@@ -9,7 +9,7 @@ const db = vi.hoisted(() => ({
   projections: [] as Array<{ playerId: string; playerName: string; position: string; season: number; adjustmentFactors: unknown; computedAt?: Date }>,
   // A game with no `season` stands in for every season; one with a season answers only for it.
   games: [] as Array<{ homeTeam: string; awayTeam: string; seasonType: string | null; startTime: Date; season?: number }>,
-  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string }>,
+  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string; fantraxId?: string }>,
   rosters: [] as Array<{ playerData: unknown }>,
   // Soccer's per-match rows (`player_game_stats`), both seasons.
   matchRows: [] as Array<{ playerId: string; season: number; team: string; gameId: string; gameDate: Date; normalizedStatMap: unknown }>,
@@ -213,6 +213,32 @@ describe('loadSportPointsBase', () => {
       })!.grade([{ kind: 'player', name: 'ace', playerId: 'ri-ace' }], [{ kind: 'player', name: 'other', playerId: 'ri-other' }])
       console.info('AUDIT SOCCER', JSON.stringify(grade))
       expect(grade).toMatchObject({ graded: true })
+    })
+
+    it('rejects ambiguous Fantrax IDs even when the other identity has no match stats', async () => {
+      soccerBoard()
+      db.identities.find((p) => p.id === 'ace')!.fantraxId = 'fx-ace'
+      db.identities.find((p) => p.id === 'wing')!.fantraxId = 'fx-wing'
+      db.identities.push({ id: 'another-ace', rollingInsightsId: 'ri-another-ace', sleeperId: null, fantraxId: 'fx-ace' })
+      const league = { id: 'L1', platform: 'fantrax', settings: {}, leagueType: 'redraft', leagueSize: 2 }
+      const out = await loadSportPointsBase({ sport: 'SOCCER', league, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.rosterIndex?.get('fx-wing')?.id).toBe('wing')
+      expect(out.ctx.rosterIndex?.has('fx-ace')).toBe(false)
+      expect(out.ctx.rosterIndex?.has('ace')).toBe(false)
+
+      const grader = createSportPointsGrader({ sport: 'SOCCER', league }, {
+        loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+      })!
+      const wing = { kind: 'player' as const, rosterPlayerId: 'fx-wing' }
+      for (const ace of [
+        { rosterPlayerId: 'fx-ace', playerId: 'fx-wing', name: 'ace' },
+        { playerId: 'ace', name: 'ace' },
+        { name: 'ace' },
+      ]) {
+        expect(await grader.grade([{ kind: 'player', ...ace }], [wing]))
+          .toMatchObject({ graded: false, valuationGap: 'unresolved_player', reason: expect.stringContaining('verified Fantrax player ID') })
+      }
     })
 
     it('grades from both seasons of match rows, on the 2026-27 season, never from stored projections', async () => {

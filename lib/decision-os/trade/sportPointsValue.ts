@@ -100,6 +100,8 @@ export type SportPointsContext = {
   sport: PointsGradedSport
   board: readonly BoardPlayer[]
   rosterIndex?: ReadonlyMap<string, BoardPlayer>
+  /** Fantrax Soccer uses a verified Fantrax ID for every player in a league grade. */
+  requireProviderId?: boolean
   /** Best free agent per position (upper-cased), already computed against this league. */
   replacementByPosition: ReadonlyMap<string, { name: string; perGame: number }>
   window: SportSeasonWindow
@@ -289,10 +291,16 @@ export function resolveBoardPlayer(
   board: readonly BoardPlayer[],
   index?: ReadonlyMap<string, BoardPlayer>,
   rosterIndex?: ReadonlyMap<string, BoardPlayer>,
+  requireProviderId = false,
 ): { ok: true; player: BoardPlayer } | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const label = String(asset.name ?? '').trim() || String(asset.playerId ?? '').trim() || 'A player'
   const raw = String(asset.playerId ?? '').trim()
   const rosterId = asset.rosterPlayerId?.trim()
+  if (requireProviderId) {
+    const hit = rosterIndex?.get(rosterId || raw)
+    return hit ? { ok: true, player: hit }
+      : { ok: false, reason: `${label} has no projection linked to a verified Fantrax player ID.`, valuationGap: 'unresolved_player' }
+  }
   if (rosterId && rosterIndex) {
     const hit = rosterIndex.get(rosterId) ?? (raw ? rosterIndex.get(raw) : undefined)
     return hit ? { ok: true, player: hit }
@@ -313,11 +321,12 @@ export function resolveBoardPlayer(
 }
 
 /** Every id a board player answers to, mapped to him. An id two players share answers to neither. */
-export function indexBoard(board: readonly BoardPlayer[], leagueRoster = false): Map<string, BoardPlayer> {
+export function indexBoard(board: readonly BoardPlayer[], leagueRoster: boolean | 'provider' = false): Map<string, BoardPlayer> {
   const out = new Map<string, BoardPlayer>()
   const clashed = new Set<string>()
   for (const p of board) {
-    for (const id of leagueRoster ? [p.id, p.rosterAlias] : [p.id, ...p.aliases]) {
+    const ids = leagueRoster === 'provider' ? [p.rosterAlias] : leagueRoster ? [p.id, p.rosterAlias] : [p.id, ...p.aliases]
+    for (const id of ids) {
       if (!id || clashed.has(id)) continue
       const prior = out.get(id)
       if (prior && prior !== p) {
@@ -397,7 +406,7 @@ function priceSide(
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: SPORT_PICKS_REASON(ctx.sport) }
     if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
-    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex)
+    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId)
     if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
     const { player } = found
     if (!meetsSampleBar(player)) {
