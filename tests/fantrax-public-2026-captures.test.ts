@@ -144,6 +144,24 @@ describe('real Fantrax captures — a league that has not drafted yet', () => {
     expect(h.upsert.mock.calls[0]![0].create).toMatchObject({ sport: stored, season: 2026 })
   })
 
+  it('imports an NHL league when its player map is the only directory available', async () => {
+    serve(nhl as unknown as Capture)
+    const unavailable = { ok: false, failure: { kind: 'unavailable', message: 'Directory unavailable' } }
+    h.players.mockImplementation(async (code: string) => code === 'NHL'
+      ? { ok: true, data: MAPS.NHL }
+      : unavailable)
+
+    const args = { leagueId: 'public', teamName: 'Team 01', appUserId: 'owner' }
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
+    expect(h.players.mock.calls.map(([code]) => code)).toEqual(['CFB', 'NFL', 'MLB', 'NBA', 'NHL', 'NCAAB'])
+    expect(h.upsert.mock.calls[0]![0].create).toMatchObject({ sport: 'nhl' })
+
+    h.upsert.mockClear()
+    h.players.mockResolvedValue(unavailable)
+    expect(await importFantraxLeague(args)).toEqual({ ok: false, error: 'Directory unavailable', kind: 'unavailable' })
+    expect(h.upsert).not.toHaveBeenCalled()
+  })
+
   it('EPL: scoring groups identify Soccer and roster ids survive missing or ambiguous links', async () => {
     serve(epl as unknown as Capture)
     h.identities.mockResolvedValue([
