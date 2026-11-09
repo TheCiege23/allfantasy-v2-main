@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 }
 
 export default function CfpPreviewPage() {
-  return <main style={{ minHeight: "100vh", padding: "clamp(16px, 5vw, 64px)", background: "#041113" }}><div style={{ maxWidth: 1120, margin: "0 auto" }}><CfpProjectionPreview standalone /></div></main>
+  return <main style={{ minHeight: "100vh", padding: "clamp(16px, 5vw, 64px)", background: "#0b0e16" }}><div style={{ maxWidth: 1280, margin: "0 auto" }}><CfpProjectionPreview standalone /></div></main>
 }
