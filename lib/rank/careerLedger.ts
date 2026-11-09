@@ -730,15 +730,17 @@ export async function loadCareerLedger(userIds: string[]): Promise<CareerLedgerR
     const importedResult = importedSurvivalByKey.get([row.userId, row.key].join('|'))
     const evidence = readSleeperSurvivalEvidence(importedResult?.evidence)
     if (importedResult && evidence) {
+      // End-of-season survival and the head-to-head bracket can be decided separately.
+      const verifiedSurvival = evidence.method === 'verified_commissioner_survived'
       const verifiedRunnerUp = evidence.method === 'verified_commissioner_runner_up'
       return {
         ...row,
         specialty: 'guillotine' as const,
         survival: sleeperSurvivalPeriods(evidence),
-        wonChampionship: evidence.method === 'sleeper_chopped' && evidence.eliminatedWeek === null,
-        madePlayoffs: verifiedRunnerUp,
-        playoffTeams: verifiedRunnerUp ? row.playoffTeams : null,
-        playoffKnown: verifiedRunnerUp,
+        wonChampionship: verifiedSurvival ? row.wonChampionship : evidence.method === 'sleeper_chopped' && evidence.eliminatedWeek === null,
+        madePlayoffs: verifiedSurvival ? row.madePlayoffs : verifiedRunnerUp,
+        playoffTeams: verifiedSurvival || verifiedRunnerUp ? row.playoffTeams : null,
+        playoffKnown: verifiedSurvival ? row.playoffKnown : verifiedRunnerUp,
         completed: true,
         updatedAt: iso(newer(new Date(row.updatedAt ?? 0), importedResult.updatedAt)),
       }
