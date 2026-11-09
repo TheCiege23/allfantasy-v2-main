@@ -102,7 +102,9 @@ describe('assertWaiverClaimEligibility — weekly lineup lock must not block ben
       baseResult({
         blockingReasons: [
           { code: 'LEAGUE_LINEUP_LOCK_ACTIVE', message: 'Lineups stay locked Mon-Tue during the active NFL/NCAAF week.' },
-          { code: 'STARTER_SLOT_EMPTY_WHEN_REQUIRED', message: 'Not enough starters (0/9).' },
+          // A duplicate assignment is a real composition problem. (An empty starting slot is not: it is
+          // reported, never enforced, on a claim — see transaction-eligibility.ts.)
+          { code: 'DUPLICATE_ASSIGNMENT', message: 'A player is assigned twice.' },
         ],
       }),
     )
@@ -115,6 +117,6 @@ describe('assertWaiverClaimEligibility — weekly lineup lock must not block ben
         dropPlayerId: 'alpha-bn',
         faabBid: 1,
       }),
-    ).rejects.toThrow('Not enough starters (0/9).')
+    ).rejects.toThrow('A player is assigned twice.')
   })
 })
