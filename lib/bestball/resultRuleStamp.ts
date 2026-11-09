@@ -71,7 +71,8 @@ export type BestBallRuleStamp = {
 }
 
 /** A stored playerId -> position map, or null when it is absent or malformed. */
-function readStoredPositions(raw: unknown): Record<string, string | null> | null {
+/** A stored `playerId -> position` map, or null when it is absent or malformed. */
+export function readStoredPositions(raw: unknown): Record<string, string | null> | null {
   if (!isRecord(raw)) return null
   const out: Record<string, string | null> = {}
   for (const [id, pos] of Object.entries(raw)) {

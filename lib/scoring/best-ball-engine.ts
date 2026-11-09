@@ -24,6 +24,8 @@ export type BestBallLineupResult = {
   totalProjectedPoints: number | null
   missingPlayerIds: string[]
   notes: string[]
+  /** playerId -> the position each optimized player was seated at in THIS selection. Empty when no lineup. */
+  positionsUsed?: Record<string, string>
 }
 
 export async function selectBestBallLineupForRoster(input: {
@@ -47,6 +49,13 @@ export async function selectBestBallLineupForRoster(input: {
    * seats matchup scoring uses. Omitted, the sport's `best_ball` roster template is used.
    */
   leagueSettings?: unknown
+  /**
+   * A LOCKED week's positions, recorded by the write that locked it (`TeamPerformance.data.sealedPositions`,
+   * see `scoreLeagueWeek`). A player listed here is seated at that position, never at today's: there is no
+   * position history in the schema, so a TE re-listed as a WR would otherwise re-seat every locked week on
+   * rescore. Players not listed (and every open week) use the current position.
+   */
+  sealedPositions?: Readonly<Record<string, string | null>> | null
 }): Promise<BestBallLineupResult> {
   if (input.rosterPlayerIds.length === 0) {
     return { status: 'UNAVAILABLE', starterIds: [], totalProjectedPoints: null, missingPlayerIds: [], notes: ['Roster is empty.'] }
@@ -143,7 +152,7 @@ export async function selectBestBallLineupForRoster(input: {
       return {
         playerId,
         playerName: player?.name ?? `Player ${playerId}`,
-        position: player?.position ?? 'UTIL',
+        position: input.sealedPositions?.[playerId] ?? player?.position ?? 'UTIL',
         points: pointsByPlayerId.get(playerId) ?? 0,
       }
     }),
@@ -174,11 +183,17 @@ export async function selectBestBallLineupForRoster(input: {
     )
   }
 
+  const positionsUsed: Record<string, string> = {}
+  for (const playerId of playersWithStats) {
+    positionsUsed[playerId] = input.sealedPositions?.[playerId] ?? playerIndex.get(playerId)?.position ?? 'UTIL'
+  }
+
   return {
     status,
     starterIds: lineup.assignments.map((a) => a.playerId),
     totalProjectedPoints: lineup.total,
     missingPlayerIds,
     notes,
+    positionsUsed,
   }
 }
