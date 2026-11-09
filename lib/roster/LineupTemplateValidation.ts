@@ -1,6 +1,7 @@
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
 import { withoutSlotIndex } from '@/lib/league/lineupSlotPositions'
 import { CAMPUS_SECTION, campusStartersAfterSave } from '@/lib/c2c/campusLineup'
+import { benchCapacityWithEmptyStarters } from '@/lib/roster/benchCapacity'
 
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
@@ -156,7 +157,10 @@ export function collectTemplateSectionIssues(
   const slotLimits = getSlotLimitsFromTemplate(template)
   const issues: TemplateSectionIssue[] = []
   for (const section of Object.keys(sections) as RosterSectionKey[]) {
-    const max = slotLimits[section]
+    // A bench holds one extra for each starting slot left empty; the total limit below still holds.
+    const max = section === 'bench'
+      ? benchCapacityWithEmptyStarters({ benchSlots: slotLimits.bench, starterSlots: slotLimits.starters, startersFilled: sections.starters.length })
+      : slotLimits[section]
     if (sections[section].length > max) {
       issues.push({
         code: 'SECTION_OVERFLOW',
