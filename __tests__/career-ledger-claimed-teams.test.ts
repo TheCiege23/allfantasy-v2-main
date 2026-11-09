@@ -441,3 +441,21 @@ it('credits a commissioner-confirmed runner-up with full survival and no title',
     survival: { periods: 17, totalPeriods: 17 },
   })
 })
+
+it.each([true, false])('keeps playoff berth %s when the commissioner verifies full-season survival', async (madePlayoffs) => {
+  state.imported = [importedLeague({
+    userId: 'joiner', platformLeagueId: 'sleeper-league', season: 2024, status: 'complete',
+    importMadePlayoffs: madePlayoffs,
+  })]
+  state.importedSurvival = [{
+    userId: 'joiner', platformLeagueId: 'sleeper-league', season: 2024, updatedAt: T0, evidence: {
+      version: 1, method: 'verified_commissioner_survived', rosterId: 2, firstWeek: 1, finalWeek: 17, eliminatedWeek: null,
+    },
+  }]
+  const rows = await loadCareerLedger(['joiner'])
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({
+    specialty: 'guillotine', completed: true, wonChampionship: false, madePlayoffs, playoffKnown: true, playoffTeams: 6,
+    survival: { periods: 17, totalPeriods: 17 },
+  })
+})
