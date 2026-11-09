@@ -166,12 +166,27 @@ export function fabricateFantraxLeague(sport: ScaleSport, teamCount: number, sou
       teamInfo,
       playerInfo: {},
       seasonYear: fixture.info.seasonYear ?? 2026,
+      ...(sport === 'SOCCER' && teamCount >= 2 ? simulatedSoccerCalendar(teamInfo) : {}),
     },
     rosters,
     playerMap,
     standings,
     valueRank,
   }
+}
+
+/** The capture has scoring weights but no calendar. Exercise an in-season import with source totals. */
+function simulatedSoccerCalendar(teamInfo: Record<string, { id: string; name: string }>) {
+  const [away, home] = Object.values(teamInfo)
+  const weekMs = 7 * 86_400_000
+  const first = Date.now() - weekMs * 1.5
+  const scoringPeriods = Array.from({ length: 38 }, (_, index) => ({
+    number: index + 1,
+    startDate: new Date(first + index * weekMs).toISOString(),
+    endDate: new Date(first + (index + 1) * weekMs - 1).toISOString(),
+  }))
+  const matchups = [1, 2, 38].map((period) => ({ period, matchupList: [{ away, home }] }))
+  return { scoringPeriods, matchups }
 }
 
 /** "Last, First" → "First Last", as every other provider and our own registry spell a name. */
@@ -379,6 +394,18 @@ export async function importLeague(env: ScaleEnv, run: ScaleRun): Promise<void> 
     inviteCode: Boolean((league.settings as any)?.inviteCode),
   }
   ;(run.stats.imported as any).seasonPlayers = seasonPlayers.length
+  if (run.sport === 'SOCCER' && seasons[0]) {
+    const { loadFantraxNativePresentation } = await import('@/lib/redraft/fantraxNativePresentation')
+    const season = seasons[0]
+    const source = await loadFantraxNativePresentation(season)
+    run.stats.soccerSeason = {
+      currentWeek: season.currentWeek,
+      totalWeeks: season.totalWeeks,
+      playoffStartWeek: season.playoffStartWeek,
+      source: source?.source ?? null,
+      matchups: source?.matchups.map(({ week, awayScore, homeScore, status }) => ({ week, awayScore, homeScore, status })),
+    }
+  }
   run.stats.seasonPlayerSample = seasonPlayers.slice(0, 3).map((p) => ({ playerId: p.playerId, playerName: p.playerName, position: p.position ?? null, slotType: p.slotType ?? null, sport: p.sport ?? null }))
   run.stats.leagueRosterSample = JSON.stringify(rosters[0]?.playerData).slice(0, 300)
   const unknownPos = seasonPlayers.filter((p) => !p.position || /unknown/i.test(String(p.position))).length

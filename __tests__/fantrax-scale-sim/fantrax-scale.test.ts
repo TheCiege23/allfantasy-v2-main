@@ -68,7 +68,18 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (load) => {
     getFantraxTeamRosters: vi.fn(async () => ({ ok: true, data: fx().rosters })),
     getFantraxPlayerIds: vi.fn(async (code: string) => ({ ok: true, data: (code === fx().sport || (code === 'CFB' && fx().sport === 'NCAAF')) ? fx().playerMap : unrelated })),
     getFantraxStandings: vi.fn(async () => ({ ok: true, data: fx().standings })),
-    fetchFantraxScheduleWithScores: vi.fn(async () => ({ rows: [], position: null, periodsRead: 0, periodsFailed: 0 })),
+    fetchFantraxScheduleWithScores: vi.fn(async () => {
+      if (fx().sport !== 'SOCCER') return { rows: [], position: null, periodsRead: 0, periodsFailed: 0 }
+      const info = fx().info
+      return {
+        rows: real.flattenFantraxSchedule(info).map((row) =>
+          row.week === 1 ? { ...row, awayScore: 42.5, homeScore: 0, played: true } : row),
+        position: real.resolveFantraxSeasonPosition(info),
+        periodsRead: 1,
+        periodsFailed: 0,
+        periodScores: [],
+      }
+    }),
     getFantraxDraftResults: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'no draft (sim)' } })),
     getFantraxDraftPicks: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'no picks (sim)' } })),
     getFantraxLeagues: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'no secret (sim)' } })),
@@ -197,8 +208,21 @@ describe.skipIf(process.env.SIM_FANTRAX !== '1')('Fantrax-scale imported leagues
       expect(run.leagueId, JSON.stringify(run.findings).slice(0, 800)).toBeTruthy()
       if (c.sport === 'SOCCER') {
         expect(run.stats.importStatus).toBe(200)
-        expect(run.stats.imported).toMatchObject({ sport: 'SOCCER', rosters: c.teamCount, rosteredPlayers: 11 * c.teamCount })
+        expect(run.stats.imported).toMatchObject({
+          sport: 'SOCCER', rosters: c.teamCount, rosteredPlayers: 11 * c.teamCount,
+          seasons: 1, seasonRosters: c.teamCount, seasonPlayers: 11 * c.teamCount, linked: c.teamCount,
+        })
         expect(run.stats.seatsHeld).toBe(c.teamCount)
+        if (c.teamCount >= 2) {
+          expect(run.stats.soccerSeason).toMatchObject({
+            currentWeek: 2, totalWeeks: 38, playoffStartWeek: 39, source: 'fantrax',
+            matchups: [
+              { week: 1, awayScore: 42.5, homeScore: 0, status: 'final' },
+              { week: 2, awayScore: null, homeScore: null, status: 'scheduled' },
+              { week: 38, awayScore: null, homeScore: null, status: 'scheduled' },
+            ],
+          })
+        }
         if (c.teamCount < 6) return
         const grades = run.stats.tradeGrades as Array<{ label: string; grade: string | null; basis: string | null; withheld: string | null }>
         expect(grades).toHaveLength(5)
@@ -208,7 +232,7 @@ describe.skipIf(process.env.SIM_FANTRAX !== '1')('Fantrax-scale imported leagues
           expect(grades.find((g) => g.label === 'fair'), JSON.stringify(grades)).toMatchObject({ grade: 'C' })
           expect(grades.find((g) => g.label === 'collusion-1')?.grade).toMatch(/^[DF]$/)
           expect(grades.every((g) => g.grade)).toBe(true)
-          expect(grades[0]?.basis).toContain('AllFantasy’s default soccer points')
+          expect(grades[0]?.basis).toContain('supported Fantrax Soccer rules')
         }
       }
     })

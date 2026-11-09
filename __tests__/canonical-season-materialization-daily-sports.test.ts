@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   seasonFindUnique: vi.fn(),
   seasonCreate: vi.fn(),
   rosterCreate: vi.fn(),
+  seasonUpsert: vi.fn(),
+  rosterUpsert: vi.fn(),
   reconcile: vi.fn(),
   materializePlayers: vi.fn(),
 }))
@@ -22,8 +24,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: mocks.leagueFindUnique },
     leagueTeam: { findMany: mocks.teamFindMany },
-    redraftSeason: { findUnique: mocks.seasonFindUnique, create: mocks.seasonCreate },
-    redraftRoster: { create: mocks.rosterCreate },
+    redraftSeason: { findUnique: mocks.seasonFindUnique, create: mocks.seasonCreate, upsert: mocks.seasonUpsert },
+    redraftRoster: { create: mocks.rosterCreate, upsert: mocks.rosterUpsert },
   },
 }))
 vi.mock('@/lib/league-runtime/reconcileRosterRedraftLinks', () => ({ reconcileRosterRedraftLinks: mocks.reconcile }))
@@ -44,6 +46,8 @@ beforeEach(() => {
   ])
   mocks.seasonCreate.mockResolvedValue({ id: 'season' })
   mocks.rosterCreate.mockResolvedValue({ id: 'roster' })
+  mocks.seasonUpsert.mockResolvedValue({ id: 'season' })
+  mocks.rosterUpsert.mockResolvedValue({ id: 'roster' })
   mocks.reconcile.mockResolvedValue(undefined)
   mocks.materializePlayers.mockResolvedValue(undefined)
 })
@@ -81,8 +85,37 @@ describe('the playoff week when the provider names none', () => {
   })
 })
 
-describe('still out of scope', () => {
-  it('soccer is not materialized', async () => {
+describe('Fantrax Soccer seasons', () => {
+  it('uses the source period and playoff calendar, including on retry', async () => {
+    mocks.leagueFindUnique.mockResolvedValue({
+      ...league('SOCCER', null),
+      platform: 'fantrax',
+      settings: { current_week: 23, fantrax_settings: { lastPeriod: 36, firstPlayoffPeriod: 31 } },
+    })
+    expect(await materializeRedraftSeasonForImportedLeague('SOCCER-league')).toMatchObject({ created: true, rosterCount: 2 })
+    const fields = { status: 'in_season', currentWeek: 23, totalWeeks: 36, playoffStartWeek: 31 }
+    expect(mocks.seasonUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining(fields),
+      update: fields,
+    }))
+    mocks.seasonFindUnique.mockResolvedValue({ id: 'season' })
+    expect(await materializeRedraftSeasonForImportedLeague('SOCCER-league')).toMatchObject({ created: false, rosterCount: 2 })
+    expect(mocks.rosterUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { seasonId_ownerId: { seasonId: 'season', ownerId: 'fantrax-user:a' } },
+      update: {},
+    }))
+    expect(mocks.materializePlayers).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses the Soccer season shape in preseason when Fantrax supplies no periods', async () => {
+    mocks.leagueFindUnique.mockResolvedValue({ ...league('SOCCER', null), platform: 'fantrax', status: 'off_season' })
+    await materializeRedraftSeasonForImportedLeague('SOCCER-league')
+    expect(mocks.seasonUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ status: 'setup', currentWeek: 0, totalWeeks: 38, playoffStartWeek: 39 }),
+    }))
+  })
+
+  it('keeps other Soccer import platforms out of scope', async () => {
     mocks.leagueFindUnique.mockResolvedValue(league('SOCCER', null))
     const result = await materializeRedraftSeasonForImportedLeague('SOCCER-league')
     expect(result).toMatchObject({ seasonId: null, created: false, skippedReason: 'UNSUPPORTED_SPORT' })

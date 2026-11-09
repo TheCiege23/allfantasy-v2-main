@@ -43,6 +43,7 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
             : 'in_season',
       playoff_team_count: undefined,
       regular_season_length: source.schedule.length > 0 ? source.schedule.length : undefined,
+      ...(source.league.sport === 'SOCCER' ? { current_week: source.league.currentWeek ?? undefined } : {}),
       schedule_unit: 'week',
       matchup_frequency: 'head_to_head',
       waiver_type: undefined,

@@ -1,6 +1,7 @@
 import { isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
 import { prisma } from '@/lib/prisma'
-import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
+import { assignFantraxTeamIds, normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
+import { fantraxImportSeason } from '@/lib/league-import/fantrax/fantraxProSports'
 import { resolveFantraxSeasonPosition, type FantraxLeagueInfo, type FantraxScheduleRow } from '@/lib/league-import/fantrax/fantraxApi'
 
 const record = (v: unknown): Record<string, any> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}
@@ -27,7 +28,10 @@ export async function syncFantraxNativePresentation(leagueId: string, info: Fant
   return prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`fantrax-presentation:${leagueId}`}))`
     const league = await tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, platformLeagueId: true, userId: true, sport: true, season: true, settings: true } })
-    if (league?.platform?.toLowerCase() !== 'fantrax' || !isNcaafSport(String(league.sport)) || !league.platformLeagueId || league.season !== Number(info.seasonYear)) return { changed: false }
+    if (league?.platform?.toLowerCase() !== 'fantrax' || !league.platformLeagueId) return { changed: false }
+    const soccer = league.sport?.toUpperCase() === 'SOCCER'
+    if (soccer ? league.season !== fantraxImportSeason(info, 'soccer', now)
+      : !isNcaafSport(String(league.sport)) || league.season !== Number(info.seasonYear)) return { changed: false }
     const snapshot = await tx.fantraxLeague.findUnique({ where: { id: league.platformLeagueId }, select: { appUserId: true } })
     if (!snapshot?.appUserId || snapshot.appUserId !== league.userId) throw new Error('Fantrax presentation ownership proof missing')
     const seasons = await tx.redraftSeason.findMany({ where: { leagueId, season: league.season }, include: { rosters: true } })
@@ -41,23 +45,79 @@ export async function syncFantraxNativePresentation(leagueId: string, info: Fant
       teamIds[team.id] = candidates[0]!.id
     }
     const position = resolveFantraxSeasonPosition(info, now)
+    if (!position && soccer) return { changed: false }
     if (!position) throw new Error('Fantrax scoring calendar unavailable')
     const metadataChanged = settings.current_week !== position.period || stableJson(previousIds) !== stableJson(teamIds) || stableJson(settings.fantrax_schedule) !== stableJson(rows) || stableJson(settings.fantrax_scoring_periods) !== stableJson(info.scoringPeriods ?? []) || stableJson(settings.fantrax_playoffs) !== stableJson(info.playoffs ?? null)
     // Merge metadata atomically without replacing unrelated settings.
     const patch = JSON.stringify({ current_week: position.period, fantrax_native_team_ids: teamIds, fantrax_schedule: rows, fantrax_scoring_periods: info.scoringPeriods ?? [], fantrax_playoffs: info.playoffs ?? null, fantrax_presentation_synced_at: now.toISOString() })
     const calendar = JSON.stringify({ scoringPeriods: info.scoringPeriods ?? [], seasonState: position.state })
     if (metadataChanged) await tx.$executeRaw`UPDATE leagues SET settings = COALESCE(settings, '{}'::jsonb) || ${patch}::jsonb || jsonb_build_object('fantrax_settings', COALESCE(settings->'fantrax_settings', '{}'::jsonb) || ${calendar}::jsonb) WHERE id = ${leagueId}`
-    const result = await tx.redraftSeason.updateMany({ where: { leagueId, season: league.season, currentWeek: { not: position.period } }, data: { currentWeek: position.period } })
-    return { changed: metadataChanged || result.count > 0, currentWeek: position.period, matchups: rows.length }
+    const currentWeek = soccer && position.state === 'preseason' ? 0 : position.period
+    const status = position.state === 'preseason' ? 'setup' : position.state === 'complete' ? 'complete' : 'in_season'
+    const result = await tx.redraftSeason.updateMany({
+      where: { leagueId, season: league.season, OR: [
+        { currentWeek: { not: currentWeek } },
+        ...(soccer ? [{ status: { not: status } }] : []),
+      ] },
+      data: { currentWeek, ...(soccer ? { status } : {}) },
+    })
+    return { changed: metadataChanged || result.count > 0, currentWeek, matchups: rows.length }
   }, { timeout: 60000 })
 }
 
-export async function loadFantraxNativePresentation(season: { id: string; leagueId: string; season: number }, now = new Date()) {
+type PresentationSeason = { id: string; leagueId: string; season: number }
+
+async function loadImportedSoccerPresentation(season: PresentationSeason, snapshotId: string, settings: Record<string, unknown>, now: Date) {
+  const calendar = record(settings.fantrax_settings)
+  const [snapshot, rosters, links] = await Promise.all([
+    prisma.fantraxLeague.findUnique({ where: { id: snapshotId }, select: { season: true, matchups: true, standings: true } }),
+    prisma.redraftRoster.findMany({ where: { seasonId: season.id } }),
+    prisma.roster.findMany({
+      where: { leagueId: season.leagueId, redraftRosterId: { not: null } },
+      select: { redraftRosterId: true, playerData: true },
+    }),
+  ])
+  if (snapshot?.season !== season.season || !Array.isArray(snapshot.matchups) || !Array.isArray(snapshot.standings)) return null
+  const rows = snapshot.matchups.filter((row) => {
+    const match = record(row)
+    return typeof match.awayTeamId === 'string' && typeof match.homeTeamId === 'string' && Number.isSafeInteger(match.week)
+  }) as unknown as FantraxScheduleRow[]
+  if (!rows.length) return null
+  const teams = snapshot.standings.flatMap((value) => {
+    const team = record(value)
+    return typeof team.team === 'string' ? [{ teamName: team.team, sourceTeamId: team.fantraxTeamId }] : []
+  })
+  const numericIds = assignFantraxTeamIds(teams)
+  const rosterBySourceId = new Map<string, string | null>()
+  for (const link of links) {
+    const sourceId = record(link.playerData).source_team_id
+    if (typeof sourceId === 'string' || typeof sourceId === 'number') {
+      const key = String(sourceId)
+      rosterBySourceId.set(key, rosterBySourceId.has(key) ? null : link.redraftRosterId)
+    }
+  }
+  const teamIds = Object.fromEntries(teams.flatMap(({ teamName, sourceTeamId }) => {
+    const rosterId = rosterBySourceId.get(String(numericIds.get(normalizeFantraxTeamName(teamName))))
+    return typeof sourceTeamId === 'string' && rosterId ? [[sourceTeamId, rosterId]] : []
+  }))
+  const projected = projectFantraxHistory({
+    seasonId: season.id, leagueId: season.leagueId, rosters, rows, teamIds, now,
+    info: { scoringPeriods: calendar.scoringPeriods, playoffs: calendar.playoffs },
+  })
+  return projected.matchups.length ? projected : null
+}
+
+export async function loadFantraxNativePresentation(season: PresentationSeason, now = new Date()) {
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true, platformLeagueId: true, sport: true, settings: true, season: true } })
-  if (league?.platform?.toLowerCase() !== 'fantrax' || !isNcaafSport(String(league.sport)) || league.season !== season.season) return null
-  const s = record(league.settings), rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id } })
+  if (league?.platform?.toLowerCase() !== 'fantrax' || league.season !== season.season) return null
+  const soccer = league.sport?.toUpperCase() === 'SOCCER'
+  if (!soccer && !isNcaafSport(String(league.sport))) return null
+  const s = record(league.settings)
   const scoringPeriods = s.fantrax_scoring_periods ?? s.fantrax_settings?.scoringPeriods
-  if (!Array.isArray(s.fantrax_schedule) || !Array.isArray(scoringPeriods)) return null
+  if (!Array.isArray(s.fantrax_schedule) || !Array.isArray(scoringPeriods)) {
+    return soccer && league.platformLeagueId ? loadImportedSoccerPresentation(season, league.platformLeagueId, s, now) : null
+  }
+  const rosters = await prisma.redraftRoster.findMany({ where: { seasonId: season.id } })
   const sourceActualTeamPeriods = new Set<string>()
   if (league.platformLeagueId) {
     const keys: string[] = s.fantrax_schedule.flatMap((row: FantraxScheduleRow) => [row.homeTeamId, row.awayTeamId].map(id => `fantrax-actuals-receipt:${league.platformLeagueId}:${season.season}:${row.week}:${id}`))

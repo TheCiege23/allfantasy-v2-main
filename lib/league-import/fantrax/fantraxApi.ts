@@ -26,7 +26,9 @@
  * `V2KZEDYPMM8JP61B` is a 400. Never normalise the case of one.
  */
 
+import { SOCCER_CONFIG } from '@/lib/sportConfig/configs/soccer'
 import { fantraxDisplayName } from './fantraxPlayerName'
+import { isFantraxSoccerScoring } from './fantraxScoring'
 
 export const FANTRAX_FXEA_BASE = 'https://www.fantrax.com/fxea/general'
 
@@ -1006,7 +1008,8 @@ export async function fetchFantraxScheduleWithScores(
   const rows = flattenFantraxSchedule(info)
   const position = resolveFantraxSeasonPosition(info, options?.now ?? new Date())
 
-  const maxPeriods = options?.maxPeriods ?? 30
+  const maxPeriods = options?.maxPeriods ??
+    (isFantraxSoccerScoring(info.scoringSystem) ? SOCCER_CONFIG.defaultSeasonWeeks : 30)
   const through = Math.min(position?.scoredThrough ?? 0, maxPeriods)
   if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0, periodScores: [] }
 

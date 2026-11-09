@@ -832,6 +832,21 @@ describe('fetching fixtures and results together', () => {
    * ⚠ A PERIOD THAT FAILS TO READ IS SKIPPED, NEVER ZEROED. Reporting it as
    * 0-0 turns one transient outage into a permanently wrong week.
    */
+  it('loads the last period of a standard Soccer season', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const period = Number(new URL(url).searchParams.get('period'))
+      return resp(200, JSON.stringify({ period, matchups: [] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await fetchFantraxScheduleWithScores('soccer', infoWith({
+      scoringSystem: { scoringCategorySettings: [{ group: { code: 'SOCCER_GOALIE' } }] },
+      scoringPeriods: [{ number: 38, startDate: '2027-05-21', endDate: '2027-05-28' }],
+    }), { now: new Date('2027-06-01') })
+    expect(out.position).toMatchObject({ period: 38, state: 'complete' })
+    expect(out.periodsRead).toBe(38)
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('period=38'))).toBe(true)
+  })
+
   it('counts a failed period rather than scoring it zero', async () => {
     const body = JSON.stringify({ error: { message: 'Fantrax is having a moment' } })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, body)))
