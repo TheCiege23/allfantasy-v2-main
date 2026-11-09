@@ -74,6 +74,13 @@ export function fantraxImportSeason(
   now: Date = new Date(),
 ): number {
   if (isFantraxSplitSeasonSport(sport)) return fantraxSplitSeasonStartYear(info, now)
+  if (String(sport ?? '').trim().toLowerCase() === 'soccer') {
+    const range = String(info.seasonYear ?? '').trim().match(/^(\d{4})\s*[-/–]\s*(\d{2}|\d{4})$/)
+    if (range) return Number(range[1])
+    // Soccer leagues can start in either half of the year. Use the source calendar year.
+    const start = earliestLeagueDate(info)
+    if (start) return start.getUTCFullYear()
+  }
   return Number(info.seasonYear) || now.getFullYear()
 }
 

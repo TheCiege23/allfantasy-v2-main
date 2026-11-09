@@ -488,14 +488,17 @@ async function finishBoard(args: {
   const hasSavedTeamCount = typeof savedTeamCount === 'number' && Number.isInteger(savedTeamCount) && savedTeamCount >= 2
   const teams = hasSavedTeamCount ? savedTeamCount : DEFAULT_TEAMS
   const lineup = lineupSlotsFor(sport, league?.settings ?? null)
-  // Fantrax's Soccer categories are retained as raw settings. Until a league
-  // supplies supported overrides, the scorer uses AllFantasy points.
-  let fantraxSoccerDefaults = false
+  let scoringBasis: SportPointsContext['scoringBasis'] = league ? 'league' : 'default'
   if (sport === 'SOCCER' && league?.platform?.toLowerCase() === 'fantrax' && valuation.kind === 'points') {
-    const leagueWeights = Object.entries(resolveLeagueScoringRules({ sport, settings: league.settings })?.overrides ?? {})
-    const defaultWeights = resolveLeagueScoringRules({ sport, settings: null })?.overrides ?? {}
-    fantraxSoccerDefaults = leagueWeights.length === Object.keys(defaultWeights).length &&
-      leagueWeights.every(([key, weight]) => weight === defaultWeights[key])
+    const rules = resolveLeagueScoringRules({ sport, settings: league.settings })
+    if (rules?.fantraxSoccer) {
+      scoringBasis = rules.fantraxSoccer.gaps.length ? 'partial_fantrax_soccer' : 'league'
+    } else {
+      const leagueWeights = Object.entries(rules?.overrides ?? {})
+      const defaultWeights = resolveLeagueScoringRules({ sport, settings: null })?.overrides ?? {}
+      if (leagueWeights.length === Object.keys(defaultWeights).length &&
+          leagueWeights.every(([key, weight]) => weight === defaultWeights[key])) scoringBasis = 'default_in_league'
+    }
   }
 
   // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`).
@@ -574,7 +577,7 @@ async function finishBoard(args: {
         baselineSeasonLabel: baseline != null ? seasonLabelFor(baseline, sport) : null,
         ...(games.scheduleKnown ? {} : { scheduleKnown: false }),
       },
-      scoringBasis: fantraxSoccerDefaults ? 'default_in_league' : league ? 'league' : 'default',
+      scoringBasis,
       teams,
       ...(league && !hasSavedTeamCount ? { teamCountAssumed: true } : {}),
       valueKind: valuation.kind,

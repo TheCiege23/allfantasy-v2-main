@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
+import { fantraxScoringRules, parseFantraxSoccerScoring } from '@/lib/league-import/fantrax/fantraxScoring'
+import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import epl from '../tests/fixtures/fantrax/epl-public-2026.json'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 
 /**
@@ -22,6 +24,40 @@ function info(configs: unknown[]): FantraxLeagueInfo {
     scoringSystem: { scoringCategorySettings: [{ configs }] } as unknown as Record<string, unknown>,
   } as FantraxLeagueInfo
 }
+
+describe('captured Fantrax Soccer points', () => {
+  const sport = 'SOCCER'
+  const scoringSystem = epl.info.scoringSystem
+  const settings = { fantrax_settings: { scoringSystem } }
+
+  it('scores keeper and outfield stats separately and surfaces omitted rules', () => {
+    const result = parseFantraxSoccerScoring(scoringSystem)
+    expect(result?.keeper).toMatchObject({ assists: 4, saves: 2, gk_goals_against: -3, pen_save: 8 })
+    expect(result?.outfield).toMatchObject({ assists: 3, shots_on_target: 2, pen_miss: -5 })
+    expect(result?.gaps).toEqual(expect.arrayContaining([expect.stringMatching(/assists \(second\)/i)]))
+    const score = buildLeagueStatScorer({ sport, settings })!
+    const line = { goals: 1, assists: 1, saves: 3, gk_goals_against: 2, shots_on_target: 2, clean_sheet_gk: 1, appearance: 1 }
+    expect(score(line, 'Goalkeeper')).toBe(11)
+    expect(score(line, 'Forward')).toBe(14)
+    expect(score(line)).toBe(7)
+  })
+
+  it('honors a league’s explicitly saved scoring weights', () => {
+    const score = buildLeagueStatScorer({ sport, settings: { ...settings, sportConfig: { categoryPoints: { assists: 9 } } } })!
+    expect(score({ assists: 1 }, 'GK')).toBe(9)
+  })
+
+  it('omits a category with an unsupported position override only for its own group', () => {
+    const groups = structuredClone(scoringSystem.scoringCategorySettings)
+    const outfield = groups.find((group) => group.group.code === 'SOCCER_NON_GOALIE')!
+    const goals = outfield.configs.find((config) => config.scoringCategory.code === 'INDIVIDUAL_GOALS')!
+    outfield.configs.push({ ...goals, points: 9, position: { ...goals.position, shortName: 'DEF' } })
+    const result = parseFantraxSoccerScoring({ ...scoringSystem, scoringCategorySettings: groups })
+    expect(result?.outfield.goals).toBeUndefined()
+    expect(result?.keeper.goals).toBe(7)
+    expect(result?.gaps).toEqual(expect.arrayContaining([expect.stringMatching(/position override/)]))
+  })
+})
 
 const DEFAULT = { shortName: 'Default', code: 'DEFAULT' }
 const cat = (code: string, name: string, shortName: string) => ({ code, name, shortName })

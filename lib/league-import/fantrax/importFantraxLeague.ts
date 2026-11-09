@@ -25,7 +25,7 @@ import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { linkNflFantraxIdentities } from '@/lib/player-identity/linkNflFantraxIdentities'
 import { resolveFantraxIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
-import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
+import { fantraxScoringRules, isFantraxSoccerScoring, type FantraxScoringRule } from './fantraxScoring'
 import { fantraxImportSeason, isFantraxSplitSeasonSport } from './fantraxProSports'
 import {
   fetchFantraxScheduleWithScores,
@@ -35,6 +35,7 @@ import {
   getFantraxTeamRosters,
   resolveRosters,
   type FantraxFailure,
+  type FantraxLeagueInfo,
   type FantraxPlayerRef,
   type FantraxSport,
   type FantraxStandingRow,
@@ -56,7 +57,14 @@ export type FantraxImportOutcome =
        * and the live path re-reads getLeagueInfo on every import anyway.
        */
       scoringRules: FantraxScoringRule[]
-      sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> }
+      sourceSettings: {
+        scoringSystem: Record<string, unknown> | null
+        rosterInfo: Record<string, unknown>
+        lastPeriod?: number
+        firstPlayoffPeriod?: number
+        scoringPeriods?: FantraxLeagueInfo['scoringPeriods']
+        playoffs?: FantraxLeagueInfo['playoffs']
+      }
       scoringGaps: string[]
       /**
        * What the league's draft board actually contained.
@@ -153,13 +161,8 @@ export async function importFantraxLeague(args: {
   }
   const info = await getFantraxLeagueInfo(args.leagueId)
   if (!info.ok) return { ok: false, error: info.failure.message, kind: info.failure.kind }
-  const scoringGroups = recordOf(info.data.scoringSystem).scoringCategorySettings
-  // The EPL capture names its sport in the scoring groups. The roster and player pool
-  // carry ids and positions, so use existing identity links to attach names.
-  const soccer = Array.isArray(scoringGroups) && scoringGroups.length > 0 && scoringGroups.every((entry) => {
-    const code = recordOf(recordOf(entry).group).code
-    return code === 'SOCCER_GOALIE' || code === 'SOCCER_NON_GOALIE'
-  })
+  // The EPL capture identifies the sport in its scoring groups.
+  const soccer = isFantraxSoccerScoring(info.data.scoringSystem)
   if (refreshTarget?.sport?.toLowerCase() === 'soccer' && !soccer) {
     return { ok: false, error: 'The source no longer confirms this is a Fantrax Soccer league', kind: 'unavailable' }
   }
@@ -168,7 +171,7 @@ export async function importFantraxLeague(args: {
   // or stamp its old roster as freshly fetched when that happens.
   // NBA/NHL seasons are keyed by the year they begin, so compare in that key;
   // every other sport keeps the exact comparison it always had.
-  const liveSeasonForRefresh = refreshTarget && isFantraxSplitSeasonSport(refreshTarget.sport)
+  const liveSeasonForRefresh = refreshTarget && (soccer || isFantraxSplitSeasonSport(refreshTarget.sport))
     ? fantraxImportSeason(info.data, refreshTarget.sport)
     : Number(info.data.seasonYear)
   if (refreshTarget && liveSeasonForRefresh !== refreshTarget.season) {
@@ -542,11 +545,41 @@ export async function importFantraxLeague(args: {
       state: draftSummary.draftState,
     },
     scoringGaps: scoring.gaps,
-    sourceSettings: { scoringSystem: info.data.scoringSystem ?? null, rosterInfo: info.data.rosterInfo },
-    seasonState: schedule.position?.state ?? null,
+    sourceSettings: {
+      scoringSystem: info.data.scoringSystem ?? null,
+      rosterInfo: info.data.rosterInfo,
+      ...(soccer ? soccerCalendar(info.data) : {}),
+    },
+    seasonState: schedule.position?.state ?? (soccer ? soccerSeasonState(info.data) : null),
     currentPeriod: schedule.position?.period ?? null,
     scoredPeriodsRead: schedule.periodsRead,
     scoredPeriodsFailed: schedule.periodsFailed,
+  }
+}
+
+function soccerSeasonState(info: FantraxLeagueInfo, now = new Date()) {
+  const start = new Date(info.startDate ?? '').getTime()
+  const endDate = info.endDate ?? ''
+  const end = new Date(endDate).getTime()
+  const endExclusive = /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? end + 86_400_000 : end
+  if (now.getTime() < start) return 'preseason'
+  if (now.getTime() >= endExclusive) return 'complete'
+  return Number.isFinite(start) || Number.isFinite(end) ? 'in_progress' : null
+}
+
+function soccerCalendar(info: FantraxLeagueInfo) {
+  const periods = [
+    ...(info.scoringPeriods ?? []).map((period) => period.number),
+    ...(info.matchups ?? []).map((period) => period.period),
+  ].filter((period) => Number.isSafeInteger(period) && period > 0)
+  const firstPlayoffPeriod = info.playoffs?.used === true ? info.playoffs.firstPlayoffPeriod : null
+  return {
+    ...(periods.length > 0 ? { lastPeriod: Math.max(...periods) } : {}),
+    scoringPeriods: info.scoringPeriods ?? [],
+    playoffs: info.playoffs ?? null,
+    ...(typeof firstPlayoffPeriod === 'number' && Number.isSafeInteger(firstPlayoffPeriod) && firstPlayoffPeriod > 0
+      ? { firstPlayoffPeriod }
+      : {}),
   }
 }
 

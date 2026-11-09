@@ -519,7 +519,8 @@ export async function fetchFantraxLeagueForImport(
   const lookup = parseFantraxSourceInput(sourceInput)
   let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
   let liveScoringGaps: string[] = []
-  let sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> } | undefined
+  let sourceSettings: Extract<import('./importFantraxLeague').FantraxImportOutcome, { ok: true }>['sourceSettings'] | undefined
+  let sourceCurrentPeriod: number | null = null
   let sourceSeasonState: string | null = null
 
   /*
@@ -569,6 +570,7 @@ export async function fetchFantraxLeagueForImport(
     liveScoringGaps = outcome.scoringGaps
     sourceSettings = outcome.sourceSettings
     sourceSeasonState = outcome.seasonState
+    sourceCurrentPeriod = outcome.currentPeriod
   }
 
   const includeConfig = {
@@ -642,6 +644,7 @@ export async function fetchFantraxLeagueForImport(
     liveScoringGaps = outcome.scoringGaps
     sourceSettings = outcome.sourceSettings
     sourceSeasonState = outcome.seasonState
+    sourceCurrentPeriod = outcome.currentPeriod
   }
 
   const username = leagueRecord.user?.fantraxUsername ?? lookup.username ?? 'fantrax-user'
@@ -788,6 +791,7 @@ export async function fetchFantraxLeagueForImport(
     week.matchups.every((m) => m.points1 == null && m.points2 == null),
   )
   const currentWeek =
+    (sport === 'SOCCER' ? sourceCurrentPeriod : null) ??
     firstUnscored?.week ?? (schedule.length > 0 ? schedule[schedule.length - 1].week : null)
 
   const transactions: FantraxImportTransaction[] = transactionRows.map((transaction, index) => {
