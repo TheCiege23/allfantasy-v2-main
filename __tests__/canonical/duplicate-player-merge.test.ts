@@ -67,16 +67,39 @@ describe('planDuplicatePlayerMerges', () => {
   })
 
   it('refuses a merge that would give the survivor two ids from one provider', () => {
-    const plan = planDuplicatePlayerMerges([keep, copy], [ident(keep.id, 'thesportsdb', 'tsdb_0'), ident(copy.id, 'thesportsdb', 'tsdb_1')])
+    // Albert Okwuegbunam, as measured: Rolling Insights 5469 on the real row, 9580 on the copy.
+    const plan = planDuplicatePlayerMerges([keep, copy], [ident(keep.id, 'rolling_insights', '5469'), ident(copy.id, 'rolling_insights', '9580')])
     expect(plan.merges).toEqual([])
-    expect(plan.skipped).toEqual([expect.objectContaining({ reason: 'provider_clash', providers: ['thesportsdb'] })])
+    expect(plan.skipped).toEqual([expect.objectContaining({ reason: 'provider_clash', providers: ['rolling_insights'] })])
   })
 
   it('refuses two copies that would fold into one survivor with different ids from one provider', () => {
     const copy2 = { ...copy, id: 'nfl-james-cook-third' }
-    const plan = planDuplicatePlayerMerges([keep, copy, copy2], [ident(copy.id, 'thesportsdb', 'tsdb_1'), ident(copy2.id, 'thesportsdb', 'tsdb_2')])
+    const plan = planDuplicatePlayerMerges([keep, copy, copy2], [ident(copy.id, 'rolling_insights', '1'), ident(copy2.id, 'rolling_insights', '2')])
     expect(plan.merges).toEqual([])
     expect(plan.skipped.map((s) => s.reason)).toEqual(['provider_clash', 'provider_clash'])
+  })
+
+  it('allows a second TheSportsDB id, which TheSportsDB itself holds for the stars (James Cook, as measured)', () => {
+    const plan = planDuplicatePlayerMerges(
+      [keep, copy],
+      [ident(keep.id, 'thesportsdb', 'tsdb_34201045'), ident(copy.id, 'thesportsdb', 'tsdb_34434889'), ident(copy.id, 'rolling_insights', '6572')],
+    )
+    expect(plan.merges).toEqual([{ dupId: copy.id, keepId: keep.id }])
+  })
+
+  it('a TheSportsDB pair never excuses a clash in another provider', () => {
+    const plan = planDuplicatePlayerMerges(
+      [keep, copy],
+      [ident(keep.id, 'thesportsdb', 't0'), ident(copy.id, 'thesportsdb', 't1'), ident(keep.id, 'rolling_insights', '5469'), ident(copy.id, 'rolling_insights', '9580')],
+    )
+    expect(plan.skipped).toEqual([expect.objectContaining({ reason: 'provider_clash', providers: ['rolling_insights'] })])
+  })
+
+  it('two copies with different TheSportsDB ids may fold into one survivor', () => {
+    const copy2 = { ...copy, id: 'nfl-james-cook-third' }
+    const plan = planDuplicatePlayerMerges([keep, copy, copy2], [ident(copy.id, 'thesportsdb', 't1'), ident(copy2.id, 'thesportsdb', 't2')])
+    expect(plan.merges).toHaveLength(2)
   })
 
   it('a provider only the copy holds moves over (Rolling Insights, ESPN)', () => {
@@ -119,10 +142,18 @@ describe('foldTargetsForUnkeyedGroups (the backfill’s side of the same rule)',
     ]
     expect(foldTargetsForUnkeyedGroups(groups, [{ id: 'k1', key, providerIds: [] }, { id: 'k2', key, providerIds: [] }]).size).toBe(0)
     const clash = foldTargetsForUnkeyedGroups(
+      [{ groupId: 'g', keys: [key], providerIds: [['rolling_insights', '9580']] }],
+      [{ id: 'k', key, providerIds: [] }, { id: 'k', key: null, providerIds: [['rolling_insights', '5469']] }],
+    )
+    expect(clash.size).toBe(0)
+  })
+
+  it('folds even when the candidate already holds a different TheSportsDB id', () => {
+    const out = foldTargetsForUnkeyedGroups(
       [{ groupId: 'g', keys: [key], providerIds: [['thesportsdb', 't1']] }],
       [{ id: 'k', key, providerIds: [] }, { id: 'k', key: null, providerIds: [['thesportsdb', 't0']] }],
     )
-    expect(clash.size).toBe(0)
+    expect([...out]).toEqual([['g', 'k']])
   })
 })
 
@@ -187,12 +218,23 @@ describe('backfillCanonicalPlayers no longer rebuilds the copy', () => {
     expect(out).toMatchObject({ canonicalPlayers: 2, foldedIntoSleeperTwin: 0 })
   })
 
-  it('does not fold when the Sleeper player already holds a different TheSportsDB id', async () => {
+  it('does not fold when the Sleeper player already holds a different Rolling Insights id', async () => {
+    const riRow = { ...tsdbRow, source: 'rolling_insights', externalId: '9580' }
+    db.sportsPlayer.findMany.mockResolvedValue([riRow])
+    db.player.findMany.mockResolvedValue([{ id: 'nfl-james-cook-b73b6c59', name: 'James Cook', birthDate: '1999-09-25', providerIds: { sleeper: 'sleeper:8138' } }])
+    db.playerProviderIdentity.findMany.mockResolvedValue([{ playerId: 'nfl-james-cook-b73b6c59', provider: 'rolling_insights', providerPlayerId: '5469' }])
+    const out = await backfillCanonicalPlayers({ sport: 'NFL' })
+    expect(writes().players).toHaveLength(1)
+    expect(out).toMatchObject({ foldedIntoSleeperTwin: 0 })
+  })
+
+  it('still folds when the Sleeper player already holds a different TheSportsDB id, so a merged star is not rebuilt', async () => {
     db.sportsPlayer.findMany.mockResolvedValue([tsdbRow])
     db.player.findMany.mockResolvedValue([{ id: 'nfl-james-cook-b73b6c59', name: 'James Cook', birthDate: '1999-09-25', providerIds: { sleeper: 'sleeper:8138' } }])
     db.playerProviderIdentity.findMany.mockResolvedValue([{ playerId: 'nfl-james-cook-b73b6c59', provider: 'thesportsdb', providerPlayerId: 'tsdb_0' }])
     const out = await backfillCanonicalPlayers({ sport: 'NFL' })
-    expect(writes().players).toHaveLength(1)
-    expect(out).toMatchObject({ foldedIntoSleeperTwin: 0 })
+    expect(writes().players).toEqual([])
+    expect(writes().identities).toEqual([['nfl-james-cook-b73b6c59', 'thesportsdb', 'tsdb_1']])
+    expect(out).toMatchObject({ foldedIntoSleeperTwin: 1 })
   })
 })
