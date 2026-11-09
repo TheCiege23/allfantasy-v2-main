@@ -230,7 +230,20 @@ export async function calculateScoreFromSportConfig(
 export function buildLeagueStatScorer(league: { sport: string; settings: unknown }): LeagueStatScorer | null {
   const rules = resolveLeagueScoringRules(league)
   if (!rules) return null
-  const { categories: resolved, overrides } = rules
+  const { categories: resolved, overrides, fantraxSoccer } = rules
+  if (fantraxSoccer) {
+    const { keeper } = fantraxSoccer
+    const shared = Object.fromEntries(resolved.map(({ key }) => [key, keeper[key] === overrides[key] ? keeper[key] : 0]))
+    return (rawStats, position) => {
+      const normalized = position?.trim().toUpperCase()
+      const weights = normalized === 'GK' || normalized === 'GKP' || normalized === 'GOALKEEPER'
+        ? keeper
+        : normalized && /^(DEF|MID|FWD|D|M|F|DEFENDER|MIDFIELDER|FORWARD)$/.test(normalized)
+          ? overrides
+          : shared
+      return scoreStatsWithCategories(resolved, rawStats, weights)
+    }
+  }
   return (rawStats, position) =>
     scoreStatsWithCategories(resolved, applyTePremiumStat(resolved, rawStats, position), overrides)
 }

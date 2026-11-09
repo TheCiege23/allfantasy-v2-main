@@ -104,7 +104,7 @@ export type SportPointsContext = {
   replacementByPosition: ReadonlyMap<string, { name: string; perGame: number }>
   window: SportSeasonWindow
   /** How the scoring was chosen: this league's rules, or the sport's defaults with no league. */
-  scoringBasis: 'league' | 'default' | 'default_in_league'
+  scoringBasis: 'league' | 'default' | 'default_in_league' | 'partial_fantrax_soccer'
   teams: number
   teamCountAssumed?: boolean
   /**
@@ -173,7 +173,9 @@ export function sportPointsBasis(
       ? 'scored under this league’s rules'
       : ctx.scoringBasis === 'default_in_league'
         ? `scored on AllFantasy’s default ${label} points`
-        : `scored on AllFantasy’s default ${label} points for a ${ctx.teams}-team league with standard lineups`
+        : ctx.scoringBasis === 'partial_fantrax_soccer'
+          ? 'scored on supported Fantrax Soccer rules. Some categories are omitted because their stats or rules cannot be reproduced'
+          : `scored on AllFantasy’s default ${label} points for a ${ctx.teams}-team league with standard lineups`
   const bonus = ctx.sport === 'NBA' || ctx.sport === 'NCAAB' ? ' Double-double and triple-double bonuses are not projected.' : ''
   // A quality start is a one-game test that a season line cannot pass or fail.
   const qs = mlb ? ' Quality starts are not projected.' : ''
