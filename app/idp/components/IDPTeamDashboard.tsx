@@ -59,7 +59,7 @@ function OffensePlayerCard({
       onClick={onOpen}
       className="relative w-full rounded-lg border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-2 text-left transition hover:border-blue-500/30"
     >
-      <span className="absolute right-2 top-2 rounded border border-[color:var(--idp-offense)]/45 bg-[color:var(--idp-offense)]/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-blue-100">
+      <span className="absolute right-2 top-2 rounded border border-idp-offense/45 bg-idp-offense/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-blue-100">
         OFF
       </span>
       <div className="flex gap-2 pr-11">
@@ -296,7 +296,7 @@ export function IDPTeamDashboard({
         {showOffense
           ? column(
               <>
-                <div className="sticky top-[4.5rem] z-[9] flex items-center justify-between rounded-lg border border-[color:var(--idp-offense)]/30 bg-blue-950/30 px-3 py-2 lg:static lg:top-auto">
+                <div className="sticky top-[4.5rem] z-[9] flex items-center justify-between rounded-lg border border-idp-offense/30 bg-blue-950/30 px-3 py-2 lg:static lg:top-auto">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-blue-200">
                     ⚔️ OFFENSE
                   </span>
@@ -347,7 +347,7 @@ export function IDPTeamDashboard({
         {showDefense
           ? column(
               <>
-                <div className="sticky top-[4.5rem] z-[9] flex items-center justify-between rounded-lg border border-[color:var(--idp-defense)]/35 bg-red-950/25 px-3 py-2 lg:static">
+                <div className="sticky top-[4.5rem] z-[9] flex items-center justify-between rounded-lg border border-idp-defense/35 bg-red-950/25 px-3 py-2 lg:static">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-red-200">
                     🛡️ DEFENSE
                   </span>

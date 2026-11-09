@@ -133,6 +133,24 @@ const config = {
   theme: {
     extend: {
       colors: {
+        // IDP stat colours, same reason as `cap`: `bg-idp-defense/25`.
+        idp: {
+          defense: 'rgb(var(--idp-defense-rgb) / <alpha-value>)',
+          offense: 'rgb(var(--idp-offense-rgb) / <alpha-value>)',
+          combined: 'rgb(var(--idp-combined-rgb) / <alpha-value>)',
+          tackle: 'rgb(var(--idp-tackle-rgb) / <alpha-value>)',
+          sack: 'rgb(var(--idp-sack-rgb) / <alpha-value>)',
+          int: 'rgb(var(--idp-int-rgb) / <alpha-value>)',
+          td: 'rgb(var(--idp-td-rgb) / <alpha-value>)',
+        },
+        // IDP salary cap. Channel tokens (app/globals.css) so opacity modifiers work: `bg-cap-green/25`.
+        cap: {
+          green: 'rgb(var(--cap-green-rgb) / <alpha-value>)',
+          amber: 'rgb(var(--cap-amber-rgb) / <alpha-value>)',
+          red: 'rgb(var(--cap-red-rgb) / <alpha-value>)',
+          dead: 'rgb(var(--cap-dead-rgb) / <alpha-value>)',
+          contract: 'rgb(var(--cap-contract-rgb) / <alpha-value>)',
+        },
         app: 'var(--surface-app)',
         surface: {
           DEFAULT: 'var(--surface-card)',

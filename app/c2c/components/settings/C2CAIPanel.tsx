@@ -100,8 +100,7 @@ export function C2CAIPanel({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
           <span>
-            AF Commissioner Subscription gates C2C AI execution — toggles are local preferences only until AfSub is
-            active.
+            C2C AI runs with AF Commissioner. Until then, these toggles are saved as preferences only.
           </span>
           <SubscriptionGateBadge
             featureId="commissioner_c2c_scouting"
