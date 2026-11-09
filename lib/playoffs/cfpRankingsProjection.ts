@@ -1,4 +1,5 @@
-export type CfpProjection = { season: number; rankingDate: string; teams: string[]; groupSix: string }
+/** `ranks[i]` is the committee rank of `teams[i]` (seed i + 1). Optional: projections cached before it existed lack it. */
+export type CfpProjection = { season: number; rankingDate: string; teams: string[]; groupSix: string; ranks?: number[] }
 
 type Rank = { rank: number; school: string; conference: string }
 const power = ["acc", "big ten", "big 12", "sec"]
@@ -25,8 +26,9 @@ export function projectCfpRankings(payload: unknown): CfpProjection | null {
     const notreDame = ranks.find(team => team.school.toLowerCase() === "notre dame" && team.rank <= 12)
     if (notreDame) qualifiers.add(notreDame.school)
     for (const team of ranks) { if (qualifiers.size >= 12) break; qualifiers.add(team.school) }
-    const teams = ranks.filter(team => qualifiers.has(team.school)).map(team => team.school)
-    if (teams.length === 12) return { season: 2026, rankingDate: dates[row.week], teams, groupSix: g6.school }
+    const field = ranks.filter(team => qualifiers.has(team.school))
+    const teams = field.map(team => team.school)
+    if (teams.length === 12) return { season: 2026, rankingDate: dates[row.week], teams, groupSix: g6.school, ranks: field.map(team => team.rank) }
   }
   return null
 }
