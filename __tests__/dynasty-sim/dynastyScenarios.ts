@@ -51,6 +51,13 @@ function seasonRoster(env: SimEnv, id: string | null) {
   return id ? (rowsOf(env.db, 'RedraftRoster') as any[]).find((r) => r.id === id) ?? null : null
 }
 
+/** A scenario written around a 12-team league skips, and says so, when the league has too few teams. */
+function tooFewSeats(all: Seat[], needed: number, S: Record<string, any>, name: string): boolean {
+  if (all.length >= needed) return false
+  ;(S.skippedForLeagueSize ??= []).push(`${name}: needs ${needed} teams, the league has ${all.length}`)
+  return true
+}
+
 function holdings(env: SimEnv, seasonRosterId: string | null) {
   return (rowsOf(env.db, 'RedraftRosterPlayer') as any[]).filter((p) => p.rosterId === seasonRosterId && !p.droppedAt)
 }
@@ -204,6 +211,7 @@ async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
     ctx.add({ code: 'NO_FREE_AGENTS', stage: 'season', message: 'No unrostered players to claim.' })
     return
   }
+  if (tooFewSeats(all, 5, S, 'waivers')) return
   const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
   const [a, b, c] = [all[2]!, all[3]!, all[4]!]
   const dropOf = (s: Seat) => holdings(env, s.seasonRosterId).filter((p) => !isStarter(p.slotType)).sort((x, y) => String(y.playerId).localeCompare(String(x.playerId)))[0]
@@ -248,6 +256,7 @@ async function freeAgentAdd(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record
   const leagueId = run.leagueId!
   const rostered = new Set((rowsOf(env.db, 'RedraftRosterPlayer') as any[]).filter((p) => !p.droppedAt).map((p) => String(p.playerId)))
   const fa = (rowsOf(env.db, 'SportsPlayer') as any[]).find((p) => p.sport === run.sport && /^sim-/.test(String(p.id)) && !rostered.has(String(p.id)) && p.position === 'TE')
+  if (tooFewSeats(seats(env, run), 6, S, 'free-agent add')) return
   const seat = seats(env, run)[5]!
   const drop = holdings(env, seat.seasonRosterId).filter((p) => !isStarter(p.slotType))[0]
   if (!fa || !drop) return
@@ -368,7 +377,9 @@ export async function collusionConsequences(env: SimEnv, run: LeagueRun, ctx: We
   // once those rosters have traded again (ROSTER_CHANGED_SINCE_EXECUTION) — recorded separately below.
   const lopsidedIds = trades.filter((x: any) => String(x.label).startsWith('collusion') && x.ok).map((x: any) => x.tradeId)
   const lopsidedRows = (rowsOf(env.db, 'AfLeagueTrade') as any[]).filter((t) => lopsidedIds.includes(t.id) && t.status === 'processed')
-  const target = lopsidedRows.sort((a, b) => String(b.processedAt ?? '').localeCompare(String(a.processedAt ?? '')))[0] ?? null
+  // The last one in the order the deals were made. `processedAt` is a Date and the deals settle in the
+  // same second, so sorting on it as text picked the FIRST deal, whose rosters the later two had changed.
+  const target = lopsidedIds.map((id: string) => lopsidedRows.find((t) => t.id === id)).filter(Boolean).at(-1) ?? null
   if (target) {
     signInAs(env, run.commissionerId)
     const route = await import('@/app/api/leagues/[leagueId]/trades/[tradeId]/process/route')
@@ -380,7 +391,16 @@ export async function collusionConsequences(env: SimEnv, run: LeagueRun, ctx: We
       return { player: i.itemReference, backHome: holders.length === 1 && holders[0] === origin }
     })
     C.reversal = { status: res.status, error: (res.body as any)?.error ?? null, tradeStatus: (rowsOf(env.db, 'AfLeagueTrade') as any[]).find((t) => t.id === target.id)?.status, back }
-    if (res.status !== 200) ctx.add({ code: 'COLLUSION_REVERSAL_REFUSED', stage: 'season', message: `Reversing a lopsided trade returned ${res.status}: ${JSON.stringify(res.body).slice(0, 200)}` })
+    if (res.status !== 200) {
+      const readiness = (res.body as any)?.readiness
+      const drift = ((readiness?.drift ?? []) as Array<{ rosterId: string; expected: string; actual: string }>).map((d) => {
+        const e = JSON.parse(d.expected) as { ids: string[]; faab: number }
+        const a = JSON.parse(d.actual) as { ids: string[]; faab: number }
+        return { rosterId: d.rosterId, faab: e.faab === a.faab ? null : `${e.faab} -> ${a.faab}`, left: e.ids.filter((x) => !a.ids.includes(x)), joined: a.ids.filter((x) => !e.ids.includes(x)) }
+      })
+      C.reversal.drift = drift
+      ctx.add({ code: 'COLLUSION_REVERSAL_REFUSED', stage: 'season', message: `Reversing a lopsided trade returned ${res.status} (${(readiness?.blockers ?? []).join(', ') || (res.body as any)?.error}); since the trade: ${JSON.stringify(drift)}` })
+    }
     else if (back.some((b) => !b.backHome)) ctx.add({ code: 'REVERSED_TRADE_PLAYERS_NOT_RETURNED', stage: 'season', message: `Reversal returned 200; players back home: ${JSON.stringify(back)}` })
   }
 }
@@ -389,6 +409,7 @@ export async function collusionConsequences(env: SimEnv, run: LeagueRun, ctx: We
 export async function secondRoundPickTrade(env: SimEnv, run: LeagueRun, ctx: WeekCtx): Promise<void> {
   const leagueId = run.leagueId!
   const all = seats(env, run)
+  if (tooFewSeats(all, 10, (run.stats.scenarios ??= {}) as Record<string, any>, '2nd-round pick trade')) return
   const [e, f] = [all[8]!, all[9]!]
   const pe = holdings(env, e.seasonRosterId).filter((p) => !isStarter(p.slotType))[0]
   const pf = holdings(env, f.seasonRosterId).filter((p) => !isStarter(p.slotType))[0]
@@ -599,6 +620,19 @@ export function expectedOrderFromFacts(input: any): { order: string[]; detail: R
   const nonPlayoff = teams.filter((t) => t.playoffSeed == null).sort((a, b) => (Number(a.maxPf ?? a.pointsFor) - Number(b.maxPf ?? b.pointsFor)) || (a.pointsFor - b.pointsFor))
   const out = teams.filter((t) => t.playoffSeed != null && t.teamId !== champion && t.teamId !== runnerUp)
     .sort((a, b) => ((exitRound.get(a.teamId) ?? 99) - (exitRound.get(b.teamId) ?? 99)) || (Number(b.playoffSeed) - Number(a.playoffSeed)))
+  // A lower bracket that plays for the pick seats the team it decided first; the rest keep their order.
+  // A consolation bracket's winner, or a toilet bowl's final loser (its winner with `pickGoesTo: 'winner'`).
+  const lower = input?.lowerBracket ?? input?.input?.lowerBracket ?? null
+  let lowerFirst: string | null = null
+  if (lower?.playsForPick && Array.isArray(lower.finishOrder)) {
+    const ids = new Set(nonPlayoff.map((t) => t.teamId))
+    const named = (lower.finishOrder as string[]).filter((id) => ids.has(id))
+    lowerFirst = lower.mode !== 'toilet_bowl' ? named[0] ?? null
+      : lower.pickGoesTo === 'winner' ? lower.final?.winner ?? named.at(-2) ?? null
+        : lower.final?.loser ?? named.at(-1) ?? null
+    const i = nonPlayoff.findIndex((t) => t.teamId === lowerFirst)
+    if (i > 0) nonPlayoff.unshift(...nonPlayoff.splice(i, 1))
+  }
   const order = [...nonPlayoff.map((t) => t.teamId), ...out.map((t) => t.teamId), ...(runnerUp ? [runnerUp] : []), ...(champion ? [champion] : [])]
   return {
     order,
@@ -607,6 +641,7 @@ export function expectedOrderFromFacts(input: any): { order: string[]; detail: R
       runnerUp,
       maxPfMissing: teams.filter((t) => t.maxPf == null).length,
       placementGames: games.filter((g) => g.kind === 'placement').length,
+      lowerBracket: lower ? { mode: lower.mode, playsForPick: lower.playsForPick, pickGoesTo: lower.pickGoesTo ?? null, picksFirst: lowerFirst } : null,
       teams: teams.map((t) => ({ id: t.teamId, seed: t.playoffSeed, maxPf: t.maxPf, pf: t.pointsFor, exit: exitRound.get(t.teamId) ?? null })),
     },
   }

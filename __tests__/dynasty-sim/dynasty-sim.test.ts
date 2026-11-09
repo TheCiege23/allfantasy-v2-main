@@ -243,7 +243,8 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
         if (scale) {
           await gradeScaleRookiePicks(env, run)
         } else {
-          if (process.env.SIM_AUDIT_VALUES === '1') await sim.seedDynastyTradeValues(env, run, pool)
+          // The integrity scenarios need graded trades in every sport, not only the value audit.
+          if (process.env.SIM_AUDIT_VALUES === '1' || process.env.SIM_SCENARIOS === '1') await sim.seedDynastyTradeValues(env, run, pool)
           if (process.env.SIM_SEASON === '1') await sim.runDynastySeason(env, run)
         }
       } catch (error) {
