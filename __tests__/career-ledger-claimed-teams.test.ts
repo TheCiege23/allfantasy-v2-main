@@ -459,3 +459,23 @@ it.each([true, false])('keeps playoff berth %s when the commissioner verifies fu
     survival: { periods: 17, totalPeriods: 17 },
   })
 })
+
+it.each([
+  { method: 'verified_commissioner_champion', eliminatedWeek: null, periods: 15, wonChampionship: true },
+  { method: 'verified_owner_roster_clear', eliminatedWeek: 4, periods: 2, wonChampionship: false },
+])('applies reviewed Sleeper evidence from $method', async ({ method, eliminatedWeek, periods, wonChampionship }) => {
+  state.imported = [importedLeague({
+    userId: 'joiner', platformLeagueId: 'sleeper-league', season: 2021, status: 'complete',
+  })]
+  state.importedSurvival = [{
+    userId: 'joiner', platformLeagueId: 'sleeper-league', season: 2021, updatedAt: T0, evidence: {
+      version: 1, method, rosterId: 2, firstWeek: 2, finalWeek: 16, eliminatedWeek,
+    },
+  }]
+  const rows = await loadCareerLedger(['joiner'])
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).toMatchObject({
+    specialty: 'guillotine', completed: true, wonChampionship,
+    survival: { periods, totalPeriods: 15 },
+  })
+})
