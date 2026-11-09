@@ -309,7 +309,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--chip);
   border: 1px solid var(--line);
 }
