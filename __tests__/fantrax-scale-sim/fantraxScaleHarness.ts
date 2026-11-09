@@ -202,7 +202,8 @@ export async function seedSoccerIdentities(env: ScaleEnv): Promise<void> {
     const name = firstLast(ref.name)
     return {
       id: `pim-${id}`, canonicalName: name, normalizedName: name.toLowerCase().replace(/[^a-z]/g, ''),
-      sport: 'SOCCER', position: ref.position, currentTeam: ref.team, rollingInsightsId: `ri-${id}`, fantraxId: id,
+      sport: 'SOCCER', position: ref.position, currentTeam: ref.team, rollingInsightsId: `ri-${id}`,
+      fantraxId: process.env.SIM_SEED_SOCCER_LINKS === '0' ? null : id,
     }
   }) })
 }

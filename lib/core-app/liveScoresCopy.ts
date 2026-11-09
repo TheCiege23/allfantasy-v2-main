@@ -85,6 +85,7 @@ const ES: Record<string, string> = {
   // Game card
   'Gamecast →': 'Seguir en vivo →',
   'Game details →': 'Detalles del partido →',
+  'Rivalry game': 'Partido de rivalidad',
   'Last play': 'Última jugada',
   'Win prob · est': 'Prob. de victoria · est.',
   Team: 'Equipo',

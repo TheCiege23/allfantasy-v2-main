@@ -21,6 +21,7 @@
  * Run with no flag for a dry run. `--apply` writes, inside one transaction.
  */
 import { prisma } from '../lib/prisma'
+import { planDuplicatePlayerMerges } from '../lib/canonical/duplicatePlayerMerge'
 
 const APPLY = process.argv.includes('--apply')
 
@@ -35,10 +36,20 @@ const APPLY = process.argv.includes('--apply')
  *              rows differing only by position spelling (Grady Jarrett DE vs DT)
  *              or by a stale team (Joe Cardona LAR vs MIA) — which is exactly the
  *              residue the first pass left behind.
+ * `birthday` — NFL only. A row with no Sleeper id folded into the ONE Sleeper-backed row with
+ *              the same normalized name AND birthday. This catches what neither scope above
+ *              can: TheSportsDB copies that differ in position label (`OT` vs `OL`) or team, and
+ *              share no provider id with the Sleeper row. Measured 2026-11-09: 479 such rows,
+ *              454 mergeable, 25 refused for a provider clash. The rule and its refusals live
+ *              in `lib/canonical/duplicatePlayerMerge.ts`, which the canonical backfill also
+ *              reads so a re-run cannot rebuild the copy. The SURVIVOR IS FIXED to the
+ *              Sleeper-backed row rather than picked by `pickSurvivor`: the backfill keys NFL
+ *              players by Sleeper id, so any other survivor would be rebuilt beside it.
  */
 const SCOPE = (process.argv.find((a) => a.startsWith('--scope='))?.split('=')[1] ?? 'name') as
   | 'name'
   | 'provider'
+  | 'birthday'
 
 type Row = {
   id: string
@@ -136,7 +147,46 @@ async function main() {
      JOIN "Player" p ON p.id = i.player_id
      ORDER BY gkey, p.id`
 
-  const rows = await prisma.$queryRawUnsafe<any[]>(SCOPE === 'provider' ? PROVIDER_SQL : NAME_SQL)
+  /* gkey -> the row that must survive. Set only by the `birthday` scope. */
+  const fixedSurvivor = new Map<string, string>()
+  const birthdayRefusals: string[] = []
+
+  let rows: any[]
+  if (SCOPE === 'birthday') {
+    const players = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT p.id, p.name, p.position, p.sport, p.team, p.provider_ids AS "providerIds",
+              to_char(p.birth_date, 'YYYY-MM-DD') AS "birthDate",
+              (SELECT COUNT(*) FROM sports_core_player_provider_identities i WHERE i.player_id = p.id)::int AS "identityCount",
+              (SELECT COUNT(*) FROM sports_core_player_images im WHERE im.player_id = p.id)::int AS "imageCount"
+       FROM "Player" p WHERE p.sport = 'NFL'`
+    )
+    const identities = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT i.player_id AS "playerId", i.provider, i.provider_player_id AS "providerPlayerId"
+       FROM sports_core_player_provider_identities i JOIN "Player" p ON p.id = i.player_id
+       WHERE p.sport = 'NFL'`
+    )
+    const birthdayPlan = planDuplicatePlayerMerges(players, identities)
+    const byId = new Map(players.map((p) => [p.id, p]))
+    rows = []
+    const added = new Set<string>()
+    for (const m of birthdayPlan.merges) {
+      fixedSurvivor.set(m.keepId, m.keepId)
+      for (const id of [m.keepId, m.dupId]) {
+        if (added.has(id)) continue
+        added.add(id)
+        rows.push({ ...byId.get(id), gkey: m.keepId })
+      }
+    }
+    console.log(
+      `birthday plan: ${birthdayPlan.merges.length} copies to fold, ${birthdayPlan.skipped.length} refused, ` +
+        `${birthdayPlan.noTwin} with no Sleeper-backed twin, ${birthdayPlan.noEvidence} with no name or birthday`
+    )
+    for (const s of birthdayPlan.skipped.slice(0, 8)) {
+      birthdayRefusals.push(`${byId.get(s.dupId)?.name} ${s.dupId} — ${s.reason}${s.providers ? ` (${s.providers.join(', ')})` : ''}`)
+    }
+  } else {
+    rows = await prisma.$queryRawUnsafe<any[]>(SCOPE === 'provider' ? PROVIDER_SQL : NAME_SQL)
+  }
 
   const groups = new Map<string, Row[]>()
   for (const r of rows) {
@@ -165,7 +215,8 @@ async function main() {
       if (conflicts.length < 8) conflicts.push(`${gkey} — spans sports: ${[...new Set(rs.map((r) => r.sport))].join('/')}`)
       continue
     }
-    const survivor = pickSurvivor(rs)
+    const fixedId = fixedSurvivor.get(gkey)
+    const survivor = (fixedId ? rs.find((r) => r.id === fixedId) : undefined) ?? pickSurvivor(rs)
     const losers = rs.filter((r) => r.id !== survivor.id)
 
     const bad = losers
@@ -196,7 +247,16 @@ async function main() {
     plan.push({ survivor, losers, mergedPids })
   }
 
-  console.log(`\ngroups considered (same name+position+sport+team): ${groups.size}`)
+  const groupRule = {
+    name: 'same name+position+sport+team',
+    provider: 'one provider id on several rows',
+    birthday: 'NFL copy with no Sleeper id -> its Sleeper-backed twin by name+birthday',
+  }[SCOPE]
+  console.log(`\ngroups considered (${groupRule}): ${groups.size}`)
+  if (birthdayRefusals.length) {
+    console.log('\n  sample birthday-scope refusals (left alone; a provider would carry two ids):')
+    birthdayRefusals.forEach((c) => console.log(`    ${c}`))
+  }
   console.log(`  mergeable:                 ${merged}`)
   console.log(`  refused (provider clash):  ${skippedConflict}`)
   console.log(`  Player rows to delete:     ${losersToDelete}`)

@@ -33,6 +33,7 @@ import {
   normalizeSport,
   type CanonicalMatchStrategy,
 } from '@/lib/canonical/canonicalIdentity'
+import { foldTargetsForUnkeyedGroups, hasSleeperId, twinKey } from '@/lib/canonical/duplicatePlayerMerge'
 
 export interface BackfillOptions {
   sport?: string
@@ -48,6 +49,8 @@ export interface BackfillSummary {
   playerIdentities: number
   teamIdentities: number
   collapsedDuplicates: number
+  /** NFL groups with no Sleeper id folded onto their Sleeper-backed twin (see `foldUnkeyedNflGroups`). */
+  foldedIntoSleeperTwin: number
   strategies: Record<CanonicalMatchStrategy, number>
   dryRun: boolean
 }
@@ -434,6 +437,81 @@ export async function backfillCanonicalTeams(
 }
 
 /**
+ * Fold NFL groups that carry no Sleeper id onto their Sleeper-backed twin, in place.
+ *
+ * ⚠ WITHOUT THIS THE BACKFILL REBUILDS THE COPIES THE DEDUPE REMOVES. A TheSportsDB row has no
+ * Sleeper id, so `deriveCanonicalPlayerIdentity` keys it by (name, position, team), and
+ * TheSportsDB spells positions and teams differently from Sleeper. That made a second canonical
+ * row for 479 NFL players on 2026-07-21 (see `duplicatePlayerMerge.ts`). After
+ * `scripts/dedupe-players.ts --scope=birthday` removes them, a re-run would derive the same
+ * ids again, recreate the rows, and `writeIdentityBatches` would point their identities back
+ * at them.
+ *
+ * The rule is `foldTargetsForUnkeyedGroups`, shared with the dedupe. Its candidates are the
+ * Sleeper-keyed groups in THIS run and the Sleeper-backed `Player` rows already in the
+ * database, because a run with `limit` sees only part of the source table.
+ *
+ * Returns the groups that fold onto a player this run does not rebuild. Those write their
+ * identities to that player and no `Player` row of their own. A group folding onto a player
+ * this run DOES rebuild is merged into its rows here.
+ */
+async function foldUnkeyedNflGroups(grouped: Map<string, SourcePlayer[]>): Promise<{ folded: number; ontoExisting: Map<string, string> }> {
+  const ontoExisting = new Map<string, string>()
+  const isNfl = (rows: SourcePlayer[]) => rows.every((r) => normalizeSport(r.sport) === 'NFL')
+  const pairs = (rows: SourcePlayer[]): Array<[string, string]> =>
+    rows
+      .filter((r) => r.source && r.externalId)
+      .map((r) => [r.source, normalizeProviderPlayerId(r.source, r.externalId.trim())] as [string, string])
+      .filter(([, id]) => Boolean(id))
+
+  const unkeyed = [...grouped]
+    .filter(([, rows]) => isNfl(rows) && rows.every((r) => !r.sleeperId))
+    .map(([groupId, rows]) => ({ groupId, keys: rows.map((r) => twinKey(r.name, r.dob)), providerIds: pairs(rows) }))
+  const wanted = new Set(unkeyed.flatMap((g) => g.keys).filter((k): k is string => Boolean(k)))
+  if (wanted.size === 0) return { folded: 0, ontoExisting }
+
+  const keyed: Array<{ id: string; key: string | null; providerIds: Array<[string, string]> }> = []
+  for (const [id, rows] of grouped) {
+    if (!isNfl(rows) || !rows.some((r) => r.sleeperId)) continue
+    for (const r of rows) {
+      const key = twinKey(r.name, r.dob)
+      if (key && wanted.has(key)) keyed.push({ id, key, providerIds: pairs(rows) })
+    }
+  }
+  const existing = await prisma.player.findMany({
+    where: { sport: 'NFL', birthDate: { not: null } },
+    select: { id: true, name: true, birthDate: true, providerIds: true },
+  })
+  const existingTwins = existing.filter((p) => {
+    const key = twinKey(p.name, p.birthDate)
+    return key && wanted.has(key) && hasSleeperId(p.providerIds as Record<string, unknown> | null)
+  })
+  /* The providers each candidate already holds, so a fold never gives it two ids from one. */
+  const candidateIds = [...new Set([...keyed.map((k) => k.id), ...existingTwins.map((p) => p.id)])]
+  const held = candidateIds.length
+    ? await prisma.playerProviderIdentity.findMany({
+        where: { playerId: { in: candidateIds } },
+        select: { playerId: true, provider: true, providerPlayerId: true },
+      })
+    : []
+  for (const h of held) if (h.playerId) keyed.push({ id: h.playerId, key: null, providerIds: [[h.provider, h.providerPlayerId]] })
+  for (const p of existingTwins) keyed.push({ id: p.id, key: twinKey(p.name, p.birthDate), providerIds: [] })
+
+  const targets = foldTargetsForUnkeyedGroups(unkeyed, keyed)
+  for (const [groupId, target] of targets) {
+    if (groupId === target) continue
+    const into = grouped.get(target)
+    if (into) {
+      into.push(...grouped.get(groupId)!)
+      grouped.delete(groupId)
+    } else {
+      ontoExisting.set(groupId, target)
+    }
+  }
+  return { folded: targets.size, ontoExisting }
+}
+
+/**
  * Backfill canonical `Player` rows from `SportsPlayer`, collapsing duplicate source rows and
  * recording every provider id that resolves to each canonical player.
  */
@@ -449,7 +527,7 @@ export async function backfillCanonicalPlayers(
     select: {
       id: true, name: true, sport: true, position: true, team: true,
       externalId: true, source: true, sleeperId: true, imageUrl: true,
-      height: true, weight: true, status: true, fetchedAt: true, expiresAt: true,
+      height: true, weight: true, status: true, fetchedAt: true, expiresAt: true, dob: true,
     },
   })) as SourcePlayer[]
 
@@ -470,6 +548,8 @@ export async function backfillCanonicalPlayers(
     grouped.set(identity.id, list)
   }
 
+  const { folded, ontoExisting } = await foldUnkeyedNflGroups(grouped)
+
   const teamCounts = await backfillCanonicalTeams(opts)
 
   let canonicalPlayers = 0
@@ -482,19 +562,26 @@ export async function backfillCanonicalPlayers(
   const identityRows: IdentityWriteRow[] = []
   const crosswalkNeeded = new Map<string, { canonicalId: string; sportKey: string; name: string }>()
 
-  for (const [canonicalId, rows] of grouped) {
-    const best = pickBestSourceRow(rows)
+  for (const [groupId, rows] of grouped) {
+    /* A group folded onto a player this run does not rebuild writes only its identities, and
+       writes them to that player. */
+    const foldTarget = ontoExisting.get(groupId)
+    const canonicalId = foldTarget ?? groupId
+    /* Rank among the Sleeper-keyed rows when there are any. A folded-in TheSportsDB row must not
+       out-rank them on a headshot and replace the player's name, team or position. */
+    const keyedRows = rows.filter((r) => r.sleeperId)
+    const best = pickBestSourceRow(keyedRows.length ? keyedRows : rows)
     const identity = deriveCanonicalPlayerIdentity({
       name: best.name, sport: best.sport, position: best.position,
       team: best.team, sleeperId: best.sleeperId,
     })
     strategies[identity.strategy]++
 
-    if (opts.dryRun) { canonicalPlayers++; continue }
+    if (opts.dryRun) { if (!foldTarget) canonicalPlayers++; continue }
 
     const sportKey = normalizeSport(best.sport)
 
-    playerRows.push({
+    if (!foldTarget) playerRows.push({
       id: canonicalId,
       name: best.name,
       normalizedName: identity.normalizedName,
@@ -544,7 +631,7 @@ export async function backfillCanonicalPlayers(
     // 3. Everything already crosswalked in PlayerIdentityMap (resolved in bulk below).
     if (best.sleeperId) crosswalkNeeded.set(best.sleeperId, { canonicalId, sportKey, name: best.name })
 
-    canonicalPlayers++
+    if (!foldTarget) canonicalPlayers++
   }
 
   if (!opts.dryRun) {
@@ -579,7 +666,8 @@ export async function backfillCanonicalPlayers(
     canonicalTeams: teamCounts.teams,
     playerIdentities: identityKeys.size,
     teamIdentities: teamCounts.identities,
-    collapsedDuplicates: sourceRows.length - grouped.size,
+    collapsedDuplicates: sourceRows.length - (grouped.size - ontoExisting.size),
+    foldedIntoSleeperTwin: folded,
     strategies,
     dryRun: Boolean(opts.dryRun),
   }

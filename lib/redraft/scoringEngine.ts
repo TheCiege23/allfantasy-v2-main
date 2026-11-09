@@ -17,6 +17,7 @@ import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment }
 import { bestBallPlayerPositions, buildBestBallSlots } from '@/lib/bestball/productionLineup'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
 import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
+import { fantraxSoccerScoringPosition } from '@/lib/league-import/fantrax/fantraxScoring'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
 import { assignExtraMatchupForWeek } from '@/lib/redraft/oddTeamExtraMatchup'
@@ -230,15 +231,15 @@ export function buildLeagueStatScorer(league: { sport: string; settings: unknown
   if (!rules) return null
   const { categories: resolved, overrides, fantraxSoccer } = rules
   if (fantraxSoccer) {
-    const { keeper } = fantraxSoccer
-    const shared = Object.fromEntries(resolved.map(({ key }) => [key, keeper[key] === overrides[key] ? keeper[key] : 0]))
+    const { positionWeights } = fantraxSoccer
+    const groups = Object.values(positionWeights)
+    const shared = Object.fromEntries(resolved.map(({ key }) => {
+      const value = positionWeights.GK[key]
+      return [key, value !== undefined && groups.every((weights) => weights[key] === value) ? value : 0]
+    }))
     return (rawStats, position) => {
-      const normalized = position?.trim().toUpperCase()
-      const weights = normalized === 'GK' || normalized === 'GKP' || normalized === 'GOALKEEPER'
-        ? keeper
-        : normalized && /^(DEF|MID|FWD|D|M|F|DEFENDER|MIDFIELDER|FORWARD)$/.test(normalized)
-          ? overrides
-          : shared
+      const slot = fantraxSoccerScoringPosition(position)
+      const weights = slot ? { ...overrides, ...positionWeights[slot] } : shared
       return scoreStatsWithCategories(resolved, rawStats, weights)
     }
   }

@@ -1,16 +1,22 @@
 import type { ReactNode } from "react"
 import { CFP_BOWL_CREST_NAMES, type CfpBowlCrestKey } from "@/lib/playoffs/cfpBowlCrest"
+import { RIVALRY_NAMES, type RivalryCrestKey } from "@/lib/college/rivalryCrests"
 
 /*
- * Original AllFantasy crests for the CFP bowls — NOT the bowls' official marks
- * (see lib/playoffs/cfpBowlCrest.ts). Each shield carries its own dark fill so it
- * reads the same on the dark, light and AF themes.
+ * Original AllFantasy crests for the CFP bowls and the big college rivalry games —
+ * NOT the bowls' official marks, a school's logo or a trophy's likeness (see
+ * lib/playoffs/cfpBowlCrest.ts). Each shield carries its own dark fill so it reads
+ * the same on the dark, light and AF themes.
  */
+
+export type CollegeCrestKey = CfpBowlCrestKey | RivalryCrestKey
+
+const CREST_NAMES: Record<CollegeCrestKey, string> = { ...CFP_BOWL_CREST_NAMES, ...RIVALRY_NAMES }
 
 const SHIELD = "M60 4 L112 20 V68 C112 102 88 124 60 136 C32 124 8 102 8 68 V20 Z"
 const LEAF = "#3CCB7F"
 
-const CRESTS: Record<CfpBowlCrestKey, { color: string; word: string; art: ReactNode }> = {
+const CRESTS: Record<CollegeCrestKey, { color: string; word: string; art: ReactNode; wordSize?: number }> = {
   rose: {
     color: "#F0506E",
     word: "ROSE",
@@ -90,11 +96,278 @@ const CRESTS: Record<CfpBowlCrestKey, { color: string; word: string; art: ReactN
       <path d="M60 46 L62.5 52 L69 52.5 L64 56.5 L65.5 63 L60 59.5 L54.5 63 L56 56.5 L51 52.5 L57.5 52 Z" fill="#111A2E" />
     </>,
   },
+  // ── Rivalry games ───────────────────────────────────────────────────
+  iron: {
+    color: "#B8BEC9",
+    word: "IRON",
+    art: <>
+      <g stroke="#FF7A3D" strokeWidth="3.5" strokeLinecap="round"><path d="M56 54 L50 42" /><path d="M62 52 L64 38" /><path d="M68 55 L78 45" /></g>
+      <path d="M30 62 H84 C84 70 78 74 70 74 V82 H78 V94 H42 V82 H50 V74 C42 74 34 70 30 62 Z" fill="#B8BEC9" />
+      <path d="M84 62 L96 58 L86 68 Z" fill="#B8BEC9" />
+      <path d="M30 62 H84" stroke="#E6E9EF" strokeWidth="3" />
+    </>,
+  },
+  game: {
+    color: "#E8EEF8",
+    word: "THE GAME",
+    art: <>
+      <path d="M28 48 L52 66 L28 84" fill="none" stroke="#E8EEF8" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M92 48 L68 66 L92 84" fill="none" stroke="#8E9BB5" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M60 56 L62.5 63 L70 64 L64 68.5 L66 76 L60 71.5 L54 76 L56 68.5 L50 64 L57.5 63 Z" fill="#FFB547" />
+    </>,
+  },
+  river: {
+    color: "#E5484D",
+    word: "RED RIVER",
+    wordSize: 10,
+    art: <>
+      <path d="M60 36 L63 45 L72 45.5 L65 51 L67.5 60 L60 55 L52.5 60 L55 51 L48 45.5 L57 45 Z" fill="#F4F7FF" />
+      <path d="M24 76 C38 62 50 90 62 76 C74 62 84 86 96 72" fill="none" stroke="#E5484D" strokeWidth="9" strokeLinecap="round" />
+      <path d="M26 94 C40 84 52 100 64 92 C76 84 86 98 94 90" fill="none" stroke="#E5484D" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.5" />
+    </>,
+  },
+  egg: {
+    color: "#E9C46A",
+    word: "EGG",
+    art: <>
+      <path d="M60 38 C74 38 83 60 83 75 C83 90 73 99 60 99 C47 99 37 90 37 75 C37 60 46 38 60 38 Z" fill="#E9C46A" />
+      <path d="M50 52 C46 58 44 66 45 72" fill="none" stroke="#FFF1C9" strokeWidth="4" strokeLinecap="round" />
+      <path d="M38 80 L48 74 L56 82 L64 74 L72 82 L82 76" fill="none" stroke="#B8902F" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </>,
+  },
+  service: {
+    color: "#6C8EBF",
+    word: "ARMY–NAVY",
+    wordSize: 10,
+    art: <>
+      <g fill="none" stroke="#6C8EBF" strokeWidth="5" strokeLinecap="round">
+        <circle cx="60" cy="44" r="6" />
+        <path d="M60 50 V96" />
+        <path d="M46 58 H74" />
+        <path d="M36 80 C40 92 50 98 60 98 C70 98 80 92 84 80" />
+      </g>
+      <path d="M32 80 L36 72 L42 82 Z M88 80 L84 72 L78 82 Z" fill="#6C8EBF" />
+      <path d="M88 34 L90 39.5 L96 40 L91.5 43.5 L93 49 L88 46 L83 49 L84.5 43.5 L80 40 L86 39.5 Z" fill="#F5C76B" />
+      <path d="M32 34 L34 39.5 L40 40 L35.5 43.5 L37 49 L32 46 L27 49 L28.5 43.5 L24 40 L30 39.5 Z" fill="#F5C76B" />
+    </>,
+  },
+  apple: {
+    color: "#E4572E",
+    word: "APPLE",
+    art: <>
+      <path d="M60 54 C46 42 32 54 34 72 C36 88 48 100 60 96 C72 100 84 88 86 72 C88 54 74 42 60 54 Z" fill="#E4572E" />
+      <path d="M60 54 C60 46 62 40 66 36" fill="none" stroke="#8A5A3C" strokeWidth="3.5" strokeLinecap="round" />
+      <path d="M62 46 C68 36 80 36 84 40 C78 48 70 50 62 46 Z" fill={LEAF} />
+      <path d="M44 64 C42 70 42 76 44 80" fill="none" stroke="#FFB59E" strokeWidth="3.5" strokeLinecap="round" />
+    </>,
+  },
+  holy: {
+    color: "#9C8AD6",
+    word: "HOLY WAR",
+    art: <>
+      <path d="M24 98 L48 56 L60 74 L72 50 L96 98 Z" fill="#9C8AD6" />
+      <path d="M48 56 L55 68 L50 66 L46 70 L41 68 Z" fill="#F4F7FF" />
+      <path d="M72 50 L80 64 L75 62 L71 66 L66 63 Z" fill="#F4F7FF" />
+      <path d="M28 98 H92" stroke="#6E5BB5" strokeWidth="3" />
+    </>,
+  },
+  brawl: {
+    color: "#7FB069",
+    word: "BACKYARD",
+    wordSize: 10,
+    art: <>
+      <path d="M30 58 L36 50 L42 58 V98 H30 Z M46 58 L52 50 L58 58 V98 H46 Z M62 58 L68 50 L74 58 V98 H62 Z M78 58 L84 50 L90 58 V98 H78 Z" fill="#7FB069" />
+      <path d="M26 68 H94 V74 H26 Z M26 86 H94 V92 H26 Z" fill="#5E8C4C" />
+    </>,
+  },
+  flga: {
+    color: "#F28C38",
+    word: "FLA · UGA",
+    wordSize: 9.5,
+    art: <>
+      <path d="M60 38 C80 44 86 66 76 78 C68 86 52 86 44 78 C34 66 40 44 60 38 Z" fill="#F28C38" transform="rotate(-35 60 62)" />
+      <path d="M50 68 L70 56" stroke="#F4F7FF" strokeWidth="3" strokeLinecap="round" />
+      <path d="M54 60 L57 65 M58 58 L61 63 M62 56 L65 61" stroke="#F4F7FF" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M26 96 Q34 90 42 96 T58 96 T74 96 T94 96" fill="none" stroke="#5EC2E6" strokeWidth="4" strokeLinecap="round" />
+    </>,
+  },
+  hate: {
+    color: "#FF5A36",
+    word: "HATE",
+    art: <>
+      <path d="M60 34 C66 46 80 52 80 72 C80 88 70 98 60 98 C50 98 40 88 40 72 C40 60 48 56 50 46 C54 52 56 54 58 54 C58 46 58 40 60 34 Z" fill="#FF5A36" />
+      <path d="M60 62 C64 70 70 74 70 82 C70 90 66 94 60 94 C54 94 50 90 50 82 C50 76 54 74 56 68 C58 72 59 72 60 62 Z" fill="#FFD84D" />
+    </>,
+  },
+  palmetto: {
+    color: "#5B7FD6",
+    word: "PALMETTO",
+    wordSize: 10,
+    art: <>
+      <path d="M36 36 A10 10 0 1 0 46 48 A8 8 0 1 1 36 36 Z" fill="#F4F7FF" />
+      <path d="M64 98 V60" stroke="#F4F7FF" strokeWidth="5" strokeLinecap="round" />
+      <g fill="none" stroke="#5B7FD6" strokeWidth="5" strokeLinecap="round">
+        <path d="M64 60 C56 52 46 52 40 58" /><path d="M64 60 C72 52 82 52 88 58" /><path d="M64 60 C60 48 54 44 48 42" /><path d="M64 60 C68 48 74 44 80 42" /><path d="M64 60 V44" />
+      </g>
+      <path d="M44 98 H84" stroke="#5B7FD6" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  sunshine: {
+    color: "#FFC233",
+    word: "SUNSHINE",
+    wordSize: 10,
+    art: <>
+      <g stroke="#FFC233" strokeWidth="3.5" strokeLinecap="round"><path d="M60 34 V42" /><path d="M38 44 L43 50" /><path d="M82 44 L77 50" /></g>
+      <path d="M26 62 H94" stroke="#FFC233" strokeWidth="4" strokeLinecap="round" />
+      <path d="M30 62 H56 V68 C56 78 50 84 42 84 C34 84 30 78 30 70 Z" fill="#FFC233" />
+      <path d="M64 62 H90 V70 C90 78 86 84 78 84 C70 84 64 78 64 68 Z" fill="#FFC233" />
+      <path d="M36 66 C40 66 44 68 46 72" fill="none" stroke="#FFF1C9" strokeWidth="3" strokeLinecap="round" />
+      <path d="M70 66 C74 66 78 68 80 72" fill="none" stroke="#FFF1C9" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  lonestar: {
+    color: "#C96B3C",
+    word: "LONE STAR",
+    wordSize: 10,
+    art: <>
+      <circle cx="60" cy="66" r="30" fill="none" stroke="#C96B3C" strokeWidth="4" strokeDasharray="7 5" />
+      <path d="M60 40 L67 58 L86 58 L71 69 L77 88 L60 77 L43 88 L49 69 L34 58 L53 58 Z" fill="#F4F7FF" />
+    </>,
+  },
+  territorial: {
+    color: "#D17A3B",
+    word: "TERRITORIAL",
+    wordSize: 9,
+    art: <>
+      <path d="M24 92 L42 62 H56 L64 74 L74 56 H84 L96 92 Z" fill="#D17A3B" />
+      <path d="M60 36 V100" stroke="#F4F7FF" strokeWidth="3" strokeDasharray="5 5" strokeLinecap="round" />
+      <circle cx="40" cy="44" r="6" fill="#FFB547" />
+    </>,
+  },
+  biggame: {
+    color: "#F2C14E",
+    word: "BIG GAME",
+    art: <>
+      <path d="M24 86 C34 66 46 62 56 72 C64 60 78 58 96 80 V98 H24 Z" fill="#F2C14E" />
+      <path d="M30 54 H58 M42 46 H78 M62 58 H90" stroke="#C9D5EC" strokeWidth="3.5" strokeLinecap="round" strokeOpacity="0.8" />
+      <path d="M24 92 Q40 86 60 92 T96 92" fill="none" stroke="#5EC2E6" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  coast: {
+    color: "#D4AF37",
+    word: "ND · USC",
+    wordSize: 10,
+    art: <>
+      <path d="M30 84 C40 46 80 46 90 72" fill="none" stroke="#D4AF37" strokeWidth="4" strokeDasharray="6 5" strokeLinecap="round" />
+      <circle cx="30" cy="84" r="7" fill="#E5484D" />
+      <circle cx="90" cy="72" r="7" fill="#6FA3FF" />
+      <path d="M60 40 L62.5 47 L70 47.5 L64 52 L66 59 L60 55 L54 59 L56 52 L50 47.5 L57.5 47 Z" fill="#D4AF37" />
+      <path d="M26 98 H94" stroke="#D4AF37" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.6" />
+    </>,
+  },
+  october: {
+    color: "#F59E42",
+    word: "3RD SAT",
+    wordSize: 10,
+    art: <>
+      <path d="M30 42 H90 V96 H30 Z" fill="#E6E9EF" />
+      <path d="M30 42 H90 V54 H30 Z" fill="#F59E42" />
+      <path d="M42 36 V46 M78 36 V46" stroke="#E6E9EF" strokeWidth="4" strokeLinecap="round" />
+      <g fill="#9AA8C2">
+        <rect x="35" y="60" width="8" height="7" /><rect x="47" y="60" width="8" height="7" /><rect x="59" y="60" width="8" height="7" /><rect x="71" y="60" width="8" height="7" />
+        <rect x="35" y="72" width="8" height="7" /><rect x="47" y="72" width="8" height="7" /><rect x="59" y="72" width="8" height="7" />
+        <rect x="35" y="84" width="8" height="7" /><rect x="47" y="84" width="8" height="7" /><rect x="59" y="84" width="8" height="7" /><rect x="71" y="84" width="8" height="7" />
+      </g>
+      <rect x="69" y="70" width="12" height="11" rx="2" fill="#F59E42" />
+    </>,
+  },
+  oak: {
+    color: "#8DA05E",
+    word: "OLDEST",
+    wordSize: 9,
+    art: <>
+      <circle cx="44" cy="58" r="15" fill="#8DA05E" />
+      <circle cx="76" cy="58" r="15" fill="#8DA05E" />
+      <circle cx="60" cy="46" r="17" fill="#A3B872" />
+      <circle cx="60" cy="64" r="14" fill="#8DA05E" />
+      <path d="M56 98 C57 86 56 78 52 72 M64 98 C63 86 64 78 68 72 M56 98 H64 V76 H56 Z" fill="#8A5A3C" stroke="#8A5A3C" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M34 98 H86" stroke="#8DA05E" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  mitten: {
+    color: "#9AA8FF",
+    word: "MICH · MSU",
+    wordSize: 9.5,
+    art: <>
+      <path d="M44 98 C38 86 38 66 44 52 C48 42 56 38 62 42 C66 46 64 54 62 60 C66 54 74 52 78 56 C82 62 80 70 78 76 C76 88 72 96 66 98 Z" fill="#9AA8FF" />
+      <path d="M78 56 C84 50 90 52 90 58 C90 64 84 66 80 64" fill="#9AA8FF" />
+      <circle cx="58" cy="80" r="4" fill="#111A2E" />
+      <circle cx="70" cy="66" r="4" fill="#111A2E" />
+      <path d="M58 80 L70 66" stroke="#111A2E" strokeWidth="2.5" strokeDasharray="3 3" />
+    </>,
+  },
+  sunflower: {
+    color: "#FFCC33",
+    word: "SUNFLOWER",
+    wordSize: 9.5,
+    art: <>
+      <path d="M60 76 V100" stroke={LEAF} strokeWidth="4" strokeLinecap="round" />
+      <path d="M60 92 C52 86 46 88 42 94 C50 96 56 96 60 92 Z" fill={LEAF} />
+      <g fill="#FFCC33">
+        <ellipse cx="60" cy="38" rx="6" ry="10" /><ellipse cx="60" cy="74" rx="6" ry="10" /><ellipse cx="42" cy="56" rx="10" ry="6" /><ellipse cx="78" cy="56" rx="10" ry="6" />
+        <ellipse cx="47" cy="43" rx="6" ry="10" transform="rotate(-45 47 43)" /><ellipse cx="73" cy="43" rx="6" ry="10" transform="rotate(45 73 43)" />
+        <ellipse cx="47" cy="69" rx="6" ry="10" transform="rotate(45 47 69)" /><ellipse cx="73" cy="69" rx="6" ry="10" transform="rotate(-45 73 69)" />
+      </g>
+      <circle cx="60" cy="56" r="11" fill="#7A4E1E" />
+    </>,
+  },
+  cyhawk: {
+    color: "#E8C547",
+    word: "CY-HAWK",
+    art: <>
+      <path d="M60 36 C70 36 74 50 74 66 C74 80 68 90 60 90 C52 90 46 80 46 66 C46 50 50 36 60 36 Z" fill="#E8C547" />
+      <g stroke="#B8962E" strokeWidth="2"><path d="M50 50 H70" /><path d="M48 60 H72" /><path d="M48 70 H72" /><path d="M50 80 H70" /><path d="M60 38 V88" /></g>
+      <path d="M60 98 C50 92 42 80 42 64 C46 74 52 82 60 86 Z" fill={LEAF} />
+      <path d="M60 98 C70 92 78 80 78 64 C74 74 68 82 60 86 Z" fill="#2FA866" />
+    </>,
+  },
+  governor: {
+    color: "#6C9BD2",
+    word: "GOVERNOR",
+    wordSize: 9.5,
+    art: <>
+      <path d="M40 94 V64 C40 48 48 38 60 38 C72 38 80 48 80 64 V94 H68 V64 C68 56 64 50 60 50 C56 50 52 56 52 64 V94 Z" fill="#C9D5EC" />
+      <g fill="#111A2E"><circle cx="46" cy="64" r="2.5" /><circle cx="74" cy="64" r="2.5" /><circle cx="46" cy="78" r="2.5" /><circle cx="74" cy="78" r="2.5" /><circle cx="50" cy="50" r="2.5" /><circle cx="70" cy="50" r="2.5" /></g>
+      <path d="M28 100 Q44 94 60 100 T92 100" fill="none" stroke="#6C9BD2" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  ridge: {
+    color: "#7E8CE0",
+    word: "COMMONWEALTH",
+    wordSize: 9,
+    art: <>
+      <circle cx="78" cy="46" r="7" fill="#FFB547" />
+      <path d="M22 74 C34 60 44 58 56 66 C66 56 80 54 98 68 V100 H22 Z" fill="#4A56A6" />
+      <path d="M22 86 C36 74 48 74 60 82 C72 72 84 72 98 82 V100 H22 Z" fill="#7E8CE0" />
+      <path d="M22 96 C38 88 52 90 62 94 C74 88 86 88 98 94 V100 H22 Z" fill="#B3BCF0" />
+    </>,
+  },
+  storm: {
+    color: "#45C4B0",
+    word: "MIA · FSU",
+    wordSize: 9.5,
+    art: <>
+      <circle cx="60" cy="66" r="10" fill="#111A2E" stroke="#45C4B0" strokeWidth="5" />
+      <path d="M70 66 C72 50 62 38 46 40" fill="none" stroke="#45C4B0" strokeWidth="6" strokeLinecap="round" />
+      <path d="M50 66 C48 82 58 94 74 92" fill="none" stroke="#45C4B0" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="60" cy="66" r="3" fill="#F4F7FF" />
+    </>,
+  },
 }
 
-export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { bowl: CfpBowlCrestKey; size?: number; decorative?: boolean }) {
+export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { bowl: CollegeCrestKey; size?: number; decorative?: boolean }) {
   const crest = CRESTS[bowl]
-  const label = `${CFP_BOWL_CREST_NAMES[bowl]} crest`
+  const label = `${CREST_NAMES[bowl]} crest`
   return (
     <svg
       className="af-pb-crest"
@@ -110,7 +383,7 @@ export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { 
         ? <path d="M14 24 L60 10 L106 24" fill="none" stroke="#5EE6D3" strokeWidth="3" />
         : <path d="M22 27 L60 15 L98 27" fill="none" stroke={crest.color} strokeWidth="2.5" strokeOpacity="0.55" />}
       {crest.art}
-      {size >= 56 ? <text x="60" y="121" textAnchor="middle" fontSize="11" fontWeight="800" letterSpacing="1.5" fill={crest.color}>{crest.word}</text> : null}
+      {size >= 56 ? <text x="60" y="121" textAnchor="middle" fontSize={crest.wordSize ?? 11} fontWeight="800" letterSpacing={crest.wordSize ? 1 : 1.5} fill={crest.color}>{crest.word}</text> : null}
     </svg>
   )
 }

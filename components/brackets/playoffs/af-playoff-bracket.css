@@ -948,20 +948,10 @@
 .af-pb-game-meta { width: 100%; border: 0; border-bottom: 1px solid var(--pb-line); background: var(--pb-surface2); color: var(--pb-text); padding: 7px 8px; text-align: left; font-size: 11px; font-weight: 800; line-height: 1.35; cursor: pointer; }
 .af-pb-game-meta span { display: block; margin-top: 2px; color: var(--pb-muted); font-weight: 600; }
 .af-pb-game-meta:hover { color: var(--pb-accent); }
-/* CFP bowl crests: our own artwork per bowl, leading each game header and bowl card. */
+/* CFP bowl crests: our own artwork per bowl, leading each game header. The bowl schedule cards style themselves in cfp-bowl-schedule.css. */
 .af-pb-game-meta .af-pb-game-meta-text { margin-top: 0; color: inherit; font-weight: inherit; min-width: 0; }
 .af-pb-game-meta.has-crest { display: flex; align-items: center; gap: 9px; padding: 8px 10px; font-size: 12px; }
 .af-pb-crest { display: block; flex: none; }
-.af-pb-bowl-card { border: 1px solid var(--pb-line2, #2a3350); border-radius: 14px; background: var(--pb-surface2, #0a0c1a); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.af-pb-bowl-card[data-bowl="title"] { border-color: #f5c76b; }
-.af-pb-bowl-head { display: flex; align-items: center; gap: 12px; }
-.af-pb-bowl-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.af-pb-bowl-title strong { font-size: 15px; font-weight: 800; color: var(--pb-text, #eef0fa); }
-.af-pb-bowl-when { font-size: 12px; font-weight: 700; color: var(--pb-text2, #c3c9e6); }
-.af-pb-bowl-round { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pb-muted, #8f97bd); }
-.af-pb-bowl-card[data-bowl="title"] .af-pb-bowl-round { color: #f5c76b; }
-.af-pb-bowl-place { font-size: 12px; color: var(--pb-muted, #8f97bd); }
-.af-pb-bowl-teams { font-size: 13px; font-weight: 700; color: var(--pb-text, #eef0fa); background: var(--pb-surface, #0d1020); border-radius: 8px; padding: 8px 10px; }
 .af-pb-tiebreaker { display: inline-flex; align-items: center; gap: 7px; color: var(--pb-text); font-size: 11px; font-weight: 700; }
 .af-pb-tiebreaker input { width: 72px; min-height: 38px; border: 1px solid var(--pb-line); border-radius: 9px; background: var(--pb-surface2); color: var(--pb-text); padding: 5px 8px; font: inherit; }
 @media (max-width: 640px) { .af-pb-tiebreaker { width: 100%; justify-content: space-between; } }

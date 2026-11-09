@@ -102,15 +102,11 @@ export function resolveLeagueScoringRules(league: { sport: string; settings: unk
     if (cfg.sport === 'SOCCER' && fantrax && !storeSavedByPerson(settings?.soccer_scoring_config)) {
       const scoring = parseFantraxSoccerScoring(fantrax.scoringSystem)
       if (scoring) {
-        categories = categories.filter((category) =>
-          scoring.keeper[category.key] !== undefined || scoring.outfield[category.key] !== undefined)
-        // Explicit zeros keep the native defaults out of both groups.
-        const zeroes = Object.fromEntries(categories.map((category) => [category.key, 0]))
-        return {
-          categories,
-          overrides: { ...zeroes, ...scoring.outfield },
-          fantraxSoccer: { ...scoring, keeper: { ...zeroes, ...scoring.keeper } },
-        }
+        const groups = Object.values(scoring.positionWeights)
+        categories = categories.filter(({ key }) => groups.some((weights) => weights[key] !== undefined))
+        // Any stat absent from a Fantrax position group scores zero, regardless of native defaults.
+        const zeroes = Object.fromEntries(categories.map(({ key }) => [key, 0]))
+        return { categories, overrides: zeroes, fantraxSoccer: scoring }
       }
     }
     const savedPanel = storeSavedByPerson(settings?.ncaaf_scoring_config)
