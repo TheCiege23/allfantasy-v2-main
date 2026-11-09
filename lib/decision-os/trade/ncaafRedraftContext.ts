@@ -4,11 +4,12 @@ import type { TradeValuationGap } from './tradeGrade'
 
 import { prisma } from '@/lib/prisma'
 import { latestNcaafProjectionSeason, lookupNcaafProjections } from '@/lib/core-app/ncaafProjections'
-import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
+import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import { MAX_PLAUSIBLE_SPORT_WEEK } from '@/lib/season-week/sportWeekSignal'
-import { scoringRulesFrom } from './scoringContextFromWorld'
 import { playerIdSpaceFor, resolveTradePlayers, rosteredIdsOf, type PlayerIdSpace } from './tradePlayers'
 import {
   ncaafSeasonWindow,
@@ -81,13 +82,62 @@ function addableIn(space: PlayerIdSpace, row: { rollingInsightsId: string | null
   return Boolean(row.rollingInsightsId || row.espnId)
 }
 
+/**
+ * The stat weights this league's college trades are priced under, or null when it has none.
+ *
+ * A league CREATED HERE is priced by the rules its matchups are scored by: its sport config — the
+ * categories, preset and commissioner points `buildLeagueStatScorer` applies — read through the same
+ * resolution (`resolveLeagueScoringRules`), flattened to one weight per stat and renamed into the
+ * projection scorer's names (`pass_yds` is `pass_yd` there). Bonus and tier
+ * categories are left out: a per-game projection is an average, and a single-game threshold
+ * ("300+ passing yards") cannot be read off an average.
+ *
+ * ⚠ NOT ITS `scoring_settings`. League creation writes a summary there in the scoring screen's names
+ * (`ppr: 0.5`, `passingTouchdown: 4`, `fieldGoalMade: 3`, ...). It passes `hasScoringRules`, and not
+ * one of its keys is a stat a projection carries, so every player came back unpriced and every trade
+ * in a college league created here was "N assets have no value on this league's chart" — never graded,
+ * never flagged. Measured on a league made by the real create flow (dynasty simulation, 2026-11-09).
+ *
+ * An IMPORTED league is priced by the provider's rulebook it carries in `scoring_settings`, which is
+ * what its matchups are scored by. Without one it refuses: our defaults are not that league's rules.
+ * Never the settings blob itself — a roster size is not a stat weight.
+ */
+/**
+ * The scoring engine's college category names → the names `computeLeagueProjectedPoints` scores, whose
+ * aliases reach the CFBD spellings the projections are stored under (`passing.YDS`, `receiving.REC`).
+ * The inverse of `importedNcaafScoring`'s KEYS. A name both share is not listed.
+ */
+const ENGINE_TO_PROJECTION_KEY: Readonly<Record<string, string>> = {
+  pass_yds: 'pass_yd', rush_yds: 'rush_yd', rec_yds: 'rec_yd',
+  fg_made: 'fgm', xp_made: 'xpm', xp_miss: 'xpmiss',
+}
+/** The engine pays `two_pt` only when no role count is present, so with role weights it would count twice. */
+const TWO_POINT_ROLES = ['pass_2pt', 'rush_2pt', 'rec_2pt'] as const
+
+export function ncaafTradeScoringRules(league: { platform: string | null | undefined; settings: unknown }): Record<string, number> | null {
+  if (!isNativePlatform(league.platform)) {
+    const saved = extractScoringSettings(league.settings)
+    return saved && hasScoringRules(saved) ? (saved as Record<string, number>) : null
+  }
+  const resolved = resolveLeagueScoringRules({ sport: 'NCAAF', settings: league.settings })
+  if (!resolved) return null
+  const weights: Record<string, number> = {}
+  for (const category of resolved.categories) {
+    if (category.minForBonus != null || category.tierStatKey != null) continue
+    const weight = resolved.overrides[category.key] ?? category.defaultPoints
+    if (Number.isFinite(weight) && weight !== 0) weights[ENGINE_TO_PROJECTION_KEY[category.key] ?? category.key] = weight
+  }
+  if (TWO_POINT_ROLES.some((key) => key in weights)) delete weights.two_pt
+  return hasScoringRules(weights) ? weights : null
+}
+
 export async function loadNcaafRedraftBase(league: {
   id: string
   platform: string | null | undefined
   settings: unknown
 }): Promise<NcaafRedraftBaseResult> {
-  const rules = scoringRulesFrom(league.settings)
-  if (!rules || !hasScoringRules(rules)) return { ok: false, reason: NO_LEAGUE_SCORING_REASON }
+  const rules = ncaafTradeScoringRules(league)
+  if (!rules) return { ok: false, reason: NO_LEAGUE_SCORING_REASON }
 
   const projected = await latestNcaafProjectionSeason()
   const season = projected ? Number.parseInt(projected.season, 10) : NaN
