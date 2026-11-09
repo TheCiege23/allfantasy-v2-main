@@ -37,7 +37,7 @@ export function DraftTransitionCard({
   return (
     <div
       className={`rounded-xl border p-4 ${
-        live ? 'border-[var(--tournament-active)]/50 bg-cyan-500/10' : 'border-[var(--tournament-border)] bg-[var(--tournament-panel)]'
+        live ? 'border-tournament-active/50 bg-cyan-500/10' : 'border-[var(--tournament-border)] bg-[var(--tournament-panel)]'
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">

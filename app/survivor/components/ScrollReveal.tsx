@@ -69,7 +69,7 @@ export function ScrollReveal({
         }}
       />
       <header className="relative z-[1] flex min-h-[48px] items-center gap-2 border-b border-white/10 px-3 py-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--survivor-torch)]/25 text-sm">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--survivor-torch)_25%,transparent)] text-sm">
           🔥
         </div>
         <p className="text-[12px] text-[var(--survivor-torch)]">The Host</p>

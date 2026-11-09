@@ -123,7 +123,7 @@ export default function ZombieStandingsPage() {
             className={clsx(
               'rounded-lg px-3 py-1.5 text-[11px] font-semibold transition',
               filter === f.id
-                ? 'bg-[var(--zombie-crimson)]/20 text-[var(--zombie-crimson)]'
+                ? 'bg-zombie-crimson/20 text-[var(--zombie-crimson)]'
                 : 'text-[var(--zombie-text-dim)] hover:bg-white/[0.04]',
             )}
           >

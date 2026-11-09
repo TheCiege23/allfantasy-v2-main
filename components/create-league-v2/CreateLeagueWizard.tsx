@@ -552,7 +552,7 @@ export function CreateLeagueWizard(props: WizardProps) {
             ordinary inline row. Cancel stays in the page flow on a phone: it is the one action a
             stray tap should not reach.
           */}
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[color:var(--border-subtle)] bg-[color:var(--surface-app)]/95 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)] backdrop-blur-md sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[color:var(--border-subtle)] bg-[color:color-mix(in_srgb,var(--surface-app)_95%,transparent)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)] backdrop-blur-md sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
             <div className="flex items-center gap-3 sm:justify-between">
               <button
                 type="button"

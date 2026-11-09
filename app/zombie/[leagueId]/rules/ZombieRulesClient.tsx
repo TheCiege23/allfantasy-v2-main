@@ -89,7 +89,7 @@ export function ZombieRulesClient({
             className={clsx(
               'min-h-[44px] rounded-lg px-4 py-2 text-[12px] font-semibold whitespace-nowrap transition-colors',
               tab === t.id
-                ? 'bg-[var(--zombie-crimson)]/15 text-[var(--zombie-crimson)]'
+                ? 'bg-zombie-crimson/15 text-[var(--zombie-crimson)]'
                 : 'text-[var(--zombie-text-dim)] hover:text-[var(--zombie-text-mid)]',
             )}
           >
@@ -161,7 +161,7 @@ function ThresholdsTab({ cfg, rules, isPaid, infectionLossToWhisperer, infection
               {isPaid ? ' Loser forfeits additional pot share.' : ' Loser receives "Bashed" marker.'}
             </p>
           </div>
-          <div className="rounded-xl border border-[var(--zombie-red)]/20 bg-[var(--zombie-red)]/[0.04] p-4">
+          <div className="rounded-xl border border-zombie-red/20 bg-[var(--zombie-red)]/[0.04] p-4">
             <div className="flex items-center gap-2">
               <span className="text-2xl">💀</span>
               <div>
@@ -178,7 +178,7 @@ function ThresholdsTab({ cfg, rules, isPaid, infectionLossToWhisperer, infection
       </section>
 
       {/* Infection rules */}
-      <section className="rounded-xl border border-[var(--zombie-purple)]/20 bg-[var(--zombie-panel)] p-5">
+      <section className="rounded-xl border border-zombie-purple/20 bg-[var(--zombie-panel)] p-5">
         <h2 className="text-[14px] font-bold text-[var(--zombie-text-full)]">Infection Mechanics</h2>
         <div className="mt-3 space-y-2 text-[12px] text-[var(--zombie-text-mid)]">
           <div className="flex items-start gap-2">

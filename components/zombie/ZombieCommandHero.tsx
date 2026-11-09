@@ -95,7 +95,7 @@ export function ZombieCommandHero({
         <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10">
           <div className="min-w-0 flex-1 space-y-5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--zombie-toxic)] shadow-[var(--zombie-glow-toxic)]">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-zombie-toxic/35 bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--zombie-toxic)] shadow-[var(--zombie-glow-toxic)]">
                 <Radio className="h-3.5 w-3.5" aria-hidden />
                 Outbreak command
               </span>
@@ -116,7 +116,7 @@ export function ZombieCommandHero({
             </div>
 
             <div className="flex flex-wrap items-start gap-4">
-              <div className="zombie-toxic-ring flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--zombie-toxic)]/40 bg-black/50 sm:h-[72px] sm:w-[72px]">
+              <div className="zombie-toxic-ring flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zombie-toxic/40 bg-black/50 sm:h-[72px] sm:w-[72px]">
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- league logos may be arbitrary commissioner URLs
                   <img src={logoUrl} alt="" className="h-full w-full object-cover" />

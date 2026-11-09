@@ -76,7 +76,7 @@ export default function ZombieSettingsPage() {
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-4 py-2 text-[12px] font-semibold whitespace-nowrap transition-colors',
               tab === t.id
-                ? 'bg-[var(--zombie-crimson)]/15 text-[var(--zombie-crimson)]'
+                ? 'bg-zombie-crimson/15 text-[var(--zombie-crimson)]'
                 : 'text-[var(--zombie-text-dim)] hover:text-[var(--zombie-text-mid)]',
             )}
           >
