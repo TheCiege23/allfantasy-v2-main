@@ -11,6 +11,7 @@ import {
   getLandingCreateSports,
   getLandingImportSports,
 } from '@/components/core-app/screens/landingConnectPlatforms'
+import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
@@ -437,6 +438,15 @@ export function LandingV4({
         ))}
       </section>
 
+      {/* ── Every league + Chimmy ─────────────────────────────────── */}
+      {/*
+        The one thing reviewers said mattered most: every league from every platform in one place,
+        with Chimmy across all of them. Right under the platform strip so it is read in the first
+        scroll. Platforms and their status come from the import config (AllLeaguesChimmy); the
+        leagues and the exchange are an EXAMPLE and labelled as one.
+      */}
+      <AllLeaguesChimmy copy={{ ...c.chimmy, soon: c.connects.soon }} />
+
       {/* ── How it works: what a new account actually does ─────────── */}
       {/*
         The nav's "How it works" used to land on the three-reasons section, which says why, not
@@ -454,40 +464,6 @@ export function LandingV4({
             </li>
           ))}
         </ol>
-      </section>
-
-      {/* ── Chimmy ──────────────────────────────────────────────────── */}
-      {/*
-        The product's assistant was named on this page only in passing ("Paid plans add Chimmy"),
-        so a stranger met the word before learning what it is. The exchange is an EXAMPLE and
-        labelled as one, over the same four example leagues as the hero card — it must never read
-        as somebody's real roster.
-      */}
-      <section className="af-lp-chimmy" aria-labelledby="af-lp-chimmy-h2">
-        <div className="af-lp-chimmy-copy">
-          <span className="af-label">{c.chimmy.label}</span>
-          <h2 className="af-lp-h2" id="af-lp-chimmy-h2">
-            {c.chimmy.h2}
-          </h2>
-          <p className="af-lp-chimmy-body">{c.chimmy.body}</p>
-          <p className="af-lp-chimmy-free">{c.chimmy.free}</p>
-        </div>
-        <figure className="af-lp-chimmy-chat" aria-label={c.chimmy.exampleLabel}>
-          <span className="af-lp-card-week af-num af-lp-chimmy-example">{c.chimmy.exampleLabel}</span>
-          <p className="af-lp-chimmy-q">{c.chimmy.question}</p>
-          <div className="af-lp-chimmy-a">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="af-lp-card-foot-avatar"
-              src="/images/chimmy-avatar.png"
-              alt=""
-              width={30}
-              height={30}
-              loading="lazy"
-            />
-            <p>{c.chimmy.answer}</p>
-          </div>
-        </figure>
       </section>
 
       {/* ── Three reasons ───────────────────────────────────────────── */}

@@ -60,6 +60,21 @@ export const COMMISSIONERS_HEALTH_EXAMPLE = {
   ],
 } as const
 
+/**
+ * "All your leagues + Chimmy" (AllLeaguesChimmy). `{platforms}` is filled from the import config at
+ * render time. The exchange is labelled as an example on the page and mirrors the illustrative health
+ * card above — it is nobody's real league.
+ */
+export const COMMISSIONERS_ALL_LEAGUES = {
+  label: 'Every league + Chimmy',
+  h2: 'All your leagues from {platforms}, in one place.',
+  body: 'Run every league you commission from one League Hub — then ask Chimmy about any of them, in plain words.',
+  exampleLabel: 'Example',
+  question: 'Which of my leagues need me this week?',
+  answer:
+    'Two do. In Gridiron Gang a manager has started an empty slot for two weeks, and in Waiver Warriors a trade was flagged as lopsided — review it before it processes. Dynasty Dragons and End Zone Elites are in good shape.',
+} as const
+
 export const COMMISSIONER_FEATURES: readonly CommissionerFeature[] = [
   {
     id: 'league-health',

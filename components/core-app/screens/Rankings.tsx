@@ -666,7 +666,7 @@ function XpBreakdownCard({ data }: { data: RankingsData }) {
         </p>
       ) : null}
       <p className="af-rk-note">
-        XP is a ladder, not a ranking: losses never subtract, and imported Sleeper, ESPN and Yahoo seasons count the same
+        XP is a ladder, not a ranking: losses never subtract, and imported seasons count the same
         as leagues played here. Playoff berths only count once games have been played.
       </p>
     </section>

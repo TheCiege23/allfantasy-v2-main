@@ -31,10 +31,12 @@ import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-pricing.css'
 import '@/components/core-app/af-pricing-redesign.css'
+import '@/components/core-app/af-pricing-compare.css'
 import { useMessages } from '@/components/i18n/useMessages'
 import { plansScreenMessages } from '@/lib/core-app/messages/plansScreen'
 import { pricingCardStatus, type PricingAccount } from '@/lib/core-app/pricingAccount'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import type { ComparisonCell, ComparisonGroup, ComparisonTier, PlanExample } from '@/lib/monetization/planComparison'
 
 /**
  * Screen 18a — pricing.
@@ -97,6 +99,106 @@ export type PricingV4Props = {
    * server. Null for a visitor or a failed read: no banner and no YOUR PLAN chip, exactly as before.
    */
   account?: PricingAccount | null
+  /** The plain-language comparison table, computed on the server from the paywall's own checks. */
+  comparison?: ComparisonGroup[]
+  /** One or two concrete things each plan lets you do. */
+  examples?: Record<ComparisonTier, readonly PlanExample[]>
+}
+
+/** "What you can do" on a plan card: outcomes, not feature names. */
+function PlanExamples({ items }: { items: readonly PlanExample[] | undefined }) {
+  if (!items?.length) return null
+  return (
+    <div className="af-pr-examples" data-testid="pricing-plan-examples">
+      <span className="af-pr-examples-label">What you can do</span>
+      <ul>
+        {items.map((ex) => (
+          <li key={ex.text}>
+            {ex.text}
+            {ex.learnMoreHref ? (
+              <>
+                {' '}
+                <Link href={ex.learnMoreHref} className="af-pr-examples-link">
+                  How it works
+                </Link>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ComparisonCellView({ cell }: { cell: ComparisonCell }) {
+  if (cell.kind === 'yes') return <span className="af-pr-cmp-yes" aria-label="Included">✓</span>
+  if (cell.kind === 'no') return <span className="af-pr-cmp-no" aria-label="Not included">—</span>
+  if (cell.kind === 'soon') return <span className="af-pr-cmp-soon">Coming soon</span>
+  return <span className="af-pr-cmp-text">{cell.text}</span>
+}
+
+/**
+ * Plain-language comparison. Every tick is what `hasFeatureAccessForPlans` answers for that plan
+ * (lib/monetization/planComparison.ts), so the table cannot promise what the paywall refuses.
+ * Scrolls sideways on a phone with the feature column pinned.
+ */
+function ComparisonTable({ groups, columns }: { groups: ComparisonGroup[]; columns: { tier: ComparisonTier; name: string }[] }) {
+  return (
+    <section className="af-pr-compare" aria-labelledby="af-pr-compare-h" data-testid="pricing-compare">
+      <div className="af-pr-tokens-head">
+        <h2 className="af-pr-h2" id="af-pr-compare-h">
+          Compare plans
+        </h2>
+        <p className="af-pr-sub af-pr-sub--tight">
+          What each plan includes, in plain words. Commissioner features link to where{' '}
+          <Link href="/commissioners">Commissioner OS</Link> shows them working.
+        </p>
+      </div>
+      <div className="af-pr-compare-scroll" tabIndex={0} aria-label="Plan comparison table, scrolls sideways">
+        <table className="af-pr-compare-table">
+          <thead>
+            <tr>
+              <th scope="col" className="af-pr-compare-feature">
+                <span className="af-pr-visually-hidden">Feature</span>
+              </th>
+              {columns.map((c) => (
+                <th key={c.tier} scope="col">
+                  {c.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          {groups.map((g) => (
+            <tbody key={g.id} data-group={g.id}>
+              <tr className="af-pr-compare-group">
+                <th scope="colgroup" colSpan={columns.length + 1}>
+                  {g.title}
+                </th>
+              </tr>
+              {g.rows.map((r) => (
+                <tr key={r.id} data-testid={`pricing-compare-row-${r.id}`}>
+                  <th scope="row" className="af-pr-compare-feature">
+                    <span className="af-pr-compare-label">{r.label}</span>
+                    {r.detail ? <span className="af-pr-compare-detail">{r.detail}</span> : null}
+                    {r.learnMoreHref ? (
+                      <Link href={r.learnMoreHref} className="af-pr-examples-link">
+                        See it in Commissioner OS
+                      </Link>
+                    ) : null}
+                  </th>
+                  {columns.map((c) => (
+                    <td key={c.tier}>
+                      <ComparisonCellView cell={r.cells[c.tier]} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+      </div>
+    </section>
+  )
 }
 
 /** The Plans board's kicker over each lane: who the plan is for. Free sits outside the lane list. */
@@ -299,7 +401,7 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
   },
 ]
 
-export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, account = null }: PricingV4Props) {
+export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, account = null, comparison, examples }: PricingV4Props) {
   const pm = useMessages(plansScreenMessages)
   const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
   const [interval, setInterval] = useState<Interval>('month')
@@ -404,6 +506,8 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, acc
           <span className="af-pr-wordmark">Pricing</span>
         </Link>
         <div className="af-pr-nav-right">
+          {/* Same destination as every other "For commissioners" link: what Commissioner OS does. */}
+          <Link href="/commissioners" className="af-pr-nav-link">For commissioners</Link>
           {signedIn ? (
             <Link href="/core" className="af-pr-nav-cta">Back to app</Link>
           ) : !signedIn ? (
@@ -512,6 +616,7 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, acc
               </li>
             ))}
           </ul>
+          <PlanExamples items={examples?.free} />
         </section>
 
         {/* ── Paid lanes ───────────────────────────────────────── */}
@@ -597,10 +702,21 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, acc
                   </li>
                 ))}
               </ul>
+              <PlanExamples items={examples?.[plan.planFamily as ComparisonTier]} />
             </section>
           )
         })}
       </div>
+
+      {comparison?.length ? (
+        <ComparisonTable
+          groups={comparison}
+          columns={[
+            { tier: 'free' as ComparisonTier, name: 'Free' },
+            ...ordered.map((p) => ({ tier: p.planFamily as ComparisonTier, name: p.name })),
+          ]}
+        />
+      ) : null}
 
       {/*
         ── Yearly, beside the tokens card ─────────────────────────

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 
 /**
  * Offers across your leagues — the strip above the Trade Center's league
@@ -254,7 +255,7 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
       <div className="af-tc-strip-head">
         <span className="af-label">{copy("Offers across your leagues")}</span>
         <span className="af-tc-rule" aria-hidden />
-        <span className="af-tc-strip-note">{copy(" Yahoo offers are read · Sleeper shows a trade only once it’s accepted · other platforms are not, and say so ")}{copy(beyond > 0 ? ` · ${beyond} more available below` : '')}
+        <span className="af-tc-strip-note">{/* Yahoo is named only while its import is live (provider-ui-config) — no Yahoo league exists to read until then. */}{copy(isImportProviderAvailable('yahoo') ? " Yahoo offers are read · Sleeper shows a trade only once it’s accepted · other platforms are not, and say so " : " Sleeper shows a trade only once it’s accepted · other platforms are not, and say so ")}{copy(beyond > 0 ? ` · ${beyond} more available below` : '')}
         </span>
       </div>
       <div className="af-tc-tiles">

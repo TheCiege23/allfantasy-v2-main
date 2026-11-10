@@ -210,9 +210,9 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       ],
     },
     chimmy: {
-      label: 'Meet Chimmy',
-      h2: 'One question. Every league.',
-      body: 'Chimmy is the AllFantasy assistant. It reads the rosters you connect, so the answer is about your teams — not generic advice.',
+      label: 'Every league + Chimmy',
+      h2: `All your leagues from ${platforms}, in one place.`,
+      body: 'Then ask Chimmy about any of them. Chimmy is the AllFantasy assistant: it reads the rosters you connect, so the answer is about your teams — not generic advice.',
       exampleLabel: 'Example',
       question: 'Who’s hurt across all my leagues?',
       answer:
@@ -379,9 +379,9 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       ],
     },
     chimmy: {
-      label: 'Conoce a Chimmy',
-      h2: 'Una pregunta. Todas tus ligas.',
-      body: 'Chimmy es el asistente de AllFantasy. Lee los rosters que conectas, así que la respuesta es sobre tus equipos — no un consejo genérico.',
+      label: 'Todas tus ligas + Chimmy',
+      h2: `Todas tus ligas de ${platforms}, en un solo lugar.`,
+      body: 'Luego pregúntale a Chimmy sobre cualquiera de ellas. Chimmy es el asistente de AllFantasy: lee los rosters que conectas, así que la respuesta es sobre tus equipos — no un consejo genérico.',
       exampleLabel: 'Ejemplo',
       question: '¿Quién está lesionado en todas mis ligas?',
       answer:

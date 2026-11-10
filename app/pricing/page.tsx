@@ -12,6 +12,7 @@ import { isSubscriptionEntitlementBypassUserId } from "@/lib/dev-admin/access";
 import { getDisplayPlanName } from "@/lib/subscription/feature-access";
 import type { PricingAccount } from "@/lib/core-app/pricingAccount";
 import { readWeeklyTokenSpend } from "@/lib/tokens/readWeeklyTokenSpend";
+import { buildPlanComparison, PLAN_EXAMPLES } from "@/lib/monetization/planComparison";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -130,6 +131,9 @@ export default async function PricingPage(
       savingsHeadline={describeYearlySavings(presentations)}
       signedIn={Boolean(session?.user?.id)}
       account={account}
+      // Computed from the entitlement checks the paywall enforces (lib/monetization/planComparison.ts).
+      comparison={buildPlanComparison()}
+      examples={PLAN_EXAMPLES}
     />
   );
 }

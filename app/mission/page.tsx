@@ -1,6 +1,7 @@
 import Link from "next/link"
 import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import { availableImportPlatformsPhrase } from "@/lib/league-import/provider-ui-config"
 
 interface MissionPageProps {
   searchParams?: Promise<Promise<{ from?: string; next?: string }> | { from?: string; next?: string }>
@@ -84,7 +85,7 @@ export default async function MissionPage(props: MissionPageProps) {
         <p>
           Commissioners and managers running season-long leagues across the NFL, NBA, MLB, NHL, and NCAA football —
           in redraft, dynasty, and keeper formats — plus bracket and World Cup pools. AllFantasy imports leagues
-          from Sleeper, Yahoo, ESPN, MFL, and Fantrax so you can bring your existing league with you.
+          from {availableImportPlatformsPhrase('and')} so you can bring your existing league with you.
         </p>
       </section>
 

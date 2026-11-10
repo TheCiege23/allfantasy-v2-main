@@ -1,0 +1,108 @@
+/*
+ * /pricing — "What you can do" on each plan card, and the Compare plans table.
+ * Reads the .af-core token layer like the rest of af-pricing.css (see the import note in PricingV4).
+ */
+
+/* ── What you can do ──────────────────────────────────────────────── */
+.af-pr-examples {
+  margin-top: 4px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+.af-pr-examples-label {
+  display: block;
+  margin-bottom: 6px;
+  font: 700 10.5px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.af-pr-examples ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.af-pr-examples li { font-size: 12.5px; line-height: 1.5; color: var(--text); }
+.af-pr-examples-link {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.af-pr-examples-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ── Compare plans ───────────────────────────────────────────────── */
+.af-pr-compare { display: flex; flex-direction: column; gap: 14px; }
+.af-pr-compare .af-pr-sub a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.af-pr-compare-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  -webkit-overflow-scrolling: touch;
+}
+.af-pr-compare-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-pr-compare-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13px; }
+.af-pr-compare-table th,
+.af-pr-compare-table td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; }
+.af-pr-compare-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface2, var(--surface));
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+}
+.af-pr-compare-table .af-pr-compare-feature {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 44%;
+  min-width: 220px;
+  text-align: left;
+  background: var(--surface);
+}
+.af-pr-compare-table thead .af-pr-compare-feature { z-index: 2; background: var(--surface2, var(--surface)); }
+.af-pr-compare-label { display: block; font-weight: 700; color: var(--text); }
+.af-pr-compare-detail { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; line-height: 1.45; color: var(--text2); }
+.af-pr-compare-feature .af-pr-examples-link { margin-top: 4px; }
+.af-pr-compare-group th {
+  padding-top: 18px;
+  text-align: left;
+  font: 700 11px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--surface);
+}
+.af-pr-compare-table tbody tr:last-child td,
+.af-pr-compare-table tbody tr:last-child th { border-bottom-color: var(--line2, var(--line)); }
+.af-pr-cmp-yes { color: var(--accent); font-weight: 900; font-size: 16px; }
+.af-pr-cmp-no { color: var(--faint, var(--text2)); }
+.af-pr-cmp-text { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; color: var(--text); white-space: nowrap; }
+.af-pr-cmp-soon {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line2, var(--line));
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.af-pr-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .af-pr-compare-table .af-pr-compare-feature { min-width: 180px; }
+  .af-pr-compare-table th,
+  .af-pr-compare-table td { padding: 10px; }
+}
