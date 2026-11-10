@@ -264,9 +264,13 @@ export async function seedDynastyTradeValues(env: SimEnv, run: LeagueRun, pool: 
     }
     await env.db.playerGameStat.createMany({ data: rows as never })
   } else {
-    await env.db.playerIdentityMap.createMany({ data: pool.map((p) =>
-      identity(p, 'sim-value-' + p.id, sport === 'NCAAB' ? { espnId: espnIds.get(p.id) } : {}),
-    ) })
+    const birthYear = new Date(now).getUTCFullYear()
+    await env.db.playerIdentityMap.createMany({ data: pool.map((p, i) => {
+      // Every fourth pro player is a young entrant with a stored birthdate and a projection.
+      const facts = sport === 'NCAAB' ? { espnId: espnIds.get(p.id) }
+        : { dob: String(birthYear - (i % 4 === 0 ? 21 : 27)) + '-01-01' }
+      return identity(p, 'sim-value-' + p.id, facts)
+    }) })
     if (sport === 'NCAAB') {
       const teams = [...new Set(pool.map((p) => p.team))]
       await env.db.sportsDataCache.createMany({ data: teams.map((school, i) => ({

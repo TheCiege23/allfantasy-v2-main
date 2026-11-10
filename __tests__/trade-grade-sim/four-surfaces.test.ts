@@ -3,6 +3,7 @@
  * notification event, and the collusion scan. Only billing, transport and the NFL chart are mocked.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fantraxSoccerRulesDigest } from '@/lib/league-import/fantrax/soccerPlayerExport'
 import type { NotificationEvent } from '@/lib/notification-engine'
 import { createInMemoryPrisma, type InMemoryPrisma } from '../redraft-season-simulation/inMemoryPrisma'
 import { createMockNextRequest } from '../helpers/createMockNextRequest'
@@ -63,16 +64,19 @@ const PLAYERS = [
 ]
 const day = 24 * 60 * 60 * 1000
 
-async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft') {
+async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft', imported?: 'espn' | 'yahoo' | 'fantrax') {
   const db = h.db!
   const season = new Date().getUTCFullYear()
-  const platform = sport === 'NCAAF' ? 'fantrax' : 'native'
+  const platform = imported ?? (sport === 'NCAAF' ? 'fantrax' : 'native')
+  const rosterClub = sport === 'MLB' ? 'NYY' : sport === 'SOCCER' ? 'ARS' : 'LAL'
+  const publishedSoccer = imported === 'fantrax' && sport === 'SOCCER'
   const leagueId = 'parity-' + sport.toLowerCase()
   const scoring = sport === 'NCAAF' ? { pass_yd: 0.04, pass_td: 4 } : { rec: 1 }
   const league = await db.league.create({ data: {
     id: leagueId, userId: 'commish', platform, platformLeagueId: leagueId, sport, season,
     leagueType: format, leagueSize: 4, name: 'Trade parity ' + sport,
-    settings: { scoring_mode: 'points', scoring_settings: scoring, trade_settings: { reviewType: 'none' } },
+    settings: { scoring_mode: 'points', scoring_settings: scoring, trade_settings: { reviewType: 'none' },
+      ...(publishedSoccer ? { fantrax_settings: { scoringSystem: { type: 'POINTS_BASED' } } } : {}) },
   } })
   const pos = POSITIONS[sport]
   const records = PLAYERS.map((p, i) => ({ ...p, id: String(600 + i), canonical: 'identity-' + i }))
@@ -82,7 +86,7 @@ async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft'
   for (const p of records) {
     await db.playerIdentityMap.create({ data: {
       id: p.canonical, canonicalName: p.name, normalizedName: p.name.toLowerCase().replaceAll(' ', ''),
-      sport, position: pos, ...(sport === 'NFL' ? { sleeperId: p.id } : { rollingInsightsId: p.id }),
+      sport, position: pos, ...(imported ? { currentTeam: rosterClub } : {}), ...(sport === 'NFL' ? { sleeperId: p.id } : { rollingInsightsId: p.id }),
       ...(sport === 'NCAAF' ? { cfbdId: 'cfbd-' + p.id, fantraxId: p.id, rollingInsightsId: null } : {}),
       ...(sport === 'NCAAB' && format === 'dynasty' ? { espnId: p.id } : {}),
     } })
@@ -108,7 +112,10 @@ async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft'
     }
     if (p.owner) {
       const rosterId = 'roster-' + p.owner
-      await db.roster.create({ data: { id: rosterId, leagueId, platformUserId: p.owner, playerData: { players: [p.id], starters: [p.id] } } })
+      await db.roster.create({ data: { id: rosterId, leagueId, platformUserId: p.owner, playerData: {
+        players: [p.id], starters: [p.id],
+        ...(imported ? { source_provider: imported, player_metadata: { [p.id]: { name: p.name, team: rosterClub, position: pos } } } : {}),
+      } } })
       await db.leagueTeam.create({ data: {
         id: 'team-' + p.owner, leagueId, externalId: rosterId, platformUserId: p.owner,
         claimedByUserId: p.owner, ownerName: p.owner, teamName: p.owner, legacyRosterId: rosterId,
@@ -135,6 +142,19 @@ async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft'
       } })
     }
   }
+  if (publishedSoccer) {
+    await db.sportsDataCache.create({ data: {
+      cacheKey: 'fantrax:soccer:player-points:' + leagueId, expiresAt: new Date(Date.now() + day),
+      data: {
+        source: 'fantrax-player-export', platformLeagueId: leagueId, season, fullPool: true,
+        rulesDigest: fantraxSoccerRulesDigest(league.settings), through: new Date(Date.now() - day).toISOString(),
+        players: [
+          ...records.map((p) => ({ fantraxId: p.id, name: p.name, position: 'FWD', fantasyPoints: p.strength * 12, appearances: 12, clubMatches: 12 })),
+          ...Array.from({ length: 38 }, (_, i) => ({ fantraxId: 'fa' + i, name: 'Free agent ' + i, position: 'FWD', fantasyPoints: 12, appearances: 12, clubMatches: 12 })),
+        ],
+      },
+    } })
+  }
   if (sport === 'NCAAB' && format === 'dynasty') {
     await db.sportsDataCache.create({ data: {
       cacheKey: 'espn:ncaab:roster:' + (season + 1) + ':1',
@@ -145,7 +165,7 @@ async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft'
   if (sport !== 'NFL') {
     for (let i = 0; i < 24; i++) {
       await db.sportsGame.create({ data: {
-        sport, externalId: 'future-' + i, homeTeam: 'T1', awayTeam: 'T2', source: 'simulation', season,
+        sport, externalId: 'future-' + i, homeTeam: 'T1', awayTeam: 'T2', source: publishedSoccer ? 'thesportsdb' : 'simulation', season,
         seasonType: 'regular', week: i % 13 + 1, startTime: new Date(Date.now() + (i + 1) * day),
         expiresAt: new Date(Date.now() + 365 * day),
       } })
@@ -171,12 +191,15 @@ describe.skipIf(process.env.SIM_TRADE_PARITY !== '1')('same-trade grades across 
   afterEach(() => vi.unstubAllGlobals())
 
   const cases = [
-    ...SPORTS.map((sport) => [sport, 'redraft'] as const),
-    ...(['NCAAF', 'NCAAB', 'SOCCER'] as const).map((sport) => [sport, 'dynasty'] as const),
+    ...SPORTS.map((sport) => [sport, 'redraft', undefined] as const),
+    ...(['NCAAF', 'NCAAB', 'SOCCER'] as const).map((sport) => [sport, 'dynasty', undefined] as const),
+    ['NBA', 'redraft', 'yahoo'] as const,
+    ['MLB', 'redraft', 'espn'] as const,
+    ['SOCCER', 'redraft', 'fantrax'] as const,
   ]
   // The first case loads all four real entry points and pays the cold transform cost.
-  it.each(cases)('%s with usable %s inputs', { timeout: 300_000 }, async (sport, format) => {
-    const { db, league, records } = await seedOffer(sport, format)
+  it.each(cases)('%s with usable %s inputs (%s)', { timeout: 300_000 }, async (sport, format, imported) => {
+    const { db, league, records } = await seedOffer(sport, format, imported)
     const [{ createAfLeagueTrade, proposalOneGrade }, { POST }, { executeChimmyTool }, { scanTradeForCollusion }] = await Promise.all([
       import('@/lib/league-trade-engine/tradeService').then(async (service) => ({ ...service, ...(await import('@/lib/league-trade-engine/serverTradeDecision')) })),
       import('@/app/api/trade-evaluator/route'),
@@ -195,6 +218,7 @@ describe.skipIf(process.env.SIM_TRADE_PARITY !== '1')('same-trade grades across 
     expect(proposed, JSON.stringify(proposed)).toMatchObject({ graded: true })
     if (!proposed.graded) throw new Error(proposed.reason)
     if (format === 'dynasty') expect(proposed.lines[0]?.source).toMatch(/-dynasty$/)
+    if (sport === 'SOCCER' && imported === 'fantrax') expect(proposed.basis).toContain('published Fantrax fantasy-point totals')
 
     const trade = await createAfLeagueTrade(input)
     const sent = h.notices.find((n) => n.type === 'trade_proposed' && n.meta?.tradeId === trade.id)
