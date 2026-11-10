@@ -5,6 +5,7 @@ import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 import type { LeagueValueAdjustment } from '@/lib/trade-value/leagueTradeValue'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { C2CDraftSide } from '@/lib/parsePickLabel'
 import type { EvaluatedCounterOffer } from './counterOffers'
 
 export type TradeSportFilter = 'ALL' | SupportedSport
@@ -34,6 +35,7 @@ export type TradeAssetInput =
       round: number
       /** Overall selection number when a draft has assigned this pick a slot. */
       overall?: number
+      draftSide?: C2CDraftSide
       tier?: 'early' | 'mid' | 'late'
       label?: string
       /**

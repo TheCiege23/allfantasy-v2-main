@@ -10,6 +10,8 @@ import {
 } from './sportPointsContext'
 import { gradeSportPointsDeal, isPointsGradedSport } from './sportPointsValue'
 import { gradeSportDynastyDeal, isDynastyGradedSport } from './sportDynastyValue'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { createNbaCampusTradeGrader } from './nbaCampusTradeValue'
 
 /**
  * The daily-sport half of the one grade — NBA, college basketball, NHL — shared by
@@ -38,6 +40,13 @@ export function createSportPointsGrader(
 ): SportPointsGrader | null {
   const sport = String(args.sport ?? '').trim().toUpperCase()
   if (!isPointsGradedSport(sport)) return null
+  if (sport === 'NBA' && args.league?.leagueType === 'c2c' && isNativePlatform(args.league.platform)) {
+    const grade = createNbaCampusTradeGrader(args.league, deps.loadBase)
+    return { async grade(give, get) {
+      try { return await grade(give, get) }
+      catch { return { graded: false, reason: 'Campus-to-Canton values could not be loaded just now.', basis: null } }
+    } }
+  }
   let base: Promise<SportPointsBaseResult> | null = null
   const baseOnce = () =>
     (base ??= deps
