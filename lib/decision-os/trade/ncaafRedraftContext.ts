@@ -3,9 +3,11 @@ import 'server-only'
 import type { TradeValuationGap } from './tradeGrade'
 
 import { prisma } from '@/lib/prisma'
-import { latestNcaafProjectionSeason, lookupNcaafProjections } from '@/lib/core-app/ncaafProjections'
+import { collegePlayerIds } from '@/lib/c2c/campusLineup'
+import { latestNcaafProjectionSeason, lookupNcaafProjections, lookupNcaafProjectionsForCfbdLinks } from '@/lib/core-app/ncaafProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { bridgeNcaafRosterIdsToCfbdIds, type NcaafRosterNamespace } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
@@ -131,10 +133,52 @@ export function ncaafTradeScoringRules(league: { platform: string | null | undef
   return hasScoringRules(weights) ? weights : null
 }
 
+function ncaafNamespace(platform: string | null | undefined): NcaafRosterNamespace | null {
+  const p = platform?.trim().toLowerCase()
+  if (p === 'fantrax' || p === 'espn') return p
+  return isNativePlatform(platform) ? 'pool' : null
+}
+
+export async function loadNcaafClassYears(
+  platform: string | null | undefined,
+  rosterIds: string[],
+  season: number,
+  campusOnly = false,
+): Promise<Map<string, number>> {
+  const namespace = ncaafNamespace(platform)
+  const years = new Map<string, number>()
+  if (!namespace || !rosterIds.length) return years
+  if (campusOnly) {
+    const devy = await prisma.devyPlayer.findMany({
+      where: { id: { in: rosterIds }, sport: 'NCAAF', lastRosterYear: season, draftStatus: 'college', graduatedToNFL: false },
+      select: { id: true, classYear: true },
+    })
+    for (const row of devy) {
+      if (row.classYear != null && Number.isInteger(row.classYear) && row.classYear >= 1 && row.classYear <= 4) years.set(row.id, row.classYear)
+    }
+  }
+  const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma, rosterIds, namespace)
+  if (!bridge.cfbdIds.length) return years
+  const rows = await prisma.devyPlayer.findMany({
+    where: { sport: 'NCAAF', cfbdId: { in: bridge.cfbdIds }, lastRosterYear: season, draftStatus: 'college' },
+    select: { cfbdId: true, classYear: true },
+  })
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const id = row.cfbdId && bridge.rosterIdFor(row.cfbdId)
+    if (!id) continue
+    if (seen.has(id)) { years.delete(id); continue }
+    seen.add(id)
+    if (row.classYear != null && Number.isInteger(row.classYear) && row.classYear >= 1 && row.classYear <= 4) years.set(id, row.classYear)
+  }
+  return years
+}
+
 export async function loadNcaafRedraftBase(league: {
   id: string
   platform: string | null | undefined
   settings: unknown
+  campusOnly?: boolean
 }): Promise<NcaafRedraftBaseResult> {
   const rules = ncaafTradeScoringRules(league)
   if (!rules) return { ok: false, reason: NO_LEAGUE_SCORING_REASON }
@@ -159,22 +203,39 @@ export async function loadNcaafRedraftBase(league: {
   if (!window) return { ok: false, reason: `The ${season} college schedule has no week on file, so the weeks left to play cannot be counted.`, valuationGap: 'missing_schedule' }
   if (!rosterRows) return { ok: false, reason: 'This league’s rosters could not be read just now.' }
 
-  const rosteredIds = [...new Set(rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))]
+  const rosteredIds = [...new Set(rosterRows.flatMap((r) => league.campusOnly ? [...collegePlayerIds(r.playerData)] : rosteredIdsOf(r.playerData)))]
   const rosteredSet = new Set(rosteredIds)
   const space = playerIdSpaceFor({ platform: league.platform ?? null, sport: 'NCAAF' })
 
+  const namespace = ncaafNamespace(league.platform)
   const [identities, projections] = await Promise.all([
     resolveTradePlayers(rosteredIds, { space, sport: 'NCAAF' }),
-    typeof space === 'object' && space.provider === 'fantrax'
-      ? lookupNcaafProjections(rosteredIds, { season: String(season) }, 'fantrax')
-      : lookupNcaafProjections(rosteredIds, { season: String(season) }),
+    namespace ? lookupNcaafProjections(rosteredIds, { season: String(season) }, namespace) : Promise.resolve(new Map()),
   ])
+
+  if (league.campusOnly) {
+    const missing = rosteredIds.filter((id) => !projections.has(id) && identities.get(id)?.ok !== true)
+    const players = missing.length ? await prisma.devyPlayer.findMany({
+      where: { id: { in: missing }, sport: 'NCAAF', graduatedToNFL: false, cfbdId: { not: null } },
+      select: { id: true, cfbdId: true },
+    }) : []
+    const counts = new Map<string, number>()
+    for (const p of players) if (p.cfbdId) counts.set(p.cfbdId, (counts.get(p.cfbdId) ?? 0) + 1)
+    const links = new Map(players.flatMap((p) => p.cfbdId && counts.get(p.cfbdId) === 1 ? [[p.id, p.cfbdId] as const] : []))
+    for (const [id, projection] of await lookupNcaafProjectionsForCfbdLinks(links, season)) projections.set(id, projection)
+    for (const cfbdId of links.values()) rosteredSet.add(cfbdId)
+  }
 
   // An id that names nobody, or two people, is left out: a deal naming him is refused, never guessed.
   const rostered: NcaafRosteredPlayer[] = []
   for (const id of rosteredIds) {
     const p = identities.get(id)
     if (p?.ok) rostered.push({ rosterPlayerId: id, name: p.name, position: p.position })
+    else if (p?.why !== 'ambiguous') {
+      const line = projections.get(id)
+      // The projection loader already proved the one-to-one roster-to-CFBD link.
+      if (line?.name) rostered.push({ rosterPlayerId: id, name: line.name, position: line.position ?? null })
+    }
   }
   const perGameByRosterId = new Map<string, NcaafPerGame>()
   for (const [id, proj] of projections) {

@@ -210,18 +210,24 @@ export async function seedDynastyTradeValues(env: SimEnv, run: LeagueRun, pool: 
   const now = Date.now()
   const day = 86_400_000
   const points = (p: PoolPlayer) => Math.max(5, 42 - p.adp / 4)
+  const classYear = (p: PoolPlayer) => (Math.floor(p.adp) - 1) % 4 + 1
+  const espnIds = new Map(pool.map((p, index) => [p.id, String(1_000_000 + index)]))
   const identity = (p: PoolPlayer, id: string, extra: Record<string, unknown> = {}) => ({
     id, canonicalName: p.name, normalizedName: p.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
     sport, position: p.position, rollingInsightsId: p.id, ...extra,
   })
 
   if (sport === 'NCAAF') {
-    await env.db.playerIdentityMap.createMany({ data: pool.map((p) => identity(p, 'sim-value-' + p.id, { cfbdId: 'sim-cfbd-' + p.id })) })
+    await env.db.playerIdentityMap.createMany({ data: pool.map((p) => identity(p, p.id, { cfbdId: 'sim-cfbd-' + p.id })) })
+    await env.db.devyPlayer.createMany({ data: pool.map((p) => ({
+      sport, name: p.name, normalizedName: p.name.toLowerCase(), position: p.position, school: p.team,
+      cfbdId: 'sim-cfbd-' + p.id, classYear: classYear(p), lastRosterYear: season, draftStatus: 'college',
+    })) })
     await env.db.aFProjectionSnapshot.createMany({ data: pool.map((p) => {
       const pts = points(p)
       return {
         playerId: 'sim-cfbd-' + p.id, playerName: p.name, sport, position: p.position, season,
-        baselineProjection: pts, afProjection: pts, snapshotLookupKey: 'sim-value-' + p.id,
+        baselineProjection: pts, afProjection: pts, snapshotLookupKey: p.id,
         adjustmentFactors: {
           perGameRates: { pass_yd: pts * 10, pass_td: pts / 15, rush_yd: pts * 3, rush_td: pts / 40, rec: pts / 8, rec_yd: pts * 2, rec_td: pts / 50, fg: pts / 10, fgm: pts / 10, xpm: pts / 15 },
           confidenceReasons: ['12 games in the season sample'], sourceSeason: season,
@@ -243,10 +249,11 @@ export async function seedDynastyTradeValues(env: SimEnv, run: LeagueRun, pool: 
       for (const p of pool) {
         const pts = points(p)
         const r = role(p.position)
-        for (let m = 1; m <= 4; m += 1) {
+        for (let m = 1; m <= 12; m += 1) {
+          const count = (rate: number) => Math.floor(rate * m) - Math.floor(rate * (m - 1))
           const stats = r.group === 'goalkeepers'
-            ? { saves: Math.round(pts / 8), goals_conceded: 1, clean_sheets: m % 2, minutes_played: 90, goals: 0, assists: 0 }
-            : { goals: Math.round(pts / 30), assists: Math.round(pts / 40), shots_on_goal: Math.round(pts / 12), shots_attempted: Math.round(pts / 8), minutes_played: 90, clean_sheets: r.position === 'Defender' ? m % 2 : 0 }
+            ? { saves: count(pts / 8), goals_conceded: 1, clean_sheets: m % 2, minutes_played: 90, goals: 0, assists: 0 }
+            : { goals: count(pts / 30), assists: count(pts / 40), shots_on_goal: count(pts / 12), shots_attempted: count(pts / 8), minutes_played: 90, clean_sheets: r.position === 'Defender' ? m % 2 : 0 }
           const map = { ...r, positionCategory: null, scored: false, status: null, stats }
           rows.push({
             playerId: p.id, gameId: `sim-value-${s}-${m}-${p.team}`, season: s, weekOrRound: m, sportType: 'SOCCER',
@@ -257,7 +264,21 @@ export async function seedDynastyTradeValues(env: SimEnv, run: LeagueRun, pool: 
     }
     await env.db.playerGameStat.createMany({ data: rows as never })
   } else {
-    await env.db.playerIdentityMap.createMany({ data: pool.map((p) => identity(p, 'sim-value-' + p.id)) })
+    const birthYear = new Date(now).getUTCFullYear()
+    await env.db.playerIdentityMap.createMany({ data: pool.map((p, i) => {
+      // Every fourth pro player is a young entrant with a stored birthdate and a projection.
+      const facts = sport === 'NCAAB' ? { espnId: espnIds.get(p.id) }
+        : { dob: String(birthYear - (i % 4 === 0 ? 21 : 27)) + '-01-01' }
+      return identity(p, 'sim-value-' + p.id, facts)
+    }) })
+    if (sport === 'NCAAB') {
+      const teams = [...new Set(pool.map((p) => p.team))]
+      await env.db.sportsDataCache.createMany({ data: teams.map((school, i) => ({
+        cacheKey: 'espn:ncaab:roster:' + (season + 1) + ':' + (i + 1), expiresAt: new Date(now + 40 * day),
+        data: { seasonYear: season + 1, teamId: String(i + 1), school, observedAt: new Date(now).toISOString(),
+          athletes: pool.filter((p) => p.team === school).map((p) => ({ id: espnIds.get(p.id), fullName: p.name, classYear: classYear(p) })) },
+      })) })
+    }
     await env.db.aFProjectionSnapshot.createMany({ data: pool.map((p) => {
       const pts = points(p)
       const perGameRates = sport === 'NHL'
@@ -308,7 +329,13 @@ export async function seedPlayerPool(env: SimEnv, run: LeagueRun): Promise<PoolP
   if (fresh.length) {
     await env.db.sportsPlayer.createMany({
       // A native NFL league stores Sleeper ids, and SportsPlayer carries them: the pool ids stand in for both.
-      data: fresh.map((p) => ({ id: p.id, sport: run.sport, externalId: p.id, ...(run.sport === 'NFL' ? { sleeperId: p.id } : {}), name: p.name, position: p.position, team: p.team, source: 'simulation', expiresAt: new Date('2030-01-01T00:00:00Z') })),
+      data: fresh.map((p) => ({
+        id: p.id, sport: run.sport, externalId: p.id, name: p.name, position: p.position, team: p.team,
+        ...(run.sport === 'NFL' ? { sleeperId: p.id } : {}),
+        ...(run.sport === 'SOCCER' ? { age: 19 + Math.floor(p.adp) % 13 } : {}),
+        source: run.sport === 'SOCCER' ? 'rolling_insights' : 'simulation',
+        expiresAt: new Date('2030-01-01T00:00:00Z'),
+      })),
     })
   }
   run.stats.poolSize = pool.length

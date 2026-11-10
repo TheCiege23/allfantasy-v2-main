@@ -33,6 +33,10 @@ export type TournamentGrantLike = {
   canEditSettings: boolean
 }
 
+export function isSeasonLiveStaff(grant: { role: string; canEditSettings: boolean } | null | undefined) {
+  return grant?.role === 'live_co_commissioner' && grant.canEditSettings
+}
+
 export type ViewerContext = {
   userId: string | null
   commissionerId: string

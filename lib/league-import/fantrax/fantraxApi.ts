@@ -71,7 +71,7 @@ export const FANTRAX_ENDPOINTS = [
  * MLB/CFB. A map that fails to load fails soft (the import needs only the league's own sport to
  * load), so a wrong assumption costs NBA/NHL detection and nothing else. contracts/fantrax/GAPS.md.
  */
-export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'EPL'
 
 export type FantraxFailure = {
   /**

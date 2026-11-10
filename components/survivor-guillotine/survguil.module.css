@@ -97,6 +97,14 @@
 
 .proposed { display: inline-block; font-size: 12px; color: #f2c94c; border: 1px dashed rgba(242,201,76,.6); border-radius: 8px; padding: 4px 8px; }
 
+/* Chop line: on a phone the decorative bar squeezed every name to three letters and pushed the tier pill
+   past the card. The points beside it carry the same number, so the bar goes and the name gets the room. */
+.chopName { flex: 0 1 30%; }
+.mrow > .mono, .chopName ~ span:last-child { flex-shrink: 0; }
+@media (max-width: 520px) {
+  .chopBar { display: none; }
+  .mrow > .chopName { flex: 1 1 auto; }
+}
 @media (max-width: 640px) {
   .stageBody { grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .stageArt { width: 120px; height: 150px; }
@@ -112,7 +120,11 @@
 .mark { position: absolute; top: -5px; width: 6px; height: 24px; border-radius: 3px; background: #fff; transform: translateX(-50%); }
 .mark > span { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; font-weight: 800; color: #ff9a8a; font-style: normal; }
 .markYou > span { color: #fff; bottom: auto; top: 28px; }
-.meterLbl { display: flex; justify-content: space-between; font-size: 12px; color: #9aa3b8; margin-top: 22px; }
+/* A label centred on a mark near either end of the meter ran past the card ("Outcasts · 912.7" at 0%):
+   near an end it hangs inward from the mark instead. */
+.markStart > span { left: 0; transform: none; }
+.markEnd > span { left: auto; right: 0; transform: none; }
+.meterLbl { display: flex; justify-content: space-between; font-size: 12px; color: #9aa3b8; margin-top: 30px; }
 .primaryBtn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 0; background: #e2672a; color: #1a0a04; font-weight: 800; text-decoration: none; cursor: pointer; margin-top: 8px; }
 .textLink { display: inline-flex; align-items: center; min-height: 44px; color: #ffc08a; font-size: 13px; }
 .multi { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }

@@ -2831,6 +2831,13 @@ button.af-ch-os-chip {
 .af-li-chip[data-low='true'] .af-li-chip-val {
   color: var(--warn);
 }
+.af-li-coverage {
+  border-left: 2px solid var(--faint);
+  padding-left: 10px;
+}
+.af-li-coverage[data-gap='true'] {
+  border-left-color: var(--warn);
+}
 .af-li-chip-top {
   color: var(--muted);
 }

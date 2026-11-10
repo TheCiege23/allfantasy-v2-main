@@ -1,7 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { readImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import { ourIdOrSleeperIdWhere, playerNamesAgree, providerIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { providerIdentityColumn, resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 
@@ -27,7 +29,7 @@ import { providerIdentityColumn, resolveProviderRosterPlayers } from '@/lib/play
 
 /** Every id a stored roster holds, including lineup sections used by older imports. */
 export function rosteredIdsOf(playerData: unknown): string[] {
-  const ids = new Set(getRosterPlayerIds(playerData).map(String))
+  const ids = new Set([...getRosterPlayerIds(playerData).map(String), ...collegePlayerIds(playerData)])
   const pd = (playerData ?? {}) as Record<string, unknown>
   for (const key of ['starters', 'reserve', 'taxi', 'bench', 'ir']) {
     const entries = pd[key]
@@ -85,7 +87,7 @@ export function decidePlayerIdentity(rows: ReadonlyArray<{ name: string | null; 
 /** Resolve every id at once. Never throws: an unreadable table is "unresolved", which refuses the grade. */
 export async function resolveTradePlayers(
   playerIds: readonly string[],
-  opts: { space: PlayerIdSpace; sport: string },
+  opts: { space: PlayerIdSpace; sport: string; membershipCheckedLeagueId?: string },
 ): Promise<Map<string, ResolvedTradePlayer>> {
   const ids = [...new Set(playerIds.map((i) => String(i ?? '').trim()).filter(Boolean))]
   const out = new Map<string, ResolvedTradePlayer>()
@@ -94,12 +96,29 @@ export async function resolveTradePlayers(
 
   if (typeof opts.space === 'object') {
     // The provider resolver already leaves an id that matches two identities unresolved.
+    const provider = opts.space.provider
     const ambiguous = new Set<string>()
-    const found = await resolveProviderRosterPlayers(opts.space.provider, ids, sport, ambiguous).catch(() => new Map())
+    const found = await resolveProviderRosterPlayers(provider, ids, sport, ambiguous).catch(() => new Map())
+    const names = new Map<string, Array<{ name: string; position: string | null }>>()
+    // Saved provider metadata names the roster entry in this league. The projection grader still
+    // independently verifies its crosswalk before assigning a value.
+    if (opts.membershipCheckedLeagueId && (provider === 'espn' || provider === 'yahoo' || provider === 'fantrax')) {
+      const missing = new Set(ids.filter((id) => !found.has(id) && !ambiguous.has(id)))
+      if (missing.size) {
+        const rosters = await prisma.roster.findMany({ where: { leagueId: opts.membershipCheckedLeagueId }, select: { playerData: true } }).catch(() => [])
+        for (const { playerData } of rosters) {
+          for (const id of rosteredIdsOf(playerData)) {
+            if (!missing.has(id)) continue
+            const player = readImportedPlayerMetadata(playerData, provider, id)
+            if (player) names.set(id, [...(names.get(id) ?? []), player])
+          }
+        }
+      }
+    }
     for (const id of ids) {
       const p = found.get(id)
       out.set(id, p?.name ? { ok: true, name: p.name, position: p.position ?? null, ...(p.sleeperId ? { sleeperId: p.sleeperId } : {}) }
-        : { ok: false, why: ambiguous.has(id) ? 'ambiguous' : 'unresolved' })
+        : ambiguous.has(id) ? { ok: false, why: 'ambiguous' } : decidePlayerIdentity(names.get(id) ?? []))
     }
     return out
   }
@@ -123,6 +142,14 @@ export async function resolveTradePlayers(
         if (r.id !== key) record(r.id, r)
       }
     } else {
+      const collegeIds = sport === 'NBA' ? ids.filter((id) => /^espn:ncaab:\d+$/.test(id)) : []
+      if (collegeIds.length) {
+        const campus = await prisma.devyPlayer.findMany({
+          where: { id: { in: collegeIds }, sport: 'NCAAB', source: 'espn_ncaab_roster' },
+          select: { id: true, name: true, position: true },
+        }).catch(() => [])
+        for (const player of campus) record(player.id, player)
+      }
       const rows = await prisma.sportsPlayer.findMany({
         where: { sport, OR: [{ id: { in: ids } }, providerIdWhere('rolling_insights', ids)] },
         select: { id: true, source: true, externalId: true, name: true, position: true },

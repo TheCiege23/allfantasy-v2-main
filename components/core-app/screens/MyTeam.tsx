@@ -12,6 +12,8 @@ import { DynastyAgeKey, DynastyMarkersScope, DynastyRowMarkers } from './Dynasty
 import '@/components/core-app/af-my-team.css'
 /* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
+// The head-to-head row look (wide pages only); after the base and redraft sheets so it sizes over them.
+import '@/components/core-app/af-my-team-h2h.css'
 import { statusShorthand } from '@/lib/core-app/myTeamStatusShorthand'
 import { lineupPeriodLabel, noGameBadge, redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { lineupDecision } from '@/lib/core-app/lineupDecision'
@@ -2221,7 +2223,7 @@ export function MyTeam({ data }: MyTeamProps) {
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
         {data.starters.available ? (
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.starters.data.map((slot, i) => (
               <SlotRow
                 key={`${slot.slotLabel}-${i}`}
@@ -2262,7 +2264,7 @@ export function MyTeam({ data }: MyTeamProps) {
         </header>
         {data.bench.available ? (
           <>
-            <ul className="af-mt-list">
+            <ul className="af-mt-list" data-look="h2h">
               {data.bench.data.map((p) => (
                 <BenchRow key={p.sleeperId} player={p} slotLabel="BN" />
               ))}
@@ -2280,7 +2282,7 @@ export function MyTeam({ data }: MyTeamProps) {
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Injured reserve')}</h2>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.ir.data.map((p) => (
               <BenchRow key={p.sleeperId} player={p} slotLabel="IR" />
             ))}
@@ -2302,7 +2304,7 @@ export function MyTeam({ data }: MyTeamProps) {
               {copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')}
             </span>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.taxi.data.map((p) => (
               <BenchRow
                 key={p.sleeperId}

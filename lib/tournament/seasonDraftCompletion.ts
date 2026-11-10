@@ -4,6 +4,7 @@ import { withControlLock } from '@/lib/draft/draftLock'
 import { recordArchiveEvent } from '@/lib/draft-archive/events'
 import { isSeasonTournamentDraft } from './seasonDraftMutationGate'
 import { assessSeasonDraftCompletion } from './seasonDraftReview'
+import { lockAndCheckSeasonRecovery } from './seasonRecoveryState'
 
 export type SeasonDraftCompletionOutcome = {
   /** The board is completed (now, or already was). */
@@ -14,8 +15,8 @@ export type SeasonDraftCompletionOutcome = {
 }
 
 /** null delegates ordinary leagues; completion never activates a tournament season. */
-export async function completeSeasonDraft(leagueId: string): Promise<boolean | null> {
-  const outcome = await completeSeasonDraftWithOutcome(leagueId)
+export async function completeSeasonDraft(leagueId: string, now = new Date()): Promise<boolean | null> {
+  const outcome = await completeSeasonDraftWithOutcome(leagueId, now)
   return outcome === null ? null : outcome.completed
 }
 
@@ -25,19 +26,26 @@ export async function completeSeasonDraft(leagueId: string): Promise<boolean | n
  * status before the call and comparing it after let two concurrent completers both see
  * "was not completed, is now" and both announce.
  */
-export async function completeSeasonDraftWithOutcome(leagueId: string): Promise<SeasonDraftCompletionOutcome | null> {
+export async function completeSeasonDraftWithOutcome(leagueId: string, now = new Date()): Promise<SeasonDraftCompletionOutcome | null> {
   if (!(await isSeasonTournamentDraft(leagueId))) return null
   const notDone: SeasonDraftCompletionOutcome = { completed: false, transitioned: false, sessionId: null }
   const locked = await withControlLock(leagueId, () => prisma.$transaction(async (tx): Promise<SeasonDraftCompletionOutcome> => {
     const review = await assessSeasonDraftCompletion(leagueId, tx)
-    if (!review) return notDone
+    if (!review || await lockAndCheckSeasonRecovery(tx, review.context.tournamentId)) return notDone
     if (review.state === 'completed') return { completed: true, transitioned: false, sessionId: review.session?.id ?? null }
     const { context, session, boardHash } = review
     if (!review.canCheckpoint || !session || !boardHash) return notDone
+    if (context.config.rules!.calendar.draftOverrides) {
+      const deadline = new Date(context.draftWindow.completeBy)
+      const late = await tx.draftPick.count({ where: { sessionId: session.id, OR: [
+        { pickedAt: { gt: deadline } }, { pickedAt: null, createdAt: { gt: deadline } },
+      ] } })
+      if (late) return notDone
+    }
     const claimed = await tx.draftSession.updateMany({ where: { id: session.id, version: session.version, status: session.status, timerEndAt: session.timerEndAt }, data: { status: 'completed', timerEndAt: null, pausedRemainingSeconds: null, overnightFrozenPickSeconds: null, pausedByUserId: null, version: { increment: 1 } } })
     if (claimed.count !== 1) return notDone
     await recordArchiveEvent(tx, { ...session, status: 'completed' }, 'complete')
-    await tx.tournamentAuditLog.create({ data: { tournamentId: context.tournamentId, actorType: 'system', actorId: null, action: 'season_draft_board_completed', targetType: 'league', targetId: leagueId, data: { version: 1, manifestHash: context.manifestHash, sessionId: session.id, boardHash, totalPicks: review.totalPicks, rosterCount: context.rosterIds.length, previousVersion: session.version, launchReady: false } } })
+    await tx.tournamentAuditLog.create({ data: { tournamentId: context.tournamentId, actorType: 'system', actorId: null, action: 'season_draft_board_completed', createdAt: now, targetType: 'league', targetId: leagueId, data: { version: 1, manifestHash: context.manifestHash, sessionId: session.id, boardHash, totalPicks: review.totalPicks, rosterCount: context.rosterIds.length, previousVersion: session.version, launchReady: false } } })
     return { completed: true, transitioned: true, sessionId: session.id }
   }))
   return locked.acquired ? locked.value : notDone

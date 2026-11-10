@@ -2,7 +2,7 @@ import 'server-only'
 
 import { loadTradeRosterIds, playerIdSpaceFor, resolveTradePlayers } from '@/lib/decision-os/trade/tradePlayers'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
 import { evaluateTrade, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
@@ -69,7 +69,7 @@ export type {
 
 export interface TradeScenarioDeps {
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
-  loadPlayerNames: (sport: string, ids: string[], platform?: string | null) => Promise<Map<string, { name: string | null; position: string | null; sleeperId?: string; externalId?: string }>>
+  loadPlayerNames: (sport: string, ids: string[], platform?: string | null, membershipCheckedLeagueId?: string) => Promise<Map<string, { name: string | null; position: string | null; sleeperId?: string; externalId?: string }>>
   loadForeignRosterIds?: (leagueId: string) => Promise<Map<string, string[]>>
   evaluate: (args: EvaluateCanonicalTradeArgs, deps: { resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null> }) => Promise<CanonicalTradeEvaluation>
   /** THE grade for the deal, from the viewer's side. */
@@ -80,9 +80,9 @@ export interface TradeScenarioDeps {
 
 const defaultDeps: TradeScenarioDeps = {
   resolveWorld: resolveCanonicalWorld,
-  async loadPlayerNames(sport, ids, platform) {
+  async loadPlayerNames(sport, ids, platform, membershipCheckedLeagueId) {
     const space = playerIdSpaceFor({ platform: platform ?? null, sport })
-    const found = await resolveTradePlayers(ids.slice(0, MAX_LEAGUE_PLAYER_IDS), { sport, space })
+    const found = await resolveTradePlayers(ids.slice(0, MAX_LEAGUE_PLAYER_IDS), { sport, space, membershipCheckedLeagueId })
     return new Map([...found].flatMap(([id, player]) => player.ok ? [[id, player] as const] : []))
   },
   loadForeignRosterIds: loadTradeRosterIds,
@@ -178,8 +178,8 @@ export async function buildTradeScenario(
   }
   const platform = world.provenance?.provider ?? null
   const space = playerIdSpaceFor({ platform, sport: world.league.sport })
-  const foreign = isForeignIdSpace(platform)
-  // The lineup port's ID contract is different. Load provider IDs for trade grounding only.
+  const foreign = rosterIdSpaceOf(platform) !== 'sleeper' || world.league.leagueType === 'c2c'
+  // The lineup port can translate ESPN IDs to Sleeper IDs. Trade grounding needs the original provider IDs.
   const foreignRosterIds = foreign ? await deps.loadForeignRosterIds?.(args.leagueId).catch(() => null) : null
   if (foreign && !foreignRosterIds?.get(viewerRoster.rosterId)?.length) {
     return {
@@ -192,7 +192,7 @@ export async function buildTradeScenario(
     ...world,
     rosters: world.rosters.map((roster) => ({ ...roster, playerIds: foreignRosterIds.get(roster.rosterId) ?? [] })),
   } : world
-  const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(rosterWorld), platform).catch(() => new Map())
+  const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(rosterWorld), platform, args.leagueId).catch(() => new Map())
   const byName = indexRosterNames(rosterWorld, names)
 
   const left: Located[][] = []
@@ -321,7 +321,7 @@ export async function buildTradeScenario(
           identity: { ok: true, name: p.name, position: p.position, sleeperId: identity?.sleeperId, externalId: identity?.externalId },
         })
       }),
-      ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round })),
+      ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round, ...(p.draftSide ? { draftSide: p.draftSide } : {}) })),
     ],
     unpriceable: [],
   })

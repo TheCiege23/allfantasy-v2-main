@@ -18,7 +18,7 @@ describe('tournament planner interface', () => {
     expect(screen.getByText('Opening qualifier')).toBeInTheDocument()
     expect(screen.getByText('Championship bracket')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save tournament plan' })).toBeEnabled()
-    fireEvent.change(screen.getByLabelText('Participants'), { target: { value: '66' } })
+    fireEvent.change(screen.getByLabelText('Participants'), { target: { value: '62' } })
     expect(screen.getByRole('button', { name: 'Save tournament plan' })).toBeDisabled()
   })
   it('does not ignore league names typed before saving', () => {

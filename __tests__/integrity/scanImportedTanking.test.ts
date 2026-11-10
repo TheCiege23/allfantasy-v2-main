@@ -135,7 +135,7 @@ describe('scanImportedLeagueForTanking', () => {
 })
 
 describe('scanImportedLeaguesForTanking', () => {
-  it('scans every imported Sleeper league with the monitor on; one failure does not end the batch', async () => {
+  it('scans every imported Sleeper and ESPN league with the monitor on; one failure does not end the batch', async () => {
     m.findMany.mockResolvedValue([{ leagueId: 'A' }, { leagueId: 'B' }, { leagueId: 'C' }])
     const scanOne = vi.fn(async (id: string) => {
       if (id === 'B') throw new Error('boom')
@@ -144,7 +144,7 @@ describe('scanImportedLeaguesForTanking', () => {
     expect(await scanImportedLeaguesForTanking({}, scanOne)).toEqual({ discovered: 3, scanned: 2, flagged: 2, failed: 1 })
     expect(m.findMany.mock.calls[0]![0].where).toMatchObject({
       tankingMonitorEnabled: true,
-      league: { platform: { equals: 'sleeper', mode: 'insensitive' }, platformLeagueId: { not: '' } },
+      league: { OR: [{ platform: { equals: 'sleeper', mode: 'insensitive' } }, { platform: { equals: 'espn', mode: 'insensitive' } }], platformLeagueId: { not: '' } },
     })
   })
 })
@@ -202,5 +202,21 @@ describe('the Lineup Integrity pattern for an imported Sleeper league', () => {
       return { id: 'flag-1' }
     })
     expect(await run()).toMatchObject({ flagged: 1 })
+  })
+})
+
+describe('the scan for an imported ESPN league', () => {
+  const weeks = (...ratios: number[]) => ratios.map((ratio, i) => ({ week: i + 4, ratio, startedTopCount: 7, starterCount: 9, skipReason: null }))
+  it('keeps its own once-per-week marker and says the projections are not ESPN\u2019s', async () => {
+    deps.report.mockResolvedValue({ ...report([]), scoresSource: 'espn' })
+    deps.lineupScores.mockResolvedValue(
+      new Map([['3', { thisWeek: { scored: true, ratio: 0.8, startedProj: 0, optimalProj: 0, startedTopCount: 7, starterCount: 9, excludedIds: [] }, weeks: weeks(0.8, 0.8), snapshot: null }]]),
+    )
+    expect(await run()).toMatchObject({ outcome: 'scanned', flagged: 1 })
+    expect(deps.claim).toHaveBeenCalledWith(importedTankingScanMarkerKey('L', 2026, 6, 'espn'))
+    expect(importedTankingScanMarkerKey('L', 2026, 6, 'espn')).not.toBe(importedTankingScanMarkerKey('L', 2026, 6))
+    // Sleeper's key is unchanged, so no Sleeper week is ever scanned twice.
+    expect(importedTankingScanMarkerKey('L', 2026, 6)).toBe('integrity-tanking-scan:L:sleeper:2026:6')
+    expect(deps.createFlag.mock.calls[0][0].evidenceJson.redFlags.join(' ')).toMatch(/ESPN\u2019s own projections are not stored/)
   })
 })

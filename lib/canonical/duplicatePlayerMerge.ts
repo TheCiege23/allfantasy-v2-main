@@ -31,9 +31,27 @@
  *   - it carries no Sleeper id, and the twin does;
  *   - the twin has the same normalized name AND the same birthday, and is the ONLY such row;
  *   - no provider would end up with two different ids on the merged player, whether from the
- *     survivor or from a second copy folding into the same survivor. That happens for 25 rows,
- *     because TheSportsDB itself has two records for the athlete. Those are reported and
- *     skipped, never resolved by picking one.
+ *     survivor or from a second copy folding into the same survivor. The one exception is
+ *     TheSportsDB; see `PROVIDERS_ALLOWED_TWICE`.
+ *
+ * ── Why TheSportsDB may hold two ids, and no other provider may ──
+ *
+ * The first apply (2026-11-09, 455 merged) refused 25 rows for a clash, and every one but one
+ * was TheSportsDB. TheSportsDB itself holds two records for those athletes, and they are the
+ * stars: James Cook, Kyle Pitts, Marvin Harrison Jr., Travis Etienne, Kenneth Walker, Chris
+ * Godwin, Michael Pittman, Anthony Richardson. Their copies carry their ESPN identity and,
+ * for some, their ONLY Rolling Insights identity. Refusing left them split.
+ *
+ * Two TheSportsDB ids on one player is true: both records are that person. Every reader was
+ * checked before allowing it:
+ *   - `getCanonicalPlayer` folds identities into a provider -> id map and keeps one, but nothing
+ *     reads its `thesportsdb` entry;
+ *   - the tournament draft bridge (`seasonScoreLedger`) binds only Sleeper and Rolling
+ *     Insights ids;
+ *   - `Player.provider_ids` holds one value per provider, and the survivor's wins.
+ * Every other provider keeps the strict rule. Two Rolling Insights or Sleeper ids on one player
+ * would feed scoring and the live crosswalk two answers. That is why Albert Okwuegbunam, the one
+ * non-TheSportsDB clash, stays refused.
  *
  * A name alone is never enough (see `matchProviderAthlete`). Two Sleeper-backed rows that share
  * a name and a birthday are NOT handled here either: that is Sleeper's own duplicate (17 such
@@ -42,6 +60,9 @@
  */
 import { birthDay } from '@/lib/player-identity/matchProviderAthlete'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+
+/** Providers that may end up with two ids on one merged player. See the header for why. */
+export const PROVIDERS_ALLOWED_TWICE: ReadonlySet<string> = new Set(['thesportsdb'])
 
 export type CanonicalPlayerRow = {
   id: string
@@ -137,6 +158,7 @@ export function planDuplicatePlayerMerges(
     const keepIdsByProvider = idsByPlayer.get(keepId) ?? new Map<string, Set<string>>()
     const clashes: string[] = []
     for (const [provider, ids] of dupIds) {
+      if (PROVIDERS_ALLOWED_TWICE.has(provider)) continue
       const theirs = keepIdsByProvider.get(provider)
       if (!theirs) continue
       if ([...ids].some((id) => !theirs.has(id))) clashes.push(provider)
@@ -167,7 +189,10 @@ export function planDuplicatePlayerMerges(
         seen.set(provider, all)
       }
     }
-    const clashing = [...seen].filter(([, ids]) => ids.size > 1).map(([provider]) => provider).sort()
+    const clashing = [...seen]
+      .filter(([provider, ids]) => ids.size > 1 && !PROVIDERS_ALLOWED_TWICE.has(provider))
+      .map(([provider]) => provider)
+      .sort()
     if (!clashing.length) continue
     for (const m of group) {
       refused.add(m.dupId)
@@ -218,6 +243,7 @@ export function foldTargetsForUnkeyedGroups(
     const target = [...candidates][0]!
     const theirs = idsByCandidate.get(target)
     const clash = g.providerIds.some(([provider, id]) => {
+      if (PROVIDERS_ALLOWED_TWICE.has(provider)) return false
       const ids = theirs?.get(provider)
       return Boolean(ids && !ids.has(id))
     })

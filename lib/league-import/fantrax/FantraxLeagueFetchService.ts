@@ -8,7 +8,7 @@ import type {
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
 import { readStoredFantraxDerived, readStoredFantraxDraft } from './fantraxSnapshotHistory'
-import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots } from './fantraxProSports'
+import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
 
 type LegacyStanding = {
   rank?: unknown
@@ -790,8 +790,9 @@ export async function fetchFantraxLeagueForImport(
   const firstUnscored = schedule.find((week) =>
     week.matchups.every((m) => m.points1 == null && m.points2 == null),
   )
+  const usesPeriodCalendar = usesFantraxPeriodCalendar(sport)
   const currentWeek =
-    (sport === 'SOCCER' ? sourceCurrentPeriod : null) ??
+    (usesPeriodCalendar ? sourceCurrentPeriod : null) ??
     firstUnscored?.week ?? (schedule.length > 0 ? schedule[schedule.length - 1].week : null)
 
   const transactions: FantraxImportTransaction[] = transactionRows.map((transaction, index) => {
@@ -982,7 +983,7 @@ export async function fetchFantraxLeagueForImport(
        */
       isFinished:
         sourceSeasonState === 'complete' ||
-        ((sport !== 'SOCCER' || !sourceSeasonState) &&
+        ((!usesPeriodCalendar || !sourceSeasonState) &&
           (splitSeason ? isFantraxSplitSeasonFinished(season) : season < new Date().getFullYear())),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),

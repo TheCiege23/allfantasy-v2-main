@@ -118,6 +118,9 @@ export const playerFinderMessages = defineMessages({
 
     // GameDayTriage
     triageTitle: 'Game day · your flagged starters',
+    /** Under Game day and Your shares, which show their first FINDER_LIST_PREVIEW rows. */
+    listShowAll: (n: number) => `Show all ${n}`,
+    listShowFewer: 'Show fewer',
     triageWeek: (week: number) => `week ${week}`,
     triageThisWeek: 'this week',
     triageRead: (read: number, count: number) => `${read} of ${count} ${count === 1 ? 'lineup' : 'lineups'} read`,
@@ -225,6 +228,8 @@ export const playerFinderMessages = defineMessages({
 
     // GameDayTriage
     triageTitle: 'Día de partido · tus titulares señalados',
+    listShowAll: (n) => `Ver los ${n}`,
+    listShowFewer: 'Ver menos',
     triageWeek: (week) => `semana ${week}`,
     triageThisWeek: 'esta semana',
     triageRead: (read, count) => `${read} de ${count} ${count === 1 ? 'alineación leída' : 'alineaciones leídas'}`,

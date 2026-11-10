@@ -13,6 +13,12 @@ import type { FantraxLeagueInfo } from './fantraxApi'
 /** Stored `FantraxLeague.sport` values whose season spans two calendar years. */
 const SPLIT_SEASON_SPORTS = new Set(['nba', 'nhl', 'ncaab'])
 
+/** Imports that retain Fantrax’s period calendar on the canonical league. */
+export function usesFantraxPeriodCalendar(sport: string | null | undefined): boolean {
+  const key = String(sport ?? '').trim().toLowerCase()
+  return key === 'soccer' || key === 'ncaab'
+}
+
 export function isFantraxSplitSeasonSport(sport: string | null | undefined): boolean {
   return SPLIT_SEASON_SPORTS.has(String(sport ?? '').trim().toLowerCase())
 }

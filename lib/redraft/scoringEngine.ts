@@ -226,7 +226,7 @@ export async function calculateScoreFromSportConfig(
  * Moved out of `calculateScoreFromSportConfig` unchanged (2026-10-09): the weekly matchup engine and the
  * trade grade must score a stat line the same way, so they share this rather than a copy.
  */
-export function buildLeagueStatScorer(league: { sport: string; settings: unknown }): LeagueStatScorer | null {
+export function buildLeagueStatScorer(league: Parameters<typeof resolveLeagueScoringRules>[0]): LeagueStatScorer | null {
   const rules = resolveLeagueScoringRules(league)
   if (!rules) return null
   const { categories: resolved, overrides, fantraxSoccer } = rules
@@ -1108,9 +1108,10 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     include: {
       homeRoster: { include: { players: true } },
       awayRoster: { include: { players: true } },
+      league: { select: { leagueVariant: true } },
     },
   })
-  if (!m || !m.homeRoster) return null
+  if (!m || !m.homeRoster || m.league?.leagueVariant === 'season_tournament') return null
   if (!m.awayRosterId) {
     await updateByeRowScore(m)
     return null

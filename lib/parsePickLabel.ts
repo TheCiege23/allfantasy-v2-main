@@ -34,6 +34,12 @@
 /** Rounds beyond this are not a draft, they are a typo. Bounds the parse, not the curve. */
 const MAX_PARSEABLE_ROUND = 25
 
+export type C2CDraftSide = 'campus' | 'canton'
+
+export function c2cDraftSide(value: unknown): C2CDraftSide | undefined {
+  return value === 'campus' || value === 'canton' ? value : undefined
+}
+
 export type ParsedPick = {
   year: number;
   /**
@@ -45,6 +51,7 @@ export type ParsedPick = {
    */
   round: number;
   bucket?: 'early' | 'mid' | 'late';
+  draftSide?: C2CDraftSide;
 };
 
 /** "2026 Early 3rd", "2026 3rd Rd" — the ordinal form. */
@@ -55,7 +62,11 @@ const WORD = /(20\d{2})\s*(?:(early|mid|late)\s*)?(?:round|rd\.?)\s*(\d{1,2})\b/
 export function parsePickLabel(label: string): ParsedPick | null {
   if (!label || typeof label !== 'string') return null;
 
-  const clean = label.replace(/\([^)]*\)/g, '').trim();
+  const raw = label.replace(/\([^)]*\)/g, '').trim();
+  const sides = new Set([...raw.matchAll(/\b(campus|canton)\b/gi)].map((match) => match[1]!.toLowerCase()));
+  if (sides.size > 1) return null;
+  const draftSide = c2cDraftSide(sides.values().next().value);
+  const clean = draftSide ? raw.replace(/\b(?:campus|canton)\b/gi, ' ') : raw;
 
   /*
    * Ordinal first. "2026 3rd Rd" matches BOTH patterns, and only the ordinal one reads it
@@ -80,7 +91,7 @@ export function parsePickLabel(label: string): ParsedPick | null {
 
   const bucketRaw = m[2]?.toLowerCase() as 'early' | 'mid' | 'late' | undefined;
 
-  const result: ParsedPick = { year, round };
+  const result: ParsedPick = { year, round, ...(draftSide ? { draftSide } : {}) };
   if (bucketRaw) {
     result.bucket = bucketRaw;
   }

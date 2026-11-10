@@ -1,8 +1,11 @@
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
+import { readSeasonTradePolicy, SeasonTradeError, seasonTradeOfferExpiry } from '@/lib/tournament/seasonTradePolicy'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { postDraftRosterMoveRefusal } from '@/server/services/postDraftRosterLockService'
 import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradeProposalValidation'
@@ -284,7 +287,7 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const [season, proposer, receiver] = await Promise.all([
-    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } }),
+    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId }, include: { league: { select: { leagueVariant: true } } } }),
     prisma.redraftRoster.findFirst({ where: { id: proposerRosterId, seasonId, leagueId } }),
     prisma.redraftRoster.findFirst({ where: { id: receiverRosterId, seasonId, leagueId } }),
   ])
@@ -404,7 +407,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const created = await prisma.$transaction(async (tx: any) => {
+  const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    let tournamentExpiry = expiresAt
+    if (season.league?.leagueVariant === 'season_tournament') {
+      const policy = await readSeasonTradePolicy(tx, leagueId, true)
+      if (!policy || policy.seasonId !== seasonId || multiTeam || assets.some(asset => asset.assetType !== 'player' && asset.assetType !== 'faab')) {
+        throw new SeasonTradeError('This tournament accepts player and FAAB trades between two teams in its active stage.')
+      }
+      tournamentExpiry = seasonTradeOfferExpiry(policy, expiresAt, new Date())
+    }
     const proposal = await tx.redraftTradeProposal.create({
       data: {
         id: crypto.randomUUID(),
@@ -416,7 +427,7 @@ export async function POST(req: NextRequest) {
         vetoMode,
         vetoThreshold,
         reason: body.reason?.trim() || null,
-        expiresAt,
+        expiresAt: tournamentExpiry,
       },
     })
 
@@ -432,7 +443,7 @@ export async function POST(req: NextRequest) {
         pickSeason: asset.pickSeason,
         pickRound: asset.pickRound,
         pickNumber: asset.pickNumber,
-        metadata: asset.metadata,
+        metadata: toPrismaJsonInput(asset.metadata),
       })),
     })
 
@@ -440,7 +451,13 @@ export async function POST(req: NextRequest) {
       where: { id: proposal.id },
       include: { assets: true, votes: true, decision: true },
     })
+  }).catch(error => {
+    if (error instanceof SeasonTradeError) return { seasonTradeError: error.message }
+    throw error
   })
+  if (created && 'seasonTradeError' in created) {
+    return NextResponse.json({ error: created.seasonTradeError }, { status: 409 })
+  }
 
   // T2: capture the immutable deterministic value snapshot at proposal time. Best-effort — a
   // valuation issue must never block trade creation, but it is expected to succeed.

@@ -251,6 +251,10 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
         run.findings.push({ code: 'AUDIT_CASE_THREW', stage: 'season', message: (error as Error).message })
       }
       results.push({ ...run, network: [...network], logged: [...logged], ms: Date.now() - started })
+      if (process.env.SIM_AUDIT_VALUES === '1' && process.env.SIM_SEASON === '1' && ['NBA', 'NHL', 'MLB'].includes(c.sport)) {
+        const grades = run.stats.tradeGrades as Array<{ label: string; grade: string | null }> | undefined
+        expect(grades?.find((row) => row.label === 'future-pick')?.grade, JSON.stringify(grades)).toMatch(/^[A-F]$/)
+      }
       if (scale) {
         expect(run.findings, JSON.stringify(run.findings)).toEqual([])
         expect(run.managerIds).toHaveLength(149)
@@ -270,6 +274,15 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
         expect(run.findings.some((finding) => finding.code === 'AUDIT_CASE_THREW'), JSON.stringify(run.findings)).toBe(false)
       } else {
         expect(run.leagueId === null || typeof run.leagueId === 'string').toBe(true)
+      }
+
+      if (process.env.SIM_SEASON === '1' && c.teamCount === 4 && c.draft === 'snake' && (c.sport === 'NHL' || c.sport === 'MLB')) {
+        const findings = JSON.stringify(run.findings)
+        expect(run.stats.seasonClose, findings).toMatchObject({ ok: true, champion: expect.any(String) })
+        expect(run.stats.lastScoredPlayoffWeeks).toEqual([expect.any(Number), expect.any(Number)])
+        expect(run.stats.history).toEqual({ leagueSeasons: 1, franchiseSeasons: 4, seasonResults: 4 })
+        expect(run.stats.nextSeasons).toEqual([{ season: expect.any(Number), status: 'setup' }])
+        expect(run.stats.carryover).toEqual({ owners: 4, lost: 0, gained: 0 })
       }
     })
   }

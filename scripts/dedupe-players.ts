@@ -21,7 +21,7 @@
  * Run with no flag for a dry run. `--apply` writes, inside one transaction.
  */
 import { prisma } from '../lib/prisma'
-import { planDuplicatePlayerMerges } from '../lib/canonical/duplicatePlayerMerge'
+import { PROVIDERS_ALLOWED_TWICE, planDuplicatePlayerMerges } from '../lib/canonical/duplicatePlayerMerge'
 
 const APPLY = process.argv.includes('--apply')
 
@@ -72,11 +72,16 @@ function pidKeys(p: Record<string, string> | null): string[] {
  * different people who happen to share a name, position and team, and merging
  * them would fuse two athletes into one. Matching name/position/team is
  * suggestive; a contradicting provider id is proof, and proof wins.
+ *
+ * The `birthday` scope alone passes `PROVIDERS_ALLOWED_TWICE`. Its rows are already matched on
+ * name AND birthday, and TheSportsDB is known to hold two records for one athlete; see
+ * `duplicatePlayerMerge.ts`. The name and provider scopes stay strict for every provider.
  */
-function providerIdsConflict(a: Row, b: Row): string | null {
+function providerIdsConflict(a: Row, b: Row, allowedTwice: ReadonlySet<string> = new Set()): string | null {
   const pa = a.providerIds ?? {}
   const pb = b.providerIds ?? {}
   for (const k of Object.keys(pa)) {
+    if (allowedTwice.has(k)) continue
     if (pb[k] != null && String(pb[k]) !== String(pa[k])) {
       return `${k}: ${pa[k]} vs ${pb[k]}`
     }
@@ -221,7 +226,7 @@ async function main() {
 
     const bad = losers
       .map((l) => {
-        const c = providerIdsConflict(survivor, l)
+        const c = providerIdsConflict(survivor, l, SCOPE === 'birthday' ? PROVIDERS_ALLOWED_TWICE : undefined)
         return c ? `${gkey} — ${c}` : null
       })
       .filter(Boolean) as string[]

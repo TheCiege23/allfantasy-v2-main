@@ -4,6 +4,8 @@ const state = vi.hoisted(() => ({
   league: {} as Record<string, unknown>,
   rows: [] as Array<{ week: number; rosterId: number; playerId: string; isStarter: boolean; points: number }>,
   injury: new Map<string, string>(),
+  snaps: [] as Array<Record<string, unknown>>,
+  monitorOn: true,
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -17,8 +19,18 @@ vi.mock('@/lib/prisma', () => ({
         { sleeperId: 'hurt', name: 'Hurt Guy', team: 'DAL', position: 'WR' },
       ]),
     },
-    leagueTeam: { findMany: vi.fn(async () => [{ externalId: '1', teamName: 'Tankers', ownerName: 'a' }, { externalId: '2', teamName: null, ownerName: 'bob' }]) },
+    leagueTeam: {
+      findMany: vi.fn(async () => [{ externalId: '1', teamName: 'Tankers', ownerName: 'a' }, { externalId: '2', teamName: null, ownerName: 'bob' }]),
+      count: vi.fn(async () => 2),
+    },
+    redraftRoster: { findMany: vi.fn(async () => []) },
+    leagueIntegritySettings: { findUnique: vi.fn(async () => ({ tankingMonitorEnabled: state.monitorOn })) },
   },
+}))
+vi.mock('@/lib/integrity/lineupLockStore', () => ({ readLineupLockSnapshots: vi.fn(async () => state.snaps) }))
+vi.mock('@/lib/integrity/espnLineupSnapshots', () => ({
+  // Week 9 ended long ago; week 10 ends in the far future.
+  readNflWeekWindow: vi.fn(async (_season: number, week: number) => ({ weekEndsAt: new Date(week === 9 ? '2026-11-03T08:00:00Z' : '2099-01-01T00:00:00Z') })),
 }))
 vi.mock('@/lib/core-app/byeWeekMap', () => ({ resolveByeWeekMap: vi.fn(async () => ({ KC: 6 })) }))
 vi.mock('@/lib/core-app/injuryStatusById', () => ({ readInjuryStatusById: vi.fn(async () => state.injury) }))
@@ -33,6 +45,32 @@ beforeEach(() => {
   state.league = { ...sleeper }
   state.rows = [r(5, 1, 'hurts'), r(5, 1, 'mahomes'), r(6, 1, 'mahomes'), r(6, 2, 'hurts'), r(6, 2, 'hurt', 0)]
   state.injury = new Map([['hurt', 'Out']])
+  state.snaps = []
+  state.monitorOn = true
+})
+
+const snap = (week: number, rosterId: string, ratio: number | null, scored = true) => ({
+  week, rosterId, ratio, startedTopCount: 7, starterCount: 9, skipReason: null, scoredAt: scored ? new Date('2026-10-20T12:00:00Z') : null, players: {},
+})
+
+describe('Lineup Integrity scores and coverage for an imported Sleeper league', () => {
+  it('shows the scores, named by the Sleeper team, and says how they were scored', async () => {
+    state.snaps = [snap(5, '1', 0.8), snap(6, '1', 0.82), snap(6, '2', 0.97), snap(7, '1', null, false)]
+    const rep = await readLineupIntegrity('L1', { fullSeason: true })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.scoresSource).toBe('sleeper')
+    // Snapshots are keyed by Sleeper roster_id; the names come from LeagueTeam.externalId, never "A team".
+    expect(rep.scores?.map((t) => [t.teamName, t.weeks.map((w) => w.week)])).toEqual([['Tankers', [5, 6]], ['bob', [6]]])
+    expect(rep.coverage).toEqual({ monitorOn: true, teams: 2, latest: { week: 7, snapshotted: 1 }, lastScored: { week: 6, scored: 2 } })
+  })
+
+  it('a league with the monitor off and no snapshots says so rather than showing nothing', async () => {
+    state.monitorOn = false
+    const rep = await readLineupIntegrity('L1', { fullSeason: false })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.scores).toBeNull()
+    expect(rep.coverage).toEqual({ monitorOn: false, teams: 2, latest: null, lastScored: null })
+  })
 })
 
 describe('readLineupIntegrity', () => {
@@ -92,5 +130,28 @@ describe('player names are read in the league’s sport', () => {
     const rep = await readLineupIntegrity('L1', { fullSeason: false })
     if (!rep?.supported) throw new Error('unsupported')
     expect(rep.findings.find((f) => f.rosterId === '1')?.playerNames).toEqual({ mahomes: 'Patrick Mahomes' })
+  })
+})
+
+describe('an imported ESPN league', () => {
+  const espn = { ...sleeper, platform: 'espn', platformLeagueId: '123456', settings: { roster_positions: ['QB:1', 'RB:2', 'BE:6'] } }
+
+  it('is supported, has no audit findings, and reports only weeks that have ended', async () => {
+    state.league = { ...espn }
+    state.snaps = [snap(9, '4', 0.9), snap(10, '4', null, false)]
+    const rep = await readLineupIntegrity('L1', { fullSeason: true })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.scoresSource).toBe('espn')
+    expect(rep.findings).toEqual([])
+    expect(rep.weeks).toEqual([9])
+    expect(rep.latestWeek).toBe(9)
+    expect(rep.basis).toMatch(/ESPN does not store past lineups/)
+  })
+
+  it('a league with no capture yet has no finished week to scan', async () => {
+    state.league = { ...espn }
+    const rep = await readLineupIntegrity('L1', { fullSeason: false })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.latestWeek).toBeNull()
   })
 })
