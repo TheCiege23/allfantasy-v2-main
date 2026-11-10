@@ -139,6 +139,7 @@ export function bigBrotherFacts(payload: unknown, now = Date.now()): WhatsNextFa
   const mine = (id: string | null) => myRosterId != null && id === myRosterId
   let viewerIsActor = false
   let viewerIsInvolved = false
+  let viewerDone = false
   switch (phase) {
     case 'HOH_LOCKED':
       viewerIsInvolved = mine(hohId)
@@ -152,7 +153,9 @@ export function bigBrotherFacts(payload: unknown, now = Date.now()): WhatsNextFa
       viewerIsInvolved = myRosterId != null && nomineeIds.includes(myRosterId)
       break
     case 'VOTING_OPEN':
-      viewerIsActor = ballot?.canVote === true && ballot?.closed !== true
+      // `canVote` stays true after voting, so a houseguest who voted is still the actor — and done.
+      viewerIsActor = (ballot?.canVote === true || ballot?.hasVoted === true) && ballot?.closed !== true
+      viewerDone = ballot?.hasVoted === true
       viewerIsInvolved = myRosterId != null && nomineeIds.includes(myRosterId)
       break
     case 'VETO_CHALLENGE_OPEN':
@@ -164,7 +167,7 @@ export function bigBrotherFacts(payload: unknown, now = Date.now()): WhatsNextFa
       break
   }
 
-  return { format: 'big_brother', phase, week, vars, viewerIsActor, viewerIsInvolved, deadlineIso, deadlineLabel }
+  return { format: 'big_brother', phase, week, vars, viewerIsActor, viewerIsInvolved, viewerDone, deadlineIso, deadlineLabel }
 }
 
 // ── Survivor ─────────────────────────────────────────────────────────────────────────────────
@@ -222,6 +225,7 @@ export function survivorFacts(payload: unknown, now = Date.now()): WhatsNextFact
       week,
       vars: { tribe: merged ? 'Everyone' : tribeName(attending) },
       viewerIsActor: going && stillIn,
+      viewerDone: s.myCouncilVoteSubmitted === true,
       deadlineIso,
       deadlineLabel: deadlineIso ? 'Votes close' : null,
     }

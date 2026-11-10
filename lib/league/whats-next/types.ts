@@ -61,6 +61,8 @@ export type PhaseGuide = {
   memberMessage: string
   /** Shown to a manager who is part of this phase but has nothing to do ("You're on the block"). */
   involvedMessage?: string
+  /** Shown to the manager who was asked and already did it ("Your vote is in"). */
+  doneMessage?: string
   /** "Waiting on …" — omitted for `automatic` and `everyone` phases. */
   waitingOn?: string
   /** The button for whoever acts. */
