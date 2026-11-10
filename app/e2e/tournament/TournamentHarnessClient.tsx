@@ -10,10 +10,12 @@ import TournamentProgressPage from '@/app/tournament/[tournamentId]/progress/pag
 import TournamentDraftsPage from '@/app/tournament/[tournamentId]/drafts/page'
 import TournamentForumPage from '@/app/tournament/[tournamentId]/forum/page'
 import TournamentHistoryPage from '@/app/tournament/[tournamentId]/history/page'
+import { TournamentCommissionerPageShell } from '@/app/tournament/[tournamentId]/commissioner/TournamentCommissionerPageShell'
+import type { TournamentCommissionerTabId } from '@/components/tournament/TournamentCommissionerDashboard'
 import { HARNESS_USER_ID, layout } from './fixtures'
 import type { TournamentHarnessScreen } from './screens'
 
-const PAGES: Record<TournamentHarnessScreen, ComponentType> = {
+const PAGES: Record<Exclude<TournamentHarnessScreen, 'commissioner'>, ComponentType> = {
   home: TournamentHomePage,
   standings: TournamentStandingsHubPage,
   league: TournamentMyLeaguePage,
@@ -28,13 +30,29 @@ const PAGES: Record<TournamentHarnessScreen, ComponentType> = {
  * provider, wrapper classes and chrome — around the REAL page, with the layout payload from fixtures.ts in place
  * of `loadTournamentLayoutPayload`. The pages read `useParams().tournamentId`, which this route provides.
  */
-export default function TournamentHarnessClient({ screen }: { screen: TournamentHarnessScreen }) {
-  const Page = PAGES[screen]
+export default function TournamentHarnessClient({
+  screen,
+  commissionerTab,
+}: {
+  screen: TournamentHarnessScreen
+  /** `?tab=` for the commissioner screen; the real page always opens on the overview. */
+  commissionerTab?: string
+}) {
   return (
     <TournamentUiProvider value={{ ...layout, viewerUserId: HARNESS_USER_ID }}>
       <div className="af-draft-dark tournament-theme af-tournament-immersive relative min-h-dvh">
         <TournamentChrome>
-          <Page />
+          {screen === 'commissioner' ? (
+            <TournamentCommissionerPageShell
+              tournamentId={layout.shell.id}
+              initialTab={(commissionerTab as TournamentCommissionerTabId | undefined) ?? 'overview'}
+            />
+          ) : (
+            (() => {
+              const Page = PAGES[screen]
+              return <Page />
+            })()
+          )}
         </TournamentChrome>
       </div>
     </TournamentUiProvider>

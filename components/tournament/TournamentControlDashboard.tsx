@@ -20,7 +20,8 @@ interface LeagueRow {
   fillStatus?: 'full' | 'partial' | 'empty'
 }
 
-interface ControlData {
+/** GET /api/tournament/[id]/control. */
+export interface ControlData {
   tournamentId: string
   tournamentName: string
   leagues: LeagueRow[]
