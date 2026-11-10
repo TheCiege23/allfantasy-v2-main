@@ -105,8 +105,9 @@ const BIG_BROTHER: FormatGuide = {
     VOTING_OPEN: {
       title: 'Eviction vote: {nominees}',
       actor: 'viewer_decides',
-      // The summary's `ballot.canVote` does not say whether this houseguest has already voted.
-      actorMessage: 'Your turn: cast your eviction vote before voting closes. Already voted? You’re set until the result.',
+      actorMessage: 'Your turn: cast your eviction vote before voting closes.',
+      // `ballot.hasVoted` on the summary — the viewer's own ballot only, never who for.
+      doneMessage: 'Your eviction vote is in. The result is announced when voting closes.',
       commissionerMessage: 'The house is voting. The eviction happens automatically when voting closes.',
       memberMessage: 'The house is voting on who to evict. The result is announced when voting closes.',
       involvedMessage: "You're on the block. The house is voting — the result is announced when voting closes.",
@@ -185,7 +186,8 @@ const SURVIVOR: FormatGuide = {
     tribal_open: {
       title: 'Tribal Council: {tribe} is voting',
       actor: 'viewer_decides',
-      actorMessage: 'Your turn: cast your vote at Tribal Council before it closes. Already voted? You’re set until the reveal.',
+      actorMessage: 'Your turn: cast your vote at Tribal Council before it closes.',
+      doneMessage: 'Your vote is in. The castaway voted out is revealed when votes close.',
       commissionerMessage: '{tribe} is voting at Tribal Council. The castaway voted out is revealed when votes close.',
       memberMessage: '{tribe} is at Tribal Council. You are safe this round — the result is revealed when votes close.',
       waitingOn: '{tribe}',
@@ -195,6 +197,7 @@ const SURVIVOR: FormatGuide = {
       title: 'Tribal Council tied — revote',
       actor: 'viewer_decides',
       actorMessage: 'Your turn: the vote tied. Cast your revote before it closes.',
+      doneMessage: 'Your revote is in. The result is revealed when votes close.',
       commissionerMessage: 'The vote tied, so a revote is open. The league’s tie rule applies if it ties again.',
       memberMessage: 'The vote tied, so a revote is open. Nothing to do unless you have a revote.',
       involvedMessage: "You're in the tie. Managers outside the tie are revoting now.",
@@ -220,6 +223,7 @@ const SURVIVOR: FormatGuide = {
       title: 'Finale: {finalists}',
       actor: 'viewer_decides',
       actorMessage: 'Your turn: as a juror, vote for the Sole Survivor.',
+      doneMessage: 'Your jury vote is in. The Sole Survivor is revealed when the jury is done ({juryVotes} in).',
       commissionerMessage: 'The jury is voting for the winner ({juryVotes} in).',
       memberMessage: 'The jury is voting for the Sole Survivor ({juryVotes} in).',
       involvedMessage: "You're a finalist. The jury is voting for the winner.",

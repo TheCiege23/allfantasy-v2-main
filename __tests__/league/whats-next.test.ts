@@ -138,6 +138,17 @@ describe('Big Brother', () => {
     expect(nominee.message).toMatch(/^You're on the block/)
   })
 
+  it('says the vote is in once the houseguest has voted, instead of asking again', () => {
+    const voted = bigBrotherFacts(bbSummary('VOTING_OPEN', { ballot: { canVote: true, hasVoted: true, voteDeadlineAt: LATER, closed: false } }), NOW)!
+    const v = resolveWhatsNext(voted, { isCommissioner: false })!
+    expect(v.status).toBe('done')
+    expect(v.message).toBe('Your eviction vote is in. The result is announced when voting closes.')
+    expect(v.action).toBeNull()
+    // A payload without the flag (older server) still asks, rather than guessing done.
+    const old = bigBrotherFacts(bbSummary('VOTING_OPEN', { ballot: { canVote: true, voteDeadlineAt: LATER, closed: false } }), NOW)!
+    expect(resolveWhatsNext(old, { isCommissioner: false })!.status).toBe('act')
+  })
+
   it('names the veto holder and hands them the decision', () => {
     const s = bbSummary('VETO_DECISION_OPEN', { cycle: { vetoWinnerRosterId: 'cy' } })
     expect(resolveWhatsNext(bigBrotherFacts(s, NOW)!, { isCommissioner: false })!.title).toBe('Cy won the Power of Veto')
@@ -177,6 +188,12 @@ describe('Survivor', () => {
     const other = resolveWhatsNext(survivorFacts({ ...base, myTribeId: 't2', council }, NOW)!, { isCommissioner: false })!
     expect(other.status).toBe('wait')
     expect(other.message).toMatch(/You are safe this round/)
+  })
+  it('says a castaway’s Tribal Council vote is in', () => {
+    const council = { id: 'k', week: 4, phase: 'pre_merge', attendingTribeId: 't1', voteDeadlineAt: LATER, closedAt: null }
+    const view = resolveWhatsNext(survivorFacts({ ...base, council, myCouncilVoteSubmitted: true }, NOW)!, { isCommissioner: false })!
+    expect(view.status).toBe('done')
+    expect(view.message).toBe('Your vote is in. The castaway voted out is revealed when votes close.')
   })
   it('marks a juror who has voted as done', () => {
     const finale = { open: true, closed: false, finalists: [{ rosterId: 'a' }], juryVotesSubmitted: 3, juryVotesRequired: 7, winnerRosterId: null, myJuryVote: { finalistRosterId: 'a', submittedAt: LATER } }

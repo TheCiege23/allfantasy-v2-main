@@ -98,7 +98,7 @@ export function resolveWhatsNext(facts: WhatsNextFacts, viewer: WhatsNextViewer)
   } else if (viewerDone) {
     role = 'actor'
     status = 'done'
-    message = `You're done for now. ${fill(guide.memberMessage)}`
+    message = guide.doneMessage ? fill(guide.doneMessage) : `You're done for now. ${fill(guide.memberMessage)}`
   } else if (facts.viewerIsInvolved && guide.involvedMessage) {
     role = 'involved'
     status = 'wait'
