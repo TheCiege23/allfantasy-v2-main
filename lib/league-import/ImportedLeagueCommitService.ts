@@ -1092,6 +1092,12 @@ export async function persistImportedLeagueFromNormalization(
       await ingestMlbEspnImportIdentities(normalized.player_map ?? {})
     })
   }
+  if (provider === 'espn' && normalized.league.sport === 'NCAAF') {
+    await runBootstrapStep('BOOTSTRAP_PLAYER_IDENTITIES_FAILED', 'College football player identities need review before grading', 'error', incompleteSteps, async () => {
+      const { ingestNcaafEspnImportIdentities } = await import('@/lib/player-identity/ingestNcaafEspnImportIdentities')
+      await ingestNcaafEspnImportIdentities(normalized.player_map ?? {})
+    })
+  }
 
 
   /*

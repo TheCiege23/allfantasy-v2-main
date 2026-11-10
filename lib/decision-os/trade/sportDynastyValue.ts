@@ -58,6 +58,7 @@ import {
   type SportPointsContext,
 } from './sportPointsValue'
 
+import type { RookieDraftEvidence } from './rookieDraftEvidence'
 import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
 
 export type DynastyGradedSport = 'NBA' | 'NHL' | 'MLB' | 'SOCCER' | 'NCAAF' | 'NCAAB'
@@ -100,6 +101,8 @@ export type SportDynastyContext = {
   classYears?: ReadonlyMap<string, number>
   /** The next rookie draft's year: a pick for an earlier one has been used. */
   nextDraftYear: number
+  rookieDraftEvidence?: ReadonlyMap<string, RookieDraftEvidence>
+  prospectAdp?: ReadonlyMap<string, { name: string; rank: number }>
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -136,10 +139,11 @@ export function youngPlayerPool(ctx: DynastyGradeContext, dynasty: SportDynastyC
     if (!meetsSampleBar(p)) continue
     const replacement = ctx.replacementByPosition.get(p.position.trim().toUpperCase())
     if (!replacement) continue
-    out.push(playerDynastyValue({
+    const value = playerDynastyValue({
       sport: ctx.sport, player: p, age, ...(college ? { collegeSeasons: 4 } : {}),
-      replacementPerGame: replacement.perGame, gamesRemaining: college ? FULL_SEASON_GAMES[ctx.sport] : ctx.window.gamesRemaining,
-    }))
+      replacementPerGame: replacement.perGame, gamesRemaining: FULL_SEASON_GAMES[ctx.sport],
+    })
+    if (value > 0) out.push(value)
   }
   return out.sort((a, b) => b - a)
 }
@@ -212,12 +216,12 @@ export function sportDynastyBasis(ctx: DynastyGradeContext): string {
     `Dynasty value: ${pointsBasis.charAt(0).toLowerCase()}${pointsBasis.slice(1)} ` +
     `Then each of the next ${DYNASTY_SEASONS - 1} full seasons is added, moved by the player’s age on the ${ctx.sport} aging curve for his position and counted at ${Math.round(FUTURE_DISCOUNT * 100)}% of the season before. ` +
     `Ages on file are accurate to about a year. ` +
-    `A draft pick is worth the dynasty value of the young player (${YOUNG_POOL_MAX_AGE[ctx.sport]} or under) ranked at that pick’s spot today; a later draft waits one season per year${waitNote}. ` +
+    `A draft pick is worth the dynasty value of the young player (${YOUNG_POOL_MAX_AGE[ctx.sport]} or under) ranked at that pick’s spot on a full-season board; a later draft waits one season per year${waitNote}. ` +
     `These are estimates, not a market price.`
   )
 }
 
-type Priced = { name: string; value: number; kind: 'player' | 'pick' }
+type Priced = { name: string; value: number; kind: 'player' | 'pick'; prospectBasis?: 'draft' | 'adp' }
 
 /**
  * The dynasty grade for one deal. `give` is what the graded side sends. Withheld, with the reason,
@@ -250,6 +254,22 @@ export function gradeSportDynastyDeal(args: {
         continue
       }
       const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
+      const rosterId = asset.rosterPlayerId ?? (asset.playerId?.startsWith('fantrax:') ? asset.playerId : null)
+      const drafted = rosterId && dynasty.rookieDraftEvidence?.get(rosterId)
+      const marketId = rosterId && ctx.rosterProvider === 'fantrax' && !rosterId.startsWith('fantrax:') ? 'fantrax:' + rosterId : rosterId
+      const adp = marketId && dynasty.prospectAdp?.get(marketId)
+      const evidence = drafted || (adp && { name: adp.name, overall: adp.rank, round: Math.ceil(adp.rank / ctx.teams), teams: ctx.teams })
+      if ((!found.ok || !meetsSampleBar(found.player)) && evidence) {
+        pool ??= youngPlayerPool(ctx, dynasty)
+        const reference = pickDynastyValue({
+          sport: ctx.sport, pool, teams: evidence.teams, nextDraftYear: dynasty.nextDraftYear,
+          pick: { kind: 'pick', year: dynasty.nextDraftYear, round: evidence.round, overall: evidence.overall },
+        })
+        if (reference.ok) {
+          priced.push({ name: evidence.name, value: reference.value, kind: 'player', prospectBasis: drafted ? 'draft' : 'adp' })
+          continue
+        }
+      }
       if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
       const { player } = found
       if (!meetsSampleBar(player)) {
@@ -303,6 +323,12 @@ export function gradeSportDynastyDeal(args: {
     assumedAge.length ? `${assumedAge.join(', ')} ${assumedAge.length === 1 ? 'has' : 'have'} no age on file, so ${assumedAge.length === 1 ? 'his later seasons are' : 'their later seasons are'} valued as a player at the end of his peak.` : '',
     deepPicks.length ? `${deepPicks.join(', ')} ${deepPicks.length === 1 ? 'is' : 'are'} deeper than the young players with a projection, so ${deepPicks.length === 1 ? 'it is' : 'they are'} priced as a long shot: the weakest of them, cut to ${Math.round(DEEP_PICK_ROUND_SHARE * 100)}% for each round deeper.` : '',
   ].filter(Boolean)
+  if ([...give.priced, ...get.priced].some((p) => p.prospectBasis === 'draft')) {
+    notes.push('A prospect without a usable projection is estimated from the slot where this league actually selected him in a recent rookie draft, using the same points-based pick curve.')
+  }
+  if ([...give.priced, ...get.priced].some((p) => p.prospectBasis === 'adp')) {
+    notes.push('A prospect without a usable projection is estimated from his observed Fantrax ADP rank among verified prospects, translated onto the same points-based rookie pick curve.')
+  }
   const dealBasis = notes.length ? `${basis} ${notes.join(' ')}` : basis
   const source = `${ctx.sport.toLowerCase()}-${ctx.valueKind === 'categories' ? 'category' : 'points'}-dynasty`
   const line = (side: 'give' | 'get') => (p: Priced): TradeGradeLine => ({
@@ -311,7 +337,7 @@ export function gradeSportDynastyDeal(args: {
     marketValue: round1(p.value),
     leagueValue: round1(p.value),
     source,
-    valueSource: p.kind === 'pick' ? 'pick_curve' : 'sport_projection',
+    valueSource: p.kind === 'pick' || p.prospectBasis ? 'pick_curve' : 'sport_projection',
     valueAsOf: null,
   })
   const FLOOR = 0.01
