@@ -7,6 +7,7 @@ import type { TradeValuationGap } from './tradeGrade'
 import { playerIdSpaceFor } from './tradePlayers'
 import { readImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
 import { fantraxSoccerExportKey, hasFantraxSoccerPool, validateFantraxSoccerExport } from '@/lib/league-import/fantrax/soccerPlayerExport'
+import { extractSeasonAggregate, perGameRates } from '@/lib/af-projections/core'
 import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { loadRookieDraftEvidence } from './rookieDraftEvidence'
@@ -38,6 +39,7 @@ import {
   indexBoard,
   meetsSampleBar,
   multiSeasonFormatReason,
+  MIN_SAMPLE_GAMES,
   replacementFromLineups,
   replacementFromRosters,
   sampleGamesFromReasons,
@@ -647,13 +649,8 @@ async function loadSnapshotLines(
     ? new Map([...providerLinks].map(([alias, id]) => [id, alias]))
     : new Map(identities.map((i) => [i.id, column ? i[column]?.trim() : null]))
 
-  // Every scoreable projection as a per-game stat line first; the valuation is applied once all are read.
-  const lines: BoardLine[] = []
-  for (const r of rows) {
-    const rates = readRates(r.adjustmentFactors)
-    if (!rates) continue
+  const scoringStats = (rates: Record<string, unknown>) => {
     const { stats } = normalize(rates)
-    if (Object.keys(stats).length === 0) continue
     // Derived from ONE game's line by the normalizer; on a season average they would fire every night.
     delete stats.dbl_dbl
     delete stats.trpl_dbl
@@ -661,6 +658,16 @@ async function loadSnapshotLines(
     delete stats.g_sv_pct_bonus
     delete stats.g_gaa_bonus
     delete stats.sh_pct_bonus
+    return stats
+  }
+
+  // Every scoreable projection as a per-game stat line first; the valuation is applied once all are read.
+  const lines: BoardLine[] = []
+  for (const r of rows) {
+    const rates = readRates(r.adjustmentFactors)
+    if (!rates) continue
+    const stats = scoringStats(rates)
+    if (Object.keys(stats).length === 0) continue
     lines.push({
       id: r.playerId,
       name: r.playerName,
@@ -671,6 +678,28 @@ async function loadSnapshotLines(
       sourceSeason: sourceSeasonOf(r.adjustmentFactors),
       stats,
     })
+  }
+  if (sport === 'NBA') {
+    // The projection writer switches after three games. Trade values require ten, so use
+    // the previous regular season for the same current player while their new sample is thin.
+    const thin = new Map(lines.filter((line) => line.sourceSeason === season && line.sampleGames != null &&
+      !meetsSampleBar(line)).map((line) => [line.id, line]))
+    if (thin.size) {
+      const prior = await prisma.fantasyStatLine.findMany({
+        where: { sport, season: String(season - 1), week: 0, source: 'rolling_insights', playerId: { in: [...thin.keys()] } },
+        select: { playerId: true, stats: true },
+      }).catch(() => [])
+      for (const row of prior) {
+        const line = thin.get(row.playerId)
+        const aggregate = extractSeasonAggregate(row.stats)
+        if (!line || !aggregate || aggregate.gamesPlayed < MIN_SAMPLE_GAMES) continue
+        const stats = scoringStats(perGameRates(aggregate))
+        if (Object.keys(stats).length === 0) continue
+        line.stats = stats
+        line.sampleGames = aggregate.gamesPlayed
+        line.sourceSeason = season - 1
+      }
+    }
   }
   return { ok: true, season: games.season, games, lines }
 }
