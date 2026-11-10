@@ -22,7 +22,7 @@ export function TournamentHistoryArchivePanel({
     <div className="space-y-6">
       <WarRoomPanel
         title="Phase timeline"
-        subtitle="Qualifier → cuts → redrafts → finals. Deeper audit logs wire to tournament events when enabled."
+        subtitle="Qualifier → cuts → redrafts → finals."
       >
         {rounds.length === 0 ? (
           <p className="text-sm text-white/45">No round rows yet.</p>
