@@ -78,7 +78,7 @@ export type DuplicateMerge = { dupId: string; keepId: string }
 
 export type SkippedDuplicate = {
   dupId: string
-  reason: 'ambiguous_twin' | 'provider_clash'
+  reason: 'ambiguous_twin' | 'provider_clash' | 'two_crosswalk_ids' | 'birthday_contradicts'
   /** For a clash: the providers that would carry two different ids. */
   providers?: string[]
   keepIds: string[]
@@ -251,6 +251,147 @@ export function foldTargetsForUnkeyedGroups(
     out.set(g.groupId, target)
   }
   return out
+}
+
+/*
+ * ── Second rule: Rolling Insights copies, linked by id ──────────────────────────────────────
+ *
+ * The birthday rule leaves a second kind of copy: rows holding ONLY a Rolling Insights id.
+ * The backfill made them from Rolling Insights source rows, which carry no Sleeper id and,
+ * mostly, no birthday. Measured on production 2026-11-09, after both birthday applies:
+ *
+ *   NFL rows whose only identity is Rolling Insights          402
+ *     identity map links that id to a Sleeper id, and that
+ *     Sleeper id to exactly one player                        372
+ *     no identity-map link (left alone)                        30
+ *     the target's birthday contradicts the copy's               0
+ *     the target already holds a different RI id (refused)       4
+ *     the copy holds two RI ids (refused)                        1
+ *
+ * They include Travis Etienne (RI 6211 -> Sleeper 7543) and Kenneth Walker III (RI 6943 ->
+ * Sleeper 8151). Their Rolling Insights data sat on a row the real player never reached.
+ *
+ * The evidence here is an ID CHAIN, not a name: `PlayerIdentityMap` pairs the Rolling Insights
+ * id with a Sleeper id, and the Sleeper identity names one player. Every hop must be one-to-one.
+ * Names are not compared: 4 of the 372 differ only by nickname (Camryn / Cam Bynum). A stated
+ * birthday on both sides must agree. Rolling Insights stays strict, so a target holding a
+ * different RI id is refused: scoring and the live crosswalk read one RI id per player.
+ */
+
+/** Providers a Rolling Insights copy may carry. `backfill` is the backfill's own bookkeeping. */
+const CROSSWALK_COPY_PROVIDERS: ReadonlySet<string> = new Set(['rolling_insights', 'backfill'])
+
+export type CrosswalkLink = { rollingInsightsId: string; sleeperId: string }
+
+export type CrosswalkDecision =
+  | { target: string; rollingInsightsId: string }
+  | { skip: 'not_a_copy' | 'no_link' }
+  | { skip: SkippedDuplicate['reason']; keepIds: string[] }
+
+/**
+ * Decide one Rolling Insights copy. Pure; shared by the dedupe planner and the backfill.
+ *
+ * `riIds` and `providers` describe what the copy holds. The lookups describe the world: the
+ * identity map (RI -> Sleeper ids), the Sleeper identities (Sleeper id -> players), and each
+ * candidate's birthday and existing RI ids.
+ */
+export function crosswalkDecision(copy: {
+  riIds: readonly string[]
+  providers: readonly string[]
+  birth: string | Date | null
+  sleeperIdsForRi: (ri: string) => readonly string[]
+  playersForSleeper: (sleeperId: string) => readonly string[]
+  birthOf: (playerId: string) => string | Date | null
+  riIdsOf: (playerId: string) => readonly string[]
+}): CrosswalkDecision {
+  if (copy.providers.some((p) => !CROSSWALK_COPY_PROVIDERS.has(p))) return { skip: 'not_a_copy' }
+  const riIds = [...new Set(copy.riIds)]
+  if (riIds.length === 0) return { skip: 'not_a_copy' }
+  if (riIds.length > 1) return { skip: 'two_crosswalk_ids', keepIds: [] }
+  const ri = riIds[0]!
+
+  const sleeperIds = [...new Set(copy.sleeperIdsForRi(ri))]
+  if (sleeperIds.length === 0) return { skip: 'no_link' }
+  if (sleeperIds.length > 1) return { skip: 'ambiguous_twin', keepIds: [] }
+  const players = [...new Set(copy.playersForSleeper(sleeperIds[0]!))]
+  if (players.length === 0) return { skip: 'no_link' }
+  if (players.length > 1) return { skip: 'ambiguous_twin', keepIds: players }
+  const target = players[0]!
+
+  const mine = birthDay(copy.birth ?? null)
+  const theirs = birthDay(copy.birthOf(target) ?? null)
+  if (mine && theirs && mine !== theirs) return { skip: 'birthday_contradicts', keepIds: [target] }
+  if (copy.riIdsOf(target).some((id) => id !== ri)) return { skip: 'provider_clash', keepIds: [target] }
+  return { target, rollingInsightsId: ri }
+}
+
+export type CrosswalkMergePlan = {
+  merges: DuplicateMerge[]
+  skipped: SkippedDuplicate[]
+  /** Rolling Insights copies whose id the identity map does not link to any Sleeper player. */
+  noLink: number
+}
+
+/** Plan every Rolling Insights copy in `players`. */
+export function planCrosswalkMerges(
+  players: readonly CanonicalPlayerRow[],
+  identities: readonly ProviderIdentityRow[],
+  links: readonly CrosswalkLink[],
+): CrosswalkMergePlan {
+  const plan: CrosswalkMergePlan = { merges: [], skipped: [], noLink: 0 }
+
+  const byPlayer = new Map<string, ProviderIdentityRow[]>()
+  const playersBySleeper = new Map<string, Set<string>>()
+  for (const i of identities) {
+    const list = byPlayer.get(i.playerId) ?? []
+    list.push(i)
+    byPlayer.set(i.playerId, list)
+    if (i.provider === 'sleeper') {
+      const set = playersBySleeper.get(i.providerPlayerId) ?? new Set<string>()
+      set.add(i.playerId)
+      playersBySleeper.set(i.providerPlayerId, set)
+    }
+  }
+  const sleepersByRi = new Map<string, Set<string>>()
+  for (const l of links) {
+    const set = sleepersByRi.get(l.rollingInsightsId) ?? new Set<string>()
+    set.add(l.sleeperId)
+    sleepersByRi.set(l.rollingInsightsId, set)
+  }
+  const birthById = new Map(players.map((p) => [p.id, p.birthDate]))
+  const riIdsOf = (id: string) => (byPlayer.get(id) ?? []).filter((i) => i.provider === 'rolling_insights').map((i) => i.providerPlayerId)
+
+  const riByMerge = new Map<string, string>()
+  for (const p of players) {
+    if (hasSleeperId(p.providerIds)) continue
+    const own = byPlayer.get(p.id) ?? []
+    const decision = crosswalkDecision({
+      riIds: own.filter((i) => i.provider === 'rolling_insights').map((i) => i.providerPlayerId),
+      providers: own.map((i) => i.provider),
+      birth: p.birthDate,
+      sleeperIdsForRi: (ri) => [...(sleepersByRi.get(ri) ?? [])],
+      playersForSleeper: (sid) => [...(playersBySleeper.get(sid) ?? [])].filter((id) => id !== p.id),
+      birthOf: (id) => birthById.get(id) ?? null,
+      riIdsOf,
+    })
+    if ('target' in decision) {
+      plan.merges.push({ dupId: p.id, keepId: decision.target })
+      riByMerge.set(p.id, decision.rollingInsightsId)
+    } else if (decision.skip === 'no_link') plan.noLink++
+    else if ('keepIds' in decision) plan.skipped.push({ dupId: p.id, reason: decision.skip, keepIds: decision.keepIds })
+  }
+
+  /* Two copies landing on one player with different RI ids would give it two by the back door. */
+  const riByKeep = new Map<string, Set<string>>()
+  for (const m of plan.merges) {
+    const set = riByKeep.get(m.keepId) ?? new Set<string>()
+    set.add(riByMerge.get(m.dupId)!)
+    riByKeep.set(m.keepId, set)
+  }
+  const refused = plan.merges.filter((m) => riByKeep.get(m.keepId)!.size > 1)
+  for (const m of refused) plan.skipped.push({ dupId: m.dupId, reason: 'provider_clash', providers: ['rolling_insights'], keepIds: [m.keepId] })
+  if (refused.length) plan.merges = plan.merges.filter((m) => riByKeep.get(m.keepId)!.size === 1)
+  return plan
 }
 
 /**
