@@ -10,10 +10,19 @@ import { TOURNAMENT_HARNESS_SCREENS, type TournamentHarnessScreen } from '../../
  *
  *   /e2e/tournament/e2e-tournament/home
  *   /e2e/tournament/e2e-tournament/standings   ← week 6 of the Opening Round, the viewer on the bubble
+ *   /e2e/tournament/e2e-tournament/commissioner?tab=members   ← the creator's dashboard, opened on any tab; its
+ *     reads come from app/e2e/tournament/commissioner-fixtures.ts
  */
-export default async function TournamentHarnessPage({ params }: { params: Promise<{ tournamentId: string; screen: string }> }) {
+export default async function TournamentHarnessPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ tournamentId: string; screen: string }>
+  searchParams: Promise<{ tab?: string }>
+}) {
   if (process.env.NODE_ENV === 'production') notFound()
   const { screen } = await params
   if (!(TOURNAMENT_HARNESS_SCREENS as readonly string[]).includes(screen)) notFound()
-  return <TournamentHarnessClient screen={screen as TournamentHarnessScreen} />
+  const { tab } = await searchParams
+  return <TournamentHarnessClient screen={screen as TournamentHarnessScreen} commissionerTab={tab} />
 }

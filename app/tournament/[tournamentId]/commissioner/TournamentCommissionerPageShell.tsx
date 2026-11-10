@@ -4,9 +4,18 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
-import { TournamentCommissionerDashboard } from '@/components/tournament/TournamentCommissionerDashboard'
+import {
+  TournamentCommissionerDashboard,
+  type TournamentCommissionerTabId,
+} from '@/components/tournament/TournamentCommissionerDashboard'
 
-export function TournamentCommissionerPageShell({ tournamentId }: { tournamentId: string }) {
+export function TournamentCommissionerPageShell({
+  tournamentId,
+  initialTab,
+}: {
+  tournamentId: string
+  initialTab?: TournamentCommissionerTabId
+}) {
   const { t } = useLanguage()
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-6 sm:px-6">
@@ -22,7 +31,7 @@ export function TournamentCommissionerPageShell({ tournamentId }: { tournamentId
           </div>
         }
       >
-        <TournamentCommissionerDashboard tournamentId={tournamentId} />
+        <TournamentCommissionerDashboard tournamentId={tournamentId} initialTab={initialTab} />
       </Suspense>
     </main>
   )
