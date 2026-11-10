@@ -1838,6 +1838,32 @@ export function LeagueShell({
               </Suspense>
             ) : null}
 
+            {/*
+              What's next? for an imported league, on its first tab only: the provider's status in
+              plain English, and a button that opens the host — AllFantasy is read-only here, so the
+              lineup, the draft and renewal all happen there.
+            */}
+            {!nativeWorkspace && activeTab === tabDefs[0]?.id ? (
+              <div className="mb-4">
+                <WhatsNextPanel
+                  league={selectedLeague}
+                  userId={userId}
+                  isCommissioner={isCommissioner}
+                  hasTeam={userTeam != null}
+                  draftDateIso={draftDateIso}
+                  availableTabIds={tabDefs.map((item) => item.id)}
+                  onSelectTab={setActiveTab}
+                  imported={{
+                    platform: String(league.platform ?? ''),
+                    sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null,
+                    season: selectedLeague.season ?? null,
+                    name: league.name ?? null,
+                    status: selectedLeague.status ?? null,
+                  }}
+                />
+              </div>
+            ) : null}
+
             {/* Live scores strip */}
             {!nativeWorkspace && <LeagueLiveStrip sport={String(league.sport)} />}
 

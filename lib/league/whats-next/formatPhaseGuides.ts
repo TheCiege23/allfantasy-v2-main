@@ -497,6 +497,73 @@ const IDP = lifecycleGuide('idp', 'IDP', {
   },
 })
 
+// ── Imported leagues (Sleeper, ESPN, Fantrax, MFL, Fleaflicker) ──────────────────────────────
+
+/*
+ * ⚠ ALLFANTASY IS READ-ONLY FOR AN IMPORTED LEAGUE (lib/league-links/sourceLinkResolver.ts header),
+ * so every action button opens the HOST, never a tab here, and every line says so.
+ *
+ * ⚠ PHASES ARE THE PROVIDER'S OWN STATUS, AND ONLY WHEN IT SENT ONE. Sleeper reports
+ * pre_draft / drafting / in_season / complete; several providers report nothing, which must not read
+ * as "getting ready" in the middle of a season — that is the `unknown` phase. No week number either:
+ * an imported season's current week defaults to 1 (canonicalSeasonMaterialization).
+ */
+const IMPORTED: FormatGuide = {
+  format: 'imported',
+  label: 'Imported league',
+  phases: {
+    unknown: {
+      title: 'Your {platform} league',
+      actor: 'automatic',
+      commissionerMessage: 'AllFantasy reads this league from {platform}. Run it there — settings, the draft and lineups — and this page picks up the changes on the next sync.',
+      memberMessage: 'AllFantasy reads this league from {platform}. Set lineups and make moves there; this page picks them up on the next sync.',
+      action: { href: '{hostLeagueUrl}', external: true, label: 'Open on {platform}' },
+    },
+    pre_draft: {
+      title: 'Your draft hasn’t been scheduled',
+      actor: 'commissioner',
+      actorMessage: 'Schedule the draft on {platform}. AllFantasy picks up the date on the next sync.',
+      commissionerMessage: 'Schedule the draft on {platform}. AllFantasy picks up the date on the next sync.',
+      memberMessage: 'Waiting on your commissioner to schedule the draft on {platform}. Mock draft here meanwhile.',
+      waitingOn: 'The commissioner',
+      action: { href: '{hostLeagueUrl}', external: true, label: 'Open on {platform}' },
+    },
+    draft_scheduled: {
+      title: 'Your draft is scheduled on {platform}',
+      actor: 'everyone',
+      actorMessage: 'Get ready: mock draft here with your league’s settings, then draft on {platform}.',
+      commissionerMessage: 'The draft is scheduled on {platform}.',
+      memberMessage: 'Get ready: mock draft here with your league’s settings, then draft on {platform}.',
+      action: { href: '{hostLeagueUrl}', external: true, label: 'Open on {platform}' },
+    },
+    drafting: {
+      title: 'Your draft is live on {platform}',
+      actor: 'everyone',
+      actorMessage: 'Your draft is happening now on {platform}.',
+      commissionerMessage: 'The draft is live on {platform}.',
+      memberMessage: 'Your draft is happening now on {platform}.',
+      action: { href: '{hostLeagueUrl}', external: true, label: 'Go to the draft on {platform}' },
+    },
+    in_season: {
+      title: 'The season is on',
+      actor: 'everyone',
+      actorMessage: 'Set your lineup on {platform} before your players lock. AllFantasy picks it up on the next sync.',
+      commissionerMessage: 'The season is running on {platform}. League Health here flags anything that needs you.',
+      memberMessage: 'Set your lineup on {platform} before your players lock.',
+      action: { href: '{hostLineupUrl}', external: true, label: 'Set my lineup on {platform}' },
+    },
+    complete: {
+      title: 'The season is over',
+      actor: 'commissioner',
+      actorMessage: 'Renew the league on {platform} when you’re ready for next season.',
+      commissionerMessage: 'Renew the league on {platform} when you’re ready for next season.',
+      memberMessage: 'The season is over. Waiting on your commissioner to renew the league on {platform}.',
+      waitingOn: 'The commissioner',
+      action: { href: '{hostLeagueUrl}', external: true, label: 'Open on {platform}' },
+    },
+  },
+}
+
 const REDRAFT = lifecycleGuide('redraft', 'Redraft')
 
 export const FORMAT_GUIDES: Record<WhatsNextFormatId, FormatGuide> = {
@@ -514,6 +581,7 @@ export const FORMAT_GUIDES: Record<WhatsNextFormatId, FormatGuide> = {
   c2c: C2C,
   salary_cap: SALARY_CAP,
   idp: IDP,
+  imported: IMPORTED,
 }
 
 /** Formats whose phase comes from their own summary route; the rest use the season lifecycle. */
