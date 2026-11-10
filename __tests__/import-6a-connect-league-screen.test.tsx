@@ -123,7 +123,7 @@ describe('6a rule 1 — the field follows the platform, and is never generic', (
     fireEvent.click(pill(/Yahoo/))
     if (!yahooLive) {
       /* Off: the pill stays visible; selecting it explains the pause and offers no field. */
-      expect(await screen.findByText(/Yahoo import is paused while Yahoo reviews our API access/)).toBeTruthy()
+      expect(await screen.findByText(/Yahoo import is coming soon — we're waiting on Yahoo to approve our API access/)).toBeTruthy()
       expect(document.querySelector('.af-im-field-row input')).toBeNull()
       return
     }
@@ -311,6 +311,8 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
       getImportProviderSupportedSports: () => ['NFL'],
       // Matches this mock's availability: only Sleeper is importable.
       availableImportPlatformsPhrase: () => 'Sleeper',
+      // The screen reads its blocked-provider sentence from here, so the double must provide it.
+      importComingSoonMessage: (p: string) => `${p === 'sleeper' ? 'Sleeper' : 'Fleaflicker'} import is coming soon. You can import from Sleeper today.`,
     }))
   })
 
@@ -342,7 +344,7 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
     render(<Scoped defaultProvider="fleaflicker" />)
 
     expect(screen.getByText(/Fleaflicker selected\?/i)).toBeTruthy()
-    expect(screen.getByText(/isn't available yet — coming soon\./i)).toBeTruthy()
+    expect(screen.getByText(/Fleaflicker import is coming soon\. You can import from Sleeper today\./)).toBeTruthy()
     /* No field to type into for a provider that cannot be used. */
     expect(document.querySelector('.af-im-field-row input')).toBeNull()
   })
@@ -354,7 +356,7 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
  * says what is actually happening.
  */
 describe('the Yahoo pause notice', () => {
-  const YAHOO_PAUSED = /Yahoo import is paused while Yahoo reviews our API access/
+  const YAHOO_PAUSED = /Yahoo import is coming soon — we're waiting on Yahoo to approve our API access/
 
   it('is absent on the Sleeper tab', () => {
     render(<ImportV4 defaultProvider="sleeper" />)

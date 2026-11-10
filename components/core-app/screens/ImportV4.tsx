@@ -507,16 +507,12 @@ const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   mfl: 'League ID · API key required',
 }
 
-/** Why an unavailable provider cannot be used, in the user's terms. */
-const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
-  /*
-   * Yahoo. The 2026-08-29 copy ("sign-in is not working yet — connecting returns you here still
-   * disconnected") described a bug that is no longer the reason: import is off while Yahoo reviews
-   * the app's Fantasy Sports API access (see the note on the yahoo entry in provider-ui-config).
-   * Says that, and says it is temporary, without naming plumbing the reader cannot act on.
-   */
-  yahoo: "Yahoo import is paused while Yahoo reviews our API access. We'll turn it back on as soon as it's approved.",
-}
+/*
+ * Why an unavailable provider cannot be used is `importComingSoonMessage` in provider-ui-config —
+ * the same sentence the landing strip, /commissioners and the import API's refusal use. This screen
+ * used to carry its own Yahoo line ("paused while Yahoo reviews our API access"), a third wording of
+ * one status; it now reads the shared one, which also names where the user CAN import from today.
+ */
 
 /**
  * Some gate failures name a prerequisite without saying where to satisfy it —
@@ -2730,8 +2726,7 @@ export function ImportV4({
             <span className="af-im-blocked-line">
               <span className="af-label">{providerLabel} selected?</span>
               <span>
-                {BLOCKED_REASON[provider] ??
-                  `${providerLabel} isn't available yet — coming soon.`}
+                {importComingSoonMessage(provider)}
               </span>
             </span>
           </p>
