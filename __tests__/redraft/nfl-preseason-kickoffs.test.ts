@@ -44,6 +44,24 @@ describe('NFL lineup locks ignore preseason games filed under a regular-season w
     expect(nflRegularSlate(week1).map((r) => r.awayTeam)).toEqual(['BAL'])
   })
 
+  it('one tagged game is enough to anchor the week: Sunday and Monday untagged games still count', async () => {
+    // The e2e zombie rehearsal's shape: a recorded slate with no season type, plus one game tagged
+    // regular at the week's opener (Thursday).
+    const partial = [
+      { homeTeam: 'CONTROLLED_CLOCK_HOME', awayTeam: 'CONTROLLED_CLOCK_AWAY', startTime: at('2025-09-05T00:20:00Z'), seasonType: 'regular' },
+      { homeTeam: 'PHI', awayTeam: 'DAL', startTime: at('2025-09-05T00:20:00Z'), seasonType: null },
+      { homeTeam: 'KC', awayTeam: 'LAC', startTime: at('2025-09-06T00:00:00Z'), seasonType: null },
+      { homeTeam: 'BUF', awayTeam: 'BAL', startTime: at('2025-09-08T00:20:00Z'), seasonType: null },
+      { homeTeam: 'CHI', awayTeam: 'MIN', startTime: at('2025-09-09T00:15:00Z'), seasonType: null },
+      { homeTeam: 'KC', awayTeam: 'ARI', startTime: at('2025-08-10T00:00:00Z'), seasonType: null }, // preseason
+    ]
+    const map = await buildWeekKickoffMap(db(partial), { sport: 'NFL', season: 2025, week: 1 })
+    expect(map.byTeam.get('MIN')).toEqual(at('2025-09-09T00:15:00Z'))
+    expect(map.byTeam.get('BUF')).toEqual(at('2025-09-08T00:20:00Z'))
+    expect(map.byTeam.get('KC')).toEqual(at('2025-09-06T00:00:00Z'))
+    expect(map.byTeam.has('ARI')).toBe(false)
+  })
+
   it('a week with no tagged regular game keeps its untagged rows (nothing to judge them by)', async () => {
     const untagged = [
       { homeTeam: 'KC', awayTeam: 'DEN', startTime: KC_REGULAR },

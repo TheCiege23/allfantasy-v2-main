@@ -6,6 +6,8 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { readDuesConfig } from '@/lib/dues/duesTracker'
 import { readAmendments } from '@/lib/constitution/constitutionBuilder'
 import { readTradeValueAudits, tradeValueAuditsReady } from '@/lib/integrity/tradeValueAudit'
+import { messagesFor } from '@/lib/i18n/messages'
+import { commissionerWeeklyDigestMessages, digestLanguage, type DigestLanguage } from '@/lib/core-app/messages/commissionerWeeklyDigest'
 
 /**
  * The weekly commissioner digest: ONE notification on Tuesday, after Monday night's game, rolling up
@@ -52,18 +54,17 @@ export function digestWeekKey(now: Date): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - back * DAY_MS).toISOString().slice(0, 10)
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-
-/** The digest's lines, most urgent first. `null` when there is nothing to say. Pure. */
-export function buildDigestLines(c: DigestCounts): string[] | null {
+/** The digest's lines in the commissioner's language, most urgent first. `null` when there is nothing to say. Pure. */
+export function buildDigestLines(c: DigestCounts, lang: DigestLanguage = 'en'): string[] | null {
+  const m = messagesFor(commissionerWeeklyDigestMessages, lang)
   const lines: string[] = []
-  if (c.openCases > 0) lines.push(`${plural(c.openCases, 'integrity case is', 'integrity cases are')} open for review.`)
-  if (c.pendingRuleChanges > 0) lines.push(`${plural(c.pendingRuleChanges, 'rule change is', 'rule changes are')} waiting for your approval.`)
-  if (c.duesClaims > 0) lines.push(`${plural(c.duesClaims, 'manager says they', 'managers say they')} paid dues. Confirm or follow up.`)
-  if (c.draftPollOpen) lines.push('A draft-time poll is open. Lock a time once the league has voted.')
+  if (c.openCases > 0) lines.push(m.openCases(c.openCases))
+  if (c.pendingRuleChanges > 0) lines.push(m.ruleChanges(c.pendingRuleChanges))
+  if (c.duesClaims > 0) lines.push(m.duesClaims(c.duesClaims))
+  if (c.draftPollOpen) lines.push(m.draftPoll)
   if (c.tradesAudited > 0) {
-    const gap = c.widestGapPct != null && c.widestGapPct > 0 ? ` The widest value gap was ${Math.round(c.widestGapPct)}%.` : ''
-    lines.push(`${plural(c.tradesAudited, 'trade was', 'trades were')} audited this week.${gap}`)
+    const gap = c.widestGapPct != null && c.widestGapPct > 0 ? m.widestGap(Math.round(c.widestGapPct)) : ''
+    lines.push(`${m.tradesAudited(c.tradesAudited)}${gap}`)
   }
   return lines.length ? lines : null
 }
@@ -76,7 +77,9 @@ export type DigestDeps = {
   openCases: (leagueId: string) => Promise<number>
   audits: (leagueId: string, since: Date) => Promise<Array<{ gapPct: number }>>
   claim: (leagueId: string, weekKey: string, now: Date) => Promise<boolean>
-  send: (args: { userId: string; leagueId: string; leagueName: string | null; lines: string[] }) => Promise<unknown>
+  /** The commissioner's `UserProfile.preferredLanguage`, or null. */
+  language: (userId: string) => Promise<string | null>
+  send: (args: { userId: string; leagueId: string; leagueName: string | null; lines: string[]; lang: DigestLanguage }) => Promise<unknown>
 }
 
 /** Counts from the league row's own settings: dues claims, pending rule changes, the draft poll. */
@@ -121,18 +124,23 @@ const defaultDeps: DigestDeps = {
          AND (settings -> ${KEY}::text ->> 'weekKey') IS DISTINCT FROM ${weekKey}::text`
     return n === 1
   },
-  send: ({ userId, leagueId, leagueName, lines }) =>
+  language: (userId) =>
+    prisma.userProfile
+      .findUnique({ where: { userId }, select: { preferredLanguage: true } })
+      .then((p) => p?.preferredLanguage ?? null)
+      .catch(() => null),
+  send: ({ userId, leagueId, leagueName, lines, lang }) =>
     dispatchNotification({
       userIds: [userId],
       category: 'commissioner_alerts',
       type: 'commissioner_weekly_digest',
-      title: leagueName ? `This week in ${leagueName}` : 'Your league this week',
+      title: messagesFor(commissionerWeeklyDigestMessages, lang).title(leagueName),
       body: lines.join('\n'),
       smsBody: lines[0],
       severity: 'low',
       leagueId,
       actionHref: `/core/commissioner?league=${encodeURIComponent(leagueId)}`,
-      actionLabel: 'Open the Commissioner Hub',
+      actionLabel: messagesFor(commissionerWeeklyDigestMessages, lang).action,
       meta: { leagueId, digest: 'weekly' },
     }),
 }
@@ -159,13 +167,14 @@ export async function runWeeklyCommishDigests(opts: { now?: Date; leagueId?: str
         out.alreadySent += 1
         continue
       }
-      const [openCases, audits] = await Promise.all([deps.openCases(leagueId), deps.audits(leagueId, since)])
+      const [openCases, audits, preferred] = await Promise.all([deps.openCases(leagueId), deps.audits(leagueId, since), deps.language(league.userId)])
+      const lang = digestLanguage(preferred)
       const lines = buildDigestLines({
         openCases,
         tradesAudited: audits.length,
         widestGapPct: audits.length ? Math.max(...audits.map((a) => Math.abs(a.gapPct))) : null,
         ...settingsCounts(league.settings),
-      })
+      }, lang)
       if (!lines) {
         out.quiet += 1
         continue
@@ -174,7 +183,7 @@ export async function runWeeklyCommishDigests(opts: { now?: Date; leagueId?: str
         out.alreadySent += 1
         continue
       }
-      await deps.send({ userId: league.userId, leagueId, leagueName: league.name, lines })
+      await deps.send({ userId: league.userId, leagueId, leagueName: league.name, lines, lang })
       out.sent += 1
     } catch (e) {
       out.failed += 1

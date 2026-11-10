@@ -15,9 +15,14 @@ import type { LineupCard } from '@/lib/integrity/nativeLineupCards'
 /** Long enough to outlive any season; the row is a "this week was scanned" marker, not a lock. */
 const SCANNED_MARKER_MS = 400 * 24 * 60 * 60 * 1000
 
-export function importedTankingScanMarkerKey(leagueId: string, season: number, week: number): string {
-  return `integrity-tanking-scan:${leagueId}:sleeper:${season}:${week}`
+/** Imported platforms the scan reads. The key keeps Sleeper's original shape, so no past week is rescanned. */
+export type ImportedTankingPlatform = 'sleeper' | 'espn'
+
+export function importedTankingScanMarkerKey(leagueId: string, season: number, week: number, platform: ImportedTankingPlatform = 'sleeper'): string {
+  return `integrity-tanking-scan:${leagueId}:${platform}:${season}:${week}`
 }
+
+const PROVIDER_NAME: Record<ImportedTankingPlatform, string> = { sleeper: 'Sleeper', espn: 'ESPN' }
 
 type IntegritySettingsRow = {
   tankingMonitorEnabled: boolean
@@ -51,7 +56,16 @@ export type ImportedTankingScanDeps = {
  * scorer native leagues use (lib/integrity/lineupIntegrityWeek.ts), so both score the one way.
  */
 async function defaultLineupScores(args: { leagueId: string; season: number; week: number }): Promise<Map<string, TeamLineupScores>> {
-  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platformLeagueId: true } })
+  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { platformLeagueId: true, platform: true } })
+  const { scoreLineupIntegrityWeek } = await import('@/lib/integrity/lineupIntegrityWeek')
+  if (String(league?.platform ?? '').toLowerCase() === 'espn') {
+    // ESPN: who started comes from the kickoff-locked capture (lib/integrity/espnStartersCapture.ts), and
+    // only a team whose capture is complete gets a card — the rest are scored as "no lineup", not as 0%.
+    const { readEspnWeekCards } = await import('@/lib/integrity/espnLineupSnapshots')
+    const { cards, ended } = await readEspnWeekCards(args)
+    if (!ended) return new Map()
+    return scoreLineupIntegrityWeek({ leagueId: args.leagueId, season: args.season, week: args.week, cards })
+  }
   if (!league?.platformLeagueId) return new Map()
   const rows = await prisma.leaguePlayerWeeklyScore.findMany({
     where: { leagueId: league.platformLeagueId, seasonYear: args.season, week: args.week, isStarter: true },
@@ -65,7 +79,6 @@ async function defaultLineupScores(args: { leagueId: string; season: number; wee
     card.starters.push({ playerId: r.playerId })
     cards.set(id, card)
   }
-  const { scoreLineupIntegrityWeek } = await import('@/lib/integrity/lineupIntegrityWeek')
   return scoreLineupIntegrityWeek({ leagueId: args.leagueId, season: args.season, week: args.week, cards })
 }
 
@@ -160,7 +173,8 @@ export async function scanImportedLeagueForTanking(
     return { outcome: 'before_start_week', week, flagged: 0 }
   }
 
-  const key = importedTankingScanMarkerKey(leagueId, report.season, week)
+  const platform: ImportedTankingPlatform = report.scoresSource === 'espn' ? 'espn' : 'sleeper'
+  const key = importedTankingScanMarkerKey(leagueId, report.season, week, platform)
   if (!(await d.claim(key))) return { outcome: 'already_scanned', week, flagged: 0 }
 
   let flagged = 0
@@ -234,7 +248,7 @@ export async function scanImportedLeagueForTanking(
         pointsLeftOnBench: 0,
         eliminatedFromPlayoffs: false,
         weeksUntilPlayoffs: null,
-        redFlags: ['Scored with AllFantasy projections under this league’s scoring, as of each player’s kickoff. Sleeper’s own projections are not stored and may differ.'],
+        redFlags: [`Scored with AllFantasy projections under this league’s scoring, as of each player’s kickoff. ${PROVIDER_NAME[platform]}’s own projections are not stored and may differ.`],
         detector: 'rules',
         lineupIntegrity,
       }
@@ -274,7 +288,7 @@ export async function scanImportedLeaguesForTanking(
     where: {
       tankingMonitorEnabled: true,
       ...(options.leagueId ? { leagueId: options.leagueId } : {}),
-      league: { platform: { equals: 'sleeper', mode: 'insensitive' }, platformLeagueId: { not: '' } },
+      league: { OR: [{ platform: { equals: 'sleeper', mode: 'insensitive' } }, { platform: { equals: 'espn', mode: 'insensitive' } }], platformLeagueId: { not: '' } },
     },
     select: { leagueId: true },
     orderBy: { lastTankingScanAt: { sort: 'asc', nulls: 'first' } },

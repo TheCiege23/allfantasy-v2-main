@@ -114,7 +114,7 @@ export function LineupIntegrity({ leagueId }: { leagueId: string }) {
       )}
 
       {view.scores && view.scores.length > 0 && (
-        <LineupScores leagueId={leagueId} scores={view.scores} m={m} intro={view.scoresSource === 'sleeper' ? m.scoresIntroSleeper : undefined} />
+        <LineupScores leagueId={leagueId} scores={view.scores} m={m} intro={view.scoresSource === 'sleeper' ? m.scoresIntroSleeper : view.scoresSource === 'espn' ? m.scoresIntroEspn : undefined} />
       )}
       {view.coverage && <SnapshotCoverageLine coverage={view.coverage} m={m} />}
 
