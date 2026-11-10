@@ -363,6 +363,103 @@ const CRESTS: Record<CollegeCrestKey, { color: string; word: string; art: ReactN
       <circle cx="60" cy="66" r="3" fill="#F4F7FF" />
     </>,
   },
+  valley: {
+    color: "#2E9E6A",
+    word: "UO · OSU",
+    wordSize: 9.5,
+    art: <>
+      <path d="M60 34 L76 58 H68 L82 78 H66 V88 H54 V78 H38 L52 58 H44 Z" fill="#2E9E6A" />
+      <path d="M24 98 C40 90 52 102 66 94 C78 88 88 96 96 92" fill="none" stroke="#5EC2E6" strokeWidth="4" strokeLinecap="round" />
+    </>,
+  },
+  northwoods: {
+    color: "#6FA0C8",
+    word: "WIS · MINN",
+    wordSize: 9.5,
+    art: <>
+      <circle cx="84" cy="40" r="6" fill="#F4F7FF" />
+      <path d="M42 38 L55 62 H49 L60 82 H24 L35 62 H29 Z" fill="#4C9A6E" />
+      <path d="M76 48 L86 64 H81 L90 80 H62 L71 64 H66 Z" fill="#3E8460" />
+      <path d="M24 92 Q34 86 44 92 T64 92 T84 92 T96 92" fill="none" stroke="#6FA0C8" strokeWidth="4" strokeLinecap="round" />
+      <path d="M30 100 Q40 96 50 100 T70 100 T90 100" fill="none" stroke="#6FA0C8" strokeWidth="2.5" strokeLinecap="round" strokeOpacity="0.6" />
+    </>,
+  },
+  oaken: {
+    color: "#C9963F",
+    word: "IU · PUR",
+    wordSize: 9.5,
+    art: <>
+      <path d="M60 46 V38" stroke="#8A5A3C" strokeWidth="4" strokeLinecap="round" />
+      <path d="M44 60 C44 46 76 46 76 60 Z" fill="#8A5A3C" />
+      <path d="M44 60 H76" stroke="#6E4630" strokeWidth="3" />
+      <path d="M47 60 C47 80 54 92 60 94 C66 92 73 80 73 60 Z" fill="#C9963F" />
+      <path d="M66 40 C74 32 86 34 90 40 C82 44 74 44 66 40 Z" fill={LEAF} />
+    </>,
+  },
+  barn: {
+    color: "#C9473F",
+    word: "IOWA · MINN",
+    wordSize: 9.5,
+    art: <>
+      <path d="M32 98 V64 L60 42 L88 64 V98 Z" fill="#C9473F" />
+      <path d="M32 64 L60 42 L88 64" fill="none" stroke="#F4F7FF" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M54 54 H66 V62 H54 Z" fill="#F4F7FF" />
+      <path d="M50 98 V74 H70 V98 Z" fill="#F4F7FF" />
+      <path d="M50 74 L70 98 M70 74 L50 98" stroke="#C9473F" strokeWidth="2.5" />
+    </>,
+  },
+  road: {
+    color: "#7FB2E5",
+    word: "TOBACCO RD",
+    wordSize: 9.5,
+    art: <>
+      <path d="M22 50 H98" stroke="#7FB2E5" strokeWidth="2.5" strokeOpacity="0.7" />
+      <path d="M22 50 H58 L36 100 H22 Z" fill="#2D5BA8" />
+      <path d="M98 50 H62 L84 100 H98 Z" fill="#7FB2E5" />
+      <path d="M58 50 H62 L84 100 H36 Z" fill="#2B3245" />
+      <path d="M60 56 V62 M60 70 V78 M60 86 V96" stroke="#FFD84D" strokeWidth="3" strokeLinecap="round" />
+    </>,
+  },
+  magnolia: {
+    color: "#E6D6A8",
+    word: "MAGNOLIA",
+    wordSize: 9.5,
+    art: <>
+      <path d="M30 90 C38 78 50 78 56 86 C48 94 38 96 30 90 Z M90 90 C82 78 70 78 64 86 C72 94 82 96 90 90 Z" fill="#2F7D4F" />
+      <ellipse cx="60" cy="50" rx="10" ry="18" fill="#FBF7EA" />
+      <ellipse cx="44" cy="64" rx="10" ry="18" fill="#F4EDD6" transform="rotate(-55 44 64)" />
+      <ellipse cx="76" cy="64" rx="10" ry="18" fill="#F4EDD6" transform="rotate(55 76 64)" />
+      <ellipse cx="50" cy="78" rx="9" ry="15" fill="#FBF7EA" transform="rotate(-20 50 78)" />
+      <ellipse cx="70" cy="78" rx="9" ry="15" fill="#FBF7EA" transform="rotate(20 70 78)" />
+      <circle cx="60" cy="68" r="7" fill="#C9963F" />
+    </>,
+  },
+  lights: {
+    color: "#FFE07A",
+    word: "LSU · BAMA",
+    wordSize: 9.5,
+    art: <>
+      <path d="M50 52 L28 92 H44 Z M70 52 L92 92 H76 Z" fill="#FFE07A" fillOpacity="0.22" />
+      <path d="M44 36 H76 V52 H44 Z" fill="#E6E9EF" />
+      <g fill="#FFE07A">
+        <rect x="47" y="39" width="6" height="4" /><rect x="57" y="39" width="6" height="4" /><rect x="67" y="39" width="6" height="4" />
+        <rect x="47" y="45" width="6" height="4" /><rect x="57" y="45" width="6" height="4" /><rect x="67" y="45" width="6" height="4" />
+      </g>
+      <path d="M60 52 V98 M52 98 H68" stroke="#E6E9EF" strokeWidth="4" strokeLinecap="round" />
+      <path d="M56 62 L64 70 M64 62 L56 70 M56 76 L64 84 M64 76 L56 84" stroke="#9AA8C2" strokeWidth="2" />
+    </>,
+  },
+  wings: {
+    color: "#8FB3E0",
+    word: "AF · NAVY",
+    wordSize: 9.5,
+    art: <>
+      <path d="M56 54 C44 46 30 46 18 50 C28 54 38 56 46 60 C36 60 28 62 22 66 C34 68 46 66 56 62 Z" fill="#C9D5EC" />
+      <path d="M64 54 C76 46 90 46 102 50 C92 54 82 56 74 60 C84 60 92 62 98 66 C86 68 74 66 64 62 Z" fill="#C9D5EC" />
+      <path d="M60 44 L64 55 L76 55 L66.5 62 L70 73 L60 66.5 L50 73 L53.5 62 L44 55 L56 55 Z" fill="#8FB3E0" />
+      <g fill="none" stroke="#8FB3E0" strokeWidth="3.5" strokeLinecap="round"><path d="M60 76 V98" /><path d="M52 82 H68" /><path d="M46 92 C50 98 56 100 60 100 C64 100 70 98 74 92" /></g>
+    </>,
+  },
 }
 
 export default function CfpBowlCrest({ bowl, size = 40, decorative = false }: { bowl: CollegeCrestKey; size?: number; decorative?: boolean }) {
