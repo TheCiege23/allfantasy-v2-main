@@ -171,7 +171,7 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
     if (!res.ok) add({ code: 'COLLUSION_TRADE_REFUSED_AT_' + String(res.stage).toUpperCase(), stage: 'trades', message: `Lopsided deal ${i + 1} stopped at ${res.stage}: ${res.error}` })
   }
 
-  // ── pick: a 2027 1st from seat 7 to seat 8, plus a bench player back ──
+  // ── pick: a 2027 1st from seat 7 to seat 8, plus a bench player back (dynasty: a redraft league has no future picks) ──
   // Two teams outside the lopsided pair: in a small league seats 7 and 8 wrap onto it, and a later trade
   // between those rosters is exactly what makes a commissioner's reversal of their deal refuse (correctly).
   const outsidePair = seats.filter((s) => s !== c && s !== d)
@@ -183,7 +183,7 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
   holdings = seasonHoldings(env, ctx.seasonId)
   const back = bench(f.userId)[0]
   const sendWithPick = bench(e.userId).sort((x, y) => adpOf(y.playerId) - adpOf(x.playerId))[0]
-  if (back && sendWithPick) {
+  if (back && sendWithPick && run.leagueType !== 'redraft') {
     const res = await proposeAndProcess(env, run, add, 'future-pick', e, f, [
       { itemType: 'future_pick', itemReference: pickId, fromRosterId: e.rosterId, toRosterId: f.rosterId, metadata: { season: nextYear, round: 1 } },
       { itemType: 'player', itemReference: sendWithPick.playerId, fromRosterId: e.rosterId, toRosterId: f.rosterId, metadata: { playerName: sendWithPick.playerName, position: sendWithPick.position } },
@@ -195,6 +195,15 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
   }
 
   // ── integrity: the collusion scan's verdicts ──
+  // The scan a settled trade gets is fire-and-forget (tradeService: `void ... enqueueCollusionScan`), so
+  // reading the flags straight after the trades raced it. Run that same scan for each deal and wait for it,
+  // as production's would have finished; an open flag already filed is left as it is.
+  {
+    const { scanTradeForCollusion } = await import('@/lib/integrity/CollusionDetectionEngine')
+    for (const r of results.filter((x: any) => x.ok && x.tradeId)) {
+      await scanTradeForCollusion(run.leagueId!, r.tradeId, { kind: 'af', tradeId: r.tradeId }).catch(() => undefined)
+    }
+  }
   const flags = (rowsOf(db, 'IntegrityFlag') as any[]).filter((fl) => fl.leagueId === run.leagueId)
   run.stats.integrityFlags = flags.map((fl) => ({ type: fl.flagType ?? fl.type, severity: fl.severity, tradeId: fl.tradeTransactionId ?? null }))
   const collusionTradeIds = new Set(results.filter((r) => String(r.label).startsWith('collusion') && r.ok).map((r) => r.tradeId))
@@ -211,13 +220,21 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
     pairFlag,
   }
   if (collusionTradeIds.size && ![...collusionTradeIds].some((id) => flaggedIds.has(id)) && !pairFlag) {
-    const { reviewStoredTrade } = await import('@/lib/decision-os/trade/tradeReviewContext')
-    const review: any = await reviewStoredTrade({ leagueId: run.leagueId!, ref: { kind: 'af', tradeId: [...collusionTradeIds].at(-1)! }, userId: run.commissionerId, surface: 'integrity-scan' } as never)
-      .catch((e: Error) => ({ ok: false, refusal: { reason: e.message } }))
-    const why = review?.ok
-      ? (review.review?.checks ?? []).filter((c: any) => c.status === 'not_computed' || c.code === 'repeat_partners').map((c: any) => `${c.code}: ${c.explanation}`).join(' | ') || 'every check ran and none fired'
-      : `the review refused: ${review?.refusal?.reason ?? 'unknown'}`
-    add({ code: 'COLLUSION_NOT_FLAGGED', stage: 'trades', message: `${collusionTradeIds.size} lopsided deal(s) between one pair went through with no integrity flag. Why: ${why}` })
+    // The app's own review decides what is flaggable. A deal it grades fair (under the 40% line) or cannot
+    // grade (no values on file) is EXPECTED to pass unflagged; only a deal the review flags and the scan
+    // does not file is a finding.
+    const { reviewSummary } = await import('./dynastyScenarios')
+    const reviews = await Promise.all([...collusionTradeIds].map((id) => reviewSummary(env, run, id)))
+    run.stats.lopsidedReviews = reviews
+    if (reviews.some((r: any) => (r.flags ?? []).length > 0)) {
+      const { reviewStoredTrade } = await import('@/lib/decision-os/trade/tradeReviewContext')
+      const review: any = await reviewStoredTrade({ leagueId: run.leagueId!, ref: { kind: 'af', tradeId: [...collusionTradeIds].at(-1)! }, userId: run.commissionerId, surface: 'integrity-scan' } as never)
+        .catch((e: Error) => ({ ok: false, refusal: { reason: e.message } }))
+      const why = review?.ok
+        ? (review.review?.checks ?? []).filter((c: any) => c.status === 'not_computed' || c.code === 'repeat_partners').map((c: any) => `${c.code}: ${c.explanation}`).join(' | ') || 'every check ran and none fired'
+        : `the review refused: ${review?.refusal?.reason ?? 'unknown'}`
+      add({ code: 'COLLUSION_NOT_FLAGGED', stage: 'trades', message: `${collusionTradeIds.size} lopsided deal(s) between one pair: the review flagged at least one, and no integrity flag was filed. Why: ${why}. Reviews: ${JSON.stringify(reviews)}` })
+    }
   }
   if (fairTradeId && flaggedIds.has(fairTradeId)) add({ code: 'FAIR_TRADE_FLAGGED', stage: 'trades', message: 'A fair 1-for-1 swap was flagged by the collusion scan.' })
 
