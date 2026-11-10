@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowRight, CircleHelp, Clock } from 'lucide-react'
+import { ArrowRight, CircleHelp, Clock, ExternalLink } from 'lucide-react'
 import {
   engineFacts,
+  importedFacts,
   lifecycleFacts,
   whatsNextEndpoint,
   whatsNextFormatFor,
+  type ImportedLeagueLike,
   type LifecycleLeague,
   type WhatsNextLeagueLike,
 } from '@/lib/league/whats-next/adapters'
@@ -71,6 +73,7 @@ export function WhatsNextPanel({
   availableTabIds,
   onSelectTab,
   autoOpenWalkthrough = false,
+  imported = null,
 }: {
   league: WhatsNextLeagueLike & LifecycleLeague
   userId: string | null
@@ -81,8 +84,13 @@ export function WhatsNextPanel({
   onSelectTab: (tab: string) => void
   /** The commissioner just created this league and the post-create welcome has finished. */
   autoOpenWalkthrough?: boolean
+  /**
+   * Set for a league imported from Sleeper, ESPN, …: the banner then reads the provider's status and
+   * every action opens the host, since AllFantasy is read-only for imported leagues.
+   */
+  imported?: ImportedLeagueLike | null
 }) {
-  const format = whatsNextFormatFor(league)
+  const format = imported ? 'imported' : whatsNextFormatFor(league)
   const engine = isEngineFormat(format) ? format : null
   const [payload, setPayload] = useState<{ ok: true; data: unknown } | { ok: false } | null>(null)
   const [walkthroughOpen, setWalkthroughOpen] = useState(false)
@@ -116,10 +124,11 @@ export function WhatsNextPanel({
   }, [autoOpenWalkthrough, isCommissioner, walkthrough, userId, format])
 
   const facts: WhatsNextFacts | null = useMemo(() => {
+    if (imported) return importedFacts(imported, draftDateIso)
     if (!engine) return lifecycleFacts(format, league, draftDateIso)
     if (!payload?.ok) return null
     return engineFacts(engine, payload.data)
-  }, [engine, format, league, draftDateIso, payload])
+  }, [engine, format, league, draftDateIso, payload, imported])
 
   const view = facts ? resolveWhatsNext(facts, { isCommissioner, hasTeam }) : null
   if (!view) return null
@@ -196,7 +205,19 @@ export function WhatsNextPanel({
 
       {action && actionAvailable ? (
         <div className="wn-actions">
-          {action.href ? (
+          {action.href && action.external ? (
+            // The imported league's host, from the allowlisted source-link resolver: a new tab, no referrer.
+            <a
+              href={action.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={view.status === 'act' ? 'wn-btn wn-btn--primary' : 'wn-btn'}
+              aria-label={`${action.label} (opens in a new tab)`}
+              data-testid="whats-next-action"
+            >
+              {action.label} <ExternalLink size={16} aria-hidden />
+            </a>
+          ) : action.href ? (
             <Link href={action.href} className="wn-btn wn-btn--primary" data-testid="whats-next-action">
               {action.label} <ArrowRight size={16} aria-hidden />
             </Link>

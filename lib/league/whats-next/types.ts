@@ -27,6 +27,8 @@ export type WhatsNextFormatId =
   | 'c2c'
   | 'salary_cap'
   | 'idp'
+  /** A league imported from Sleeper, ESPN, … — read-only here, so every action happens on the host. */
+  | 'imported'
 
 /**
  * Who acts in a phase.
@@ -43,6 +45,11 @@ export type PhaseAction = {
   /** Or a full path, for actions that live on their own page. */
   href?: string
   label: string
+  /**
+   * The href is on another site (an imported league's host). Its template is filled WITHOUT encoding —
+   * the value is a whole URL from the allowlisted source-link resolver — and is dropped unless https.
+   */
+  external?: boolean
 }
 
 /**
@@ -83,6 +90,8 @@ export type WhatsNextFacts = {
   format: WhatsNextFormatId
   /** A key of `FORMAT_GUIDES[format].phases`. */
   phase: string
+  /** Overrides the guide's label in the kicker ("Sleeper" rather than "Imported league"). */
+  formatLabel?: string | null
   week?: number | null
   /** The viewer is the manager (or one of the managers) this phase is waiting on. */
   viewerIsActor?: boolean
