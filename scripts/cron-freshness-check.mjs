@@ -344,6 +344,7 @@ export const PROBES = {
   // NBA Cup live scores (2026-11-01). A heartbeat: outside a Cup game window it correctly fetches
   // nothing, so an output probe would cry wolf for most of the year.
   '/api/cron/nba-cup-live': { heartbeat: 'cron-nba-cup-live' },
+  '/api/cron/season-tournaments': { heartbeat: 'cron-season-tournaments' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at

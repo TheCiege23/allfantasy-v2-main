@@ -446,6 +446,28 @@ model PlayerTeamHistory {
   @@map("player_team_history")
 }
 
+model SportsStatCoverage {
+  sport                String
+  source               String
+  periodId             String
+  kind                 String
+  identitySpace        String
+  season               Int
+  week                 Int?
+  startTime            DateTime @db.Timestamptz(6)
+  endTime              DateTime @db.Timestamptz(6)
+  teams                String[]
+  participantIds       String[]
+  gameKeys             String[]
+  recordedAt           DateTime @default(now()) @db.Timestamptz(6)
+  firstFinalObservedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([sport, source, periodId])
+  @@index([sport, startTime], map: "sports_stat_coverage_window_idx")
+  @@index([sport, season, week], map: "sports_stat_coverage_week_idx")
+  @@map("sports_stat_coverage")
+}
+
 model SportsGame {
   id         String    @id @default(uuid())
   sport      String
