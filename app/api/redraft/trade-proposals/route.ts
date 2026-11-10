@@ -5,6 +5,7 @@ import { readSeasonTradePolicy, SeasonTradeError, seasonTradeOfferExpiry } from 
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { postDraftRosterMoveRefusal } from '@/server/services/postDraftRosterLockService'
 import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradeProposalValidation'
@@ -443,7 +444,7 @@ export async function POST(req: NextRequest) {
         pickSeason: asset.pickSeason,
         pickRound: asset.pickRound,
         pickNumber: asset.pickNumber,
-        metadata: asset.metadata,
+        metadata: toPrismaJsonInput(asset.metadata),
       })),
     })
 
