@@ -3132,6 +3132,12 @@ export function ImportV4({
         */}
         {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
           <p className="af-im-fx-link af-im-fx-link--foot">
+            {/*
+              A FULL RELOAD ON PURPOSE, so not <Link>. This is the page linking to itself: the
+              provider is `useState(defaultProvider)`, which a client-side navigation would keep,
+              leaving the old tile selected under a `?provider=fantrax` URL.
+            */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- see the note above */}
             <a href="/import?provider=fantrax">
               Have a Fantrax CSV export? Bank it now →
             </a>
@@ -3147,9 +3153,9 @@ export function ImportV4({
           reach it after importing both halves, not while importing one.
         */}
         <p className="af-im-fx-link af-im-fx-link--foot">
-          <a href="/core/connect-leagues">
+          <Link href="/core/connect-leagues">
             Run a college league alongside a pro one? Connect them →
-          </a>
+          </Link>
         </p>
       </section>
       )}
