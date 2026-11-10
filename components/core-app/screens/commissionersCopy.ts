@@ -93,14 +93,21 @@ export const COMMISSIONER_FEATURES: readonly CommissionerFeature[] = [
     id: 'illegal-lineups',
     eyebrow: '02 · Illegal Lineup Alerts',
     title: 'Illegal lineups, caught early.',
-    body: 'When a lineup goes illegal, the manager and the commish both get notified, including how long it has been illegal — so it gets fixed before it costs anyone a game.',
+    /*
+     * ⚠ "HOW LONG" IS COUNTED IN WEEKS, AND ONLY THE COMMISH SEES IT. The manager's half is Chimmy's
+     * pre-kickoff lineup check (lib/chimmy-alerts/lineupCheck.ts: empty slots, starters with no game,
+     * ruled-out starters). The commish's half is the integrity flag, which counts consecutive weeks of
+     * illegal or suspicious lineups (TankingDetectionEngine, IntegrityFlagCard "N in a row"). This
+     * used to promise both people "how long it has been illegal", which nothing tracks in hours or days.
+     */
+    body: 'Before kickoff, a manager with an empty slot, a starter on bye or a starter ruled out gets a lineup check from Chimmy. If it keeps happening, the commish gets an alert showing how many weeks in a row.',
     points: [
-      'Notifies the manager and the commish',
-      'Shows how long the lineup has been illegal',
-      'Catches empty slots, byes and injured starters',
+      'A lineup check for the manager before kickoff',
+      'An alert for the commish when it repeats, with the weeks in a row',
+      'Catches empty slots, byes and ruled-out starters',
     ],
     image: '/images/commissioners/illegal-lineups.png',
-    imageAlt: 'An illegal lineup alert naming the team, the empty slot and how long it has been illegal',
+    imageAlt: 'A lineup alert naming the team, the empty slot and how many weeks in a row it has happened',
   },
   {
     id: 'trade-evaluator',

@@ -47,7 +47,7 @@ describe('Survivor stakes', () => {
   it('immunity, who goes to council, and your tribe — and you are told to vote', () => {
     const stakes = survivorStakes(survivor({
       challenges: [{ id: 'c', week: 4, challengeType: 'x', lockAt: null, resultJson: {}, winnerTribeId: 'tA' }],
-      council: { id: 'k', week: 4, phase: 'voting_open', attendingTribeId: 'tB', voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: null, eliminatedRosterId: null },
+      council: { id: 'k', week: 4, phase: 'pre_merge', attendingTribeId: 'tB', voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: null, eliminatedRosterId: null },
     }))!
     expect(stakes.title).toBe('Tribal Council')
     expect(label(stakes.lines, 'Immunity')).toBe('Tagi')
@@ -61,7 +61,7 @@ describe('Survivor stakes', () => {
   it('a castaway already voted out is not told to vote', () => {
     const stakes = survivorStakes(survivor({
       votedOutHistory: [{ rosterId: 'r1', week: 2 }],
-      council: { id: 'k', week: 4, phase: 'voting_open', attendingTribeId: 'tB', voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: null, eliminatedRosterId: null },
+      council: { id: 'k', week: 4, phase: 'pre_merge', attendingTribeId: 'tB', voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: null, eliminatedRosterId: null },
     }))!
     expect(stakes.you).toBeNull()
   })
@@ -81,7 +81,7 @@ describe('Survivor stakes', () => {
     const stakes = survivorStakes(survivor({
       merged: true,
       challenges: [{ id: 'c', week: 4, challengeType: 'x', lockAt: null, resultJson: {}, winnerUserNames: ['Rich'] }],
-      council: { id: 'k', week: 4, phase: 'voting_open', attendingTribeId: null, voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: null, eliminatedRosterId: null },
+      council: { id: 'k', week: 4, phase: 'pre_merge', attendingTribeId: null, voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: null, eliminatedRosterId: null },
     }))!
     expect(label(stakes.lines, 'Immunity')).toBe('Rich')
     expect(label(stakes.lines, 'Tribal Council')).toBe('Everyone')
@@ -101,6 +101,19 @@ describe('Survivor stakes', () => {
     expect(survivorPhase(null).label).toBe('…')
     expect(survivorPhase(survivor()).label).toBe('Tribe Phase · Week 4')
     expect(survivorPhase(survivor({ merged: true })).label).toBe('Merge · Week 4')
+  })
+
+  // The engine stores a council's phase as pre_merge / merge / revote — never 'voting_open' — so an
+  // OPEN council is one that has not closed. This label never appeared in production before.
+  it('reads an open council of this week as Tribal Council, whatever its stored phase', () => {
+    for (const phase of ['pre_merge', 'merge', 'revote']) {
+      const council = { id: 'k', week: 4, phase, attendingTribeId: null, voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: null, eliminatedRosterId: null }
+      expect(survivorPhase(survivor({ council })).label, phase).toBe('Tribal Council')
+    }
+    const closed = { id: 'k', week: 4, phase: 'pre_merge', attendingTribeId: null, voteDeadlineAt: '2026-11-08T23:00:00.000Z', closedAt: '2026-11-08T23:05:00.000Z', eliminatedRosterId: null }
+    expect(survivorPhase(survivor({ council: closed })).label).toBe('Tribe Phase · Week 4')
+    const lastWeek = { id: 'k', week: 3, phase: 'pre_merge', attendingTribeId: null, voteDeadlineAt: '2026-11-01T23:00:00.000Z', closedAt: null, eliminatedRosterId: null }
+    expect(survivorPhase(survivor({ council: lastWeek })).label).toBe('Tribe Phase · Week 4')
   })
 })
 
