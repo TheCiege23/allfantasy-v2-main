@@ -16,6 +16,7 @@ import { resolveWriteAuthority } from "@/lib/league/write-authority"
 import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
 import { HOLD_FLAGGED_TRADES_KEY, parseHoldFlaggedTradesMode, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTrades"
 import { parseTankingPenaltyPolicyPatch, readTankingPenaltyPolicy, TANKING_PENALTIES_KEY } from "@/lib/integrity/tankingPenalties"
+import { isNativeFuturePickLeague } from "@/lib/league-trade-engine/nativeFuturePicks"
 import { tankingPenaltyRule } from "@/lib/league-rules-explainer/snapshot"
 import { diffRuleSnapshots } from "@/lib/league-rules-explainer/changeKeys"
 import { publishRuleChangesEvent } from "@/lib/league-rules-explainer/publishRuleChanges"
@@ -35,7 +36,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true, leagueType: true, isDynasty: true } })
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
   const settings = await prisma.leagueIntegritySettings.upsert({
@@ -86,6 +87,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
       // Penalties take an AllFantasy draft pick; an imported league's picks live on its host, so the
       // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
       ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
+      // Losing a draft pick and worse rookie-lottery odds take from a dynasty league's future picks; a
+      // redraft league has none, so only the FAAB penalty is offered there.
+      tankingPickPenaltiesSupported: isNativeFuturePickLeague(league),
     },
     openFlags: openFlags.map(withManagers),
     recentDismissed: recentDismissed.map(withManagers),
@@ -134,6 +138,20 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   if (body.tankingPenalties !== undefined) {
     penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
     if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), penalty (forfeit_pick, lottery_odds, faab), pickAtStrike and pickRound (1-10), lotteryOddsCutPct (25, 50, 75, 100), faabPercent (10, 25, 50, 100)" }, { status: 400 })
+    /*
+     * A pick penalty needs the league's future picks (lib/integrity/tankingPenaltyService.ts takes one from
+     * that inventory). A redraft league has none, so "Lose a draft pick" — the default — could never apply
+     * there, and a confirmed strike only told the manager "the commissioner will decide" (found by the
+     * redraft simulation, 2026-11-09). Refuse a pick penalty there; a policy edited without a penalty
+     * is stored as the FAAB one, the penalty such a league can enforce.
+     */
+    const penaltyLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, leagueType: true, isDynasty: true } })
+    if (penaltyLeague && !isNativeFuturePickLeague(penaltyLeague)) {
+      if (penaltyPatch.penalty === "forfeit_pick" || penaltyPatch.penalty === "lottery_odds") {
+        return NextResponse.json({ error: "Losing a draft pick and worse rookie-lottery odds need a dynasty league's future picks, and this league has none. Choose Lose FAAB." }, { status: 400 })
+      }
+      penaltyPatch = { ...penaltyPatch, penalty: "faab" }
+    }
   }
   if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
   // "Hold flagged trades": `off` / `severe` (the default) / `all`; the older on/off switch still works.
@@ -203,7 +221,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     leagueSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
   }
 
-  const platform = (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform ?? null
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, leagueType: true, isDynasty: true } })
+  const platform = leagueRow?.platform ?? null
 
   // A tanking-penalty edit is a rule members read in a dynasty league's rules popup: say what changed.
   if (penaltyPatch && settingsBefore && resolveWriteAuthority(platform) === "NATIVE") {
@@ -223,6 +242,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
       holdFlaggedTradesMode: readHoldFlaggedTradesMode(leagueSettings),
       holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
       ...(resolveWriteAuthority(platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
+      tankingPickPenaltiesSupported: leagueRow ? isNativeFuturePickLeague(leagueRow) : false,
     },
   })
 }

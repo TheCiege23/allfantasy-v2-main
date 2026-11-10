@@ -7,6 +7,7 @@
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { RETIRED_CONCEPT_REASON_CODES } from '@/lib/league-creation/retiredConcepts'
 import { SURVIVOR_CREATION_UNAVAILABLE_MESSAGE } from '@/lib/survivor/survivorCreationAvailability'
+import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import {
   validateTradeAssets,
@@ -94,10 +95,24 @@ export function runExtendedLeagueEngineSimulation(
    * rest of the simulation still has to run against one.
    */
   const POLICY_GATE_CODES = new Set<string>(Object.values(RETIRED_CONCEPT_REASON_CODES))
+  /*
+   * ⚠ A SURVIVOR CAST THAT IS VALID BUT NO LONGER FITS THIS SEASON IS A CALENDAR GATE, NOT A BROKEN
+   * FIXTURE (2026-11-10). Create offers only the cast sizes a league drafted TODAY could still finish
+   * (survivorCastSizesThatFitNow, rules-engine.ts), so late in the NFL season 16 stops fitting and only
+   * 12 is offered. The `survivor_nfl` fixture asks for 16, and this step failed overnight with no code
+   * change: main's "Unit tests (2/4)" went red for every PR. Same shape as the retired-concept gate
+   * above. A size Survivor never offers (13, say) is still refused: only a size on the fixed list,
+   * missing purely because of the date, passes as a gate.
+   */
+  const survivorCastOutOfSeason = (e: { path?: string }) =>
+    String(p.concept) === 'survivor' &&
+    e.path === 'teamCount' &&
+    (SURVIVOR_CREATE_CAST_SIZES as readonly number[]).includes(Number(p.teamCount))
   const cpBlockedByLaunchGateOnly =
     !cp.ok && cp.errors.length > 0 && cp.errors.every((e) =>
       POLICY_GATE_CODES.has(String(e.code)) ||
-      (e.path === 'sport' && e.message === SURVIVOR_CREATION_UNAVAILABLE_MESSAGE),
+      (e.path === 'sport' && e.message === SURVIVOR_CREATION_UNAVAILABLE_MESSAGE) ||
+      survivorCastOutOfSeason(e),
     )
   const cpStructurallyOk = cp.ok || cpBlockedByLaunchGateOnly
   extendedOnlySteps.push({ kind: 'create_payload', ok: cpStructurallyOk })

@@ -201,7 +201,8 @@ async function runRedraftReconciliation() {
   const eligible = await prisma.redraftSeason.findMany({
     // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
     where: {
-      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }), {
+      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }),
+        { OR: [{ league: { leagueVariant: null } }, { league: { leagueVariant: { not: 'season_tournament' } } }] }, {
         OR: [
           { status: { in: [...SCORING_SEASON_STATUSES] } },
           { status: 'complete', league: { bestBallMode: true, bbContestId: { not: null }, lifecycleState: { in: ['post_draft', 'in_season', 'playoffs', 'completed'] }, settings: { path: ['best_ball_settings', 'contestStructure'], equals: 'tournament' } } },

@@ -59,6 +59,7 @@ import {
 } from './sportPointsValue'
 
 import type { RookieDraftEvidence } from './rookieDraftEvidence'
+import type { NbaProspectRank } from '@/lib/adp/nbaProspectRanks'
 import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
 
 export type DynastyGradedSport = 'NBA' | 'NHL' | 'MLB' | 'SOCCER' | 'NCAAF' | 'NCAAB'
@@ -103,6 +104,7 @@ export type SportDynastyContext = {
   nextDraftYear: number
   rookieDraftEvidence?: ReadonlyMap<string, RookieDraftEvidence>
   prospectAdp?: ReadonlyMap<string, { name: string; rank: number }>
+  nbaProspectRanks?: ReadonlyMap<string, NbaProspectRank>
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -203,6 +205,21 @@ export function pickDynastyValue(args: {
   return { ok: true, value: base * FUTURE_DISCOUNT ** wait, ...(deep ? { deep: true } : {}) }
 }
 
+export function nbaProspectValue(rank: NbaProspectRank, args: {
+  pool: readonly number[]
+  teams: number
+  season: number
+  nextDraftYear: number
+}): number | null {
+  const { pool, teams, season, nextDraftYear } = args
+  if (rank.draftYear !== nextDraftYear) return null
+  const estimate = pickDynastyValue({
+    sport: 'NBA', pool, teams, nextDraftYear,
+    pick: { kind: 'pick', year: rank.draftYear, round: Math.ceil(rank.rank / teams), overall: rank.rank },
+  })
+  return estimate.ok ? estimate.value * FUTURE_DISCOUNT ** Math.max(0, rank.draftYear - season) : null
+}
+
 export function sportDynastyBasis(ctx: DynastyGradeContext): string {
   const pointsBasis = ctx.sport === 'NCAAF'
     ? `Points over the best free agent at each position for the ${ctx.window.seasonLabel} college football season, using this league’s rules and its remaining weeks.`
@@ -221,18 +238,20 @@ export function sportDynastyBasis(ctx: DynastyGradeContext): string {
   )
 }
 
-type Priced = { name: string; value: number; kind: 'player' | 'pick'; prospectBasis?: 'draft' | 'adp' }
+type Priced = { name: string; value: number; kind: 'player' | 'pick'; prospectBasis?: 'draft' | 'adp' | 'nba_rank'; asOf?: string }
 
 /**
  * The dynasty grade for one deal. `give` is what the graded side sends. Withheld, with the reason,
  * whenever any asset cannot be priced — never a letter drawn from part of the deal.
  */
-export function gradeSportDynastyDeal(args: {
+type DynastyDeal = {
   give: readonly TradeAssetInput[]
   get: readonly TradeAssetInput[]
   ctx: DynastyGradeContext
   dynasty: SportDynastyContext
-}): TradeGradeView {
+}
+
+export function priceSportDynastySides(args: DynastyDeal) {
   const { ctx, dynasty } = args
   const basis = sportDynastyBasis(ctx)
   const index = indexBoard(ctx.board)
@@ -253,11 +272,24 @@ export function gradeSportDynastyDeal(args: {
         priced.push({ name: pickLabel(asset), value: p.value, kind: 'pick' })
         continue
       }
-      const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
-      const rosterId = asset.rosterPlayerId ?? (asset.playerId?.startsWith('fantrax:') ? asset.playerId : null)
+      const assetId = (asset.rosterPlayerId ?? asset.playerId)?.trim()
+      const nbaCollege = ctx.sport === 'NBA' && /^espn:ncaab:\d+$/.test(assetId ?? '')
+      const found = nbaCollege
+        ? { ok: false as const, reason: `${asset.name ?? 'This college player'} needs a verified NBA prospect rank or rookie draft selection.`, valuationGap: 'missing_projections' as const }
+        : resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
+      const rosterId = asset.rosterPlayerId ?? (nbaCollege || assetId?.startsWith('fantrax:') ? assetId : null)
       const drafted = rosterId && dynasty.rookieDraftEvidence?.get(rosterId)
       const marketId = rosterId && ctx.rosterProvider === 'fantrax' && !rosterId.startsWith('fantrax:') ? 'fantrax:' + rosterId : rosterId
       const adp = marketId && dynasty.prospectAdp?.get(marketId)
+      const ranked = rosterId && ctx.sport === 'NBA' ? dynasty.nbaProspectRanks?.get(rosterId) : undefined
+      if ((!found.ok || !meetsSampleBar(found.player)) && ranked && !drafted) {
+        pool ??= youngPlayerPool(ctx, dynasty)
+        const value = nbaProspectValue(ranked, { pool, teams: ctx.teams, season: ctx.window.season, nextDraftYear: dynasty.nextDraftYear })
+        if (value != null) {
+          priced.push({ name: ranked.name, value, kind: 'player', prospectBasis: 'nba_rank', asOf: ranked.publishedAt })
+          continue
+        }
+      }
       const evidence = drafted || (adp && { name: adp.name, overall: adp.rank, round: Math.ceil(adp.rank / ctx.teams), teams: ctx.teams })
       if ((!found.ok || !meetsSampleBar(found.player)) && evidence) {
         pool ??= youngPlayerPool(ctx, dynasty)
@@ -305,20 +337,12 @@ export function gradeSportDynastyDeal(args: {
   }
 
   const give = priceSide(args.give)
-  if ('withheld' in give) return { graded: false, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
+  if ('withheld' in give) return { graded: false as const, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
   const get = priceSide(args.get)
-  if ('withheld' in get) return { graded: false, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
+  if ('withheld' in get) return { graded: false as const, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
 
   const giveTotal = give.priced.reduce((s, p) => s + p.value, 0)
   const getTotal = get.priced.reduce((s, p) => s + p.value, 0)
-  if (giveTotal <= 0 && getTotal <= 0) {
-    return {
-      graded: false,
-      valuationGap: 'at_replacement',
-      reason: 'Nobody in this deal is projected above the best free agent at his position, over the seasons covered by the grade.',
-      basis,
-    }
-  }
   const notes = [
     assumedAge.length ? `${assumedAge.join(', ')} ${assumedAge.length === 1 ? 'has' : 'have'} no age on file, so ${assumedAge.length === 1 ? 'his later seasons are' : 'their later seasons are'} valued as a player at the end of his peak.` : '',
     deepPicks.length ? `${deepPicks.join(', ')} ${deepPicks.length === 1 ? 'is' : 'are'} deeper than the young players with a projection, so ${deepPicks.length === 1 ? 'it is' : 'they are'} priced as a long shot: the weakest of them, cut to ${Math.round(DEEP_PICK_ROUND_SHARE * 100)}% for each round deeper.` : '',
@@ -329,6 +353,9 @@ export function gradeSportDynastyDeal(args: {
   if ([...give.priced, ...get.priced].some((p) => p.prospectBasis === 'adp')) {
     notes.push('A prospect without a usable projection is estimated from his observed Fantrax ADP rank among verified prospects, translated onto the same points-based rookie pick curve.')
   }
+  if ([...give.priced, ...get.priced].some((p) => p.prospectBasis === 'nba_rank')) {
+    notes.push('A verified pre-draft NBA rank estimates the prospect’s pro value on the same points-based rookie pick curve, discounted until his draft year.')
+  }
   const dealBasis = notes.length ? `${basis} ${notes.join(' ')}` : basis
   const source = `${ctx.sport.toLowerCase()}-${ctx.valueKind === 'categories' ? 'category' : 'points'}-dynasty`
   const line = (side: 'give' | 'get') => (p: Priced): TradeGradeLine => ({
@@ -338,8 +365,23 @@ export function gradeSportDynastyDeal(args: {
     leagueValue: round1(p.value),
     source,
     valueSource: p.kind === 'pick' || p.prospectBasis ? 'pick_curve' : 'sport_projection',
-    valueAsOf: null,
+    valueAsOf: p.asOf ?? null,
   })
+  return { graded: true as const, giveTotal, getTotal, basis: dealBasis, lines: [...give.priced.map(line('give')), ...get.priced.map(line('get'))] }
+}
+
+export function gradeSportDynastyDeal(args: DynastyDeal): TradeGradeView {
+  const priced = priceSportDynastySides(args)
+  if (!priced.graded) return priced
+  const { giveTotal, getTotal, basis, lines } = priced
+  if (giveTotal <= 0 && getTotal <= 0) {
+    return {
+      graded: false,
+      valuationGap: 'at_replacement',
+      reason: 'Nobody in this deal is projected above the best free agent at his position, over the seasons covered by the grade.',
+      basis: sportDynastyBasis(args.ctx),
+    }
+  }
   const FLOOR = 0.01
   return gradeTrade({
     giveValue: Math.max(giveTotal, FLOOR),
@@ -349,11 +391,11 @@ export function gradeSportDynastyDeal(args: {
     unpriced: 0,
     giveCount: args.give.length,
     getCount: args.get.length,
-    basis: dealBasis,
-    scoringApplied: ctx.scoringBasis === 'league',
+    basis,
+    scoringApplied: args.ctx.scoringBasis === 'league',
     needApplied: false,
     needGap: null,
-    lines: [...give.priced.map(line('give')), ...get.priced.map(line('get'))],
+    lines,
     moves: [],
   })
 }

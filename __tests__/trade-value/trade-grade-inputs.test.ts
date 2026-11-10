@@ -86,7 +86,7 @@ describe('native trade items → the one grader', () => {
       { itemType: 'rookie_pick', itemReference: 'fdp:20x8:2:roster-9', metadata: null },
     ])
     expect(r.assets).toEqual([
-      { kind: 'pick', year: 2028, round: 2 },
+      { kind: 'pick', year: 2028, round: 2, draftSide: 'canton' },
       { kind: 'pick', year: 2027, round: 1 },
     ])
     expect(r.unpriceable).toEqual(['a draft pick with no season or round on file'])

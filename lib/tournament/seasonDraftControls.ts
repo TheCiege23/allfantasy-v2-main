@@ -4,16 +4,18 @@ import { withControlLock } from '@/lib/draft/draftLock'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { loadSeasonDraftContext, loadSeasonDraftPlayers } from './seasonDraftRuntime'
 import { refreshSeasonDraftPool } from './seasonDraftRefresh'
+import { lockAndCheckSeasonRecovery } from './seasonRecoveryState'
 
 /** null delegates ordinary leagues to their existing service. Route authorization stays mandatory. */
-export async function controlSeasonDraft(leagueId: string, action: 'pause' | 'resume' | 'reset', actorId?: string | null): Promise<boolean | null> {
+export async function controlSeasonDraft(leagueId: string, action: 'pause' | 'resume' | 'reset', actorId?: string | null, refresh = refreshSeasonDraftPool): Promise<boolean | null> {
   const context = await loadSeasonDraftContext(leagueId)
   if (!context) return null
   const policy = context.config.rules?.draftPolicy
   if (!policy) return false
   if (action === 'resume') {
+    if (context.config.rules?.calendar.draftOverrides && Date.now() >= Date.parse(context.draftWindow.completeBy)) return false
     const paused = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
-    if (paused?.status !== 'paused' || !(await refreshSeasonDraftPool(leagueId, actorId ?? undefined))?.ready) return false
+    if (paused?.status !== 'paused' || !(await refresh(leagueId, actorId ?? undefined))?.ready) return false
   }
   const locked = await withControlLock(leagueId, async () => {
     const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
@@ -30,6 +32,7 @@ export async function controlSeasonDraft(leagueId: string, action: 'pause' | 're
     const timerEndAt = status === 'paused' ? null : new Date(now + seconds * 1000)
     const auction = session.draftType === 'auction' && session.auctionState && typeof session.auctionState === 'object' && !Array.isArray(session.auctionState) ? session.auctionState as Record<string, unknown> : null
     return prisma.$transaction(async tx => {
+      if (await lockAndCheckSeasonRecovery(tx, context.tournamentId)) return false
       const claim = await tx.draftSession.updateMany({ where: { id: session.id, version: session.version, status: session.status, timerEndAt: session.timerEndAt }, data: {
         status, timerSeconds: session.draftType === 'auction' ? session.timerSeconds : fullClock, timerEndAt,
         pausedRemainingSeconds: status === 'paused' ? seconds : null, overnightFrozenPickSeconds: null,

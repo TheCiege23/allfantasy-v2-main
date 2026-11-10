@@ -178,7 +178,7 @@ export async function buildTradeScenario(
   }
   const platform = world.provenance?.provider ?? null
   const space = playerIdSpaceFor({ platform, sport: world.league.sport })
-  const foreign = rosterIdSpaceOf(platform) !== 'sleeper'
+  const foreign = rosterIdSpaceOf(platform) !== 'sleeper' || world.league.leagueType === 'c2c'
   // The lineup port can translate ESPN IDs to Sleeper IDs. Trade grounding needs the original provider IDs.
   const foreignRosterIds = foreign ? await deps.loadForeignRosterIds?.(args.leagueId).catch(() => null) : null
   if (foreign && !foreignRosterIds?.get(viewerRoster.rosterId)?.length) {
@@ -321,7 +321,7 @@ export async function buildTradeScenario(
           identity: { ok: true, name: p.name, position: p.position, sleeperId: identity?.sleeperId, externalId: identity?.externalId },
         })
       }),
-      ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round })),
+      ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round, ...(p.draftSide ? { draftSide: p.draftSide } : {}) })),
     ],
     unpriceable: [],
   })

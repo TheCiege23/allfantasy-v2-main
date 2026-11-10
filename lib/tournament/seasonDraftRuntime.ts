@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import 'server-only'
 import { prisma } from '@/lib/prisma'
-import { readOpeningManifest } from './seasonNativeContract'
+import { RECOVERY_HOLD_MESSAGE, seasonRecoveryHeld } from './seasonRecoveryState'
+import { readSeasonStageManifest } from './seasonNativeContract'
+import { resolveSeasonDraftWindow } from './seasonRules'
 import { seasonContractHash } from './seasonCalendarVerification'
 import { seasonResourceId } from '@/lib/domain/seasonTournamentLeague'
 import { seasonRosterPickError, type SeasonDraftPlayer } from './seasonDraftPolicy'
@@ -31,13 +33,15 @@ export async function loadSeasonDraftContext(leagueId: string, db: Pick<typeof p
   if (!settings || !('seasonTournament' in settings)) return null
   const marker = settings.seasonTournament as { tournamentId?: string; freezeId?: string; key?: string; manifestHash?: string } | null
   if (!marker?.tournamentId || !marker.freezeId || !marker.key) throw new Error('The tournament draft binding is incomplete.')
-  const event = await db.tournamentAuditLog.findFirst({ where: { id: marker.freezeId, tournamentId: marker.tournamentId, action: 'season_opening_field_frozen' } })
+  const event = await db.tournamentAuditLog.findFirst({ where: { id: marker.freezeId, tournamentId: marker.tournamentId, action: { in: ['season_opening_field_frozen', 'season_stage_field_frozen'] } } })
   if (!event) throw new Error('The frozen tournament assignment is unavailable.')
   const raw = event.data as Record<string, unknown>, { manifestHash, ...payload } = raw
   if (seasonContractHash(payload) !== manifestHash || marker.manifestHash !== manifestHash) throw new Error('The tournament draft checksum does not match.')
-  const manifest = readOpeningManifest(raw), pool = manifest.leagues.find(l => l.key === marker.key)
+  const manifest = readSeasonStageManifest(raw), pool = manifest.leagues.find(l => l.key === marker.key)
   if (!pool || league?.sport !== manifest.config.sport || leagueId !== seasonResourceId(marker.freezeId, pool.key)) throw new Error('The tournament draft league does not match its frozen assignment.')
-  return { freezeId: marker.freezeId, tournamentId: marker.tournamentId, manifestHash: manifest.manifestHash, rulesHash: manifest.rulesHash, config: manifest.config, pool, rosterIds: pool.members.map(m => seasonResourceId(marker.freezeId!, pool.key + ':roster:' + m.id)) }
+  const stage = manifest.stage ?? 1
+  const draftWindow = resolveSeasonDraftWindow(manifest.config.rules!.calendar, stage, pool)!
+  return { freezeId: marker.freezeId, tournamentId: marker.tournamentId, manifestHash: manifest.manifestHash, rulesHash: manifest.rulesHash, publicationId: manifest.publicationId, stage, draftWindow, config: manifest.config, pool, rosterIds: pool.members.map(m => seasonResourceId(marker.freezeId!, pool.key + ':roster:' + m.id)) }
 }
 export async function fetchSeasonDraftPlayers(leagueId: string, sport: 'NFL' | 'NBA', seasonYear?: number) {
   const { getResolvedDraftPoolForLeague } = await import('@/lib/draft-room/getResolvedDraftPoolForLeague')
@@ -50,8 +54,8 @@ export async function fetchSeasonDraftPlayers(leagueId: string, sport: 'NFL' | '
   return sport === 'NBA' ? rankNbaDraftPoolFromPriorSeason(players, previous).players : players
 }
 /** DB-only snapshot reader; safe inside a draft mutation lock. */
-export async function readSeasonDraftSnapshot(leagueId: string, manifestHash: string, db: Pick<typeof prisma, 'league' | 'tournamentAuditLog'> = prisma) {
-  const context = await loadSeasonDraftContext(leagueId, db)
+export async function readSeasonDraftSnapshot(leagueId: string, manifestHash: string, db: Pick<typeof prisma, 'league' | 'tournamentAuditLog'> = prisma, verifiedContext?: NonNullable<Awaited<ReturnType<typeof loadSeasonDraftContext>>>) {
+  const context = verifiedContext ?? await loadSeasonDraftContext(leagueId, db)
   if (!context || context.manifestHash !== manifestHash) return null
   const event = await db.tournamentAuditLog.findFirst({ where: { tournamentId: context.tournamentId, action: 'season_draft_pool_checked', targetId: leagueId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
   const parsed = z.object({ version: z.literal(1), manifestHash: z.string(), expiresAt: z.string().datetime({ offset: true }), ready: z.literal(true), players: z.array(z.object({ playerId: z.string().min(1), playerName: z.string().min(1), position: z.string().min(1), team: z.string().nullable().optional(), adp: z.number().finite().nullable().optional(), rank: z.number().finite().nullable().optional(), projectedPoints: z.number().finite().nullable().optional(), draftIdProvenance: z.object({ namespace: z.enum(['sleeper','rolling_insights','unknown']), sourceRecordId: z.string().min(1).nullable() }).optional() })) }).safeParse(event?.data)
@@ -70,6 +74,8 @@ export async function loadSeasonDraftPlayers(leagueId: string, sport: 'NFL' | 'N
 export async function validateSeasonDraftPlayer(leagueId: string, rosterId: string | null, picks: Array<{ rosterId: string; playerId?: string | null; playerName: string; position: string }>, candidate: { playerId?: string | null; playerName: string; position: string; team?: string | null }) {
   const context = await loadSeasonDraftContext(leagueId)
   if (!context) return null
+  if (await seasonRecoveryHeld(prisma, context.tournamentId)) return RECOVERY_HOLD_MESSAGE
+  if (context.config.rules!.calendar.draftOverrides && Date.now() >= Date.parse(context.draftWindow.completeBy)) return 'This tournament draft deadline has passed.'
   if (rosterId && !context.rosterIds.includes(rosterId)) return 'This roster is not in the frozen tournament draft.'
   const pool = await loadSeasonDraftPlayers(leagueId, context.config.sport)
   const matches = pool.filter(p => p.playerId === candidate.playerId)

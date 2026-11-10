@@ -62,7 +62,7 @@ describe('loadTrade — AfLeagueTrade', () => {
           kind: 'player', playerId: '4984', name: 'Josh Allen', position: null,
           idSpace: 'sleeper', identity: { ok: true, name: 'Josh Allen', position: null },
         }] },
-        sideB: { teamId: 'r2', rosterId: 'r2', gives: [{ kind: 'pick', season: 2027, round: 1, originalTeamId: 'r2', label: '2027 1st' }] },
+        sideB: { teamId: 'r2', rosterId: 'r2', gives: [{ kind: 'pick', season: 2027, round: 1, originalTeamId: 'r2', label: '2027 1st', draftSide: 'canton' }] },
         proposedAt: '2026-09-26T10:00:00.000Z',
         completedAt: null,
       },

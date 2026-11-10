@@ -53,6 +53,11 @@ export type IntegritySettingsValue = {
    * league run on AllFantasy: an imported league's picks and FAAB live on its host.
    */
   tankingPenalties?: TankingPenaltiesValue
+  /**
+   * True when the league has future picks to take (a dynasty-family league run here). Losing a draft pick
+   * and worse rookie-lottery odds need them; a redraft league is offered the FAAB penalty only.
+   */
+  tankingPickPenaltiesSupported?: boolean
 }
 
 export type TankingPenaltiesValue = {
@@ -98,14 +103,19 @@ function toDraft(v: IntegritySettingsValue): Draft {
  */
 function TankingPenaltyFields({
   value,
-  onChange,
+  onChange: change,
   disabled,
+  pickPenalties,
 }: {
   value: TankingPenaltiesValue
   onChange: (patch: Partial<TankingPenaltiesValue>) => void
   disabled: boolean
+  /** False in a league with no future picks: only the FAAB penalty can apply there. */
+  pickPenalties: boolean
 }) {
-  const kind = value.penalty ?? 'forfeit_pick'
+  const kind = pickPenalties ? value.penalty ?? 'forfeit_pick' : 'faab'
+  // Every edit in such a league saves the FAAB penalty, whatever was stored before.
+  const onChange = (patch: Partial<TankingPenaltiesValue>) => change(pickPenalties ? patch : { ...patch, penalty: 'faab' })
   const off = disabled || !value.enabled
   return (
     <div className="af-cm-penalties" data-testid="tanking-penalties">
@@ -134,11 +144,20 @@ function TankingPenaltyFields({
           disabled={off}
           onChange={(e) => onChange({ penalty: e.target.value as TankingPenaltiesValue['penalty'] })}
         >
-          <option value="forfeit_pick">Lose a draft pick</option>
-          <option value="lottery_odds">Worse rookie-lottery odds</option>
+          {pickPenalties ? (
+            <>
+              <option value="forfeit_pick">Lose a draft pick</option>
+              <option value="lottery_odds">Worse rookie-lottery odds</option>
+            </>
+          ) : null}
           <option value="faab">Lose FAAB</option>
         </select>
       </label>
+      {pickPenalties ? null : (
+        <p className="af-cm-threshold" data-testid="tanking-penalty-faab-only">
+          This league has no future draft picks, so losing a pick or lottery odds can't apply. A strike costs FAAB.
+        </p>
+      )}
       <label className="af-cm-numrow">
         <span className="af-cm-setrow-label">At strike</span>
         <select className="af-cm-select" value={value.pickAtStrike} disabled={off} onChange={(e) => onChange({ pickAtStrike: Number(e.target.value) })}>
@@ -430,6 +449,7 @@ export function IntegritySettings({
             <TankingPenaltyFields
               value={draft.tankingPenalties}
               disabled={saving || readOnly}
+              pickPenalties={value.tankingPickPenaltiesSupported !== false}
               onChange={(patch) =>
                 setDraft((d) => (d.tankingPenalties ? { ...d, tankingPenalties: { ...d.tankingPenalties, ...patch } } : d))
               }

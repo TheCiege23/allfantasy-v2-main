@@ -883,9 +883,10 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     include: {
       homeRoster: { include: { players: true } },
       awayRoster: { include: { players: true } },
+      league: { select: { leagueVariant: true } },
     },
   })
-  if (!m || !m.homeRoster) return null
+  if (!m || !m.homeRoster || m.league?.leagueVariant === 'season_tournament') return null
   if (!m.awayRosterId) {
     await updateByeRowScore(m)
     return null

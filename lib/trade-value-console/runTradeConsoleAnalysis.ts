@@ -47,6 +47,7 @@ import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrad
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
 import { createFootballTradeFormatGrader } from '@/lib/decision-os/trade/footballTradeFormatGrade'
+import { createFootballCampusDraftGrader } from '@/lib/decision-os/trade/footballCampusDraftGrade'
 import { createGuillotineGrader } from '@/lib/decision-os/trade/guillotineGrader'
 import { createZombieGrader } from '@/lib/decision-os/trade/zombieGrader'
 import { createLeagueAssetPolicy } from '@/lib/decision-os/trade/leagueAssetPolicy'
@@ -386,7 +387,7 @@ export async function runTradeConsoleAnalysis(
   })
   const leagueGrade = graded.leagueGrade
   const consoleLeagueType = leagueRow
-    ? leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, platform: leagueRow.platform ?? null })
+    ? leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, leagueVariant: leagueRow.leagueVariant, platform: leagueRow.platform ?? null })
     : null
   /*
    * A college league takes the same college grade `createLeagueTradeGrader` gives it (Phase 8), and the
@@ -399,7 +400,11 @@ export async function runTradeConsoleAnalysis(
           leagueSize: leagueRow.leagueSize, season: leagueRow.season, status: leagueRow.status,
         })
       : null
-  const collegeView = collegeGrader ? await collegeGrader.grade(input.sideGive, input.sideGet) : null
+  const campusDraft = leagueRow && consoleLeagueType && effectiveSport === 'NFL' && input.leagueId
+    ? createFootballCampusDraftGrader({
+        id: input.leagueId.trim(), platform: leagueRow.platform, season: leagueRow.season, leagueSize: leagueRow.leagueSize, status: leagueRow.status, type: consoleLeagueType.type,
+      }) : null
+  const collegeView = await (collegeGrader?.grade(input.sideGive, input.sideGet) ?? campusDraft?.(input.sideGive, input.sideGet)) ?? null
   if (collegeView) applyCollegeGrade(leagueGrade, collegeView)
   /*
    * NBA, college basketball and NHL take the points-over-replacement grade `createLeagueTradeGrader` gives
