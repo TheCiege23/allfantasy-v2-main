@@ -98,7 +98,8 @@ const PickInputSchema = z.object({
   year: z.number().int().min(2000).max(2099),
   round: z.number().int().min(1).max(25),
   projected_range: z.enum(['early', 'mid', 'late', 'unknown']).optional(),
-  draftSide: z.enum(['campus', 'canton']).optional(),
+  draftSide: z.enum(['campus', 'canton', 'combined']).optional(),
+  overall: z.number().int().positive().optional(),
 })
 
 const TeamInputSchema = z.object({
@@ -330,7 +331,7 @@ function unreadablePickLabels(picks: readonly unknown[]): string[] {
   return picks.filter((p): p is string => typeof p === 'string' && parsePickLabel(p) === null)
 }
 
-function resolvePickData(p: string | { year: number; round: number; projected_range?: string; draftSide?: C2CDraftSide }) {
+function resolvePickData(p: string | { year: number; round: number; projected_range?: string; draftSide?: C2CDraftSide; overall?: number }) {
   if (typeof p === 'string') {
     const parsed = parsePickLabel(p)
     /*
@@ -353,6 +354,7 @@ function resolvePickData(p: string | { year: number; round: number; projected_ra
       round: parsed.round,
       tier: parsed.bucket,
       draftSide: parsed.draftSide,
+      overall: undefined,
       label: p,
     }
   }
@@ -360,6 +362,7 @@ function resolvePickData(p: string | { year: number; round: number; projected_ra
     year: p.year,
     round: p.round,
     draftSide: p.draftSide,
+    overall: p.overall,
     tier: (p.projected_range === 'unknown' ? undefined : p.projected_range) as 'early' | 'mid' | 'late' | undefined,
     label: `${p.year} Round ${p.round}${p.projected_range ? ` (${p.projected_range})` : ''}`,
   }
@@ -428,7 +431,7 @@ async function evaluateLeagueOffer(
     for (const raw of side.gives_picks) {
       const p = resolvePickData(raw)
       const tier = p.tier === 'early' || p.tier === 'mid' || p.tier === 'late' ? p.tier : undefined
-      inputs.assets.push({ kind: 'pick', year: p.year, round: p.round, ...(tier ? { tier } : {}), ...(p.draftSide ? { draftSide: p.draftSide } : {}) })
+      inputs.assets.push({ kind: 'pick', year: p.year, round: p.round, ...(tier ? { tier } : {}), ...(p.draftSide ? { draftSide: p.draftSide } : {}), ...(p.overall != null ? { overall: p.overall } : {}) })
     }
     if (side.gives_faab > 0) inputs.assets.push({ kind: 'faab', amount: side.gives_faab })
     return inputs

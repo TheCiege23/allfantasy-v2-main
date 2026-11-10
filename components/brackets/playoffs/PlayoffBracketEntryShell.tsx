@@ -410,7 +410,8 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
               Picks save automatically. Finish available series first, then projected later rounds unlock.
             </p>
             {showLockDiagnostics ? (
-              <p data-testid="playoff-entry-lock-diagnostics" className="mt-2 text-xs font-semibold text-slate-500">
+              // Kept in the DOM for the lock tests, never shown: a commissioner reading "lockRule=…" learns nothing.
+              <p data-testid="playoff-entry-lock-diagnostics" className="mt-2 text-xs font-semibold text-slate-500" hidden>
                 lockRule={lockRule}; allowTestLatePicks={String(view.lockDiagnostics?.allowTestLatePicks ?? false)}; viewerCanLatePick={String(canUseLatePicks)}
               </p>
             ) : null}

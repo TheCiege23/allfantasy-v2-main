@@ -64,11 +64,12 @@ const PLAYERS = [
 ]
 const day = 24 * 60 * 60 * 1000
 
-async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft', imported?: 'espn' | 'yahoo' | 'fantrax') {
+async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' | 'guillotine' = 'redraft', imported?: 'espn' | 'yahoo' | 'fantrax') {
   const db = h.db!
   const season = new Date().getUTCFullYear()
   const platform = imported ?? (sport === 'NCAAF' ? 'fantrax' : 'native')
   const rosterClub = sport === 'MLB' ? 'NYY' : sport === 'SOCCER' ? 'ARS' : 'LAL'
+  const espnGuillotine = sport === 'NFL' && imported === 'espn' && format === 'guillotine'
   const publishedSoccer = imported === 'fantrax' && sport === 'SOCCER'
   const leagueId = 'parity-' + sport.toLowerCase()
   const scoring = sport === 'NCAAF' ? { pass_yd: 0.04, pass_td: 4 } : { rec: 1 }
@@ -76,6 +77,7 @@ async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft'
     id: leagueId, userId: 'commish', platform, platformLeagueId: leagueId, sport, season,
     leagueType: format, leagueSize: 4, name: 'Trade parity ' + sport,
     settings: { scoring_mode: 'points', scoring_settings: scoring, trade_settings: { reviewType: 'none' },
+      ...(espnGuillotine ? { roster_positions: ['WR:1', 'BE:4'] } : {}),
       ...(publishedSoccer ? { fantrax_settings: { scoringSystem: { type: 'POINTS_BASED' } } } : {}) },
   } })
   const pos = POSITIONS[sport]
@@ -87,6 +89,7 @@ async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft'
     await db.playerIdentityMap.create({ data: {
       id: p.canonical, canonicalName: p.name, normalizedName: p.name.toLowerCase().replaceAll(' ', ''),
       sport, position: pos, ...(imported ? { currentTeam: rosterClub } : {}), ...(sport === 'NFL' ? { sleeperId: p.id } : { rollingInsightsId: p.id }),
+      ...(espnGuillotine ? { espnId: p.id, sleeperId: 'sleeper-' + p.id } : {}),
       ...(sport === 'NCAAF' ? { cfbdId: 'cfbd-' + p.id, fantraxId: p.id, rollingInsightsId: null } : {}),
       ...(sport === 'NCAAB' && format === 'dynasty' ? { espnId: p.id } : {}),
     } })
@@ -129,15 +132,15 @@ async function seedOffer(sport: Sport, format: 'redraft' | 'dynasty' = 'redraft'
           normalizedStatMap: { group: 'fielders', position: 'Forward', stats: { goals: p.strength / 30, minutes_played: 90 } },
         } })
       }
-    } else if (sport !== 'NFL') {
+    } else if (sport !== 'NFL' || espnGuillotine) {
       const points = p.strength
-      const rates = sport === 'NCAAF' ? { pass_yd: points * 10, pass_td: 2 }
+      const rates = espnGuillotine ? { receptions: points } : sport === 'NCAAF' ? { pass_yd: points * 10, pass_td: 2 }
         : sport === 'NHL' ? { goals: points / 20, assists: points / 20, shots: points / 5 }
           : sport === 'MLB' ? { ab: 4, h: points / 24, hr: points / 100, r: points / 50, rbi: points / 40 }
             : { points }
       await db.aFProjectionSnapshot.create({ data: {
         playerId: sport === 'NCAAF' ? 'cfbd-' + p.id : p.canonical, playerName: p.name, sport, position: pos,
-        season, week: null, baselineProjection: points, afProjection: points, snapshotLookupKey: sport + ':' + p.id,
+        season, week: null, ...(espnGuillotine ? { rosWeeksRemaining: 8 } : {}), baselineProjection: points, afProjection: points, snapshotLookupKey: sport + ':' + p.id,
         adjustmentFactors: { perGameRates: rates, confidenceReasons: ['60 games in the season sample'], sourceSeason: season },
       } })
     }
@@ -195,6 +198,7 @@ describe.skipIf(process.env.SIM_TRADE_PARITY !== '1')('same-trade grades across 
     ...(['NCAAF', 'NCAAB', 'SOCCER'] as const).map((sport) => [sport, 'dynasty', undefined] as const),
     ['NBA', 'redraft', 'yahoo'] as const,
     ['MLB', 'redraft', 'espn'] as const,
+    ['NFL', 'guillotine', 'espn'] as const,
     ['SOCCER', 'redraft', 'fantrax'] as const,
   ]
   // The first case loads all four real entry points and pays the cold transform cost.
@@ -218,6 +222,7 @@ describe.skipIf(process.env.SIM_TRADE_PARITY !== '1')('same-trade grades across 
     expect(proposed, JSON.stringify(proposed)).toMatchObject({ graded: true })
     if (!proposed.graded) throw new Error(proposed.reason)
     if (format === 'dynasty') expect(proposed.lines[0]?.source).toMatch(/-dynasty$/)
+    if (format === 'guillotine') expect(proposed.lines[0]?.source).toBe('guillotine-vorp')
     if (sport === 'SOCCER' && imported === 'fantrax') expect(proposed.basis).toContain('published Fantrax fantasy-point totals')
 
     const trade = await createAfLeagueTrade(input)
@@ -230,7 +235,7 @@ describe.skipIf(process.env.SIM_TRADE_PARITY !== '1')('same-trade grades across 
       body: {
         leagueId: league.id, league: { sport }, ...(sport === 'SOCCER' ? { asOfDate: '2026-10-05' } : {}),
         sender: { team_id: giver, manager_name: sport + ' sender', gives_players: [{ name: a!.name, providerPlayerId: a!.id }] },
-        receiver: { team_id: receiver, manager_name: sport + ' receiver', gives_players: [{ name: b!.name, ...(sport === 'NFL' ? { sleeperPlayerId: b!.id } : { providerPlayerId: b!.id }) }] },
+        receiver: { team_id: receiver, manager_name: sport + ' receiver', gives_players: [{ name: b!.name, ...(sport === 'NFL' && !imported ? { sleeperPlayerId: b!.id } : { providerPlayerId: b!.id }) }] },
       },
     }), {} as Parameters<typeof POST>[1])
     const result = await response.json()

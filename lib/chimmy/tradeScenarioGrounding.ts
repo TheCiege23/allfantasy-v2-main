@@ -421,6 +421,7 @@ export async function buildTradeScenario(
           label: null,
           basis: grade.basis,
           withheld: grade.reason,
+          ...(grade.divisionImpacts ? { divisionImpacts: grade.divisionImpacts } : {}),
         },
     receiptId: receipt.receiptId,
     lineup,
@@ -549,7 +550,7 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
       ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
     s.playoffOdds.available ? `- Playoff scenario estimate: ${s.playoffOdds.before}% before, ${s.playoffOdds.after}% after. ${s.playoffOdds.reason}` : `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
-    ...(s.picks
+    ...(s.picks && !s.value.divisionImpacts && !s.value.basis?.includes('Campus')
       ? [
           "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
         ]

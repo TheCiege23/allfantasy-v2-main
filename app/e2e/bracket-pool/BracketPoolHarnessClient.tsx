@@ -2,6 +2,8 @@
 
 import { SessionProvider } from 'next-auth/react'
 import PlayoffBracketShell from '@/components/brackets/playoffs/PlayoffBracketShell'
+import PlayoffBracketEntryShell from '@/components/brackets/playoffs/PlayoffBracketEntryShell'
+import BracketQuickNav from '@/components/brackets/BracketQuickNav'
 import { HARNESS_USER_ID, VIEWS } from './fixtures'
 
 /**
@@ -10,7 +12,7 @@ import { HARNESS_USER_ID, VIEWS } from './fixtures'
  * The shell reads `useSession`, and /e2e routes get a null session, so this nests one carrying the viewer's id
  * (no /api/auth call is made).
  */
-export default function BracketPoolHarnessClient({ variant }: { variant: keyof typeof VIEWS }) {
+export default function BracketPoolHarnessClient({ variant, screen = 'dashboard' }: { variant: keyof typeof VIEWS; screen?: 'dashboard' | 'entry' }) {
   const view = VIEWS[variant]
   return (
     <SessionProvider
@@ -18,7 +20,15 @@ export default function BracketPoolHarnessClient({ variant }: { variant: keyof t
       refetchInterval={0}
       refetchOnWindowFocus={false}
     >
-      <PlayoffBracketShell initialView={view} initialInviteCode={null} />
+      {screen === 'entry' ? (
+        // Mirrors app/brackets/leagues/[leagueId]/entries/[entryId]/page.tsx: quick nav, then the pick screen.
+        <>
+          <BracketQuickNav leagueId={view.challenge.id} showInvite={view.challenge.ownerUserId === view.viewerUserId && Boolean(view.challenge.inviteCode)} />
+          <PlayoffBracketEntryShell initialView={view} />
+        </>
+      ) : (
+        <PlayoffBracketShell initialView={view} initialInviteCode={null} />
+      )}
     </SessionProvider>
   )
 }

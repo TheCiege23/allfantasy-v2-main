@@ -89,7 +89,7 @@ describe('Football format trade grades', () => {
   })
 
   it('combines the measured campus production premium with the pro option', async () => {
-    const grade = createFootballTradeFormatGrader({ ...league, type: 'c2c' }, async () => ({ season: 2026, weeks: 5, separate: false, price: () => 725 }))!
+    const grade = createFootballTradeFormatGrader({ ...league, type: 'c2c' }, async () => ({ season: 2026, weeks: 5, separate: false, combinedPick: async () => null, price: () => 725 }))!
     const prospect = { ...lines[0]!, valueSource: 'devy_option' as const }
     expect(await grade(neutral([prospect, lines[1]!]), chart, assets)).toMatchObject({ graded: true, giveValue: 725, getValue: 500, basis: expect.stringContaining('5 weeks') })
   })
