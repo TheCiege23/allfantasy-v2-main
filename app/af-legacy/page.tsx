@@ -4740,12 +4740,12 @@ function AFLegacyContent() {
                             MFL leagues import with your MFL API key — we never ask for your MFL password.
                           </p>
                         </div>
-                        <a
+                        <Link
                           href="/import?provider=mfl"
                           className="block w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold text-center hover:from-amber-400 hover:to-orange-400 transition"
                         >
                           Import MFL leagues
-                        </a>
+                        </Link>
                       </div>
                     )}
 
@@ -5835,12 +5835,12 @@ function AFLegacyContent() {
                 >
                   Submit League Idea
                 </a>
-                <a
+                <Link
                   href="/"
                   className="text-sm text-white/50 hover:text-white/70 transition"
                 >
                   Join Early Access
-                </a>
+                </Link>
               </div>
             </div>
           </div>
