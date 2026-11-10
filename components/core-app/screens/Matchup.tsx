@@ -368,6 +368,17 @@ function Kickoff({ iso }: { iso: string }) {
   return label ? <time dateTime={iso}>{label}</time> : null
 }
 
+/** "as of 2:40 PM" for a live box score, in the viewer's zone — after mount, like Kickoff. */
+function AsOf({ iso }: { iso: string }) {
+  const [label, setLabel] = useState<string | null>(null)
+  useEffect(() => {
+    const at = new Date(iso)
+    if (Number.isNaN(at.getTime())) return
+    setLabel(at.toLocaleTimeString(getAppIntlLocale(), { hour: 'numeric', minute: '2-digit' }))
+  }, [iso])
+  return label ? <time dateTime={iso}> · as of {label}</time> : null
+}
+
 /** Starters still to play for one side, or null when any of their game states is unknown. */
 function leftFor(side: { upcoming: number; live: number; unknown: number } | undefined): number | null {
   if (!side || side.unknown > 0) return null
@@ -490,9 +501,10 @@ function PlayerHalf({
             : `id ${cell.playerId}`}
         </div>
         {/*
-          Once his game is FINAL: his club's result, then his box score (lib/core-app/matchupGameLine.ts).
-          Final only — a live score in the schedule table can trail the game, so a starter still playing
-          keeps the LIVE chip below instead. Either line is absent when its data is.
+          His club's result once his game is FINAL, then his box score (lib/core-app/matchupGameLine.ts).
+          The result is final only — a live score in the schedule table can trail the game. The box score
+          also shows while he is playing, labelled "so far · as of …" because it is imported hourly.
+          Either line is absent when its data is.
         */}
         {cell.result ? (
           <div className="af-mu-half-result">
@@ -502,7 +514,19 @@ function PlayerHalf({
             {cell.opponentClub ? <span> {cell.home ? 'vs' : '@'} {cell.opponentClub}</span> : null}
           </div>
         ) : null}
-        {cell.statLine ? <div className="af-mu-half-statline">{cell.statLine}</div> : null}
+        {cell.statLine ? (
+          <div className="af-mu-half-statline" data-live={cell.statLineAsOf ? 'true' : undefined}>
+            {/* A live line is imported hourly through the game windows: say so, and say when. */}
+            {cell.statLineAsOf ? (
+              <span className="af-mu-half-statline-live">
+                {copy('so far')}
+                <AsOf iso={cell.statLineAsOf} />
+                {': '}
+              </span>
+            ) : null}
+            {cell.statLine}
+          </div>
+        ) : null}
         {/*
           His game's state as a chip — live boards only. A starter ruled out or on bye is `final` in
           the game-state read, but he never played; the BYE / OUT flag beside his number says so, and a

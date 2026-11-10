@@ -107,7 +107,7 @@ export const STALE_RUN_THRESHOLD_MS = 10 * 60 * 1000
 
 /** Ledger identity for this pipeline inside the shared StatIngestionJob table. */
 const LEDGER_SOURCE = 'sleeper-weekly'
-const LOCK_JOB_NAME = 'import-player-game-stats'
+export const LOCK_JOB_NAME = 'import-player-game-stats'
 
 /** Keep only finite numeric stat values; a row must carry at least one to be ingestible. */
 function toNumericStats(raw: unknown): Record<string, number> {

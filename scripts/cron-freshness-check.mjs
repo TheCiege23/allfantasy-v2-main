@@ -203,6 +203,15 @@ export const PROBES = {
     table: 'player_game_stats',
     column: 'updatedAt',
     seasonal: { sport: 'NFL' },
+    /*
+     * ⚠ THE SCHEDULE NO LONGER SAYS HOW OFTEN THIS WRITES. Since 2026-11-09 it fires hourly through
+     * the NFL windows (`40 0-6,13-23 * * *`), but the handler's gate (lib/player-game-stats/
+     * nflGameWindowGate.ts) does work only inside a game window or once every 20 hours. Read off
+     * the schedule alone, the largest gap is 7h and the allowance would be 14h — and every
+     * non-game day, which writes once, would read STALE. Pinned to the allowance the old once-a-day
+     * schedule had (24h cadence, tolerance 2).
+     */
+    minAllowanceMs: 48 * 60 * 60_000,
   },
   /*
    * The multi-sport sweep writes the same player_game_stats.updatedAt the NFL mode probes an hour

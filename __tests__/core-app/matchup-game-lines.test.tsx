@@ -71,7 +71,26 @@ describe('clubGameIndex', () => {
 })
 
 describe('the board', () => {
-  it('draws the lines under a final starter and nothing under a live or upcoming one', async () => {
+  it('labels a live box score "so far" and never gives a live starter a result', async () => {
+    const { default: Matchup } = await import('@/components/core-app/screens/Matchup')
+    const { container } = render(<Matchup data={matchupFixture('NFL', 'live')} />)
+    const live = [...container.querySelectorAll('.af-mu-board-row .af-mu-half[data-gs="live"]')]
+    expect(live.length).toBeGreaterThan(0)
+    for (const half of live) {
+      expect(half.querySelector('.af-mu-half-result')).toBeNull()
+      const line = half.querySelector('.af-mu-half-statline')
+      if (!line) continue
+      expect(line.getAttribute('data-live')).toBe('true')
+      expect(line.querySelector('.af-mu-half-statline-live')?.textContent).toMatch(/^so far/)
+    }
+    expect(container.querySelector('.af-mu-half-statline[data-live="true"]')).toBeTruthy()
+    // A final starter's line carries no "so far".
+    for (const half of container.querySelectorAll('.af-mu-board-row .af-mu-half[data-gs="final"]')) {
+      expect(half.querySelector('.af-mu-half-statline-live')).toBeNull()
+    }
+  })
+
+  it('draws a result only under a final starter, and nothing under an upcoming one', async () => {
     const { default: Matchup } = await import('@/components/core-app/screens/Matchup')
     const { container } = render(<Matchup data={matchupFixture('NFL', 'live')} />)
     const halves = [...container.querySelectorAll('.af-mu-board-row .af-mu-half[data-state="player"]')]
@@ -87,7 +106,8 @@ describe('the board', () => {
         expect(result?.querySelector('[data-outcome]')).toBeTruthy()
       } else {
         expect(result).toBeNull()
-        expect(stats).toBeNull()
+        // Since the game-window import, a LIVE starter may carry a "so far" line; an upcoming one never does.
+        if (gs !== 'live') expect(stats).toBeNull()
       }
     }
     expect(finals).toBeGreaterThan(0)

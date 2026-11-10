@@ -32,6 +32,12 @@
   overflow-wrap: anywhere;
 }
 
+/* A live line's "so far · as of 2:40 PM:" lead-in — the age is part of the reading, so it stays legible. */
+.af-mu-half-statline-live {
+  font-weight: 700;
+  color: var(--muted);
+}
+
 /*
  * A phone half is ~125px wide and already drops the position line (af-matchup.css, the same
  * `(max-width: 760px)` query). The result stays — it is short and it is the story — the box score goes.

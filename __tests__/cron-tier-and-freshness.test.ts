@@ -292,7 +292,9 @@ describe('allowanceFor — a probe may only RAISE its own allowance', () => {
     const raised = Object.entries(PROBES)
       .filter(([, p]) => (p as { minAllowanceMs?: number }).minAllowanceMs != null)
       .map(([path]) => path)
-    expect(raised).toEqual(['/api/cron/import-news'])
+    // import-player-game-stats (2026-11-09): fires hourly through the NFL windows but its handler gate
+    // works only in a game window or once in 20h, so its allowance stays at the old daily cadence's 48h.
+    expect(raised.sort()).toEqual(['/api/cron/import-news', '/api/cron/import-player-game-stats'])
   })
 })
 

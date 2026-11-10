@@ -47,12 +47,14 @@ import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { writeDailySportFormCache } from "@/lib/projections/dailySportFormStore"
 import { enrichOfficialNhlGameWinningGoals } from "@/lib/nhl-scoring/officialGameWinningGoalsIngest"
 import { enrichOfficialNhlGoalieGameStats } from "@/lib/nhl-scoring/officialGoalieGameStatsIngest"
+import { decideNflStatsRun, loadNflStatsRunFacts } from "@/lib/player-game-stats/nflGameWindowGate"
 import {
   SleeperWeeklyStatsFetcher,
   acquireRunLock,
   findWeeksNeedingWork,
   importPlayerGameStatsForWeek,
   isPlayerGameStatsSchemaReady,
+  LOCK_JOB_NAME,
   loadKnownNflPlayerIds,
   repairWeekFacts,
   resolveIngestableSeason,
@@ -356,6 +358,24 @@ async function handle(req: NextRequest) {
     })
   }
 
+  /*
+   * GAME-WINDOW GATE (2026-11-09). This route now fires hourly through the NFL windows so the week
+   * being played reaches the Matchup board as it happens, not the next morning. Only a fire inside a
+   * game window, or the first fire in 20 hours, does any work; every other fire stops here — before
+   * the sweep, the lock and any provider call. See lib/player-game-stats/nflGameWindowGate.ts.
+   */
+  const explicit =
+    dryRun ||
+    (Number.isFinite(seasonParam) && seasonParam > 2000) ||
+    (Number.isFinite(weekParam) && weekParam >= 1) ||
+    (Number.isFinite(limitParam) && limitParam > 0) ||
+    (Number.isFinite(maxWeeksParam) && maxWeeksParam > 0)
+  const gateNow = new Date()
+  const gate = decideNflStatsRun({ now: gateNow, explicit, ...(explicit ? { latestKickoff: null, lastSuccessAt: null } : await loadNflStatsRunFacts(LOCK_JOB_NAME, gateNow)) })
+  if (!gate.run) {
+    return NextResponse.json({ ok: true, skipped: true, reason: gate.reason, durationMs: Date.now() - startedAt })
+  }
+
   // Stale-state sweep BEFORE lock acquisition: a function killed mid-run must not block the
   // next scheduled run beyond the stale threshold, and its telemetry row is truthfully
   // closed as timed_out rather than lingering as 'running' forever.
@@ -460,6 +480,8 @@ async function handle(req: NextRequest) {
           completedAt: new Date(),
           durationMs: Date.now() - startedAt,
           metadata: toPrismaJsonInput({
+            // Why this fire ran: 'game' (inside an NFL window), 'daily' (the once-a-day floor), 'explicit'.
+            runReason: gate.reason,
             season: resolved.season,
             fallbackSeasonUsed: resolved.fallbackUsed,
             weeksIngested: ingestReports.map((r) => r.week),
