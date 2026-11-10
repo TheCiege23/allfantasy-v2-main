@@ -36,7 +36,7 @@ import { getSeasonReport, getSeasonReportAccess, listSeasonReportVersions } from
 import { deliverPendingSeasonReports, deliverSeasonReport, SEASON_REPORT_CHAT_RECEIPT } from '@/lib/tournament/seasonReportChat'
 import { seasonReportCsv, type SeasonReport } from '@/lib/tournament/seasonReportFormat'
 import { SEASON_REPORT_PUBLISHED } from '@/lib/tournament/seasonReportPublication'
-import { verifyOpeningRecovery, verifyScoringDelay, verifyCorrectionBeforeIssue, verifyIssuedRoomRecovery } from './season-recovery-fixture'
+import { inviteToken, verifyOpeningRecovery, verifyScoringDelay, verifyCorrectionBeforeIssue, verifyIssuedRoomRecovery } from './season-recovery-fixture'
 import type { HistoricalContribution } from '@/lib/tournament/seasonProviderScores'
 
 const owner = 'native-p0-owner'
@@ -135,7 +135,7 @@ async function run(sport: 'NFL' | 'NBA', missDeadline = false) {
   assert.equal((await getSeasonReportAccess(tournamentId, operator))?.canPost, true)
   await assert.rejects(resolveSeasonRecovery(operator, tournamentId, 'foreign-case', 'retain', 'Owner permission required'), { status: 404 })
   const signup = await openSeasonRegistration(owner, tournamentId, publication.id, new Date(Date.now() + hour).toISOString(), 0)
-  const token = new URL(signup.invitePath, 'https://example.invalid').searchParams.get('invite')!
+  const token = inviteToken(signup.invitePath)
   for (const manager of managers) await joinSeasonTournament(manager, tournamentId, token, publication.id, hash)
   const original = await freezeSeasonOpeningField(owner, tournamentId, publication.id)
   assert.deepEqual(await freezeSeasonOpeningField(owner, tournamentId, publication.id), original)

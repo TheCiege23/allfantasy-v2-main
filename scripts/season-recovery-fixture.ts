@@ -13,7 +13,7 @@ import type { SeasonReportSnapshot } from '@/lib/tournament/seasonReportFormat'
 import type { SeasonTournamentDeps } from '@/lib/tournament/seasonTournamentAutomation'
 
 const reason = 'Isolated recovery fixture'
-const inviteToken = (path: string) => new URL(path, 'https://example.invalid').searchParams.get('invite')!
+export const inviteToken = (path: string) => new URLSearchParams(path.split('?')[1]).get('invite')!
 
 export async function verifyOpeningRecovery(input: {
   tournamentId: string; owner: string; publicationId: string; hash: string; token: string; freezeId: string

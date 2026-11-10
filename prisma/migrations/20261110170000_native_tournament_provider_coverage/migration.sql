@@ -1,6 +1,6 @@
 -- Durable evidence from complete provider responses. It has no cache TTL and
 -- cannot be read or written by anonymous/authenticated database roles.
-CREATE TABLE IF NOT EXISTS public.sports_stat_coverage (
+CREATE TABLE IF NOT EXISTS "sports_stat_coverage" (
   sport TEXT NOT NULL,
   source TEXT NOT NULL,
   "periodId" TEXT NOT NULL,
