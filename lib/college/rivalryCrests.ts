@@ -14,6 +14,7 @@ export type RivalryCrestKey =
   | "iron" | "game" | "river" | "egg" | "service" | "apple" | "holy" | "brawl"
   | "flga" | "hate" | "palmetto" | "sunshine" | "lonestar" | "territorial" | "biggame" | "coast"
   | "october" | "oak" | "mitten" | "sunflower" | "cyhawk" | "governor" | "ridge" | "storm"
+  | "valley" | "northwoods" | "oaken" | "barn" | "road" | "magnolia" | "lights" | "wings"
 
 export const RIVALRY_NAMES: Record<RivalryCrestKey, string> = {
   iron: "Iron Bowl",
@@ -40,6 +41,15 @@ export const RIVALRY_NAMES: Record<RivalryCrestKey, string> = {
   governor: "Governor's Cup",
   ridge: "Commonwealth Clash",
   storm: "Miami–Florida State",
+  valley: "Oregon–Oregon State",
+  // Three of these are named for their trophy. The name is text; the crest never draws the trophy.
+  northwoods: "Paul Bunyan's Axe",
+  oaken: "Old Oaken Bucket",
+  barn: "Floyd of Rosedale",
+  road: "Tobacco Road",
+  magnolia: "Magnolia Bowl",
+  lights: "LSU–Alabama",
+  wings: "Air Force–Navy",
 }
 
 const SCHOOLS: Record<string, string[]> = {
@@ -84,6 +94,16 @@ const SCHOOLS: Record<string, string[]> = {
   virginiaTech: ["Virginia Tech Hokies", "Virginia Tech"],
   // ⚠ Not "Miami (OH) RedHawks": exact names keep the MAC school off this crest.
   miami: ["Miami Hurricanes", "Miami"],
+  oregon: ["Oregon Ducks", "Oregon"],
+  oregonState: ["Oregon State Beavers", "Oregon State"],
+  wisconsin: ["Wisconsin Badgers", "Wisconsin"],
+  minnesota: ["Minnesota Golden Gophers", "Minnesota"],
+  indiana: ["Indiana Hoosiers", "Indiana"],
+  purdue: ["Purdue Boilermakers", "Purdue"],
+  duke: ["Duke Blue Devils", "Duke"],
+  unc: ["North Carolina Tar Heels", "North Carolina", "UNC"],
+  lsu: ["LSU Tigers", "LSU"],
+  airForce: ["Air Force Falcons", "Air Force"],
 }
 
 const RIVALRIES: Array<[RivalryCrestKey, string, string]> = [
@@ -111,6 +131,14 @@ const RIVALRIES: Array<[RivalryCrestKey, string, string]> = [
   ["governor", "kentucky", "louisville"],
   ["ridge", "virginia", "virginiaTech"],
   ["storm", "miami", "floridaState"],
+  ["valley", "oregon", "oregonState"],
+  ["northwoods", "wisconsin", "minnesota"],
+  ["oaken", "indiana", "purdue"],
+  ["barn", "iowa", "minnesota"],
+  ["road", "duke", "unc"],
+  ["magnolia", "lsu", "oleMiss"],
+  ["lights", "lsu", "alabama"],
+  ["wings", "airForce", "navy"],
 ]
 
 const norm = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase()
