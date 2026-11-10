@@ -19,6 +19,7 @@ const TYPE_ADJECTIVE: Partial<Record<LeagueTypeId, string>> = {
   best_ball: 'Best Ball',
   guillotine: 'Guilly',
   survivor: 'Survivor',
+  survivor_guillotine: 'Survivor Guilly',
   tournament: 'Tournament',
   devy: 'Devy',
   c2c: 'Campus to Canton',

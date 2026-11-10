@@ -86,6 +86,14 @@ export const ACCENTS: Record<LeagueTypeId, AccentTone> = {
     ring: 'ring-rose-400/60',
     glow: 'shadow-[0_0_40px_-8px_rgba(244,63,94,0.55)]',
   },
+  survivor_guillotine: {
+    label: 'Amber',
+    text: 'text-amber-300',
+    hex: '#F59E0B',
+    hexSoft: '#78350F',
+    ring: 'ring-amber-400/60',
+    glow: 'shadow-[0_0_40px_-8px_rgba(245,158,11,0.55)]',
+  },
   salary_cap: {
     label: 'Emerald Gold',
     text: 'text-emerald-200',
@@ -260,6 +268,12 @@ export const LEAGUE_TYPE_MEDIA: Record<string, MediaAsset> = {
     fallback: '/league-type-c2c-intro.mp4',
   },
   guillotine: {
+    video: '/media/create-league/concept/videos/Guillotine.mp4',
+    poster: '/media/create-league/concept/thumbnails/Guillotine.png',
+    fallback: '/league-type-guillotine-intro.mp4',
+  },
+  // No dedicated clip yet: Survivor Guilly shares Guilly's chop footage.
+  survivor_guillotine: {
     video: '/media/create-league/concept/videos/Guillotine.mp4',
     poster: '/media/create-league/concept/thumbnails/Guillotine.png',
     fallback: '/league-type-guillotine-intro.mp4',

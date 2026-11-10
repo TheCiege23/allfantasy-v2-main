@@ -291,6 +291,7 @@ export function getConceptDefaultNotes(leagueType: LeagueTypeId): string {
     best_ball: 'Weekly optimal lineup scoring; draft modes vary by sport.',
     guillotine: 'Weekly elimination until one champion remains.',
     survivor: 'Tribe-based elimination brackets.',
+    survivor_guillotine: 'Tribes compete for immunity; the lowest score is chopped each period.',
     zombie: 'Thematic elimination league format.',
     tournament: 'Large participant pool split into feeder leagues.',
     salary_cap: 'Cap-based roster construction.',
