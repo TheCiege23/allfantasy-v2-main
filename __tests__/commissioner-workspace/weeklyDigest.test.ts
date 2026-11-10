@@ -27,6 +27,7 @@ beforeEach(() => {
     openCases: vi.fn(async () => 2),
     audits: vi.fn(async () => [{ gapPct: 12 }, { gapPct: -38.4 }]),
     claim: vi.fn(async () => true),
+    language: vi.fn(async () => null),
     send: vi.fn(async () => undefined),
   }
 })
@@ -48,7 +49,7 @@ describe('what it says', () => {
   it('rolls every waiting item into one notification for the commissioner', async () => {
     expect(await run()).toMatchObject({ sent: 1, quiet: 0 })
     const arg = deps.send.mock.calls[0][0]
-    expect(arg).toMatchObject({ userId: 'commish', leagueId: 'L1', leagueName: 'Dynasty Dads' })
+    expect(arg).toMatchObject({ userId: 'commish', leagueId: 'L1', leagueName: 'Dynasty Dads', lang: 'en' })
     expect(arg.lines).toEqual([
       '2 integrity cases are open for review.',
       '1 rule change is waiting for your approval.',
@@ -97,5 +98,32 @@ describe('once a week, never twice', () => {
       return { id, name: 'Dynasty Dads', userId: 'commish', settings: busySettings }
     })
     expect(await run()).toMatchObject({ sent: 1, failed: 1 })
+  })
+})
+
+describe('in the commissioner\u2019s language', () => {
+  it('a Spanish-speaking commissioner gets the digest in Spanish, any Spanish locale', async () => {
+    deps.language.mockResolvedValue('es-MX')
+    await run()
+    const arg = deps.send.mock.calls[0][0]
+    expect(arg.lang).toBe('es')
+    expect(arg.lines).toEqual([
+      'Hay 2 casos de integridad abiertos para revisar.',
+      '1 cambio de reglas espera tu aprobación.',
+      '1 mánager dice que pagó la cuota. Confírmalo o haz seguimiento.',
+      'Hay una encuesta abierta para la hora del draft. Fija una hora cuando la liga haya votado.',
+      'Se auditaron 2 intercambios esta semana. La mayor diferencia de valor fue de 38%.',
+    ])
+    expect(deps.language).toHaveBeenCalledWith('commish')
+  })
+
+  it('no stored language, or one the digest does not have, is English', async () => {
+    for (const preferred of [null, 'fr']) {
+      deps.send.mockClear()
+      deps.language.mockResolvedValue(preferred)
+      await run()
+      expect(deps.send.mock.calls[0][0]).toMatchObject({ lang: 'en' })
+      expect(deps.send.mock.calls[0][0].lines[0]).toBe('2 integrity cases are open for review.')
+    }
   })
 })
