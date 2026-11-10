@@ -10,7 +10,8 @@ import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineups'
 import { TriageLineupLinks } from '@/components/core-app/player-finder/TriageLineupLinks'
-import { chipDetail, type GameDayTriage as Triage } from '@/lib/core-app/gameDayTriage'
+import { chipDetail, splitRosterAges, type GameDayTriage as Triage } from '@/lib/core-app/gameDayTriage'
+import { gamePlanMessages } from '@/lib/core-app/messages/gamePlan'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { lockState } from '@/lib/core-app/lineupLock'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
@@ -43,6 +44,8 @@ export const FINDER_LIST_PREVIEW = 5
 export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionState<Triage>; nowIso: string; leagueCount: number }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(playerFinderMessages)
+  /* The stale-league note says exactly what War Room's Game Plan says, in both languages. */
+  const gp = useMessages(gamePlanMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const [showAll, setShowAll] = useState(false)
   if (!state.available) {
@@ -61,6 +64,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
   const unsupported = state.data.unsupportedLeagues ?? 0
   const weekLabel = week ? m.triageWeek(week.week) : m.triageThisWeek
   const weekKey = week ? `${week.season}-${week.week}` : 'current'
+  const ages = splitRosterAges(state.data, nowIso)
 
   return (
     <section className="af-card af-pf-triage" aria-labelledby="af-pf-triage-h" data-count={rows.length}>
@@ -74,7 +78,25 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
           {unsupported > 0 ? m.triageUnsupported(unsupported) : ''} · {weekLabel}
         </span>
       </header>
-      <RefreshLineups asOf={state.data.rostersAsOf ?? null} nowIso={nowIso} />
+      {/*
+        ⚠ Dated by the leagues that are syncing, not by the single oldest one (2026-11-09): one stale
+        league made this read "Lineups as of 53d ago" over 47 fresh ones. Stale leagues are named
+        below with their age, the same rule and words as Game Plan (splitRosterAges).
+      */}
+      <RefreshLineups asOf={ages.stampAsOf} nowIso={nowIso} />
+      {ages.stale.length > 0 && ages.freshCount > 0 ? (
+        <p className="af-pf-triage-warn af-pf-triage-stale" role="note">
+          {gp.staleNote}{' '}
+          {ages.stale.map((a, i) => (
+            <span key={a.leagueId}>
+              {i > 0 ? ', ' : ''}
+              <Link href={`/core/sync?league=${encodeURIComponent(a.leagueId)}`}>{a.leagueName}</Link>{' '}
+              <span className="af-num">({gp.daysAgo(a.days)})</span>
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
       {notRead > 0 ? (
         <p className="af-pf-triage-warn" role="note">
           {m.triageNotRead(notRead)}
