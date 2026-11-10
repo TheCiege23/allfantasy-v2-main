@@ -10,10 +10,12 @@ async function lockPlayerRights(db: RightsDb, leagueId: string, playerId: string
 }
 
 function draftRightId(pick: DraftCollegePick): string | null {
-  if (!/^espn:ncaab:\d+$/.test(pick.playerId ?? '') || !['c2c_college', 'devy_pick'].includes(pick.assetType ?? '')) return null
+  if (!pick.playerId || !['c2c_college', 'devy_pick'].includes(pick.assetType ?? '')) return null
   const data = pick.pickMetadata && typeof pick.pickMetadata === 'object' && !Array.isArray(pick.pickMetadata) ? pick.pickMetadata as Record<string, unknown> : {}
-  if (typeof data.draftCollegeRightsId !== 'string' || !data.draftCollegeRightsId) throw Object.assign(new Error('This college pick has no verifiable draft ownership record.'), { status: 409 })
-  return data.draftCollegeRightsId
+  if (typeof data.draftCollegeRightsId === 'string' && data.draftCollegeRightsId) return data.draftCollegeRightsId
+  // Older NFL picks did not store a transactional rights id.
+  if (!/^espn:ncaab:\d+$/.test(pick.playerId)) return null
+  throw Object.assign(new Error('This college pick has no verifiable draft ownership record.'), { status: 409 })
 }
 
 /** Draft rights are tied to a specific pick; never alter an unrelated or transferred right. */
@@ -25,11 +27,11 @@ export async function removeDraftCollegeRight(db: RightsDb, leagueId: string, pi
   if (deleted.count !== 1) throw Object.assign(new Error('College ownership changed; refresh the draft before editing this pick.'), { status: 409 })
 }
 
-export async function createDraftCollegeRight(db: RightsDb, input: { leagueId: string; rosterId: string; playerId: string; assetType: NbaCollegeAssetType }): Promise<string> {
+export async function createDraftCollegeRight(db: RightsDb, input: { leagueId: string; rosterId: string; playerId: string; assetType: NbaCollegeAssetType; seasonYear?: number }): Promise<string> {
   await lockPlayerRights(db, input.leagueId, input.playerId)
   const found = await db.devyRights.findFirst({ where: { leagueId: input.leagueId, devyPlayerId: input.playerId }, select: { id: true } })
   if (found) throw Object.assign(new Error('College player already has rights in this league.'), { status: 409 })
-  const right = await db.devyRights.create({ data: { leagueId: input.leagueId, rosterId: input.rosterId, devyPlayerId: input.playerId, state: input.assetType === 'c2c_college' ? 'COLLEGE_ACTIVE' : 'NCAA_DEVY_ACTIVE', seasonYear: resolveDevySeasonYear(), sourceConfidence: 100 }, select: { id: true } })
+  const right = await db.devyRights.create({ data: { leagueId: input.leagueId, rosterId: input.rosterId, devyPlayerId: input.playerId, state: input.assetType === 'c2c_college' ? 'COLLEGE_ACTIVE' : 'NCAA_DEVY_ACTIVE', seasonYear: input.seasonYear ?? resolveDevySeasonYear(), sourceConfidence: 100 }, select: { id: true } })
   return right.id
 }
 

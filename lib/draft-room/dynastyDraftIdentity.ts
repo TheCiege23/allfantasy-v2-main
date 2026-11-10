@@ -10,7 +10,9 @@
  * year). Nothing here is inferred from player data.
  */
 
-export type DynastyDraftKind = 'rookie' | 'startup' | 'supplemental' | 'dispersal'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
+
+export type DynastyDraftKind = 'combined' | 'rookie' | 'startup' | 'supplemental' | 'dispersal'
 
 /**
  * Which dynasty draft this is. `null` for a non-dynasty league and for an imported roster
@@ -27,6 +29,7 @@ export function resolveDynastyDraftKind(
   if (!isDynasty) return null
   const mode = String(draftModeLabel ?? '').trim().toLowerCase()
   if (mode === 'imported_rosters') return null
+  if (mode === ANNUAL_C2C_DRAFT) return 'combined'
   if (mode === 'rookie') return 'rookie'
   if (mode === 'supplemental') return 'supplemental'
   if (mode === 'dispersal') return 'dispersal'
@@ -51,10 +54,10 @@ export function formatDynastyDraftKindLabel(
   t: (key: string) => string,
 ): string | null {
   if (!kind) return null
-  if (kind === 'rookie') {
+  if (kind === 'rookie' || kind === 'combined') {
     return seasonYear != null
-      ? t('draftRoom.dynasty.kind.rookieWithYear').replace('{{year}}', String(seasonYear))
-      : t('draftRoom.dynasty.kind.rookie')
+      ? t(`draftRoom.dynasty.kind.${kind}WithYear`).replace('{{year}}', String(seasonYear))
+      : t(`draftRoom.dynasty.kind.${kind}`)
   }
   return t(`draftRoom.dynasty.kind.${kind}`)
 }

@@ -8,6 +8,7 @@ import { loadNcaafClassYears, loadNcaafRedraftBase } from './ncaafRedraftContext
 import { getC2CPhaseConfig } from '@/lib/merged-devy-c2c/draft/C2CDraftOrchestration'
 import { devyOptionValue } from '@/lib/devy/devyOptionValue'
 import { loadHeldDevyPlayers } from './leagueAssetPolicy'
+import { readOpenAnnualC2CDraft } from './openAnnualC2CDraft'
 import { combinedDraftPickValue } from './combinedC2CDraftValue'
 import { resolveNcaafRosteredPlayer } from './ncaafRedraftValue'
 import { DYNASTY_SEASONS, FULL_SEASON_GAMES, FUTURE_DISCOUNT } from './sportDynastyValue'
@@ -73,13 +74,15 @@ export async function loadFootballCampusTradeEvidence(
 
   const phase = getC2CPhaseConfig(config, 'merged_rookie_college')
   let combinedBoard: Promise<number[]> | undefined
+  let openDraft: ReturnType<typeof readOpenAnnualC2CDraft> | undefined
   return {
     season: window.season,
     weeks: window.weeks,
     separate,
     async combinedPick(pick: Extract<TradeAssetInput, { kind: 'pick' }>) {
       if (!config.mergedRookieCollegeDraft || separate || (phase.draftType !== 'snake' && phase.draftType !== 'linear') || optionFactor == null) return null
-      const draftYear = chart.pickSlots?.draftYear ?? window.season + 1
+      const open = await (openDraft ??= readOpenAnnualC2CDraft(league.id).catch(() => null))
+      const draftYear = open?.year ?? chart.pickSlots?.draftYear ?? window.season + 1
       const canton = storedRookieSlotValues(chart, draftYear)
       if (!canton.length) return null
       const campus = await (combinedBoard ??= (async () => {
@@ -94,7 +97,8 @@ export async function loadFootballCampusTradeEvidence(
           return option == null ? [] : [points * FULL_SEASON_GAMES.NCAAF * marketRate * campusWeight + option * optionFactor]
         })
       })())
-      return combinedDraftPickValue({ pick, campus, canton, teams: chart.leagueSize, nextDraftYear: draftYear, rounds: phase.rounds })
+      return combinedDraftPickValue({ pick, campus, canton, teams: pick.year === open?.year ? open.teams : chart.leagueSize,
+        nextDraftYear: draftYear, rounds: pick.year === open?.year ? open.rounds : phase.rounds })
     },
     price(asset: Extract<TradeAssetInput, { kind: 'player' }>, line: TradeGradeLine): number | null {
       const player = resolveNcaafRosteredPlayer({ ...asset, name: asset.name ?? line.name }, rostered)

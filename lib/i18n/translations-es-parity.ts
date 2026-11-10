@@ -5138,6 +5138,8 @@ export const translationsEsParity: Record<string, string> = {
   "draftRoom.tradeHistory.round": "Ronda {{round}}",
   "draftRoom.tradeHistory.unknownOwner": "Desconocido",
   "draftRoom.tradeHistory.footer": "Solo lectura · abre el menú de una selección para proponer nuevos intercambios",
+  "draftRoom.dynasty.kind.combined": "Draft combinado de Campus a Canton",
+  "draftRoom.dynasty.kind.combinedWithYear": "Draft combinado de Campus a Canton · {{year}}",
   "draftRoom.dynasty.kind.rookie": "Draft de novatos",
   "draftRoom.dynasty.kind.rookieWithYear": "Draft de novatos · {{year}}",
   "draftRoom.dynasty.kind.startup": "Draft inicial",

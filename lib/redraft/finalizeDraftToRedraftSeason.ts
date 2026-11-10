@@ -9,6 +9,7 @@ import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceS
 import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
 import { maxPlayoffStartWeekFor } from './regularSeasonCap'
 import { prisma } from '@/lib/prisma'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
@@ -43,6 +44,7 @@ const EMPTY_SUMMARY: RedraftDraftFinalizationSummary = {
 }
 
 type DraftPickForRedraftSync = {
+  assetType?: string | null
   id: string
   overall: number
   round: number
@@ -548,6 +550,7 @@ export async function syncCompletedDraftToRedraftSeason(
 
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
+      (session.draftModeLabel === ANNUAL_C2C_DRAFT && pick.assetType === 'c2c_college') ||
       isDraftPickSkipped(pick) ||
       isDraftPickRowEmpty({
         playerName: pick.playerName,

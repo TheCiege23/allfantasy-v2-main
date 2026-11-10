@@ -11,10 +11,12 @@ import { afItemAsset } from '@/lib/decision-os/trade/tradeRecord'
 import { extractPickMentions } from '@/lib/chimmy/tradePickMentions'
 import { parsePickLabel } from '@/lib/parsePickLabel'
 import { combinedDraftPickValue } from '@/lib/decision-os/trade/combinedC2CDraftValue'
+import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from '@/lib/live-draft-engine/annualC2CDraft'
+import { draftPickGradeAsset } from '@/lib/live-draft-engine/draftPickTradeGrade'
 import { mirrorTradeGrade } from '@/lib/decision-os/trade/tradeGrade'
 
-const mocks = vi.hoisted(() => ({ config: vi.fn(), rosters: vi.fn(), footballBoard: vi.fn(), footballClasses: vi.fn(), devyRights: vi.fn(), devyPlayers: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { roster: { findMany: mocks.rosters }, devyRights: { findMany: mocks.devyRights }, devyPlayer: { findMany: mocks.devyPlayers } } }))
+const mocks = vi.hoisted(() => ({ config: vi.fn(), liveDraft: vi.fn(), rosters: vi.fn(), footballBoard: vi.fn(), footballClasses: vi.fn(), devyRights: vi.fn(), devyPlayers: vi.fn() }))
+vi.mock('@/lib/prisma', () => ({ prisma: { draftSession: { findFirst: mocks.liveDraft }, roster: { findMany: mocks.rosters }, devyRights: { findMany: mocks.devyRights }, devyPlayer: { findMany: mocks.devyPlayers } } }))
 vi.mock('@/lib/merged-devy-c2c/C2CLeagueConfig', () => ({ getC2CConfig: mocks.config }))
 vi.mock('@/lib/decision-os/trade/ncaafRedraftContext', async (load) => ({
   ...await load<typeof import('@/lib/decision-os/trade/ncaafRedraftContext')>(),
@@ -50,6 +52,7 @@ const grade = () => createSportPointsGrader({ league: native, sport: 'NBA' }, {
 })!
 
 beforeEach(() => {
+  mocks.liveDraft.mockResolvedValue(null)
   mocks.rosters.mockResolvedValue([{ playerData: { lineup_sections: { devy: ranks.map((p) => p.playerId) } } }])
   mocks.config.mockResolvedValue({ standingsModel: 'unified', collegeScoringSystem: 'points', mergedRookieCollegeDraft: false, collegeDraftRounds: 3, rookieDraftRounds: 3 })
 })
@@ -106,6 +109,24 @@ it('prices a combined NBA pick from both draft pools in a shared standings leagu
   })
   mocks.config.mockResolvedValue({ ...config, standingsModel: 'separate' })
   expect(await grade().grade([pick('combined')], [p(0)])).toMatchObject({ graded: false })
+})
+
+it('prices NBA picks in the stored annual draft year using its seated slots', async () => {
+  const draft = { draftModeLabel: ANNUAL_C2C_DRAFT, c2cConfig: { annualSeason: 2027 }, rounds: 5, teamCount: 4 }
+  mocks.liveDraft.mockResolvedValue(draft)
+  mocks.config.mockResolvedValue({ standingsModel: 'unified', collegeScoringSystem: 'points', mergedRookieCollegeDraft: true, rookieDraftType: 'linear', collegeDraftRounds: 3, rookieDraftRounds: 2 })
+  const loadBase = vi.fn(async ({ sport }: { sport: string }) => {
+    const ctx = sport === 'NBA' ? nba : campus
+    return { ok: true as const, ctx: { ...ctx, window: { ...ctx.window, season: 2027 } } }
+  })
+  const grader = createSportPointsGrader({ league: { ...native, season: 2027, status: 'in_season' }, sport: 'NBA' }, { loadBase })!
+  const quote = (slot: number) => draftPickGradeAsset({ season: annualC2CDraftSeason(draft)!, round: 1, slot, overall: slot, teamCount: 4, combined: true })
+  const result = await grader.grade([quote(1)], [quote(4)])
+  expect(result, JSON.stringify(result)).toMatchObject({
+    graded: true,
+    lines: [expect.objectContaining({ source: 'nba-c2c-combined-pick' }), expect.objectContaining({ source: 'nba-c2c-combined-pick' })],
+  })
+  expect(loadBase).toHaveBeenCalledWith(expect.objectContaining({ sport: 'NBA', league: expect.objectContaining({ season: 2027, status: 'pre_draft' }) }))
 })
 
 it('quotes an exact combined slot from both pools and discounts future seasons', () => {
@@ -172,6 +193,20 @@ it('prices a numbered NFL combined pick through the saved chart and verified fre
   const inputs: Parameters<typeof resolveAssets>[1] = { effectiveSport: 'NFL', nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget, dataGaps: [], fcPlayers: chart.fcPlayers }
   expect((await resolveAssets([first], { ...inputs, combinedPickQuote })).priced[0]).toMatchObject({ type: 'pick', value: amount, name: 'Combined 2027 1st' })
   expect((await resolveAssets([first], inputs)).priced[0]).toMatchObject({ unpriced: true })
+})
+
+it('prices NFL live annual slots in the board year even when the market projects the following draft', async () => {
+  const draft = { draftModeLabel: ANNUAL_C2C_DRAFT, c2cConfig: { annualSeason: 2027 }, rounds: 5, teamCount: 8 }
+  mocks.liveDraft.mockResolvedValue(draft)
+  mocks.config.mockResolvedValue({ standingsModel: 'unified', collegeScoringSystem: 'ppr', mergedRookieCollegeDraft: true, rookieDraftType: 'snake', collegeDraftRounds: 3, rookieDraftRounds: 2 })
+  const rostered = footballBoard(12)
+  mocks.devyRights.mockResolvedValue(rostered.map(p => ({ devyPlayerId: p.rosterPlayerId })))
+  mocks.devyPlayers.mockResolvedValue(rostered.map(p => ({ id: p.rosterPlayerId, name: p.name, position: p.position, recruitingStars: 5, recruitingComposite: 0.99, draftEligibleYear: 2029 })))
+  const chart = { ...nflChart(), pickSlots: { draftYear: 2028, oddsByTeam: new Map(), weeksLeft: 0 } }
+  const combinedPickQuote = createFootballCombinedPickQuote(native)(chart)
+  const first = draftPickGradeAsset({ season: annualC2CDraftSeason(draft)!, round: 1, slot: 1, overall: 1, teamCount: 8, combined: true })
+  expect(await combinedPickQuote(first)).toBeGreaterThanOrEqual(1200)
+  expect(await combinedPickQuote({ ...first, year: 2026 })).toBeNull()
 })
 
 it('keeps football Campus and Canton separate when both sides have measured prices', async () => {

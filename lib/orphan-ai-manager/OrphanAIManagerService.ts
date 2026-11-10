@@ -20,6 +20,7 @@ import type { LeagueSport } from '@prisma/client'
 import { getAssignmentForRoster, parseCommissionerAiManagers } from '@/lib/commissioner-ai-draft-manager'
 import { mapAiStyleToCpuMode } from '@/lib/commissioner-ai-draft-manager/mapAiStyle'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 
 export type AiManagerAuditAction = 'draft_pick' | 'trade_accept' | 'trade_reject' | 'trade_counter' | 'trade_send'
@@ -228,12 +229,23 @@ export async function executeDraftPickForOrphan(
 
   const draftedNames = new Set(snapshot.picks.map((p) => p.playerName))
   const sport = (league.sport as LeagueSport) ?? 'NFL'
-  const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 })
   const sessionPool = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { playerPool: true },
+    select: { playerPool: true, draftModeLabel: true },
   })
+  if (sessionPool?.draftModeLabel === ANNUAL_C2C_DRAFT) {
+    const { submitBestAvailableAutopickForExpiredTimer } = await import('@/lib/live-draft-engine/autopickBestAvailableSubmit')
+    const overall = snapshot.currentPick.overall
+    const result = await submitBestAvailableAutopickForExpiredTimer(leagueId, currentRosterId, input.expectedOverall ?? overall)
+    if (!result.ok) return { success: false, error: 'No eligible pick could be made on the combined draft board.' }
+    return {
+      success: true,
+      pick: { playerName: result.pick.playerName, position: result.pick.position, overall, round: snapshot.currentPick.round, slot: snapshot.currentPick.slot },
+      reason: result.pick.reason,
+    }
+  }
+  const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 })
   // Pick validation refuses an ineligible `auto` pick in a rookies-only / veterans-only draft.
   const eligiblePool = await filterCandidatesForPlayerPool(leagueId, sessionPool?.playerPool, pool, (p) => ({
     playerName: p.full_name,

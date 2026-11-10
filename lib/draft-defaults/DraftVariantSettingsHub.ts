@@ -1,3 +1,4 @@
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 /**
  * Unified Draft Variant Settings Hub.
@@ -274,7 +275,7 @@ export async function updateSessionVariant(
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, rounds: true, keeperConfig: true, devyConfig: true, c2cConfig: true, auctionBudgetPerTeam: true, draftType: true },
+    select: { id: true, status: true, rounds: true, keeperConfig: true, devyConfig: true, c2cConfig: true, auctionBudgetPerTeam: true, draftType: true, draftModeLabel: true },
   })
   if (!session || session.status !== 'pre_draft') return
 
@@ -298,7 +299,7 @@ export async function updateSessionVariant(
       ? { enabled: true, devyRounds: sanitizeRoundList(patch.devyConfig.devyRounds, session.rounds) }
       : { enabled: false, devyRounds: [] }
   }
-  if (patch.c2cConfig !== undefined) {
+  if (patch.c2cConfig !== undefined && session.draftModeLabel !== ANNUAL_C2C_DRAFT) {
     updatePayload.c2cConfig = patch.c2cConfig && patch.c2cConfig.enabled
       ? { enabled: true, collegeRounds: sanitizeRoundList(patch.c2cConfig.collegeRounds, session.rounds) }
       : { enabled: false, collegeRounds: [] }
@@ -321,15 +322,16 @@ async function syncConfigToSession(leagueId: string, config: Partial<DraftRoomCo
     prisma.draftSession.findFirst({
       where: { leagueId },
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
-      select: { id: true, status: true },
+      select: { id: true, status: true, draftModeLabel: true },
     }),
     getDraftUISettingsForLeague(leagueId),
   ])
   if (!session || session.status !== 'pre_draft') return
 
   const data: Record<string, unknown> = { updatedAt: new Date() }
-  if (config.draft_type !== undefined) data.draftType = config.draft_type
-  if (config.rounds !== undefined) data.rounds = Math.max(1, Math.min(50, Math.round(config.rounds)))
+  const combined = session.draftModeLabel === ANNUAL_C2C_DRAFT
+  if (!combined && config.draft_type !== undefined) data.draftType = config.draft_type
+  if (!combined && config.rounds !== undefined) data.rounds = Math.max(1, Math.min(50, Math.round(config.rounds)))
   const prefersSlowTimer = uiSettings.timerMode === 'soft_pause' || uiSettings.timerMode === 'overnight_pause'
   if (config.timer_seconds !== undefined || config.slow_timer_seconds !== undefined) {
     const preferredTimerSeconds = prefersSlowTimer
@@ -339,7 +341,7 @@ async function syncConfigToSession(leagueId: string, config: Partial<DraftRoomCo
       data.timerSeconds = preferredTimerSeconds == null ? null : Math.max(0, Math.min(CUSTOM_TIMER_MAX_SECONDS, Math.round(preferredTimerSeconds)))
     }
   }
-  if (config.third_round_reversal !== undefined) data.thirdRoundReversal = config.third_round_reversal
+  if (!combined && config.third_round_reversal !== undefined) data.thirdRoundReversal = config.third_round_reversal
   if (Object.keys(data).length <= 1) return
 
   await prisma.draftSession.update({

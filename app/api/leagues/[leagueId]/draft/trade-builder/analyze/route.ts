@@ -19,6 +19,7 @@ import { buildDraftPickTradeStructuredAnalysis } from '@/lib/live-draft-engine/d
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getCanonicalDraftState } from '@/lib/draft/getCanonicalDraftState'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
+import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from '@/lib/live-draft-engine/annualC2CDraft'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import {
@@ -148,15 +149,18 @@ export async function POST(
    * offer: `gradeDeal`, no receipt written per tweak. `viewerSide: false` keeps roster-need reads off
    * a live-draft request path — need never changes the letter anyway.
    */
-  const pickSeason = new Date(draftSession.startedAt ?? draftSession.createdAt).getUTCFullYear()
-  const tradeGrade: DraftPickTradeGrade = isRookieDraft(draftSession)
+  const combined = draftSession.draftModeLabel === ANNUAL_C2C_DRAFT
+  const pickSeason = combined ? annualC2CDraftSeason(draftSession) : new Date(draftSession.startedAt ?? draftSession.createdAt).getUTCFullYear()
+  const tradeGrade: DraftPickTradeGrade = pickSeason == null
+    ? { graded: false, reason: 'This combined draft has no verified season.' }
+    : isRookieDraft(draftSession)
     ? await gradeDeal(await createLeagueTradeGrader({ leagueId, userId }).catch(() => null), {
         give: {
-          assets: [draftPickGradeAsset({ season: pickSeason, round: giveRound, overall: giveOverall, slot: giveSlot, teamCount: draftSession.teamCount })],
+          assets: [draftPickGradeAsset({ season: pickSeason, round: giveRound, overall: giveOverall, slot: giveSlot, teamCount: draftSession.teamCount, combined })],
           unpriceable: [],
         },
         get: {
-          assets: [draftPickGradeAsset({ season: pickSeason, round: receiveRound, overall: receiveOverall, slot: receiveSlot, teamCount: draftSession.teamCount })],
+          assets: [draftPickGradeAsset({ season: pickSeason, round: receiveRound, overall: receiveOverall, slot: receiveSlot, teamCount: draftSession.teamCount, combined })],
           unpriceable: [],
         },
         viewerSide: false,

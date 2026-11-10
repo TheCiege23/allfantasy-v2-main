@@ -22,6 +22,9 @@ import { getManagerColorBySeed } from '@/lib/draft-room'
 import type { DraftSessionSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { isDraftPickRowEmpty, PICK_EDITOR_EMPTY_POSITION } from '@/lib/live-draft-engine/draftPickEmpty'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from '../annualC2CDraft'
+import { resolveAnnualC2CPick } from '../annualC2CPickEligibility'
+import { loadLeagueRosteredPlayers, rosteredHolder } from '../rosteredPlayerGuard'
 import { verifyNcaabCollegeDraftPick } from '@/lib/devy/verifyNcaabDraftPick'
 import { createDraftCollegeRight, removeDraftCollegeRight, transferDraftCollegeRight, type NbaCollegeAssetType } from '@/lib/devy/nbaDraftRights'
 
@@ -151,6 +154,7 @@ async function runSpecialtyAndPoolValidation(params: {
   /** Same minimal delegate shape as `validateDevyEligibilityAsync` / `validateC2CEligibilityAsync` in PickValidation. */
   tx: { devyPlayer: { findFirst: (args: any) => Promise<any> } }
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (params.session.draftModeLabel === ANNUAL_C2C_DRAFT) return { ok: true }
   const roundForEligibility = Math.ceil(params.overall / params.teamCount) || 1
   const rawC2c = params.session.c2cConfig
   const c2cConfig =
@@ -269,8 +273,18 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
     const teamCount = session.teamCount
     const picks = session.picks as unknown as PickRow[]
     const leagueSport = session.league?.sport ?? session.sportType ?? 'NFL'
+    const annualCombined = session.draftModeLabel === ANNUAL_C2C_DRAFT
+    const annualSeason = annualC2CDraftSeason(session) ?? undefined
 
     const resolveCollegeAsset = async (playerId: string | null | undefined, playerName: string, position: string): Promise<NbaCollegeAssetType | null> => {
+      if (annualCombined) {
+        const player = { playerId, playerName, position }
+        const asset = await resolveAnnualC2CPick(tx, params.leagueId, leagueSport, player)
+        if (!asset || (asset === 'player' && rosteredHolder(await loadLeagueRosteredPlayers(params.leagueId), player))) {
+          throw Object.assign(new Error('Select an available, verified Canton rookie or Campus player from the combined draft board.'), { status: 400 })
+        }
+        return asset === 'c2c_college' ? asset : null
+      }
       if (!String(playerId ?? '').startsWith('espn:ncaab:')) return null
       if (String(leagueSport).toUpperCase() !== 'NBA') throw Object.assign(new Error('This college player is not eligible in this league.'), { status: 400 })
       const [c2cConfig, devyConfig, verified] = await Promise.all([
@@ -442,10 +456,11 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           throw Object.assign(new Error('Player is already drafted in this session'), { status: 409 })
         }
 
+        const collegeAsset = await resolveCollegeAsset(params.playerId, playerName, position)
         const others = picks
-          .filter((p) => p.id !== pick.id && !isDraftPickRowEmpty(p))
+          .filter((p) => p.id !== pick.id && !isDraftPickRowEmpty(p) && (!annualCombined || p.assetType !== 'c2c_college'))
           .map((p) => ({ rosterId: p.rosterId, position: p.position }))
-        const rosterFit = await validateRosterFitForDraftPick({
+        const rosterFit = annualCombined && collegeAsset ? { valid: true as const, error: undefined } : await validateRosterFitForDraftPick({
           leagueId: params.leagueId,
           rosterId: pick.rosterId,
           existingPicks: others,
@@ -461,8 +476,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           }
         }
 
-        const collegeAsset = await resolveCollegeAsset(params.playerId, playerName, position)
-        const editedAssetType = collegeAsset ?? (String(leagueSport).toUpperCase() === 'NBA' && /^espn:ncaab:/.test(pick.playerId ?? '') ? 'player' : pick.assetType ?? 'player')
+        const editedAssetType = collegeAsset ?? (annualCombined ? 'player' : String(leagueSport).toUpperCase() === 'NBA' && /^espn:ncaab:/.test(pick.playerId ?? '') ? 'player' : pick.assetType ?? 'player')
         const spec = await runSpecialtyAndPoolValidation({
           leagueId: params.leagueId,
           leagueSport,
@@ -492,7 +506,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         })
 
         await removeDraftCollegeRight(tx, params.leagueId, pick)
-        const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: pick.rosterId, playerId: params.playerId!, assetType: collegeAsset }) : null
+        const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: pick.rosterId, playerId: params.playerId!, assetType: collegeAsset, ...(annualSeason ? { seasonYear: annualSeason } : {}) }) : null
         const metadata = pick.pickMetadata && typeof pick.pickMetadata === 'object' && !Array.isArray(pick.pickMetadata) ? { ...pick.pickMetadata as Record<string, unknown> } : {}
         delete metadata.draftCollegeRightsId
         if (rightId) metadata.draftCollegeRightsId = rightId
@@ -577,8 +591,9 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
             : resolvedOwner?.displayName) ?? displayNameForRoster(slotOrder, onClockRosterId)
         const slotOriginalRosterId = slotOrder.find((s) => s.slot === slot)?.rosterId ?? onClockRosterId
 
-        const others = picks.filter((p) => !isDraftPickRowEmpty(p)).map((p) => ({ rosterId: p.rosterId, position: p.position }))
-        const rosterFit = await validateRosterFitForDraftPick({
+        const collegeAsset = await resolveCollegeAsset(params.playerId, playerName, position)
+        const others = picks.filter(p => !isDraftPickRowEmpty(p) && (!annualCombined || p.assetType !== 'c2c_college')).map((p) => ({ rosterId: p.rosterId, position: p.position }))
+        const rosterFit = annualCombined && collegeAsset ? { valid: true as const, error: undefined } : await validateRosterFitForDraftPick({
           leagueId: params.leagueId,
           rosterId: onClockRosterId,
           existingPicks: others,
@@ -594,7 +609,6 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
           }
         }
 
-        const collegeAsset = await resolveCollegeAsset(params.playerId, playerName, position)
         const spec = await runSpecialtyAndPoolValidation({
           leagueId: params.leagueId,
           leagueSport,
@@ -631,7 +645,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
             | undefined
         }
 
-        const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: onClockRosterId, playerId: params.playerId!, assetType: collegeAsset }) : null
+        const rightId = collegeAsset ? await createDraftCollegeRight(tx, { leagueId: params.leagueId, rosterId: onClockRosterId, playerId: params.playerId!, assetType: collegeAsset, ...(annualSeason ? { seasonYear: annualSeason } : {}) }) : null
         const pickMetadata = rightId ? { draftCollegeRightsId: rightId } : {}
         let savedPickId: string
         if (existing && isDraftPickRowEmpty(existing)) {
