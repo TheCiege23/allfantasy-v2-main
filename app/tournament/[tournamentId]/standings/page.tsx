@@ -182,7 +182,7 @@ export default function TournamentStandingsHubPage() {
 
       {tab === 'league' && myLeague ? (
         <div className="tournament-panel overflow-x-auto p-2">
-          <table className="w-full sm:min-w-[560px]">
+          <table className="w-full lg:min-w-[560px]">
             <tbody>
               {myLeague.participants
                 .filter((r) => filterQ(r.participant.displayName))
@@ -220,7 +220,7 @@ export default function TournamentStandingsHubPage() {
       {tab === 'conference' ? (
         conferenceRowsSeason.length > 0 ? (
           <div className="tournament-panel overflow-x-auto p-2">
-            <table className="w-full sm:min-w-[560px]">
+            <table className="w-full lg:min-w-[560px]">
               <tbody>
                 {conferenceRowsSeason
                   .filter((r) => filterQ(r.participant.displayName))
@@ -246,7 +246,7 @@ export default function TournamentStandingsHubPage() {
       {tab === 'global' ? (
         globalRowsSeason.length > 0 ? (
           <div className="tournament-panel overflow-x-auto p-2">
-            <table className="w-full sm:min-w-[560px]">
+            <table className="w-full lg:min-w-[560px]">
               <tbody>
                 {globalRowsSeason
                   .filter((r) => filterQ(r.participant.displayName))
@@ -281,7 +281,7 @@ export default function TournamentStandingsHubPage() {
               <span className="ml-2 font-normal text-[var(--tournament-text-dim)]">(high to low)</span>
             </h2>
             <div className="tournament-panel overflow-x-auto p-2">
-              <table className="w-full sm:min-w-[560px]">
+              <table className="w-full lg:min-w-[560px]">
                 <tbody>
                   {[...globalRowsSeason]
                     .sort((a, b) => weekPoints(b) - weekPoints(a))
@@ -307,7 +307,7 @@ export default function TournamentStandingsHubPage() {
                 {conference.name} — round {state.standingsRound?.roundNumber ?? standingsRoundNumber}, week {weeklyWeek}
               </h2>
               <div className="tournament-panel overflow-x-auto p-2">
-                <table className="w-full sm:min-w-[560px]">
+                <table className="w-full lg:min-w-[560px]">
                   <tbody>
                     {[...conferenceRowsSeason]
                       .sort((a, b) => weekPoints(b) - weekPoints(a))
@@ -334,7 +334,7 @@ export default function TournamentStandingsHubPage() {
             </h2>
             {myLeague ? (
               <div className="tournament-panel overflow-x-auto p-2">
-                <table className="w-full sm:min-w-[560px]">
+                <table className="w-full lg:min-w-[560px]">
                   <tbody>
                     {myLeague.participants
                       .filter((r) => filterQ(r.participant.displayName))
