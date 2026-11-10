@@ -131,7 +131,9 @@ function cell(
     opponentClub,
     home: Number(id.replace(/\D/g, '')) % 2 === 0,
     result: gameState === 'final' ? FIXTURE_RESULTS[Number(id.replace(/\D/g, '')) % FIXTURE_RESULTS.length] : null,
-    statLine: gameState === 'final' && sport === 'NFL' ? FIXTURE_NFL_STAT_LINES[pos] ?? null : null,
+    statLine: (gameState === 'final' || gameState === 'live') && sport === 'NFL' ? FIXTURE_NFL_STAT_LINES[pos] ?? null : null,
+    // A live line carries when it was imported (the hourly game-window import); a final one does not.
+    statLineAsOf: gameState === 'live' && sport === 'NFL' && FIXTURE_NFL_STAT_LINES[pos] ? '2026-11-01T19:40:00.000Z' : null,
   }
 }
 

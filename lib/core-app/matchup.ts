@@ -208,10 +208,16 @@ export type MatchupPlayerCell = {
   result?: GameResult | null
   /**
    * His box score for the week — "12/19 CMP, 127 YD, 4 CAR, 22 YD" — from the stored Sleeper week
-   * stats. NFL only, final games only, and null whenever no row or no volume stat exists. NFL week
-   * stats are imported daily after the games, so a Sunday line appears the next morning.
+   * stats. NFL only, and null whenever no row or no volume stat exists. Final games, and since
+   * 2026-11-09 live ones too: the import runs hourly through the NFL windows
+   * (lib/player-game-stats/nflGameWindowGate.ts), so a live line can be up to an hour old.
    */
   statLine?: string | null
+  /**
+   * When `statLine` was imported, as an ISO instant — set only while his game is LIVE, so the board can
+   * say "so far · as of 2:40 PM" rather than present an hour-old line as current.
+   */
+  statLineAsOf?: string | null
 }
 
 export type MatchupSlot = {
@@ -816,7 +822,7 @@ async function buildMatchupData(
       ? prisma.playerGameStat
           .findMany({
             where: { sportType: 'NFL', source: 'sleeper', season: latest.seasonYear, weekOrRound: latest.week, playerId: { in: lookupIds } },
-            select: { playerId: true, statPayload: true },
+            select: { playerId: true, statPayload: true, updatedAt: true },
           })
           .catch(() => [])
       : Promise.resolve([])
@@ -843,10 +849,10 @@ async function buildMatchupData(
   }
   // Started above, beside the games query, so it costs no extra round trip.
   const statRows = await statRowsPromise
-  const statLineBy = new Map<string, string>()
+  const statLineBy = new Map<string, { line: string; at: Date }>()
   for (const row of statRows) {
     const line = nflStatLine(row.statPayload)
-    if (line && !statLineBy.has(row.playerId)) statLineBy.set(row.playerId, line)
+    if (line && !statLineBy.has(row.playerId)) statLineBy.set(row.playerId, { line, at: row.updatedAt })
   }
   /*
    * Each club's game THIS week — kickoff and opponent — from the same rows the states come from.
@@ -987,17 +993,21 @@ async function buildMatchupData(
    * lineup — who starts where — is still shown; only the points projections are withheld.
    */
   const withholdPointsProjections = scoringTypeRefusal != null
-  /* The result and box score, for a starter whose game is FINAL only (see matchupGameLine.ts). */
+  /*
+   * The result and box score (see matchupGameLine.ts). The RESULT stays final-only: a live
+   * SportsGame score can trail the game. The BOX SCORE also shows while his game is live, carrying
+   * the time it was imported so the board labels it "so far · as of …".
+   */
   const finalLines = (
     entry: { playerId: string; unavailable?: Unavailable | null },
     sleeperId: string | null,
     team: string | null | undefined,
-  ): { result: GameResult | null; statLine: string | null } => {
-    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null }
-    return {
-      result: resultOf(normalizeTeamAbbrev(team)),
-      statLine: sleeperId ? statLineBy.get(sleeperId) ?? null : null,
-    }
+  ): { result: GameResult | null; statLine: string | null; statLineAsOf: string | null } => {
+    const state = gameStateOf(entry)
+    const stats = sleeperId ? statLineBy.get(sleeperId) ?? null : null
+    if (state === 'live') return { result: null, statLine: stats?.line ?? null, statLineAsOf: stats ? stats.at.toISOString() : null }
+    if (state !== 'final') return { result: null, statLine: null, statLineAsOf: null }
+    return { result: resultOf(normalizeTeamAbbrev(team)), statLine: stats?.line ?? null, statLineAsOf: null }
   }
   const cellFor = (
     raw: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
