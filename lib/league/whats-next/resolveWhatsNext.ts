@@ -33,6 +33,10 @@ export const PLACEHOLDER_FALLBACKS: Record<string, string> = {
   roleAdvice: 'Set your lineup. Any survivor who loses to a zombie becomes one.',
   chopAdvice: 'Set your lineup. The lowest score this week is chopped.',
   leagueId: '',
+  platform: 'the host platform',
+  // An empty URL fails the https check, so the button is dropped rather than pointing nowhere.
+  hostLeagueUrl: '',
+  hostLineupUrl: '',
 }
 
 function present(value: string | null | undefined): value is string {
@@ -59,6 +63,12 @@ export function fillTemplate(template: string, vars: Record<string, string | nul
 
 function fillAction(action: PhaseAction | undefined, vars: Record<string, string | null | undefined>): PhaseAction | null {
   if (!action) return null
+  if (action.external) {
+    // A whole URL from the source-link resolver: substituted as-is, and only ever https.
+    const href = (action.href ?? '').replace(/\{(\w+)\}/g, (_, key: string) => vars[key] ?? '')
+    if (!/^https:\/\/[^\s]+$/.test(href)) return null
+    return { ...action, href, label: fillTemplate(action.label, vars) }
+  }
   return {
     ...action,
     label: fillTemplate(action.label, vars),
@@ -121,7 +131,7 @@ export function resolveWhatsNext(facts: WhatsNextFacts, viewer: WhatsNextViewer)
 
   return {
     format: facts.format,
-    formatLabel: FORMAT_GUIDES[facts.format].label,
+    formatLabel: present(facts.formatLabel) ? facts.formatLabel : FORMAT_GUIDES[facts.format].label,
     phase: facts.phase,
     title: fill(guide.title),
     role,

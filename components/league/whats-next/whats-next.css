@@ -5,6 +5,8 @@
  * dark, light and the navy/purple "AF" mode on its own. Every var() carries the AF-mode value as a
  * fallback for the imported-league shell, which does not sit inside `.af-core`.
  */
+/* Its own box model: the banner also renders in the imported-league shell, which is not .nl-workspace. */
+.wn, .wn *, .wn-overlay, .wn-overlay * { box-sizing: border-box; }
 .wn {
   --wn-accent: var(--accent, #a78bfa);
   --wn-surface: var(--surface, #170f2b);
@@ -71,7 +73,7 @@
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 44px; padding: 9px 16px; border-radius: 10px;
   border: 1px solid var(--line2, rgba(167, 139, 250, 0.28)); background: transparent;
-  color: var(--text2, #cfc6ea); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; text-decoration: none;
+  color: var(--text2, #cfc6ea); font: inherit; font-size: 13px; font-weight: 800; line-height: 1.2; cursor: pointer; text-decoration: none;
 }
 .wn-btn:hover { background: var(--chip, rgba(167, 139, 250, 0.1)); }
 .wn-btn--primary { background: var(--accent, #a78bfa); border-color: var(--accent, #a78bfa); color: var(--accent-ink, #0d0819); }

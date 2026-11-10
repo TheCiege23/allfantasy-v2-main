@@ -12,6 +12,9 @@
  * Every reader is defensive: a missing or reshaped field degrades to a quieter banner, never a throw.
  */
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
+import { resolveSourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
+import { getImportProviderLabel } from '@/lib/league-import/provider-ui-config'
+import type { ImportProvider } from '@/lib/league-import/types'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
 import { isEngineFormat, type EngineFormat } from './formatPhaseGuides'
 import type { WhatsNextFacts, WhatsNextFormatId } from './types'
@@ -372,6 +375,51 @@ export function lifecycleFacts(format: WhatsNextFormatId, league: LifecycleLeagu
   const draftAt = future(draftDateIso, now)
   if (draftAt) return { format, phase: 'draft_scheduled', week, vars, deadlineIso: draftAt, deadlineLabel: 'Draft starts' }
   return { format, phase: 'setup', week, vars }
+}
+
+// ── Imported leagues ─────────────────────────────────────────────────────────────────────────
+
+export type ImportedLeagueLike = {
+  platform: string
+  /** The provider's league id — the one the league header's source link uses. */
+  sourceLeagueId: string | null
+  season?: number | string | null
+  name?: string | null
+  status?: string | null
+}
+
+/** The provider statuses that mean something; anything else (or nothing) is `unknown`. */
+const IMPORTED_STATUS: Record<string, string> = {
+  pre_draft: 'pre_draft',
+  drafting: 'drafting',
+  in_season: 'in_season',
+  complete: 'complete',
+}
+
+const SHORT_PLATFORM: Record<string, string> = { mfl: 'MFL' }
+
+/**
+ * An imported league's phase, from the status its provider reported. Host links come from the
+ * allowlisted source-link resolver (never built here): the lineup screen where its format is verified,
+ * the league page otherwise. No week number — an imported season's week defaults to 1.
+ */
+export function importedFacts(league: ImportedLeagueLike, draftDateIso: string | null, now = Date.now()): WhatsNextFacts {
+  const provider = league.platform.toLowerCase()
+  const platform = SHORT_PLATFORM[provider] ?? getImportProviderLabel(provider as ImportProvider)
+  const ctx = { platform: provider, sourceLeagueId: league.sourceLeagueId, season: league.season ?? null, leagueName: league.name ?? null }
+  const hostLeagueUrl = resolveSourceScreenLink({ ...ctx, screen: 'league' })?.href ?? null
+  const hostLineupUrl = resolveSourceScreenLink({ ...ctx, screen: 'lineup' })?.href ?? hostLeagueUrl
+  const vars = { platform, hostLeagueUrl, hostLineupUrl }
+  let phase = IMPORTED_STATUS[String(league.status ?? '').toLowerCase()] ?? 'unknown'
+  const draftAt = future(draftDateIso, now)
+  if (phase === 'pre_draft' && draftAt) phase = 'draft_scheduled'
+  return {
+    format: 'imported',
+    phase,
+    formatLabel: platform,
+    vars,
+    ...(phase === 'draft_scheduled' ? { deadlineIso: draftAt, deadlineLabel: 'Draft starts' } : {}),
+  }
 }
 
 /** Engine payload → facts. Null when the payload is unusable, so the panel hides. */

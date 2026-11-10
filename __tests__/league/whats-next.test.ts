@@ -6,6 +6,7 @@ import { fillTemplate, resolveWhatsNext } from '@/lib/league/whats-next/resolveW
 import {
   bigBrotherFacts,
   guillotineFacts,
+  importedFacts,
   lifecycleFacts,
   pirateFacts,
   survivorFacts,
@@ -60,9 +61,9 @@ describe('phase config', () => {
     }
   })
 
-  it('has a 3–5 step walkthrough for every format except plain redraft', () => {
+  it('has a 3–5 step walkthrough for every format except plain redraft and imported leagues', () => {
     for (const format of Object.keys(FORMAT_GUIDES) as WhatsNextFormatId[]) {
-      if (format === 'redraft') continue
+      if (format === 'redraft' || format === 'imported') continue
       const w = FORMAT_WALKTHROUGHS[format]
       expect(w, format).toBeDefined()
       expect(w!.steps.length, format).toBeGreaterThanOrEqual(3)
@@ -255,5 +256,41 @@ describe('whatsNextFormatFor', () => {
     expect(whatsNextFormatFor({ leagueType: 'keeper' })).toBe('keeper')
     expect(whatsNextFormatFor({ isDynasty: true })).toBe('dynasty')
     expect(whatsNextFormatFor({ leagueType: 'redraft' })).toBe('redraft')
+  })
+})
+
+describe('imported leagues', () => {
+  const sleeper = (status: string | null) => ({ platform: 'sleeper', sourceLeagueId: '1180000000000000000', season: 2026, name: 'Dynasty Dragons', status })
+
+  it('sends an in-season manager to the lineup screen on the host, in a new tab', () => {
+    const view = resolveWhatsNext(importedFacts(sleeper('in_season'), null, NOW), { isCommissioner: false })!
+    expect(view.formatLabel).toBe('Sleeper')
+    expect(view.message).toBe('Set your lineup on Sleeper before your players lock. AllFantasy picks it up on the next sync.')
+    expect(view.action).toMatchObject({ external: true, href: 'https://sleeper.com/leagues/1180000000000000000/team', label: 'Set my lineup on Sleeper' })
+    expect(view.title).not.toMatch(/Week/) // an imported season's week defaults to 1
+  })
+
+  it('does not call a league with no reported status "getting ready"', () => {
+    const view = resolveWhatsNext(importedFacts({ platform: 'espn', sourceLeagueId: '555', season: 2026, status: null }, null, NOW), { isCommissioner: false })!
+    expect(view.phase).toBe('unknown')
+    expect(view.title).toBe('Your ESPN league')
+    expect(view.action?.href).toMatch(/^https:\/\/fantasy\.espn\.com\//)
+  })
+
+  it('waits on the commissioner to schedule the draft, then counts down to it', () => {
+    const waiting = resolveWhatsNext(importedFacts(sleeper('pre_draft'), null, NOW), { isCommissioner: false })!
+    expect(waiting.waitingOn).toBe('The commissioner')
+    const scheduled = importedFacts(sleeper('pre_draft'), LATER, NOW)
+    expect(scheduled.phase).toBe('draft_scheduled')
+    expect(scheduled.deadlineIso).toBe(LATER)
+  })
+
+  it('names MFL short and drops a host link that is not https', () => {
+    expect(importedFacts({ platform: 'mfl', sourceLeagueId: '12345', status: 'in_season' }, null, NOW).formatLabel).toBe('MFL')
+    const bad = resolveWhatsNext({ format: 'imported', phase: 'in_season', vars: { platform: 'Sleeper', hostLineupUrl: 'javascript:alert(1)' } }, { isCommissioner: false })!
+    expect(bad.action).toBeNull()
+    const none = resolveWhatsNext({ format: 'imported', phase: 'in_season' }, { isCommissioner: false })!
+    expect(none.action).toBeNull()
+    expect(none.message).toBe('Set your lineup on the host platform before your players lock. AllFantasy picks it up on the next sync.')
   })
 })
