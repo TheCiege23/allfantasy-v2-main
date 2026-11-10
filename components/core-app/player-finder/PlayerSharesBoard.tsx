@@ -1,6 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
+import { useMessages } from '@/components/i18n/useMessages'
+import { playerFinderMessages } from '@/lib/core-app/messages/playerFinder'
+import { FINDER_LIST_PREVIEW } from '@/components/core-app/player-finder/GameDayTriage'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import type { SectionState } from '@/lib/core-app/leagueHome'
@@ -53,6 +57,9 @@ export function PlayerSharesBoard({
 }) {
   const { language } = useOptionalLanguage()
   const t = tradeValueCopy(language)
+  const m = useMessages(playerFinderMessages)
+  /* The same five-then-all as Game day (FINDER_LIST_PREVIEW); ranks keep their numbers when opened. */
+  const [showAll, setShowAll] = useState(false)
   if (!state.available) {
     return (
       <section className="af-card af-pf-shares af-pf-shares--empty" aria-labelledby="af-pf-shares-h">
@@ -85,8 +92,9 @@ export function PlayerSharesBoard({
       {rows.length === 0 ? (
         <p className="af-pf-unavailable">{t.sharesNone}</p>
       ) : (
-        <ol className="af-pf-shares-list">
-          {rows.map((r, i) => {
+        <>
+        <ol className="af-pf-shares-list" id="af-pf-shares-list">
+          {(showAll ? rows : rows.slice(0, FINDER_LIST_PREVIEW)).map((r, i) => {
             const cell = league?.cells[r.player.sleeperId] ?? null
             const holder = cell ? holderLabel(cell.holder, t) : null
             const href = `/core/players?q=${encodeURIComponent(r.player.name)}&player=${encodeURIComponent(playerRef(r.player.sport, r.player.externalId, r.player.source))}${leagueParam}`
@@ -163,6 +171,18 @@ export function PlayerSharesBoard({
             )
           })}
         </ol>
+        {rows.length > FINDER_LIST_PREVIEW ? (
+          <button
+            type="button"
+            className="af-pf-list-more"
+            aria-expanded={showAll}
+            aria-controls="af-pf-shares-list"
+            onClick={() => setShowAll((open) => !open)}
+          >
+            {showAll ? m.listShowFewer : m.listShowAll(rows.length)}
+          </button>
+        ) : null}
+        </>
       )}
       {/* All leagues only: the split is across every roster, which a one-league view would misstate. */}
       {!league ? <TeamSplit data={state.data.teamSplit} /> : null}
