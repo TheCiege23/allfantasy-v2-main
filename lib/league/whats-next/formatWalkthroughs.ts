@@ -7,6 +7,9 @@
  *
  * Seen-state is per user AND per format, not per league: the point is a commissioner's FIRST
  * Big Brother league, so their second one opens without it.
+ *
+ * It lives on the ACCOUNT (walkthroughSeenStore.ts, via /api/user/format-walkthroughs), so it follows
+ * the commissioner to a new phone. The browser flag below is only a fast path that saves the request.
  */
 import type { WhatsNextFormatId } from './types'
 
@@ -139,6 +142,39 @@ export function hasSeenWalkthrough(userId: string | null | undefined, format: Wh
   } catch {
     // Unreadable storage: treat as seen, so a blocked browser is not shown the tour on every visit.
     return true
+  }
+}
+
+export const WALKTHROUGH_SEEN_ENDPOINT = '/api/user/format-walkthroughs'
+
+/**
+ * The account's answer: `true` seen, `false` not seen, `null` unknown (signed out, offline, a failed
+ * read). Unknown is NOT "not seen" for the caller to decide — the panel opens on `false` or `null`,
+ * exactly as it did before the account knew anything.
+ */
+export async function fetchAccountWalkthroughSeen(format: WhatsNextFormatId, fetchImpl: typeof fetch = fetch): Promise<boolean | null> {
+  try {
+    const res = await fetchImpl(WALKTHROUGH_SEEN_ENDPOINT, { cache: 'no-store', credentials: 'include' })
+    if (!res.ok) return null
+    const body = (await res.json()) as { seen?: Record<string, unknown> } | null
+    if (!body?.seen || typeof body.seen !== 'object') return null
+    return typeof body.seen[format] === 'string'
+  } catch {
+    return null
+  }
+}
+
+/** Fire and forget: the browser flag is already set, so a failed save costs one more showing at most. */
+export async function saveAccountWalkthroughSeen(format: WhatsNextFormatId, fetchImpl: typeof fetch = fetch): Promise<void> {
+  try {
+    await fetchImpl(WALKTHROUGH_SEEN_ENDPOINT, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format }),
+    })
+  } catch {
+    /* offline or signed out — the browser flag still holds on this device */
   }
 }
 
