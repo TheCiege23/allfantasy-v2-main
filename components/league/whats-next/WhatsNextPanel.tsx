@@ -15,7 +15,13 @@ import {
 } from '@/lib/league/whats-next/adapters'
 import { isEngineFormat } from '@/lib/league/whats-next/formatPhaseGuides'
 import { resolveWhatsNext } from '@/lib/league/whats-next/resolveWhatsNext'
-import { hasSeenWalkthrough, markWalkthroughSeen, walkthroughFor } from '@/lib/league/whats-next/formatWalkthroughs'
+import {
+  fetchAccountWalkthroughSeen,
+  hasSeenWalkthrough,
+  markWalkthroughSeen,
+  saveAccountWalkthroughSeen,
+  walkthroughFor,
+} from '@/lib/league/whats-next/formatWalkthroughs'
 import type { WhatsNextFacts } from '@/lib/league/whats-next/types'
 import { FormatWalkthrough } from './FormatWalkthrough'
 import './whats-next.css'
@@ -119,8 +125,21 @@ export function WhatsNextPanel({
   // First Big Brother (Survivor, …) league this commissioner has created: open the walkthrough once.
   useEffect(() => {
     if (!autoOpenWalkthrough || !isCommissioner || !walkthrough) return
+    // This browser already knows: no request.
     if (hasSeenWalkthrough(userId, format)) return
-    setWalkthroughOpen(true)
+    // Otherwise ask the account — seen on another device means not again here.
+    let cancelled = false
+    void fetchAccountWalkthroughSeen(format).then((seen) => {
+      if (cancelled) return
+      if (seen === true) {
+        markWalkthroughSeen(userId, format)
+        return
+      }
+      setWalkthroughOpen(true)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [autoOpenWalkthrough, isCommissioner, walkthrough, userId, format])
 
   const facts: WhatsNextFacts | null = useMemo(() => {
@@ -241,6 +260,7 @@ export function WhatsNextPanel({
           onClose={() => {
             setWalkthroughOpen(false)
             markWalkthroughSeen(userId, format)
+            void saveAccountWalkthroughSeen(format)
           }}
         />
       ) : null}
