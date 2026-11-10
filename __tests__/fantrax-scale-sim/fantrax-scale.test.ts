@@ -70,7 +70,9 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (load) => {
     getFantraxPlayerIds: vi.fn(async (code: string) => ({ ok: true, data: (code === fx().sport || (code === 'CFB' && fx().sport === 'NCAAF')) ? fx().playerMap : unrelated })),
     getFantraxStandings: vi.fn(async () => ({ ok: true, data: fx().standings })),
     fetchFantraxScheduleWithScores: vi.fn(async () => {
-      if (fx().sport !== 'SOCCER') return { rows: [], position: null, periodsRead: 0, periodsFailed: 0 }
+      if (fx().sport !== 'SOCCER' && fx().sport !== 'NCAAB') {
+        return { rows: [], position: null, periodsRead: 0, periodsFailed: 0, periodScores: [] }
+      }
       const info = fx().info
       return {
         rows: real.flattenFantraxSchedule(info).map((row) =>
@@ -207,6 +209,22 @@ describe.skipIf(process.env.SIM_FANTRAX !== '1')('Fantrax-scale imported leagues
       await step('trades', () => sim.runTrades(env, run))
       await step('rank+chimmy', () => sim.runRankAndChimmy(env, run))
       expect(run.leagueId, JSON.stringify(run.findings).slice(0, 800)).toBeTruthy()
+      if (c.sport === 'NCAAB') {
+        expect(run.stats.importStatus).toBe(200)
+        expect(run.stats.imported).toMatchObject({
+          sport: 'NCAAB', rosters: c.teamCount, rosteredPlayers: 14 * c.teamCount,
+          seasons: 1, seasonRosters: c.teamCount, seasonPlayers: 14 * c.teamCount, linked: c.teamCount,
+        })
+        if (c.teamCount >= 2) {
+          expect(run.stats.ncaabSeason).toEqual({ status: 'in_season', currentWeek: 2, totalWeeks: 20, playoffStartWeek: 19 })
+        }
+        if (c.teamCount >= 6 && process.env.SIM_AUDIT_VALUES === '1' && process.env.SIM_SEED_VALUES !== '0') {
+          expect(run.stats.tradeGrades).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'fair', grade: 'C' }),
+            expect.objectContaining({ label: 'collusion-1', grade: 'F' }),
+          ]))
+        }
+      }
       if (c.sport === 'SOCCER') {
         expect(run.stats.importStatus).toBe(200)
         expect(run.stats.imported).toMatchObject({

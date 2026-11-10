@@ -85,21 +85,21 @@ describe('the playoff week when the provider names none', () => {
   })
 })
 
-describe('Fantrax Soccer seasons', () => {
-  it('uses the source period and playoff calendar, including on retry', async () => {
+describe('Fantrax period-based seasons', () => {
+  it.each(['SOCCER', 'NCAAB'])('%s uses the source calendar and retries roster creation', async (sport) => {
     mocks.leagueFindUnique.mockResolvedValue({
-      ...league('SOCCER', null),
+      ...league(sport, null),
       platform: 'fantrax',
-      settings: { current_week: 23, fantrax_settings: { lastPeriod: 36, firstPlayoffPeriod: 31 } },
+      settings: { current_week: 12, fantrax_settings: { lastPeriod: 20, firstPlayoffPeriod: 18 } },
     })
-    expect(await materializeRedraftSeasonForImportedLeague('SOCCER-league')).toMatchObject({ created: true, rosterCount: 2 })
-    const fields = { status: 'in_season', currentWeek: 23, totalWeeks: 36, playoffStartWeek: 31 }
+    expect(await materializeRedraftSeasonForImportedLeague(`${sport}-league`)).toMatchObject({ created: true, rosterCount: 2 })
+    const fields = { status: 'in_season', currentWeek: 12, totalWeeks: 20, playoffStartWeek: 18 }
     expect(mocks.seasonUpsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining(fields),
       update: fields,
     }))
     mocks.seasonFindUnique.mockResolvedValue({ id: 'season' })
-    expect(await materializeRedraftSeasonForImportedLeague('SOCCER-league')).toMatchObject({ created: false, rosterCount: 2 })
+    expect(await materializeRedraftSeasonForImportedLeague(`${sport}-league`)).toMatchObject({ created: false, rosterCount: 2 })
     expect(mocks.rosterUpsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { seasonId_ownerId: { seasonId: 'season', ownerId: 'fantrax-user:a' } },
       update: {},
@@ -107,11 +107,11 @@ describe('Fantrax Soccer seasons', () => {
     expect(mocks.materializePlayers).toHaveBeenCalledTimes(2)
   })
 
-  it('uses the Soccer season shape in preseason when Fantrax supplies no periods', async () => {
-    mocks.leagueFindUnique.mockResolvedValue({ ...league('SOCCER', null), platform: 'fantrax', status: 'off_season' })
-    await materializeRedraftSeasonForImportedLeague('SOCCER-league')
+  it.each([['SOCCER', 38], ['NCAAB', 18]] as const)('%s uses its own preseason length when periods are absent', async (sport, totalWeeks) => {
+    mocks.leagueFindUnique.mockResolvedValue({ ...league(sport, null), platform: 'fantrax', status: 'off_season' })
+    await materializeRedraftSeasonForImportedLeague(`${sport}-league`)
     expect(mocks.seasonUpsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({ status: 'setup', currentWeek: 0, totalWeeks: 38, playoffStartWeek: 39 }),
+      create: expect.objectContaining({ status: 'setup', currentWeek: 0, totalWeeks, playoffStartWeek: totalWeeks + 1 }),
     }))
   })
 
