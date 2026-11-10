@@ -39,6 +39,14 @@ export function seasonRosterPickError(c: SeasonBlueprint, existing: Pick<SeasonD
   if (matchSeasonDraftSlots(c, players) !== players.length) return 'This pick would prevent a legal completed starter and bench roster.'
   return null
 }
+export function assignSeasonDraftLineup<T extends Pick<SeasonDraftPlayer, 'position'>>(config: SeasonBlueprint, players: T[]) {
+  const rules = config.rules!
+  const labels = [...rules.starters.flatMap(slot => Array<string>(slot.count).fill(slot.position)), ...Array<string>(rules.bench).fill('BN')]
+  const owners = assignSeasonDraftSlots(config, players)
+  if (players.length !== labels.length || owners.includes(-1)) throw new Error('The completed draft cannot fill the frozen lineup.')
+  return owners.map((index, slot) => ({ player: players[index]!, slotType: labels[slot]! }))
+}
+
 export function selectSeasonAutodraft(c: SeasonBlueprint, existing: SeasonDraftPlayer[], pool: SeasonDraftPlayer[], taken: Set<string>) {
   const rank = (value: number | null | undefined) => value != null && Number.isFinite(value) && value > 0 ? value : Infinity
   return [...pool].filter(p => p.playerId && !taken.has(p.playerId) && !seasonRosterPickError(c, existing, p)).sort((a, b) =>

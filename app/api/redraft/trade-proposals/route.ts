@@ -1,5 +1,6 @@
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
+import { readSeasonTradePolicy, SeasonTradeError, seasonTradeOfferExpiry } from '@/lib/tournament/seasonTradePolicy'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -404,7 +405,16 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const created = await prisma.$transaction(async (tx: any) => {
+  const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const league = await tx.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+    let tournamentExpiry = expiresAt
+    if (league?.leagueVariant === 'season_tournament') {
+      const policy = await readSeasonTradePolicy(tx, leagueId, true)
+      if (!policy || policy.seasonId !== seasonId || multiTeam || assets.some(asset => asset.assetType !== 'player' && asset.assetType !== 'faab')) {
+        throw new SeasonTradeError('This tournament accepts player and FAAB trades between two teams in its active stage.')
+      }
+      tournamentExpiry = seasonTradeOfferExpiry(policy, expiresAt, new Date())
+    }
     const proposal = await tx.redraftTradeProposal.create({
       data: {
         id: crypto.randomUUID(),
@@ -416,7 +426,7 @@ export async function POST(req: NextRequest) {
         vetoMode,
         vetoThreshold,
         reason: body.reason?.trim() || null,
-        expiresAt,
+        expiresAt: tournamentExpiry,
       },
     })
 
@@ -440,7 +450,13 @@ export async function POST(req: NextRequest) {
       where: { id: proposal.id },
       include: { assets: true, votes: true, decision: true },
     })
+  }).catch(error => {
+    if (error instanceof SeasonTradeError) return { seasonTradeError: error.message }
+    throw error
   })
+  if (created && 'seasonTradeError' in created) {
+    return NextResponse.json({ error: created.seasonTradeError }, { status: 409 })
+  }
 
   // T2: capture the immutable deterministic value snapshot at proposal time. Best-effort — a
   // valuation issue must never block trade creation, but it is expected to succeed.

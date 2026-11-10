@@ -1,4 +1,5 @@
 import 'server-only'
+import { hasSeasonDraftRelease } from './seasonDraftReleaseGate'
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
@@ -9,6 +10,10 @@ import { buildSeasonBlueprint } from './seasonBlueprint'
 import { BlueprintOperationError } from './seasonBlueprintStore'
 import { readOpeningManifest } from './seasonNativeContract'
 import { identityArt, type SeasonArt } from './seasonArtwork'
+import { loadSeasonStage } from './seasonRounds'
+import { earliestOpeningDraft } from './seasonLeagueLayout'
+import { resolveSeasonDraftWindow } from './seasonRules'
+import { currentSeasonOpeningField } from './seasonRecoveryState'
 
 const controlSchema = z.object({ version: z.literal(1), publicationId: z.string(), tokenHash: z.string().regex(/^[a-f0-9]{64}$/), closesAt: z.string().datetime({ offset: true }), waitlistLimit: z.number().int().min(0).max(192), state: z.enum(['open', 'paused']) })
 type Control = z.infer<typeof controlSchema>
@@ -50,7 +55,7 @@ async function mutate<T>(tournamentId: string, userId: string, ownerOnly: boolea
         const timestamp = new Date(Math.max(Date.now(), shell.updatedAt.getTime() + 1))
         const locked = await db.tournamentShell.updateMany({ where: { id: tournamentId, status: 'rules_published', updatedAt: shell.updatedAt }, data: { updatedAt: timestamp } })
         if (locked.count !== 1) throw new RetryRegistration()
-        const frozen = await db.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_field_frozen' } })
+        const frozen = await currentSeasonOpeningField(db, tournamentId)
         if (frozen && !allowFrozen) throw new BlueprintOperationError('The opening field is frozen. Registration and participant changes are locked.', 409)
         return run(db, shell, timestamp)
       })
@@ -62,8 +67,8 @@ async function mutate<T>(tournamentId: string, userId: string, ownerOnly: boolea
   throw new BlueprintOperationError('Registration is busy.', 409)
 }
 function beforeDraft(config: ReturnType<typeof buildSeasonBlueprint>['config']) {
-  const draft = config.rules?.calendar.drafts.find(d => d.stage === 1)
-  if (!draft || !Number.isFinite(Date.parse(draft.startsAt)) || Date.parse(draft.startsAt) <= Date.now()) throw new BlueprintOperationError('Registration changes are locked at the opening draft.', 409)
+  const startsAt = Date.parse(earliestOpeningDraft(config))
+  if (!Number.isFinite(startsAt) || startsAt <= Date.now()) throw new BlueprintOperationError('Registration changes are locked at the opening draft.', 409)
 }
 async function promote(db: Prisma.TransactionClient, tournamentId: string, capacity: number, publicationId: string, userId: string, timestamp: Date) {
   let count = await db.tournamentParticipant.count({ where: { tournamentId, status: 'registered' } })
@@ -92,7 +97,7 @@ export async function openSeasonRegistration(userId: string, tournamentId: strin
     if (!pub.config.rules?.transactionPolicy || !pub.config.rules.draftPolicy) throw new BlueprintOperationError('This frozen version has no complete draft, IR and waiver transaction policy. Create a new plan with complete rules before inviting entrants.', 409)
     beforeDraft(pub.config)
     const end = Date.parse(closesAt)
-    const draftAt = Date.parse(pub.config.rules.calendar.drafts.find(d => d.stage === 1)!.startsAt)
+    const draftAt = Date.parse(earliestOpeningDraft(pub.config))
     if (!Number.isFinite(end) || end <= Date.now() || end > draftAt) throw new BlueprintOperationError('Registration must close in the future, at or before the opening draft.', 409)
     const c = controlSchema.parse({ version: 1, publicationId: pub.id, tokenHash: hashToken(token), closesAt, waitlistLimit, state: 'open' })
     const waitlisted = await db.tournamentParticipant.count({ where: { tournamentId, status: 'waitlisted' } })
@@ -168,7 +173,7 @@ export async function freezeSeasonOpeningField(userId: string, tournamentId: str
   return mutate(tournamentId, userId, true, async (db, _shell, timestamp) => {
     const pub = await publication(db, tournamentId)
     if (pub.id !== publicationId) throw new BlueprintOperationError('Reload the current published rules before freezing.', 409)
-    const existing = await db.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_field_frozen' } })
+    const existing = await currentSeasonOpeningField(db, tournamentId)
     if (existing) return { freezeId: existing.id }
     beforeDraft(pub.config)
     if (!pub.config.rules?.draftPolicy || !pub.config.rules.transactionPolicy) throw new BlueprintOperationError('Complete frozen draft and transaction rules are required.', 409)
@@ -198,28 +203,29 @@ export async function loadSeasonRegistration(userId: string, tournamentId: strin
   const pub = await publication(prisma, tournamentId)
   const c = await control(prisma, tournamentId)
   const entrants = await prisma.tournamentParticipant.findMany({ where: { tournamentId }, orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }], select: { id: true, displayName: true, status: true, updatedAt: true } })
-  const frozen = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_field_frozen' } })
+  const frozen = await currentSeasonOpeningField(prisma, tournamentId)
   const manifest = frozen?.data as { manifestHash: string; leagues: ReturnType<typeof buildOpeningField>['leagues'] } | undefined
   const registered = entrants.filter(e => e.status === 'registered').length
   return { frozenField: frozen && manifest ? { id: frozen.id, manifestHash: manifest.manifestHash, leagues: manifest.leagues } : null, publicationId: pub.id, capacity: pub.config.participants, registered, waitlisted: entrants.filter(e => e.status === 'waitlisted').length,
     state: frozen ? 'field_frozen' : c ? (Date.parse(c.closesAt) <= Date.now() ? 'expired' : c.state) : 'not_opened', closesAt: c?.closesAt ?? '', waitlistLimit: c?.waitlistLimit ?? 64,
     fullField: registered === pub.config.participants, entrants: entrants.map(e => ({ id: e.id, displayName: e.displayName, status: e.status })),
-    openingDraftAt: pub.config.rules?.calendar.drafts.find(d => d.stage === 1)?.startsAt ?? '',
+    openingDraftAt: earliestOpeningDraft(pub.config),
   }
 }
 
 export async function loadSeasonEntry(userId: string, tournamentId: string, token?: string) {
   const shell = await prisma.tournamentShell.findUnique({ where: { id: tournamentId } })
-  if (!shell || shell.status !== 'rules_published') return null
+  if (!shell || !['rules_published', 'complete'].includes(shell.status)) return null
+  if (shell.status === 'complete' && !await prisma.tournamentAuditLog.count({ where: { tournamentId, action: 'season_champion_crowned' } })) return null
   const pub = await publication(prisma, tournamentId)
   const entrant = await prisma.tournamentParticipant.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } })
   const c = await control(prisma, tournamentId)
-  if (!entrant && !inviteValid(c, token, pub.id)) return null
-  const frozen = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_field_frozen' } })
-  const registered = await prisma.tournamentParticipant.count({ where: { tournamentId, status: 'registered' } })
+  if (!entrant && (shell.status === 'complete' || !inviteValid(c, token, pub.id))) return null
+  const frozen = await currentSeasonOpeningField(prisma, tournamentId)
+  const registered = frozen ? pub.config.participants : await prisma.tournamentParticipant.count({ where: { tournamentId, status: 'registered' } })
   const queue = entrant?.status === 'waitlisted' ? await prisma.tournamentParticipant.findMany({ where: { tournamentId, status: 'waitlisted' }, orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }], select: { id: true } }) : []
-  let assignment: { key: string; name: string; division: string | null; art: SeasonArt; teams: number; draftSlot: number; startsAt: string; draftId?: string } | undefined
-  if (frozen && entrant?.status === 'registered') {
+  let assignment: { key: string; name: string; division: string | null; art: SeasonArt; teams: number; draftSlot: number; startsAt: string; completeBy?: string; stage?: number; leagueId?: string; draftId?: string } | undefined
+  if (frozen && entrant?.status === 'registered' && shell.currentRoundNumber <= 1) {
     const raw = frozen.data as Record<string, unknown>, { manifestHash, ...payload } = raw
     if (seasonContractHash(payload) !== manifestHash) throw new BlueprintOperationError('The frozen assignment needs review.', 409)
     const manifest = readOpeningManifest(raw)
@@ -227,21 +233,41 @@ export async function loadSeasonEntry(userId: string, tournamentId: string, toke
     const index = manifest.leagues.findIndex(l => l.members.some(m => m.id === entrant.id && m.userId === userId))
     const league = manifest.leagues[index], member = league?.members.find(m => m.id === entrant.id && m.userId === userId)
     if (league && member) {
-      const provision = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_league_provisioned', targetType: 'opening_league', targetId: league.key }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
-      const native = provision?.data as { freezeId?: string; manifestHash?: string; leagueId?: string; draftId?: string } | undefined
-      let draftId: string | undefined
-      if (native?.freezeId === frozen.id && native.manifestHash === manifest.manifestHash && native.leagueId && native.draftId) {
-        const release = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_draft_released', targetType: 'league', targetId: native.leagueId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })
-        const data = release?.data as { freezeId?: string; manifestHash?: string; publicationId?: string; key?: string; leagueId?: string; draftId?: string; seasonLaunchReady?: boolean } | undefined
-        if (data?.freezeId === frozen.id && data.manifestHash === manifest.manifestHash && data.publicationId === manifest.publicationId && data.key === league.key && data.leagueId === native.leagueId && data.draftId === native.draftId && data.seasonLaunchReady === false) draftId = native.draftId
-      }
-      assignment = { key: league.key, name: league.name, division: league.division, art: identityArt(manifest.config, index), teams: league.slots, draftSlot: member.draftSlot, startsAt: manifest.config.rules!.calendar.drafts.find(d => d.stage === 1)!.startsAt, ...(draftId ? { draftId } : {}) }
+      const { startsAt, completeBy } = resolveSeasonDraftWindow(manifest.config.rules!.calendar, 1, league)!
+      assignment = { key: league.key, name: league.name, division: league.division, art: identityArt(manifest.config, index), teams: league.slots, draftSlot: member.draftSlot, startsAt, completeBy }
     }
   }
+  if (frozen && entrant && shell.currentRoundNumber > 0 && ['registered', 'eliminated', 'champion'].includes(entrant.status)) {
+    const stage = entrant.status === 'registered' ? shell.currentRoundNumber : entrant.currentRoundNumber
+    const field = await loadSeasonStage(tournamentId, stage)
+    const pool = field?.manifest.leagues.find(league => league.members.some(member => member.id === entrant.id && member.userId === userId))
+    const member = pool?.members.find(member => member.id === entrant.id)
+    if (field && pool && member) {
+      const binding = await prisma.tournamentLeague.findUnique({
+        where: { tournamentId_slug: { tournamentId, slug: pool.key } }, select: { leagueId: true, draftSessionId: true },
+      })
+      const league = stage === 1 && binding?.leagueId
+        ? await prisma.league.findUnique({ where: { id: binding.leagueId }, select: { settings: true } }) : null
+      const openingReleased = !!(binding?.leagueId && league && await hasSeasonDraftRelease(binding.leagueId, league.settings))
+      const roomId = stage === 1 && !openingReleased ? null : binding?.leagueId
+      if (stage === 1 || roomId) {
+        const { startsAt, completeBy } = resolveSeasonDraftWindow(field.manifest.config.rules!.calendar, stage, pool)!
+        assignment = {
+          key: pool.key, name: pool.name, division: pool.division, art: identityArt(field.manifest.config, field.manifest.leagues.indexOf(pool)),
+          teams: pool.slots, draftSlot: member.draftSlot, startsAt, completeBy,
+          stage, ...(roomId ? { leagueId: roomId } : {}),
+          ...(openingReleased && binding?.draftSessionId ? { draftId: binding.draftSessionId } : {}),
+        }
+      }
+    }
+  }
+  const champion = shell.status === 'complete' ? await prisma.tournamentParticipant.findFirst({ where: { tournamentId, status: 'champion' }, select: { displayName: true } }) : null
   return { tournamentId, name: pub.config.name, sport: pub.config.sport, publicationId: pub.id, hash: pub.hash, config: pub.config, scheduleExceptions: pub.exceptions, registered, capacity: pub.config.participants,
+    ...(champion ? { championName: champion.displayName } : {}),
     status: entrant?.status ?? 'not_joined', participantId: entrant?.id ?? null, waitlistPosition: entrant?.status === 'waitlisted' ? queue.findIndex(e => e.id === entrant.id) + 1 : null,
     canJoin: !frozen && inviteValid(c, token, pub.id) && !activeStatuses.includes(entrant?.status ?? '') && entrant?.status !== 'removed',
-    canWithdraw: !frozen && !!entrant && activeStatuses.includes(entrant.status) && !!c && Date.parse(c.closesAt) > Date.now() && Date.parse(pub.config.rules!.calendar.drafts.find(d => d.stage === 1)!.startsAt) > Date.now(),
+    canWithdraw: !frozen && !!entrant && activeStatuses.includes(entrant.status) && !!c && Date.parse(c.closesAt) > Date.now() && Date.parse(earliestOpeningDraft(pub.config)) > Date.now(),
+    canRequestWithdrawal: !!frozen && entrant?.status === 'registered' && shell.status === 'rules_published',
     fieldFrozen: !!frozen, closesAt: c?.closesAt ?? null, ...(assignment ? { assignment } : {}),
   }
 }

@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { resolveDraftRouteContext } from '@/lib/draft/resolve-draft-context'
 import { DraftBoard } from '@/components/draft/DraftBoard'
+import { SeasonDraftAssistant } from '@/components/tournament/SeasonDraftAssistant'
+import { Suspense } from 'react'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +30,9 @@ export default async function AuctionDraftPage({
 
   return (
     <div className="min-h-screen">
+      <Suspense fallback={null}>
+        <SeasonDraftAssistant leagueId={context.leagueId} userId={userId} />
+      </Suspense>
       <DraftBoard
         kind="live"
         draftId={context.draftId}
