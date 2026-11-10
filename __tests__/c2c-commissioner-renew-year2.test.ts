@@ -48,6 +48,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueSeason: {
       upsert: leagueSeasonUpsertMock,
     },
+    redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
     leagueTeam: {
       updateMany: leagueTeamUpdateManyMock,
       count: leagueTeamCountMock,

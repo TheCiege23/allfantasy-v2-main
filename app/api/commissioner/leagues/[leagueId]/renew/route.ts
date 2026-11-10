@@ -384,6 +384,25 @@ export async function POST(
     }
   }
 
+  /*
+   * 🛑 A KEEPER OR DYNASTY LEAGUE IS ALREADY ON NEXT SEASON WHEN RENEW IS PRESSED. Closing the season
+   * builds next year's season shell and moves `League.season` onto it (ensureNextRedraftSeasonShell), so
+   * `league.season + 1` skipped a year: a 2026 keeper league renewed into 2028, and the 2027 history
+   * row was written for a season nobody played (keeper simulation, 2026-11-10: 27 of 27 leagues). When
+   * the league's season is that unplayed shell and the season before it exists, the season engine has
+   * already decided: history belongs to the season before, and next season is the one already current.
+   */
+  if (!redraftRenewal) {
+    const [shell, played] = await Promise.all([
+      prisma.redraftSeason.findFirst({ where: { leagueId, season: currentSeason, status: 'setup' }, select: { id: true, season: true, status: true } }),
+      prisma.redraftSeason.findFirst({ where: { leagueId, season: currentSeason - 1 }, select: { id: true, season: true } }),
+    ])
+    if (shell?.status === 'setup' && shell.season === currentSeason && played?.season === currentSeason - 1) {
+      nextSeason = currentSeason
+      currentSeason = currentSeason - 1
+    }
+  }
+
   // ─── 1. STORE SEASON HISTORY with rankings ───
   try {
     // Build team records with rankings attached
