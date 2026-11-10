@@ -173,6 +173,7 @@ import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
 import { ImportedGuillyTab } from './tabs/ImportedGuillyTab'
 import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
+import { ImportedGuillyChopCard } from '@/components/league/ImportedGuillyChopCard'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
@@ -2632,6 +2633,15 @@ function LeagueTabRouter({
     case 'decide':
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          {/* An imported Guilly league's League home leads with where the viewer stands against the chop line. */}
+          {guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported' ? (
+            <ImportedGuillyChopCard
+              leagueId={leagueId}
+              platform={selectedLeague.platform}
+              yourRosterId={userTeam?.externalId != null ? String(userTeam.externalId) : null}
+              onOpenGuilly={() => onSelectTab('guillotine')}
+            />
+          ) : null}
           <DecideHome
             league={selectedLeague}
             teams={teamSlots}
