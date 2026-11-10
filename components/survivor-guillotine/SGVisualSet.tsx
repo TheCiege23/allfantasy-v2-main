@@ -214,8 +214,8 @@ export function SGVisualSet({
               {g.rows.map((r) => (
                 <div key={r.rosterId} className={cx(s.mrow, r.you && s.you, r.tier === 'chop_zone' && s.zone)} data-tier={r.tier}>
                   <Avatar id={r.rosterId} name={r.name} />
-                  <span className={s.mname} style={{ flex: '0 1 30%' }}>{r.name}{r.you ? ' (you)' : ''}</span>
-                  <span className={s.bar} aria-hidden><i style={{ width: `${(r.points / top) * 100}%`, background: r.tier === 'chop_zone' ? '#e0402e' : r.tier === 'danger' ? '#e8b84a' : '#7b6cf0' }} /></span>
+                  <span className={cx(s.mname, s.chopName)}>{r.name}{r.you ? ' (you)' : ''}</span>
+                  <span className={cx(s.bar, s.chopBar)} aria-hidden><i style={{ width: `${(r.points / top) * 100}%`, background: r.tier === 'chop_zone' ? '#e0402e' : r.tier === 'danger' ? '#e8b84a' : '#7b6cf0' }} /></span>
                   <span className={s.mono}>{r.points.toFixed(1)}</span>
                   <SpecialtyTag tone={r.tier === 'chop_zone' ? 'danger' : r.tier === 'danger' ? 'gold' : 'safe'}>
                     {r.tier === 'chop_zone' ? 'Under the blade' : r.tier === 'danger' ? `${r.marginAboveBlade.toFixed(1)} above it` : 'Safe'}
