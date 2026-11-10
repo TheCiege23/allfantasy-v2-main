@@ -19,6 +19,8 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { computeStartupDraftCapacity, formatCountsTaxiAndDevy } from '@/lib/draft/draftSettingsPolicy'
+import { resolveSGCreateConfig, sgSetupHref } from '@/lib/survivor-guillotine/createFit'
+import { writeSGRulesInTransaction } from '@/lib/survivor-guillotine/rulesWrite'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -86,6 +88,19 @@ export async function executeCanonicalLeagueCreation(args: {
     return { ok: false, status: 400, response: { success: false, error: message,
       errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] } }
   }
+  // Survivor Guilly: the season rules are fitted and validated here, before anything is written, and
+  // committed in the same transaction as the league below. A request that cannot be fitted is refused
+  // whole rather than leaving a plain redraft league behind without its rules.
+  const sgCreate = resolveSGCreateConfig({
+    concept: body.concept,
+    sport: body.sport,
+    teamCount: body.teamCount,
+    conceptSetup: body.conceptSetup,
+  })
+  if (sgCreate.kind === 'invalid') {
+    return { ok: false, status: 400, response: { success: false, error: sgCreate.message,
+      errors: [{ path: sgCreate.path, message: sgCreate.message }] } }
+  }
   let createdLeagueId = ''
   let homepageUrl = ''
   let universeId: string | undefined
@@ -119,6 +134,11 @@ export async function executeCanonicalLeagueCreation(args: {
             teamCount: body.teamCount,
             acceptWeeklyLineups: body.conceptSetup?.acceptWeeklyLineups === true,
           })
+        }
+        if (sgCreate.kind === 'ok') {
+          await writeSGRulesInTransaction(tx as Prisma.TransactionClient, created.leagueId, sgCreate.config)
+          // Land on the season setup page: tribes, powers and the calendar are tuned there.
+          return { ...created, homepageUrl: sgSetupHref(created.leagueId), universeId: undefined, children: [] }
         }
         return { ...created, universeId: undefined, children: [] }
       },

@@ -123,7 +123,8 @@ describe('2026-09-19 league audit reproductions', () => {
       serverCounts: LEAGUE_CREATE_OPTIONS_CATALOG_V1.teamCountOptionsByConceptSport[c.id]?.NFL,
     }))
     console.log('AUDIT_NFL_MATRIX', JSON.stringify(matrix))
-    expect(matrix).toHaveLength(13)
+    // 14 since Survivor Guilly became a catalog concept (2026-11-10).
+    expect(matrix).toHaveLength(14)
   })
 
   // ✅ FIXED 2026-09-24: the bootstrap now seeds the chosen preset (see

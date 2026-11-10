@@ -158,6 +158,8 @@ export interface CreateLeagueV2State {
   tournamentPoolSize: number
   /** Survivor-only: number of tribes. Ignored for other league types. */
   survivorTribeCount: number
+  /** Survivor Guilly only: starting tribes (2–4). Absent in a state restored from before it existed → 2. */
+  survivorGuillotineTribeCount?: number
   /** Whether the creator occupies one of the Survivor cast seats. */
   survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
   /** Survivor-only: a LABEL. Dues are collected off the app; AllFantasy takes no payments. */
@@ -359,6 +361,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   zombieLeagueCount: 1,
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
+  survivorGuillotineTribeCount: 2,
   survivorCommissionerParticipationMode: 'non_participating_host',
   survivorEntryFeeMode: 'free',
   survivorTwistPreset: SURVIVOR_TWIST_PRESET_DEFAULT,

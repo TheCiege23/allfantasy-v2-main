@@ -134,9 +134,13 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     )
   }
 
+  // An alias with its own catalog entry is validated against that entry, not its shell's: a Survivor
+  // Guilly league is a redraft shell but offers only the sports and sizes its schedule can fit.
   const catalogConcept = normalizedConcept?.aliasTags.includes('idp')
     ? 'idp'
-    : normalizedConcept?.formatId ?? validated.data.concept
+    : normalizedConcept?.aliasTags.includes('survivor_guillotine')
+      ? 'survivor_guillotine'
+      : normalizedConcept?.formatId ?? validated.data.concept
 
   const allowedSports = getAllowedSportsFromCatalog(catalog, catalogConcept)
   if (allowedSports.length > 0 && !allowedSports.includes(validated.data.sport)) {

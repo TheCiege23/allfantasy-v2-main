@@ -4,6 +4,7 @@ import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleEliminati
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
+import { SG_CREATE_TRIBE_COUNTS } from '@/lib/survivor-guillotine/createFit'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
@@ -91,7 +92,7 @@ const STEP_ORDER: readonly WizardStep[] = ['sport', 'basics', 'draft', 'review']
 /** The four familiar formats, shown as a compact row beneath the specialties. */
 const CLASSIC_FORMATS: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
 /** Specialty order on the Basics step: the elimination and social formats lead. */
-const SPECIALTY_ORDER: readonly string[] = ['survivor', 'pirate', 'guillotine', 'big_brother', 'zombie', 'salary_cap', 'devy', 'c2c', 'idp']
+const SPECIALTY_ORDER: readonly string[] = ['survivor', 'pirate', 'guillotine', 'survivor_guillotine', 'big_brother', 'zombie', 'salary_cap', 'devy', 'c2c', 'idp']
 
 function specialtyRank(id: string): number {
   const index = SPECIALTY_ORDER.indexOf(id)
@@ -247,7 +248,9 @@ export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: L
     idpSelected: false,
     scoringPresetId,
     draftType,
-    teamCount: leagueType === 'zombie' && getEffectiveLeagueType(state) !== 'zombie'
+    // Zombie and Survivor Guilly open on their own default size rather than keeping the last
+    // format's: both seasons are designed around it (a 22-team Survivor Guilly is the default rules).
+    teamCount: (leagueType === 'zombie' || leagueType === 'survivor_guillotine') && getEffectiveLeagueType(state) !== leagueType
       ? getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline)
       : getTeamCountOptions(state.sport, leagueType, state.soccerPipeline).includes(state.teamCount)
       ? state.teamCount : getDefaultTeamCount(state.sport, leagueType, state.soccerPipeline),
@@ -1007,6 +1010,34 @@ export function LeagueBasicsStep({
         <ZombieCreationOptions state={state} onChange={onChange} importCarryover={importCarryover} />
       ) : null}
 
+      {getEffectiveLeagueType(state) === 'survivor_guillotine' ? (
+        <div className="space-y-3 rounded-2xl border border-violet-500/25 bg-violet-600/5 p-4" data-testid="g30-sg-setup">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+              {tx(t, 'createLeague.g30.sg.tribes', 'Starting tribes')}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {SG_CREATE_TRIBE_COUNTS.map((count) => {
+                const selected = (state.survivorGuillotineTribeCount ?? 2) === count
+                return (
+                  <button key={count} type="button" aria-pressed={selected}
+                    onClick={() => onChange({ survivorGuillotineTribeCount: count })}
+                    className={cx('inline-flex min-h-11 min-w-12 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold',
+                      selected ? 'border-violet-500 bg-violet-600/12' : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]')}
+                    data-testid={`g30-sg-tribes-${count}`}>
+                    <SelectionCheck selected={selected} size="sm" testId={`g30-sg-tribes-${count}-check`} />
+                    {count}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <p className="text-xs leading-5 text-[color:var(--text-secondary)]" data-testid="g30-sg-note">
+            {tx(t, 'createLeague.g30.sg.note', `Tribes win immunity each week, and the lowest score is chopped. The elimination schedule is built for ${state.teamCount} managers so three finalists reach the championship; after creating, you'll fine-tune tribes, idols and the calendar on the Survivor Guilly setup page.`)}
+          </p>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         <p className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
           {t('createLeague.g30.privacy.label')}
@@ -1035,8 +1066,8 @@ export function LeagueBasicsStep({
       </div>
 
       {/* A guillotine week has no opponent — every team plays the chop line — so there is no
-          head-to-head game for a median game to double. */}
-      {getEffectiveLeagueType(state) === 'guillotine' ? null : (
+          head-to-head game for a median game to double. Survivor Guilly chops the same way. */}
+      {getEffectiveLeagueType(state) === 'guillotine' || getEffectiveLeagueType(state) === 'survivor_guillotine' ? null : (
       <label
         className={cx(
           'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',
@@ -1510,6 +1541,9 @@ export function ReviewCreateStep({
           ) : null}
           {getEffectiveLeagueType(state) === 'survivor' ? (
             <SummaryTile label="Starting tribes" value={String(state.survivorTribeCount)} onEdit={edit('basics')} testId="g30-review-edit-survivor-tribes" />
+          ) : null}
+          {getEffectiveLeagueType(state) === 'survivor_guillotine' ? (
+            <SummaryTile label="Starting tribes" value={String(state.survivorGuillotineTribeCount ?? 2)} onEdit={edit('basics')} testId="g30-review-edit-sg-tribes" />
           ) : null}
           <SummaryTile label={t('createLeague.summary.draft')} value={draftWhenLabel(t, state)} onEdit={edit('draft')} testId="g30-review-edit-draft" />
         </div>
