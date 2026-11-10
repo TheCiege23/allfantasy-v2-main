@@ -14,7 +14,7 @@
 .af-pr-examples-label {
   display: block;
   margin-bottom: 6px;
-  font: 700 10.5px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1.2 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
