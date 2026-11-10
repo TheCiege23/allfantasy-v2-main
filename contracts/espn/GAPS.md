@@ -153,3 +153,28 @@ real teams, dates and venue fields are verified; tournament seeds are not.
 The six-week date-range request returned HTTP 400. Runtime uses individual days.
 The alternate NBA CDN `scheduleLeagueV2.json` returned HTTP 403 through its probe;
 no spoofed headers or bypass retry was attempted. It is not a runtime source.
+
+## Weekly starters for Lineup Integrity, 2026-11-09 — recorded without probing
+
+- `S-01` OPEN, AND WORKED AROUND RATHER THAN PROBED: no request in this repo asks ESPN for a PAST week's
+  lineup. `fetchEspnLeagueJson` sends no query, so neither `scoringPeriodId` nor `matchupPeriodId` is ever
+  set, and `rosterForMatchupPeriod` appears in `fixtures/fantasy-league.NFL.2026.json` only on the CURRENT
+  week's schedule sides. Whether `view=mMatchupScore&scoringPeriodId=N` returns week N's lineup for a past
+  N is unverified. The owner declined the probe on 2026-11-09, so nothing calls it.
+- What runs instead (`lib/integrity/espnLineupSnapshots.ts`, rules in `espnStartersCapture.ts`): ESPN locks a
+  player's slot at his kickoff, so the synced `Roster.playerData.starters` from any fetch AFTER that kickoff,
+  inside the week, is the slot he was played in. Each player is frozen from the first such fetch. No ESPN call.
+  The fetch time is the earlier of `Roster.updatedAt` (advanced on every successful read, changed or not)
+  and `League.lastSyncedAt`.
+  - Measured on production 2026-11-09, read-only: 10 ESPN NFL leagues, 120 rosters, median roster age
+    8 minutes, and 114 of 120 rosters re-read inside the week-9 game window. So the capture has data to work from.
+  - It records nothing while the ESPN sync is off (`FANTASY_OS_EXEC_SYNC_LIVE`). A week with a player who
+    had a game but was never read after kickoff is reported incomplete and must not be scored.
+  - A player on bye has no lock; he keeps the last in-week read.
+  - It cannot recover weeks played before it ran. That needs `S-01` resolved.
+- `S-02` FOUND WHILE BUILDING IT, NOT FIXED HERE: several `SportsGame` sources store NFL preseason games with
+  `seasonType` null and reused week numbers. In 2026 those are `espn` week 2 (Aug 13–16) and `espn_live`
+  weeks 3–4 (Aug 21–29). `buildWeekKickoffMap` (lib/redraft/lineupLock.ts) does not filter on season type,
+  so for those regular-season week numbers a team's "earliest kickoff that week" is an August preseason
+  game. The ESPN writer reads `seasonType: 'regular'` rows only for this reason.
+
