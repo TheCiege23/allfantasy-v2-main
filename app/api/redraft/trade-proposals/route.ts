@@ -287,7 +287,7 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const [season, proposer, receiver] = await Promise.all([
-    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } }),
+    prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId }, include: { league: { select: { leagueVariant: true } } } }),
     prisma.redraftRoster.findFirst({ where: { id: proposerRosterId, seasonId, leagueId } }),
     prisma.redraftRoster.findFirst({ where: { id: receiverRosterId, seasonId, leagueId } }),
   ])
@@ -408,9 +408,8 @@ export async function POST(req: NextRequest) {
   }
 
   const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const league = await tx.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
     let tournamentExpiry = expiresAt
-    if (league?.leagueVariant === 'season_tournament') {
+    if (season.league?.leagueVariant === 'season_tournament') {
       const policy = await readSeasonTradePolicy(tx, leagueId, true)
       if (!policy || policy.seasonId !== seasonId || multiTeam || assets.some(asset => asset.assetType !== 'player' && asset.assetType !== 'faab')) {
         throw new SeasonTradeError('This tournament accepts player and FAAB trades between two teams in its active stage.')
