@@ -220,7 +220,8 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
     if (!(await writeWeek(week))) break
     try {
       await updateStandings(seasonId, week)
-      await scoreActivePlayoffRound({ seasonId, calendarWeek: week }, { finalizeWeek: (async () => ({ finalized: true, alreadyFinal: false })) as never })
+      const scored = await scoreActivePlayoffRound({ seasonId, calendarWeek: week }, { finalizeWeek: (async () => ({ finalized: true, alreadyFinal: false })) as never })
+      if (scored.outcome === 'scored') run.stats.lastScoredPlayoffWeeks = scored.weeks
       for (let guard = 0; guard < 4; guard += 1) {
         const adv = (await advanceNflRedraftPlayoffRuntimeRound({ seasonId, week, actorUserId: run.commissionerId })) as any
         advances.push(adv.ok ? adv.status : adv.code)
@@ -230,7 +231,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
       add({ code: 'PLAYOFF_WEEK_THREW', stage: 'playoffs', message: `Week ${week}: ${(e as Error).message}` })
       break
     }
-    clearStats()
+    // Keep earlier playoff stats so the runtime can rescore every week of a multi-week round.
     // The bracket is played out once the engine reports nothing left to advance.
     if (advances[advances.length - 1] === 'NO_ACTIVE_ROUND') break
   }

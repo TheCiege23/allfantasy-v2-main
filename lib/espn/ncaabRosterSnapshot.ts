@@ -39,6 +39,35 @@ export function makeEspnNcaabRosterSnapshot(input: {
   return { seasonYear, teamId, school, observedAt: now.toISOString(), athletes }
 }
 
+/** Fresh ESPN class evidence scoped to the exact basketball season. Duplicate roster IDs are ambiguous. */
+export async function readEspnNcaabClassYears(
+  db: Pick<PrismaClient, 'sportsDataCache'>,
+  seasonYear: number,
+  now: Date,
+): Promise<Map<string, number>> {
+  const rows = await db.sportsDataCache.findMany({
+    where: { cacheKey: { startsWith: `${ESPN_NCAAB_ROSTER_KEY_PREFIX}${seasonYear}:` }, expiresAt: { gt: now } },
+    select: { data: true },
+  })
+  const years = new Map<string, number>()
+  const seen = new Set<string>()
+  for (const { data } of rows) {
+    const snapshot = data as Partial<EspnNcaabRosterSnapshot> | null
+    if (snapshot?.seasonYear !== seasonYear || !Array.isArray(snapshot.athletes)) continue
+    for (const athlete of snapshot.athletes) {
+      if (typeof athlete?.id !== 'string' || !/^\d+$/.test(athlete.id)) continue
+      if (seen.has(athlete.id)) {
+        years.delete(athlete.id)
+        continue
+      }
+      seen.add(athlete.id)
+      const year = athlete.classYear
+      if (typeof year === 'number' && Number.isInteger(year) && year >= 1 && year <= 4) years.set(athlete.id, year)
+    }
+  }
+  return years
+}
+
 export async function storeEspnNcaabRosterSnapshot(
   db: Pick<PrismaClient, 'sportsDataCache'>,
   snapshot: EspnNcaabRosterSnapshot,

@@ -12,6 +12,10 @@ describe("CFP weekly projection", () => {
     expect(result.rankingDate).toBe("2026-11-10")
     expect(result.teams).toEqual([...names.slice(0, 11), "Boise State"])
     expect(result.groupSix).toBe("Boise State")
+    // Each seed carries its committee rank, in seed order.
+    expect(result.ranks).toHaveLength(12)
+    expect(result.ranks![0]).toBe(1)
+    expect(result.ranks![11]).toBe(names.indexOf("Boise State") + 1)
   })
   it("includes the highest ranked team in every automatic-qualifier conference", () => {
     const altered = ranks.map((row, i) => ({ ...row, conference: i === 15 ? "ACC" : row.conference === "ACC" ? "SEC" : row.conference }))

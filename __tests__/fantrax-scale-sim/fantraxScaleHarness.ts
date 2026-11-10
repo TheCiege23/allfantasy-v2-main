@@ -166,7 +166,8 @@ export function fabricateFantraxLeague(sport: ScaleSport, teamCount: number, sou
       teamInfo,
       playerInfo: {},
       seasonYear: fixture.info.seasonYear ?? 2026,
-      ...(sport === 'SOCCER' && teamCount >= 2 ? simulatedSoccerCalendar(teamInfo) : {}),
+      ...(sport === 'SOCCER' && teamCount >= 2 ? simulatedPeriodCalendar(teamInfo, 38) : {}),
+      ...(sport === 'NCAAB' && teamCount >= 2 ? simulatedPeriodCalendar(teamInfo, 20, 19) : {}),
     },
     rosters,
     playerMap,
@@ -175,18 +176,23 @@ export function fabricateFantraxLeague(sport: ScaleSport, teamCount: number, sou
   }
 }
 
-/** The capture has scoring weights but no calendar. Exercise an in-season import with source totals. */
-function simulatedSoccerCalendar(teamInfo: Record<string, { id: string; name: string }>) {
+/** Supply a synthetic provider calendar to exercise in-season import. */
+function simulatedPeriodCalendar(
+  teamInfo: Record<string, { id: string; name: string }>,
+  totalWeeks: number,
+  firstPlayoffPeriod?: number,
+) {
   const [away, home] = Object.values(teamInfo)
   const weekMs = 7 * 86_400_000
   const first = Date.now() - weekMs * 1.5
-  const scoringPeriods = Array.from({ length: 38 }, (_, index) => ({
+  const scoringPeriods = Array.from({ length: totalWeeks }, (_, index) => ({
     number: index + 1,
     startDate: new Date(first + index * weekMs).toISOString(),
     endDate: new Date(first + (index + 1) * weekMs - 1).toISOString(),
   }))
-  const matchups = [1, 2, 38].map((period) => ({ period, matchupList: [{ away, home }] }))
-  return { scoringPeriods, matchups }
+  const matchups = [1, 2, totalWeeks].map((period) => ({ period, matchupList: [{ away, home }] }))
+  const playoffs = firstPlayoffPeriod ? { used: true, firstPlayoffPeriod } : undefined
+  return { scoringPeriods, matchups, ...(playoffs ? { playoffs } : {}) }
 }
 
 /** "Last, First" → "First Last", as every other provider and our own registry spell a name. */
@@ -230,7 +236,7 @@ async function seedSoccerMatchValues(env: ScaleEnv, run: ScaleRun): Promise<void
   await env.db.sportsGame.createMany({ data: Array.from({ length: 18 }, (_, match) =>
     clubs.filter((_, club) => club % 2 === 0).map((club, pair) => ({
       sport: 'SOCCER', externalId: `soc-future-${match}-${pair}`, homeTeam: club, awayTeam: clubs[pair * 2 + 1]!,
-      source: 'sim', season, seasonType: 'regular', startTime: new Date(today + (match + 1) * dayMs),
+      source: 'thesportsdb', season, seasonType: 'regular', startTime: new Date(today + (match + 1) * dayMs),
       expiresAt: new Date(today + 365 * dayMs),
     }))).flat() })
   run.stats.seededValues = { identities: Object.keys(fx.playerMap).length, matchesPerClub: 12, season }
@@ -395,6 +401,10 @@ export async function importLeague(env: ScaleEnv, run: ScaleRun): Promise<void> 
     inviteCode: Boolean((league.settings as any)?.inviteCode),
   }
   ;(run.stats.imported as any).seasonPlayers = seasonPlayers.length
+  if (run.sport === 'NCAAB' && seasons[0]) {
+    const { status, currentWeek, totalWeeks, playoffStartWeek } = seasons[0]
+    run.stats.ncaabSeason = { status, currentWeek, totalWeeks, playoffStartWeek }
+  }
   if (run.sport === 'SOCCER' && seasons[0]) {
     const { loadFantraxNativePresentation } = await import('@/lib/redraft/fantraxNativePresentation')
     const season = seasons[0]

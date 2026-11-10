@@ -17,6 +17,11 @@ function cx(...p: Array<string | false | null | undefined>) {
   return p.filter(Boolean).join(' ')
 }
 
+/** Near either end of the meter a centred label would run past the card; hang it inward instead. */
+export function markEdge(pct: number): string | undefined {
+  return pct < 20 ? s.markStart : pct > 80 ? s.markEnd : undefined
+}
+
 /* SGLineup: blade meter + play-idol shortcut */
 export function SGLineupMeter({ meter, heldIdolId, idolLabel, onPlayIdol, lockText }: {
   meter: SGBladeMeter; heldIdolId: string | null; idolLabel: string | null; onPlayIdol?: (id: string) => void; lockText: string | null
@@ -35,8 +40,8 @@ export function SGLineupMeter({ meter, heldIdolId, idolLabel, onPlayIdol, lockTe
       {meter.tier !== 'immune' ? (
         <div className={s.meterWrap}>
           <div className={s.meter} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meter.youPct)} aria-label={`Your score against the blade: ${meter.margin.toFixed(1)} points`}>
-            <i className={s.mark} style={{ left: `${meter.bladePct}%` }}><span>{meter.bladeName ? `${meter.bladeName} · ${meter.blade.toFixed(1)}` : `Blade · ${meter.blade.toFixed(1)}`}</span></i>
-            <i className={cx(s.mark, s.markYou)} style={{ left: `${meter.youPct}%` }}><span>You · {meter.you.toFixed(1)}</span></i>
+            <i className={cx(s.mark, markEdge(meter.bladePct))} style={{ left: `${meter.bladePct}%` }}><span>{meter.bladeName ? `${meter.bladeName} · ${meter.blade.toFixed(1)}` : `Blade · ${meter.blade.toFixed(1)}`}</span></i>
+            <i className={cx(s.mark, s.markYou, markEdge(meter.youPct))} style={{ left: `${meter.youPct}%` }}><span>You · {meter.you.toFixed(1)}</span></i>
           </div>
           <div className={s.meterLbl}><span>Chop zone</span><span>Danger · within 10</span><span>Safe</span></div>
         </div>

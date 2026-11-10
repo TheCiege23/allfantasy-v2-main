@@ -392,6 +392,25 @@ export async function GET(request: Request) {
   }
 
   /*
+   * The same snapshot for IMPORTED ESPN leagues (lib/integrity/espnLineupSnapshots.ts), which also
+   * records who each team STARTED — read only from a roster the ESPN sync fetched after that player's
+   * kickoff, when ESPN had locked his slot (lib/integrity/espnStartersCapture.ts). DB-first: it reads
+   * synced rosters and never calls ESPN. Guarded and on its own job identity.
+   */
+  let espnLineupSnapshots: unknown = null
+  try {
+    const { runEspnLineupSnapshots } = await import('@/lib/integrity/espnLineupSnapshots')
+    espnLineupSnapshots = await withSyncJobRun(
+      { jobName: 'cron-espn-lineup-snapshots', trigger: 'cron' },
+      () => runEspnLineupSnapshots(),
+      (r) => ({ rowsRead: r.teams, rowsWritten: r.written, errors: r.failures, metadata: { leagues: r.leagues, skipped: r.skipped, unmappedPlayers: r.unmapped } }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] espn lineup snapshots failed', e)
+    espnLineupSnapshots = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Taxi deadline notices (lib/taxi/taxiDeadlineNoticeService): in the week a taxi promotion deadline
    * or lock week closes, every owner is told before it does and the commissioner gets a summary. Leagues
    * with taxi enforcement on (AF Commissioner). Guarded and on its own job identity, like the sweeps around it.
@@ -601,5 +620,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

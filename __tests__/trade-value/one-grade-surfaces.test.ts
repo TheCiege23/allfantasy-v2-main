@@ -443,7 +443,8 @@ describe('College redraft — points over replacement, never the private scale (
 
   it('the college value reads no chart and no private scale', () => {
     for (const file of ['lib/decision-os/trade/ncaafRedraftValue.ts', 'lib/decision-os/trade/ncaafRedraftContext.ts', 'lib/decision-os/trade/ncaafLeagueGrader.ts']) {
-      expect(code(file)).not.toMatch(/resolveAssets|dynastyValue|fantasycalc|FantasyCalc|scoringFit|sportsPlayerRecord/i)
+      // Guard the private dynastyValue field while allowing the shared sportDynastyValue module.
+      expect(code(file)).not.toMatch(/resolveAssets|\bdynastyValue\b|fantasycalc|scoringFit|sportsPlayerRecord/i)
     }
   })
 

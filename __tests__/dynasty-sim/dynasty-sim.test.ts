@@ -272,6 +272,15 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
       } else {
         expect(run.leagueId === null || typeof run.leagueId === 'string').toBe(true)
       }
+
+      if (process.env.SIM_SEASON === '1' && c.teamCount === 4 && c.draft === 'snake' && (c.sport === 'NHL' || c.sport === 'MLB')) {
+        const findings = JSON.stringify(run.findings)
+        expect(run.stats.seasonClose, findings).toMatchObject({ ok: true, champion: expect.any(String) })
+        expect(run.stats.lastScoredPlayoffWeeks).toEqual([expect.any(Number), expect.any(Number)])
+        expect(run.stats.history).toEqual({ leagueSeasons: 1, franchiseSeasons: 4, seasonResults: 4 })
+        expect(run.stats.nextSeasons).toEqual([{ season: expect.any(Number), status: 'setup' }])
+        expect(run.stats.carryover).toEqual({ owners: 4, lost: 0, gained: 0 })
+      }
     })
   }
 })
