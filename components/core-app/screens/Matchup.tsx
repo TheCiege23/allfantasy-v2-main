@@ -9,6 +9,8 @@ import '@/components/core-app/af-matchup-pulse.css'
 import '@/components/core-app/af-core-redraft-matchup.css'
 // The head-to-head board look (wide boards only); last, so it sizes over the base and redraft rules.
 import '@/components/core-app/af-matchup-h2h.css'
+// The final-game result and box-score lines under each starter.
+import '@/components/core-app/af-matchup-gamelines.css'
 import '@/components/core-app/af-empty-state.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
@@ -487,6 +489,20 @@ function PlayerHalf({
             ? [cell.position, cell.team].filter(Boolean).join(' · ') || copy('no position on file')
             : `id ${cell.playerId}`}
         </div>
+        {/*
+          Once his game is FINAL: his club's result, then his box score (lib/core-app/matchupGameLine.ts).
+          Final only — a live score in the schedule table can trail the game, so a starter still playing
+          keeps the LIVE chip below instead. Either line is absent when its data is.
+        */}
+        {cell.result ? (
+          <div className="af-mu-half-result">
+            <span className="af-num" data-outcome={cell.result.outcome}>
+              {cell.result.outcome} {cell.result.clubScore}–{cell.result.opponentScore}
+            </span>
+            {cell.opponentClub ? <span> {cell.home ? 'vs' : '@'} {cell.opponentClub}</span> : null}
+          </div>
+        ) : null}
+        {cell.statLine ? <div className="af-mu-half-statline">{cell.statLine}</div> : null}
         {/*
           His game's state as a chip — live boards only. A starter ruled out or on bye is `final` in
           the game-state read, but he never played; the BYE / OUT flag beside his number says so, and a

@@ -88,6 +88,21 @@ const LIVE_STATES: Array<'final' | 'live' | 'upcoming'> = ['final', 'live', 'fin
 
 const r1 = (n: number) => Math.round(n * 10) / 10
 
+/** A FINAL starter's club result and (NFL) box score, cycled — fixture text in the loader's shapes. */
+const FIXTURE_RESULTS: Array<NonNullable<MatchupPlayerCell['result']>> = [
+  { outcome: 'W', clubScore: 27, opponentScore: 20 },
+  { outcome: 'L', clubScore: 17, opponentScore: 24 },
+  { outcome: 'W', clubScore: 31, opponentScore: 13 },
+  { outcome: 'L', clubScore: 10, opponentScore: 23 },
+]
+const FIXTURE_NFL_STAT_LINES: Record<string, string> = {
+  QB: '22/31 CMP, 268 YD, 2 TD, 3 CAR, 14 YD',
+  RB: '18 CAR, 84 YD, 1 TD, 3 REC, 22 YD',
+  WR: '6 REC, 91 YD',
+  TE: '4 REC, 47 YD, 1 TD',
+  K: '2/2 FG, 3 XP',
+}
+
 function cell(
   sport: FixtureSport,
   id: string,
@@ -115,6 +130,8 @@ function cell(
     kickoff: gameState === 'upcoming' ? '2026-11-01T18:00:00.000Z' : null,
     opponentClub,
     home: Number(id.replace(/\D/g, '')) % 2 === 0,
+    result: gameState === 'final' ? FIXTURE_RESULTS[Number(id.replace(/\D/g, '')) % FIXTURE_RESULTS.length] : null,
+    statLine: gameState === 'final' && sport === 'NFL' ? FIXTURE_NFL_STAT_LINES[pos] ?? null : null,
   }
 }
 

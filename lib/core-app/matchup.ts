@@ -23,7 +23,8 @@ import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-lin
 import { verifiedHandoff, type PlatformLink } from './platformLinks'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isBestBallSettings } from './lineupMode'
-import { starterGameStates, type StarterGameState } from './matchupGameState'
+import { clubGameIndex, starterGameStates, type StarterGameState } from './matchupGameState'
+import { gameResultFor, nflStatLine, type GameResult } from './matchupGameLine'
 import { bestBallProjectedFinal } from './bestBallForecast'
 import { realManagerName, rosterLabel } from './managerName'
 import { eliminationFormat, type EliminationFormat } from './railMatchupMode'
@@ -200,6 +201,17 @@ export type MatchupPlayerCell = {
   /** The club he plays this week, and whether at home. Null when his game could not be placed. */
   opponentClub?: string | null
   home?: boolean | null
+  /**
+   * His club's result, once his game is FINAL and both scores are stored (lib/core-app/matchupGameLine.ts).
+   * Null while the game is upcoming or live: a live SportsGame score can trail the game by an hour.
+   */
+  result?: GameResult | null
+  /**
+   * His box score for the week — "12/19 CMP, 127 YD, 4 CAR, 22 YD" — from the stored Sleeper week
+   * stats. NFL only, final games only, and null whenever no row or no volume stat exists. NFL week
+   * stats are imported daily after the games, so a Sunday line appears the next morning.
+   */
+  statLine?: string | null
 }
 
 export type MatchupSlot = {
@@ -794,12 +806,48 @@ async function buildMatchupData(
     if (row) identityBy.set(rosterId, row)
   }
   const actualBy = new Map(scoreRows.map((r) => [r.playerId, r.points]))
+  /*
+   * NFL box scores for this week, keyed on the Sleeper id — the key /api/cron/import-player-game-stats
+   * writes them under (source 'sleeper'). Postgres only; nothing here calls a provider. Other sports'
+   * rows come from other writers under other ids, so they are not read here at all.
+   */
+  const statRowsPromise =
+    String(sport ?? 'NFL').toUpperCase() === 'NFL' && lookupIds.length
+      ? prisma.playerGameStat
+          .findMany({
+            where: { sportType: 'NFL', source: 'sleeper', season: latest.seasonYear, weekOrRound: latest.week, playerId: { in: lookupIds } },
+            select: { playerId: true, statPayload: true },
+          })
+          .catch(() => [])
+      : Promise.resolve([])
   const games = await prisma.sportsGame.findMany({
     where: { sport: sport ?? 'NFL', season: latest.seasonYear, week: latest.week, OR: [{ seasonType: 'regular' }, { seasonType: null }] },
-    select: { homeTeam: true, awayTeam: true, status: true, startTime: true, fetchedAt: true, seasonType: true },
+    select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, status: true, startTime: true, fetchedAt: true, seasonType: true },
     take: 400,
   }).catch(() => [])
   const states = starterGameStates(identityBy, games)
+  /*
+   * The result line reads the SAME per-club row the state above came from, so a "final" marker and a
+   * score can never come from two different provider rows.
+   */
+  const gameIndex = clubGameIndex(games)
+  const resultOf = (club: string | null | undefined): GameResult | null => {
+    const g = club ? gameIndex.get(club) : undefined
+    if (!g) return null
+    return gameResultFor(club, {
+      home: normalizeTeamAbbrev(g.homeTeam) ?? null,
+      away: normalizeTeamAbbrev(g.awayTeam) ?? null,
+      homeScore: g.homeScore ?? null,
+      awayScore: g.awayScore ?? null,
+    })
+  }
+  // Started above, beside the games query, so it costs no extra round trip.
+  const statRows = await statRowsPromise
+  const statLineBy = new Map<string, string>()
+  for (const row of statRows) {
+    const line = nflStatLine(row.statPayload)
+    if (line && !statLineBy.has(row.playerId)) statLineBy.set(row.playerId, line)
+  }
   /*
    * Each club's game THIS week — kickoff and opponent — from the same rows the states come from.
    * Regular-season fixtures only (an untyped live-writer row may be a preseason reading), earliest
@@ -939,6 +987,18 @@ async function buildMatchupData(
    * lineup — who starts where — is still shown; only the points projections are withheld.
    */
   const withholdPointsProjections = scoringTypeRefusal != null
+  /* The result and box score, for a starter whose game is FINAL only (see matchupGameLine.ts). */
+  const finalLines = (
+    entry: { playerId: string; unavailable?: Unavailable | null },
+    sleeperId: string | null,
+    team: string | null | undefined,
+  ): { result: GameResult | null; statLine: string | null } => {
+    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null }
+    return {
+      result: resultOf(normalizeTeamAbbrev(team)),
+      statLine: sleeperId ? statLineBy.get(sleeperId) ?? null : null,
+    }
+  }
   const cellFor = (
     raw: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
   ): MatchupPlayerCell | null => {
@@ -984,6 +1044,9 @@ async function buildMatchupData(
         gameState: gameStateOf(entry),
         injury: null,
         ...fixtureOf(rawTeam ? normalizeTeamAbbrev(rawTeam) : null),
+        // No platform id, so no box score; the club's final still applies.
+        result: gameStateOf(entry) === 'final' ? resultOf(rawTeam ? normalizeTeamAbbrev(rawTeam) : null) : null,
+        statLine: null,
       }
     }
     const identity = identityBy.get(entry.playerId)
@@ -1019,6 +1082,7 @@ async function buildMatchupData(
         ? atRisk[sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) ?? ''] ?? null
         : null,
       ...fixtureOf(normalizeTeamAbbrev(identity?.team)),
+      ...finalLines(entry, identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null, identity?.team),
     }
   }
 
