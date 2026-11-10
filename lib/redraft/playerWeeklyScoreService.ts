@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { recordWeekPositions } from '@/lib/bestball/weekPositions'
 import { calculateScoreFromSportConfig, leagueIsBestBall } from './scoringEngine'
 import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { pickFreshestSourceRows } from '@/lib/sports-live-scores-service'
@@ -99,6 +100,8 @@ export type WeeklyScoreSyncSummary = {
   scoresUpserted: number
   /** Daily-lineup leagues only: per-day rows written to `player_daily_scores` (see lib/redraft/dailyLineups.ts). */
   dailyScoresUpserted?: number
+  /** Week positions written to `player_week_positions` (lib/bestball/weekPositions.ts); 0 until migrated. */
+  weekPositionsRecorded?: number
   /** Games-count leagues only: `player_week_game_scores` rows written (lib/redraft/gamesCount.ts). */
   weekGameScoresUpserted?: number
   missingCachePlayerIds: string[]
@@ -1064,6 +1067,25 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     summary.warnings.push(
       `Unrecognized ${sport} provider stat keys (alias table may be wrong): ${[...unmappedStatKeys].sort().join(', ')}`,
     )
+  }
+
+  /*
+   * The position each player's week was computed with, recorded per week (lib/bestball/weekPositions.ts):
+   * the position history the schema never had. Best ball seats a player at it when it rescores this week
+   * later. A row follows the roster while the week is open and is frozen once the week finalizes. A no-op
+   * until the player_week_positions migration is applied.
+   */
+  const positionsBySport = new Map<string, Map<string, string | null>>()
+  for (const playerId of playerIds) {
+    const playerSport = sportByPlayer.get(playerId) ?? sport
+    const forSport = positionsBySport.get(playerSport) ?? new Map<string, string | null>()
+    forSport.set(playerId, positionByPlayer.get(playerId) ?? null)
+    positionsBySport.set(playerSport, forSport)
+  }
+  for (const [playerSport, positions] of positionsBySport) {
+    summary.weekPositionsRecorded =
+      (summary.weekPositionsRecorded ?? 0) +
+      (await recordWeekPositions(prisma as never, { sport: playerSport, season: seasonYear, week }, positions))
   }
 
   await recordScoreSyncAudit(summary, params.actorId ?? 'system')

@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   playerWeeklyScore: { findUnique: vi.fn() },
   roster: { findMany: vi.fn(async () => []) },
   afRosterLineupAssignment: { findMany: vi.fn(async () => []) },
+  playerWeekPosition: { findMany: vi.fn(async (): Promise<unknown[]> => []) },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/devy/scoringEligibilityEngine', () => ({
@@ -245,6 +246,43 @@ describe('a SEALED week keeps the positions its players were seated at', () => {
       expect(
         written().lineupSnapshots.redraftScoring.home.bestBall.assignments.find((a: { playerId: string }) => a.playerId === 'r2').slot,
       ).not.toBe('RB')
+    } finally {
+      r2.position = 'RB'
+    }
+  })
+})
+
+/*
+ * Position history (lib/bestball/weekPositions.ts): the weekly score sync records each player's position
+ * for the week. An OPEN week — no seal yet — is seated at that recorded position, not today's.
+ */
+describe('an OPEN week is seated at the position recorded for that week', () => {
+  const r2 = HOME.find((p) => p.playerId === 'r2')!
+  const seatedAt = () =>
+    Object.fromEntries(written().lineupSnapshots.redraftScoring.home.bestBall.assignments.map((a: { playerId: string; slot: string }) => [a.playerId, a.slot]))
+
+  it('the RB re-listed as a WR is still seated at RB for a week recorded as RB', async () => {
+    r2.position = 'WR'
+    try {
+      arrange(WITH_SF, { status: 'active' })
+      db.playerWeekPosition.findMany.mockImplementation(async () => [{ playerId: 'r2', position: 'RB', frozen: true }])
+      await updateMatchupScores('m1')
+      expect(seatedAt().r2).toBe('RB')
+      expect(db.playerWeekPosition.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ sport: 'NFL', season: 2026, week: 3 }) }),
+      )
+    } finally {
+      r2.position = 'RB'
+      db.playerWeekPosition.findMany.mockImplementation(async () => [])
+    }
+  })
+
+  it('with nothing recorded for the week, today’s position is used, as before', async () => {
+    r2.position = 'WR'
+    try {
+      arrange(WITH_SF, { status: 'active' })
+      await updateMatchupScores('m1')
+      expect(seatedAt().r2).not.toBe('RB')
     } finally {
       r2.position = 'RB'
     }

@@ -180,6 +180,7 @@ describe('the production best ball scorer uses the week roster', () => {
           return { count: a.where.playerId.in.length }
         }),
       },
+      playerWeekPosition: { updateMany: vi.fn(async (a: { where: { playerId: { in: string[] } } }) => ({ count: a.where.playerId.in.length })) },
     }
     const recalc = vi.fn(async () => ({ updated: 1, incomplete: 0, summaries: [] }))
     const result = await finalizeRedraftWeek(
@@ -188,6 +189,11 @@ describe('the production best ball scorer uses the week roster', () => {
     )
     expect(result.finalized).toBe(true)
     expect(updated.flat().sort()).toEqual(['q1', 'w1', 'wDrop'])
+    // The week's recorded positions freeze with its scores (lib/bestball/weekPositions.ts).
+    expect(prisma.playerWeekPosition.updateMany).toHaveBeenCalledWith({
+      where: { sport: 'NFL', season: 2026, week: 4, playerId: { in: expect.arrayContaining(['q1', 'w1', 'wDrop']) }, frozen: false },
+      data: { frozen: true },
+    })
   })
 
   it('an unreadable schedule scores the current roster, as before', async () => {

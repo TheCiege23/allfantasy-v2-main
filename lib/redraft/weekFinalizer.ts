@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { prisma as defaultPrisma } from '@/lib/prisma'
+import { freezeWeekPositions } from '@/lib/bestball/weekPositions'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
@@ -801,6 +802,8 @@ export async function finalizeRedraftWeek(
       data: { isFinalized: true },
     })
     rowsFinalized += updated.count
+    // The week's recorded positions freeze with its scores (lib/bestball/weekPositions.ts).
+    await freezeWeekPositions(prisma as never, { sport: playerSport, season: season.season, week: params.week }, playerIds)
   }
 
   await recalc(season.id, params.week)

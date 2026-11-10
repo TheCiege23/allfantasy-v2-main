@@ -32,6 +32,7 @@ const db = vi.hoisted(() => ({
   afRosterLineupAssignment: { findMany: vi.fn() },
   sportsGame: { findMany: vi.fn(async () => []) },
   sportsPlayer: { findFirst: vi.fn() },
+  playerWeekPosition: { findMany: vi.fn(async (): Promise<unknown[]> => []), createMany: vi.fn(async () => ({ count: 1 })), updateMany: vi.fn(async () => ({ count: 0 })) },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('server-only', () => ({}))
@@ -293,6 +294,17 @@ describe('the stat sync writes per-day rows for a daily best ball league', () =>
   it('daily best ball: one row per game day', async () => {
     const summary = await runSync(DAILY_BB)
     expect(summary.dailyScoresUpserted).toBe(2)
+  })
+
+  // Position history (lib/bestball/weekPositions.ts): the sync records the position each week was scored with.
+  it('records each player’s position for the week, under the weekly score’s own sport key', async () => {
+    vi.mocked(db.playerWeekPosition.createMany).mockClear()
+    const summary = await runSync(WEEKLY_BB)
+    expect(db.playerWeekPosition.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ playerId: 'p1', sport: 'NBA', season: 2026, week: 1, position: 'PG', source: 'weekly_score_sync' })],
+      skipDuplicates: true,
+    })
+    expect(summary.weekPositionsRecorded).toBe(1)
   })
 
   it('weekly and legacy-default leagues: no daily rows, as before', async () => {

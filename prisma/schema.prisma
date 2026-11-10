@@ -15965,6 +15965,30 @@ model PlayerWeeklyScore {
   @@map("player_weekly_scores")
 }
 
+/// A player's position for one scoring week, recorded when that week's weekly score is written and
+/// FROZEN when the week finalizes (lib/bestball/weekPositions.ts). There was no position history
+/// anywhere: `SportsPlayer.position` and the roster rows hold the CURRENT position only, so rescoring
+/// a past best ball week seated a re-listed player at today's position. Best ball reads this before
+/// falling back to the current position. Same ids and sport keys as `PlayerWeeklyScore`.
+model PlayerWeekPosition {
+  playerId   String
+  sport      String
+  season     Int
+  week       Int
+  /// The position the weekly score was computed with; null when the roster row had none.
+  position   String?
+  /// What recorded it, e.g. `weekly_score_sync`.
+  source     String
+  /// Set when the week's weekly scores finalize; a frozen row is never rewritten.
+  frozen     Boolean  @default(false)
+  recordedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@id([playerId, sport, season, week])
+  @@index([sport, season, week])
+  @@map("player_week_positions")
+}
+
 model RedraftPlayoffBracket {
   id        String                @id @default(cuid())
   seasonId  String                @unique

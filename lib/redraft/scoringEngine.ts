@@ -1,4 +1,5 @@
 import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
+import { readWeekPositions } from '@/lib/bestball/weekPositions'
 import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -344,11 +345,34 @@ type BestBallScoringContext = {
   frozenPositions?: Record<string, string | null>
 }
 
-/** The position a best ball player is seated and scored at: the sealed one when the week froze it. */
-function bestBallPositionOf(ctx: BestBallScoringContext, p: { playerId: string; position?: string | null }): string | null {
+/**
+ * The position a best ball player is seated and scored at: the sealed one when the week froze it, else
+ * the position recorded for this week (lib/bestball/weekPositions.ts), else his current one.
+ */
+function bestBallPositionOf(
+  ctx: BestBallScoringContext,
+  p: { playerId: string; position?: string | null },
+  weekPositions?: ReadonlyMap<string, string | null>,
+): string | null {
   const frozen = ctx.frozenPositions
   if (frozen && Object.prototype.hasOwnProperty.call(frozen, p.playerId)) return frozen[p.playerId] ?? null
+  if (weekPositions?.has(p.playerId)) return weekPositions.get(p.playerId) ?? null
   return p.position ?? null
+}
+
+/** This week's recorded positions for the candidates, per sport key (the weekly score's own key). */
+async function loadCandidateWeekPositions(
+  candidates: ReadonlyArray<{ playerId: string; sport: string }>,
+  season: number,
+  week: number,
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  const bySport = new Map<string, string[]>()
+  for (const c of candidates) bySport.set(c.sport, [...(bySport.get(c.sport) ?? []), c.playerId])
+  for (const [sport, ids] of bySport) {
+    for (const [id, position] of await readWeekPositions(prisma as never, { sport, season, week }, ids)) out.set(id, position)
+  }
+  return out
 }
 
 export type MatchupScoreUpdateSummary = {
@@ -832,6 +856,7 @@ async function scoreRosterBestBall(args: {
   const missingPlayerIds: string[] = []
   const inputs: { playerId: string; positions: string[]; points: number; playerName: string | null }[] = []
   const positionsUsed: Record<string, string | null> = {}
+  const weekPositions = await loadCandidateWeekPositions(candidates, args.seasonYear, args.week)
   for (const p of candidates) {
     const row = await prisma.playerWeeklyScore.findUnique({
       where: {
@@ -843,7 +868,7 @@ async function scoreRosterBestBall(args: {
       allFinal = false
       continue
     }
-    const position = bestBallPositionOf(args.bestBall, p)
+    const position = bestBallPositionOf(args.bestBall, p, weekPositions)
     positionsUsed[p.playerId] = position
     const points = await calculateScoreFromSportConfig(
       args.leagueId,
@@ -946,6 +971,7 @@ async function scoreRosterBestBallDaily(args: {
   const inputs: DailyBestBallCandidate[] = []
   const positionsUsed: Record<string, string | null> = {}
   const sportOf = new Map<string, string>()
+  const weekPositions = await loadCandidateWeekPositions(candidates, args.seasonYear, args.week)
   for (const p of candidates) {
     const row = await prisma.playerWeeklyScore.findUnique({
       where: { playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport } },
@@ -962,7 +988,7 @@ async function scoreRosterBestBallDaily(args: {
     // A drafted or kept row is held from before the season, whatever its `addedAt` says.
     const rosterRow = heldFromSeasonStart(p) ? { addedAt: null, droppedAt: p.droppedAt } : p
     const onRosterDays = new Set(daysOnRoster(rosterRow, days, lockStartOnFor(lockStarts, p)).map((d) => dayKey(d)))
-    const position = bestBallPositionOf(args.bestBall, p)
+    const position = bestBallPositionOf(args.bestBall, p, weekPositions)
     positionsUsed[p.playerId] = position
     const pointsByDay = new Map<string, number>()
     for (const key of onRosterDays) {
