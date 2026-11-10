@@ -147,10 +147,13 @@ export function TournamentControlDashboard({
               key={row.tournamentLeagueId}
               className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3"
             >
-              <div className="min-w-0 flex-1">
+              {/* The name keeps at least 14rem: at 820 the three actions beside it squeezed "Gridiron South of the
+                  Mississippi" onto three lines. Now the actions wrap below instead (tournament gaps audit item 6). */}
+              <div className="min-w-0 flex-1 basis-56">
                 <div className="font-medium text-white">{row.leagueName}</div>
                 <div className="text-xs text-white/50">
-                  {row.conferenceName} · Round {row.roundIndex}
+                  {/* roundIndex is 0-based; people count rounds from 1 ("Round 0" was the first round). */}
+                  {row.conferenceName} · Round {row.roundIndex + 1}
                   {row.rosterCount != null && row.leagueSize != null && (
                     <span className="ml-2">
                       Fill: {row.rosterCount}/{row.leagueSize}
@@ -161,7 +164,7 @@ export function TournamentControlDashboard({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {row.joinUrl ? (
                   <>
                     <button
