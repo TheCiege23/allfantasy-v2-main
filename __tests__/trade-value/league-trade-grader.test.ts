@@ -202,12 +202,11 @@ describe('createLeagueTradeGrader', () => {
     expect(email.html).toContain('Personal roster fit is shown separately')
     expect(email.html).not.toContain('a bad season by the team that owes one moves this grade')
   })
-  it('shares specialty coverage limits and rejects a prohibited format through the real grade path', async () => {
+  it('withholds a keeper grade without league terms and rejects a prohibited format', async () => {
     const deal = { give: [{ kind: 'player' as const, name: 'Drake London' }], get: [{ kind: 'player' as const, name: 'Puka Nacua' }], viewerSide: false }
     h.leagueType = 'keeper'
     const keeper = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
-    const read = graded(await keeper.grade(deal))
-    expect(read.basis).toContain('Keeper costs and future keeper surplus are not included')
+    expect(await keeper.grade(deal)).toMatchObject({ graded: false, reason: expect.stringContaining('league season') })
     h.leagueType = 'survivor_guillotine'
     const prohibited = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
     const result = await prohibited.grade(deal)

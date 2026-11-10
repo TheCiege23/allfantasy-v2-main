@@ -2,8 +2,7 @@ import 'server-only'
 
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
-import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
+import { readStoredLeagueTradeChart, type LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { loadNcaafRedraftBase } from './ncaafRedraftContext'
 import { resolveNcaafRosteredPlayer } from './ncaafRedraftValue'
@@ -29,7 +28,7 @@ export function campusPointsToMarket(campus: readonly number[], canton: readonly
 async function optionChartFactor(chart: LeagueTradeChart): Promise<number | null> {
   if (!chart.chartIsDynasty) return null
   if (chart.isSuperFlex && chart.leagueSize === 12 && chart.pprNfl === 1) return 1
-  const reference = await readFantasyCalcValuesFromDb({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 }, { allowStale: false })
+  const reference = await readStoredLeagueTradeChart({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
   const values = new Map(reference.players.filter((p) => p.player.sleeperId && p.value > 0).map((p) => [p.player.sleeperId, p.value]))
   const ratios = chart.fcPlayers.flatMap((p) => {
     const base = values.get(p.player.sleeperId)
