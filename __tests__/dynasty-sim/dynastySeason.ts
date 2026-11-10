@@ -191,7 +191,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
       if (SCENARIOS) {
         const sc = await import('./dynastyScenarios')
         await sc.collusionConsequences(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `collusion: ${e.message}` }))
-        await sc.secondRoundPickTrade(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `pick trade: ${e.message}` }))
+        if (run.leagueType !== 'redraft') await sc.secondRoundPickTrade(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `pick trade: ${e.message}` }))
       }
     }
   }
@@ -264,6 +264,11 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   if (history.franchiseSeasons !== run.teamCount) add({ code: 'FRANCHISE_HISTORY_INCOMPLETE', stage: 'offseason', message: `${history.franchiseSeasons} franchise-season rows for ${run.teamCount} teams — rankings read these.` })
   if (history.seasonResults !== run.teamCount) add({ code: 'SEASON_RESULTS_INCOMPLETE', stage: 'offseason', message: `${history.seasonResults} season results for ${run.teamCount} teams — legacy and hall of fame read these.` })
 
+  if (run.leagueType === 'redraft') {
+    await runRankings(env, run, championId, add)
+    await runRedraftRenewal(env, run, { seasonId, rosterIds, ledger, championId }, add)
+    return
+  }
   const next = (rowsOf(db, 'RedraftSeason') as any[]).filter((s) => s.leagueId === leagueId && s.id !== seasonId)
   run.stats.nextSeasons = next.map((s) => ({ season: s.season, status: s.status }))
   if (!next.length) {
@@ -300,6 +305,89 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   }
   run.stats.playoffStart = playoffStart
   await runRookieDraft(env, run, { ledger, championId, runnerUpId: (closed?.runnerUpRosterId ?? null) as string | null, year1RosterIds: rosterIds, year1, nextSeasonId: next[0].id }, add)
+}
+
+// ── Redraft renewal → year 2: the commissioner's Renew, then a fresh season and a fresh draft ──
+async function runRedraftRenewal(
+  env: SimEnv,
+  run: LeagueRun,
+  ctx: { seasonId: string; rosterIds: string[]; ledger: Ledger; championId: string | null },
+  add: (f: SeasonFinding) => void,
+): Promise<void> {
+  const db = env.db
+  const leagueId = run.leagueId!
+  const year1 = rowsOf(db, 'RedraftSeason').find((s: any) => s.id === ctx.seasonId) as any
+  const ownerOf = new Map((rowsOf(db, 'RedraftRoster') as any[]).filter((r) => ctx.rosterIds.includes(r.id)).map((r) => [r.id, String(r.ownerId)]))
+  const year1Owners = new Set(ownerOf.values())
+
+  env.signIn({ id: run.commissionerId, email: 'commish@sim.allfantasy.test', name: 'Sim Commish' } as never)
+  const route = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
+  const { NextRequest } = await import('next/server')
+  const view = await route.GET(new NextRequest(`http://sim.allfantasy.test/api/commissioner/leagues/${leagueId}/renew`), { params: Promise.resolve({ leagueId }) } as never)
+  run.stats.renewView = { status: view.status }
+  if (view.status !== 200) add({ code: 'RENEW_SCREEN_NOT_READABLE', stage: 'offseason', message: `The renew screen returned ${view.status}.` })
+  const res = await route.POST(
+    new NextRequest(`http://sim.allfantasy.test/api/commissioner/leagues/${leagueId}/renew`, { method: 'POST', body: JSON.stringify({ draftOrder: 'standings' }) }),
+    { params: Promise.resolve({ leagueId }) } as never,
+  )
+  const body = (await res.json().catch(() => null)) as any
+  run.stats.renewal = { status: res.status, error: body?.error ?? null }
+  if (res.status !== 200) {
+    add({ code: 'RENEWAL_REFUSED', stage: 'offseason', message: `Renew returned ${res.status}: ${JSON.stringify(body).slice(0, 240)}` })
+    return
+  }
+
+  // A fresh season, one year on.
+  const next = (rowsOf(db, 'RedraftSeason') as any[]).filter((s) => s.leagueId === leagueId && s.id !== ctx.seasonId)
+  run.stats.nextSeasons = next.map((s) => ({ season: s.season, status: s.status }))
+  const season2 = next.find((s) => Number(s.season) === Number(year1?.season) + 1) ?? next[0]
+  if (!season2) {
+    add({ code: 'NO_NEXT_SEASON', stage: 'offseason', message: 'Renewal returned 200 but the league has no year-2 season.' })
+    return
+  }
+  if (Number(season2.season) !== Number(year1?.season) + 1) add({ code: 'NEXT_SEASON_WRONG_YEAR', stage: 'offseason', message: `Year 1 was ${year1?.season}; the renewed season is ${season2.season}.` })
+
+  // Every manager is still in the league, each with an EMPTY roster: a redraft league starts over.
+  const rosters2 = (rowsOf(db, 'RedraftRoster') as any[]).filter((r) => r.seasonId === season2.id)
+  const owners2 = new Set(rosters2.map((r) => String(r.ownerId)))
+  const missing = [...year1Owners].filter((o) => !owners2.has(o))
+  if (rosters2.length !== run.teamCount) add({ code: 'RENEWED_ROSTER_COUNT', stage: 'offseason', message: `${rosters2.length} season-2 rosters for a ${run.teamCount}-team league.` })
+  if (missing.length) add({ code: 'MANAGER_LOST_AT_RENEWAL', stage: 'offseason', message: `${missing.length} manager(s) have no season-2 team: ${missing.slice(0, 3).join(', ')}.` })
+  const ids2 = new Set(rosters2.map((r) => r.id))
+  const kept = (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => ids2.has(p.rosterId) && !p.droppedAt)
+  run.stats.renewedRosters = { rosters: rosters2.length, players: kept.length, missingOwners: missing.length }
+  if (kept.length) add({ code: 'REDRAFT_ROSTERS_NOT_RESET', stage: 'offseason', message: `${kept.length} player(s) are still on season-2 rosters; a redraft league starts empty.` })
+  const genericLeft = (rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId)
+    .reduce((n, r) => n + ((r.playerData as any)?.players?.length ?? 0), 0)
+  if (genericLeft) add({ code: 'REDRAFT_LEAGUE_ROSTERS_NOT_RESET', stage: 'offseason', message: `${genericLeft} player(s) remain on the league rosters after renewal.` })
+
+  // A fresh draft, waiting to be run, in the order the commissioner chose: "standings" is worst to first,
+  // champion last (renewRedraftLeague: "reverse standings" is champion first).
+  const sessions = (rowsOf(db, 'DraftSession') as any[]).filter((s) => s.leagueId === leagueId)
+  const draft2 = sessions.filter((s) => s.status === 'pre_draft').sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0]
+  run.stats.renewedDraft = draft2 ? { status: draft2.status, rounds: draft2.rounds, draftType: draft2.draftType, slots: (draft2.slotOrder ?? []).length } : null
+  if (!draft2) {
+    add({ code: 'NO_DRAFT_FOR_NEXT_SEASON', stage: 'offseason', message: `Renewed with no pre-draft session (sessions: ${sessions.map((s) => s.status).join(', ')}).` })
+    return
+  }
+  const slots = ([...(draft2.slotOrder ?? [])] as Array<{ slot: number; rosterId: string }>).sort((a, b) => a.slot - b.slot)
+  if (slots.length !== run.teamCount) add({ code: 'NEXT_DRAFT_SLOT_COUNT', stage: 'offseason', message: `${slots.length} draft slots for ${run.teamCount} teams.` })
+  if (ctx.championId) {
+    const championOwner = ownerOf.get(ctx.championId)
+    const genericOfOwner = new Map((rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId).map((r) => [String(r.platformUserId), String(r.id)]))
+    const championRoster = championOwner ? genericOfOwner.get(championOwner) : undefined
+    const last = slots.at(-1)?.rosterId
+    run.stats.renewedDraftLast = { champion: championRoster ?? null, last: last ?? null }
+    if (championRoster && last && last !== championRoster) add({ code: 'STANDINGS_ORDER_CHAMPION_NOT_LAST', stage: 'offseason', message: 'Renewed with "standings" (worst to first); the champion does not pick last.' })
+  }
+
+  // A second Renew into the same season is refused.
+  const again = await route.POST(
+    new NextRequest(`http://sim.allfantasy.test/api/commissioner/leagues/${leagueId}/renew`, { method: 'POST', body: JSON.stringify({ draftOrder: 'standings' }) }),
+    { params: Promise.resolve({ leagueId }) } as never,
+  )
+  run.stats.renewTwice = again.status
+  if (again.status === 200) add({ code: 'RENEWED_TWICE', stage: 'offseason', message: 'A second Renew into the same season was accepted.' })
 }
 
 // ── Rankings: the manager rank the career ledger produces from the season just closed ──

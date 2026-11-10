@@ -233,12 +233,13 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
     it(`${c.sport} ${c.teamCount} teams, ${c.draft} draft`, { timeout: 1_800_000 }, async () => {
       const started = Date.now()
       const env: SimEnv = { db: holder.db, signIn: (user) => (holder.session = user ? { user } : null) }
-      const run = await sim.createDynastyLeague(env, c)
+      const run = await sim.createDynastyLeague(env, { ...c, leagueType: process.env.SIM_LEAGUE_TYPE === 'redraft' ? 'redraft' : 'dynasty' })
       const scale = c.teamCount === 150 && ['audit', 'scale'].includes(process.env.SIM_MATRIX ?? '')
       try {
         await sim.joinManagers(env, run)
         if (process.env.SIM_SCENARIOS === '1') await (await import('./dynastyScenarios')).preDraftSettings(env, run)
         const pool = await sim.seedPlayerPool(env, run)
+        await sim.checkDraftRoomNames(env, run)
         await sim.runStartupDraft(env, run, pool, scale ? 151 : undefined)
         if (scale) {
           await gradeScaleRookiePicks(env, run)

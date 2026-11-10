@@ -151,7 +151,8 @@ export async function weeklyScenarios(env: SimEnv, run: LeagueRun, ctx: WeekCtx)
   if (ctx.week === 7) await step('health', () => leagueHealth(env, run, ctx, S))
   if (ctx.week === 8) await step('takeover', () => takeover(env, run, ctx, S, 'midseason'))
   if (ctx.week === 10) await step('chimmy', () => chimmySweep(env, run, ctx, S))
-  if (ctx.week === ctx.regularWeeks) await step('rookie-order-setting', () => setLiveRookieOrder(env, run, S))
+  // Rookie draft order is a dynasty feature; a redraft league renews into a fresh draft instead.
+  if (ctx.week === ctx.regularWeeks && run.leagueType !== 'redraft') await step('rookie-order-setting', () => setLiveRookieOrder(env, run, S))
 }
 
 /** Before the lineups that tanking reads are scored: the tankers start injured players over healthy bench. */
@@ -159,8 +160,18 @@ export async function beforeWeekScoring(env: SimEnv, run: LeagueRun, ctx: WeekCt
   if (!run.leagueId || ctx.week < 3 || ctx.week > 7) return
   const tanker = tankerFor(env, run, ctx.week)
   if (!tanker) return
-  const starters = holdings(env, tanker.seasonRosterId).filter((p) => isStarter(p.slotType))
-  for (const p of starters.slice(0, 3)) await env.db.redraftRosterPlayer.update({ where: { id: p.id }, data: { injuryStatus: 'Out' } })
+  const held = holdings(env, tanker.seasonRosterId)
+  // Tank the starters a healthy BENCH player could have replaced: that is what the scan looks for, and in
+  // a sport with position-specific slots (baseball's C, SS, P) an arbitrary three can have no eligible
+  // substitute at all — a lineup the scan rightly does not call tanking.
+  const { allowedPositionsForSlot } = await import('@/lib/redraft/lineupValidation')
+  const benchPositions = held.filter((p) => !isStarter(p.slotType) && !p.injuryStatus).map((p) => String(p.position ?? '').toUpperCase())
+  const replaceable = (p: any) => allowedPositionsForSlot(run.sport, String(p.slotType ?? '')).some((pos) => benchPositions.includes(pos))
+  const starters = held.filter((p) => isStarter(p.slotType)).sort((a, b) => Number(replaceable(b)) - Number(replaceable(a)))
+  const tanked = starters.slice(0, 3)
+  const S0 = (run.stats.scenarios ??= {}) as Record<string, any>
+  ;(S0.tankReplaceable ??= {})[ctx.week] = tanked.filter(replaceable).length
+  for (const p of tanked) await env.db.redraftRosterPlayer.update({ where: { id: p.id }, data: { injuryStatus: 'Out' } })
   // The tanker SAVES that lineup on the lineup screen — what the tanking scan reads (afRosterLineupAssignment).
   const roster = (rowsOf(env.db, 'Roster') as any[]).find((r) => r.id === tanker.rosterId)
   signInAs(env, tanker.userId)
@@ -189,7 +200,10 @@ async function integritySetup(env: SimEnv, run: LeagueRun, S: Record<string, any
       tankingStartWeek: 1,
       tankingIllegalLineupCheck: true,
       holdFlaggedTradesMode: 'severe',
-      tankingPenalties: { enabled: true, penalty: 'forfeit_pick', pickAtStrike: 2, pickRound: 1 },
+      // A redraft league has no future picks: losing a pick (and lottery odds) are dynasty penalties. FAAB is not.
+      tankingPenalties: run.leagueType === 'redraft'
+        ? { enabled: true, penalty: 'faab', pickAtStrike: 2, faabPercent: 25 }
+        : { enabled: true, penalty: 'forfeit_pick', pickAtStrike: 2, pickRound: 1 },
     },
   }, { leagueId: run.leagueId! })
   S.integritySetup = { status: put.status, error: (put.body as any)?.error ?? null }
@@ -199,7 +213,40 @@ async function integritySetup(env: SimEnv, run: LeagueRun, S: Record<string, any
 
 // ── Waivers (the waiver screen's routes: claims → process) ───────────────────
 
+/**
+ * The league's first waiver run, with no claims in it. In production it runs on schedule whether or not
+ * anyone filed a claim, and it is what opens trading after the draft ("Rosters are locked after the draft.
+ * Trades open after the first waiver run"). A skipped waiver scenario must not leave the lock on.
+ */
+async function firstWaiverRun(env: SimEnv, run: LeagueRun, S: Record<string, any>) {
+  // A run with no claims in it does not count as the first waiver run (the lock stayed on, measured), so
+  // one manager claims a free agent first — as some manager in a real league does before week 1.
+  const leagueId = run.leagueId!
+  const seat = seats(env, run).find((s) => s.seasonRosterId)
+  const rostered = new Set((rowsOf(env.db, 'RedraftRosterPlayer') as any[]).filter((p) => !p.droppedAt).map((p) => String(p.playerId)))
+  const fa = (rowsOf(env.db, 'SportsPlayer') as any[]).find((p) => p.sport === run.sport && /^sim-/.test(String(p.id)) && !rostered.has(String(p.id)))
+  const drop = seat ? holdings(env, seat.seasonRosterId).filter((p) => !isStarter(p.slotType))[0] : undefined
+  if (seat && fa && drop && !(run.sport === 'NBA' && run.leagueType === 'redraft')) {
+    signInAs(env, seat.userId)
+    const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
+    const claim = await call(claims.POST, `/api/waiver-wire/leagues/${leagueId}/claims`, { method: 'POST', body: { addPlayerId: fa.id, dropPlayerId: drop.playerId, faabBid: 1 } }, { leagueId })
+    S.firstWaiverClaim = { status: claim.status, error: (claim.body as any)?.error ?? null }
+  }
+  signInAs(env, run.commissionerId)
+  const proc = await import('@/app/api/waiver-wire/leagues/[leagueId]/process/route')
+  const ran = await call(proc.POST, `/api/waiver-wire/leagues/${run.leagueId}/process`, { method: 'POST', body: {} }, { leagueId: run.leagueId! })
+  S.firstWaiverRun = { status: ran.status, error: (ran.body as any)?.error ?? null }
+}
+
 async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<string, any>) {
+  // NBA redraft waivers act only on players verified against current NBA rosters (Rolling Insights /
+  // TheSportsDB rows with numeric provider ids — lib/waiver-wire/current-nba-player-pool.ts). The
+  // simulation's players carry no provider ids, so this path cannot be exercised here: say so.
+  if (run.sport === 'NBA' && run.leagueType === 'redraft') {
+    ;(S.skippedForData ??= []).push(`waivers: needs verified current NBA roster data`)
+    await firstWaiverRun(env, run, S)
+    return
+  }
   const leagueId = run.leagueId!
   const db = env.db
   const all = seats(env, run)
@@ -211,7 +258,10 @@ async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
     ctx.add({ code: 'NO_FREE_AGENTS', stage: 'season', message: 'No unrostered players to claim.' })
     return
   }
-  if (tooFewSeats(all, 5, S, 'waivers')) return
+  if (tooFewSeats(all, 5, S, 'waivers')) {
+    await firstWaiverRun(env, run, S)
+    return
+  }
   const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
   const [a, b, c] = [all[2]!, all[3]!, all[4]!]
   const dropOf = (s: Seat) => holdings(env, s.seasonRosterId).filter((p) => !isStarter(p.slotType)).sort((x, y) => String(y.playerId).localeCompare(String(x.playerId)))[0]
@@ -253,6 +303,13 @@ async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
 }
 
 async function freeAgentAdd(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<string, any>) {
+  // NBA redraft waivers act only on players verified against current NBA rosters (Rolling Insights /
+  // TheSportsDB rows with numeric provider ids — lib/waiver-wire/current-nba-player-pool.ts). The
+  // simulation's players carry no provider ids, so this path cannot be exercised here: say so.
+  if (run.sport === 'NBA' && run.leagueType === 'redraft') {
+    ;(S.skippedForData ??= []).push(`free-agent add: needs verified current NBA roster data`)
+    return
+  }
   const leagueId = run.leagueId!
   const rostered = new Set((rowsOf(env.db, 'RedraftRosterPlayer') as any[]).filter((p) => !p.droppedAt).map((p) => String(p.playerId)))
   const fa = (rowsOf(env.db, 'SportsPlayer') as any[]).find((p) => p.sport === run.sport && /^sim-/.test(String(p.id)) && !rostered.has(String(p.id)) && p.position === 'TE')
@@ -302,7 +359,9 @@ async function tanking(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
   const tankerFlag = tanker ? open.find((f) => (f.affectedRosterIds ?? []).includes(tanker.seasonRosterId)) : null
   const week: any = { week: ctx.week, tanker: tanker?.userId ?? null, scan: JSON.stringify(direct).slice(0, 500), openFlags: open.map((f) => ({ rosters: f.affectedRosterIds, severity: f.severity })) }
   const faabBefore = tanker ? (rowsOf(env.db, 'Roster') as any[]).find((r) => r.id === tanker.rosterId)?.faabRemaining ?? null : null
-  if (tanker && !tankerFlag) ctx.add({ code: 'TANKING_NOT_FLAGGED', stage: 'season', message: `Week ${ctx.week}: ${tanker.userId} started 3 injured players over a healthy bench; no open tanking flag.` })
+  const replaceableThisWeek = Number(((run.stats.scenarios as any)?.tankReplaceable ?? {})[ctx.week] ?? 3)
+  week.replaceable = replaceableThisWeek
+  if (tanker && !tankerFlag && replaceableThisWeek > 0) ctx.add({ code: 'TANKING_NOT_FLAGGED', stage: 'season', message: `Week ${ctx.week}: ${tanker.userId} started ${replaceableThisWeek} injured player(s) a healthy bench player could have replaced; no open tanking flag.` })
   for (const f of open) {
     const innocent = !tanker || !(f.affectedRosterIds ?? []).includes(tanker.seasonRosterId)
     if (innocent) ctx.add({ code: 'TANKING_FLAG_ON_INNOCENT_TEAM', stage: 'season', message: `Week ${ctx.week}: tanking flag on ${JSON.stringify(f.affectedRosterIds)}, who did not tank.` })
@@ -331,7 +390,7 @@ export function checkTankingConsequences(env: SimEnv, run: LeagueRun, add: Add):
   const a = T.weeks.filter((w: any) => w.tanker === 'sim-mgr-011')
   const b = T.weeks.filter((w: any) => w.tanker === 'sim-mgr-012')
   const aForfeited = a.at(-1)?.forfeited ?? []
-  if (a.filter((w: any) => w.confirm?.status === 200).length >= 2 && aForfeited.length === 0) add({ code: 'TANKING_PICK_NOT_FORFEITED', stage: 'season', message: `sim-mgr-011 has ${a.length} confirmed strikes under "forfeit a 1st at strike 2"; no pick is forfeited.` })
+  if (run.leagueType !== 'redraft' && a.filter((w: any) => w.confirm?.status === 200).length >= 2 && aForfeited.length === 0) add({ code: 'TANKING_PICK_NOT_FORFEITED', stage: 'season', message: `sim-mgr-011 has ${a.length} confirmed strikes under "forfeit a 1st at strike 2"; no pick is forfeited.` })
   const bConfirmed = b.filter((w: any) => w.confirm?.status === 200).length
   const bFaab = b.at(-1)?.faab
   if (bConfirmed >= 2 && bFaab && b[0]?.faab?.before != null && bFaab.after === b[0].faab.before) add({ code: 'TANKING_FAAB_NOT_TAKEN', stage: 'season', message: `sim-mgr-012 has ${bConfirmed} confirmed strikes under "take 25% FAAB at strike 2"; FAAB is unchanged at ${bFaab.after}.` })
@@ -628,7 +687,7 @@ async function setLiveRookieOrder(env: SimEnv, run: LeagueRun, S: Record<string,
 const lopsidedTradeIds = (trades: any[]) => trades.filter((x: any) => String(x.label).startsWith('collusion') && x.ok).map((x: any) => x.tradeId as string)
 
 /** One trade as the integrity scan's review sees it: its flags, its value gap, and the lopsided check's verdict. */
-async function reviewSummary(env: SimEnv, run: LeagueRun, tradeId: string): Promise<Record<string, unknown>> {
+export async function reviewSummary(env: SimEnv, run: LeagueRun, tradeId: string): Promise<Record<string, unknown>> {
   const { reviewStoredTrade } = await import('@/lib/decision-os/trade/tradeReviewContext')
   const r: any = await reviewStoredTrade({ leagueId: run.leagueId!, ref: { kind: 'af', tradeId }, userId: run.commissionerId, surface: 'integrity-scan' } as never).catch((e: Error) => ({ ok: false, refusal: { reason: e.message } }))
   if (!r?.ok) return { tradeId, refused: r?.refusal?.reason ?? 'unknown' }
