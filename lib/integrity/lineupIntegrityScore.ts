@@ -36,6 +36,11 @@ export type SnapshotPlayer = {
   team?: string | null
   /** When the player's game started and this entry stopped changing. Null while it can still move. */
   frozenAt?: string | null
+  /**
+   * Imported ESPN leagues only (./espnStartersCapture.ts): whether the player was in a starting slot,
+   * read from a roster the provider returned AFTER his kickoff, when ESPN had locked his slot.
+   */
+  started?: boolean | null
 }
 
 /** One starting seat: its label and the positions that may fill it. */

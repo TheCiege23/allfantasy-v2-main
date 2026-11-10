@@ -68,6 +68,9 @@ export type CronEntryStatus = {
   lastRunAt: string | null
   lastSuccessAt: string | null
   lastFailureAt: string | null
+  /** A job inside another cron route: the parent's path, and what the page calls it. */
+  subJobOf: string | null
+  label: string | null
 }
 
 export type CronStatusResult = {
@@ -166,6 +169,8 @@ function entryFromRegistry(entry: CronRegistryEntry, runsByJob: Map<string, JobR
     lastRunAt: jobHealth?.lastRunAt ?? null,
     lastSuccessAt: jobHealth?.lastSuccessAt ?? null,
     lastFailureAt: jobHealth?.lastFailureAt ?? null,
+    subJobOf: entry.subJobOf ?? null,
+    label: entry.label ?? null,
   }
 }
 
@@ -175,7 +180,7 @@ export async function getCronStatus(): Promise<CronStatusResult> {
   try {
     registry = loadCronRegistry()
   } catch {
-    registry = { entries: [], missingRoutes: [], duplicates: [], instrumentedCount: 0, totalDeclared: 0 }
+    registry = { entries: [], missingRoutes: [], duplicates: [], instrumentedCount: 0, totalDeclared: 0, subJobCount: 0 }
   }
 
   const runsByJob = new Map<string, JobRunRecord[]>()

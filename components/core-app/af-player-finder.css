@@ -5194,3 +5194,33 @@
     min-height: 44px;
   }
 }
+
+/*
+ * "Show all N" under Game day and Your shares (2026-11-09 phone pass). Both lists show their first five
+ * rows (FINDER_LIST_PREVIEW in GameDayTriage.tsx); at 375px twenty of each made Player Finder 10,949px.
+ * The same quiet full-width button as the trade history and Competitive Edge. Top level, appended.
+ */
+.af-core .af-pf-list-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin: 10px 0 0;
+  padding: 0 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pf-list-more:hover {
+  border-style: solid;
+}
+.af-core .af-pf-list-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
