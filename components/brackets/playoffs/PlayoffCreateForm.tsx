@@ -30,7 +30,9 @@ export default function PlayoffCreateForm() {
   }
 
   return (
-    <div className="mx-auto max-w-xl rounded-3xl border border-slate-300 bg-[linear-gradient(160deg,#fff7ed_0%,#ecfeff_50%,#eef2ff_100%)] p-6 shadow-[0_18px_48px_rgba(15,23,42,0.16)]">
+    // `af-draft-dark`: this card is drawn light in every mode; the opt-out stops light mode's clamp from turning
+    // the dark "Create Bracket" button white on the white card.
+    <div className="af-draft-dark mx-auto max-w-xl rounded-3xl border border-slate-300 bg-[linear-gradient(160deg,#fff7ed_0%,#ecfeff_50%,#eef2ff_100%)] p-6 shadow-[0_18px_48px_rgba(15,23,42,0.16)]">
       <h1 className="text-2xl font-black tracking-tight text-slate-900">Create a Playoff Bracket</h1>
       <p className="mt-1 text-sm text-slate-700">Launch an NBA, NHL or MLB bracket pool using the shared playoff engine.</p>
 
