@@ -14,6 +14,6 @@ async function main() {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : ''
-  console.error(/^(Usage:|Supply a fresh|Fewer than five|The stored rankings)/.test(message) ? message : 'NBA prospect rankings could not be imported.')
+  console.error(/^(Usage:|Supply a fresh|Fewer than five|The stored rankings|Live NBA pricing requires)/.test(message) ? message : 'NBA prospect rankings could not be imported.')
   process.exitCode = 1
 }).finally(() => prisma.$disconnect())
