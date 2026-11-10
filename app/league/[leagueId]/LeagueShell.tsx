@@ -102,6 +102,7 @@ import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/L
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
+import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
@@ -1915,6 +1916,9 @@ export function LeagueShell({
               draftDateIso={draftDateIso}
               draftSetupSession={draftSetupSession}
               hasActiveRedraftSeason={hasActiveRedraftSeason}
+              viewerUserId={userId}
+              // After the welcome sheet and any format intro, so the walkthrough never stacks on them.
+              autoOpenFormatWalkthrough={isCommissioner && createdFromLeagueCreate && welcomeStage === 'done'}
             />
             )}
           </div>
@@ -2234,6 +2238,8 @@ function LeagueTabRouter({
   hasActiveRedraftSeason,
   importedLeagueCount,
   leagueRail,
+  viewerUserId,
+  autoOpenFormatWalkthrough,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -2264,6 +2270,10 @@ function LeagueTabRouter({
   importedLeagueCount: number
   /** The rail's saved matchup summaries — the chat's pinned score card reads this league's entry. */
   leagueRail?: LeagueRailData | null
+  /** The signed-in viewer, for the format walkthrough's per-user "seen" flag. */
+  viewerUserId: string
+  /** The commissioner just created this league and the post-create welcome has finished. */
+  autoOpenFormatWalkthrough: boolean
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -2464,11 +2474,28 @@ function LeagueTabRouter({
   }
 
   switch (activeTab) {
-    case 'native_home':
+    case 'native_home': {
+      /*
+       * "What's next?" leads League Home for every format: the phase in plain English, act-or-wait,
+       * who the league is waiting on and the deadline (components/league/whats-next/WhatsNextPanel).
+       */
+      const whatsNext = (
+        <WhatsNextPanel
+          league={selectedLeague}
+          userId={viewerUserId}
+          isCommissioner={isCommissioner}
+          hasTeam={userTeam != null}
+          draftDateIso={draftDateIso}
+          availableTabIds={tabDefs.map((item) => item.id)}
+          onSelectTab={onSelectTab}
+          autoOpenWalkthrough={autoOpenFormatWalkthrough}
+        />
+      )
       if (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor') {
-        return <SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} />
+        return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }
-      return <NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} />
+      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} /></div>
+    }
     case 'home':
       return (
         <NflRedraftLeagueHomeDashboard

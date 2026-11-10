@@ -312,7 +312,7 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
         <section className="af-rk-card">
           <h2 className="af-rk-q">Does my old Sleeper history count?</h2>
           <p className="af-rk-a">
-            Yes. Imported seasons from Sleeper, ESPN and Yahoo count the same as leagues played inside
+            Yes. Imported seasons count the same as leagues played inside
             AllFantasy. Each league-season is counted once, and imported data wins when two sources
             describe the same season.
           </p>

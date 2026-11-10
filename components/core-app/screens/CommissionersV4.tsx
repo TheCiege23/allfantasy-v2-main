@@ -8,7 +8,9 @@ import '@/components/core-app/af-commissioners.css'
 import { Shield } from '@/components/core-app/screens/LandingV4'
 import { CommissionersCtaLink } from '@/components/core-app/screens/CommissionersCtaLink'
 import { CommissionerScreenshot } from '@/components/core-app/screens/CommissionerScreenshot'
+import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
 import {
+  COMMISSIONERS_ALL_LEAGUES,
   COMMISSIONER_FEATURES,
   COMMISSIONERS_BOTTOM,
   COMMISSIONERS_HEALTH_EXAMPLE,
@@ -205,6 +207,14 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
               </p>
             ))}
         </section>
+
+        {/* ── Every league + Chimmy — the reviewers' favourite, before the feature list ── */}
+        <AllLeaguesChimmy
+          id="all-leagues"
+          // "and", not the import sentences' "or": this headline lists everything that comes together.
+          copy={{ ...COMMISSIONERS_ALL_LEAGUES, h2: COMMISSIONERS_ALL_LEAGUES.h2.replace('{platforms}', availableImportPlatformsPhrase('and')), soon: COMMISSIONERS_PLATFORMS.soon }}
+          cta={{ href: importHref, label: h.ctaPrimary }}
+        />
 
         {/* ── Features ─────────────────────────────────────────────────── */}
         <div id="features" className="af-cx-features">

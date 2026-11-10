@@ -1503,7 +1503,7 @@ function AFLegacyContent() {
       'compare': 'Fantasy Football Player Comparison Tool | Start or Sit with Chimmy',
       'chat': 'Chimmy, Your Fantasy Football Coach | Personalized Advice & Strategy',
       'share': 'Share Your Fantasy Football Career Report Card | AllFantasy',
-      'transfer': 'Transfer Fantasy Football Leagues from Sleeper, Yahoo & More',
+      'transfer': 'Transfer Fantasy Football Leagues from Sleeper & More',
       'strategy': 'Season Strategy Planner | Chimmy-Powered Fantasy Football Roadmap',
       'shop': 'Official AllFantasy Merch | Shop AF Gear on Etsy',
       'mock-draft': 'Chimmy-Powered Mock Draft Simulator & Predict Board | AllFantasy',
@@ -4390,7 +4390,7 @@ function AFLegacyContent() {
                 </h2>
 
                 <p className="mt-2 sm:mt-3 text-sm sm:text-base text-white/65">
-                  Import your fantasy history from Sleeper today. Yahoo, MFL, and Fantrax tools are still limited and do not yet support full historical imports.
+                  Import your fantasy history from Sleeper today. Other platforms do not yet support full historical imports, and Yahoo is coming soon.
                 </p>
 
                 {/* Trust line */}

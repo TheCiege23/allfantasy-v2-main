@@ -164,7 +164,7 @@ describe('PlayerSearchBox in Spanish', () => {
     expect(out).toContain('libre en Dragones')
     expect(out).toContain('libre en 2 ligas')
     expect(out).toContain('sin equipo registrado')
-    expect(out).toContain('Busca a la vez en todas las plataformas que conectaste')
+    expect(out).toContain('Busca a la vez en todas las ligas que conectaste')
     expectSpanish(out, 'search box, signed in')
     unmount()
 
@@ -187,7 +187,7 @@ describe('PlayerSearchBox in Spanish', () => {
     expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy()
     expect(screen.getByRole('listbox', { name: 'Suggestions' })).toBeTruthy()
     const out = container.textContent ?? ''
-    for (const s of ['yours in Dragones', 'yours in 2 leagues', '@tashaR has him in Oficina FC', 'owned in Oficina FC', 'owned in 2 of your leagues', 'free in Dragones', 'free in 2 leagues', 'no team on file', 'Searches every platform you have connected at once — Sleeper, ESPN and Yahoo.']) {
+    for (const s of ['yours in Dragones', 'yours in 2 leagues', '@tashaR has him in Oficina FC', 'owned in Oficina FC', 'owned in 2 of your leagues', 'free in Dragones', 'free in 2 leagues', 'no team on file', 'Searches every league you have connected at once.']) {
       expect(out).toContain(s)
     }
   })
