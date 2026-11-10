@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { loadTradeRosterIds } from './tradePlayers'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { evaluateCanonicalTrade } from './canonicalEvaluator'
@@ -162,7 +162,8 @@ export async function evaluateStoredTrade(
   const world = await d.resolveWorld(args.leagueId).catch(() => null)
   const trade = withCanonicalRosters(loaded.trade, world)
 
-  const foreign = isForeignIdSpace(trade.origin.platform)
+  // The canonical world can carry translated Sleeper IDs for ESPN. Ownership checks need the stored IDs.
+  const foreign = rosterIdSpaceOf(trade.origin.platform) !== 'sleeper'
   const foreignRosterIds = foreign && trade.status === 'proposed' && trade.sideA.rosterId && trade.sideB.rosterId
     ? await loadTradeRosterIds(args.leagueId, [trade.sideA.rosterId, trade.sideB.rosterId]).catch(() => null)
     : foreign ? null : undefined

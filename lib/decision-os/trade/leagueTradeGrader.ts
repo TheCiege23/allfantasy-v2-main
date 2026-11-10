@@ -35,6 +35,7 @@ export { providerNameInChartOrder } from './tradePlayers'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
+import { createFootballTradeFormatGrader } from './footballTradeFormatGrade'
 import { createGuillotineGrader } from './guillotineGrader'
 import { createZombieGrader } from './zombieGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
@@ -397,6 +398,7 @@ export async function createLeagueTradeGrader(args: {
     platform: leagueRow.platform ?? null,
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
+  const footballFormat = sport === 'NFL' ? createFootballTradeFormatGrader({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, type: leagueType.type }) : null
   // College football redraft and dynasty use the league’s stored projections and scoring.
   const college =
     sport === 'NCAAF'
@@ -415,6 +417,7 @@ export async function createLeagueTradeGrader(args: {
     league: {
       id: args.leagueId,
       platform: leagueRow.platform,
+      platformLeagueId: leagueRow.platformLeagueId,
       settings: leagueRow.settings,
       leagueType: leagueType.type,
       leagueSize: leagueRow.leagueSize ?? null,
@@ -551,7 +554,8 @@ export async function createLeagueTradeGrader(args: {
     profile,
     async grade(deal) {
       // A dated grade is never priced for roster need: the roster it would read is today's.
-      return withType(await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal))
+      const view = await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal)
+      return withType(footballFormat ? await footballFormat(view, chart, [...deal.give, ...deal.get], dated) : view)
     },
     ...(book
       ? {
