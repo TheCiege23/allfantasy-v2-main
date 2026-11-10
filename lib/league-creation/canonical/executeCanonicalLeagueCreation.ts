@@ -244,8 +244,19 @@ async function finishCreatedLeague(
          * sit at the end of the draft (devyConfig): they are numbered from the last round.
          */
         const devyRounds = (session?.devyConfig as { enabled?: unknown } | null)?.enabled === true
-        const grow = engine.leagueFormatId === 'dynasty' && startupCapacity > 0 && !devyRounds
-        if (session && (session.rounds > capacity || (grow && session.rounds < capacity))) {
+        /*
+         * A plain REDRAFT draft grows the same way, to the spots a drafted player is placed in (starters +
+         * bench; IR is never filled by a draft). College basketball's preset was 12 rounds for 13 such
+         * spots, so every team finished the draft one player short — while the first roster edit already
+         * resizes a redraft draft to that same count (syncDraftRoundsToRoster). Found by the redraft
+         * simulation, 2026-11-09. Keeper drafts are left alone: their keepers fill the rest.
+         */
+        const redraftActive = engine.leagueFormatId === 'redraft' ? computeStartupDraftCapacity(template.template?.slots ?? []) : 0
+        const growTo = engine.leagueFormatId === 'dynasty' && startupCapacity > 0 && !devyRounds
+          ? capacity
+          : redraftActive > 0 && !devyRounds ? Math.min(template.totalRosterSlots, redraftActive) : 0
+        const target = session && session.rounds > capacity ? capacity : session && growTo > session.rounds ? growTo : null
+        if (session && target != null) {
           await prisma.$transaction(async (tx) => {
             const league = await tx.league.findUniqueOrThrow({ where: { id: createdLeagueId }, select: { settings: true } })
             const settings = (league.settings ?? {}) as Record<string, unknown>
@@ -258,16 +269,16 @@ async function finishCreatedLeague(
                 rosterSize: capacity,
                 settings: {
                   ...settings,
-                  draftSettings: { ...draftSettings, rounds: capacity },
-                  foundation_defaults: { ...foundation, draft: { ...foundationDraft, rounds: capacity } },
+                  draftSettings: { ...draftSettings, rounds: target },
+                  foundation_defaults: { ...foundation, draft: { ...foundationDraft, rounds: target } },
                 } as Prisma.InputJsonValue,
               },
             })
-            await tx.draftSession.update({ where: { id: session.id }, data: { rounds: capacity } })
-            await tx.leagueSettings.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: capacity } })
-            await tx.redraftLeagueDraftProfile.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: capacity } })
+            await tx.draftSession.update({ where: { id: session.id }, data: { rounds: target } })
+            await tx.leagueSettings.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: target } })
+            await tx.redraftLeagueDraftProfile.updateMany({ where: { leagueId: createdLeagueId }, data: { rounds: target } })
           })
-          log('draft_rounds_fit_roster', { leagueId: createdLeagueId, requestedRounds: session.rounds, rounds: capacity })
+          log('draft_rounds_fit_roster', { leagueId: createdLeagueId, requestedRounds: session.rounds, rounds: target })
         }
       }
     } catch (e) {
