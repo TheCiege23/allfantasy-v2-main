@@ -955,6 +955,11 @@ export type LeagueTradeChart = {
  * Resolve the chart for a league and fetch it. Moved verbatim from the console; the console's
  * request overrides (`leagueSize`, `tePremium`, `isSuperFlex`, `waiverBudget`) ride in `overrides`.
  */
+/** Read the league chart from the current stored market without refreshing a provider. */
+export function readStoredLeagueTradeChart(profile: ReturnType<typeof fantasyCalcSettingsForChart>) {
+  return readFantasyCalcValuesFromDb(profile, { allowStale: false })
+}
+
 export async function resolveLeagueTradeChart(args: {
   leagueRow: LoadedTradeLeague | null
   leagueSnapshot: TradeConsoleLeagueSnapshot | null
@@ -1045,7 +1050,7 @@ export async function resolveLeagueTradeChart(args: {
   const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless || !readsNflChart
     ? { players: [] as FantasyCalcPlayer[], syncedAt: null }
     : largeLeagueRookiePicks
-      ? await readFantasyCalcValuesFromDb(marketProfile, { allowStale: false })
+      ? await readStoredLeagueTradeChart(marketProfile)
       : await getFantasyCalcChartDbFirst(marketProfile, { maxStaleMs: 1000 * 60 * 60 * 2 })
   args.mark?.('fantasycalc')
 

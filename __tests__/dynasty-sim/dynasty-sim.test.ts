@@ -252,6 +252,10 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
         run.findings.push({ code: 'AUDIT_CASE_THREW', stage: 'season', message: (error as Error).message })
       }
       results.push({ ...run, network: [...network], logged: [...logged], ms: Date.now() - started })
+      if (process.env.SIM_AUDIT_VALUES === '1' && process.env.SIM_SEASON === '1' && ['NBA', 'NHL', 'MLB'].includes(c.sport)) {
+        const grades = run.stats.tradeGrades as Array<{ label: string; grade: string | null }> | undefined
+        expect(grades?.find((row) => row.label === 'future-pick')?.grade, JSON.stringify(grades)).toMatch(/^[A-F]$/)
+      }
       if (scale) {
         expect(run.findings, JSON.stringify(run.findings)).toEqual([])
         expect(run.managerIds).toHaveLength(149)

@@ -130,7 +130,7 @@ export type LoadTradeDeps = {
   loadProviderOffer: (leagueId: string, provider: string, providerTradeId: string) => Promise<ProviderRow | null>
   /** `RedraftRoster.id` → `Roster.id`, through the unique `Roster.redraftRosterId`. */
   rostersForRedraft: (leagueId: string, redraftRosterIds: string[]) => Promise<Map<string, string>>
-  resolvePlayers: (ids: readonly string[], opts: { space: PlayerIdSpace; sport: string }) => Promise<Map<string, ResolvedTradePlayer>>
+  resolvePlayers: typeof resolveTradePlayers
   /** The viewer's ids in every space a trade source uses. */
   viewerIdentity: (leagueId: string, userId: string) => Promise<ViewerIdentity>
   isCommissioner: (leagueId: string, userId: string) => Promise<boolean>
@@ -259,7 +259,7 @@ async function withPlayers(
   resolvePlayers: LoadTradeDeps['resolvePlayers'],
 ): Promise<{ ok: true; sides: { a: LoadedTradeAsset[]; b: LoadedTradeAsset[] } } | { ok: false; refusal: TradeRefusal }> {
   const ids = [...raw.sideA.gives, ...raw.sideB.gives].flatMap((a) => (a.kind === 'player' ? [a.playerId] : []))
-  const found = ids.length ? await resolvePlayers(ids, { space, sport: league.sport }).catch(() => new Map<string, ResolvedTradePlayer>()) : new Map<string, ResolvedTradePlayer>()
+  const found = ids.length ? await resolvePlayers(ids, { space, sport: league.sport, membershipCheckedLeagueId: league.id }).catch(() => new Map<string, ResolvedTradePlayer>()) : new Map<string, ResolvedTradePlayer>()
   const missing: string[] = []
   const toLoaded = (asset: RawTrade['sideA']['gives'][number]): LoadedTradeAsset | null => {
     if (asset.kind !== 'player') return asset
