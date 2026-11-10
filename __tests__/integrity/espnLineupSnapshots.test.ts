@@ -28,7 +28,7 @@ vi.mock('@/lib/core-app/byeWeekMap', () => ({ resolveByeWeekMap: async () => ({ 
 vi.mock('@/lib/core-app/injuryStatusById', () => ({ readInjuryStatusById: async () => new Map() }))
 vi.mock('@/lib/integrity/lineupLockStore', () => ({ lineupLockSnapshotsReady: async () => true, readLineupLockSnapshots: m.prior, upsertPlayers: m.upsert }))
 
-import { runEspnLineupSnapshots } from '@/lib/integrity/espnLineupSnapshots'
+import { readEspnWeekCards, runEspnLineupSnapshots } from '@/lib/integrity/espnLineupSnapshots'
 
 const NOW = new Date('2026-11-15T20:00:00Z')
 const KC_KICK = new Date('2026-11-15T18:00:00Z')
@@ -107,5 +107,31 @@ describe('runEspnLineupSnapshots', () => {
     await runEspnLineupSnapshots({ now: NOW })
     expect(m.latestGame.mock.calls[0][0].where).toMatchObject({ sport: 'NFL', season: 2026, seasonType: 'regular' })
     expect(m.games.mock.calls[0][0].where).toMatchObject({ seasonType: 'regular', week: { in: [10, 11] } })
+  })
+})
+
+describe('readEspnWeekCards', () => {
+  const frozen = (team: string, started: boolean) => ({ team, started, frozenAt: '2026-11-15T22:00:00.000Z', proj: 10, position: 'RB' })
+  const live = (team: string, started: boolean) => ({ team, started, frozenAt: null, proj: 10, position: 'WR' })
+  const AFTER_WEEK = new Date('2026-11-17T12:00:00Z')
+
+  it('cards only for teams whose capture is complete; the rest are named, never scored from a partial lineup', async () => {
+    m.prior.mockResolvedValue([
+      { rosterId: '4', players: { a: frozen('KC', true), b: frozen('LAR', false), bye: live('SF', true) } },
+      { rosterId: '7', players: { c: frozen('KC', true), d: live('LAR', true) } },
+    ])
+    const out = await readEspnWeekCards({ leagueId: 'E1', season: 2026, week: 11, now: AFTER_WEEK })
+    expect(out.ended).toBe(true)
+    expect([...out.cards.keys()]).toEqual(['4'])
+    // A bye player has no lock: his last in-week read stands, so a bye starter is counted as started.
+    expect(out.cards.get('4')!.starters.map((s) => s.playerId)).toEqual(['a', 'bye'])
+    expect(out.incomplete).toEqual([{ rosterId: '7', uncaptured: 1 }])
+  })
+
+  it('a week still being played has no cards', async () => {
+    m.prior.mockResolvedValue([{ rosterId: '4', players: { a: frozen('KC', true) } }])
+    const out = await readEspnWeekCards({ leagueId: 'E1', season: 2026, week: 11, now: NOW })
+    expect(out).toMatchObject({ ended: false })
+    expect(out.cards.size).toBe(0)
   })
 })

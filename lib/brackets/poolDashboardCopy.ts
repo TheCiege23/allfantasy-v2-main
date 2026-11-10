@@ -39,7 +39,7 @@ const en = {
   leagueLimit: (n: number) => `This league allows up to ${n} brackets per person.`,
   invitePanel: "Invite friends to your league", shareLink: "Friends can use this link to join your league and create their own brackets.", copyInvite: "Copy invite link",
   inviteMemberTitle: "Invite", inviteMemberBody: "Only the pool commissioner can copy and share the invite link. Ask your commissioner for the invite link or code.",
-  participantsTitle: "Participants", entriesCount: (n: number) => `${n} entries`,
+  participantsTitle: "Participants", entriesCount: (n: number) => `${n} ${n === 1 ? "entry" : "entries"}`,
   myEntries: "My Brackets / Entries", noEntries: "You have not created a bracket in this pool yet.",
   picksOf: (n: number, total: number) => `${n}/${total} picks`, finalized: "Finalized", completeStatus: "Complete", draft: "Draft",
   raceEyebrow: "Your league race", ofFinalized: (n: number) => `of ${n} finalized brackets`,

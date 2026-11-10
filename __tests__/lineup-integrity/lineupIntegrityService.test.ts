@@ -28,6 +28,10 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/integrity/lineupLockStore', () => ({ readLineupLockSnapshots: vi.fn(async () => state.snaps) }))
+vi.mock('@/lib/integrity/espnLineupSnapshots', () => ({
+  // Week 9 ended long ago; week 10 ends in the far future.
+  readNflWeekWindow: vi.fn(async (_season: number, week: number) => ({ weekEndsAt: new Date(week === 9 ? '2026-11-03T08:00:00Z' : '2099-01-01T00:00:00Z') })),
+}))
 vi.mock('@/lib/core-app/byeWeekMap', () => ({ resolveByeWeekMap: vi.fn(async () => ({ KC: 6 })) }))
 vi.mock('@/lib/core-app/injuryStatusById', () => ({ readInjuryStatusById: vi.fn(async () => state.injury) }))
 vi.mock('@/lib/subscription/FeatureGateService', () => ({ FeatureGateService: class { async evaluateUserFeatureAccess() { return { allowed: true } } } }))
@@ -126,5 +130,28 @@ describe('player names are read in the league’s sport', () => {
     const rep = await readLineupIntegrity('L1', { fullSeason: false })
     if (!rep?.supported) throw new Error('unsupported')
     expect(rep.findings.find((f) => f.rosterId === '1')?.playerNames).toEqual({ mahomes: 'Patrick Mahomes' })
+  })
+})
+
+describe('an imported ESPN league', () => {
+  const espn = { ...sleeper, platform: 'espn', platformLeagueId: '123456', settings: { roster_positions: ['QB:1', 'RB:2', 'BE:6'] } }
+
+  it('is supported, has no audit findings, and reports only weeks that have ended', async () => {
+    state.league = { ...espn }
+    state.snaps = [snap(9, '4', 0.9), snap(10, '4', null, false)]
+    const rep = await readLineupIntegrity('L1', { fullSeason: true })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.scoresSource).toBe('espn')
+    expect(rep.findings).toEqual([])
+    expect(rep.weeks).toEqual([9])
+    expect(rep.latestWeek).toBe(9)
+    expect(rep.basis).toMatch(/ESPN does not store past lineups/)
+  })
+
+  it('a league with no capture yet has no finished week to scan', async () => {
+    state.league = { ...espn }
+    const rep = await readLineupIntegrity('L1', { fullSeason: false })
+    if (!rep?.supported) throw new Error('unsupported')
+    expect(rep.latestWeek).toBeNull()
   })
 })

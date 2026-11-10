@@ -472,8 +472,12 @@ export async function buildWeekKickoffMap(
   return { byTeam, firstKickoff, warnings }
 }
 
-/** How far an untagged game may sit from the week's tagged regular-season games and still count. */
-const NFL_SLATE_MARGIN_MS = 2 * 86_400_000
+/**
+ * How far an untagged game may sit from the week's tagged regular-season games and still count. A full
+ * week: a source may tag only PART of a slate (one Thursday game), and every Thursday-to-Monday game
+ * must still survive. The leaks it removes sit four weeks away (preseason) or months away (postseason).
+ */
+const NFL_SLATE_MARGIN_MS = 7 * 86_400_000
 
 /**
  * One NFL week's REGULAR-SEASON games out of everything filed under that week number. Pure.
@@ -487,8 +491,9 @@ const NFL_SLATE_MARGIN_MS = 2 * 86_400_000
  * whole week, and `firstKickoff` (the trade deadline) read as long past.
  *
  * So: rows tagged `pre`/`post` are dropped, and when the week has tagged `regular` rows, an untagged row
- * counts only within two days of them — the same game from a source that does not tag (in-season the
- * untagged sources carry the same kickoffs, so nothing real is lost). A week with NO tagged regular row
+ * counts only within a week of them — the same week's games from a source that does not tag (in-season
+ * the untagged sources carry the same kickoffs, so nothing real is lost). Two days was tried first and
+ * dropped Sunday and Monday games whenever only Thursday's game was tagged (e2e zombie rehearsal). A week with NO tagged regular row
  * keeps every untagged row: there is nothing to judge them against, and dropping the whole slate would
  * leave every player unlocked.
  */

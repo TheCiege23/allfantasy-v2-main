@@ -10,7 +10,8 @@ import { readInjuryStatusById } from '@/lib/core-app/injuryStatusById'
 import { normalizeNflTeam } from '@/lib/redraft/lineupLock'
 import { espnDefenseTeamAbbreviation } from '@/lib/league-import/espn/espnTeamDefenseIds'
 
-import { captureStarters, snapshotSlotsFromTemplate, weekEnd, type SnapshotPlayerMap } from './espnStartersCapture'
+import { captureStarters, snapshotSlotsFromTemplate, weekEnd, weekStarters, type SnapshotPlayerMap } from './espnStartersCapture'
+import type { LineupCard } from './nativeLineupCards'
 import { lineupLockSnapshotsReady, readLineupLockSnapshots, upsertPlayers } from './lineupLockStore'
 
 /**
@@ -51,7 +52,11 @@ export async function readNflWeekContext(season: number, now: Date): Promise<Nfl
     select: { week: true },
   })
   if (!latest?.week) return null
-  const week = latest.week
+  return readNflWeekWindow(season, latest.week)
+}
+
+/** One regular-season NFL week's per-club kickoffs and its window (see `readNflWeekContext`). */
+export async function readNflWeekWindow(season: number, week: number): Promise<NflWeekContext | null> {
   const games = await prisma.sportsGame.findMany({
     where: { sport: 'NFL', season, seasonType: 'regular', week: { in: [week - 1, week] }, startTime: { not: null } },
     select: { week: true, homeTeam: true, awayTeam: true, startTime: true },
@@ -84,6 +89,37 @@ export async function readNflWeekContext(season: number, now: Date): Promise<Nfl
     weekStartsAt: prevLast ? weekEnd(prevLast) : new Date(first.getTime() - 7 * DAY_MS),
     weekEndsAt: weekEnd(last),
   }
+}
+
+/**
+ * The week's lineup cards for the ESPN teams whose capture is COMPLETE (`weekStarters`): the week has
+ * ended and every player who had a game was read after his kickoff. A team still missing a capture gets
+ * no card, so the scorer records it as unscored — never as a lineup that started only the players
+ * captured so far, which would read as a team that started almost nobody.
+ */
+export async function readEspnWeekCards(args: { leagueId: string; season: number; week: number; now?: Date }): Promise<{
+  cards: Map<string, LineupCard>
+  incomplete: Array<{ rosterId: string; uncaptured: number }>
+  ended: boolean
+}> {
+  const now = args.now ?? new Date()
+  const cards = new Map<string, LineupCard>()
+  const incomplete: Array<{ rosterId: string; uncaptured: number }> = []
+  const ctx = await readNflWeekWindow(args.season, args.week)
+  if (!ctx) return { cards, incomplete, ended: false }
+  const rows = await readLineupLockSnapshots({ leagueId: args.leagueId, season: args.season, weeks: [args.week] })
+  for (const r of rows) {
+    const players = r.players as SnapshotPlayerMap
+    const kickoffById = new Map<string, Date>()
+    for (const [id, p] of Object.entries(players)) {
+      const at = p.team ? ctx.kickoffByClub.get(p.team) : undefined
+      if (at) kickoffById.set(id, at)
+    }
+    const w = weekStarters(players, kickoffById, now, ctx.weekEndsAt)
+    if (w.complete) cards.set(r.rosterId, { rosterId: r.rosterId, starters: w.starterIds.map((playerId) => ({ playerId })), bench: [] })
+    else incomplete.push({ rosterId: r.rosterId, uncaptured: w.uncaptured.length })
+  }
+  return { cards, incomplete, ended: now.getTime() > ctx.weekEndsAt.getTime() }
 }
 
 const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})

@@ -71,7 +71,7 @@ export type LineupIntegrityReport =
        * says so). Null when no week has been scored yet.
        */
       scores: TeamLineupScoreView[] | null
-      scoresSource: 'native' | 'sleeper'
+      scoresSource: LineupSource
       /** How much of the league the kickoff snapshots actually cover — so a silent gap is visible. */
       coverage: SnapshotCoverage
     }
@@ -96,7 +96,11 @@ export type TeamLineupScoreView = {
   reportText: string
 }
 
-const BASIS: Record<'sleeper' | 'native', string> = {
+export type LineupSource = 'sleeper' | 'native' | 'espn'
+
+const BASIS: Record<LineupSource, string> = {
+  espn:
+    'ESPN does not store past lineups, so each week’s lineup is read from the rosters AllFantasy synced after each player’s kickoff, when ESPN had locked his slot. A week is scored only once every player who had a game was read after his kickoff. Weeks played before that capture began cannot be scored. Empty-slot and bye-starter checks need recorded points and do not run for ESPN leagues yet.',
   sleeper:
     'Starting lineups are the ones Sleeper recorded for each finished week. An empty slot is a starting slot with no player in it. A bye starter is a player whose NFL team had no game that week. “Listed Out/IR” means the starter scored 0 and is on the injury report today — injury status is not stored as it was at kickoff, so treat that one as a lead, not proof.',
   native:
@@ -108,9 +112,11 @@ const LEAGUE_SELECT = {
   leagueType: true, bestBallMode: true, userId: true,
 } as const
 
-function sourceOf(league: LeagueRow): 'sleeper' | 'native' | null {
+function sourceOf(league: LeagueRow): LineupSource | null {
   if (resolveWriteAuthority(league.platform) === 'NATIVE') return 'native'
-  if (String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId) return 'sleeper'
+  const platform = String(league.platform ?? '').toLowerCase()
+  if (platform === 'sleeper' && league.platformLeagueId) return 'sleeper'
+  if (platform === 'espn') return 'espn'
   return null
 }
 
@@ -155,7 +161,7 @@ export async function readLineupIntegrity(leagueId: string, opts: { fullSeason: 
   const requiredStarters = readRequiredStarterCount(league)
 
   const source = sourceOf(league)!
-  const data = source === 'native' ? await readNativeRows(league, opts.fullSeason) : await readSleeperRows(league, opts.fullSeason)
+  const data = source === 'native' ? await readNativeRows(league, opts.fullSeason) : source === 'espn' ? await readEspnRows(league) : await readSleeperRows(league, opts.fullSeason)
   const allWeeks = data.allWeeks
   const latestWeek = allWeeks.at(-1) ?? null
   const scoped = data.rows
@@ -186,7 +192,7 @@ export async function readLineupIntegrity(leagueId: string, opts: { fullSeason: 
 }
 
 /** See `SnapshotCoverage`. Never throws: coverage is a line on the card, not a reason to lose it. */
-export async function readSnapshotCoverage(league: Pick<LeagueRow, 'id' | 'season'>, source: 'native' | 'sleeper'): Promise<SnapshotCoverage> {
+export async function readSnapshotCoverage(league: Pick<LeagueRow, 'id' | 'season'>, source: LineupSource): Promise<SnapshotCoverage> {
   // Each read is lazy so a failure — even a synchronous one — lands in its own fallback.
   const safe = <T,>(read: () => Promise<T>, fallback: T) => Promise.resolve().then(read).catch(() => fallback)
   const [settings, rows, teams] = await Promise.all([
@@ -293,6 +299,26 @@ async function readSleeperRows(league: LeagueRow, fullSeason: boolean): Promise<
 }
 
 /** AllFantasy-run leagues: each finished week's SAVED lineups (see the header). */
+/**
+ * ESPN: no audit rows. Nothing records an ESPN starter's points, so the empty-slot / bye-starter audit
+ * has nothing to read (BASIS says so). What it reports is which weeks have ENDED with a kickoff capture on
+ * file, so the scan and the card know the latest week that can be scored.
+ */
+async function readEspnRows(league: LeagueRow): Promise<SourceRows> {
+  const empty = { rows: [] as WeeklyStarterRow[], nameById: new Map<string, string>(), clubByPlayer: new Map<string, string | null>(), ruledOutNow: new Set<string>(), teamNameByRoster: new Map<string, string>() }
+  const snaps = await readLineupLockSnapshots({ leagueId: league.id, season: league.season }).catch(() => [])
+  const weeks = [...new Set(snaps.map((r) => r.week))].sort((a, b) => a - b)
+  if (weeks.length === 0) return { ...empty, allWeeks: [] }
+  const { readNflWeekWindow } = await import('@/lib/integrity/espnLineupSnapshots')
+  const now = Date.now()
+  const ended: number[] = []
+  for (const week of weeks) {
+    const window = await readNflWeekWindow(league.season, week).catch(() => null)
+    if (window && now > window.weekEndsAt.getTime()) ended.push(week)
+  }
+  return { ...empty, allWeeks: ended }
+}
+
 async function readNativeRows(league: LeagueRow, fullSeason: boolean): Promise<SourceRows> {
   const empty: SourceRows = { rows: [], allWeeks: [], nameById: new Map(), clubByPlayer: new Map(), ruledOutNow: new Set(), teamNameByRoster: new Map() }
   const season =

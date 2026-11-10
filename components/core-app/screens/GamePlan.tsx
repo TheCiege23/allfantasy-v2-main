@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import type { GameDayTriage, TriageLeague, TriageRow } from '@/lib/core-app/gameDayTriage'
+import { splitRosterAges } from '@/lib/core-app/gameDayTriage'
 import { lockState } from '@/lib/core-app/lineupLock'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import { playerRef } from '@/lib/core-app/playerRef'
@@ -166,12 +167,6 @@ function LeagueLineupLink({ league }: { league: TriageLeague }) {
   )
 }
 
-/** A league whose lineup is older than this is named on its own rather than dating the list. */
-const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000
-
-function daysAgo(nowMs: number, iso: string): number {
-  return Math.floor((nowMs - new Date(iso).getTime()) / 86_400_000)
-}
 
 /**
  * The week in one line: how much there is to fix, across how many leagues, and when the first of it
@@ -210,18 +205,8 @@ function Summary({
     data.leaguesNotRead ? m.notRead(data.leaguesNotRead) : null,
   ].filter(Boolean)
   const asOfMs = data.rostersAsOf ? new Date(data.rostersAsOf).getTime() : NaN
-  /*
-   * ⚠ ONE STALE LEAGUE MUST NOT DATE THE WHOLE LIST. The stamp is the oldest lineup read, by design (a
-   * newest-first stamp would say "just now" over a league last seen at 9am). But a single league that
-   * stopped syncing made all fifty read "as of 101d ago". So a league past STALE_AFTER_MS is NAMED, with
-   * its age, and the stamp describes the rest.
-   */
-  const nowMs = new Date(nowIso).getTime()
-  const ages = data.rosterAges ?? []
-  const stale = ages.filter((a) => nowMs - new Date(a.asOf).getTime() > STALE_AFTER_MS).sort((a, b) => a.asOf.localeCompare(b.asOf))
-  const fresh = ages.filter((a) => !stale.includes(a))
-  const freshOldest = fresh.length > 0 ? fresh.map((a) => a.asOf).sort()[0]! : null
-  const stampAsOf = stale.length > 0 && freshOldest ? freshOldest : (data.rostersAsOf ?? null)
+  // One stale league must not date the whole list: see splitRosterAges (shared with Player Finder).
+  const { stale, freshCount, stampAsOf } = splitRosterAges(data, nowIso)
 
   return (
     <section className="af-gp-summary" aria-label={m.weekAtAGlance}>
@@ -255,14 +240,14 @@ function Summary({
         being flagged here — before, the only way was to wait for the next sync.
       */}
       <RefreshLineups asOf={stampAsOf} nowIso={nowIso} />
-      {stale.length > 0 && fresh.length > 0 ? (
+      {stale.length > 0 && freshCount > 0 ? (
         <p className="af-gp-summary-note af-gp-stale" role="note">
           {m.staleNote}{' '}
           {stale.map((a, i) => (
             <span key={a.leagueId}>
               {i > 0 ? ', ' : ''}
               <Link href={`/core/sync?league=${encodeURIComponent(a.leagueId)}`}>{a.leagueName}</Link>{' '}
-              <span className="af-num">({m.daysAgo(daysAgo(nowMs, a.asOf))})</span>
+              <span className="af-num">({m.daysAgo(a.days)})</span>
             </span>
           ))}
           .

@@ -230,3 +230,37 @@ export function compareTriageRows(nowIso: string): (a: TriageRow, b: TriageRow) 
     return a.player.name.localeCompare(b.player.name)
   }
 }
+
+/** A league whose lineup read is older than this is named on its own rather than dating the list. */
+export const ROSTER_STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000
+
+export type StaleRosterLeague = { leagueId: string; leagueName: string; asOf: string; days: number }
+
+/**
+ * ⚠ ONE STALE LEAGUE MUST NOT DATE THE WHOLE LIST. `rostersAsOf` is the OLDEST lineup read, by design (a
+ * newest-first stamp would say "just now" over a league last seen at 9am). But one league that stopped
+ * syncing made fifty read "as of 101d ago" on Game Plan, and "53d ago" on Player Finder (2026-11-09).
+ * So a league past ROSTER_STALE_AFTER_MS is NAMED, oldest first, with its age, and the stamp describes
+ * the rest. When every league is stale, or no ages are known, the stamp stays `rostersAsOf`.
+ *
+ * One rule, two screens: War Room's Game Plan and Player Finder's Game day both call this.
+ */
+export function splitRosterAges(
+  data: Pick<GameDayTriage, 'rostersAsOf' | 'rosterAges'>,
+  nowIso: string,
+): { stale: StaleRosterLeague[]; freshCount: number; stampAsOf: string | null } {
+  const nowMs = new Date(nowIso).getTime()
+  const ages = data.rosterAges ?? []
+  const isStale = (asOf: string) => nowMs - new Date(asOf).getTime() > ROSTER_STALE_AFTER_MS
+  const stale = ages
+    .filter((a) => isStale(a.asOf))
+    .sort((a, b) => a.asOf.localeCompare(b.asOf))
+    .map((a) => ({ ...a, days: Math.floor((nowMs - new Date(a.asOf).getTime()) / 86_400_000) }))
+  const fresh = ages.filter((a) => !isStale(a.asOf))
+  const freshOldest = fresh.length > 0 ? fresh.map((a) => a.asOf).sort()[0]! : null
+  return {
+    stale,
+    freshCount: fresh.length,
+    stampAsOf: stale.length > 0 && freshOldest ? freshOldest : (data.rostersAsOf ?? null),
+  }
+}
