@@ -3,6 +3,11 @@ import { notFound, redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { loadSeasonBlueprint } from '@/lib/tournament/seasonBlueprintStore'
 import { SeasonTournamentPlanner } from '@/components/tournament/SeasonTournamentPlanner'
+import { SeasonReportsPanel } from '@/components/tournament/SeasonReportsPanel'
+import { SeasonAssistantPanel } from '@/components/tournament/SeasonAssistantPanel'
+import { SeasonLiveCutPanel } from '@/components/tournament/SeasonLiveCutPanel'
+import { SeasonIntegrityPanel } from '@/components/tournament/SeasonIntegrityPanel'
+import { SeasonRecoveryPanel } from '@/components/tournament/SeasonRecoveryPanel'
 import { getTournamentStandingsBoard } from '@/lib/tournament/standingsBoard'
 import { TournamentStandingsBoard } from './TournamentStandingsBoard'
 import { loadDivisionsHub } from '@/lib/tournament/divisions/divisionsStore'
@@ -47,7 +52,16 @@ export default async function TournamentHubPage({
   if (divisions) return <DivisionsHub view={divisions} canManage={divisions.canManage} leagueLinks={divisions.leagueLinks} />
 
   const blueprint = await loadSeasonBlueprint(tournamentId, userId)
-  if (blueprint) return <SeasonTournamentPlanner key={blueprint.tournamentId + blueprint.revision} saved={blueprint} />
+  if (blueprint) return <>
+    <SeasonTournamentPlanner key={blueprint.tournamentId + blueprint.revision} saved={blueprint} />
+    {blueprint.publication && <div className="mx-auto max-w-6xl space-y-6 px-4 pb-6">
+      {blueprint.canReviewRecovery && <SeasonRecoveryPanel tournamentId={tournamentId} isOwner={blueprint.isOwner} />}
+      {blueprint.canReviewRecovery && <SeasonIntegrityPanel tournamentId={tournamentId} />}
+      {!!blueprint.currentStage && !blueprint.championName && <SeasonLiveCutPanel tournamentId={tournamentId} />}
+      <SeasonReportsPanel tournamentId={tournamentId} />
+      <SeasonAssistantPanel tournamentId={tournamentId} />
+    </div>}
+  </>
 
   const board = await getTournamentStandingsBoard(tournamentId, userId)
   if (!board) notFound()

@@ -16,7 +16,10 @@
  * Pure: no I/O, no league knowledge. Unit-tested in `__tests__/chimmy-trade-pick-mentions.test.ts`.
  */
 
+import { c2cDraftSide, type C2CDraftSide } from '@/lib/parsePickLabel'
+
 export type PickMention = {
+  draftSide?: C2CDraftSide
   /** Null when the side named no year for it — the grader refuses rather than assuming one. */
   season: number | null
   round: 1 | 2 | 3 | 4
@@ -47,7 +50,7 @@ const NOT_A_PICK = String.raw`(?![\s-]+(?:place|down|quarter|half|string|team|ti
  *   "a 2027 1st", "two 2026 seconds", "2027 first-round pick", "my 2028 2nd rounder"
  */
 const MENTION = new RegExp(
-  String.raw`(?:\b(a|an|one|two|three|2|3)\s+)?(?:\b((?:19|20)\d{2})\s+)?\b(1st|2nd|3rd|4th|first|second|third|fourth)(s)?\b` +
+  String.raw`(?:\b(a|an|one|two|three|2|3)\s+)?(?:\b((?:19|20)\d{2})\s+)?(?:\b(campus|canton)\s+)?\b(1st|2nd|3rd|4th|first|second|third|fourth)(s)?\b` +
     /* Longest first: "round pick" before "round", or " pick" is left behind and reads as an unparsed pick. */
     /* "Rd" is how Sleeper's trade card writes it: "2028 2nd Rd (JeffersonTD)". */
     String.raw`(?:[\s-]+(round\s+(?:draft\s+)?picks?|round(?:er)?s?|rd(?![a-z])\.?(?:\s+(?:draft\s+)?picks?)?|(?:draft\s+)?picks?))?` +
@@ -75,7 +78,8 @@ export function extractPickMentions(sideText: string): { picks: PickMention[]; u
   let remainder = sideText
 
   for (const m of sideText.matchAll(MENTION)) {
-    const [whole, countWord, year, ordinal, plural, pickWord, owner] = m
+    const [whole, countWord, year, division, ordinal, plural, pickWord, owner] = m
+    const draftSide = c2cDraftSide(division?.toLowerCase())
     const round = ROUND[ordinal!.toLowerCase()]
     if (!round) continue
     /*
@@ -90,7 +94,7 @@ export function extractPickMentions(sideText: string): { picks: PickMention[]; u
     if (plural && !countWord) continue
 
     for (let i = 0; i < count; i += 1) {
-      picks.push({ season: year ? Number(year) : null, round, text: whole!.trim(), ...(owner?.trim() ? { owner: owner.trim() } : {}) })
+      picks.push({ season: year ? Number(year) : null, round, text: whole!.trim(), ...(draftSide ? { draftSide } : {}), ...(owner?.trim() ? { owner: owner.trim() } : {}) })
     }
     remainder = remainder.replace(whole!, ' ')
   }
@@ -103,7 +107,7 @@ export function extractPickMentions(sideText: string): { picks: PickMention[]; u
   return { picks, unclear }
 }
 
-export function pickLabel(p: { season: number | null; round: number }): string {
+export function pickLabel(p: { season: number | null; round: number; draftSide?: C2CDraftSide }): string {
   const ord = p.round === 1 ? '1st' : p.round === 2 ? '2nd' : p.round === 3 ? '3rd' : `${p.round}th`
-  return `${p.season ?? '(year?)'} ${ord}-round pick`
+  return `${p.season ?? '(year?)'} ${p.draftSide ? p.draftSide + ' ' : ''}${ord}-round pick`
 }

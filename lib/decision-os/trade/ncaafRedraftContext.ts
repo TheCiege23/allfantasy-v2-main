@@ -143,10 +143,20 @@ export async function loadNcaafClassYears(
   platform: string | null | undefined,
   rosterIds: string[],
   season: number,
+  campusOnly = false,
 ): Promise<Map<string, number>> {
   const namespace = ncaafNamespace(platform)
   const years = new Map<string, number>()
   if (!namespace || !rosterIds.length) return years
+  if (campusOnly) {
+    const devy = await prisma.devyPlayer.findMany({
+      where: { id: { in: rosterIds }, sport: 'NCAAF', lastRosterYear: season, draftStatus: 'college', graduatedToNFL: false },
+      select: { id: true, classYear: true },
+    })
+    for (const row of devy) {
+      if (row.classYear != null && Number.isInteger(row.classYear) && row.classYear >= 1 && row.classYear <= 4) years.set(row.id, row.classYear)
+    }
+  }
   const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma, rosterIds, namespace)
   if (!bridge.cfbdIds.length) return years
   const rows = await prisma.devyPlayer.findMany({
