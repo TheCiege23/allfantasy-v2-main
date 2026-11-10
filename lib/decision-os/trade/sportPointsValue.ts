@@ -120,8 +120,9 @@ export type SportPointsContext = {
    * Present in an NBA, NHL or MLB dynasty league: what the multi-season grade reads
    * (`./sportDynastyValue.ts`). Board id → age today, and the year of the next rookie draft.
    */
-  dynasty?: { ages: ReadonlyMap<string, number>; classYears?: ReadonlyMap<string, number>; nextDraftYear: number }
+  dynasty?: import('./sportDynastyValue').SportDynastyContext
   verifiedSoccerOwnGoals?: boolean
+  publishedSoccerPoints?: boolean
   /** Only this provider’s alias may resolve an explicit roster ID. */
   rosterProvider?: string
 }
@@ -134,7 +135,7 @@ export const SPORT_FAAB_REASON =
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 export function sportPointsBasis(
-  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList' | 'verifiedSoccerOwnGoals'>,
+  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList' | 'verifiedSoccerOwnGoals' | 'publishedSoccerPoints'>,
 ): string {
   const label = SPORT_LABEL[ctx.sport]
   const teamCountNote = ctx.teamCountAssumed ? ` This league has no verified team count. The grade uses ${ctx.teams} teams.` : ''
@@ -185,8 +186,9 @@ export function sportPointsBasis(
   // A quality start is a one-game test that a season line cannot pass or fail.
   const qs = mlb ? ' Quality starts are not projected.' : ''
   // Soccer's board blends two seasons and scales to club matches (`./soccerBoard.ts`).
-  const clubs = soccer
-    ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in.${ctx.verifiedSoccerOwnGoals ? ' Own goals use verified match timelines.' : ' Own goals are not projected.'}`
+  const clubs = ctx.publishedSoccerPoints
+    ? ' Projections use the league’s published Fantrax fantasy-point totals per club match, including the scoring categories Fantrax applied.'
+    : soccer ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in.${ctx.verifiedSoccerOwnGoals ? ' Own goals use verified match timelines.' : ' Own goals are not projected.'}`
     : ''
   return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}${teamCountNote}`
 }
