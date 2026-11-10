@@ -17,6 +17,7 @@ const db = vi.hoisted(() => ({
   identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string; currentTeam?: string; position?: string; fantraxId?: string; espnId?: string; mflId?: string; fleaflickerId?: string }>,
   rosters: [] as Array<{ playerData: unknown }>,
   cache: [] as Array<{ cacheKey: string; data: unknown }>,
+  priorNbaStats: [] as Array<{ playerId: string; stats: unknown }>,
   // Soccer's per-match rows (`player_game_stats`), both seasons.
   matchRows: [] as Array<{ playerId: string; season: number; team: string; gameId: string; gameDate: Date; normalizedStatMap: unknown }>,
   // `SportsPlayer` age rows, for a dynasty league's multi-season grade.
@@ -44,6 +45,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     playerIdentityMap: { findMany: vi.fn(async () => db.identities) },
     sportsPlayer: { findMany: vi.fn(async () => db.sportsPlayers) },
+    fantasyStatLine: { findMany: vi.fn(async ({ where }: { where: { playerId: { in: string[] } } }) => db.priorNbaStats.filter((r) => where.playerId.in.includes(r.playerId))) },
     roster: { findMany: vi.fn(async () => db.rosters) },
     sportsDataCache: {
       findMany: vi.fn(async () => db.cache),
@@ -62,10 +64,10 @@ import { sportPointsBasis } from '@/lib/decision-os/trade/sportPointsValue'
 
 const NOW = new Date('2026-10-20T12:00:00Z')
 
-function nbaPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample = 60) {
+function nbaPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample = 60, sourceSeason = 2025) {
   db.projections.push({
     playerId: id, playerName: name, position, season: 2026,
-    adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason: 2025 },
+    adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason },
   })
   db.identities.push({ id, canonicalName: name, rollingInsightsId: `ri-${id}`, sleeperId: null })
 }
@@ -85,6 +87,7 @@ beforeEach(() => {
   db.rosters = []
   db.matchRows = []
   db.sportsPlayers = []
+  db.priorNbaStats = []
   db.cache = []
 })
 
@@ -98,6 +101,29 @@ it('links an ESPN college football ID only through unique school, position, and 
 })
 
 describe('loadSportPointsBase', () => {
+  it('keeps verified NBA prior-year rates until each current player meets the ten-game trade bar', async () => {
+    nbaPlayer('returner', 'Returning', 'C', { points: 36 }, 7, 2026)
+    nbaPlayer('current', 'Current', 'C', { points: 30 }, 10, 2026)
+    nbaPlayer('rookie', 'Rookie', 'C', { points: 40 }, 4, 2026)
+    nbaPlayer('thin', 'Thin Prior', 'C', { points: 27 }, 8, 2026)
+    schedule(['T1', 'T2'], 40, null)
+    const league = { id: 'L', settings: { scoringSettings: { rules: { points: 1 } } }, leagueType: 'redraft', leagueSize: 2 }
+    const load = () => loadSportPointsBase({ sport: 'NBA', league, now: NOW })
+    expect(await load()).toMatchObject({ ok: false, valuationGap: 'projection_coverage' })
+    const prior = (playerId: string, games_played: number, points: number) => ({ playerId, stats: { regular_season: { games_played, points } } })
+    db.priorNbaStats = [prior('returner', 40, 800), prior('current', 60, 600), prior('thin', 3, 60)]
+    expect(await load()).toMatchObject({ ok: false, valuationGap: 'projection_coverage' })
+    db.priorNbaStats.push(prior('thin', 10, 120))
+    const result = await load()
+    if (!result.ok) throw new Error(result.reason)
+    expect(result.ctx.board).toMatchObject([
+      { id: 'returner', sampleGames: 40, sourceSeason: 2025, perGame: 20 },
+      { id: 'current', sampleGames: 10, sourceSeason: 2026, perGame: 30 },
+      { id: 'rookie', sampleGames: 4, sourceSeason: 2026, perGame: 40 },
+      { id: 'thin', sampleGames: 10, sourceSeason: 2025, perGame: 12 },
+    ])
+  })
+
   it('reports an assumed team count in the points grade basis', async () => {
     nbaPlayer('a', 'Alpha', 'C', { points: 30, total_rebounds: 10 })
     nbaPlayer('b', 'Beta', 'PG', { points: 20, assists: 8 })
