@@ -886,7 +886,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
       league: { select: { leagueVariant: true } },
     },
   })
-  if (!m || !m.homeRoster || m.league.leagueVariant === 'season_tournament') return null
+  if (!m || !m.homeRoster || m.league?.leagueVariant === 'season_tournament') return null
   if (!m.awayRosterId) {
     await updateByeRowScore(m)
     return null

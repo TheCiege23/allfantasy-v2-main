@@ -28,6 +28,7 @@ import {
   captureSeasonOpeningLineup, captureSeasonOpeningMatchups, finalizeSeasonOpeningWeek, ingestSeasonOpeningScores,
   readSeasonLiveScores, reviewSeasonOpeningWeek, type SeasonScoreBatch,
 } from '@/lib/tournament/seasonScoreLedger'
+import type { SeasonStageManifest } from '@/lib/tournament/seasonNativeContract'
 import { defaultSeasonRules, resolveSeasonDraftWindow } from '@/lib/tournament/seasonRules'
 import { runSeasonTournament, type SeasonTournamentDeps } from '@/lib/tournament/seasonTournamentAutomation'
 import { openSeasonRegistration, joinSeasonTournament, freezeSeasonOpeningField, loadSeasonEntry } from '@/lib/tournament/seasonRegistration'
@@ -256,7 +257,7 @@ async function run(sport: 'NFL' | 'NBA', missDeadline = false) {
       assert.equal(bindings.length, ids.length)
       assert.equal(settings.length, ids.length)
       for (const binding of bindings) {
-        const pool = field.manifest.leagues.find(pool => pool.key === binding.slug)!
+        const pool: SeasonStageManifest['leagues'][number] = field.manifest.leagues.find(room => room.key === binding.slug)!
         const window = windows.get(binding.leagueId!)!
         assert.equal(binding.conference?.name ?? null, pool.division)
         assert.equal(binding.draftScheduledAt?.getTime(), Date.parse(window.startsAt))
@@ -285,7 +286,7 @@ async function run(sport: 'NFL' | 'NBA', missDeadline = false) {
         await tick(date)
         await waitForDrafts('in_progress', due.length - 1, date)
         missingPool = false
-        const pool = field.manifest.leagues.find((_, index) => ids[index] === blockedRoom)!
+        const pool: SeasonStageManifest['leagues'][number] = field.manifest.leagues.find((_, index) => ids[index] === blockedRoom)!
         assert.equal((await release(field.id, pool.key)).released, true)
         assert.equal((await release(field.id, pool.key)).repeated, true)
       }

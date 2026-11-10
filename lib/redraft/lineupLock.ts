@@ -23,6 +23,7 @@
  * Emergency commissioner unlocks (postponements/data errors) always win.
  */
 import type { PrismaClient } from '@prisma/client'
+import { getAllCanonicalTeams } from '@/lib/team-abbrev'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 // Client-safe: takes the client as an argument and imports Prisma for types only.
@@ -143,9 +144,11 @@ const NFL_TEAM_ALIASES: Record<string, string> = {
   NEP: 'NE',
 }
 
+const NFL_FULL_TEAM_NAMES = new Map(getAllCanonicalTeams().map(team => [team.fullName.toUpperCase(), team.abbrev]))
+
 export function normalizeNflTeam(team: string | null | undefined): string {
   const u = String(team ?? '').trim().toUpperCase()
-  return NFL_TEAM_ALIASES[u] ?? u
+  return NFL_TEAM_ALIASES[u] ?? NFL_FULL_TEAM_NAMES.get(u) ?? u
 }
 
 /**

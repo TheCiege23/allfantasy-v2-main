@@ -193,10 +193,6 @@
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/cron/season-tournaments",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/live-score-tick",
       "schedule": "*/2 * * * *"
     },
