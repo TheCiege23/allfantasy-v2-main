@@ -64,10 +64,19 @@ function formatDraftTime(iso: string | null, timeZone: string | null, notSchedul
   }
 }
 
+/**
+ * A chip's text colour that reads in BOTH themes. The chip colours were written for the dark theme
+ * (light text on a tinted panel) and measured 1.3–1.6:1 contrast on the light theme's white cards. Mixing
+ * each hue with the theme's own text colour darkens it in light mode and keeps it light in dark mode.
+ */
+function tone(color: string): string {
+  return `color-mix(in srgb, ${color} 40%, var(--text))`
+}
+
 const RANK_BAND_STYLES: Record<RankBand, { background: string; color: string }> = {
-  step_up: { background: "rgba(244, 114, 182, 0.14)", color: "rgb(249, 168, 212)" },
-  your_level: { background: "rgba(56, 189, 248, 0.14)", color: "rgb(125, 211, 252)" },
-  chill: { background: "rgba(52, 211, 153, 0.14)", color: "rgb(110, 231, 183)" },
+  step_up: { background: "rgba(244, 114, 182, 0.14)", color: tone("rgb(249, 168, 212)") },
+  your_level: { background: "rgba(56, 189, 248, 0.14)", color: tone("rgb(125, 211, 252)") },
+  chill: { background: "rgba(52, 211, 153, 0.14)", color: tone("rgb(110, 231, 183)") },
 }
 
 function isNew(createdAt: string): boolean {
@@ -110,12 +119,12 @@ function getSourceBadgeStyle(source: DiscoveryCard["source"]): {
   color: string
 } {
   if (source === "fantasy") {
-    return { background: "rgba(14, 165, 233, 0.14)", color: "rgb(125, 211, 252)" }
+    return { background: "rgba(14, 165, 233, 0.14)", color: tone("rgb(125, 211, 252)") }
   }
   if (source === "creator") {
-    return { background: "rgba(168, 85, 247, 0.15)", color: "rgb(216, 180, 254)" }
+    return { background: "rgba(168, 85, 247, 0.15)", color: tone("rgb(216, 180, 254)") }
   }
-  return { background: "rgba(59, 130, 246, 0.15)", color: "rgb(96, 165, 250)" }
+  return { background: "rgba(59, 130, 246, 0.15)", color: tone("rgb(96, 165, 250)") }
 }
 
 /** "Runs 3 AllFantasy leagues · since 2025" — who you'd be playing for, before you ask to join. */
@@ -191,7 +200,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           </span>
           <span
             className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium capitalize"
-            style={{ background: "rgba(148, 163, 184, 0.14)", color: "rgb(203, 213, 225)" }}
+            style={{ background: "rgba(148, 163, 184, 0.14)", color: tone("rgb(203, 213, 225)") }}
           >
             {formatLeagueType(league, t)}
           </span>
@@ -199,14 +208,14 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             <span
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               title={paidBoundaryDisclosure}
-              style={{ background: "rgba(234, 179, 8, 0.15)", color: "rgb(250, 204, 21)" }}
+              style={{ background: "rgba(234, 179, 8, 0.15)", color: tone("rgb(250, 204, 21)") }}
             >
               {t("findLeague.card.paid")}
             </span>
           ) : (
             <span
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
-              style={{ background: "rgba(34, 197, 94, 0.12)", color: "rgb(74, 222, 128)" }}
+              style={{ background: "rgba(34, 197, 94, 0.12)", color: tone("rgb(74, 222, 128)") }}
             >
               {t("findLeague.card.free")}
             </span>
@@ -214,7 +223,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           {fillingFast && (
             <span
               className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
-              style={{ background: "rgba(34, 211, 238, 0.12)", color: "rgb(34, 211, 238)" }}
+              style={{ background: "rgba(34, 211, 238, 0.12)", color: tone("rgb(34, 211, 238)") }}
             >
               <Zap className="h-3 w-3" />
               {t("findLeague.card.fillingFast")}
@@ -223,7 +232,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           {showNew && (
             <span
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
-              style={{ background: "rgba(251, 146, 60, 0.15)", color: "rgb(251, 146, 60)" }}
+              style={{ background: "rgba(251, 146, 60, 0.15)", color: tone("rgb(251, 146, 60)") }}
             >
               {t("findLeague.card.new")}
             </span>
@@ -231,7 +240,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           {hasAI && (
             <span
               className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
-              style={{ background: "rgba(167, 139, 250, 0.15)", color: "rgb(196, 181, 253)" }}
+              style={{ background: "rgba(167, 139, 250, 0.15)", color: tone("rgb(196, 181, 253)") }}
             >
               <Sparkles className="h-3 w-3" />
               {t("findLeague.card.aiEnabled")}
@@ -250,14 +259,14 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             <span
               className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               title="Ranking effect score based on league tier fit and direct-join eligibility."
-              style={{ background: "rgba(56, 189, 248, 0.14)", color: "rgb(125, 211, 252)" }}
+              style={{ background: "rgba(56, 189, 248, 0.14)", color: tone("rgb(125, 211, 252)") }}
             >
               Rank fit +{rankFitScore}
             </span>
           )}
         </div>
         {league.isPaid ? (
-          <p className="text-[11px]" style={{ color: "rgba(250, 204, 21, 0.75)" }} data-testid={`find-league-paid-${league.id}`}>
+          <p className="text-[11px]" style={{ color: tone("rgba(250, 204, 21, 0.75)") }} data-testid={`find-league-paid-${league.id}`}>
             {league.entryFee ? `${tInterpolate("findLeague.card.entryFee", { fee: league.entryFee })} ` : ""}
             {t("findLeague.card.paidNote")}
           </p>
@@ -269,7 +278,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               <span
                 key={vibe}
                 className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                style={{ background: "rgba(251, 191, 36, 0.12)", color: "rgb(252, 211, 77)" }}
+                style={{ background: "rgba(251, 191, 36, 0.12)", color: tone("rgb(252, 211, 77)") }}
               >
                 {vibeLabel(vibe)}
               </span>
@@ -288,7 +297,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
               <span
                 key={`${league.id}-${feature}`}
                 className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
-                style={{ borderColor: "rgba(167, 139, 250, 0.35)", color: "rgb(221, 214, 254)" }}
+                style={{ borderColor: "rgba(167, 139, 250, 0.35)", color: tone("rgb(221, 214, 254)") }}
               >
                 {feature}
               </span>
@@ -412,7 +421,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           <span
             data-testid={`find-league-invite-required-${league.id}`}
             className="rounded-lg px-2.5 sm:px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-medium"
-            style={{ background: "rgba(251, 146, 60, 0.14)", color: "rgb(251, 146, 60)" }}
+            style={{ background: "rgba(251, 146, 60, 0.14)", color: tone("rgb(251, 146, 60)") }}
             title="This league is outside your current rank window and needs commissioner invite."
           >
             Invite required
@@ -489,7 +498,7 @@ function RequestSpotButton({ league }: { league: DiscoveryCard }) {
     return (
       <span
         className="text-xs sm:text-sm font-medium"
-        style={{ color: "rgb(110, 231, 183)" }}
+        style={{ color: tone("rgb(110, 231, 183)") }}
         data-testid={`find-league-request-sent-${league.id}`}
       >
         Request sent. The commissioner will answer with their {platformLabel(league.externalPlatform)} invite.
@@ -540,7 +549,7 @@ function RequestSpotButton({ league }: { league: DiscoveryCard }) {
         </button>
       </div>
       {state === "error" ? (
-        <p role="alert" className="text-xs" style={{ color: "rgb(248, 113, 113)" }}>
+        <p role="alert" className="text-xs" style={{ color: tone("rgb(248, 113, 113)") }}>
           {error}
         </p>
       ) : null}
@@ -667,7 +676,7 @@ function AskToJoinButton({ league }: { league: DiscoveryCard }) {
         </button>
       </div>
       {state === "error" ? (
-        <p role="alert" className="text-xs" style={{ color: "rgb(248, 113, 113)" }}>
+        <p role="alert" className="text-xs" style={{ color: tone("rgb(248, 113, 113)") }}>
           {error}
         </p>
       ) : null}
