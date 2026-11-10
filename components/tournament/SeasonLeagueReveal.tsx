@@ -9,10 +9,12 @@ export function SeasonLeagueReveal({ assignment, timezone }: { assignment: NonNu
   const [localTimezone, setLocalTimezone] = useState('')
   useEffect(() => { setLocalTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone) }, [])
   const format = (date: string, timeZone: string) => new Intl.DateTimeFormat('en', { timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date))
-  const draftPath = assignment.draftId ? '/drafts/' + encodeURIComponent(assignment.draftId) : assignment.leagueId ? '/league/' + assignment.leagueId + '/draft' : null
+  const stage = assignment.stage ?? 1
+  const draftPath = assignment.draftId ? '/drafts/' + encodeURIComponent(assignment.draftId)
+    : stage > 1 && assignment.leagueId ? '/league/' + encodeURIComponent(assignment.leagueId) + '/draft' : null
   return <section className="space-y-4 rounded-2xl border border-amber-300/40 bg-[#0b0c12] p-5 text-center" aria-label="Your tournament league assignment">
-    <h2 className="text-xl font-semibold">{(assignment.stage ?? 1) === 1 ? 'Your opening league is ready to reveal' : 'Your round ' + assignment.stage + ' league'}</h2>
-    {draftPath && <Link className="inline-flex min-h-11 items-center rounded-xl bg-cyan-300 px-4 font-bold text-slate-950" href={draftPath}>Open my draft room</Link>}
+    <h2 className="text-xl font-semibold">{stage === 1 ? 'Your opening league is ready to reveal' : 'Your round ' + assignment.stage + ' league'}</h2>
+    {revealed && draftPath && <Link className="inline-flex min-h-11 items-center rounded-xl bg-cyan-300 px-4 font-bold text-slate-950" href={draftPath}>Open my draft room</Link>}
     {revealed ? <div role="status" className="space-y-3"><SeasonCrest art={assignment.art} name={assignment.name} division={assignment.division ?? ''} className="mx-auto max-w-44" /><p>{assignment.teams} teams · Draft slot {assignment.draftSlot}</p><div className="text-sm text-slate-300"><p>Draft scheduled {format(assignment.startsAt, timezone)} ({timezone}).</p>{localTimezone && localTimezone !== timezone && <p>Your local start is {format(assignment.startsAt, localTimezone)} ({localTimezone}).</p>}{assignment.completeBy && <p>Draft deadline {format(assignment.completeBy, localTimezone || timezone)} ({localTimezone || timezone}).</p>}</div>{assignment.leagueId && <div className="flex justify-center gap-4"><Link href={'/league/' + assignment.leagueId}>View league</Link></div>}</div> : <p className="py-6 text-5xl text-amber-300" aria-hidden="true">?</p>}
     <button type="button" className="min-h-12 w-full rounded-xl border border-amber-300/40 bg-amber-300 px-4 font-bold text-slate-950" onClick={() => setRevealed(value => !value)}>{revealed ? 'Hide league reveal' : 'Reveal my league'}</button>
     <p className="text-sm text-slate-300">The reveal shows your saved assignment. It never changes your league or draft slot.</p>
