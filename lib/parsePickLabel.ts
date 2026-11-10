@@ -34,10 +34,10 @@
 /** Rounds beyond this are not a draft, they are a typo. Bounds the parse, not the curve. */
 const MAX_PARSEABLE_ROUND = 25
 
-export type C2CDraftSide = 'campus' | 'canton'
+export type C2CDraftSide = 'campus' | 'canton' | 'combined'
 
 export function c2cDraftSide(value: unknown): C2CDraftSide | undefined {
-  return value === 'campus' || value === 'canton' ? value : undefined
+  return value === 'campus' || value === 'canton' || value === 'combined' ? value : undefined
 }
 
 export type ParsedPick = {
@@ -63,10 +63,10 @@ export function parsePickLabel(label: string): ParsedPick | null {
   if (!label || typeof label !== 'string') return null;
 
   const raw = label.replace(/\([^)]*\)/g, '').trim();
-  const sides = new Set([...raw.matchAll(/\b(campus|canton)\b/gi)].map((match) => match[1]!.toLowerCase()));
+  const sides = new Set([...raw.matchAll(/\b(campus|canton|combined)\b/gi)].map((match) => match[1]!.toLowerCase()));
   if (sides.size > 1) return null;
   const draftSide = c2cDraftSide(sides.values().next().value);
-  const clean = draftSide ? raw.replace(/\b(?:campus|canton)\b/gi, ' ') : raw;
+  const clean = draftSide ? raw.replace(/\b(?:campus|canton|combined)\b/gi, ' ') : raw;
 
   /*
    * Ordinal first. "2026 3rd Rd" matches BOTH patterns, and only the ordinal one reads it

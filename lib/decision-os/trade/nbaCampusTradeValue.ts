@@ -4,11 +4,13 @@ import { prisma } from '@/lib/prisma'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
+import { combinedDraftPickValue } from './combinedC2CDraftValue'
+import { getC2CPhaseConfig } from '@/lib/merged-devy-c2c/draft/C2CDraftOrchestration'
 import { campusPointsToMarket } from './footballCampusTradeValue'
 import type { loadSportPointsBase, SportPointsLeague } from './sportPointsContext'
 import { gradeSportDynastyDeal, FULL_SEASON_GAMES, nbaProspectValue, pickDynastyValue, pickLabel, playerDynastyValue, priceSportDynastySides, youngPlayerPool } from './sportDynastyValue'
 import { meetsSampleBar, type SportPointsContext } from './sportPointsValue'
-import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
+import { gradeTrade, separateStandingsTradeGrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 
 const collegeId = /^espn:ncaab:(\d+)$/
 const playerKey = (asset: TradeAssetInput) => asset.kind === 'player' ? asset.rosterPlayerId ?? asset.playerId ?? '' : ''
@@ -43,34 +45,38 @@ export function createNbaCampusTradeGrader(league: SportPointsLeague, loadBase: 
     const onCampus = (asset: TradeAssetInput) => asset.kind === 'pick' ? asset.draftSide === 'campus' : collegeId.test(playerKey(asset))
     const campusCount = assets.filter(onCampus).length
     const picks = assets.filter((asset) => asset.kind === 'pick')
-    if (picks.length && (config.mergedRookieCollegeDraft || picks.some((pick) => !pick.draftSide))) {
-      return withheld('Specify Campus or Canton. A combined draft needs its own pick curve.')
+    const combined = picks.filter((pick) => pick.draftSide === 'combined')
+    const combinedConfig = getC2CPhaseConfig(config, 'merged_rookie_college')
+    if (picks.some((pick) => !pick.draftSide || (pick.draftSide === 'combined') !== config.mergedRookieCollegeDraft)) {
+      return withheld('Specify Campus or Canton for separate drafts, or Combined for a merged rookie and college draft.')
     }
-    if (picks.some((pick) => pick.round > (onCampus(pick) ? config.collegeDraftRounds : config.rookieDraftRounds))) {
+    if (combined.length && (config.standingsModel === 'separate' || (combinedConfig.draftType !== 'snake' && combinedConfig.draftType !== 'linear'))) {
+      return withheld('Combined picks need shared standings and a numbered draft order to compare college and pro options.')
+    }
+    if (picks.some((pick) => pick.round > (pick.draftSide === 'combined' ? combinedConfig.rounds : onCampus(pick) ? config.collegeDraftRounds : config.rookieDraftRounds))) {
       return withheld('A pick’s round exceeds the league’s configured draft rounds.')
     }
     const campusPicks = picks.some(onCampus)
     if (campusPicks && config.standingsModel !== 'separate') {
       return withheld('Campus pick values need measured college and pro outcomes to grade against the combined standings.')
     }
-    if (config.standingsModel === 'separate' && campusCount && campusCount !== assets.length) {
-      return withheld('This league awards separate Campus and Canton standings. A single letter cannot combine gains across the two divisions.')
-    }
     const needPro = campusCount < assets.length || config.standingsModel !== 'separate'
+    const needsCampus = campusCount > 0 || combined.length > 0
     const [pro, campus, held] = await Promise.all([
       needPro ? (proPromise ??= loadBase({ sport: 'NBA', league: { ...league, leagueType: 'dynasty' } })) : null,
-      campusCount ? (campusPromise ??= loadBase({ sport: 'NCAAB', league: { ...league, settings: null, leagueType: 'dynasty' }, campusOnly: true })) : null,
-      campusCount ? (heldPromise ??= prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } })
+      needsCampus ? (campusPromise ??= loadBase({ sport: 'NCAAB', league: { ...league, settings: null, leagueType: 'dynasty' }, campusOnly: true })) : null,
+      needsCampus ? (heldPromise ??= prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } })
         .then((rows) => new Set(rows.flatMap((row) => [...collegePlayerIds(row.playerData)])))) : new Set<string>(),
     ])
     if (pro && !pro.ok) return withheld(pro.reason)
     const dynasty = pro?.ctx.dynasty
     if (needPro && !dynasty) return withheld('Canton dynasty values are unavailable for this league.')
 
-    const givePro = give.filter((asset) => !onCampus(asset))
-    const getPro = get.filter((asset) => !onCampus(asset))
+    const onProBoard = (asset: TradeAssetInput) => !onCampus(asset) && (asset.kind !== 'pick' || asset.draftSide !== 'combined')
+    const givePro = give.filter(onProBoard)
+    const getPro = get.filter(onProBoard)
     const proContext = pro?.ok ? { ...pro.ctx, sport: 'NBA' as const } : null
-    if (!campusCount) return dynasty && proContext ? gradeSportDynastyDeal({ give, get, ctx: proContext, dynasty }) : withheld('Canton values are unavailable.')
+    if (!needsCampus) return dynasty && proContext ? gradeSportDynastyDeal({ give, get, ctx: proContext, dynasty }) : withheld('Canton values are unavailable.')
     const proGrade = dynasty && proContext && (givePro.length || getPro.length)
       ? priceSportDynastySides({ give: givePro, get: getPro, ctx: proContext, dynasty }) : null
     if (proGrade && !proGrade.graded) return proGrade
@@ -88,11 +94,32 @@ export function createNbaCampusTradeGrader(league: SportPointsLeague, loadBase: 
     const proWeight = config.hybridProWeight ?? 60
     if (config.standingsModel === 'hybrid' && (!(proWeight > 0) || proWeight > 100)) return withheld('The league’s hybrid standings weights are unavailable.')
     const weight = config.standingsModel === 'hybrid' ? (100 - proWeight) / proWeight : 1
+    const combinedCampus = combined.length && dynasty && proContext ? [...production].flatMap(([id, college]) => {
+      const raw = collegeId.exec(id)?.[1]
+      const player = raw ? campus.ctx.rosterIndex?.get(raw) : undefined
+      if (!player || collegeDraft?.classYears?.get(player.id) !== 1) return []
+      const rank = dynasty.nbaProspectRanks?.get(id)
+      const option = rank ? nbaProspectValue(rank, { pool, teams: proContext.teams, season: proContext.window.season, nextDraftYear: dynasty.nextDraftYear }) : null
+      return option != null ? [college.perGame * FULL_SEASON_GAMES.NCAAB * rate * weight + option] : []
+    }) : []
     const lines = proGrade?.graded ? [...proGrade.lines] : []
-    let giveValue = proGrade?.graded ? proGrade.giveTotal : 0
-    let getValue = proGrade?.graded ? proGrade.getTotal : 0
+    const proGive = proGrade?.graded ? proGrade.giveTotal : 0
+    const proGet = proGrade?.graded ? proGrade.getTotal : 0
+    let giveValue = 0
+    let getValue = 0
     for (const [side, items] of [['give', give], ['get', get]] as const) {
-      for (const asset of items.filter(onCampus)) {
+      for (const asset of items.filter((asset) => !onProBoard(asset))) {
+        if (asset.kind === 'pick' && asset.draftSide === 'combined') {
+          const value = dynasty && proContext ? combinedDraftPickValue({
+            pick: asset, campus: combinedCampus, canton: pool, teams: proContext.teams,
+            nextDraftYear: dynasty.nextDraftYear, rounds: combinedConfig.rounds,
+          }) : null
+          if (value == null) return withheld('The verified Campus and Canton prospect boards do not cover this combined pick.')
+          if (side === 'give') giveValue += value
+          else getValue += value
+          lines.push({ side, name: 'Combined ' + pickLabel(asset), marketValue: value, leagueValue: value, source: 'nba-c2c-combined-pick', valueSource: 'pick_curve', valueAsOf: null })
+          continue
+        }
         if (asset.kind === 'pick') {
           if (!collegeDraft) return withheld('No verified freshman projections are available for the Campus draft.')
           const price = pickDynastyValue({ sport: 'NCAAB', pick: asset, pool: campusPool, teams: campus.ctx.teams, nextDraftYear: collegeDraft.nextDraftYear })
@@ -117,10 +144,18 @@ export function createNbaCampusTradeGrader(league: SportPointsLeague, loadBase: 
         lines.push(line)
       }
     }
+    if (separate && proGrade?.graded) {
+      return separateStandingsTradeGrade([
+        { division: 'Campus', giveValue, getValue },
+        { division: 'Canton', giveValue: proGive, getValue: proGet },
+      ])
+    }
+    giveValue += proGive
+    getValue += proGet
     if (giveValue <= 0 && getValue <= 0) return withheld('The assets on both sides are at replacement level.')
     const basis = separate
       ? 'Campus division estimate from college points over replacement for the remaining eligibility years, with future seasons discounted.' + (campusPicks ? ' Picks use current freshmen as a proxy for future entrants and discount later drafts.' : '')
-      : 'Campus-to-Canton estimate. Converts the remaining college production above replacement using the observed college and young NBA boards, applies the league standings weights, and includes the discounted pro option from verified NBA draft ranks.'
+      : 'Campus-to-Canton estimate. Converts the remaining college production above replacement using the observed college and young NBA boards, applies the league standings weights, and includes the discounted pro option from verified NBA draft ranks.' + (combined.length ? ' Combined picks use the ranked union of projected freshmen with verified NBA ranks and young NBA players as proxies for draft entrants. Later drafts are discounted.' : '')
     return gradeTrade({
       giveValue: Math.max(0.01, giveValue), getValue: Math.max(0.01, getValue),
       giveMarket: giveValue, getMarket: getValue, unpriced: 0, giveCount: give.length, getCount: get.length,

@@ -163,7 +163,7 @@ async function notifyProposerOfDecision(input: {
 }
 
 /** The part of a trade decision a notice can state for one side. */
-export type NoticeGrade = { grade: string | null; valueGiven: number | null; valueReceived: number | null }
+export type NoticeGrade = { grade: string | null; valueGiven: number | null; valueReceived: number | null; divisionImpactSummary?: string }
 
 /**
  * THE grade, in a trade notice's words (2026-09-27). PURE.
@@ -181,6 +181,7 @@ export function gradeNoticeLine(
   d: NoticeGrade | null | undefined,
   when: 'offer' | 'sent',
 ): { titleSuffix: string; bodyLine: string } | null {
+  if (d?.divisionImpactSummary) return { titleSuffix: '', bodyLine: d.divisionImpactSummary }
   if (!d?.grade || !['A', 'B', 'C', 'D', 'F'].includes(d.grade)) return null
   const values =
     d.valueGiven != null && d.valueReceived != null

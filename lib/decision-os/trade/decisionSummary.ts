@@ -18,6 +18,7 @@ export function counterDecision(args:{before:TradeGradeView;after:TradeGradeView
 /** Explain observed price and roster signals without inventing risks or acceptance odds. */
 export function decisionSummary(args: { grade: TradeGradeView; evaluatedAt?: string | null; gaps?: readonly string[]; visual?: VisualImpactResult | null; generic?: boolean;language?:LanguageCode }) {
   const { grade, visual, generic } = args
+  if (!grade.graded && grade.divisionImpacts) return { headline: 'Campus and Canton impact', accept: [], hesitate: [grade.reason], change: [] }
   if (!grade.graded) return { headline: 'More evidence needed', accept: [], hesitate: [grade.reason], change: ['Resolve the missing evidence and run the evaluation again.'] }
   const giveValue=generic?grade.giveMarket:grade.giveValue,getValue=generic?grade.getMarket:grade.getValue
   if (![giveValue,getValue].every(value=>Number.isFinite(value)&&value>0)) return {headline:'More evidence needed',accept:[],hesitate:['Quoted price totals are incomplete. Reanalyze before relying on this assessment.'],change:['Resolve the missing evidence and run the evaluation again.']}

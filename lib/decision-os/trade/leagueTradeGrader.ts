@@ -36,6 +36,7 @@ import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligib
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
 import { createFootballTradeFormatGrader } from './footballTradeFormatGrade'
+import { createFootballCombinedPickQuote } from './footballCampusTradeValue'
 import { createFootballCampusDraftGrader } from './footballCampusDraftGrade'
 import { createGuillotineGrader } from './guillotineGrader'
 import { createZombieGrader } from './zombieGrader'
@@ -401,6 +402,8 @@ export async function createLeagueTradeGrader(args: {
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
   const footballFormat = sport === 'NFL' ? createFootballTradeFormatGrader({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, type: leagueType.type }) : null
+  const combinedPickQuote = sport === 'NFL' && leagueType.type === 'c2c'
+    ? createFootballCombinedPickQuote({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season }) : null
   const campusDraft = sport === 'NFL' ? createFootballCampusDraftGrader({
     id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, leagueSize: leagueRow.leagueSize, status: leagueRow.status, type: leagueType.type,
   }) : null
@@ -440,7 +443,7 @@ export async function createLeagueTradeGrader(args: {
     sport,
     leagueType: leagueType.type,
     leagueVariant: leagueRow.leagueVariant ?? null,
-    league: { id: args.leagueId, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
+    league: { id: args.leagueId, platform: leagueRow.platform, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
   })
   const zombie = createZombieGrader({
     leagueType: leagueType.type,
@@ -491,6 +494,7 @@ export async function createLeagueTradeGrader(args: {
         fcPlayers: chart.fcPlayers,
         resolveEnrichmentIds: false,
         pickSlots: chart.pickSlots ?? null,
+        ...(combinedPickQuote ? { combinedPickQuote: combinedPickQuote(chart) } : {}),
       }
       let [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])
       /*
@@ -558,7 +562,7 @@ export async function createLeagueTradeGrader(args: {
     book,
     profile,
     async grade(deal) {
-      const campus = await campusDraft?.(deal.give, deal.get, dated)
+      const campus = await campusDraft?.(deal.give, deal.get, dated, chart)
       if (campus) return withType(campus)
       // A dated grade is never priced for roster need: the roster it would read is today's.
       const view = await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal)
