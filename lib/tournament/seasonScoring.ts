@@ -1,6 +1,8 @@
 import 'server-only'
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { STAT_CORRECTION_WINDOW_MS } from '@/lib/sports-data/statCoverage'
+import { NflLiveStatsProvider } from '@/lib/live-scoring/nflLiveStatsProvider'
 import { seasonResourceId } from '@/lib/domain/seasonTournamentLeague'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { loadHistoricalPeriod, type HistoricalPeriod, type HistoricalPlayerState } from './seasonProviderScores'
@@ -75,14 +77,17 @@ export function scoreSeasonContributions(
 }
 
 export type SeasonStatsReader = typeof loadHistoricalPeriod
-async function syncNflStats(seasonId: string, week: number) {
-  const { syncPlayerWeeklyScoresForRedraftSeason } = await import('@/lib/redraft/playerWeeklyScoreService')
-  await syncPlayerWeeklyScoresForRedraftSeason({ seasonId, week, actorId: 'system:season-tournament', refreshNflStats: true })
+async function fetchFinalNflStats(season: number, week: number, players: HistoricalPlayerState[]) {
+  const provider = new NflLiveStatsProvider(prisma as unknown as PrismaClient)
+  return provider.fetchPlayerStatsForGames({
+    sport: 'NFL', season, week, games: [], playerIds: [...new Set(players.map(player => player.playerId))],
+    certifyAbsentPlayers: true,
+  })
 }
 
 export async function scoreSeasonLeaguePeriod(
   leagueId: string, week: number, now: Date,
-  deps: { readStats?: SeasonStatsReader; refreshNfl?: typeof syncNflStats } = {},
+  deps: { readStats?: SeasonStatsReader; refreshNfl?: typeof fetchFinalNflStats } = {},
 ) {
   const context = await loadSeasonDraftContext(leagueId)
   const rule = context?.config.rules?.calendar.periods.find(period => period.number === week)
@@ -110,11 +115,20 @@ export async function scoreSeasonLeaguePeriod(
   const finalWindow = now.getTime() >= Date.parse(rule.finalizesAt)
   const openingEvidence = context.stage === 1 && await hasSeasonOpeningScoreEvidence(prisma, leagueId, week)
   let measured = openingEvidence ? null : await read(prisma as unknown as PrismaClient, args)
-  if (measured && finalWindow && context.config.sport === 'NFL' && (!measured.correctionsReady || measured.missingPlayerIds.length)) {
-    await (deps.refreshNfl ?? syncNflStats)(seasonId, week)
-    measured = await read(prisma as unknown as PrismaClient, args)
+  const nfl = context.config.sport === 'NFL'
+  let fetchedFinalNflStats = false
+  if (measured && nfl && now >= endsAt) {
+    const firstFinal = measured.nflFirstFinalObservedAt?.getTime()
+    // Observe the completed slate before the correction window. At finalization
+    // score from this room's complete provider response, which covers its own lineup.
+    if (firstFinal === undefined || (finalWindow && now.getTime() >= firstFinal + STAT_CORRECTION_WINDOW_MS)) {
+      const freshNflStats = await (deps.refreshNfl ?? fetchFinalNflStats)(season.season, week, players)
+      measured = await read(prisma as unknown as PrismaClient, { ...args, freshNflStats })
+      fetchedFinalNflStats = true
+    }
   }
-  const providerFinal = finalWindow && !!measured?.slateFinal && measured.correctionsReady && measured.missingPlayerIds.length === 0
+  const providerFinal = finalWindow && (!nfl || fetchedFinalNflStats) && !!measured?.slateFinal
+    && measured.correctionsReady && measured.missingPlayerIds.length === 0
   if (!openingEvidence && !providerFinal && !measured?.contributions.length) return false
   const providerPoints = measured && scoreSeasonContributions(context.config.sport, context.config.rules!, week, rosters, measured)
   return prisma.$transaction(async tx => {

@@ -180,7 +180,7 @@ async function run(sport: 'NFL' | 'NBA', missDeadline = false) {
       return { ready: true, refreshed: true, players: players.length, blockers: [] }
     },
     progressDraft: async () => { throw new Error('The acceptance fixture supplies draft picks before clocks expire.') },
-    refreshNfl: async () => {},
+    refreshNfl: async () => new Map(),
     readStats: async (_db, input) => {
       const starters = input.frozenTournament!.players
       const missed = missingStats && input.leagueId === blockedRoom

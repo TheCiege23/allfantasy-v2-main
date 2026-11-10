@@ -18,10 +18,12 @@ export type HistoricalContribution = { player: HistoricalPlayerState; stats: Rec
 export type HistoricalPeriod = {
   contributions: HistoricalContribution[]; eligible: HistoricalPlayerState[]; missingPlayerIds: string[]
   slateFinal: boolean; correctionsReady: boolean; end: Date
+  nflFirstFinalObservedAt?: Date
 }
 
 export async function loadHistoricalPeriod(db: PrismaClient, args: {
   leagueId: string; seasonId: string; sport: string; season: number; week: number
+  freshNflStats?: ReadonlyMap<string, Record<string, number>>
   frozenTournament: { players: HistoricalPlayerState[]; startsAt: Date; endsAt: Date; now: Date; minimumGames: number }
 }): Promise<HistoricalPeriod> {
   const { sport, season, week, frozenTournament: { players, startsAt, endsAt, now, minimumGames } } = args
@@ -53,22 +55,27 @@ export async function loadHistoricalPeriod(db: PrismaClient, args: {
   const missing = new Set(players.filter(player => !teamCode(player.team)).map(player => player.playerId))
   const slateKeys = slate.map(game => coverageGameKey(game, teamCode)).sort()
   let correctionsReady = false
+  let nflFirstFinalObservedAt: Date | undefined
   if (!normalize) {
     const ids = [...new Set([...eligible.values()].map(player => player.playerId))]
-    const rows = await db.playerWeeklyScore.findMany({ where: { sport, season, week, playerId: { in: ids } } })
+    const rows = args.freshNflStats ? [] : await db.playerWeeklyScore.findMany({ where: { sport, season, week, playerId: { in: ids } } })
     const proof = proofs.find(row => row.kind === 'week' && row.identitySpace === 'sleeper' && row.source === 'sleeper_weekly_stats'
       && row.week === week && JSON.stringify(row.gameKeys) === JSON.stringify(slateKeys))
     const verified = proof ? new Set((await db.playerIdentityMap.findMany({
       where: { sport, sleeperId: { in: ids } }, select: { sleeperId: true },
     })).map(row => row.sleeperId)) : new Set<string>()
     for (const player of eligible.values()) {
-      const stats = rows.find(row => row.playerId === player.playerId)?.stats
+      const stats = args.freshNflStats
+        ? args.freshNflStats.get(player.playerId)
+        : rows.find(row => row.playerId === player.playerId)?.stats
       if (stats && typeof stats === 'object' && !Array.isArray(stats) && Object.keys(stats).length) {
         contributions.push({ player, stats: stats as Record<string, number>, gameId: 'week:' + week })
-      } else if (!(proof && verified.has(player.playerId) && !proof.participantIds.includes(player.playerId))) {
+      } else if (!(proof && verified.has(player.playerId) && !proof.participantIds.includes(player.playerId)
+        && (!args.freshNflStats || args.freshNflStats.has(player.playerId)))) {
         missing.add(player.playerId)
       }
     }
+    nflFirstFinalObservedAt = proof?.firstFinalObservedAt
     correctionsReady = !!proof && statCoverageCorrectionsReady(proof, now)
   } else {
     const covered = new Set<string>()
@@ -119,7 +126,7 @@ export async function loadHistoricalPeriod(db: PrismaClient, args: {
         catch { return false }
       }) && statCoverageCorrectionsReady(proof, now)))
   }
-  return { contributions, eligible: [...eligible.values()], missingPlayerIds: [...missing], end, correctionsReady,
+  return { contributions, eligible: [...eligible.values()], missingPlayerIds: [...missing], end, correctionsReady, nflFirstFinalObservedAt,
     slateFinal: correctionsReady && slate.length >= minimumGames && slate.every(game => normalizeGameStatus(game.status) === 'final')
       && Math.max(...slate.map(game => game.startTime!.getTime())) + 12 * 3600_000 <= now.getTime() && endsAt <= now }
 }

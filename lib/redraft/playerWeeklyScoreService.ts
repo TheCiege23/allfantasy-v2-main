@@ -107,7 +107,6 @@ export type NflWeekStatsFetcher = (args: {
   season: number
   week: number
   playerIds: readonly string[]
-  requireComplete?: boolean
 }) => Promise<Map<string, Record<string, number>>>
 
 /**
@@ -132,7 +131,7 @@ export type NflWeekStatsFetcher = (args: {
  * id-space assumption. It is imported lazily because that provider imports this module for its
  * normalizers, and a static import would close the cycle.
  */
-const fetchNflWeekStatsFromLiveProvider: NflWeekStatsFetcher = async ({ season, week, playerIds, requireComplete }) => {
+const fetchNflWeekStatsFromLiveProvider: NflWeekStatsFetcher = async ({ season, week, playerIds }) => {
   try {
     const { NflLiveStatsProvider } = await import('@/lib/live-scoring/nflLiveStatsProvider')
     const provider = new NflLiveStatsProvider(prisma as never)
@@ -144,7 +143,6 @@ const fetchNflWeekStatsFromLiveProvider: NflWeekStatsFetcher = async ({ season, 
       // passing none is what lets this reconcile a week whose games are long finished.
       games: [],
       playerIds,
-      certifyAbsentPlayers: requireComplete,
     })
   } catch {
     // No fabrication on a provider failure — those players stay unscored and are reported.
@@ -210,7 +208,6 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   seasonStartUtc?: Date | string | null
   /** Injectable for tests; defaults to the live provider's week-wide Sleeper payload. */
   fetchNflWeekStats?: NflWeekStatsFetcher
-  refreshNflStats?: boolean
 }): Promise<WeeklyScoreSyncSummary> {
   const season = await prisma.redraftSeason.findFirst({
     where: params.seasonId ? { id: params.seasonId } : { leagueId: params.leagueId },
@@ -723,16 +720,11 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         !isTeamDefense(id) &&
         Object.keys(cachedWeekStatsFor(id)).length === 0,
     )
-    const requestedIds = params.refreshNflStats ? playerIds : uncachedOffensiveIds
-    if (requestedIds.length > 0) {
+    if (uncachedOffensiveIds.length > 0) {
       const fetcher = params.fetchNflWeekStats ?? fetchNflWeekStatsFromLiveProvider
-      const fetched = await fetcher({ season: seasonYear, week, playerIds: requestedIds,
-        ...(params.refreshNflStats ? { requireComplete: true } : {}) })
-      if (params.refreshNflStats && requestedIds.some(id => !fetched.has(id))) {
-        throw new Error('NFL_CORRECTION_REFRESH_INCOMPLETE')
-      }
+      const fetched = await fetcher({ season: seasonYear, week, playerIds: uncachedOffensiveIds })
       for (const [id, stats] of fetched) {
-        if (stats && (params.refreshNflStats || Object.keys(stats).length > 0)) weekStatsByPlayer.set(id, stats)
+        if (stats && Object.keys(stats).length > 0) weekStatsByPlayer.set(id, stats)
       }
     }
   }
@@ -815,8 +807,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
       const stored = storedDefenceStatsByPlayer.get(playerId)
       // A stored line with more than points allowed is a box score, and nothing below may shrink it.
-      const keepStored = !params.refreshNflStats && !weekPayload && !!stored && Object.keys(stored).some((key) => key !== 'def_points_allowed')
-      const stats: Record<string, number> = params.refreshNflStats ? { ...weekStatsByPlayer.get(playerId) } : weekPayload
+      const keepStored = !weekPayload && !!stored && Object.keys(stored).some((key) => key !== 'def_points_allowed')
+      const stats: Record<string, number> = weekPayload
         ? normalizeNflTeamDefenseWeeklyStats(weekPayload)
         : keepStored
           ? { ...stored }
@@ -974,10 +966,10 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
     const cachedStats = cachedWeekStatsFor(playerId)
     const providerStats = weekStatsByPlayer.get(playerId) ?? {}
-    const usedProvider = params.refreshNflStats || (Object.keys(cachedStats).length === 0 && Object.keys(providerStats).length > 0)
-    const stats = usedProvider ? providerStats : cachedStats
+    const usedProvider = Object.keys(cachedStats).length === 0 && Object.keys(providerStats).length > 0
+    const stats = Object.keys(cachedStats).length > 0 ? cachedStats : providerStats
 
-    if (!Object.keys(stats).length && !(params.refreshNflStats && weekStatsByPlayer.has(playerId))) {
+    if (!Object.keys(stats).length) {
       if (!cached) summary.missingCachePlayerIds.push(playerId)
       else if (!weekPayload) summary.missingWeekPlayerIds.push(playerId)
       else summary.missingStatPlayerIds.push(playerId)
