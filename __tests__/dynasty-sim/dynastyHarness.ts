@@ -44,7 +44,7 @@ export type LeagueRun = {
   findings: Finding[]
   stats: Record<string, unknown>
   /** Dynasty unless SIM_LEAGUE_TYPE=redraft: the same create → join → draft → season, renewed instead of carried over. */
-  leagueType?: 'dynasty' | 'redraft'
+  leagueType?: 'dynasty' | 'redraft' | 'keeper'
 }
 
 const COMMISH = { id: 'sim-commish', email: 'commish@sim.allfantasy.test', name: 'Sim Commish' }
@@ -90,7 +90,7 @@ function fitDynastySetupToTeamCount<T extends { playoffTeamCount: number; playof
 
 // ── 1. Create from the wizard ─────────────────────────────────────────────
 
-export async function createDynastyLeague(env: SimEnv, input: { sport: DynastySport; teamCount: number; draft: StartupDraftKind; leagueType?: 'dynasty' | 'redraft' }): Promise<LeagueRun> {
+export async function createDynastyLeague(env: SimEnv, input: { sport: DynastySport; teamCount: number; draft: StartupDraftKind; leagueType?: 'dynasty' | 'redraft' | 'keeper' }): Promise<LeagueRun> {
   const leagueType = input.leagueType ?? 'dynasty'
   const run: LeagueRun = { sport: input.sport, teamCount: input.teamCount, draft: input.draft, leagueId: null, commissionerId: COMMISH.id, managerIds: [], rounds: 0, findings: [], stats: {}, leagueType }
   const { DEFAULT_V2_STATE, getDefaultDynastySetup } = await import('@/lib/create-league-v2/state')
@@ -111,7 +111,7 @@ export async function createDynastyLeague(env: SimEnv, input: { sport: DynastySp
     draftType: wizardDraft,
     thirdRoundReversal: input.draft === 'snake_3rr',
     draftScheduleLater: true,
-    name: `Sim ${leagueType === 'redraft' ? 'Redraft' : 'Dynasty'} ${input.sport} ${input.teamCount} ${input.draft}`,
+    name: `Sim ${leagueType === 'redraft' ? 'Redraft' : leagueType === 'keeper' ? 'Keeper' : 'Dynasty'} ${input.sport} ${input.teamCount} ${input.draft}`,
     nameTouched: true,
     scoringPresetId: presets[0]?.id ?? '',
     ...(leagueType === 'dynasty'
