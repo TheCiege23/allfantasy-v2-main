@@ -35,6 +35,7 @@ export function createNcaafLeagueGrader(
     leagueSize?: number | null
     season?: number | null
     status?: string | null
+    campusOnly?: boolean
   },
   deps: NcaafLeagueGraderDeps = { loadBase: loadNcaafRedraftBase },
 ): NcaafLeagueGrader {
@@ -44,7 +45,7 @@ export function createNcaafLeagueGrader(
   let eligibility: Promise<Map<string, number>> | null = null
   const baseOnce = () =>
     (base ??= deps
-      .loadBase({ id: league.id, platform: league.platform, settings: league.settings })
+      .loadBase({ id: league.id, platform: league.platform, settings: league.settings, ...(league.campusOnly ? { campusOnly: true } : {}) })
       .catch((): NcaafRedraftBaseResult => ({ ok: false, reason: 'This league’s college values could not be loaded just now.' })))
 
   return {
@@ -58,6 +59,10 @@ export function createNcaafLeagueGrader(
       if (!loaded.ok) return { graded: false, reason: loaded.reason, basis: null, ...(loaded.valuationGap ? { valuationGap: loaded.valuationGap } : {}) }
       const { rostered, perGameByRosterId, window } = loaded.base
       const assets = [...give, ...get]
+      if (league.campusOnly && (league.season !== window.season || assets.some((asset) => asset.kind === 'player' &&
+        !rostered.some((player) => player.rosterPlayerId === (asset.rosterPlayerId ?? asset.playerId))))) {
+        return { graded: false, reason: 'Each player needs a verified Campus roster ID and projections for this league season.', basis: null }
+      }
       const positions = ncaafDealPositions(assets, rostered, perGameByRosterId)
       if (isDynasty) {
         const board: BoardPlayer[] = rostered.flatMap((player) => {
@@ -68,7 +73,7 @@ export function createNcaafLeagueGrader(
           }] : []
         })
         const classYears = await (eligibility ??= (deps.loadClassYears ?? loadNcaafClassYears)(
-          league.platform, board.map((p) => p.id), window.season,
+          league.platform, board.map((p) => p.id), window.season, ...(league.campusOnly ? [true] as const : []),
         ).catch(() => new Map()))
         const hasPicks = assets.some((asset) => asset.kind === 'pick')
         const teams = league.leagueSize

@@ -8,6 +8,7 @@ import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePric
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import { loadFootballCampusTradeEvidence } from './footballCampusTradeValue'
+import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 
 type Asset = Extract<TradeAssetInput, { kind: 'player' }>
 type Cost = { eligible: boolean; round: number | null; free: boolean }
@@ -116,30 +117,39 @@ function withFormatValues(view: Extract<TradeGradeView, { graded: true }>, lines
 }
 
 /** Same league economics for the shared grader and the console. Memoized for a batch of proposals. */
-export function createFootballTradeFormatGrader(league: League, loadCampus = loadFootballCampusTradeEvidence) {
+export function createFootballTradeFormatGrader(league: League, loadCampus = loadFootballCampusTradeEvidence, loadConfig = getC2CConfig) {
   if (league.type !== 'keeper' && league.type !== 'salary_cap' && league.type !== 'c2c') return null
   let keeperCosts: ReturnType<typeof loadKeeperCosts> | undefined
   let contracts: ReturnType<typeof loadContracts> | undefined
   let campus: ReturnType<typeof loadCampus> | undefined
+  let config: ReturnType<typeof loadConfig> | undefined
 
   return async (view: TradeGradeView, chart: LeagueTradeChart, assets: readonly TradeAssetInput[], dated = false): Promise<TradeGradeView> => {
     if (!view.graded) return view
     if (league.type === 'c2c') {
-      if (assets.some((asset) => asset.kind === 'pick')) {
-        return withheld('Campus and Canton draft picks need separate prices in this league.', view.basis)
+      const picks = assets.filter((asset) => asset.kind === 'pick')
+      if (picks.length) {
+        const settings = await (config ??= loadConfig(league.id).catch(() => null))
+        if (dated || !settings || settings.mergedRookieCollegeDraft || picks.some((pick) => pick.draftSide !== 'canton' || pick.round > settings.rookieDraftRounds)) {
+          return withheld('This trade needs a verified Canton pick in a separate rookie draft. Campus and combined drafts need their own pricing evidence.', view.basis)
+        }
       }
       if (!view.lines.some((line) => line.valueSource === 'devy_option')) return view
       if (dated || assets.length !== view.lines.length) return withheld('The trade-date Campus-to-Canton values could not be verified.', view.basis)
       const evidence = await (campus ??= loadCampus(league, chart).catch(() => null))
       if (!evidence) return withheld('College production and pro upside do not have enough measured inputs for a common value scale in this Campus-to-Canton league.', view.basis)
+      if (evidence.separate && view.lines.some((line) => line.valueSource !== 'devy_option')) {
+        return withheld('Separate Campus and Canton standings do not share a value scale. Compare assets in one division at a time.', view.basis)
+      }
       const lines: TradeGradeLine[] = []
       for (const [i, line] of view.lines.entries()) {
         if (line.valueSource !== 'devy_option') { lines.push(line); continue }
         const asset = assets[i]
         const value = asset?.kind === 'player' ? evidence.price(asset, line) : null
         if (value == null) return withheld('A verified campus projection or replacement level is missing for ' + line.name + '.', view.basis)
-        lines.push({ ...line, leagueValue: value, source: 'c2c-campus-and-pro' })
+        lines.push({ ...line, leagueValue: value, source: evidence.separate ? 'c2c-campus' : 'c2c-campus-and-pro' })
       }
+      if (evidence.separate) return withFormatValues(view, lines, 'Campus division estimate from college points over replacement for the remaining ' + evidence.weeks + ' weeks.')
       return withFormatValues(view, lines, 'Campus-to-Canton estimate. Adds projected college points above replacement for the remaining ' + evidence.weeks + ' weeks of ' + evidence.season + ', converted to one season of pro market value using the two observed boards and the league standings weights. Also includes the discounted pro option.')
     }
     if (dated) return withheld('The league’s trade-date keeper or contract terms are unavailable.', view.basis)

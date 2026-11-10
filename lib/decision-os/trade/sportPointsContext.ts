@@ -11,6 +11,9 @@ import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { loadRookieDraftEvidence } from './rookieDraftEvidence'
 import { readFantraxProspectAdp } from '@/lib/adp/fantraxProspectAdp'
+import { readNbaProspectRanks } from '@/lib/adp/nbaProspectRanks'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import { planProFantraxIdentityLinks, proTeamCode, type ProFantraxSport } from '@/lib/player-identity/proFantraxIdentityPlan'
 
 import { prisma } from '@/lib/prisma'
@@ -246,6 +249,7 @@ export async function loadSportPointsBase(args: {
   /** The open analyzer's scoring choice; ignored in a league, which is scored by its own settings. */
   format?: SportScoringFormat | null
   now?: Date
+  campusOnly?: boolean
 }): Promise<SportPointsBaseResult> {
   const { sport, league } = args
   const now = args.now ?? new Date()
@@ -265,11 +269,15 @@ export async function loadSportPointsBase(args: {
   const normalize = sport === 'MLB' ? engineKeyedLine : getDailySportNormalizer(sport)
   if (!normalize) return { ok: false, reason: `No ${sport} scoring is configured, so this deal cannot be graded.` }
 
-  const space = league ? playerIdSpaceFor({ platform: league.platform ?? null, sport }) : null
+  const campus = args.campusOnly === true && sport === 'NCAAB' && league && isNativePlatform(league.platform)
+  const space = campus ? { provider: 'espn' } : league ? playerIdSpaceFor({ platform: league.platform ?? null, sport }) : null
   const column = typeof space === 'object' && space ? providerIdentityColumn(space.provider)
     : space === 'sleeper' ? 'sleeperId' : space === 'rolling_insights' ? 'rollingInsightsId' : null
   const provider = typeof space === 'object' && space ? space.provider : undefined
-  const rosterRows = league ? await prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } }).catch(() => []) : []
+  const storedRosters = league ? await prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } }).catch(() => []) : []
+  const rosterRows = campus ? storedRosters.map(({ playerData }) => ({
+    playerData: { players: [...collegePlayerIds(playerData)].flatMap((id) => /^espn:ncaab:(\d+)$/.exec(id)?.[1] ?? []) },
+  })) : storedRosters
   const canLinkFromRoster = provider === 'yahoo' || provider === 'espn' || (provider === 'fantrax' && sport === 'SOCCER')
   const claims = canLinkFromRoster ? providerRosterClaims(rosterRows, provider) : []
   const published = sport === 'SOCCER' && provider === 'fantrax' && league && valuation.kind === 'points'
@@ -279,7 +287,7 @@ export async function loadSportPointsBase(args: {
   const { season, games, lines, verifiedSoccerOwnGoals } = source
   const sourcedValuation = verifiedSoccerOwnGoals ? valuationFor(sport, league, args.format, true) : valuation
   if ('refuse' in sourcedValuation) return { ok: false, reason: sourcedValuation.refuse }
-  const finished = await finishBoard({ sport, league, valuation: sourcedValuation, season, games, lines, verifiedSoccerOwnGoals, publishedSoccerPoints: Boolean(published), rosterProvider: provider, rosterRows })
+  const finished = await finishBoard({ sport, league, valuation: sourcedValuation, season, games, lines, verifiedSoccerOwnGoals, publishedSoccerPoints: Boolean(published), rosterProvider: provider, rosterRows, campusOnly: Boolean(campus) })
   if (!finished.ok || !league || !isDynastyGradedSport(sport) || !isDynastyLeagueType(league.leagueType)) return finished
   const boardIds = finished.ctx.board.map((p) => p.id)
   const nextDraftYear = nextRookieDraftYear(league, season, games.games, FULL_SEASON_GAMES[sport])
@@ -295,13 +303,14 @@ export async function loadSportPointsBase(args: {
     }
     return { ok: true, ctx: { ...finished.ctx, dynasty: { ages: new Map(), classYears, nextDraftYear } } }
   }
-  const [ages, rookieDraftEvidence, prospectAdp] = await Promise.all([
+  const [ages, rookieDraftEvidence, prospectAdp, nbaProspectRanks] = await Promise.all([
     loadBoardAges(sport, boardIds, now),
     sport === 'NBA' || sport === 'NHL' || sport === 'MLB' ? loadRookieDraftEvidence(league, now) : undefined,
     sport === 'NHL' || sport === 'MLB' ? readFantraxProspectAdp(sport, now) : undefined,
+    sport === 'NBA' && isNativePlatform(league.platform) ? readNbaProspectRanks(nextDraftYear, now) : undefined,
   ])
   if (!ages) return { ok: false, reason: `The ${sport} players’ ages could not be read just now, so this dynasty deal cannot be graded.` }
-  return { ok: true, ctx: { ...finished.ctx, dynasty: { ages, nextDraftYear, rookieDraftEvidence, prospectAdp } } }
+  return { ok: true, ctx: { ...finished.ctx, dynasty: { ages, nextDraftYear, rookieDraftEvidence, prospectAdp, nbaProspectRanks } } }
 }
 
 /** League statuses that mean this season's rookie draft has been held. */
@@ -678,6 +687,7 @@ async function finishBoard(args: {
   publishedSoccerPoints?: boolean
   rosterProvider?: string
   rosterRows: readonly RosterRow[]
+  campusOnly?: boolean
 }): Promise<SportPointsBaseResult> {
   const { sport, league, valuation, season, games, lines, verifiedSoccerOwnGoals, rosterProvider } = args
   const savedTeamCount = league?.leagueSize
@@ -745,6 +755,7 @@ async function finishBoard(args: {
   if (league) {
     rosterIndex = indexBoard(board, rosterProvider ? 'provider' : true)
     const rostered = [...new Set(args.rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))]
+    if (args.campusOnly && rostered.length === 0) return { ok: false, reason: 'No verified Campus roster IDs are saved.', valuationGap: 'unresolved_player' }
     if (rostered.length > 0) {
       const onBoard = new Set<string>()
       let mapped = 0
@@ -756,6 +767,7 @@ async function finishBoard(args: {
         }
       }
       if (mapped / rostered.length >= MIN_ROSTER_MAPPING) replacementByPosition = replacementFromRosters(board, onBoard)
+      else if (args.campusOnly) return { ok: false, reason: 'Too few Campus roster IDs link to current college projections.', valuationGap: 'projection_coverage' }
     }
   }
 

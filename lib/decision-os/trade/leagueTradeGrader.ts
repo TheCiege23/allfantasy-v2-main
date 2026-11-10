@@ -36,6 +36,7 @@ import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligib
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
 import { createFootballTradeFormatGrader } from './footballTradeFormatGrade'
+import { createFootballCampusDraftGrader } from './footballCampusDraftGrade'
 import { createGuillotineGrader } from './guillotineGrader'
 import { createZombieGrader } from './zombieGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
@@ -395,10 +396,14 @@ export async function createLeagueTradeGrader(args: {
   const leagueType = leagueTypeBasis({
     settings: leagueRow.settings,
     leagueType: leagueRow.leagueType,
+    leagueVariant: leagueRow.leagueVariant,
     platform: leagueRow.platform ?? null,
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
   const footballFormat = sport === 'NFL' ? createFootballTradeFormatGrader({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, type: leagueType.type }) : null
+  const campusDraft = sport === 'NFL' ? createFootballCampusDraftGrader({
+    id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, leagueSize: leagueRow.leagueSize, status: leagueRow.status, type: leagueType.type,
+  }) : null
   // College football redraft and dynasty use the league’s stored projections and scoring.
   const college =
     sport === 'NCAAF'
@@ -553,6 +558,8 @@ export async function createLeagueTradeGrader(args: {
     book,
     profile,
     async grade(deal) {
+      const campus = await campusDraft?.(deal.give, deal.get, dated)
+      if (campus) return withType(campus)
       // A dated grade is never priced for roster need: the roster it would read is today's.
       const view = await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal)
       return withType(footballFormat ? await footballFormat(view, chart, [...deal.give, ...deal.get], dated) : view)

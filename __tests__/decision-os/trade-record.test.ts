@@ -70,7 +70,7 @@ describe('assets', () => {
   it('AfLeagueTradeItem: player by reference, fdp pick parsed, FAAB from either field', () => {
     expect(afItemAsset({ itemType: 'player', itemReference: '4984', faabAmount: null, metadata: null })).toEqual({ kind: 'player', playerId: '4984' })
     expect(afItemAsset({ itemType: 'future_pick', itemReference: 'fdp:2027:1:roster-9', faabAmount: null, metadata: {} })).toEqual({
-      kind: 'pick', season: 2027, round: 1, originalTeamId: 'roster-9', label: '2027 1st',
+      kind: 'pick', season: 2027, round: 1, originalTeamId: 'roster-9', label: '2027 1st', draftSide: 'canton',
     })
     expect(afItemAsset({ itemType: 'rookie_pick', itemReference: 'opaque', faabAmount: null, metadata: { pickSeason: 2027, pickRound: 2, originalRosterId: 'r3' } })).toMatchObject({ season: 2027, round: 2, originalTeamId: 'r3' })
     expect(afItemAsset({ itemType: 'faab', itemReference: null, faabAmount: null, metadata: { amount: 25 } })).toEqual({ kind: 'faab', amount: 25 })
