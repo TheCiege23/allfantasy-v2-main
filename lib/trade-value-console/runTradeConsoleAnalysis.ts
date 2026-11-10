@@ -47,6 +47,7 @@ import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrad
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
 import { createFootballTradeFormatGrader } from '@/lib/decision-os/trade/footballTradeFormatGrade'
+import { createFootballCombinedPickQuote } from '@/lib/decision-os/trade/footballCampusTradeValue'
 import { createFootballCampusDraftGrader } from '@/lib/decision-os/trade/footballCampusDraftGrade'
 import { createGuillotineGrader } from '@/lib/decision-os/trade/guillotineGrader'
 import { createZombieGrader } from '@/lib/decision-os/trade/zombieGrader'
@@ -265,6 +266,12 @@ export async function runTradeConsoleAnalysis(
     mark,
   })
   dataGaps.push(...(chart.valuationGaps ?? []))
+  const consoleLeagueType = leagueRow
+    ? leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, leagueVariant: leagueRow.leagueVariant, platform: leagueRow.platform ?? null })
+    : null
+  const combinedPickQuote = effectiveSport === 'NFL' && consoleLeagueType?.type === 'c2c' && leagueRow && input.leagueId
+    ? createFootballCombinedPickQuote({ id: input.leagueId.trim(), platform: leagueRow.platform, season: leagueRow.season })(chart)
+    : undefined
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
   const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx, faabState } = chart
 
@@ -275,7 +282,7 @@ export async function runTradeConsoleAnalysis(
     faabState,
     dataGaps,
     fcPlayers,
-    pickSlots: chart.pickSlots ?? null,
+    pickSlots: chart.pickSlots ?? null, combinedPickQuote,
   })
   mark('assets_give')
   let { priced: getPriced, lines: getLines, unresolved: getUnresolved } = await resolveAssets(get, {
@@ -285,7 +292,7 @@ export async function runTradeConsoleAnalysis(
     faabState,
     dataGaps,
     fcPlayers,
-    pickSlots: chart.pickSlots ?? null,
+    pickSlots: chart.pickSlots ?? null, combinedPickQuote,
   })
 
   const unresolved = [...giveUnresolved, ...getUnresolved]
@@ -386,9 +393,6 @@ export async function runTradeConsoleAnalysis(
     mark,
   })
   const leagueGrade = graded.leagueGrade
-  const consoleLeagueType = leagueRow
-    ? leagueTypeBasis({ settings: leagueRow.settings, leagueType: leagueRow.leagueType, leagueVariant: leagueRow.leagueVariant, platform: leagueRow.platform ?? null })
-    : null
   /*
    * A college league takes the same college grade `createLeagueTradeGrader` gives it (Phase 8), and the
    * console's own numbers are rewritten from it, so the letter and the values beside it are one basis.
@@ -404,7 +408,7 @@ export async function runTradeConsoleAnalysis(
     ? createFootballCampusDraftGrader({
         id: input.leagueId.trim(), platform: leagueRow.platform, season: leagueRow.season, leagueSize: leagueRow.leagueSize, status: leagueRow.status, type: consoleLeagueType.type,
       }) : null
-  const collegeView = await (collegeGrader?.grade(input.sideGive, input.sideGet) ?? campusDraft?.(input.sideGive, input.sideGet)) ?? null
+  const collegeView = await (collegeGrader?.grade(input.sideGive, input.sideGet) ?? campusDraft?.(input.sideGive, input.sideGet, false, chart)) ?? null
   if (collegeView) applyCollegeGrade(leagueGrade, collegeView)
   /*
    * NBA, college basketball and NHL take the points-over-replacement grade `createLeagueTradeGrader` gives
@@ -425,7 +429,7 @@ export async function runTradeConsoleAnalysis(
           sport: effectiveSport,
           leagueType: consoleLeagueType.type,
           leagueVariant: leagueRow.leagueVariant ?? null,
-          league: { id: input.leagueId.trim(), settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
+          league: { id: input.leagueId.trim(), platform: leagueRow.platform, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
         })
       : null
   const zombieGrader =
@@ -821,7 +825,7 @@ export async function runTradeConsoleAnalysis(
       if (counterPickWhy) return { graded: false, reason: counterPickWhy, basis: null }
       const opts = { effectiveSport, nflCtx: chart.nflCtx, waiverBudget: chart.waiverBudget, faabState: chart.faabState ?? null,
         dataGaps: [] as string[], fcPlayers: chart.fcPlayers, resolveEnrichmentIds: false,
-        pickSlots: chart.pickSlots ?? null }
+        pickSlots: chart.pickSlots ?? null, combinedPickQuote }
       const [g, t] = await Promise.all([resolveAssets(counterGive, opts), resolveAssets(counterGet, opts)])
       if (g.unresolved.length || t.unresolved.length) return { graded: false, reason: 'Counter assets could not be resolved.', basis: null }
       const [gd, td] = assetPolicy

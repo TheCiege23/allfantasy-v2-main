@@ -50,7 +50,7 @@ const NOT_A_PICK = String.raw`(?![\s-]+(?:place|down|quarter|half|string|team|ti
  *   "a 2027 1st", "two 2026 seconds", "2027 first-round pick", "my 2028 2nd rounder"
  */
 const MENTION = new RegExp(
-  String.raw`(?:\b(a|an|one|two|three|2|3)\s+)?(?:\b((?:19|20)\d{2})\s+)?(?:\b(campus|canton)\s+)?\b(1st|2nd|3rd|4th|first|second|third|fourth)(s)?\b` +
+  String.raw`(?:\b(a|an|one|two|three|2|3)\s+)?(?:\b((?:19|20)\d{2})\s+)?(?:\b(campus|canton|combined)\s+)?\b(1st|2nd|3rd|4th|first|second|third|fourth)(s)?\b` +
     /* Longest first: "round pick" before "round", or " pick" is left behind and reads as an unparsed pick. */
     /* "Rd" is how Sleeper's trade card writes it: "2028 2nd Rd (JeffersonTD)". */
     String.raw`(?:[\s-]+(round\s+(?:draft\s+)?picks?|round(?:er)?s?|rd(?![a-z])\.?(?:\s+(?:draft\s+)?picks?)?|(?:draft\s+)?picks?))?` +

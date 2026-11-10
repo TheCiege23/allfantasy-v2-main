@@ -6,7 +6,7 @@ import { roundCostOnChart } from '@/lib/keeper/tradeKeeperCosts'
 import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
 import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
-import { gradeTrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
+import { gradeTrade, separateStandingsTradeGrade, type TradeGradeLine, type TradeGradeView } from './tradeGrade'
 import { loadFootballCampusTradeEvidence } from './footballCampusTradeValue'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 
@@ -130,17 +130,18 @@ export function createFootballTradeFormatGrader(league: League, loadCampus = loa
       const picks = assets.filter((asset) => asset.kind === 'pick')
       if (picks.length) {
         const settings = await (config ??= loadConfig(league.id).catch(() => null))
-        if (dated || !settings || settings.mergedRookieCollegeDraft || picks.some((pick) => pick.draftSide !== 'canton' || pick.round > settings.rookieDraftRounds)) {
-          return withheld('This trade needs a verified Canton pick in a separate rookie draft. Campus and combined drafts need their own pricing evidence.', view.basis)
+        if (dated || !settings || picks.some((pick) => settings.mergedRookieCollegeDraft
+          ? pick.draftSide !== 'combined'
+          : pick.draftSide !== 'canton' || pick.round > settings.rookieDraftRounds)) {
+          return withheld('Use the pick designation for the saved draft format: Combined for a joint draft, or Canton for the separate rookie draft.', view.basis)
         }
       }
-      if (!view.lines.some((line) => line.valueSource === 'devy_option')) return view
+      const combinedBasis = picks.some((pick) => pick.draftSide === 'combined')
+        ? ' Combined picks rank college freshman estimates and stored Canton rookie slots on the shared league scale. Later drafts are discounted.' : ''
+      if (!view.lines.some((line) => line.valueSource === 'devy_option')) return combinedBasis ? { ...view, basis: view.basis + combinedBasis } : view
       if (dated || assets.length !== view.lines.length) return withheld('The trade-date Campus-to-Canton values could not be verified.', view.basis)
       const evidence = await (campus ??= loadCampus(league, chart).catch(() => null))
       if (!evidence) return withheld('College production and pro upside do not have enough measured inputs for a common value scale in this Campus-to-Canton league.', view.basis)
-      if (evidence.separate && view.lines.some((line) => line.valueSource !== 'devy_option')) {
-        return withheld('Separate Campus and Canton standings do not share a value scale. Compare assets in one division at a time.', view.basis)
-      }
       const lines: TradeGradeLine[] = []
       for (const [i, line] of view.lines.entries()) {
         if (line.valueSource !== 'devy_option') { lines.push(line); continue }
@@ -149,8 +150,19 @@ export function createFootballTradeFormatGrader(league: League, loadCampus = loa
         if (value == null) return withheld('A verified campus projection or replacement level is missing for ' + line.name + '.', view.basis)
         lines.push({ ...line, leagueValue: value, source: evidence.separate ? 'c2c-campus' : 'c2c-campus-and-pro' })
       }
-      if (evidence.separate) return withFormatValues(view, lines, 'Campus division estimate from college points over replacement for the remaining ' + evidence.weeks + ' weeks.')
-      return withFormatValues(view, lines, 'Campus-to-Canton estimate. Adds projected college points above replacement for the remaining ' + evidence.weeks + ' weeks of ' + evidence.season + ', converted to one season of pro market value using the two observed boards and the league standings weights. Also includes the discounted pro option.')
+      if (evidence.separate) {
+        const campus = lines.filter((line) => line.valueSource === 'devy_option')
+        const canton = lines.filter((line) => line.valueSource !== 'devy_option')
+        if (canton.length) {
+          const sum = (rows: TradeGradeLine[], side: TradeGradeLine['side']) => rows.reduce((value, line) => value + (line.side === side ? line.leagueValue ?? 0 : 0), 0)
+          return separateStandingsTradeGrade([
+            { division: 'Campus', giveValue: sum(campus, 'give'), getValue: sum(campus, 'get') },
+            { division: 'Canton', giveValue: sum(canton, 'give'), getValue: sum(canton, 'get') },
+          ])
+        }
+        return withFormatValues(view, lines, 'Campus division estimate from college points over replacement for the remaining ' + evidence.weeks + ' weeks.')
+      }
+      return withFormatValues(view, lines, 'Campus-to-Canton estimate. Adds projected college points above replacement for the remaining ' + evidence.weeks + ' weeks of ' + evidence.season + ', converted to one season of pro market value using the two observed boards and the league standings weights. Also includes the discounted pro option.' + combinedBasis)
     }
     if (dated) return withheld('The league’s trade-date keeper or contract terms are unavailable.', view.basis)
     if (!league.season) return withheld('The league season is needed to price its keeper or contract terms.', view.basis)
