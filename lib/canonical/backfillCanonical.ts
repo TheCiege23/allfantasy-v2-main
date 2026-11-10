@@ -33,7 +33,7 @@ import {
   normalizeSport,
   type CanonicalMatchStrategy,
 } from '@/lib/canonical/canonicalIdentity'
-import { foldTargetsForUnkeyedGroups, hasSleeperId, twinKey } from '@/lib/canonical/duplicatePlayerMerge'
+import { crosswalkDecision, foldTargetsForUnkeyedGroups, hasSleeperId, twinKey } from '@/lib/canonical/duplicatePlayerMerge'
 
 export interface BackfillOptions {
   sport?: string
@@ -467,8 +467,40 @@ async function foldUnkeyedNflGroups(grouped: Map<string, SourcePlayer[]>): Promi
   const unkeyed = [...grouped]
     .filter(([, rows]) => isNfl(rows) && rows.every((r) => !r.sleeperId))
     .map(([groupId, rows]) => ({ groupId, keys: rows.map((r) => twinKey(r.name, r.dob)), providerIds: pairs(rows) }))
+  if (unkeyed.length === 0) return { folded: 0, ontoExisting }
+
+  const apply = (groupId: string, target: string) => {
+    if (groupId === target) return
+    const into = grouped.get(target)
+    if (into) {
+      into.push(...grouped.get(groupId)!)
+      grouped.delete(groupId)
+    } else {
+      ontoExisting.set(groupId, target)
+    }
+  }
+
+  const byBirthday = await birthdayFoldTargets(unkeyed, grouped, isNfl, pairs)
+  for (const [groupId, target] of byBirthday) apply(groupId, target)
+
+  const remaining = unkeyed.filter((g) => !byBirthday.has(g.groupId) && grouped.has(g.groupId))
+  const byCrosswalk = await crosswalkFoldTargets(remaining, grouped, isNfl, pairs)
+  for (const [groupId, target] of byCrosswalk) apply(groupId, target)
+
+  return { folded: byBirthday.size + byCrosswalk.size, ontoExisting }
+}
+
+type UnkeyedGroup = { groupId: string; keys: Array<string | null>; providerIds: Array<[string, string]> }
+
+/** The birthday rule (`foldTargetsForUnkeyedGroups`): same name AND birthday as one Sleeper-backed player. */
+async function birthdayFoldTargets(
+  unkeyed: UnkeyedGroup[],
+  grouped: Map<string, SourcePlayer[]>,
+  isNfl: (rows: SourcePlayer[]) => boolean,
+  pairs: (rows: SourcePlayer[]) => Array<[string, string]>,
+): Promise<Map<string, string>> {
   const wanted = new Set(unkeyed.flatMap((g) => g.keys).filter((k): k is string => Boolean(k)))
-  if (wanted.size === 0) return { folded: 0, ontoExisting }
+  if (wanted.size === 0) return new Map()
 
   const keyed: Array<{ id: string; key: string | null; providerIds: Array<[string, string]> }> = []
   for (const [id, rows] of grouped) {
@@ -497,18 +529,107 @@ async function foldUnkeyedNflGroups(grouped: Map<string, SourcePlayer[]>): Promi
   for (const h of held) if (h.playerId) keyed.push({ id: h.playerId, key: null, providerIds: [[h.provider, h.providerPlayerId]] })
   for (const p of existingTwins) keyed.push({ id: p.id, key: twinKey(p.name, p.birthDate), providerIds: [] })
 
-  const targets = foldTargetsForUnkeyedGroups(unkeyed, keyed)
-  for (const [groupId, target] of targets) {
-    if (groupId === target) continue
-    const into = grouped.get(target)
-    if (into) {
-      into.push(...grouped.get(groupId)!)
-      grouped.delete(groupId)
-    } else {
-      ontoExisting.set(groupId, target)
-    }
+  return foldTargetsForUnkeyedGroups(unkeyed, keyed)
+}
+
+/**
+ * The crosswalk rule (`crosswalkDecision`): a group that is only a Rolling Insights row follows
+ * `PlayerIdentityMap` from its RI id to a Sleeper id, and from there to the one player holding
+ * that Sleeper id. That player may be in this run or already in the database.
+ *
+ * Without it, a re-run after `scripts/dedupe-players.ts --scope=crosswalk` would rebuild all
+ * ~370 Rolling Insights copies. These groups mostly have no birthday, so the birthday rule
+ * never sees them.
+ */
+async function crosswalkFoldTargets(
+  remaining: UnkeyedGroup[],
+  grouped: Map<string, SourcePlayer[]>,
+  isNfl: (rows: SourcePlayer[]) => boolean,
+  pairs: (rows: SourcePlayer[]) => Array<[string, string]>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const riOf = (g: UnkeyedGroup) => g.providerIds.filter(([p]) => p === 'rolling_insights').map(([, id]) => id)
+  const riIds = [...new Set(remaining.flatMap(riOf))]
+  if (riIds.length === 0) return out
+
+  const links = await prisma.playerIdentityMap.findMany({
+    where: { sport: 'NFL', rollingInsightsId: { in: riIds }, sleeperId: { not: null } },
+    select: { rollingInsightsId: true, sleeperId: true },
+  })
+  const sleepersByRi = new Map<string, Set<string>>()
+  for (const l of links) {
+    if (!l.rollingInsightsId || !l.sleeperId) continue
+    const set = sleepersByRi.get(l.rollingInsightsId) ?? new Set<string>()
+    set.add(l.sleeperId)
+    sleepersByRi.set(l.rollingInsightsId, set)
   }
-  return { folded: targets.size, ontoExisting }
+  const sleeperIds = [...new Set([...sleepersByRi.values()].flatMap((s) => [...s]))]
+  if (sleeperIds.length === 0) return out
+
+  /* Who holds each Sleeper id: a group in this run, and/or a player already in the database.
+     The deterministic id makes those the same id when both exist. */
+  const playersBySleeper = new Map<string, Set<string>>()
+  const add = (sid: string, id: string) => {
+    const set = playersBySleeper.get(sid) ?? new Set<string>()
+    set.add(id)
+    playersBySleeper.set(sid, set)
+  }
+  const wantedSleepers = new Set(sleeperIds)
+  for (const [id, rows] of grouped) {
+    if (!isNfl(rows)) continue
+    for (const r of rows) if (r.sleeperId && wantedSleepers.has(r.sleeperId)) add(r.sleeperId, id)
+  }
+  const sleeperIdentities = await prisma.playerProviderIdentity.findMany({
+    where: { provider: 'sleeper', sportKey: 'NFL', providerPlayerId: { in: sleeperIds }, playerId: { not: null } },
+    select: { playerId: true, providerPlayerId: true },
+  })
+  for (const s of sleeperIdentities) if (s.playerId) add(s.providerPlayerId, s.playerId)
+
+  const candidateIds = [...new Set([...playersBySleeper.values()].flatMap((s) => [...s]))]
+  const [dbPlayers, dbRi] = await Promise.all([
+    prisma.player.findMany({ where: { id: { in: candidateIds } }, select: { id: true, birthDate: true } }),
+    prisma.playerProviderIdentity.findMany({
+      where: { playerId: { in: candidateIds }, provider: 'rolling_insights' },
+      select: { playerId: true, providerPlayerId: true },
+    }),
+  ])
+  const birthById = new Map<string, string | Date | null>(dbPlayers.map((p) => [p.id, p.birthDate]))
+  const riById = new Map<string, Set<string>>()
+  const addRi = (id: string, ri: string) => {
+    const set = riById.get(id) ?? new Set<string>()
+    set.add(ri)
+    riById.set(id, set)
+  }
+  for (const r of dbRi) if (r.playerId) addRi(r.playerId, r.providerPlayerId)
+  for (const id of candidateIds) {
+    const rows = grouped.get(id)
+    if (!rows) continue
+    for (const [p, ri] of pairs(rows)) if (p === 'rolling_insights') addRi(id, ri)
+    if (!birthById.get(id)) birthById.set(id, rows.find((r) => r.dob)?.dob ?? null)
+  }
+
+  const riByTarget = new Map<string, Set<string>>()
+  for (const g of remaining) {
+    const rows = grouped.get(g.groupId)
+    if (!rows) continue
+    const decision = crosswalkDecision({
+      riIds: riOf(g),
+      providers: g.providerIds.map(([p]) => p),
+      birth: rows.find((r) => r.dob)?.dob ?? null,
+      sleeperIdsForRi: (ri) => [...(sleepersByRi.get(ri) ?? [])],
+      playersForSleeper: (sid) => [...(playersBySleeper.get(sid) ?? [])].filter((id) => id !== g.groupId),
+      birthOf: (id) => birthById.get(id) ?? null,
+      riIdsOf: (id) => [...(riById.get(id) ?? [])],
+    })
+    if (!('target' in decision)) continue
+    out.set(g.groupId, decision.target)
+    const set = riByTarget.get(decision.target) ?? new Set<string>()
+    set.add(decision.rollingInsightsId)
+    riByTarget.set(decision.target, set)
+  }
+  /* Two RI groups landing on one player with different ids would give it two. Drop both. */
+  for (const [groupId, target] of [...out]) if (riByTarget.get(target)!.size > 1) out.delete(groupId)
+  return out
 }
 
 /**
