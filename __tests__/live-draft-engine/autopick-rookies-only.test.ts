@@ -163,3 +163,15 @@ describe('autopick honours a rookies-only / veterans-only pool', () => {
     expect(r).toMatchObject({ ok: true, pick: { playerName: 'Veteran Star' } })
   })
 })
+
+it('uses a small verified combined board and never falls back to veterans', async () => {
+  const poolType = 'merged_rookie_college'
+  hm.draftSessionFindFirst.mockResolvedValue({ ...session(), playerPool: 'rookies_only', draftModeLabel: poolType })
+  const campus = { ...entry('Campus Guard', 'PG', 2), poolType: 'college' }
+  const stale = warm([vet('Veteran Star', 1), campus])
+  hm.getWarmDraftPoolSnapshotFast.mockResolvedValue({ ...stale, payload: { ...stale.payload, poolType } })
+
+  expect(await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')).toMatchObject({ ok: true, pick: { playerName: 'Campus Guard' } })
+  expect(hm.submitPick).toHaveBeenCalledWith(expect.objectContaining({ playerId: campus.playerId, source: 'auto' }))
+  expect(hm.getResolvedDraftPoolForLeague).not.toHaveBeenCalled()
+})

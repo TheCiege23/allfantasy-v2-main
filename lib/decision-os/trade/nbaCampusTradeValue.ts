@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
+import { readOpenAnnualC2CDraft } from './openAnnualC2CDraft'
 import { combinedDraftPickValue } from './combinedC2CDraftValue'
 import { getC2CPhaseConfig } from '@/lib/merged-devy-c2c/draft/C2CDraftOrchestration'
 import { campusPointsToMarket } from './footballCampusTradeValue'
@@ -35,6 +36,8 @@ export function nbaCampusProduction(ctx: SportPointsContext, held: ReadonlySet<s
 export function createNbaCampusTradeGrader(league: SportPointsLeague, loadBase: typeof loadSportPointsBase) {
   let configPromise: ReturnType<typeof getC2CConfig> | undefined
   let proPromise: ReturnType<typeof loadBase> | undefined
+  let combinedProPromise: ReturnType<typeof loadBase> | undefined
+  let openDraft: ReturnType<typeof readOpenAnnualC2CDraft> | undefined
   let campusPromise: ReturnType<typeof loadBase> | undefined
   let heldPromise: Promise<Set<string>> | undefined
 
@@ -53,7 +56,8 @@ export function createNbaCampusTradeGrader(league: SportPointsLeague, loadBase: 
     if (combined.length && (config.standingsModel === 'separate' || (combinedConfig.draftType !== 'snake' && combinedConfig.draftType !== 'linear'))) {
       return withheld('Combined picks need shared standings and a numbered draft order to compare college and pro options.')
     }
-    if (picks.some((pick) => pick.round > (pick.draftSide === 'combined' ? combinedConfig.rounds : onCampus(pick) ? config.collegeDraftRounds : config.rookieDraftRounds))) {
+    const open = combined.length ? await (openDraft ??= readOpenAnnualC2CDraft(league.id).catch(() => null)) : null
+    if (picks.some((pick) => pick.round > (pick.draftSide === 'combined' ? (pick.year === open?.year ? open.rounds : combinedConfig.rounds) : onCampus(pick) ? config.collegeDraftRounds : config.rookieDraftRounds))) {
       return withheld('A pick’s round exceeds the league’s configured draft rounds.')
     }
     const campusPicks = picks.some(onCampus)
@@ -63,7 +67,9 @@ export function createNbaCampusTradeGrader(league: SportPointsLeague, loadBase: 
     const needPro = campusCount < assets.length || config.standingsModel !== 'separate'
     const needsCampus = campusCount > 0 || combined.length > 0
     const [pro, campus, held] = await Promise.all([
-      needPro ? (proPromise ??= loadBase({ sport: 'NBA', league: { ...league, leagueType: 'dynasty' } })) : null,
+      needPro ? open
+        ? (combinedProPromise ??= loadBase({ sport: 'NBA', league: { ...league, season: open.year, status: 'pre_draft', leagueType: 'dynasty' } }))
+        : (proPromise ??= loadBase({ sport: 'NBA', league: { ...league, leagueType: 'dynasty' } })) : null,
       needsCampus ? (campusPromise ??= loadBase({ sport: 'NCAAB', league: { ...league, settings: null, leagueType: 'dynasty' }, campusOnly: true })) : null,
       needsCampus ? (heldPromise ??= prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true } })
         .then((rows) => new Set(rows.flatMap((row) => [...collegePlayerIds(row.playerData)])))) : new Set<string>(),
@@ -111,8 +117,8 @@ export function createNbaCampusTradeGrader(league: SportPointsLeague, loadBase: 
       for (const asset of items.filter((asset) => !onProBoard(asset))) {
         if (asset.kind === 'pick' && asset.draftSide === 'combined') {
           const value = dynasty && proContext ? combinedDraftPickValue({
-            pick: asset, campus: combinedCampus, canton: pool, teams: proContext.teams,
-            nextDraftYear: dynasty.nextDraftYear, rounds: combinedConfig.rounds,
+            pick: asset, campus: combinedCampus, canton: pool, teams: asset.year === open?.year ? open.teams : proContext.teams,
+            nextDraftYear: dynasty.nextDraftYear, rounds: asset.year === open?.year ? open.rounds : combinedConfig.rounds,
           }) : null
           if (value == null) return withheld('The verified Campus and Canton prospect boards do not cover this combined pick.')
           if (side === 'give') giveValue += value

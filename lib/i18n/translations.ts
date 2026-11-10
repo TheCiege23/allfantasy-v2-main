@@ -7190,6 +7190,8 @@ export const translations: Record<string, Record<string, string>> = {
     "draftRoom.tradeHistory.round": "Round {{round}}",
     "draftRoom.tradeHistory.unknownOwner": "Unknown",
     "draftRoom.tradeHistory.footer": "Read-only · open a pick's menu to propose new trades",
+    "draftRoom.dynasty.kind.combined": "Combined Campus-to-Canton draft",
+    "draftRoom.dynasty.kind.combinedWithYear": "Combined Campus-to-Canton draft · {{year}}",
     "draftRoom.dynasty.kind.rookie": "Rookie draft",
     "draftRoom.dynasty.kind.rookieWithYear": "Rookie draft · {{year}}",
     "draftRoom.dynasty.kind.startup": "Startup draft",

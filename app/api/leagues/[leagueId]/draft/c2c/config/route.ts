@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { emptyCollegeRoundsError, sanitizeRoundList } from '@/lib/draft-defaults/draftRoundList'
@@ -34,6 +35,9 @@ export async function PATCH(
 
   const draft = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!draft) return NextResponse.json({ error: 'No draft session' }, { status: 404 })
+  if (draft.draftModeLabel === ANNUAL_C2C_DRAFT) {
+    return NextResponse.json({ error: 'Every round in this annual draft is combined.' }, { status: 409 })
+  }
   if (draft.status !== 'pre_draft') {
     return NextResponse.json({ error: 'C2C config cannot be changed after draft has started' }, { status: 400 })
   }

@@ -169,6 +169,7 @@ export type PlayerPanelProps = {
   devyConfig?: { enabled: boolean; devyRounds: number[] }
   /** C2C: when enabled, show College/Pro filter and college/pro round hint */
   c2cConfig?: { enabled: boolean; collegeRounds: number[] }
+  combinedAnnualDraft?: boolean
   /** Current draft round (for devy/C2C round hints) */
   currentRound?: number
   /** When 'IDP', position filter includes Offense, DL, LB, DB, DE, DT, CB, S, IDP FLEX */
@@ -406,6 +407,7 @@ function PlayerPanelInner({
   onNominate,
   devyConfig,
   c2cConfig,
+  combinedAnnualDraft = false,
   currentRound,
   formatType,
   selectedPlayerTarget = null,
@@ -490,8 +492,8 @@ function PlayerPanelInner({
    */
   const [watchlistKeys, setWatchlistKeys] = useState<Set<string>>(new Set())
   const isDevyRound = Boolean(devyConfig?.enabled && !c2cConfig?.enabled && currentRound != null && devyConfig.devyRounds?.includes(currentRound))
-  const isCollegeRound = Boolean(c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
-  const isProRound = Boolean(c2cConfig?.enabled && currentRound != null && !c2cConfig.collegeRounds?.includes(currentRound))
+  const isCollegeRound = Boolean(!combinedAnnualDraft && c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
+  const isProRound = Boolean(!combinedAnnualDraft && c2cConfig?.enabled && currentRound != null && !c2cConfig.collegeRounds?.includes(currentRound))
   const showPoolFilter = Boolean(devyConfig?.enabled || c2cConfig?.enabled)
   const hasAiOverlaySignals = Boolean(aiOverlaySignals && Object.keys(aiOverlaySignals).length > 0)
 
@@ -745,7 +747,7 @@ function PlayerPanelInner({
   const selectedIsWatchlisted = selectedPlayer ? watchlistKeys.has(watchKeyFor(selectedPlayer)) : false
 
   useEffect(() => {
-    if (!showPoolFilter || currentRound == null) return
+    if (!showPoolFilter || currentRound == null || combinedAnnualDraft) return
     if (c2cConfig?.enabled) {
       setPoolFilter(isCollegeRound ? 'College' : 'Pro')
       return
@@ -753,7 +755,7 @@ function PlayerPanelInner({
     if (devyConfig?.enabled) {
       setPoolFilter(isDevyRound ? 'Devy' : 'Pro')
     }
-  }, [showPoolFilter, currentRound, c2cConfig?.enabled, devyConfig?.enabled, isCollegeRound, isDevyRound])
+  }, [showPoolFilter, currentRound, combinedAnnualDraft, c2cConfig?.enabled, devyConfig?.enabled, isCollegeRound, isDevyRound])
 
   useEffect(() => {
     if (!selectedPlayerTarget?.name) return

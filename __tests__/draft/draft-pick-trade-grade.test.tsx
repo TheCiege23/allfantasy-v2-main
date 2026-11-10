@@ -21,6 +21,7 @@ const code = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'ut
 describe('isRookieDraft', () => {
   it('a rookie-labelled draft or a rookies-only pool is graded; a startup or redraft draft is not', () => {
     expect(isRookieDraft({ draftModeLabel: 'rookie', playerPool: 'all' })).toBe(true)
+    expect(isRookieDraft({ draftModeLabel: 'merged_rookie_college', playerPool: 'all' })).toBe(true)
     expect(isRookieDraft({ draftModeLabel: null, playerPool: 'rookies_only' })).toBe(true)
     expect(isRookieDraft({ draftModeLabel: 'startup', playerPool: 'all' })).toBe(false)
     expect(isRookieDraft({ draftModeLabel: null, playerPool: 'all' })).toBe(false)
@@ -89,8 +90,10 @@ describe('wiring', () => {
   const route = code('app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts')
   const root = code('components/app/draft-room/DraftPickTradePanelRoot.tsx')
 
-  it('the route grades only a rookie draft, through the league grader, and returns the grade', () => {
-    expect(route).toMatch(/const tradeGrade: DraftPickTradeGrade = isRookieDraft\(draftSession\)\s*\?\s*await gradeDeal\(/)
+  it('the route grades rookie and combined draft picks through the league grader', () => {
+    expect(route).toMatch(/isRookieDraft\(draftSession\)\s*\?\s*await gradeDeal\(/)
+    expect(route).toMatch(/annualC2CDraftSeason\(draftSession\)/)
+    expect(route).toMatch(/draftPickGradeAsset\(\{[^}]*combined \}\)/)
     expect(route).toMatch(/: \{ graded: false, reason: NOT_A_ROOKIE_DRAFT_REASON \}/)
     expect(route).toMatch(/ok: true,\s*tradeGrade,/)
   })

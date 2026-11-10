@@ -16,6 +16,7 @@ import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayer, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
 import { cooperativeMap } from '@/lib/async-cooperative-map'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { entryRookieVerdict, hasRookieVerdicts, resolveRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
@@ -996,7 +997,7 @@ function resolveConflictingExternalIds(
   return rows
 }
 
-const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal'])
+const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal', ANNUAL_C2C_DRAFT])
 
 export function isFollowUpDraftMode(draftModeLabel: string | null | undefined): boolean {
   return FOLLOW_UP_DRAFT_MODES.has(String(draftModeLabel ?? '').toLowerCase())
@@ -1048,6 +1049,13 @@ export function applyDraftModePoolFiltersWithState(
       new Set(rostered.map((r) => normalizeDraftPoolNameForDedupe(r.playerName ?? '')).filter(Boolean)),
       new Set(rostered.map((r) => String(r.playerId ?? '').trim()).filter(Boolean)),
     )
+  }
+  if (session?.draftModeLabel === ANNUAL_C2C_DRAFT) {
+    return {
+      entries: out.filter(entry => entry.poolType === 'college' || entryRookieVerdict(entry) === 'rookie'),
+      rookieFilterState: 'not_requested',
+      provenNonRookies: [],
+    }
   }
   // The board matches what pick validation (`validateSpecialtyDraftPools`) already enforces.
   // ⚠ Not in the `fallback_no_rookie_data` case: validation refuses a rookies-only pick only when
@@ -1205,7 +1213,9 @@ async function buildResolvedDraftPoolForLeague(
   const rawDevyConfig = draftSession?.devyConfig as { enabled?: boolean; devyRounds?: number[] } | null
   const rawC2cConfig = draftSession?.c2cConfig as { enabled?: boolean; collegeRounds?: number[] } | null
   const devyEnabled = Boolean(rawDevyConfig?.enabled)
-  const c2cEnabled = Boolean(rawC2cConfig?.enabled) || isC2C
+  const annualCombined = draftSession?.draftModeLabel === ANNUAL_C2C_DRAFT
+  if (annualCombined) poolType = ANNUAL_C2C_DRAFT
+  const c2cEnabled = annualCombined || Boolean(rawC2cConfig?.enabled) || isC2C
   const liveDraftUsesDevyPools = devyEnabled || c2cEnabled
   if (isDevyDynasty && !isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_vet'
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
@@ -1219,7 +1229,7 @@ async function buildResolvedDraftPoolForLeague(
   const currentRosterOnly = ['NFL', 'NBA', 'NHL', 'MLB'].includes(String(sport)) &&
       !league?.isDynasty && !String(effectiveLeagueTemplate.formatType).toUpperCase().includes('DYNASTY') &&
       !String(league?.leagueVariant ?? '').toLowerCase().includes('dynasty') && !isDevyDynasty && !isC2C && !mergeCollegePool
-  const strictPoolSeparation = (isDevyDynasty && poolType != null) || (isC2C && poolType != null)
+  const strictPoolSeparation = annualCombined || ((isDevyDynasty || isC2C) && poolType != null)
   const useMixedPoolTypeMarkers = mergeCollegePool || c2cEnabled || devyEnabled
   const adpFormat: 'redraft' | 'dynasty' =
     league?.isDynasty || String(league?.leagueVariant ?? '').toLowerCase().includes('dynasty')
@@ -2832,6 +2842,14 @@ async function buildResolvedDraftPoolForLeague(
     options.excludeDraftedPlayerIds,
   )
 
+  if (annualCombined) {
+    const rights = await prisma.devyRights.findMany({
+      where: { leagueId },
+      select: { devyPlayerId: true, promotedProPlayerId: true },
+    })
+    const reserved = new Set(rights.flatMap(right => [right.devyPlayerId, right.promotedProPlayerId]))
+    entries = entries.filter(entry => entry.playerId && !reserved.has(entry.playerId))
+  }
   let rookieFilterState: RookieFilterState = 'not_requested'
   let provenNonRookies: ProvenNonRookie[] = []
   if (isFollowUpDraftMode(draftSession?.draftModeLabel)) {

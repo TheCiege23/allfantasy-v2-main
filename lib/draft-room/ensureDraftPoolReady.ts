@@ -19,6 +19,8 @@ import { rosterFingerprintFromEligible } from '@/lib/draft-room/draft-pool-eligi
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { getApiCached } from '@/lib/api-performance'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
+import { CURRENT_DRAFT_SESSION_ORDER } from './currentDraftSession'
 
 export type EnsureDraftPoolReadyResult =
   | { ok: true; source: 'db-cache' | 'memory-cache' | 'rebuilt' }
@@ -122,7 +124,13 @@ export async function resolveDraftPoolCacheContext(
 }> {
   const effectiveLeagueTemplate =
     options?.effectiveLeagueTemplate ?? (await getEffectiveLeagueRosterTemplate(leagueId))
-  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate)
+  const draft = await prisma.draftSession?.findFirst({
+    where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true, draftModeLabel: true },
+  })
+  const scope = draft?.draftModeLabel === ANNUAL_C2C_DRAFT ? `:${draft.id}` : ''
+  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + scope
   return {
     effectiveLeagueTemplate,
     rosterFp,

@@ -3931,6 +3931,7 @@ export function DraftRoomPageClient({
               }
             : undefined)
         }
+        combinedAnnualDraft={dynastyDraftKind === 'combined'}
         currentRound={currentPick?.round}
         formatType={formatType === 'IDP' || Boolean((draftPool as { isIdp?: boolean } | null)?.isIdp) ? 'IDP' : undefined}
         selectedPlayerTarget={helperSelectedPlayer}
@@ -3982,6 +3983,7 @@ export function DraftRoomPageClient({
       handleAuctionNominate,
       draftPool?.devyConfig,
       draftPool?.c2cConfig,
+      dynastyDraftKind,
       session,
       draftRoomState.isAuction,
       formatType,
@@ -4394,7 +4396,7 @@ export function DraftRoomPageClient({
   const myDraftedPicks = viewerDraftedPicks
   const myDevyAssetCount = myDraftedPicks.filter((p) => {
     const source = String((p as { source?: string | null }).source ?? '').toLowerCase()
-    if (source === 'devy' || source === 'college') return true
+    if (p.assetType === 'c2c_college' || source === 'devy' || source === 'college') return true
     if ((session as DraftSessionSnapshot).devy?.enabled && (session as DraftSessionSnapshot).devy?.devyRounds?.includes(p.round)) return true
     if ((session as DraftSessionSnapshot).c2c?.enabled && (session as DraftSessionSnapshot).c2c?.collegeRounds?.includes(p.round)) return true
     return false
@@ -4561,8 +4563,10 @@ export function DraftRoomPageClient({
           {myDraftedPicks.map((p) => {
             const source = String((p as { source?: string | null }).source ?? '').toLowerCase()
             const c2cCollegeRounds = (session as DraftSessionSnapshot).c2c?.collegeRounds ?? []
-            const isCollegeAsset = Boolean((session as DraftSessionSnapshot).c2c?.enabled) && (source === 'college' || c2cCollegeRounds.includes(p.round))
-            const isProAsset = Boolean((session as DraftSessionSnapshot).c2c?.enabled) && !isCollegeAsset
+            const combined = dynastyDraftKind === 'combined'
+            const c2c = Boolean((session as DraftSessionSnapshot).c2c?.enabled)
+            const isCollegeAsset = combined ? p.assetType === 'c2c_college' : c2c && (source === 'college' || c2cCollegeRounds.includes(p.round))
+            const isProAsset = (combined || c2c) && !isCollegeAsset
             return (
               <li
                 key={p.id}
