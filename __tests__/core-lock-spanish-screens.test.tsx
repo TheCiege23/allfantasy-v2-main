@@ -13,7 +13,7 @@
  */
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -207,6 +207,9 @@ describe('Player Finder — GameDayTriage', () => {
     rows.push(row(null, { noGame: true, bye: true, status: null }))
     const data: Triage = { rows, week: { season: 2026, week: 5 }, leaguesRead: 3, startersRead: 30, rostersAsOf: NOW }
     const { container } = render(<GameDayTriage state={{ available: true, data }} nowIso={NOW} leagueCount={3} />)
+    // Every row is under test, so open the list past its first FINDER_LIST_PREVIEW rows (2026-11-09).
+    const more = container.querySelector<HTMLButtonElement>('.af-pf-list-more')
+    if (more) fireEvent.click(more)
     const out = text(container)
     expectSpanish(out, /\b(locks?|locked|kicked off|reported|Game day|starting in|lineups? read|Bye|Flagged means|bench him)\b/, 'triage')
     for (const k of AHEAD) expect(out, k).toContain(coreUiCopy(lockState(k, NOW).label, 'es'))
