@@ -183,7 +183,7 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
   holdings = seasonHoldings(env, ctx.seasonId)
   const back = bench(f.userId)[0]
   const sendWithPick = bench(e.userId).sort((x, y) => adpOf(y.playerId) - adpOf(x.playerId))[0]
-  if (back && sendWithPick && run.leagueType !== 'redraft') {
+  if (back && sendWithPick && run.leagueType === 'dynasty') {
     const res = await proposeAndProcess(env, run, add, 'future-pick', e, f, [
       { itemType: 'future_pick', itemReference: pickId, fromRosterId: e.rosterId, toRosterId: f.rosterId, metadata: { season: nextYear, round: 1 } },
       { itemType: 'player', itemReference: sendWithPick.playerId, fromRosterId: e.rosterId, toRosterId: f.rosterId, metadata: { playerName: sendWithPick.playerName, position: sendWithPick.position } },

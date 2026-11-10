@@ -253,7 +253,7 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
           await Promise.all(holder.scans.splice(0))
         },
       }
-      const run = await sim.createDynastyLeague(env, { ...c, leagueType: process.env.SIM_LEAGUE_TYPE === 'redraft' ? 'redraft' : 'dynasty' })
+      const run = await sim.createDynastyLeague(env, { ...c, leagueType: process.env.SIM_LEAGUE_TYPE === 'redraft' || process.env.SIM_LEAGUE_TYPE === 'keeper' ? process.env.SIM_LEAGUE_TYPE : 'dynasty' })
       const scale = c.teamCount === 150 && ['audit', 'scale'].includes(process.env.SIM_MATRIX ?? '')
       try {
         await sim.joinManagers(env, run)
@@ -297,7 +297,8 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
         expect(run.leagueId === null || typeof run.leagueId === 'string').toBe(true)
       }
 
-      if (process.env.SIM_SEASON === '1' && c.teamCount === 4 && c.draft === 'snake' && (c.sport === 'NHL' || c.sport === 'MLB')) {
+      // Year-2 carryover is a dynasty rule: a redraft or keeper league starts year 2 from empty rosters.
+      if (process.env.SIM_SEASON === '1' && run.leagueType === 'dynasty' && c.teamCount === 4 && c.draft === 'snake' && (c.sport === 'NHL' || c.sport === 'MLB')) {
         const findings = JSON.stringify(run.findings)
         expect(run.stats.seasonClose, findings).toMatchObject({ ok: true, champion: expect.any(String) })
         expect(run.stats.lastScoredPlayoffWeeks).toEqual([expect.any(Number), expect.any(Number)])

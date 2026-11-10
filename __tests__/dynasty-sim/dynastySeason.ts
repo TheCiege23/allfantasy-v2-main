@@ -191,7 +191,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
       if (SCENARIOS) {
         const sc = await import('./dynastyScenarios')
         await sc.collusionConsequences(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `collusion: ${e.message}` }))
-        if (run.leagueType !== 'redraft') await sc.secondRoundPickTrade(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `pick trade: ${e.message}` }))
+        if (run.leagueType === 'dynasty') await sc.secondRoundPickTrade(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `pick trade: ${e.message}` }))
       }
     }
   }
@@ -265,6 +265,11 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   if (history.franchiseSeasons !== run.teamCount) add({ code: 'FRANCHISE_HISTORY_INCOMPLETE', stage: 'offseason', message: `${history.franchiseSeasons} franchise-season rows for ${run.teamCount} teams — rankings read these.` })
   if (history.seasonResults !== run.teamCount) add({ code: 'SEASON_RESULTS_INCOMPLETE', stage: 'offseason', message: `${history.seasonResults} season results for ${run.teamCount} teams — legacy and hall of fame read these.` })
 
+  if (run.leagueType === 'keeper') {
+    await runRankings(env, run, championId, add)
+    await runKeeperOffseason(env, run, { seasonId, rosterIds, championId }, add)
+    return
+  }
   if (run.leagueType === 'redraft') {
     await runRankings(env, run, championId, add)
     await runRedraftRenewal(env, run, { seasonId, rosterIds, ledger, championId }, add)
@@ -306,6 +311,168 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   }
   run.stats.playoffStart = playoffStart
   await runRookieDraft(env, run, { ledger, championId, runnerUpId: (closed?.runnerUpRosterId ?? null) as string | null, year1RosterIds: rosterIds, year1, nextSeasonId: next[0].id }, add)
+}
+
+// ── Keeper offseason → year 2: each manager keeps up to N players at a round cost, the rest go back ──
+// Driven through the routes the Keepers tab and the commissioner dashboard call, with the ids they send
+// (KeeperSelectionTab: the open session's season and the viewer's roster in it).
+async function runKeeperOffseason(
+  env: SimEnv,
+  run: LeagueRun,
+  ctx: { seasonId: string; rosterIds: string[]; championId: string | null },
+  add: (f: SeasonFinding) => void,
+): Promise<void> {
+  const db = env.db
+  const leagueId = run.leagueId!
+  const { NextRequest } = await import('next/server')
+  const call = async (handler: (...a: any[]) => Promise<Response>, url: string, init?: { method: string; body: unknown }, params?: Record<string, string>) => {
+    const req = new NextRequest(`http://sim.allfantasy.test${url}`, init ? { method: init.method, body: JSON.stringify(init.body) } : undefined)
+    const res = await (params ? handler(req, { params: Promise.resolve(params) }) : handler(req))
+    return { status: res.status, body: (await res.json().catch(() => null)) as any }
+  }
+  const signInAs = (id: string) => env.signIn({ id, email: id === run.commissionerId ? 'commish@sim.allfantasy.test' : `${id}@sim.allfantasy.test`, name: id } as never)
+  const S: Record<string, any> = ((run.stats as any).keeper ??= {}) as Record<string, any>
+
+  const league = rowsOf(db, 'League').find((l: any) => l.id === leagueId) as any
+  const maxKeepers = Number(league?.keeperCount ?? 0)
+  const year1 = rowsOf(db, 'RedraftSeason').find((s: any) => s.id === ctx.seasonId) as any
+  S.policy = { maxKeepers, roundPenalty: league?.keeperRoundPenalty ?? null, maxYears: league?.keeperMaxYears ?? null, costSystem: league?.keeperCostSystem ?? null, leagueType: league?.leagueType ?? null }
+  if (maxKeepers < 1) add({ code: 'KEEPER_LEAGUE_HAS_NO_KEEPER_SLOTS', stage: 'offseason', message: `A keeper league was created with keeperCount ${league?.keeperCount}; the wizard asked for 3.` })
+
+  // Closing the season opens the keeper window on the incoming season (triggerKeeperOffseason).
+  const sessions = (rowsOf(db, 'KeeperSelectionSession') as any[]).filter((s) => s.leagueId === leagueId)
+  const open = sessions.find((s) => s.status === 'open')
+  const incoming = open ? (rowsOf(db, 'RedraftSeason') as any[]).find((s) => s.id === open.seasonId) : null
+  S.window = { sessions: sessions.length, open: Boolean(open), incomingSeason: incoming?.season ?? null, deadline: open?.deadline ?? null }
+  if (!open) {
+    add({ code: 'KEEPER_WINDOW_NOT_OPENED', stage: 'offseason', message: `Closing the season opened no keeper selection window (${sessions.length} session(s): ${sessions.map((s) => s.status).join(', ') || 'none'}).` })
+    return
+  }
+  if (!incoming || Number(incoming.season) !== Number(year1?.season) + 1) add({ code: 'KEEPER_WINDOW_WRONG_SEASON', stage: 'offseason', message: `The keeper window is on season ${incoming?.season ?? 'unknown'}; year 1 was ${year1?.season}.` })
+
+  // What each owner ended year 1 holding.
+  const ownerOf = new Map((rowsOf(db, 'RedraftRoster') as any[]).map((r) => [r.id, String(r.ownerId)]))
+  const year1Held = new Map<string, string[]>()
+  for (const p of (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => ctx.rosterIds.includes(p.rosterId) && !p.droppedAt)) {
+    const owner = ownerOf.get(p.rosterId)!
+    year1Held.set(owner, [...(year1Held.get(owner) ?? []), String(p.playerId)])
+  }
+
+  const contextRoute = await import('@/app/api/keeper/context/route')
+  const eligibilityRoute = await import('@/app/api/keeper/eligibility/route')
+  const selectionsRoute = await import('@/app/api/keeper/selections/route')
+  const rosterRoute = await import('@/app/api/redraft/roster/route')
+  // Current members only: the takeover scenario removes a manager mid-season, and a 403 for them is right.
+  const members = new Set((rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId).map((r) => String(r.platformUserId)))
+  const owners = [run.commissionerId, ...run.managerIds].filter((o) => members.has(o))
+  const managers: Array<Record<string, unknown>> = []
+  const submitted = new Map<string, string[]>() // owner → player ids the route accepted
+  for (const owner of owners) {
+    signInAs(owner)
+    const c = await call(contextRoute.GET, `/api/keeper/context?leagueId=${leagueId}`)
+    const viewer = c.body?.viewerRoster as { id: string; seasonId: string } | null | undefined
+    const seasonId = String(c.body?.session?.seasonId ?? '')
+    const row: Record<string, unknown> = { owner, context: c.status, viewerRoster: viewer?.id ?? null, year1Players: year1Held.get(owner)?.length ?? 0 }
+    managers.push(row)
+    if (c.status !== 200 || !viewer || !seasonId) continue
+    const e = await call(eligibilityRoute.GET, `/api/keeper/eligibility?leagueId=${leagueId}&seasonId=${seasonId}&rosterId=${viewer.id}`)
+    const raw = (Array.isArray(e.body?.raw) ? e.body.raw : []) as Array<{ playerId: string; isEligible: boolean; ineligibleReason?: string | null; projectedCostRound?: number | null }>
+    // A manager keeps players who cost DIFFERENT rounds: two keepers in one round is a conflict the league's
+    // same-round rule settles (player_chooses refuses both), which is the rule working, not a failure.
+    const usedRounds = new Set<number>()
+    const eligible = raw.filter((r) => r.isEligible).filter((r) => {
+      if (r.projectedCostRound == null) return true
+      if (usedRounds.has(r.projectedCostRound)) return false
+      usedRounds.add(r.projectedCostRound)
+      return true
+    }).map((r) => String(r.playerId))
+    // What the tab lists: the viewer's team last season when the context names one, else the window's roster.
+    const listedFrom = String(c.body?.sourceRoster?.id ?? viewer.id)
+    const shown = await call(rosterRoute.GET, `/api/redraft/roster?rosterId=${listedFrom}&week=1`)
+    const shownPlayers = Array.isArray(shown.body?.players) ? shown.body.players.length : Array.isArray(shown.body?.roster?.players) ? shown.body.roster.players.length : 0
+    // Keep the players the screen offers; if it offers none, try the players this manager actually owned.
+    const choice = (eligible.length ? eligible : year1Held.get(owner) ?? []).slice(0, maxKeepers)
+    const s = await call(selectionsRoute.POST, '/api/keeper/selections', { method: 'POST', body: { leagueId, seasonId, rosterId: viewer.id, playerIds: choice } })
+    Object.assign(row, {
+      eligibility: e.status, eligible: eligible.length, ineligible: raw.length - eligible.length,
+      ineligibleReasons: [...new Set(raw.filter((r) => !r.isEligible).map((r) => r.ineligibleReason))].slice(0, 3),
+      screenRoster: shown.status, screenPlayers: shownPlayers, tried: choice.length, submit: s.status, submitError: s.body?.error ?? null,
+      accepted: Array.isArray(s.body?.valid) ? s.body.valid.length : 0,
+      refusedAs: [...new Set(((s.body?.conflicted ?? []) as Array<{ reason?: string }>).map((c) => c.reason))].slice(0, 3),
+      costs: s.body?.cost ?? null,
+    })
+    // 200 is not acceptance: the route answers 200 and lists each refused player under `conflicted`.
+    const accepted = (Array.isArray(s.body?.valid) ? s.body.valid : []).map((v: any) => String(v?.playerId ?? v))
+    if (s.status === 200 && accepted.length) submitted.set(owner, accepted)
+  }
+  S.managers = managers
+  const withPlayers = managers.filter((m) => Number(m.year1Players) > 0)
+  const noViewer = managers.filter((m) => !m.viewerRoster)
+  const blankScreen = withPlayers.filter((m) => m.viewerRoster && Number(m.screenPlayers) === 0)
+  const nothingEligible = withPlayers.filter((m) => m.viewerRoster && Number(m.eligible) === 0)
+  const refused = managers.filter((m) => m.submit != null && m.submit !== 200)
+  const turnedAway = managers.filter((m) => m.submit === 200 && Number(m.tried) > 0 && Number(m.accepted) === 0)
+  if (noViewer.length) add({ code: 'KEEPER_TAB_HAS_NO_TEAM', stage: 'offseason', message: `${noViewer.length} of ${owners.length} managers get no team on the Keepers tab while the window is open.` })
+  if (blankScreen.length) add({ code: 'KEEPER_TAB_LISTS_NO_PLAYERS', stage: 'offseason', message: `${blankScreen.length} of ${withPlayers.length} managers see an empty roster on the Keepers tab; each ended year 1 with players (first: ${blankScreen[0].year1Players}).` })
+  if (nothingEligible.length) add({ code: 'KEEPER_NOTHING_ELIGIBLE', stage: 'offseason', message: `${nothingEligible.length} of ${withPlayers.length} managers have no keeper-eligible player in the window the tab reads.` })
+  if (turnedAway.length) add({ code: 'KEEPERS_ALL_REFUSED', stage: 'offseason', message: `${turnedAway.length} of ${owners.length} managers tried to keep players they owned all year and every one was refused (${String((turnedAway[0].refusedAs as string[]).join(', '))}); the route still answered 200.` })
+  if (refused.length) add({ code: 'KEEPER_SUBMIT_REFUSED', stage: 'offseason', message: `${refused.length} of ${owners.length} keeper submissions refused; first: ${refused[0].submit} ${String(refused[0].submitError).slice(0, 160)}` })
+
+  // The commissioner locks the window: keepers carry onto year-2 rosters at their round cost.
+  signInAs(run.commissionerId)
+  const sessionRoute = await import('@/app/api/keeper/session/route')
+  const lock = await call(sessionRoute.POST, '/api/keeper/session', { method: 'POST', body: { leagueId, action: 'lock', sessionId: open.id } })
+  S.lock = { status: lock.status, error: lock.body?.error ?? null }
+  if (lock.status !== 200) add({ code: 'KEEPER_LOCK_REFUSED', stage: 'offseason', message: `Locking keepers returned ${lock.status}: ${JSON.stringify(lock.body).slice(0, 200)}` })
+
+  const records = (rowsOf(db, 'KeeperRecord') as any[]).filter((r) => r.leagueId === leagueId)
+  const locked = records.filter((r) => r.status === 'locked')
+  const incomingRosterIds = new Set((rowsOf(db, 'RedraftRoster') as any[]).filter((r) => r.seasonId === open.seasonId).map((r) => r.id))
+  const year2Rows = (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => incomingRosterIds.has(p.rosterId) && !p.droppedAt)
+  const keptRows = year2Rows.filter((p) => p.isKept)
+  const adjustments = (rowsOf(db, 'KeeperPickAdjustment') as any[]).filter((a) => a.leagueId === leagueId)
+  const expected = [...submitted.values()].reduce((n, ids) => n + ids.length, 0)
+  const recordSeasons = [...new Set(records.map((r) => (r.seasonId === open.seasonId ? 'incoming' : r.seasonId === ctx.seasonId ? 'outgoing' : 'other')))]
+  S.carry = { submittedPlayers: expected, records: records.length, recordSeasons, locked: locked.length, year2Players: year2Rows.length, kept: keptRows.length, pickAdjustments: adjustments.length }
+  if (expected && locked.length !== expected) add({ code: 'KEEPERS_NOT_LOCKED', stage: 'offseason', message: `${expected} keeper(s) were accepted; ${locked.length} are locked after the commissioner locked the window (records: ${records.length}, on ${recordSeasons.join('/') || 'none'}).` })
+  if (expected && keptRows.length !== expected) add({ code: 'KEEPERS_NOT_CARRIED', stage: 'offseason', message: `${expected} keeper(s) were accepted; ${keptRows.length} are on year-2 rosters after the lock.` })
+  const strays = year2Rows.filter((p) => !p.isKept)
+  if (strays.length) add({ code: 'NON_KEEPERS_CARRIED', stage: 'offseason', message: `${strays.length} player(s) nobody kept are on year-2 rosters.` })
+  const misplaced = keptRows.find((p) => {
+    const owner = ownerOf.get(p.rosterId)
+    return owner && !(year1Held.get(owner) ?? []).includes(String(p.playerId))
+  })
+  if (misplaced) add({ code: 'KEEPER_ON_WRONG_TEAM', stage: 'offseason', message: `${misplaced.playerName ?? misplaced.playerId} was kept onto a year-2 roster whose owner did not hold him in year 1.` })
+  const roundCost = locked.filter((r) => r.costRound != null)
+  if (roundCost.length && adjustments.length !== roundCost.length) add({ code: 'KEEPER_ROUND_COST_NOT_RECORDED', stage: 'offseason', message: `${roundCost.length} keeper(s) cost a round; ${adjustments.length} pick adjustment(s) recorded.` })
+
+  // The commissioner renews into year 2.
+  const renewRoute = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
+  const renew = await call(renewRoute.POST, `/api/commissioner/leagues/${leagueId}/renew`, { method: 'POST', body: { draftOrder: 'standings' } }, { leagueId })
+  const leagueAfter = rowsOf(db, 'League').find((l: any) => l.id === leagueId) as any
+  const keptAfterRenew = (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => incomingRosterIds.has(p.rosterId) && !p.droppedAt && p.isKept).length
+  S.renewal = { status: renew.status, error: renew.body?.error ?? null, leagueSeason: leagueAfter?.season ?? null, year1Season: year1?.season ?? null, keptAfterRenew }
+  if (renew.status !== 200) add({ code: 'RENEWAL_REFUSED', stage: 'offseason', message: `Renew returned ${renew.status}: ${JSON.stringify(renew.body).slice(0, 240)}` })
+  else {
+    if (Number(leagueAfter?.season) !== Number(year1?.season) + 1) add({ code: 'KEEPER_RENEWAL_WRONG_SEASON', stage: 'offseason', message: `After renewal the league reads season ${leagueAfter?.season}; year 1 was ${year1?.season}, so year 2 is ${Number(year1?.season) + 1}.` })
+    if (keptAfterRenew !== keptRows.length) add({ code: 'RENEWAL_DROPPED_KEEPERS', stage: 'offseason', message: `${keptRows.length} keeper(s) before Renew, ${keptAfterRenew} after.` })
+  }
+
+  // Year 2's draft: each locked keeper is placed in the round he cost.
+  const controls = await import('@/app/api/leagues/[leagueId]/draft/controls/route')
+  const next = await call(controls.POST, `/api/leagues/${leagueId}/draft/controls`, { method: 'POST', body: { action: 'create_next_draft' } }, { leagueId })
+  const draft2 = (rowsOf(db, 'DraftSession') as any[]).filter((s) => s.leagueId === leagueId && s.status === 'pre_draft')
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0]
+  const placed = (Array.isArray(draft2?.keeperSelections) ? draft2.keeperSelections : []) as Array<{ playerId?: string; playerName?: string; roundCost?: number }>
+  S.nextDraft = { status: next.status, error: next.body?.error ?? null, draft: draft2 ? { rounds: draft2.rounds, slots: (draft2.slotOrder ?? []).length } : null, keeperSelections: placed.length, maxKeepers: draft2?.keeperConfig?.maxKeepers ?? null }
+  if (next.status !== 200) add({ code: 'NEXT_DRAFT_REFUSED', stage: 'offseason', message: `create_next_draft returned ${next.status}: ${JSON.stringify(next.body).slice(0, 200)}` })
+  else if (!draft2) add({ code: 'NO_DRAFT_FOR_NEXT_SEASON', stage: 'offseason', message: 'create_next_draft returned 200 with no pre-draft session.' })
+  else if (roundCost.length && placed.length !== roundCost.length) add({ code: 'KEEPERS_NOT_ON_NEXT_DRAFT_BOARD', stage: 'offseason', message: `${roundCost.length} locked keeper(s) with a round cost; year 2's draft places ${placed.length}.` })
+  else {
+    const byPlayer = new Map(roundCost.map((r) => [String(r.playerId), Number(r.costRound)]))
+    const wrong = placed.filter((k) => k.playerId && byPlayer.has(String(k.playerId)) && Number(k.roundCost) !== byPlayer.get(String(k.playerId)))
+    if (wrong.length) add({ code: 'KEEPER_PLACED_IN_WRONG_ROUND', stage: 'offseason', message: `${wrong.length} keeper(s) sit in a different round from the cost recorded for them.` })
+  }
 }
 
 // ── Redraft renewal → year 2: the commissioner's Renew, then a fresh season and a fresh draft ──

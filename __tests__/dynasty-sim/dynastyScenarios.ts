@@ -152,7 +152,7 @@ export async function weeklyScenarios(env: SimEnv, run: LeagueRun, ctx: WeekCtx)
   if (ctx.week === 8) await step('takeover', () => takeover(env, run, ctx, S, 'midseason'))
   if (ctx.week === 10) await step('chimmy', () => chimmySweep(env, run, ctx, S))
   // Rookie draft order is a dynasty feature; a redraft league renews into a fresh draft instead.
-  if (ctx.week === ctx.regularWeeks && run.leagueType !== 'redraft') await step('rookie-order-setting', () => setLiveRookieOrder(env, run, S))
+  if (ctx.week === ctx.regularWeeks && run.leagueType === 'dynasty') await step('rookie-order-setting', () => setLiveRookieOrder(env, run, S))
 }
 
 /** Before the lineups that tanking reads are scored: the tankers start injured players over healthy bench. */
@@ -201,7 +201,7 @@ async function integritySetup(env: SimEnv, run: LeagueRun, S: Record<string, any
       tankingIllegalLineupCheck: true,
       holdFlaggedTradesMode: 'severe',
       // A redraft league has no future picks: losing a pick (and lottery odds) are dynasty penalties. FAAB is not.
-      tankingPenalties: run.leagueType === 'redraft'
+      tankingPenalties: run.leagueType !== 'dynasty'
         ? { enabled: true, penalty: 'faab', pickAtStrike: 2, faabPercent: 25 }
         : { enabled: true, penalty: 'forfeit_pick', pickAtStrike: 2, pickRound: 1 },
     },
@@ -226,7 +226,7 @@ async function firstWaiverRun(env: SimEnv, run: LeagueRun, S: Record<string, any
   const rostered = new Set((rowsOf(env.db, 'RedraftRosterPlayer') as any[]).filter((p) => !p.droppedAt).map((p) => String(p.playerId)))
   const fa = (rowsOf(env.db, 'SportsPlayer') as any[]).find((p) => p.sport === run.sport && /^sim-/.test(String(p.id)) && !rostered.has(String(p.id)))
   const drop = seat ? holdings(env, seat.seasonRosterId).filter((p) => !isStarter(p.slotType))[0] : undefined
-  if (seat && fa && drop && !(run.sport === 'NBA' && run.leagueType === 'redraft')) {
+  if (seat && fa && drop && !(run.sport === 'NBA' && run.leagueType !== 'dynasty')) {
     signInAs(env, seat.userId)
     const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
     const claim = await call(claims.POST, `/api/waiver-wire/leagues/${leagueId}/claims`, { method: 'POST', body: { addPlayerId: fa.id, dropPlayerId: drop.playerId, faabBid: 1 } }, { leagueId })
@@ -242,7 +242,7 @@ async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
   // NBA redraft waivers act only on players verified against current NBA rosters (Rolling Insights /
   // TheSportsDB rows with numeric provider ids — lib/waiver-wire/current-nba-player-pool.ts). The
   // simulation's players carry no provider ids, so this path cannot be exercised here: say so.
-  if (run.sport === 'NBA' && run.leagueType === 'redraft') {
+  if (run.sport === 'NBA' && run.leagueType !== 'dynasty') {
     ;(S.skippedForData ??= []).push(`waivers: needs verified current NBA roster data`)
     await firstWaiverRun(env, run, S)
     return
@@ -290,15 +290,20 @@ async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
     faabAfter: { a: faab(a), b: faab(b), c: faab(c) },
     chimmyPending: pendingView.slice(0, 400),
   }
+  // A league on priority waivers (NHL's sport default, which a keeper league keeps) awards by priority
+  // and charges nothing: the bid comparisons below are FAAB rules.
+  const waiverType = String((rowsOf(env.db, 'LeagueWaiverSettings') as any[]).find((w) => w.leagueId === leagueId)?.waiverType ?? 'faab')
+  ;(result as Record<string, unknown>).waiverType = waiverType
   S.waivers = result
   if (submitted.some((s) => s.status !== 200 && s.status !== 201)) ctx.add({ code: 'WAIVER_CLAIM_REFUSED', stage: 'season', message: `Claims: ${submitted.map((s) => `${s.user} ${s.status} ${s.error ?? ''}`).join('; ')}` })
-  if (wonBy.length !== 1 || wonBy[0] !== a.seasonRosterId) ctx.add({ code: 'WAIVER_FAAB_WINNER_WRONG', stage: 'season', message: `$17 beat $9 for ${prize.id}; season holders are [${wonBy.join(', ')}], expected ${a.seasonRosterId}.` })
+  const faabLeague = waiverType === 'faab'
+  if (faabLeague && (wonBy.length !== 1 || wonBy[0] !== a.seasonRosterId)) ctx.add({ code: 'WAIVER_FAAB_WINNER_WRONG', stage: 'season', message: `$17 beat $9 for ${prize.id}; season holders are [${wonBy.join(', ')}], expected ${a.seasonRosterId}.` })
   const aAfter = faab(a)
   const aBefore = submitted[0]!.faabBefore
-  if (aAfter.season != null && aBefore.season != null && aAfter.season !== aBefore.season - 17) ctx.add({ code: 'WAIVER_FAAB_NOT_CHARGED', stage: 'season', message: `Winner's season FAAB ${aBefore.season} → ${aAfter.season}; expected −17.` })
+  if (faabLeague && (aAfter.season != null && aBefore.season != null && aAfter.season !== aBefore.season - 17)) ctx.add({ code: 'WAIVER_FAAB_NOT_CHARGED', stage: 'season', message: `Winner's season FAAB ${aBefore.season} → ${aAfter.season}; expected −17.` })
   if (aAfter.generic != null && aAfter.season != null && aAfter.generic !== aAfter.season) ctx.add({ code: 'FAAB_MIRRORS_DISAGREE', stage: 'season', message: `After waivers the winner's FAAB is ${aAfter.generic} on the league roster and ${aAfter.season} on the season roster.` })
   const bAfter = faab(b)
-  if (bAfter.season != null && bAfter.season !== submitted[1]!.faabBefore.season) ctx.add({ code: 'WAIVER_LOSER_CHARGED', stage: 'season', message: `The losing $9 bidder's FAAB moved ${submitted[1]!.faabBefore.season} → ${bAfter.season}.` })
+  if (faabLeague && (bAfter.season != null && bAfter.season !== submitted[1]!.faabBefore.season)) ctx.add({ code: 'WAIVER_LOSER_CHARGED', stage: 'season', message: `The losing $9 bidder's FAAB moved ${submitted[1]!.faabBefore.season} → ${bAfter.season}.` })
   if (!/pending|claim|\$?17/i.test(pendingView)) ctx.add({ code: 'CHIMMY_DOES_NOT_SEE_PENDING_CLAIM', stage: 'season', message: `get_waiver_status before processing: ${pendingView.slice(0, 160)}` })
 }
 
@@ -306,7 +311,7 @@ async function freeAgentAdd(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record
   // NBA redraft waivers act only on players verified against current NBA rosters (Rolling Insights /
   // TheSportsDB rows with numeric provider ids — lib/waiver-wire/current-nba-player-pool.ts). The
   // simulation's players carry no provider ids, so this path cannot be exercised here: say so.
-  if (run.sport === 'NBA' && run.leagueType === 'redraft') {
+  if (run.sport === 'NBA' && run.leagueType !== 'dynasty') {
     ;(S.skippedForData ??= []).push(`free-agent add: needs verified current NBA roster data`)
     return
   }
@@ -390,7 +395,7 @@ export function checkTankingConsequences(env: SimEnv, run: LeagueRun, add: Add):
   const a = T.weeks.filter((w: any) => w.tanker === 'sim-mgr-011')
   const b = T.weeks.filter((w: any) => w.tanker === 'sim-mgr-012')
   const aForfeited = a.at(-1)?.forfeited ?? []
-  if (run.leagueType !== 'redraft' && a.filter((w: any) => w.confirm?.status === 200).length >= 2 && aForfeited.length === 0) add({ code: 'TANKING_PICK_NOT_FORFEITED', stage: 'season', message: `sim-mgr-011 has ${a.length} confirmed strikes under "forfeit a 1st at strike 2"; no pick is forfeited.` })
+  if (run.leagueType === 'dynasty' && a.filter((w: any) => w.confirm?.status === 200).length >= 2 && aForfeited.length === 0) add({ code: 'TANKING_PICK_NOT_FORFEITED', stage: 'season', message: `sim-mgr-011 has ${a.length} confirmed strikes under "forfeit a 1st at strike 2"; no pick is forfeited.` })
   const bConfirmed = b.filter((w: any) => w.confirm?.status === 200).length
   const bFaab = b.at(-1)?.faab
   if (bConfirmed >= 2 && bFaab && b[0]?.faab?.before != null && bFaab.after === b[0].faab.before) add({ code: 'TANKING_FAAB_NOT_TAKEN', stage: 'season', message: `sim-mgr-012 has ${bConfirmed} confirmed strikes under "take 25% FAAB at strike 2"; FAAB is unchanged at ${bFaab.after}.` })
