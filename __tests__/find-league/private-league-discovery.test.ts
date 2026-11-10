@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Where private "Ask to join" cards appear: the finder's "Public & private" view (now its default)
+ * Where private "Ask to join" cards appear: the finder's "Public & private" view (opt-in; "Public" is the default)
  * and nowhere else. Chimmy, saved-search alerts, creator pages and recommendations ask for
  * "public" and must keep seeing public leagues only.
  */

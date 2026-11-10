@@ -216,6 +216,8 @@ function initialFiltersFrom(searchParams: { get(name: string): string | null } |
     rankBand: (get("rankBand") || "all") as RankBandFilter,
     vibe: (parsed?.vibe ?? (get("vibe") || "all")) as LeagueVibeFilter,
     aiEnabled: get("aiEnabled") === "true",
+    // Public unless the link asks for both: a saved search for "Public & private" reopens as one.
+    visibility: (get("visibility") === "all" ? "all" : "public") as VisibilityFilter,
     teamCountMin: teamCount || get("teamCountMin"),
     teamCountMax: teamCount || get("teamCountMax"),
     searchReadAs:
@@ -242,9 +244,10 @@ export function FindLeagueClient() {
   const [rankBand, setRankBand] = useState<RankBandFilter>(initial.rankBand)
   const [vibe, setVibe] = useState<LeagueVibeFilter>(initial.vibe)
   const [searchReadAs, setSearchReadAs] = useState<string[]>(initial.searchReadAs)
-  // Private leagues are listed too, as "Ask to join" (lib/public-discovery/privateLeagueRequests.ts).
-  // "Public" narrows to the leagues anyone can join straight away.
-  const [visibility, setVisibility] = useState<VisibilityFilter>("all")
+  // Public leagues by default — the leagues anyone can join straight away (owner's call, 2026-11-10:
+  // on production 10 of 12 cards were private). "Public & private" adds private leagues as "Ask to
+  // join" cards (lib/public-discovery/privateLeagueRequests.ts).
+  const [visibility, setVisibility] = useState<VisibilityFilter>(initial.visibility)
   const [sort, setSort] = useState<DiscoverySort>("ranking_match")
   const [leagues, setLeagues] = useState<DiscoveryCard[]>([])
   const [total, setTotal] = useState(0)

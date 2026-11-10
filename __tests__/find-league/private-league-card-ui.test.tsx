@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 vi.mock("@/hooks/useUserTimezone", () => ({ useUserTimezone: () => ({ timezone: "America/New_York" }) }))
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }))
+const nav = vi.hoisted(() => ({ query: "" }))
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(nav.query) }))
 
 import { FindLeagueCard } from "@/components/discovery/FindLeagueCard"
 import { FindLeagueClient } from "@/app/find-league/FindLeagueClient"
@@ -132,11 +133,25 @@ describe("a private league's card", () => {
 })
 
 describe("the finder page", () => {
-  it("opens on Public & private, so private leagues are listed without touching a filter", async () => {
+  const firstSearch = async () => {
     answer.body = { leagues: [], total: 0, page: 1, limit: 12, totalPages: 0, searches: [], rails: [] }
     render(<FindLeagueClient />)
     await waitFor(() => expect(calls.some((c) => c.url.startsWith("/api/discover/leagues"))).toBe(true))
-    const url = new URL(calls.find((c) => c.url.startsWith("/api/discover/leagues"))!.url, "http://x")
-    expect(url.searchParams.get("visibility")).toBe("all")
+    return new URL(calls.find((c) => c.url.startsWith("/api/discover/leagues"))!.url, "http://x")
+  }
+
+  // Owner's call, 2026-11-10: on production 10 of the 12 cards in "Public & private" were private.
+  it("opens on Public: the leagues anyone can join straight away", async () => {
+    nav.query = ""
+    expect((await firstSearch()).searchParams.get("visibility")).toBe("public")
+  })
+
+  it("a link that asks for Public & private (a saved search) reopens on it", async () => {
+    nav.query = "visibility=all&sport=NFL"
+    try {
+      expect((await firstSearch()).searchParams.get("visibility")).toBe("all")
+    } finally {
+      nav.query = ""
+    }
   })
 })
