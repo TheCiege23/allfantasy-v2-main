@@ -4,13 +4,14 @@ import { withControlLock } from '@/lib/draft/draftLock'
 import { recordArchiveEvent } from '@/lib/draft-archive/events'
 import { isSeasonTournamentDraft } from './seasonDraftMutationGate'
 import { assessSeasonDraftCompletion } from './seasonDraftReview'
+import { lockAndCheckSeasonRecovery } from './seasonRecoveryState'
 
 /** null delegates ordinary leagues; completion never activates a tournament season. */
 export async function completeSeasonDraft(leagueId: string, now = new Date()): Promise<boolean | null> {
   if (!(await isSeasonTournamentDraft(leagueId))) return null
   const locked = await withControlLock(leagueId, () => prisma.$transaction(async tx => {
     const review = await assessSeasonDraftCompletion(leagueId, tx)
-    if (!review) return false
+    if (!review || await lockAndCheckSeasonRecovery(tx, review.context.tournamentId)) return false
     if (review.state === 'completed') return true
     const { context, session, boardHash } = review
     if (!review.canCheckpoint || !session || !boardHash) return false

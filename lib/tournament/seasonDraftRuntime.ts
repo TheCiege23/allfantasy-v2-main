@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { RECOVERY_HOLD_MESSAGE, seasonRecoveryHeld } from './seasonRecoveryState'
 import { readSeasonStageManifest } from './seasonNativeContract'
 import { resolveSeasonDraftWindow } from './seasonRules'
 import { seasonContractHash } from './seasonCalendarVerification'
@@ -73,6 +74,8 @@ export async function loadSeasonDraftPlayers(leagueId: string, sport: 'NFL' | 'N
 export async function validateSeasonDraftPlayer(leagueId: string, rosterId: string | null, picks: Array<{ rosterId: string; playerId?: string | null; playerName: string; position: string }>, candidate: { playerId?: string | null; playerName: string; position: string; team?: string | null }) {
   const context = await loadSeasonDraftContext(leagueId)
   if (!context) return null
+  if (await seasonRecoveryHeld(prisma, context.tournamentId)) return RECOVERY_HOLD_MESSAGE
+  if (context.config.rules!.calendar.draftOverrides && Date.now() >= Date.parse(context.draftWindow.completeBy)) return 'This tournament draft deadline has passed.'
   if (rosterId && !context.rosterIds.includes(rosterId)) return 'This roster is not in the frozen tournament draft.'
   const pool = await loadSeasonDraftPlayers(leagueId, context.config.sport)
   const matches = pool.filter(p => p.playerId === candidate.playerId)

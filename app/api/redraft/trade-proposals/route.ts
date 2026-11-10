@@ -1,5 +1,6 @@
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { readSeasonTradePolicy, SeasonTradeError, seasonTradeOfferExpiry } from '@/lib/tournament/seasonTradePolicy'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'

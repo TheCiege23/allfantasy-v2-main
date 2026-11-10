@@ -386,7 +386,6 @@ export async function finalizeRedraftTrade(
       : {
           source: 'redraft',
           tradeId: proposal.id,
-        ...(seasonTrade ? { seasonTrade } : {}),
           status: 'processed',
           detail:
             executedByRole === 'commissioner'
