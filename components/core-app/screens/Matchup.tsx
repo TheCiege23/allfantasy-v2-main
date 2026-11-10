@@ -7,6 +7,8 @@ import '@/components/core-app/af-matchup.css'
 import '@/components/core-app/af-matchup-pulse.css'
 // Redraft batch B3: the broadcast score bug, scoped to the /core shell's data-format="redraft".
 import '@/components/core-app/af-core-redraft-matchup.css'
+// The head-to-head board look (wide boards only); last, so it sizes over the base and redraft rules.
+import '@/components/core-app/af-matchup-h2h.css'
 import '@/components/core-app/af-empty-state.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
@@ -734,7 +736,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
         </p>
       ) : null}
 
-      <div className="af-mu-board" role="table" aria-label={copy('Head to head, slot by slot')}>
+      <div className="af-mu-board" data-look="h2h" role="table" aria-label={copy('Head to head, slot by slot')}>
         <div className="af-mu-board-head" role="row">
           <span className="af-label af-mu-board-side" role="columnheader">
             {copy('You')}
