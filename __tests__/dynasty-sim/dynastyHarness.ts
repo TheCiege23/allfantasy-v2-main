@@ -20,6 +20,7 @@ export type DynastySport = 'NFL' | 'NBA' | 'NHL' | 'MLB' | 'NCAAF' | 'NCAAB' | '
 export type StartupDraftKind = 'snake' | 'snake_3rr' | 'linear' | 'auction' | 'auto' | 'offline'
 
 export type SimEnv = {
+  finishTradeScans: () => Promise<void>
   db: InMemoryPrisma
   signIn: (user: { id: string; email: string; name: string } | null) => void
 }

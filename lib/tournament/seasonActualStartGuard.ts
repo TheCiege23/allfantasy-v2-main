@@ -14,7 +14,7 @@ type StartContext = {
 type LockedGame = { gameId: string; actualStartsAt: string; lineups: Array<{ lockedAt: string }> }
 
 /** Saved vendor observations can veto a claimed start; they never create an exact timestamp. */
-export async function assertSeasonObservedStartsConsistent(tx: Prisma.TransactionClient, context: StartContext, games: LockedGame[]) {
+export async function assertSeasonObservedStartsConsistent(tx: Prisma.TransactionClient, context: StartContext, games: LockedGame[], requireObserved = false) {
   const registry = await tx.gameProviderIdentity.findMany({ where: { provider: 'rolling_insights', sportKey: context.sport,
     gameId: { in: games.map(game => game.gameId) } } })
   for (const game of games) {
@@ -27,7 +27,10 @@ export async function assertSeasonObservedStartsConsistent(tx: Prisma.Transactio
       where: { tournamentId: context.tournamentId, action: 'season_game_start_observed', targetId: providerGameId },
       take: 101,
     })
-    if (!rows.length) continue // Older locked-setup receipts remain provisional, never launch-certified.
+    if (!rows.length) {
+      if (requireObserved) throw new BlueprintOperationError('An opening score needs verified start observations before live publication.', 409)
+      continue
+    }
     if (rows.length > 100) throw new BlueprintOperationError('Game-start observation history exceeds its limit. Correction review is required.', 409)
     const observations: GameStartObservation[] = rows.map(row => {
       if (!row.data || typeof row.data !== 'object') throw new BlueprintOperationError('Malformed game-start receipt. Correction review is required.', 409)

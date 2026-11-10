@@ -75,6 +75,7 @@ async function proposeAndProcess(env: SimEnv, run: LeagueRun, add: Add, label: s
       return { ok: false as const, stage: 'commissioner', tradeId, error: (e as Error).message }
     }
   }
+  await env.finishTradeScans()
   const row = (rowsOf(env.db, 'AfLeagueTrade') as any[]).find((t) => t.id === tradeId)
   return { ok: true as const, tradeId, status: row?.status as string, acceptStatus: status, label }
 }
@@ -105,18 +106,55 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
   const adpOf = (playerId: string) => Number(/-(\d+)$/.exec(playerId)?.[1] ?? 999)
   const results: any[] = []
 
-  // ── fair: two bench players of similar draft value ──
+  // Use league values to select the control. Similar startup ADP can hide a sizable gap,
+  // especially when the two players have different positions or replacement baselines.
   const [a, b] = [seats[4 % seats.length]!, seats[5 % seats.length]!]
-  const ga = bench(a.userId).sort((x, y) => adpOf(x.playerId) - adpOf(y.playerId))[0]
-  const gb = bench(b.userId).sort((x, y) => adpOf(x.playerId) - adpOf(y.playerId))[0]
+  const { createLeagueTradeGrader, loadNativePlayerNames } = await import('@/lib/decision-os/trade/leagueTradeGrader')
+  const { gradeInputsFromNativeItems } = await import('@/lib/decision-os/trade/tradeGradeInputs')
+  const candidatesA = bench(a.userId)
+  const candidatesB = bench(b.userId)
+  const grader = await createLeagueTradeGrader({ leagueId: run.leagueId, userId: run.commissionerId })
+  const playerAsset = (p: { playerId: string; playerName: string; position: string }, fromRosterId: string, toRosterId: string) => ({
+    itemType: 'player', itemReference: p.playerId, fromRosterId, toRosterId, metadata: { playerName: p.playerName, position: p.position },
+  })
+  const candidates = [
+    ...candidatesA.map(p => playerAsset(p, a.rosterId, b.rosterId)),
+    ...candidatesB.map(p => playerAsset(p, b.rosterId, a.rosterId)),
+  ]
+  const nameFor = await loadNativePlayerNames(candidates, run.leagueId)
+  const pricedInputs = candidates.map(item => gradeInputsFromNativeItems([item], nameFor))
+  let ga: (typeof candidatesA)[number] | undefined
+  let gb: (typeof candidatesB)[number] | undefined
+  if (grader) {
+    let bestGap = Infinity
+    for (const [i, left] of candidatesA.entries()) {
+      const give = pricedInputs[i]!
+      if (give.unpriceable.length) continue
+      for (const [j, right] of candidatesB.entries()) {
+        const get = pricedInputs[candidatesA.length + j]!
+        if (get.unpriceable.length) continue
+        const grade = await grader.grade({ give: give.assets, get: get.assets, viewerSide: false })
+        if (!grade.graded || grade.letter !== 'C' || grade.partnerLetter !== 'C') continue
+        const gap = Math.abs(grade.percentDiff)
+        if (gap >= bestGap) continue
+        bestGap = gap
+        ga = left
+        gb = right
+        if (gap === 0) break
+      }
+      if (bestGap === 0) break
+    }
+  }
   if (ga && gb) {
     const res = await proposeAndProcess(env, run, add, 'fair', a, b, [
-      { itemType: 'player', itemReference: ga.playerId, fromRosterId: a.rosterId, toRosterId: b.rosterId, metadata: { playerName: ga.playerName, position: ga.position } },
-      { itemType: 'player', itemReference: gb.playerId, fromRosterId: b.rosterId, toRosterId: a.rosterId, metadata: { playerName: gb.playerName, position: gb.position } },
+      playerAsset(ga, a.rosterId, b.rosterId),
+      playerAsset(gb, b.rosterId, a.rosterId),
     ])
     results.push({ ...res, moved: [ga.playerId, gb.playerId] })
     if (res.ok) checkMoved(env, ctx.seasonId, add, 'fair', [[ga.playerId, b], [gb.playerId, a]])
     else add({ code: 'FAIR_TRADE_FAILED', stage: 'trades', message: `A fair 1-for-1 failed at ${res.stage}: ${res.error}` })
+  } else {
+    add({ code: 'FAIR_TRADE_FIXTURE_UNAVAILABLE', stage: 'trades', message: 'No bench swap earned C/C on this league’s chart.' })
   }
 
   // ── collusion: the same pair, three lopsided deals in a row ──
@@ -167,11 +205,20 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
     }
   }
   const flags = (rowsOf(db, 'IntegrityFlag') as any[]).filter((fl) => fl.leagueId === run.leagueId)
-  run.stats.integrityFlags = flags.map((fl) => ({ type: fl.flagType ?? fl.type, severity: fl.severity, tradeId: fl.tradeId ?? fl.entityId ?? null }))
+  run.stats.integrityFlags = flags.map((fl) => ({ type: fl.flagType ?? fl.type, severity: fl.severity, tradeId: fl.tradeTransactionId ?? null }))
   const collusionTradeIds = new Set(results.filter((r) => String(r.label).startsWith('collusion') && r.ok).map((r) => r.tradeId))
   const fairTradeId = results.find((r) => r.label === 'fair' && r.ok)?.tradeId
-  const flaggedIds = new Set(flags.map((fl) => fl.tradeId ?? fl.entityId ?? fl.metadata?.tradeId).filter(Boolean))
-  const pairFlag = flags.some((fl) => /repeat|pair|collu/i.test(String(fl.flagType ?? fl.type ?? '')))
+  const flaggedIds = new Set(flags.map((fl) => fl.tradeTransactionId).filter(Boolean))
+  const pairFlag = flaggedIds.has(`pair:${[c.rosterId, d.rosterId].sort().join('|')}`)
+  const { readTradeValueAudits } = await import('@/lib/integrity/tradeValueAudit')
+  const audited = await readTradeValueAudits(run.leagueId)
+  const pairAuditGaps = audited.filter(row => collusionTradeIds.has(row.tradeKey.slice(3))).map(row => row.gapPct)
+  run.stats.collusionAudits = {
+    trades: audited.length,
+    fairGap: audited.find(row => row.tradeKey === `af:${fairTradeId}`)?.gapPct ?? null,
+    pairGaps: pairAuditGaps,
+    pairFlag,
+  }
   if (collusionTradeIds.size && ![...collusionTradeIds].some((id) => flaggedIds.has(id)) && !pairFlag) {
     // The app's own review decides what is flaggable. A deal it grades fair (under the 40% line) or cannot
     // grade (no values on file) is EXPECTED to pass unflagged; only a deal the review flags and the scan
@@ -180,7 +227,13 @@ export async function runDynastyTrades(env: SimEnv, run: LeagueRun, ctx: Ctx, ad
     const reviews = await Promise.all([...collusionTradeIds].map((id) => reviewSummary(env, run, id)))
     run.stats.lopsidedReviews = reviews
     if (reviews.some((r: any) => (r.flags ?? []).length > 0)) {
-      add({ code: 'COLLUSION_NOT_FLAGGED', stage: 'trades', message: `${collusionTradeIds.size} lopsided deal(s) between one pair: the review flagged at least one, and no integrity flag was filed. Reviews: ${JSON.stringify(reviews)}` })
+      const { reviewStoredTrade } = await import('@/lib/decision-os/trade/tradeReviewContext')
+      const review: any = await reviewStoredTrade({ leagueId: run.leagueId!, ref: { kind: 'af', tradeId: [...collusionTradeIds].at(-1)! }, userId: run.commissionerId, surface: 'integrity-scan' } as never)
+        .catch((e: Error) => ({ ok: false, refusal: { reason: e.message } }))
+      const why = review?.ok
+        ? (review.review?.checks ?? []).filter((c: any) => c.status === 'not_computed' || c.code === 'repeat_partners').map((c: any) => `${c.code}: ${c.explanation}`).join(' | ') || 'every check ran and none fired'
+        : `the review refused: ${review?.refusal?.reason ?? 'unknown'}`
+      add({ code: 'COLLUSION_NOT_FLAGGED', stage: 'trades', message: `${collusionTradeIds.size} lopsided deal(s) between one pair: the review flagged at least one, and no integrity flag was filed. Why: ${why}. Reviews: ${JSON.stringify(reviews)}` })
     }
   }
   if (fairTradeId && flaggedIds.has(fairTradeId)) add({ code: 'FAIR_TRADE_FLAGGED', stage: 'trades', message: 'A fair 1-for-1 swap was flagged by the collusion scan.' })

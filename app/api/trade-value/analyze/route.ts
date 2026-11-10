@@ -60,6 +60,7 @@ const assetSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('player'),
     playerId: z.string().optional(),
+    rosterPlayerId: z.string().trim().max(128).optional(),
     name: z.string().optional(),
     sportHint: z.string().optional(),
     providerIdentity: z.object({
@@ -74,6 +75,8 @@ const assetSchema = z.discriminatedUnion('kind', [
     year: z.number(),
     round: z.number(),
     tier: z.enum(['early', 'mid', 'late']).optional(),
+    draftSide: z.enum(['campus', 'canton', 'combined']).optional(),
+    overall: z.number().int().positive().optional(),
     label: z.string().optional(),
   }),
   z.object({ kind: z.literal('faab'), amount: z.number() }),

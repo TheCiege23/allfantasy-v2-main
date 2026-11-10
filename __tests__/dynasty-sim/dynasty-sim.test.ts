@@ -21,8 +21,19 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import fs from 'node:fs'
 import os from 'node:os'
 import nodePath from 'node:path'
+import { withTradeAuditTable } from './tradeAuditTable'
 
-const holder = vi.hoisted(() => ({ db: null as any, session: null as any }))
+const holder = vi.hoisted(() => ({ db: null as any, session: null as any, scans: [] as Promise<void>[] }))
+vi.mock('@/lib/integrity/enqueueCollusionScan', async (load) => {
+  const { enqueueCollusionScan } = await load<typeof import('@/lib/integrity/enqueueCollusionScan')>()
+  return {
+    enqueueCollusionScan: (...args: Parameters<typeof enqueueCollusionScan>) => {
+      const scan = enqueueCollusionScan(...args)
+      holder.scans.push(scan)
+      return scan
+    },
+  }
+})
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   get prisma() {
@@ -138,7 +149,10 @@ const realFetch = globalThis.fetch
 
 beforeEach(async () => {
   sim ??= await loadSim()
-  holder.db = sim.createInMemoryPrisma()
+  holder.db = withTradeAuditTable(sim.createInMemoryPrisma())
+  holder.scans = []
+  const { resetTradeValueAuditsReadyCache } = await import('@/lib/integrity/tradeValueAudit')
+  resetTradeValueAuditsReadyCache()
   // Every test's in-memory ids restart, so each league is league_000001. The roster-template memo is
   // keyed by league id and would hand the previous test's sport to this one — bust it, as its doc says.
   const { clearEffectiveLeagueRosterTemplateCache } = await import('@/lib/league/getEffectiveLeagueRosterTemplate')
@@ -232,7 +246,13 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
   for (const c of matrix()) {
     it(`${c.sport} ${c.teamCount} teams, ${c.draft} draft`, { timeout: 1_800_000 }, async () => {
       const started = Date.now()
-      const env: SimEnv = { db: holder.db, signIn: (user) => (holder.session = user ? { user } : null) }
+      const env: SimEnv = {
+        db: holder.db,
+        signIn: (user) => (holder.session = user ? { user } : null),
+        async finishTradeScans() {
+          await Promise.all(holder.scans.splice(0))
+        },
+      }
       const run = await sim.createDynastyLeague(env, { ...c, leagueType: process.env.SIM_LEAGUE_TYPE === 'redraft' ? 'redraft' : 'dynasty' })
       const scale = c.teamCount === 150 && ['audit', 'scale'].includes(process.env.SIM_MATRIX ?? '')
       try {

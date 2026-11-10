@@ -19,6 +19,8 @@ import { resolveDraftRouteContext } from '@/lib/draft/resolve-draft-context'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { DraftBoard } from '@/components/draft/DraftBoard'
+import { SeasonDraftAssistant } from '@/components/tournament/SeasonDraftAssistant'
+import { Suspense } from 'react'
 import { checkDraftPoolCacheFast, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 
 export const dynamic = 'force-dynamic'
@@ -140,6 +142,9 @@ export default async function DraftsByIdPage({
           : 'min-h-screen'
       }
     >
+      <Suspense fallback={null}>
+        <SeasonDraftAssistant leagueId={context.leagueId} userId={userId} />
+      </Suspense>
       <DraftBoard
         kind="live"
         draftId={context.draftId}

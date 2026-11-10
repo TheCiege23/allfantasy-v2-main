@@ -26,6 +26,7 @@ export type ServerTradeParticipantDecision = {
   gradeLabel?: string | null
   /** Why this side has no letter, when it has none. */
   gradeWithheld?: string | null
+  divisionImpactSummary?: string
 }
 
 export type ServerTradeDecisionResult = {
@@ -230,6 +231,7 @@ export async function evaluateServerTradeDecision(input: {
         coveragePct: g.graded ? 100 : evaluation?.coveragePct ?? 0,
         gradeLabel: g.graded ? g.label : null,
         gradeWithheld: g.graded ? null : g.reason,
+        ...(!g.graded && g.divisionImpacts ? { divisionImpactSummary: g.reason } : {}),
         lineupPointsBefore: historical ? history?.before ?? null : evaluation?.rosterImpact?.startingPointsBefore ?? null,
         lineupPointsAfter: historical ? history?.after ?? null : evaluation?.rosterImpact?.startingPointsAfter ?? null,
         lineupPointsDelta: historical ? history?.delta ?? null : evaluation?.rosterImpact?.startingPointsDelta ?? null,

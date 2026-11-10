@@ -1,6 +1,8 @@
 import type { Prisma } from '@prisma/client'
 import type { ActorContext } from './actorContext'
-import type { OpeningManifest } from '@/lib/tournament/seasonNativeContract'
+import type { SeasonStageManifest } from '@/lib/tournament/seasonNativeContract'
+import { buildSeasonBlueprint } from '@/lib/tournament/seasonBlueprint'
+import { resolveSeasonDraftWindow } from '@/lib/tournament/seasonRules'
 import { nativeSeasonSettings, nativeSeasonScoring, nativeSeasonWaivers } from '@/lib/tournament/seasonNativeContract'
 import { createHash } from 'node:crypto'
 
@@ -9,16 +11,32 @@ export function seasonResourceId(freezeId: string, resource: string) {
   const h = createHash('sha256').update(JSON.stringify([freezeId, resource])).digest('hex')
   return h.slice(0, 8) + '-' + h.slice(8, 12) + '-5' + h.slice(13, 16) + '-a' + h.slice(17, 20) + '-' + h.slice(20, 32)
 }
-export async function createSeasonTournamentLeague(tx: Prisma.TransactionClient, actor: ActorContext, tournamentId: string, freezeId: string, manifest: OpeningManifest, key: string) {
+export async function ensureSeasonConference(tx: Prisma.TransactionClient, tournamentId: string, divisions: string[], division: string) {
+  const conferenceNumber = divisions.indexOf(division) + 1
+  if (!conferenceNumber) throw new Error('Unknown frozen division.')
+  const conference = await tx.tournamentConference.upsert({
+    where: { tournamentId_conferenceNumber: { tournamentId, conferenceNumber } },
+    create: { id: seasonResourceId(tournamentId, 'division:' + conferenceNumber), tournamentId, conferenceNumber, name: division, slug: 'division-' + conferenceNumber },
+    update: {},
+  })
+  if (conference.name !== division) throw new Error('The stored division differs from the frozen assignment.')
+  return conference.id
+}
+
+export async function createSeasonTournamentLeague(tx: Prisma.TransactionClient, actor: ActorContext, tournamentId: string, freezeId: string, manifest: SeasonStageManifest, key: string) {
   const pool = manifest.leagues.find(l => l.key === key)
   if (!pool) throw new Error('Unknown frozen league.')
-  const c = manifest.config, r = c.rules!, draft = r.calendar.drafts.find(d => d.stage === 1)!
+  const c = manifest.config, r = c.rules!, stage = manifest.stage ?? 1
+  const draft = resolveSeasonDraftWindow(r.calendar, stage, pool)!
+  const conferenceId = pool.division ? await ensureSeasonConference(tx, tournamentId, c.divisions, pool.division) : null
+  const defaultDraft = r.calendar.drafts.find(row => row.stage === stage)!
+  const plan = buildSeasonBlueprint(c).stages[stage - 1]!
   const id = seasonResourceId(freezeId, key), tournamentLeagueId = seasonResourceId(freezeId, key + ':shell'), draftId = seasonResourceId(freezeId, key + ':draft')
-  const roundId = seasonResourceId(freezeId, 'round:1')
-  await tx.tournamentRound.upsert({ where: { tournamentId_roundNumber: { tournamentId, roundNumber: 1 } }, create: { id: roundId, tournamentId, roundNumber: 1, roundType: 'season_qualifier', roundLabel: 'Opening qualifier', weekStart: c.startWeek, weekEnd: c.firstCutWeek, status: 'setup_blocked', draftScheduledAt: new Date(draft.startsAt) }, update: {} })
+  const roundId = seasonResourceId(freezeId, 'round:' + stage)
+  await tx.tournamentRound.upsert({ where: { tournamentId_roundNumber: { tournamentId, roundNumber: stage } }, create: { id: roundId, tournamentId, roundNumber: stage, roundType: stage === 3 ? 'season_bracket' : 'season_qualifier', roundLabel: plan.name, weekStart: plan.startWeek, weekEnd: plan.endWeek, status: 'setup_blocked', draftScheduledAt: new Date(defaultDraft.startsAt) }, update: {} })
   // Caller owns the shell lock; conflicts roll back rather than adopting unrelated rows.
   await tx.league.create({ data: { id, tenantId: actor.tenantId, userId: actor.userId, isCommissioner: true, platform: 'manual', platformLeagueId: id, name: pool.name, sport: c.sport, season: new Date(r.calendar.regularSeasonStartsAt).getUTCFullYear(), leagueSize: pool.slots, rosterSize: c.rosterSize, scoring: c.scoring, leagueType: 'redraft', leagueVariant: 'season_tournament', status: 'tournament_setup', lifecycleState: 'setup', locked: true, timezone: r.calendar.timezone, starters: r.starters.flatMap(s => Array.from({ length: s.count }, () => s.position)), settings: nativeSeasonSettings(manifest, tournamentId, freezeId, key) as Prisma.InputJsonValue, syncStatus: 'manual' } })
-  await tx.tournamentLeague.create({ data: { id: tournamentLeagueId, tournamentId, roundId, leagueId: id, name: pool.name, slug: key, leagueNumber: manifest.leagues.indexOf(pool) + 1, teamSlots: pool.slots, currentTeamCount: pool.slots, status: 'season_setup_blocked', draftScheduledAt: new Date(draft.startsAt), draftSessionId: draftId } })
+  await tx.tournamentLeague.create({ data: { id: tournamentLeagueId, tournamentId, roundId, conferenceId, leagueId: id, name: pool.name, slug: key, leagueNumber: manifest.leagues.indexOf(pool) + 1, teamSlots: pool.slots, currentTeamCount: pool.slots, status: 'season_setup_blocked', draftScheduledAt: new Date(draft.startsAt), draftSessionId: draftId } })
   const slotOrder = pool.members.map(m => ({ slot: m.draftSlot, rosterId: seasonResourceId(freezeId, key + ':roster:' + m.id), displayName: m.displayName, open: false }))
   await tx.leagueSettings.create({ data: { leagueId: id, draftDateUtc: new Date(draft.startsAt), timezone: r.calendar.timezone, autostart: false, draftType: c.draftType, rounds: c.rosterSize, cpuAutoPick: true, aiAutoPick: false, pickTimerPreset: 'custom', pickTimerCustomValue: r.draftPolicy!.pickClockSeconds, draftOrderMethod: 'manual', draftOrderLocked: true, draftOrderSlots: slotOrder } })
   await tx.leagueWaiverSettings.create({ data: { leagueId: id, ...nativeSeasonWaivers(manifest) } })
@@ -30,7 +48,7 @@ export async function createSeasonTournamentLeague(tx: Prisma.TransactionClient,
     await tx.leagueEntrySlot.create({ data: { leagueId: id, slotNumber: m.draftSlot, status: 'FILLED', rosterId } })
     await tx.redraftLeagueMember.create({ data: { leagueId: id, userId: m.userId, teamNumber: m.draftSlot, role: m.userId === actor.userId ? 'COMMISSIONER' : 'MEMBER' } })
     await tx.tournamentLeagueParticipant.create({ data: { tournamentLeagueId, participantId: m.id, userId: m.userId, draftSlot: m.draftSlot, faabBalance: r.waivers.mode === 'faab' ? r.waivers.budget : 0, advancementStatus: 'competing' } })
-    await tx.tournamentParticipant.update({ where: { id: m.id }, data: { currentLeagueId: tournamentLeagueId, currentRoundNumber: 1 } })
+    await tx.tournamentParticipant.update({ where: { id: m.id }, data: { currentLeagueId: tournamentLeagueId, currentRoundNumber: stage, furthestRoundReached: stage, currentConferenceId: conferenceId, ...(stage === 1 && conferenceId ? { originalConferenceId: conferenceId } : {}), status: 'registered' } })
   }
   if (!pool.members.some(m => m.userId === actor.userId)) await tx.redraftLeagueMember.create({ data: { leagueId: id, userId: actor.userId, role: 'COMMISSIONER' } })
   await tx.leagueWaiverState.create({ data: { leagueId: id, currentPriorityOrder: [...pool.members].reverse().map(m => ({ rosterId: seasonResourceId(freezeId, key + ':roster:' + m.id), waiverPriority: m.waiverPriority, faabRemaining: r.waivers.mode === 'faab' ? r.waivers.budget : null })), faabState: Object.fromEntries(pool.members.map(m => [seasonResourceId(freezeId, key + ':roster:' + m.id), r.waivers.mode === 'faab' ? r.waivers.budget : 0])), processingLocked: true } })

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { readImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import { ourIdOrSleeperIdWhere, playerNamesAgree, providerIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { providerIdentityColumn, resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 
@@ -28,7 +29,7 @@ import { providerIdentityColumn, resolveProviderRosterPlayers } from '@/lib/play
 
 /** Every id a stored roster holds, including lineup sections used by older imports. */
 export function rosteredIdsOf(playerData: unknown): string[] {
-  const ids = new Set(getRosterPlayerIds(playerData).map(String))
+  const ids = new Set([...getRosterPlayerIds(playerData).map(String), ...collegePlayerIds(playerData)])
   const pd = (playerData ?? {}) as Record<string, unknown>
   for (const key of ['starters', 'reserve', 'taxi', 'bench', 'ir']) {
     const entries = pd[key]
@@ -141,6 +142,14 @@ export async function resolveTradePlayers(
         if (r.id !== key) record(r.id, r)
       }
     } else {
+      const collegeIds = sport === 'NBA' ? ids.filter((id) => /^espn:ncaab:\d+$/.test(id)) : []
+      if (collegeIds.length) {
+        const campus = await prisma.devyPlayer.findMany({
+          where: { id: { in: collegeIds }, sport: 'NCAAB', source: 'espn_ncaab_roster' },
+          select: { id: true, name: true, position: true },
+        }).catch(() => [])
+        for (const player of campus) record(player.id, player)
+      }
       const rows = await prisma.sportsPlayer.findMany({
         where: { sport, OR: [{ id: { in: ids } }, providerIdWhere('rolling_insights', ids)] },
         select: { id: true, source: true, externalId: true, name: true, position: true },
