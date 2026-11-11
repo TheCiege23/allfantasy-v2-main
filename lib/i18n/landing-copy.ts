@@ -96,6 +96,13 @@ export type LandingCopy = {
     cardFootBefore: string
     /** Second line under it — who produced the figure and over what. */
     cardFootMeta: string
+    /** The no-import way in, under the hero CTAs: links to /trade-evaluator. */
+    tradeLink: string
+  }
+  /** The live AllFantasy trade market board — values from completed trades in connected leagues. */
+  tradeMarket: {
+    heading: string
+    cta: string
   }
   /**
    * Two sport lists under two labels: what IMPORTS today (football) and what a league CREATED here
@@ -179,6 +186,11 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       cardWeek: 'Week 12 · example',
       cardFootBefore: 'Two fixes worth ',
       cardFootMeta: 'Chimmy, across all 4 leagues',
+      tradeLink: 'Or grade a trade right now — no import needed →',
+    },
+    tradeMarket: {
+      heading: 'Trade values built from real trades',
+      cta: 'Grade a trade free',
     },
     connects: {
       label: 'Connects to',
@@ -349,6 +361,11 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       cardWeek: 'Semana 12 · ejemplo',
       cardFootBefore: 'Dos ajustes que valen ',
       cardFootMeta: 'Chimmy, en las 4 ligas',
+      tradeLink: 'O evalúa un intercambio ahora, sin importar nada →',
+    },
+    tradeMarket: {
+      heading: 'Valores de intercambio basados en intercambios reales',
+      cta: 'Evalúa un intercambio gratis',
     },
     connects: {
       label: 'Se conecta con',
