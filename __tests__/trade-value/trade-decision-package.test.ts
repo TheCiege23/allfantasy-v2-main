@@ -9,7 +9,7 @@ describe('usable roster package economics',()=>{
     const result=reviewPackageCost(args)
     expect(result).toMatchObject({activeBefore:2,activeAfter:3,requiredDrops:1,displacedStarters:['starter']})
     expect(result.candidates).toEqual([{playerId:'starter',name:'starter',singleDropLineupCost:0}])
-    expect(result.note).toContain('zero weekly starter cost does not mean')
+    expect(result.note).toContain('A zero only means no lineup points this week')
   })
   it('measures a retained starter’s loss and withholds costs with incomplete projection coverage',()=>{
     expect(reviewPackageCost({...args,sent:[],incoming:[p('in',5)]}).candidates.find(c=>c.playerId==='starter')?.singleDropLineupCost).toBe(12)

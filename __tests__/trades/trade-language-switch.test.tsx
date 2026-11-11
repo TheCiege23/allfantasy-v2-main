@@ -56,7 +56,7 @@ describe('English ↔ Spanish trade experience',()=>{
     expect(screen.getByText('Activos enviados en los equipos receptores')).toBeTruthy()
     expect(document.documentElement.lang).toBe('es')
     expect(localStorage.getItem('af_lang')).toBe('es')
-    expect(screen.getByText('Se necesita 1 baja para que este paquete quepa.')).toBeTruthy()
+    expect(screen.getByText('Tienes que dar de baja a 1 jugador para que quepa este intercambio.')).toBeTruthy()
     expect(screen.getByText('Sube el valor. Deja que Chimmy cocine.')).toBeTruthy()
     expect(document.body.textContent).toContain('Tu equipo recibe 140 en valor y envía 100')
     expect(document.body.textContent).toContain('Dinastía · Superflex · 12 equipos')
