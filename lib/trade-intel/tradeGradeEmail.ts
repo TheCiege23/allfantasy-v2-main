@@ -369,7 +369,7 @@ function whyTheseLetters(views: SideView[]): { reason: string; scale: string } |
       gap === 0
         ? `Both sides got a C: each received ${fmtValue(a.total)} in this league’s values — dead even.`
         : `Both sides got a C: ${name(a)} received ${fmtValue(a.total)} and ${name(b)} received ${fmtValue(b.total)} in this league’s values. ` +
-          `That is ${fmtValue(gap)} apart, ${Math.abs(a.pct)}% of the bigger side — under ${even}%, so the trade reads as even and neither side earns a B.`
+          `That’s only ${fmtValue(gap)} apart (${Math.abs(a.pct)}%), under ${even}%, so the trade counts as even.`
     return { reason, scale }
   }
 
@@ -407,11 +407,11 @@ function rosterFitCard(grade: TradeGradeView | null): string {
   if (!grade?.graded || !grade.rosterFit) return ''
   const fit = grade.rosterFit
   const moves = fit.moves.map(move =>
-    `${move.name}: ${fmtValue(move.base)} base → ${fmtValue(move.leagueValue)} personal utility. ${move.reasons.join('; ')}.`)
+    `${move.name}: ${fmtValue(move.base)} market → ${fmtValue(move.leagueValue)} for your team. ${move.reasons.join('; ')}.`)
   const yourTeam = grade.letterBasis === 'your_team'
-  return card(eyebrow(yourTeam ? 'Your roster fit · what your grade is taken on' : 'Your roster fit') +
+  return card(eyebrow(yourTeam ? 'How it fits your roster · used for your grade' : 'How it fits your roster') +
     `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">` +
-    escapeHtml(`Personal utility: ${fmtValue(fit.giveValue)} given, ${fmtValue(fit.getValue)} received.${yourTeam ? ' Your letter above is taken on these.' : ''} This is a roster-fit estimate, not a prediction of your chances of winning.`) +
+    escapeHtml(`Value to your team: ${fmtValue(fit.giveValue)} sent, ${fmtValue(fit.getValue)} received.${yourTeam ? ' Your grade above uses these numbers.' : ''} This shows how the trade fits your roster. It doesn’t predict who wins the trade.`) +
     moves.map(move => `<div style="margin-top:6px">${escapeHtml(move)}</div>`).join('') + '</div>')
 }
 
@@ -593,8 +593,8 @@ export function buildTradeGradeEmail(params: {
     : grade && !grade.graded
       ? grade.reason
       : trade.sides.length !== 2
-        ? 'Only two-team trades are graded — one value gap cannot give three teams a letter each.'
-        : 'This league’s values could not be loaded just now.'
+        ? 'We only grade trades between two teams.'
+        : 'We couldn’t load this league’s values right now.'
   const basis = (graded?.basis || grade?.basis || '').trim()
   const summary = graded
     ? ordered.map((v) => `${v.isViewer ? 'You' : v.side.managerName}: ${v.letter} (${gapText(v.pct ?? 0)})`).join(' · ')
@@ -602,19 +602,19 @@ export function buildTradeGradeEmail(params: {
 
   const hasPicks = trade.sides.some((s) => s.picksIn.length > 0)
   const how = graded
-    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values ${gradeMoment(graded)}. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
-      (hasPicks ? ' Unresolved future picks use the chart’s season-and-round value; a specific early, mid or late tier is used only when supplied to the evaluator.' : '')
+    ? `Each side is graded on what it got compared with what it gave, using ${basis ? `${basis} ` : 'this league’s '}values ${gradeMoment(graded)}. Values change over time, so grading the same trade later can give a different result. How it fits your roster is shown separately and doesn’t change this grade.` +
+      (hasPicks ? ' Future picks use the average value for their year and round, unless the trade said whether the pick is early, mid or late.' : '')
     : steal || (grade && !grade.graded && giveawaySide(trade))
       // A giveaway has no "part of the deal" a letter could be drawn from — the reason says it all.
       ? `${withheldReason}`
-      : `${withheldReason} No letter is shown rather than one drawn from part of the deal.`
+      : `${withheldReason} We don’t show a grade based on only part of the trade.`
 
   const rows =
     `<tr><td>${sidesCard(ordered)}</td></tr><tr><td style="height:12px"></td></tr>` +
     (graded ? whyCard(ordered) : '') +
     card(`${eyebrow(graded ? 'How this is graded' : 'Why there is no grade')}<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">${escapeHtml(how)}</div>`) +
     leagueTypeCard(leagueType, params.confirmUrl ?? null) +
-    (params.receiptUrl ? cta(params.receiptUrl, 'View the original evaluation', 'The exact grade and values in this email, preserved for comparison.') : '') +
+    (params.receiptUrl ? cta(params.receiptUrl, 'See the original grade', 'The grade and values from this email, saved so you can compare later.') : '') +
     cta(ledgerUrl, 'See the trade in AllFantasy', escapeHtml('Every asset, and the value behind each letter.'))
 
   const weekPart = Number.isFinite(trade.week) && trade.week > 0 ? ` · week ${trade.week}` : ''
@@ -721,7 +721,7 @@ export function buildPendingTradeOfferEmail(params: {
     title: leagueName,
     sub: `${who} sent you an offer on Sleeper.`,
     rows: verdict + swap + rosterFitCard(params.grade ?? null) + leagueTypeCard(leagueType, params.confirmUrl ?? null) +
-      (params.receiptUrl ? cta(params.receiptUrl, 'View the original evaluation', 'The exact grade and values in this email, preserved for comparison.') : '') +
+      (params.receiptUrl ? cta(params.receiptUrl, 'See the original grade', 'The grade and values from this email, saved so you can compare later.') : '') +
       cta(params.reviewUrl, 'See our read on this offer', sleeperNote),
     footer: emailFooter({ baseUrl: params.baseUrl, leagueName, leagueId: params.leagueId ?? null, unsubscribeUrl: params.unsubscribeUrl ?? null }),
   })
