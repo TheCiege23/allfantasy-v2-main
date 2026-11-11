@@ -149,7 +149,7 @@ describe('per-league grade breakdown', () => {
     const row = grades.available ? grades.data[0] : null
     expect(row).toBeTruthy()
     expect(row!.letter).toBe('A')
-    expect(row!.breakdown[0]).toMatch(/^You came out well ahead/)
+    expect(row!.breakdown[0]).toMatch(/^You won this trade clearly, getting /)
     expect(row!.breakdown.join(' ')).toContain('Alpha Back')
     /* The partner's real name, from `partnerName` — never a platform id. */
     expect(row!.breakdown.join(' ')).not.toContain(VIEWER_SLEEPER_ID)

@@ -143,8 +143,8 @@ describe('TradeInbox — lineup effect line', () => {
     expect([...sideB.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['4,000'])
     expect(sideA.querySelector('img')!.getAttribute('src')).toBe('https://img.example/receiver.png')
     const why = row.querySelector('.af-tc-timeline-why')!.textContent!
-    expect(why).toContain('Your team got the better end of it — 5,000 in league value for 4,000.')
-    expect(why).toContain('Graded on this league\'s values today (Dynasty · Superflex · 12 teams · PPR).')
+    expect(why).toContain('Your team won this trade, getting 5,000 in this league’s values for 4,000')
+    expect(why).toContain('These grades use this league’s settings (Dynasty · Superflex · 12 teams · PPR) and values today.')
   })
   it('mirrors the grade when the viewer is the SECOND side of the record, so no team gets the other’s letter', async () => {
     fetchTradesPanel.mockResolvedValue(panel([]))

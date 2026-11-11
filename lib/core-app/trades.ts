@@ -363,7 +363,12 @@ async function resolveGrades(
       picksOut: picksOut.length,
       breakdown:
         g.graded && mine
-          ? oneGradeBreakdown({ grade: g, receiverLabel: 'You', partnerLabel: t.partnerName?.trim() || 'the other side' })
+          ? oneGradeBreakdown({
+              grade: g,
+              receiverLabel: 'You',
+              partnerLabel: t.partnerName?.trim() || 'the other side',
+              positions: [...recv, ...gave].map((id) => playerById.get(id)?.position ?? null),
+            })
           : [],
     }
   }))

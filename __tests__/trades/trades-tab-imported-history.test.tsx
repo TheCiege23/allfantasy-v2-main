@@ -110,7 +110,7 @@ describe('TradesTab — completed history', () => {
     expect(screen.getByText('Nicolodeon').closest('.min-w-0')!.textContent).toContain('Woody Marks · 2,000')
     expect(screen.getByText('Side A gets')).toBeInTheDocument()
     expect(screen.queryByText(/Side A sends/)).not.toBeInTheDocument()
-    expect(screen.getByText('Nicolodeon got the better end — Hoovi got 1,500 in league value for 2,000.')).toBeInTheDocument()
+    expect(screen.getByText(/^Nicolodeon won this trade, getting 2,000 in this league’s values for 1,500/)).toBeInTheDocument()
     // The realized-points letter is the one that contradicted the board; it must not come back.
     expect(screen.queryByText(/net -17\.8/)).not.toBeInTheDocument()
     // The Trade Center link stays, for photos and the full breakdown.

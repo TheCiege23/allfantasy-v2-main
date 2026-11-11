@@ -99,7 +99,7 @@ describe('trades screen — directional player sides', () => {
     expect(letters).toEqual(['D', 'B'])
     const values = [...container.querySelectorAll('.af-tr-asset-value')].map((n) => n.textContent)
     expect(values).toEqual(['7,200', '7,000', '2,000'])
-    expect(container.querySelector('.af-tr-leaguegrade-why')!.textContent).toContain('Gridiron Vultures got the better end — You got 7,200 in league value for 9,000.')
+    expect(container.querySelector('.af-tr-leaguegrade-why')!.textContent).toContain('Gridiron Vultures won this trade, getting 9,000 in this league’s values for 7,200')
     // A league grade is a grade: the "n/a — counts only" placeholder must not sit beside it.
     expect(container.textContent).not.toContain('Counts only')
   })

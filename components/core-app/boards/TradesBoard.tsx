@@ -268,8 +268,19 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             shape this screen must not have — and prose is the wrong place to
             carry a structural fact. Where a letter would be, the reason is.
           */}
+          {/*
+            ⚠ ONE GRADE PER TEAM, EACH WITH ITS NAME (2026-11-11). This read "Latest grade A" — the
+            letter of `fromName` alone, with nothing saying whose. A manager on a phone read it as the
+            trade's grade and asked which team it was for. `partnerLetter` is the mirror the grade
+            already holds; a payload cached before it existed still names the one letter it has.
+          */}
           {t?.letter ? (
-            <StatPair k="Latest grade" v={t.letter} sev={GRADE_SEV[t.letter]} />
+            <>
+              <StatPair k={`${t.fromName} grade`} v={t.letter} sev={GRADE_SEV[t.letter]} />
+              {t.partnerLetter ? (
+                <StatPair k={`${t.toName} grade`} v={t.partnerLetter} sev={GRADE_SEV[t.partnerLetter]} />
+              ) : null}
+            </>
           ) : t ? (
             <span className="af-bd-kv">
               <span className="af-bd-k">Latest grade</span>
@@ -298,7 +309,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           */}
           {t?.letter && t.sharePct != null ? (
             <span className="af-bd-kv">
-              <span className="af-bd-k">Value split</span>
+              <span className="af-bd-k">Share of the value</span>
               <span className="af-bd-sub" style={{ maxWidth: 260 }}>
                 {t.fromName} {Math.round(t.sharePct)}% · {t.toName} {100 - Math.round(t.sharePct)}%
               </span>

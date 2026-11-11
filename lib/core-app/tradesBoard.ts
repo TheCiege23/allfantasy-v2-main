@@ -95,6 +95,12 @@ export type BoardTrade = {
   received: TradeAsset[]
   /** Null when the trade could not be priced on both sides — see the header. */
   letter: 'A' | 'B' | 'C' | 'D' | 'F' | null
+  /**
+   * The letter `toName` got — the mirror of `letter`. The card shows both, each with its team's name:
+   * one unnamed letter read as "the trade's grade", not as one side's (reported from a phone, 2026-11-11).
+   * Optional so a payload cached before then still parses; the card then shows `letter` alone, named.
+   */
+  partnerLetter?: 'A' | 'B' | 'C' | 'D' | 'F' | null
   sharePct: number | null
   withheldReason: string | null
   /**
@@ -1029,7 +1035,12 @@ export async function getTradesBoard(
 
     // Read off the grade's own lines, so the explanation cannot disagree with the letter.
     const breakdown = g.graded
-      ? oneGradeBreakdown({ grade: g, receiverLabel: fromName, partnerLabel: toName })
+      ? oneGradeBreakdown({
+          grade: g,
+          receiverLabel: fromName,
+          partnerLabel: toName,
+          positions: [...sentAssets, ...recvAssets].map((a) => (a.kind === 'pick' ? null : a.position)),
+        })
       : []
 
     const card: BoardTrade = {
@@ -1042,6 +1053,7 @@ export async function getTradesBoard(
       sent: sentAssets,
       received: recvAssets,
       letter: g.graded ? g.letter : null,
+      partnerLetter: g.graded ? g.partnerLetter : null,
       sharePct: g.graded ? Math.round((g.getValue / Math.max(1, g.getValue + g.giveValue)) * 1000) / 10 : null,
       breakdown,
       // The grader's own reason — it names what could not be priced, never a count.

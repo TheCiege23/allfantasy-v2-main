@@ -59,7 +59,7 @@ it('shows each team’s ONE grade on completed trades, realized points as a fact
   expect(screen.getByText('Hoovi received: 2027 round 3 (1,500)')).toBeTruthy()
   expect(screen.getByText('Nicolodeon received: Woody Marks (2,000)')).toBeTruthy()
   expect(screen.queryByText(/ sent: /)).toBeNull()
-  expect(screen.getByText('Nicolodeon got the better end — Hoovi got 1,500 in league value for 2,000.')).toBeTruthy()
+  expect(screen.getByText(/^Nicolodeon won this trade, getting 2,000 in this league’s values for 1,500/)).toBeTruthy()
   expect(screen.getByText(/Realized so far: Hoovi net 17\.8 fantasy points · Nicolodeon net -17\.8 fantasy points/)).toBeTruthy()
   expect(screen.queryByText(/Realized grade/)).toBeNull()
   const card = screen.getByText('League grade: Hoovi D · Nicolodeon B').closest('article')!

@@ -1717,10 +1717,24 @@ describe('TradesBoard — a priced pick shows its price', () => {
     expect(row!.querySelector('.af-bd-asset-val')?.textContent).toBe('\u2014')
   })
 
+  /*
+   * Reported from a phone, 2026-11-11: the card read "Latest grade A" — one letter, no team. Each
+   * team's letter now sits under its own name.
+   */
+  it('shows each team’s grade under that team’s name', () => {
+    const d = withPick(1231, 'D', 42)
+    const data = { ...d, windows: [{ ...d.windows[0]!, latest: { ...d.windows[0]!.latest!, partnerLetter: 'B' as const } }] }
+    const { container } = render(<TradesBoard data={data} allHref="/core/trades?all=1" />)
+    const pairs = [...container.querySelectorAll('.af-bd-card-foot .af-bd-kv')].map((el) => el.textContent)
+    expect(pairs).toContain('TheCiege24 gradeD')
+    expect(pairs).toContain('Jordan gradeB')
+    expect(container.textContent).not.toContain('Latest grade')
+  })
+
   it('names both managers in the value split, summing to 100', () => {
     const { container } = render(<TradesBoard data={withPick(1231, 'D', 42)} allHref="/core/trades?all=1" />)
     const text = container.textContent ?? ''
-    expect(text).toContain('Value split')
+    expect(text).toContain('Share of the value')
     expect(text).toContain('TheCiege24 42%')
     expect(text).toContain('Jordan 58%')
   })
@@ -1732,7 +1746,7 @@ describe('TradesBoard — a priced pick shows its price', () => {
     const { container } = render(
       <TradesBoard data={withPick(null, null, null)} allHref="/core/trades?all=1" />,
     )
-    expect(container.textContent).not.toContain('Value split')
+    expect(container.textContent).not.toContain('Share of the value')
   })
 })
 

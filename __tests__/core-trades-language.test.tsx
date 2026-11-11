@@ -58,6 +58,21 @@ describe('Trades Spanish view', () => {
     expect(document.body.textContent).toContain('No hay intercambios registrados en esta liga')
   })
 
+  it('translates the per-team, league-specific explanation (2026-11-11)', () => {
+    expect(tradeUiCopy('LeoMan won this trade clearly, getting 12,136 in this league’s values for 9,022 (26% apart).', 'es'))
+      .toBe('LeoMan ganó este intercambio con claridad: recibió 12,136 en valores de esta liga por 9,022 (26% de diferencia).')
+    expect(tradeUiCopy('So LeoMan gets an A and fellzy33 an F.', 'es')).toBe('Así que LeoMan saca una A y fellzy33 una F.')
+    expect(tradeUiCopy('So you get a D and Gridiron Vultures a B.', 'es')).toBe('Así que tú sacas una D y Gridiron Vultures una B.')
+    expect(tradeUiCopy('The biggest piece was Josh Allen (10,755), and LeoMan got him.', 'es'))
+      .toBe('La pieza más valiosa fue Josh Allen (10,755) y la recibió LeoMan.')
+    expect(tradeUiCopy('This league is Superflex (teams can start two QBs), so quarterbacks are worth more here than in a one-QB league.', 'es'))
+      .toContain('Superflex')
+    expect(tradeUiCopy('fellzy33 got fewer players back, so their total includes 178 for an open roster spot to fill.', 'es'))
+      .toBe('fellzy33 recibió menos jugadores, así que su total incluye 178 por un puesto libre en la plantilla.')
+    expect(tradeUiCopy('These grades use this league’s settings (Dynasty · Superflex · 12 teams) and values at the time of the trade (Sep 5).', 'es'))
+      .toContain('en la fecha del traspaso (5 sep)')
+  })
+
   it('keeps trade grade amounts and timing in translated explanations', () => {
     expect(tradeUiCopy('Gridiron Vultures got the better end — Tú got 7,200 in league value for 9,000.', 'es'))
       .toContain('tú recibiste 7,200 por 9,000')

@@ -1,6 +1,6 @@
 import type { TradeRecord } from './trades'
 import { mirrorTradeGrade, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
-import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
+import { oneGradeBreakdownParts } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 
 /** One asset on a timeline row, as the Trade Center renders it. */
 export type TimelineAsset = {
@@ -105,6 +105,6 @@ export function mergeImportedTradeTimelineRows<T extends { id: string }>(
  */
 export function gradeReasons(grade: TradeGradeView | null | undefined, giveLabel: string, otherLabel: string): string[] {
   if (!grade?.graded) return []
-  const all = oneGradeBreakdown({ grade, receiverLabel: giveLabel, partnerLabel: otherLabel })
-  return all.length > 2 ? [all[0]!, all[1]!, all[all.length - 1]!] : all
+  const p = oneGradeBreakdownParts({ grade, receiverLabel: giveLabel, partnerLabel: otherLabel })
+  return [p.verdict, p.grades, ...(p.best ? [p.best] : []), ...(p.rosterSpot ? [p.rosterSpot] : []), p.basis]
 }
