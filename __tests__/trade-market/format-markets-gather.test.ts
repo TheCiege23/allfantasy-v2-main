@@ -52,7 +52,15 @@ function fakePrisma() {
           ? [{ platformLeagueId: 'P-2024', leagueId: 'L-1QB', metadata: { rosterPositions: ['QB', 'QB', 'QB', 'QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'BN'], rawSettings: { type: 2, max_keepers: 0 } } }]
           : [],
     },
-    playerValueSnapshot: { findMany: async () => snapshots },
+    /*
+     * The bounded latest-snapshot read (`loadLatestPlayerValueSnapshots`) and the FAAB read both go through
+     * `$queryRaw`; answer the snapshot query per book from its bound values, and nothing else by default.
+     */
+    $queryRaw: async (q: { sql: string; values: unknown[] }) => {
+      if (!q.sql.includes('PlayerValueSnapshot')) return []
+      const [ids, , format, qbFormat] = q.values as [string[], string, string, string]
+      return snapshots.filter((s) => ids.includes(s.sleeperId) && s.format === format && s.qbFormat === qbFormat)
+    },
     sportsPlayer: {
       findMany: async () => [
         { sleeperId: '1', name: 'A Quarterback', position: 'QB', source: 'sleeper', fetchedAt: new Date() },
@@ -152,10 +160,13 @@ describe('FAAB in the trade market', () => {
     const prisma = {
       ...base,
       leagueTrade: { findMany: async () => [{ transactionId: 'faab-1', historyId: 'h-sf', season: 2026, tradeDate: null, playersGiven: ['2'], playersReceived: [], picksGiven: [], picksReceived: [] }, ...(await base.leagueTrade.findMany())] },
-      $queryRaw: async () => [
-        { tx: 'faab-1', payload: { faabIn: 50, faabOut: 0, playersInIds: [], playersOutIds: ['2'] } },
-        { tx: 'faab-1', payload: { faabIn: 0, faabOut: 50, playersInIds: ['2'], playersOutIds: [] } },
-      ],
+      $queryRaw: async (q: { sql: string; values: unknown[] }) =>
+        q.sql.includes('dw_transaction_facts')
+          ? [
+              { tx: 'faab-1', payload: { faabIn: 50, faabOut: 0, playersInIds: [], playersOutIds: ['2'] } },
+              { tx: 'faab-1', payload: { faabIn: 0, faabOut: 50, playersInIds: ['2'], playersOutIds: [] } },
+            ]
+          : base.$queryRaw(q),
     }
     const g = await gatherFormatObservations(prisma as never, { sinceSeason: 2024 })
     expect(g.skipped).toMatchObject({ faab_priced: 1 })
