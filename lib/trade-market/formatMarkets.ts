@@ -1,9 +1,10 @@
-import type { PrismaClient } from '@prisma/client'
+import { Prisma, type PrismaClient } from '@prisma/client'
 
 import { valueBookFor } from '@/lib/core-app/valueBook'
 import { lineupProfileFromSettings, type LineupPosition, type LineupProfile } from '@/lib/league/lineupProfile'
 import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
+import { loadLatestPlayerValueSnapshots, type LatestPlayerValueClient } from '@/lib/player-values/latestPlayerValueSnapshots'
 import {
   attributeTrade,
   computeCompletedTradeValue,
@@ -280,10 +281,10 @@ export function faabForTradeRow(
 async function loadTradeFaab(prisma: PrismaClient, txIds: readonly string[]): Promise<Map<string, TradeFactSide[]>> {
   const out = new Map<string, TradeFactSide[]>()
   for (const ids of chunk([...new Set(txIds)])) {
-    const rows = await prisma.$queryRaw<Array<{ tx: string; payload: Record<string, unknown> }>>`
+    const rows = await prisma.$queryRaw<Array<{ tx: string; payload: Record<string, unknown> }>>(Prisma.sql`
       SELECT payload->>'sleeperTransactionId' AS tx, payload
       FROM dw_transaction_facts
-      WHERE type = 'trade' AND payload ? 'faabIn' AND payload->>'sleeperTransactionId' = ANY(${ids}::text[])`
+      WHERE type = 'trade' AND payload ? 'faabIn' AND payload->>'sleeperTransactionId' = ANY(${ids}::text[])`)
     for (const r of rows) {
       const p = r.payload ?? {}
       const side: TradeFactSide = {
@@ -331,19 +332,25 @@ export async function gatherFormatObservations(
   const ids = new Set<string>()
   for (const t of unique.values()) for (const id of [...asIds(t.playersGiven), ...asIds(t.playersReceived)]) ids.add(id)
 
-  // All four charts in one read, newest capture per (book, player).
+  /*
+   * The newest capture per player, per book — through the bounded helper. A `findMany` ordered by date
+   * with no `take`/`distinct` reads every daily capture of every player in all four books just to keep
+   * the first; `latest-player-value-snapshots.test.ts` guards against exactly that read.
+   */
   const charts = new Map<string, Map<string, number>>()
-  for (const b of MARKET_BOOKS) charts.set(bookKey(b), new Map())
-  for (const part of chunk([...ids])) {
-    const snaps = await prisma.playerValueSnapshot.findMany({
-      where: { sleeperId: { in: part }, source: 'FANTASYCALC', format: { in: ['DYNASTY', 'REDRAFT'] }, qbFormat: { in: ['ONE_QB', 'SUPERFLEX'] } },
-      orderBy: { capturedAt: 'desc' },
-      select: { sleeperId: true, value: true, format: true, qbFormat: true },
-    })
-    for (const s of snaps) {
-      const m = charts.get(`${s.format}:${s.qbFormat}`)
-      if (m && !m.has(s.sleeperId)) m.set(s.sleeperId, s.value)
+  for (const b of MARKET_BOOKS) {
+    const m = new Map<string, number>()
+    for (const part of chunk([...ids])) {
+      const snaps = await loadLatestPlayerValueSnapshots({
+        sleeperIds: part,
+        source: 'FANTASYCALC',
+        format: b.format,
+        qbFormat: b.qbFormat,
+        client: prisma as unknown as LatestPlayerValueClient,
+      })
+      for (const s of snaps) if (!m.has(s.sleeperId)) m.set(s.sleeperId, Number(s.value))
     }
+    charts.set(bookKey(b), m)
   }
 
   const meta = new Map<string, { name: string; position: string | null }>()
