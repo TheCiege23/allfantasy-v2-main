@@ -844,6 +844,8 @@ export async function runTradeConsoleAnalysis(
     give: input.sideGive,
     get: input.sideGet,
     selectedProviderIds,
+    // Your own priced picks — offered as a counter only when you are the side that should send more.
+    yourPicks: availablePicksNegotiation,
     theirTargets: opponentRosterTargets ?? [],
     yourTargets: (rosterCtxForDrivers?.yourRoster ?? [])
       .filter(a => a.type === 'PLAYER')
@@ -1001,7 +1003,7 @@ export async function runTradeConsoleAnalysis(
 
   if (input.leagueId && input.opponentTeamExternalId) {
     tradeIntelligence.rebalanceSuggestions = counterOffers.map(counter =>
-      `${counter.addTo === 'get' ? 'Ask for' : 'Offer'} ${counter.name}. With that change you’d grade ${counter.grade.letter} and they’d grade ${counter.grade.partnerLetter}: ${Math.abs(counter.grade.percentDiff)}% apart, with ${counter.remainingGap.toLocaleString('en-US')} in value left to even out. ${counter.balanced ? 'That’s about even.' : 'Closer, but not even yet.'} Grade it again after you change the trade.`,
+      `${counter.action === 'remove' ? (counter.addTo === 'get' ? `Ask for less: leave ${counter.name} out` : `Send less: keep ${counter.name}`) : `${counter.addTo === 'get' ? 'Ask for' : 'Offer'} ${counter.name}`}. With that change you’d grade ${counter.grade.letter} and they’d grade ${counter.grade.partnerLetter}: ${Math.abs(counter.grade.percentDiff)}% apart, with ${counter.remainingGap.toLocaleString('en-US')} in value left to even out. ${counter.balanced ? 'That’s about even.' : 'Closer, but not even yet.'} Grade it again after you change the trade.`,
     )
   }
 

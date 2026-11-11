@@ -19,7 +19,7 @@ describe('Spanish cross-league matchup board', () => {
 
     render(<MatchupPulseBoard pulse={pulse} allHref="/core/matchup?all=1" totalLeagues={1} />)
     expect(screen.getByRole('heading', { name: 'Tu situación' })).toBeTruthy()
-    expect(screen.getByText('Sin clasificar: 1 sin calendario.')).toBeTruthy()
+    expect(screen.getByText('1 aún sin calendario sincronizado')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ver 1 liga →' })).toHaveAttribute('href', '/core/matchup?all=1')
   })
 })

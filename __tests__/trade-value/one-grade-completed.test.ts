@@ -81,24 +81,54 @@ describe('withOneGrade — the letter before points arrive is THE grade', () => 
 })
 
 describe('oneGradeBreakdown reads only the grade', () => {
-  it('headlines the letter with the grade’s own totals and names the best asset', () => {
+  it('says who won, each team’s letter by name, and the biggest piece', () => {
     const g = graded(3000, 9000, [
       { side: 'give', name: 'Beta Wide', marketValue: 3000, leagueValue: 3000 },
       { side: 'get', name: 'Alpha Back', marketValue: 9000, leagueValue: 9000 },
     ])
     const out = oneGradeBreakdown({ grade: g, receiverLabel: 'You', partnerLabel: 'Gridiron Vultures' })
-    expect(out[0]).toBe('You came out well ahead — 9,000 in league value for 3,000.')
-    expect(out[1]).toBe('The most valuable asset was Alpha Back, and You got him.')
-    expect(out.at(-1)).toContain('Dynasty · 1QB · 12 teams · PPR')
+    expect(out[0]).toBe('You won this trade clearly, getting 9,000 in this league’s values for 3,000 (67% apart).')
+    expect(out[1]).toBe('So you get an A and Gridiron Vultures an F.')
+    expect(out[2]).toBe('The biggest piece was Alpha Back (9,000), and you got him.')
+    expect(out.at(-1)).toBe('These grades use this league’s settings (Dynasty · 1QB · 12 teams · PPR) and values today.')
   })
 
-  it('says when quality and quantity pulled apart', () => {
+  it('says when the biggest piece went to the side that lost on value', () => {
     const g = graded(1000, 1400, [
       { side: 'give', name: 'Star', marketValue: 1000, leagueValue: 1000 },
       { side: 'get', name: 'Depth One', marketValue: 700, leagueValue: 700 },
       { side: 'get', name: 'Depth Two', marketValue: 700, leagueValue: 700 },
     ])
-    expect(oneGradeBreakdown({ grade: g, receiverLabel: 'You', partnerLabel: 'Them' })[1]).toMatch(/^Quality and quantity pulled apart: the best single asset was Star, and Them got him/)
+    expect(oneGradeBreakdown({ grade: g, receiverLabel: 'You', partnerLabel: 'Them' })[2])
+      .toBe('Them got the biggest piece, Star (1,000), but the other side got more value overall.')
+  })
+
+  /*
+   * Reported from a phone, 2026-11-11: "doesn't say why the trade works for one or not the other for
+   * that specific league." A format sentence appears only when a player at that position moved.
+   */
+  it('explains this league’s settings only where they touch the players in the trade', () => {
+    const g = { ...graded(9022, 12136, [
+      { side: 'get', name: 'Josh Allen', marketValue: 10755, leagueValue: 10755 },
+      { side: 'get', name: 'David Montgomery', marketValue: 1381, leagueValue: 1381 },
+      { side: 'give', name: 'Caleb Williams', marketValue: 7498, leagueValue: 7498 },
+      { side: 'give', name: '2028 2nd', assetKind: 'pick', marketValue: 1346, leagueValue: 1346 },
+    ]), basis: 'Dynasty · Superflex · 12 teams · PPR · TE premium +0.5 Includes 178 for an open roster spot: they receive fewer players, so their side gains room to add a player. One spot is worth the league’s last rostered player on this chart (rank 312, today Dont\'e Thornton).',
+      rosterSpot: { side: 'give' as const, spots: 1, valuePerSpot: 178, value: 178 } }
+    const out = oneGradeBreakdown({ grade: g, receiverLabel: 'LeoMan', partnerLabel: 'fellzy33', positions: ['QB', 'RB', 'QB', null] })
+    expect(out).toContain('So LeoMan gets an A and fellzy33 an F.')
+    expect(out).toContain('This league is Superflex (teams can start two QBs), so quarterbacks are worth more here than in a one-QB league.')
+    // No tight end moved, so the TE premium is not offered as a reason.
+    expect(out.join(' ')).not.toContain('tight ends')
+    expect(out).toContain('fellzy33 got fewer players back, so their total includes 178 for an open roster spot to fill.')
+    // The roster-spot sentence the grader appends to the chart label is not repeated inside the settings.
+    expect(out.at(-1)).toBe('These grades use this league’s settings (Dynasty · Superflex · 12 teams · PPR · TE premium +0.5) and values today.')
+
+    const withTe = oneGradeBreakdown({ grade: g, receiverLabel: 'LeoMan', partnerLabel: 'fellzy33', positions: ['TE'] })
+    expect(withTe).toContain('This league gives tight ends an extra 0.5 points per catch, so tight ends are worth more here.')
+    expect(withTe.join(' ')).not.toContain('Superflex (teams')
+    // Without positions, no format sentence is guessed.
+    expect(oneGradeBreakdown({ grade: g, receiverLabel: 'LeoMan', partnerLabel: 'fellzy33' }).join(' ')).not.toMatch(/Superflex \(teams|tight ends/)
   })
 })
 

@@ -96,4 +96,44 @@ describe('counteroffer package evaluation', () => {
     }
     expect(evaluate).not.toHaveBeenCalled()
   })
+
+  /*
+   * 2026-11-11: counters were players only, and only ever added. A manager who is WINNING was only
+   * ever told to send another player; his own picks were loaded and never considered, and "ask for
+   * less" was never on the table.
+   */
+  it('offers one of YOUR picks when you should send more, with its original team carried for pricing', async () => {
+    const evaluate = vi.fn(async (give: Array<{ kind: string }>) => grade(give.some(a => a.kind === 'pick') ? 980 : 1400, 1000))
+    const offers = await evaluateCounterOffers({ grade: grade(700, 1000), give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Received' }], yourTargets: [], theirTargets: [],
+      yourPicks: [{ id: 'fdp:2027:2:7', displayName: '2027 2nd', season: 2027, round: 2, value: 290 }], evaluate })
+    expect(offers).toHaveLength(1)
+    expect(offers[0]).toMatchObject({ action: 'add', addTo: 'give', name: '2027 2nd', rosterPlayerId: 'fdp:2027:2:7',
+      asset: { kind: 'pick', year: 2027, round: 2, originalRosterId: '7' } })
+  })
+
+  it('never offers a pick for THEM — their picks are not loaded here', async () => {
+    const evaluate = vi.fn(async () => grade(1000, 990))
+    const offers = await evaluateCounterOffers({ grade: grade(1000, 700), give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Received' }], yourTargets: [], theirTargets: [],
+      yourPicks: [{ id: 'fdp:2027:2:7', displayName: '2027 2nd', season: 2027, round: 2, value: 290 }], evaluate })
+    expect(offers).toEqual([])
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+
+  it('asks for less: takes one asset off the side that is ahead, by its position', async () => {
+    // You get two players worth 600 + 400 for 700. Leaving out the 400 makes it 600 for 700 — closer.
+    const evaluate = vi.fn(async (_give: unknown[], get: Array<{ name?: string }>) =>
+      grade(700, get.length === 1 ? (get[0]!.name === 'Big' ? 600 : 400) : 1000))
+    const offers = await evaluateCounterOffers({ grade: grade(700, 1000), give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Big' }, { kind: 'player', name: 'Small' }], yourTargets: [], theirTargets: [], evaluate })
+    expect(offers[0]).toMatchObject({ action: 'remove', addTo: 'get', index: 1, name: 'Small' })
+  })
+
+  it('never empties a side: no removal when the side ahead holds one asset', async () => {
+    const evaluate = vi.fn(async () => grade(700, 700))
+    await evaluateCounterOffers({ grade: grade(700, 1000), give: [{ kind: 'player', name: 'Given' }],
+      get: [{ kind: 'player', name: 'Only' }], yourTargets: [], theirTargets: [], evaluate })
+    expect(evaluate).not.toHaveBeenCalled()
+  })
 })

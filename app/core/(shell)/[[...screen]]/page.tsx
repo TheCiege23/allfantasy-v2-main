@@ -4844,6 +4844,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             issues={issues}
             allHref="/core/matchup?all=1"
             totalLeagues={playedLeagues.length}
+            /*
+             * Leagues on this list with no team claimed to this account — the board is never handed
+             * them, so without this count they vanished from its arithmetic (82 leagues, "23 · 23").
+             * Null for a pulse cached before `claimedLeagueIds` existed: unknown, not zero.
+             */
+            unclaimedLeagues={
+              matchupPulse.claimedLeagueIds
+                ? playedLeagues.filter((l) => !matchupPulse.claimedLeagueIds!.includes(String((l as { id: unknown }).id))).length
+                : null
+            }
+            /* Named, so a manager can tell WHICH leagues they hold no claimed team in, not just how many. */
+            unclaimedLeagueNames={
+              matchupPulse.claimedLeagueIds
+                ? playedLeagues
+                    .filter((l) => !matchupPulse.claimedLeagueIds!.includes(String((l as { id: unknown }).id)))
+                    .map((l) => String((l as { name?: unknown }).name ?? '').trim())
+                    .filter(Boolean)
+                : undefined
+            }
           />
         )
       ) : activeKey === 'trades' ? (
@@ -4909,7 +4928,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             viewerId={userId}
             league={null}
             leagues={tradeStripLeagues}
-            board={!showAllLeagues && tradesBoard ? <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" totalLeagues={playedLeagues.length} /> : null}
+            board={!showAllLeagues && tradesBoard ? <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" totalLeagues={playedLeagues.length} language={language} /> : null}
           />
         )
       ) : activeKey === 'waivers' ? (

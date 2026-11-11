@@ -17,8 +17,10 @@ import {
   positionTone,
   StockMark,
   TradeAssetPicker,
+  rosterPickAsset,
   type PickedAsset,
 } from '@/components/core-app/screens/TradeAssetPicker'
+import type { EvaluatedCounterOffer } from '@/lib/trade-value-console/counterOffers'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { readPickPreviewValue } from '@/lib/trade-value-console/pickPreview'
 import {
@@ -564,6 +566,18 @@ export function valuedByVerdict(a: PickedAsset): boolean {
   return !(a.kind === 'pick' && a.unpricedReason?.code === 'pick_without_round')
 }
 
+/** "Ask for X" / "Offer X" / "Ask for less: leave out X" / "Send less: keep X" — the counter's heading. */
+function counterHeading(c: EvaluatedCounterOffer): string {
+  if (c.action === 'remove') return c.addTo === 'get' ? 'Ask for less: leave out' : 'Send less: keep'
+  return c.addTo === 'get' ? 'Ask for' : 'Offer'
+}
+
+/** The same, lower-case, after "Make it more even:". */
+function counterVerb(c: EvaluatedCounterOffer): string {
+  if (c.action === 'remove') return c.addTo === 'get' ? 'leave out' : 'keep'
+  return c.addTo === 'get' ? 'ask for' : 'offer'
+}
+
 function toInput(a: PickedAsset) {
   if (a.kind === 'player') {
     return {
@@ -1000,6 +1014,35 @@ export function TradeCenter(props: {
     setResult(null)
     setError(null)
   }, [])
+
+  /*
+   * Apply one counteroffer to the deal on screen (2026-11-11: it can now add one of your picks, or take
+   * an asset off). A removal is matched by its index AND its name — the deal is the one that was
+   * analysed, but a name check costs nothing and stops a stale index removing the wrong asset. A pick
+   * is added exactly as the picker adds it when it is on your roster, so it prices and proposes the same.
+   */
+  const applyCounter = useCallback((counter: EvaluatedCounterOffer) => {
+    const nameOf = (a: PickedAsset | undefined) => (a?.kind === 'player' ? a.name : a?.kind === 'pick' ? a.label : null)
+    if (counter.action === 'remove') {
+      const list = counter.addTo === 'give' ? giveAssets : getAssets
+      const at = counter.index != null && nameOf(list[counter.index]) === counter.name
+        ? counter.index
+        : list.findIndex((a) => nameOf(a) === counter.name)
+      if (at >= 0) removeAsset(counter.addTo, at)
+      return
+    }
+    if (counter.asset.kind === 'pick') {
+      const fromRoster = myRoster?.picks.find((p) => p.pickId === counter.rosterPlayerId)
+      addAsset(counter.addTo, fromRoster
+        ? rosterPickAsset(fromRoster, props.league?.id, rosterData?.pickPreviewBook)
+        : { kind: 'pick', year: counter.asset.year, round: counter.asset.round, label: counter.name, pickId: null, value: counter.marketValue })
+      return
+    }
+    addAsset(counter.addTo, { kind: 'player', name: counter.name,
+      playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
+      providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
+      position: counter.position, team: null, value: counter.marketValue })
+  }, [giveAssets, getAssets, myRoster, props.league?.id, rosterData?.pickPreviewBook, addAsset, removeAsset])
 
   /**
    * Take a pending offer from the inbox and make it the deal under
@@ -2613,15 +2656,11 @@ export function TradeCenter(props: {
             <small>{copy("A fair trade isn’t always an accepted one. Their needs and preferences matter too.")}</small>
             {!depthLocked ? <TradePartnerEvidence notes={result.leverageNotes ?? []} copy={copy} /> : null}
             {!depthLocked && result.counterOffers?.[0] ? <div className="af-tc-partner-counter">
-              <strong>{copy("Make it more even: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
+              <strong>{copy("Make it more even: ")}{copy(counterVerb(result.counterOffers[0]))} {result.counterOffers[0].name}</strong>
               <span>{result.counterOffers[0].balanced ? copy('About even') : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% ${copy('apart')}`}{copy(" once it’s added.")}</span>
               <button type="button" className="af-btn af-btn-ghost" onClick={() => {
                 const counter = result.counterOffers?.[0]
-                if (!counter) return
-                addAsset(counter.addTo, { kind: 'player', name: counter.name,
-                  playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
-                  providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
-                  position: counter.position, team: null, value: counter.marketValue })
+                if (counter) applyCounter(counter)
               }}>{copy("Try this deal")}</button>
             </div> : null}
           </div> : null}
@@ -2659,18 +2698,16 @@ export function TradeCenter(props: {
               <ul>
                 {result.counterOffers!.map(counter => (
                   <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
-                    <strong>{copy(counter.addTo === 'get' ? 'Ask for' : 'Offer')} {counter.name}</strong>
-                    {serverGrade ? <p className="af-tc-row-sub">{copy(counterDecision({before:serverGrade,after:counter.grade,addTo:counter.addTo,cost:result.visualImpact?.packageCost,language}))}</p> : null}
-                    <span className="af-tc-row-sub">{copy('Market value')} {money(counter.marketValue)}{copy(" · ")}{copy('Value in your league')} {money(counter.assetLeagueValue)}</span>
+                    <strong>{copy(counterHeading(counter))} {counter.name}</strong>
+                    {serverGrade ? <p className="af-tc-row-sub">{copy(counterDecision({before:serverGrade,after:counter.grade,addTo:counter.addTo,action:counter.action,kind:counter.asset.kind,cost:result.visualImpact?.packageCost,language}))}</p> : null}
+                    {counter.action === 'remove'
+                      ? <span className="af-tc-row-sub">{copy('Value in your league')} {money(counter.assetLeagueValue)}</span>
+                      : <span className="af-tc-row-sub">{copy('Market value')} {money(counter.marketValue)}{copy(" · ")}{copy('Value in your league')} {money(counter.assetLeagueValue)}</span>}
                     <span className="af-tc-row-sub">
                       {copy('You')} {counter.grade.letter}{copy(" / ")}{theirLabel} {counter.grade.partnerLetter}{copy(" · ")}{counter.balanced ? copy('About even') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`}{copy(" · ")}{money(counter.remainingGap)} {copy('gap left')}
                     </span>
-                    <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
-                      playerId: counter.asset.kind === 'player'
-                        ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
-                      providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
-                      position: counter.position, team: null, value: counter.marketValue })}>
-                      {copy('Add to proposal')}
+                    <button type="button" className="af-btn af-btn-ghost" onClick={() => applyCounter(counter)}>
+                      {copy(counter.action === 'remove' ? 'Take it out' : 'Add to proposal')}
                     </button>
                   </li>
                 ))}
