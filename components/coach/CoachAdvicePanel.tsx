@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import Link from 'next/link';
 import { Loader2, GraduationCap } from 'lucide-react';
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui';
@@ -211,7 +212,7 @@ async function requestLineupOptimizationDefault(input: {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to optimize lineup');
+    throw new Error(readPlanRefusal(res.status, data)?.message ?? (typeof data?.error === 'string' ? data.error : 'Failed to optimize lineup'));
   }
   return data as LineupOptimizationResponse;
 }

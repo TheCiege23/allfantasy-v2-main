@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import DemandHeatmap from './DemandHeatmap'
 import { WhatChangedPanel, TierLabel, WinWindowPanel } from './RankingsMicroPanels'
 import ManagerPsychology from './ManagerPsychology'
@@ -683,7 +684,10 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
           leagueName: data?.leagueName,
         }),
       })
-      if (!res.ok) throw new Error('Failed to generate plan')
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(readPlanRefusal(res.status, body)?.message ?? 'Failed to generate plan')
+      }
       const result = await res.json()
       setYearPlan(result.roadmap)
     } catch (err: any) {
