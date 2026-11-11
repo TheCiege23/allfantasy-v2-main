@@ -1110,6 +1110,8 @@ const spanish: Record<string, string> = {
   'Within the even-value band': 'Dentro del rango equilibrado',
   'value gap remaining': 'de diferencia de valor restante',
   'Add to proposal': 'Añadir a la propuesta',
+  'incl. open roster spot': 'incl. hueco de plantilla libre',
+  'incl. open roster spots': 'incl. huecos de plantilla libres',
   'What we couldn’t see': 'Datos que faltan',
   Format: 'Formato',
   'League & roster shape': 'Tipo de liga y plantilla',
