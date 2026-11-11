@@ -11,6 +11,10 @@ import { useSearchParams } from "next/navigation"
 import { TradeSimulationStrip } from "@/components/ai/sim/TradeSimulationStrip"
 import { IdpTradeLineupWarning } from "@/components/idp/IdpTradeLineupWarning"
 import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
+import { GenericTradeAnalyzer } from "@/components/core-app/screens/GenericTradeAnalyzer"
+import { TradeMarketMovers } from "@/components/trade-market/TradeMarketMovers"
+import "@/components/core-app/af-core.css"
+import "@/components/core-app/af-trade-center.css"
 import {
   GradeLeaguePicker,
   gradeLeagueOptions,
@@ -842,6 +846,15 @@ function TradeHubInner() {
   const previewSender = searchParams?.get("previewSender") ?? ""
   const previewReceiver = searchParams?.get("previewReceiver") ?? ""
   const linkedLeagueIdParam = searchParams?.get("leagueId") ?? ""
+  /*
+   * The open-market grade is the default: it needs no login and no imported league, which is who this
+   * page was failing ("Not graded" without a league). A `?leagueId=` link, or `?mode=league`, opens the
+   * league analysis instead.
+   */
+  const modeParam = searchParams?.get("mode") ?? ""
+  const [mode, setMode] = useState<"market" | "league">(
+    modeParam === "league" || (linkedLeagueIdParam && modeParam !== "market") ? "league" : "market"
+  )
 
   const [sender, setSender] = useState<TradeSide>(() => emptySide("Sender Team", previewSender))
   const [receiver, setReceiver] = useState<TradeSide>(() => emptySide("Receiver Team", previewReceiver))
@@ -1103,17 +1116,51 @@ function TradeHubInner() {
 
         <div className="mt-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%),#0a0d1a] p-4 sm:p-8">
           <div className="max-w-3xl">
-            <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Premium Analysis</div>
+            <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">
+              {mode === "market" ? "Free · No import needed" : "League analysis"}
+            </div>
             <h2 className="mt-3 text-2xl font-black leading-tight sm:text-4xl">
               Grade a trade before you send it.
             </h2>
             <p className="mt-4 text-sm leading-6 text-white/60 sm:text-base">
-              Put the players and picks on each side, choose the league it&apos;s in, and see a letter grade for both
-              teams against the current market, with Chimmy&apos;s read on the deal.
+              Put the players, picks and FAAB on each side and get a letter grade for both teams — no league
+              import needed. Values come from the current market, adjusted by what managers actually paid in
+              completed trades across AllFantasy leagues.
             </p>
           </div>
         </div>
 
+        <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="How to grade this trade" data-testid="trade-evaluator-mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "market"}
+            onClick={() => setMode("market")}
+            data-testid="trade-evaluator-mode-market"
+            className={`touch-manipulation min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "market" ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100" : "border-white/10 text-white/60 hover:text-white"}`}
+          >
+            Quick grade — no league needed
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "league"}
+            onClick={() => setMode("league")}
+            data-testid="trade-evaluator-mode-league"
+            className={`touch-manipulation min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "league" ? "border-violet-400/60 bg-violet-500/15 text-violet-100" : "border-white/10 text-white/60 hover:text-white"}`}
+          >
+            Grade in my league
+          </button>
+        </div>
+
+        {mode === "market" ? (
+          <div className="af-core mt-2" data-testid="trade-evaluator-market-mode">
+            <GenericTradeAnalyzer />
+            <TradeMarketMovers limit={6} heading="What real trades say right now" testId="trade-evaluator-market-movers" />
+          </div>
+        ) : null}
+
+        {mode === "league" ? (<>
         <InContextMonetizationCard
           className="mt-6"
           title="Trade Analyzer access"
@@ -1590,6 +1637,7 @@ function TradeHubInner() {
             </p>
           </div>
         ) : null}
+        </>) : null}
       </div>
     </div>
   )

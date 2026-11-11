@@ -21,7 +21,12 @@
 
 import { signedGapPct } from '@/lib/decision-os/trade/tradeGrade'
 
-export type LeagueValueAdjustmentKind = 'scoring' | 'need'
+/**
+ * `tradeMarket`: what managers actually paid for the player across completed trades in AllFantasy-
+ * connected leagues, against what the chart says (`lib/trade-market/afTradeMarketReads.ts`). Bounded
+ * at ±12% by the writer, and only from a fresh, centred run — so it can never dominate the others.
+ */
+export type LeagueValueAdjustmentKind = 'scoring' | 'need' | 'tradeMarket'
 
 export type LeagueValueAdjustment = {
   kind: LeagueValueAdjustmentKind

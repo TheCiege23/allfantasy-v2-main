@@ -7,7 +7,7 @@ import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { leagueTypeBasis, type LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { loadLeagueForTrade, type LoadedTradeLeague } from '@/lib/trade-value-console/league-loader'
-import { gradeBaseOf, gradeOnLeagueValue, isNonPlayerLine, type LeagueGrade } from '@/lib/trade-value-console/leagueGrade'
+import { gradeBaseOf, gradeOnLeagueValue, isNonPlayerLine, type LeagueGrade, type LeagueGradeInput } from '@/lib/trade-value-console/leagueGrade'
 import {
   applyChartTePremium,
   resolveAssets,
@@ -176,6 +176,11 @@ export async function gradePricedSides(args: {
   allowGenericMarketGrade?: boolean
   /** Sentences the basis must carry about how some lines were priced (e.g. devy prospects). */
   basisNotes?: readonly string[]
+  /**
+   * The AllFantasy trade market's move per line, index-aligned with the lines. Only the trade console
+   * passes it today; every other grader omits it and grades exactly as before.
+   */
+  tradeMarket?: LeagueGradeInput['tradeMarket']
   mark?: (name: string) => void
 }): Promise<{ leagueGrade: LeagueGrade; grade: TradeGradeView; needFactors: NeedFactors | null }> {
   const { chart } = args
@@ -211,6 +216,7 @@ export async function gradePricedSides(args: {
     league: chart.marketCtx ? { scoringSettings: chart.marketCtx.scoring.settings } : null,
     chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
     needFactors: null,
+    tradeMarket: args.tradeMarket ?? null,
   })
 
   const rosterFitGrade = needFactors && !needFactors.gap
@@ -222,6 +228,7 @@ export async function gradePricedSides(args: {
         league: chart.marketCtx ? { scoringSettings: chart.marketCtx.scoring.settings } : null,
         chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
         needFactors,
+        tradeMarket: args.tradeMarket ?? null,
       })
     : null
 

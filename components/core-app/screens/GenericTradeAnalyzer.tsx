@@ -20,6 +20,11 @@ type Result = {
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
   dataGaps?: string[]
   error?: string
+  /** What completed trades in AllFantasy-connected leagues say about these players (`tradeMarketOverlay.ts`). */
+  tradeMarket?: {
+    generatedAt: string | null
+    lines: Array<{ side: 'give' | 'get'; name: string; adjustmentPercent: number; trades: number; chartValue: number | null; tradeMarketValue: number | null }>
+  } | null
 }
 
 const SPORTS = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'] as const
@@ -48,9 +53,19 @@ const SCORING_CHOICES: Readonly<Record<string, { label: string; choices: Readonl
   },
 }
 
+/** "$25 FAAB", "25 faab", "FAAB 25" → a FAAB asset. Exported for its test. */
+export function parseFaabLine(line: string): number | null {
+  const m = /^(?:\$?\s*(\d{1,5})\s*(?:faab|fab)|(?:faab|fab)\s*\$?\s*(\d{1,5}))$/i.exec(line.trim())
+  if (!m) return null
+  const amount = Number(m[1] ?? m[2])
+  return Number.isFinite(amount) && amount > 0 ? amount : null
+}
+
 function assets(text: string, sport: string, verified: Record<string, string>) {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((name) => {
-    const pick = /^(20\d{2})\s+(?:(?:round|ronda)\s*)?([1-9]\d?)(?:st|nd|rd|th)?(?:\s+(early|mid|late|temprana|media|tardía|tardia))?$/i.exec(name)
+    const faab = parseFaabLine(name)
+    if (faab != null) return { kind: 'faab' as const, amount: faab }
+    const pick =/^(20\d{2})\s+(?:(?:round|ronda)\s*)?([1-9]\d?)(?:st|nd|rd|th)?(?:\s+(early|mid|late|temprana|media|tardía|tardia))?$/i.exec(name)
     if (pick) return { kind: 'pick' as const, year: Number(pick[1]), round: Number(pick[2]), tier: ({early:'early',mid:'mid',late:'late',temprana:'early',media:'mid',tardía:'late',tardia:'late'} as const)[pick[3]?.toLowerCase() as 'early'|'mid'|'late'|'temprana'|'media'|'tardía'|'tardia'], label: name }
     return { kind: 'player' as const, name, ...(verified[name] ? { playerId: verified[name] } : {}), sportHint: sport }
   })
@@ -123,6 +138,22 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
   const [pickRound, setPickRound] = useState(1)
   const [pickTier, setPickTier] = useState<'early' | 'mid' | 'late'>('mid')
   const [pickOverall, setPickOverall] = useState('')
+  const [faabAmount, setFaabAmount] = useState('')
+  const [waiverBudget, setWaiverBudget] = useState(100)
+
+  function addFaab(side: 'A' | 'B') {
+    const amount = Number(faabAmount)
+    if (!Number.isInteger(amount) || amount < 1 || amount > waiverBudget) {
+      setError(`FAAB must be a whole amount from 1 to ${waiverBudget}.`)
+      return
+    }
+    const line = `$${amount} FAAB`
+    if (side === 'A') setTeamA((current) => [current.trim(), line].filter(Boolean).join('\n'))
+    else setTeamB((current) => [current.trim(), line].filter(Boolean).join('\n'))
+    setFaabAmount('')
+    setResult(null)
+    setError(null)
+  }
 
   function addPick(side: 'A' | 'B') {
     if (!Number.isInteger(pickYear) || pickYear < new Date().getFullYear() || pickYear > new Date().getFullYear() + 8) {
@@ -221,6 +252,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           sideGive,
           sideGet,
           skipAi: true,
+          waiverBudget,
           ...(scoring ? { scoringFormat: scoring } : {}),
         }),
       })
@@ -242,7 +274,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
         <div>
           <div className="af-label">{copy("No league connection needed")}</div>
           <h2 id="af-tc-generic-title">{copy("Quick trade analyzer")}</h2>
-          <p>{copy("Grade any trade with general market values. Put each player or pick a team sends on its own line.")}</p>
+          <p>{copy("Grade any trade on current market values, adjusted by what managers actually paid in completed trades across AllFantasy leagues. Put each player, pick or FAAB amount a team sends on its own line.")}</p>
         </div>
         <label className="af-tc-generic-upload">
           {copy(extracting ? 'Reading screenshot…' : 'Import screenshot')}
@@ -304,7 +336,16 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
         <button type="button" onClick={() => addPick('A')}>{copy("Add to A")}</button>
         <button type="button" onClick={() => addPick('B')}>{copy("Add to B")}</button>
       </div>
-      <p className="af-tc-generic-hint">{copy("If you know the overall pick number, we treat it as early, mid or late (based on a 12-team league). This uses general market values only — no league scoring, roster needs or trade rules. Screenshots are sent to our image reader to pull out the players and aren’t saved.")}</p>
+      {sport === 'NFL' ? (
+        <div className="af-tc-generic-pick" data-testid="generic-faab-row">
+          <strong>{copy("Add FAAB")}</strong>
+          <label>{copy("Amount ")}<input type="number" min={1} max={waiverBudget} value={faabAmount} onChange={(event) => setFaabAmount(event.target.value)} placeholder="25" /></label>
+          <label>{copy("League budget ")}<input type="number" min={1} max={10000} value={waiverBudget} onChange={(event) => { setWaiverBudget(Math.max(1, Math.min(10000, Number(event.target.value) || 100))); setResult(null) }} /></label>
+          <button type="button" onClick={() => addFaab('A')}>{copy("Add FAAB to A")}</button>
+          <button type="button" onClick={() => addFaab('B')}>{copy("Add FAAB to B")}</button>
+        </div>
+      ) : null}
+      <p className="af-tc-generic-hint">{copy("If you know the overall pick number, we treat it as early, mid or late (based on a 12-team league). FAAB is priced against the league budget you enter. This uses market values only — no league scoring, roster needs or trade rules. Screenshots are sent to our image reader to pull out the players and aren’t saved.")}</p>
       <button type="button" className="af-btn" onClick={() => void analyze()} disabled={busy || extracting || Boolean(imageName && !screenshotConfirmed)}>
         {copy(busy ? 'Analyzing…' : 'Analyze trade')}
       </button>
@@ -318,8 +359,22 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                 <div><span>{copy("Team B")}</span><strong>{copy(result.grade.partnerLetter)}</strong><small>{copy("Receives Team A assets")}</small><TradeReaction letter={result.grade.partnerLetter} /></div>
               </div>
               <h3>{copy(result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value')}</h3>
-              <p>{copy("Team A receives ")}{copy(result.grade.getMarket.toLocaleString(locale))}{copy(" in market value and sends ")}{copy(result.grade.giveMarket.toLocaleString(locale))}{copy("; Team B is the opposite. The gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the bigger side.")} <TopicTip topic="tradeGrade" /></p>
+              <p>{copy("Team A receives ")}{copy((result.grade.getValue ?? result.grade.getMarket).toLocaleString(locale))}{copy(" in market value and sends ")}{copy((result.grade.giveValue ?? result.grade.giveMarket).toLocaleString(locale))}{copy("; Team B is the opposite. The gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the bigger side.")} <TopicTip topic="tradeGrade" /></p>
               <p className="af-tc-generic-hint">{copy("This grade compares market value only. It doesn’t account for league scoring, roster needs, injuries, whether they’ll accept, or how players will perform.")}</p>
+              {result.tradeMarket?.lines.length ? (
+                <div className="af-tc-generic-market" data-testid="generic-trade-market">
+                  <strong>{copy("What real trades say")}</strong>
+                  <p className="af-tc-generic-hint">{copy("These players' values were moved by what managers actually paid for them in completed trades across AllFantasy-connected leagues. The letter above already includes these moves.")}</p>
+                  <ul>{result.tradeMarket.lines.map((line, index) => (
+                    <li key={`${line.side}-${line.name}-${index}`}>
+                      <span>{line.name}</span>
+                      <strong className={line.adjustmentPercent >= 0 ? 'af-tc-generic-up' : 'af-tc-generic-down'}>{line.adjustmentPercent > 0 ? '+' : ''}{line.adjustmentPercent}%</strong>
+                      <small>{copy(`${line.trades} completed trades`)}{line.chartValue != null && line.tradeMarketValue != null ? copy(` · chart ${line.chartValue.toLocaleString(locale)} → ${line.tradeMarketValue.toLocaleString(locale)}`) : ''}</small>
+                    </li>
+                  ))}</ul>
+                  {result.tradeMarket.generatedAt ? <small className="af-tc-generic-hint">{copy(`Trade market updated ${new Date(result.tradeMarket.generatedAt).toLocaleDateString(locale)}.`)}</small> : null}
+                </div>
+              ) : null}
               <p className="af-tc-generic-hint">{copy("Value basis: ")}{copy(result.grade.basis)}{copy(/[.!?]\s*$/.test(result.grade.basis) ? " Valuation checked " : ". Valuation checked ")}{copy(result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString(locale) : 'at analysis time; source date unavailable')}{copy(".")}</p>
               <TradeDecisionSummary grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeEvidencePanel grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
@@ -331,7 +386,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                   <ul>{result.grade.lines.map((line, index) => (
                     <li key={`${line.side}-${line.name}-${index}`}>
                       <strong>{copy(line.side === 'give' ? 'Team A sends' : 'Team B sends')}{copy(" · ")}{line.name}</strong>
-                      <span>{copy(line.marketValue == null ? 'Value unavailable' : `${line.marketValue.toLocaleString(locale)} market value`)}</span>
+                      <span>{copy(line.marketValue == null ? 'Value unavailable' : line.leagueValue != null && line.leagueValue !== line.marketValue ? `${line.leagueValue.toLocaleString(locale)} graded value (chart ${line.marketValue.toLocaleString(locale)})` : `${line.marketValue.toLocaleString(locale)} market value`)}</span>
                       <small>{copy(line.valueSource ?? line.source ?? 'Source unavailable')}{copy(line.valueAsOf && Number.isFinite(Date.parse(line.valueAsOf)) ? ` · as of ${new Date(line.valueAsOf).toLocaleDateString(locale)}` : ' · source date unavailable')}</small>
                     </li>
                   ))}

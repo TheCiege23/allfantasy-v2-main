@@ -236,6 +236,24 @@ export type TradeIntelligence = {
   syncedDataHighlights?: string[]
 }
 
+/** One asset the AllFantasy trade market moved, as shown beside the grade. */
+export type TradeConsoleTradeMarketLine = {
+  side: 'give' | 'get'
+  name: string
+  /** The move on the chart value, in percent (bounded ±12 by the writer). */
+  adjustmentPercent: number
+  /** Completed trades behind the move. */
+  trades: number
+  chartValue: number | null
+  tradeMarketValue: number | null
+}
+
+export type TradeConsoleTradeMarket = {
+  /** When the market values were last rebuilt from completed trades (ISO). */
+  generatedAt: string | null
+  lines: TradeConsoleTradeMarketLine[]
+}
+
 export type TradeConsoleAnalyzeResult = {
   visualImpact?: import('@/lib/decision-os/trade/loadVisualImpact').VisualImpactResult | null
   evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
@@ -268,9 +286,17 @@ export type TradeConsoleAnalyzeResult = {
     label: string
     scoringAdjusted: boolean
     needAdjusted: boolean
+    /** True when at least one line moved on the AllFantasy trade market (completed trades). */
+    tradeMarketAdjusted?: boolean
     /** Why roster need could not be priced, when it could not. Null when it ran or was not attempted. */
     needGap: string | null
   }
+  /**
+   * The AllFantasy trade market's contribution, per asset — values from trades that actually happened
+   * in AllFantasy-connected leagues. Absent when the market does not apply to this chart (redraft,
+   * superflex, non-NFL) or has no fresh run.
+   */
+  tradeMarket?: TradeConsoleTradeMarket | null
   /**
    * THE grade for this deal — letter, label and recommendation — from the one grader every trade
    * surface uses (`lib/decision-os/trade/leagueTradeGrader.ts`). The Trade Center reads its letters from
