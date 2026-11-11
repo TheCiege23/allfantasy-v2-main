@@ -43,6 +43,8 @@ export type LeagueRun = {
   rounds: number
   findings: Finding[]
   stats: Record<string, unknown>
+  /** Dynasty unless SIM_LEAGUE_TYPE=redraft: the same create → join → draft → season, renewed instead of carried over. */
+  leagueType?: 'dynasty' | 'redraft'
 }
 
 const COMMISH = { id: 'sim-commish', email: 'commish@sim.allfantasy.test', name: 'Sim Commish' }
@@ -88,8 +90,9 @@ function fitDynastySetupToTeamCount<T extends { playoffTeamCount: number; playof
 
 // ── 1. Create from the wizard ─────────────────────────────────────────────
 
-export async function createDynastyLeague(env: SimEnv, input: { sport: DynastySport; teamCount: number; draft: StartupDraftKind }): Promise<LeagueRun> {
-  const run: LeagueRun = { sport: input.sport, teamCount: input.teamCount, draft: input.draft, leagueId: null, commissionerId: COMMISH.id, managerIds: [], rounds: 0, findings: [], stats: {} }
+export async function createDynastyLeague(env: SimEnv, input: { sport: DynastySport; teamCount: number; draft: StartupDraftKind; leagueType?: 'dynasty' | 'redraft' }): Promise<LeagueRun> {
+  const leagueType = input.leagueType ?? 'dynasty'
+  const run: LeagueRun = { sport: input.sport, teamCount: input.teamCount, draft: input.draft, leagueId: null, commissionerId: COMMISH.id, managerIds: [], rounds: 0, findings: [], stats: {}, leagueType }
   const { DEFAULT_V2_STATE, getDefaultDynastySetup } = await import('@/lib/create-league-v2/state')
   const { analyzeCreateLeagueCompletion } = await import('@/lib/create-league-v2/form-completion')
   const { getScoringPresetOptionsForSelection } = await import('@/lib/create-league-v2/rules-engine')
@@ -98,20 +101,22 @@ export async function createDynastyLeague(env: SimEnv, input: { sport: DynastySp
   await env.db.appUser.upsert({ where: { id: COMMISH.id }, create: { id: COMMISH.id, email: COMMISH.email, username: COMMISH.id }, update: {} })
   env.signIn(COMMISH)
   const wizardDraft = input.draft === 'snake_3rr' ? 'snake' : input.draft
-  const presets = getScoringPresetOptionsForSelection({ leagueType: 'dynasty', sport: input.sport, idpSelected: false } as never)
+  const presets = getScoringPresetOptionsForSelection({ leagueType, sport: input.sport, idpSelected: false } as never)
   const state = {
     ...DEFAULT_V2_STATE,
-    leagueType: 'dynasty',
+    leagueType,
     leagueTypeTouched: true,
     sport: input.sport,
     teamCount: input.teamCount,
     draftType: wizardDraft,
     thirdRoundReversal: input.draft === 'snake_3rr',
     draftScheduleLater: true,
-    name: `Sim Dynasty ${input.sport} ${input.teamCount} ${input.draft}`,
+    name: `Sim ${leagueType === 'redraft' ? 'Redraft' : 'Dynasty'} ${input.sport} ${input.teamCount} ${input.draft}`,
     nameTouched: true,
     scoringPresetId: presets[0]?.id ?? '',
-    dynasty: fitDynastySetupToTeamCount({ ...getDefaultDynastySetup(input.sport, wizardDraft as never), startupDraftType: wizardDraft }, input.teamCount),
+    ...(leagueType === 'dynasty'
+      ? { dynasty: fitDynastySetupToTeamCount({ ...getDefaultDynastySetup(input.sport, wizardDraft as never), startupDraftType: wizardDraft }, input.teamCount) }
+      : {}),
   } as any
   run.stats.scoringPreset = state.scoringPresetId
 
@@ -186,6 +191,33 @@ export async function joinManagers(env: SimEnv, run: LeagueRun): Promise<void> {
   if (open.length) run.findings.push({ code: 'SEATS_STILL_OPEN', stage: 'join', message: `${open.length} seat(s) still open after every manager joined.` })
   const people = new Set(seats.filter((s) => !s.startsWith('open-slot-')))
   if (people.size !== seats.filter((s) => !s.startsWith('open-slot-')).length) run.findings.push({ code: 'MANAGER_HOLDS_TWO_SEATS', stage: 'join', message: 'One user holds more than one seat.' })
+
+}
+
+/**
+ * What the draft room shows for each team once everyone has joined: the board reads the session's
+ * `slotOrder`, and a joined manager's slot must not still read "Open Team N".
+ */
+// Called once the player pool exists: opening the draft room warms (and caches) the pool, and a pool
+// warmed before any player is on file holds only the synthetic team defenses — which an automatic
+// draft then drafts, and stalls (a simulation ordering artifact; production's player table predates
+// every league).
+export async function checkDraftRoomNames(env: SimEnv, run: LeagueRun): Promise<void> {
+  const { GET } = await import('@/app/api/leagues/[leagueId]/draft/session/route')
+  const { NextRequest } = await import('next/server')
+  env.signIn(COMMISH)
+  const res = await GET(new NextRequest(`http://sim.allfantasy.test/api/leagues/${run.leagueId}/draft/session`), { params: Promise.resolve({ leagueId: run.leagueId! }) } as never)
+  const body = (await res.json().catch(() => null)) as any
+  const slots: Array<{ slot?: number; rosterId?: string; displayName?: string; open?: boolean }> = body?.session?.slotOrder ?? []
+  const owners = new Map((rowsOf(env.db, 'Roster') as any[]).filter((r) => r.leagueId === run.leagueId).map((r) => [String(r.id), String(r.platformUserId ?? '')]))
+  const joined = slots.filter((s) => s.rosterId && !String(owners.get(String(s.rosterId)) ?? '').startsWith('open-slot-'))
+  const stale = joined.filter((s) => /^open team\b/i.test(String(s.displayName ?? '')) || s.open === true)
+  run.stats.draftRoomNames = { status: res.status, slots: slots.length, joined: joined.length, stillOpen: stale.length, sample: slots.slice(0, 3).map((s) => s.displayName ?? null) }
+  if (res.status !== 200 || slots.length === 0) {
+    run.findings.push({ code: 'DRAFT_ROOM_NOT_READABLE', stage: 'join', message: `The draft room's session returned ${res.status} with ${slots.length} slots.` })
+  } else if (stale.length) {
+    run.findings.push({ code: 'DRAFT_ROOM_SHOWS_OPEN_TEAM', stage: 'join', message: `${stale.length} of ${joined.length} joined managers still show as ${JSON.stringify(stale.slice(0, 3).map((s) => s.displayName))} in the draft room.` })
+  }
 }
 
 // ── 3. Player pool, from the positions the draft enforces ─────────────────
@@ -317,11 +349,16 @@ export async function seedPlayerPool(env: SimEnv, run: LeagueRun): Promise<PoolP
   const totalNeed = Object.values(singleNeed).reduce((a, b) => a + b, 0)
   const size = Math.ceil(run.teamCount * run.rounds * 1.5) + 40
   const pool: PoolPlayer[] = []
+  // Real team abbreviations: a redraft pool keeps only players on a current team of the sport (its
+  // current-roster reconciliation), so made-up codes left an NFL redraft pool holding only the 32
+  // synthetic team defenses — and an automatic draft drafted those and stalled.
+  const { getTeamMetadataForSport } = await import('@/lib/sport-teams/SportTeamMetadataRegistry')
+  const teams = getTeamMetadataForSport(run.sport).map((t) => t.abbreviation.toUpperCase()).filter(Boolean)
   for (const position of positions) {
     const share = (singleNeed[position] ?? 0.5) / totalNeed
     const n = Math.max(run.teamCount * 3, Math.ceil(size * share))
     for (let i = 0; i < n; i += 1) {
-      pool.push({ id: `sim-${run.sport.toLowerCase()}-${position.toLowerCase()}-${i + 1}`, name: simPlayerName(run.sport, position, i), position, team: `T${(i * 7) % 30}`, adp: i + 1 + positions.indexOf(position) * 0.01 })
+      pool.push({ id: `sim-${run.sport.toLowerCase()}-${position.toLowerCase()}-${i + 1}`, name: simPlayerName(run.sport, position, i), position, team: teams.length ? teams[(i * 7) % teams.length]! : `T${(i * 7) % 30}`, adp: i + 1 + positions.indexOf(position) * 0.01 })
     }
   }
   pool.sort((a, b) => a.adp - b.adp)
@@ -335,12 +372,36 @@ export async function seedPlayerPool(env: SimEnv, run: LeagueRun): Promise<PoolP
         ...(run.sport === 'NFL' ? { sleeperId: p.id } : {}),
         ...(run.sport === 'SOCCER' ? { age: 19 + Math.floor(p.adp) % 13 } : {}),
         source: run.sport === 'SOCCER' ? 'rolling_insights' : 'simulation',
+        // A redraft pool keeps only "live" players (lib/draft-room/currentProRoster.ts): fetched in the last
+        // 72 hours, on a team, with an active roster status (Rolling Insights spells it ACT).
+        status: run.sport === 'SOCCER' ? 'ACT' : 'ACTIVE',
+        fetchedAt: new Date(),
         expiresAt: new Date('2030-01-01T00:00:00Z'),
       })),
     })
   }
+  await seedPoolAdp(env, run, pool)
   run.stats.poolSize = pool.length
   return pool
+}
+
+/**
+ * The market ADP the draft pool ranks by (`AdpDataRecord`, filled in production by the ADP importer).
+ * Without it the resolved pool falls back to ALPHABETICAL order, so an automatic draft and the auction's
+ * automatic nominations took players by name — the stars stayed in free agency, every rostered player
+ * sat below replacement, and no trade in those leagues could be graded (dynasty simulation 2026-11-09:
+ * "Nobody in this deal is projected above the best free agent at his position"). The same ADP the pool
+ * already carries, under every scoring and format name the pool may ask for.
+ */
+async function seedPoolAdp(env: SimEnv, run: LeagueRun, pool: PoolPlayer[]): Promise<void> {
+  const league = rowsOf(env.db, 'League').find((l: any) => l.id === run.leagueId) as any
+  const season = Math.min(Number(league?.season ?? new Date().getUTCFullYear()), new Date().getUTCFullYear())
+  const scorings = [...new Set(['ppr', 'halfPPR', 'standard', String(league?.scoring ?? '').trim()].filter(Boolean))]
+  const existing = new Set((rowsOf(env.db, 'AdpDataRecord') as any[]).map((r) => `${r.sport}|${r.format}|${r.scoring}|${r.playerId}`))
+  const data = (['dynasty', 'redraft'] as const).flatMap((format) => scorings.flatMap((scoring) => pool
+    .filter((p) => !existing.has(`${run.sport}|${format}|${scoring}|${p.id}`))
+    .map((p) => ({ sport: run.sport, format, scoring, playerId: p.id, playerName: p.name, position: p.position, team: p.team, adp: p.adp, week: 1, season, source: 'sleeper' }))))
+  if (data.length) await env.db.adpDataRecord.createMany({ data })
 }
 
 /**

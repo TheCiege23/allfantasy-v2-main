@@ -151,7 +151,8 @@ export async function weeklyScenarios(env: SimEnv, run: LeagueRun, ctx: WeekCtx)
   if (ctx.week === 7) await step('health', () => leagueHealth(env, run, ctx, S))
   if (ctx.week === 8) await step('takeover', () => takeover(env, run, ctx, S, 'midseason'))
   if (ctx.week === 10) await step('chimmy', () => chimmySweep(env, run, ctx, S))
-  if (ctx.week === ctx.regularWeeks) await step('rookie-order-setting', () => setLiveRookieOrder(env, run, S))
+  // Rookie draft order is a dynasty feature; a redraft league renews into a fresh draft instead.
+  if (ctx.week === ctx.regularWeeks && run.leagueType !== 'redraft') await step('rookie-order-setting', () => setLiveRookieOrder(env, run, S))
 }
 
 /** Before the lineups that tanking reads are scored: the tankers start injured players over healthy bench. */
@@ -159,8 +160,18 @@ export async function beforeWeekScoring(env: SimEnv, run: LeagueRun, ctx: WeekCt
   if (!run.leagueId || ctx.week < 3 || ctx.week > 7) return
   const tanker = tankerFor(env, run, ctx.week)
   if (!tanker) return
-  const starters = holdings(env, tanker.seasonRosterId).filter((p) => isStarter(p.slotType))
-  for (const p of starters.slice(0, 3)) await env.db.redraftRosterPlayer.update({ where: { id: p.id }, data: { injuryStatus: 'Out' } })
+  const held = holdings(env, tanker.seasonRosterId)
+  // Tank the starters a healthy BENCH player could have replaced: that is what the scan looks for, and in
+  // a sport with position-specific slots (baseball's C, SS, P) an arbitrary three can have no eligible
+  // substitute at all — a lineup the scan rightly does not call tanking.
+  const { allowedPositionsForSlot } = await import('@/lib/redraft/lineupValidation')
+  const benchPositions = held.filter((p) => !isStarter(p.slotType) && !p.injuryStatus).map((p) => String(p.position ?? '').toUpperCase())
+  const replaceable = (p: any) => allowedPositionsForSlot(run.sport, String(p.slotType ?? '')).some((pos) => benchPositions.includes(pos))
+  const starters = held.filter((p) => isStarter(p.slotType)).sort((a, b) => Number(replaceable(b)) - Number(replaceable(a)))
+  const tanked = starters.slice(0, 3)
+  const S0 = (run.stats.scenarios ??= {}) as Record<string, any>
+  ;(S0.tankReplaceable ??= {})[ctx.week] = tanked.filter(replaceable).length
+  for (const p of tanked) await env.db.redraftRosterPlayer.update({ where: { id: p.id }, data: { injuryStatus: 'Out' } })
   // The tanker SAVES that lineup on the lineup screen — what the tanking scan reads (afRosterLineupAssignment).
   const roster = (rowsOf(env.db, 'Roster') as any[]).find((r) => r.id === tanker.rosterId)
   signInAs(env, tanker.userId)
@@ -189,7 +200,10 @@ async function integritySetup(env: SimEnv, run: LeagueRun, S: Record<string, any
       tankingStartWeek: 1,
       tankingIllegalLineupCheck: true,
       holdFlaggedTradesMode: 'severe',
-      tankingPenalties: { enabled: true, penalty: 'forfeit_pick', pickAtStrike: 2, pickRound: 1 },
+      // A redraft league has no future picks: losing a pick (and lottery odds) are dynasty penalties. FAAB is not.
+      tankingPenalties: run.leagueType === 'redraft'
+        ? { enabled: true, penalty: 'faab', pickAtStrike: 2, faabPercent: 25 }
+        : { enabled: true, penalty: 'forfeit_pick', pickAtStrike: 2, pickRound: 1 },
     },
   }, { leagueId: run.leagueId! })
   S.integritySetup = { status: put.status, error: (put.body as any)?.error ?? null }
@@ -199,7 +213,40 @@ async function integritySetup(env: SimEnv, run: LeagueRun, S: Record<string, any
 
 // ── Waivers (the waiver screen's routes: claims → process) ───────────────────
 
+/**
+ * The league's first waiver run, with no claims in it. In production it runs on schedule whether or not
+ * anyone filed a claim, and it is what opens trading after the draft ("Rosters are locked after the draft.
+ * Trades open after the first waiver run"). A skipped waiver scenario must not leave the lock on.
+ */
+async function firstWaiverRun(env: SimEnv, run: LeagueRun, S: Record<string, any>) {
+  // A run with no claims in it does not count as the first waiver run (the lock stayed on, measured), so
+  // one manager claims a free agent first — as some manager in a real league does before week 1.
+  const leagueId = run.leagueId!
+  const seat = seats(env, run).find((s) => s.seasonRosterId)
+  const rostered = new Set((rowsOf(env.db, 'RedraftRosterPlayer') as any[]).filter((p) => !p.droppedAt).map((p) => String(p.playerId)))
+  const fa = (rowsOf(env.db, 'SportsPlayer') as any[]).find((p) => p.sport === run.sport && /^sim-/.test(String(p.id)) && !rostered.has(String(p.id)))
+  const drop = seat ? holdings(env, seat.seasonRosterId).filter((p) => !isStarter(p.slotType))[0] : undefined
+  if (seat && fa && drop && !(run.sport === 'NBA' && run.leagueType === 'redraft')) {
+    signInAs(env, seat.userId)
+    const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
+    const claim = await call(claims.POST, `/api/waiver-wire/leagues/${leagueId}/claims`, { method: 'POST', body: { addPlayerId: fa.id, dropPlayerId: drop.playerId, faabBid: 1 } }, { leagueId })
+    S.firstWaiverClaim = { status: claim.status, error: (claim.body as any)?.error ?? null }
+  }
+  signInAs(env, run.commissionerId)
+  const proc = await import('@/app/api/waiver-wire/leagues/[leagueId]/process/route')
+  const ran = await call(proc.POST, `/api/waiver-wire/leagues/${run.leagueId}/process`, { method: 'POST', body: {} }, { leagueId: run.leagueId! })
+  S.firstWaiverRun = { status: ran.status, error: (ran.body as any)?.error ?? null }
+}
+
 async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<string, any>) {
+  // NBA redraft waivers act only on players verified against current NBA rosters (Rolling Insights /
+  // TheSportsDB rows with numeric provider ids — lib/waiver-wire/current-nba-player-pool.ts). The
+  // simulation's players carry no provider ids, so this path cannot be exercised here: say so.
+  if (run.sport === 'NBA' && run.leagueType === 'redraft') {
+    ;(S.skippedForData ??= []).push(`waivers: needs verified current NBA roster data`)
+    await firstWaiverRun(env, run, S)
+    return
+  }
   const leagueId = run.leagueId!
   const db = env.db
   const all = seats(env, run)
@@ -211,7 +258,10 @@ async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
     ctx.add({ code: 'NO_FREE_AGENTS', stage: 'season', message: 'No unrostered players to claim.' })
     return
   }
-  if (tooFewSeats(all, 5, S, 'waivers')) return
+  if (tooFewSeats(all, 5, S, 'waivers')) {
+    await firstWaiverRun(env, run, S)
+    return
+  }
   const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
   const [a, b, c] = [all[2]!, all[3]!, all[4]!]
   const dropOf = (s: Seat) => holdings(env, s.seasonRosterId).filter((p) => !isStarter(p.slotType)).sort((x, y) => String(y.playerId).localeCompare(String(x.playerId)))[0]
@@ -253,20 +303,37 @@ async function waivers(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
 }
 
 async function freeAgentAdd(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<string, any>) {
+  // NBA redraft waivers act only on players verified against current NBA rosters (Rolling Insights /
+  // TheSportsDB rows with numeric provider ids — lib/waiver-wire/current-nba-player-pool.ts). The
+  // simulation's players carry no provider ids, so this path cannot be exercised here: say so.
+  if (run.sport === 'NBA' && run.leagueType === 'redraft') {
+    ;(S.skippedForData ??= []).push(`free-agent add: needs verified current NBA roster data`)
+    return
+  }
   const leagueId = run.leagueId!
   const rostered = new Set((rowsOf(env.db, 'RedraftRosterPlayer') as any[]).filter((p) => !p.droppedAt).map((p) => String(p.playerId)))
   const fa = (rowsOf(env.db, 'SportsPlayer') as any[]).find((p) => p.sport === run.sport && /^sim-/.test(String(p.id)) && !rostered.has(String(p.id)) && p.position === 'TE')
   if (tooFewSeats(seats(env, run), 6, S, 'free-agent add')) return
   const seat = seats(env, run)[5]!
   const drop = holdings(env, seat.seasonRosterId).filter((p) => !isStarter(p.slotType))[0]
-  if (!fa || !drop) return
+  if (!fa || !drop) {
+    S.freeAgent = { skipped: !fa ? 'no unrostered TE in the pool' : 'no bench player to drop' }
+    return
+  }
   signInAs(env, seat.userId)
   const route = await import('@/app/api/waiver-wire/leagues/[leagueId]/add-drop/route')
   const res = await call(route.POST, `/api/waiver-wire/leagues/${leagueId}/add-drop`, { method: 'POST', body: { addPlayerId: fa.id, dropPlayerId: drop.playerId } }, { leagueId })
   const on = holdings(env, seat.seasonRosterId).some((p) => String(p.playerId) === fa.id)
   const stillHasDrop = holdings(env, seat.seasonRosterId).some((p) => String(p.playerId) === String(drop.playerId))
   S.freeAgent = { status: res.status, error: (res.body as any)?.error ?? null, added: on, dropped: !stillHasDrop }
-  if (res.status !== 200) ctx.add({ code: 'FREE_AGENT_ADD_REFUSED', stage: 'season', message: `${res.status} ${JSON.stringify(res.body).slice(0, 200)}` })
+  if (res.status === 409 && (res.body as any)?.code === 'WAIVER_REQUIRED') {
+    // The league's own rule (e.g. FAAB waivers with instant free agency off): every pickup is a claim.
+    const claims = await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
+    const claim = await call(claims.POST, `/api/waiver-wire/leagues/${leagueId}/claims`, { method: 'POST', body: { addPlayerId: fa.id, dropPlayerId: drop.playerId, faabBid: 1 } }, { leagueId })
+    const pending = (rowsOf(env.db, 'WaiverClaim') as any[]).some((c) => c.leagueId === leagueId && String(c.addPlayerId) === fa.id && c.status === 'pending')
+    S.freeAgent.claim = { status: claim.status, error: (claim.body as any)?.error ?? null, pending }
+    if (claim.status >= 300 || !pending) ctx.add({ code: 'FREE_AGENT_CLAIM_REFUSED', stage: 'season', message: `The add needs a waiver claim here, and the claim was refused: ${claim.status} ${JSON.stringify(claim.body).slice(0, 200)}` })
+  } else if (res.status !== 200) ctx.add({ code: 'FREE_AGENT_ADD_REFUSED', stage: 'season', message: `${res.status} ${JSON.stringify(res.body).slice(0, 200)}` })
   else if (!on || stillHasDrop) ctx.add({ code: 'FREE_AGENT_ADD_NOT_ON_SEASON_ROSTER', stage: 'season', message: `Add/drop returned 200; season roster added=${on} dropped=${!stillHasDrop}.` })
 }
 
@@ -292,7 +359,9 @@ async function tanking(env: SimEnv, run: LeagueRun, ctx: WeekCtx, S: Record<stri
   const tankerFlag = tanker ? open.find((f) => (f.affectedRosterIds ?? []).includes(tanker.seasonRosterId)) : null
   const week: any = { week: ctx.week, tanker: tanker?.userId ?? null, scan: JSON.stringify(direct).slice(0, 500), openFlags: open.map((f) => ({ rosters: f.affectedRosterIds, severity: f.severity })) }
   const faabBefore = tanker ? (rowsOf(env.db, 'Roster') as any[]).find((r) => r.id === tanker.rosterId)?.faabRemaining ?? null : null
-  if (tanker && !tankerFlag) ctx.add({ code: 'TANKING_NOT_FLAGGED', stage: 'season', message: `Week ${ctx.week}: ${tanker.userId} started 3 injured players over a healthy bench; no open tanking flag.` })
+  const replaceableThisWeek = Number(((run.stats.scenarios as any)?.tankReplaceable ?? {})[ctx.week] ?? 3)
+  week.replaceable = replaceableThisWeek
+  if (tanker && !tankerFlag && replaceableThisWeek > 0) ctx.add({ code: 'TANKING_NOT_FLAGGED', stage: 'season', message: `Week ${ctx.week}: ${tanker.userId} started ${replaceableThisWeek} injured player(s) a healthy bench player could have replaced; no open tanking flag.` })
   for (const f of open) {
     const innocent = !tanker || !(f.affectedRosterIds ?? []).includes(tanker.seasonRosterId)
     if (innocent) ctx.add({ code: 'TANKING_FLAG_ON_INNOCENT_TEAM', stage: 'season', message: `Week ${ctx.week}: tanking flag on ${JSON.stringify(f.affectedRosterIds)}, who did not tank.` })
@@ -321,7 +390,7 @@ export function checkTankingConsequences(env: SimEnv, run: LeagueRun, add: Add):
   const a = T.weeks.filter((w: any) => w.tanker === 'sim-mgr-011')
   const b = T.weeks.filter((w: any) => w.tanker === 'sim-mgr-012')
   const aForfeited = a.at(-1)?.forfeited ?? []
-  if (a.filter((w: any) => w.confirm?.status === 200).length >= 2 && aForfeited.length === 0) add({ code: 'TANKING_PICK_NOT_FORFEITED', stage: 'season', message: `sim-mgr-011 has ${a.length} confirmed strikes under "forfeit a 1st at strike 2"; no pick is forfeited.` })
+  if (run.leagueType !== 'redraft' && a.filter((w: any) => w.confirm?.status === 200).length >= 2 && aForfeited.length === 0) add({ code: 'TANKING_PICK_NOT_FORFEITED', stage: 'season', message: `sim-mgr-011 has ${a.length} confirmed strikes under "forfeit a 1st at strike 2"; no pick is forfeited.` })
   const bConfirmed = b.filter((w: any) => w.confirm?.status === 200).length
   const bFaab = b.at(-1)?.faab
   if (bConfirmed >= 2 && bFaab && b[0]?.faab?.before != null && bFaab.after === b[0].faab.before) add({ code: 'TANKING_FAAB_NOT_TAKEN', stage: 'season', message: `sim-mgr-012 has ${bConfirmed} confirmed strikes under "take 25% FAAB at strike 2"; FAAB is unchanged at ${bFaab.after}.` })
@@ -365,8 +434,21 @@ export async function collusionConsequences(env: SimEnv, run: LeagueRun, ctx: We
       const accepted = await acceptAfLeagueTrade({ tradeId: created.id, userId: d.userId, leagueId } as any)
       const row = (rowsOf(env.db, 'AfLeagueTrade') as any[]).find((t) => t.id === created.id)
       // Under instant review a held trade waits for the commissioner instead of processing.
-      C.fourth = { reviewMode: 'instant', acceptStatus: accepted.status, status: row?.status, held: row?.status !== 'processed' }
-      if (!C.fourth.held) ctx.add({ code: 'SEVERE_COLLUSION_TRADE_NOT_HELD', stage: 'season', message: `"Hold severe" is on, the league reviews instantly, and a 4th lopsided deal between a flagged pair processed (${accepted.status}).` })
+      C.fourth = { tradeId: created.id, reviewMode: 'instant', acceptStatus: accepted.status, status: row?.status, held: row?.status !== 'processed' }
+      // What the review concluded for each lopsided deal: a held trade needs a SEVERE flag on itself.
+      C.reviews = await Promise.all([...lopsidedTradeIds(trades), created.id].map((id) => reviewSummary(env, run, id)))
+      // The app's rule: "hold severe" holds a trade the review itself flags SEVERE (heavily lopsided, or an
+      // eliminated team dumping starters). Repeat partners alone alert and let it through, by design. The
+      // deals here are chosen by ADP, and in an uneven roster (an auction, baseball's split pitcher values)
+      // the app can fairly grade one under the 40% line — that is a deal that should NOT be held.
+      const r4: any = C.reviews.at(-1)
+      const severe = (r4?.flags ?? []).some((f: string) => /^(heavily_lopsided|eliminated_team_dumping):/.test(f))
+      C.fourth.expectedHold = severe
+      if (severe && !C.fourth.held) {
+        ctx.add({ code: 'SEVERE_COLLUSION_TRADE_NOT_HELD', stage: 'season', message: `"Hold severe" is on, the league reviews instantly, and the review flagged this deal severe — yet it processed (${accepted.status}). Its review: ${JSON.stringify(r4)}` })
+      } else if (!severe && C.fourth.held) {
+        ctx.add({ code: 'TRADE_HELD_WITHOUT_A_SEVERE_FLAG', stage: 'season', message: `"Hold severe" held a deal its review did not flag severe. Its review: ${JSON.stringify(r4)}` })
+      }
     } catch (e) {
       C.fourth = { threw: (e as Error).message }
     }
@@ -376,6 +458,9 @@ export async function collusionConsequences(env: SimEnv, run: LeagueRun, ctx: We
   // The commissioner reverses the LATEST processed lopsided deal: an earlier one is refused by design
   // once those rosters have traded again (ROSTER_CHANGED_SINCE_EXECUTION) — recorded separately below.
   const lopsidedIds = trades.filter((x: any) => String(x.label).startsWith('collusion') && x.ok).map((x: any) => x.tradeId)
+  // A 4th deal the app rightly let through is now the latest between this pair; undoing an earlier one
+  // would be refused, correctly, because the 4th changed those rosters.
+  if (C.fourth?.status === 'processed' && C.fourth.tradeId) lopsidedIds.push(C.fourth.tradeId)
   const lopsidedRows = (rowsOf(env.db, 'AfLeagueTrade') as any[]).filter((t) => lopsidedIds.includes(t.id) && t.status === 'processed')
   // The last one in the order the deals were made. `processedAt` is a Date and the deals settle in the
   // same second, so sorting on it as text picked the FIRST deal, whose rosters the later two had changed.
@@ -596,6 +681,31 @@ async function setLiveRookieOrder(env: SimEnv, run: LeagueRun, S: Record<string,
   const route = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/live/route')
   const res = await call(route.PUT, `/api/commissioner/leagues/${run.leagueId}/rookie-draft-order/live`, { method: 'PUT', body: { enabled: true, config: { nonPlayoff: 'reverse_max_pf', playoff: 'finish_then_seed', withinRound: 'worse_seed' } } }, { leagueId: run.leagueId! })
   S.liveRookieOrder = { status: res.status, error: (res.body as any)?.error ?? null, saved: JSON.stringify((res.body as any)?.settings ?? (res.body as any) ?? null).slice(0, 300) }
+  if (res.status !== 200) run.findings.push({ code: 'ROOKIE_ORDER_SCREEN_SAVE_FAILED', stage: 'season', message: `Saving the commissioner's rookie order rule returned ${res.status}: ${(res.body as any)?.error ?? ''}` })
+}
+
+const lopsidedTradeIds = (trades: any[]) => trades.filter((x: any) => String(x.label).startsWith('collusion') && x.ok).map((x: any) => x.tradeId as string)
+
+/** One trade as the integrity scan's review sees it: its flags, its value gap, and the lopsided check's verdict. */
+export async function reviewSummary(env: SimEnv, run: LeagueRun, tradeId: string): Promise<Record<string, unknown>> {
+  const { reviewStoredTrade } = await import('@/lib/decision-os/trade/tradeReviewContext')
+  const r: any = await reviewStoredTrade({ leagueId: run.leagueId!, ref: { kind: 'af', tradeId }, userId: run.commissionerId, surface: 'integrity-scan' } as never).catch((e: Error) => ({ ok: false, refusal: { reason: e.message } }))
+  if (!r?.ok) return { tradeId, refused: r?.refusal?.reason ?? 'unknown' }
+  const lopsided = (r.review?.checks ?? []).find((c: any) => c.code === 'heavily_lopsided')
+  return {
+    tradeId,
+    flags: (r.review?.flags ?? []).map((f: any) => `${f.code}:${f.severity}`),
+    gapPct: r.facts?.gapPct?.ok ? Math.round(Number(r.facts.gapPct.value) * 10) / 10 : null,
+    lopsided: lopsided ? `${lopsided.status}: ${String(lopsided.explanation ?? '').slice(0, 160)}` : null,
+  }
+}
+
+/** The rookie order preview, as a member opens it (free: any member may see the order). */
+export async function readRookiePreview(env: SimEnv, run: LeagueRun, userId: string): Promise<{ status: number; slots: number; error: string | null }> {
+  signInAs(env, userId)
+  const route = await import('@/app/api/commissioner/leagues/[leagueId]/rookie-draft-order/route')
+  const res = await call(route.GET, `/api/commissioner/leagues/${run.leagueId}/rookie-draft-order`, null, { leagueId: run.leagueId! })
+  return { status: res.status, slots: ((res.body as any)?.slots ?? []).length, error: (res.body as any)?.error ?? null }
 }
 
 /**

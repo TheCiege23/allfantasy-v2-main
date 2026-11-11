@@ -75,7 +75,7 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     isPublic: state.privacy === 'public',
     // A guillotine week has no opponent, so there is no head-to-head game for a median game to
     // double. The wizard hides the box for guillotine; this drops a choice made before switching.
-    medianGame: state.medianGame === true && lt !== 'guillotine',
+    medianGame: state.medianGame === true && lt !== 'guillotine' && lt !== 'survivor_guillotine',
     // TE premium: NFL only, and only once the commissioner has chosen the per-catch amount.
     ...(state.sport === 'NFL' && state.tePremium === true && typeof state.tePremiumPoints === 'number'
       ? { tePremiumPoints: state.tePremiumPoints }
@@ -106,6 +106,8 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   if (lt === 'guillotine' && state.sport === 'MLB' && state.guillotineTwoWeekPeriods === true) {
     conceptSetup.guillotinePeriodWeeks = 2
   }
+  // The server fits the season schedule to the team count; the tribe count is the one rule chosen here.
+  if (lt === 'survivor_guillotine') conceptSetup.survivorGuillotineTribeCount = state.survivorGuillotineTribeCount ?? 2
   if (lt === 'guillotine' && state.guillotineBestBall === true) {
     conceptSetup.guillotineBestBall = true
   }

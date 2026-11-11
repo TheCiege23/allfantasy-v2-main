@@ -55,9 +55,9 @@ describe('🛑 every producible alias tag is classified', () => {
      * The positive control for the control. A regex that stops matching (a producer renamed, a
      * file moved) would report an empty set, and an empty set passes the classification test below
      * vacuously — a check that cannot fail, which is the shape this repo has been bitten by
-     * repeatedly. Pinning the four known tags means the scan must keep working to stay green.
+     * repeatedly. Pinning the known tags means the scan must keep working to stay green.
      */
-    expect(producibleAliasTags()).toEqual(['idp', 'king_of_the_hill', 'pirate_vampire', 'royal'])
+    expect(producibleAliasTags()).toEqual(['idp', 'king_of_the_hill', 'pirate_vampire', 'royal', 'survivor_guillotine'])
   })
 
   it('classifies each as exactly one of format-alias or modifier', () => {

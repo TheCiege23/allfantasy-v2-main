@@ -81,6 +81,9 @@ export const DRAFT_TYPES_BY_LEAGUE_FORMAT: Record<DraftMatrixLeagueFormatId, rea
   zombie: ['snake'],
   salary_cap: ['auction'],
   big_brother: DRAFT_TYPES_BIG_BROTHER,
+  // A redraft shell (lib/survivor-guillotine/createFit.ts), so redraft's matrix — the format engine
+  // resolves it the same way. The create catalog narrows what the wizard offers.
+  survivor_guillotine: DRAFT_TYPES_REDRAFT,
 }
 
 /** Sports that support each league format concept (mirrors format-engine). */
@@ -98,6 +101,8 @@ export const SUPPORTED_SPORTS_BY_LEAGUE_FORMAT: Record<DraftMatrixLeagueFormatId
   zombie: ZOMBIE_ELIGIBLE_LEAGUE_SPORTS,
   salary_cap: ALL_SPORTS,
   big_brother: ALL_SPORTS,
+  // The Survivor Guilly engine schedules NFL weeks and NBA scoring periods only.
+  survivor_guillotine: ['NFL', 'NBA'],
 }
 
 /**
