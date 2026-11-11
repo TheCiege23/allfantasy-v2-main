@@ -51,6 +51,7 @@ async function rebuildTradeMarket(startedAt: number): Promise<
           ...(r.written > 0 ? [] : ['no book published in any window']),
           ...r.attempts.filter((a) => a.refused.length > 0).map((a) => `${a.sinceSeason}: not centred — ${a.refused.join(', ')}`),
           ...(r.lineup ? [`lineup factors: ${r.lineup.published} of ${r.lineup.measured} published (since ${r.lineup.sinceSeason})`] : []),
+          ...(r.tradesStamped ? [`trades given a league format: ${r.tradesStamped}`] : []),
         ],
       }),
     )

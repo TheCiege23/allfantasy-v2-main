@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { bookKey, faabBudgetFromSettings, faabForTradeRow, gatherFormatObservations, seasonLeagueRow } from '@/lib/trade-market/formatMarkets'
+import { bookKey, faabBudgetFromSettings, faabForTradeRow, gatherFormatObservations, resolveLeague, seasonLeagueRow, stampTradeFormats } from '@/lib/trade-market/formatMarkets'
 import { attributeTrade } from '@/lib/trade-market/completedTradeObservations'
 
 /**
@@ -174,5 +174,37 @@ describe('FAAB in the trade market', () => {
     const sf = g.byBook.get(bookKey({ format: 'DYNASTY', qbFormat: 'SUPERFLEX' }))!
     // $50 of a $100 budget is half of the full-budget value (1800) = 900 for the RB.
     expect(sf.byPlayer.get('2')!.observations.find((o) => o.transactionId === 'faab-1')!.observedValue).toBe(900)
+  })
+})
+
+describe('stamping each trade’s league format for trade learning', () => {
+  it('derives the format from the BOOK, so a keeper league on the redraft chart is written redraft', () => {
+    expect(resolveLeague({ id: 'a', platformLeagueId: 'p', leagueType: 'dynasty', settings: { roster_positions: ['QB', 'SUPER_FLEX', 'RB'] } }, false)).toMatchObject({ tradeFormat: 'dynasty', book: { qbFormat: 'SUPERFLEX' } })
+    expect(resolveLeague({ id: 'b', platformLeagueId: 'p', leagueType: 'redraft', settings: { roster_positions: ['QB', 'RB'] } }, false)).toMatchObject({ tradeFormat: 'redraft' })
+    const keeperFew = resolveLeague({ id: 'c', platformLeagueId: 'p', leagueType: 'keeper', settings: { roster_positions: ['QB', 'RB', 'WR', 'TE', 'BN', 'BN', 'BN', 'BN', 'BN', 'BN'], max_keepers: 1 } }, false)!
+    expect(keeperFew.book.format).toBe('REDRAFT')
+    expect(keeperFew.tradeFormat).toBe('redraft')
+  })
+
+  it('the gather records a stamp for every trade whose league resolved, and none for an unknown league', async () => {
+    const g = await gatherFormatObservations(fakePrisma() as never, { sinceSeason: 2024 })
+    expect(g.formatStamps.map((s) => `${s.transactionId}:${s.tradeFormat}:${s.isSuperFlex}`).sort()).toEqual([
+      'old-4qb:dynasty:true',
+      'one-1:dynasty:false',
+      'sf-1:dynasty:true',
+    ])
+  })
+
+  it('writes only EMPTY rows, grouped by format, never overwriting a set value', async () => {
+    const updateMany = vi.fn(async () => ({ count: 2 }))
+    const n = await stampTradeFormats({ leagueTrade: { updateMany } } as never, [
+      { transactionId: 't1', tradeFormat: 'dynasty', isSuperFlex: true },
+      { transactionId: 't2', tradeFormat: 'dynasty', isSuperFlex: true },
+      { transactionId: 't3', tradeFormat: 'redraft', isSuperFlex: false },
+    ])
+    expect(updateMany).toHaveBeenCalledTimes(2)
+    expect(updateMany.mock.calls[0]![0]).toEqual({ where: { transactionId: { in: ['t1', 't2'] }, leagueFormat: null }, data: { leagueFormat: 'dynasty', isSuperFlex: true } })
+    expect(updateMany.mock.calls[1]![0]).toEqual({ where: { transactionId: { in: ['t3'] }, leagueFormat: null }, data: { leagueFormat: 'redraft', isSuperFlex: false } })
+    expect(n).toBe(4)
   })
 })

@@ -35,6 +35,8 @@ export type ScheduledMarketRecalcResult = {
   books: Array<BookResult & { sinceSeason: number }>
   lineup: { sinceSeason: number; published: number; measured: number } | null
   attempts: Array<{ sinceSeason: number; refused: string[]; written: number }>
+  /** `LeagueTrade` rows given a `leagueFormat` / `isSuperFlex` this run (only empty rows are filled). */
+  tradesStamped: number
 }
 
 export function marketWindows(now = new Date()): number[] {
@@ -54,6 +56,7 @@ export async function runScheduledMarketRecalc(
   const attempts: ScheduledMarketRecalcResult['attempts'] = []
   let lineupTable: LineupFactorTable | null = null
   let tradesUsed = 0
+  let tradesStamped = 0
 
   const windows = marketWindows(opts.now)
   const published = (t: LineupFactorTable | null) => (t ? t.factors.filter((f) => f.published).length : -1)
@@ -61,8 +64,11 @@ export async function runScheduledMarketRecalc(
   for (const sinceSeason of windows) {
     if (done.size === MARKET_BOOKS.length) break
     attempted.add(sinceSeason)
-    const r = await recalc(prisma, { sinceSeason, dryRun: false, requireCentred: true, skipBooks: done, writeLineupFactors: false, now: opts.now })
+    // The widest window covers every season the market reads, so it is the one that stamps trades.
+    const stampTrades = sinceSeason === windows[windows.length - 1]
+    const r = await recalc(prisma, { sinceSeason, dryRun: false, requireCentred: true, skipBooks: done, writeLineupFactors: false, stampTrades, now: opts.now })
     tradesUsed = Math.max(tradesUsed, r.tradesUsed)
+    tradesStamped += r.tradesStamped ?? 0
     attempts.push({ sinceSeason, refused: r.books.filter((b) => b.refused).map((b) => b.concept), written: r.books.reduce((s, b) => s + b.written, 0) })
     for (const b of r.books) {
       // A book a fresher window already published is never replaced by an older one.
@@ -84,8 +90,9 @@ export async function runScheduledMarketRecalc(
   const widest = windows[windows.length - 1]!
   if (!attempted.has(widest)) {
     const all = new Set(MARKET_BOOKS.map(bookKey))
-    const r = await recalc(prisma, { sinceSeason: widest, dryRun: false, requireCentred: true, skipBooks: all, writeLineupFactors: false, now: opts.now })
+    const r = await recalc(prisma, { sinceSeason: widest, dryRun: false, requireCentred: true, skipBooks: all, writeLineupFactors: false, stampTrades: true, now: opts.now })
     if (published(r.lineup) > published(lineupTable)) lineupTable = r.lineup
+    tradesStamped += r.tradesStamped ?? 0
   }
 
   let lineup: ScheduledMarketRecalcResult['lineup'] = null
@@ -104,5 +111,6 @@ export async function runScheduledMarketRecalc(
     books,
     lineup,
     attempts,
+    tradesStamped,
   }
 }
