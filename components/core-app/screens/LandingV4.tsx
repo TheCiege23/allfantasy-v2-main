@@ -12,6 +12,7 @@ import {
   getLandingImportSports,
 } from '@/components/core-app/screens/landingConnectPlatforms'
 import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
+import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
@@ -316,6 +317,13 @@ export function LandingV4({
               {c.hero.ctaSecondary}
             </a>
           </div>
+          <p className="af-lp-reassure" data-testid="landing-hero-trade-link">
+            <Link href="/trade-evaluator">
+              {lang === 'es'
+                ? 'O evalúa un intercambio ahora, sin importar nada →'
+                : 'Or grade a trade right now — no import needed →'}
+            </Link>
+          </p>
           <p className="af-lp-reassure">{c.hero.reassure}</p>
           {/*
             The commissioner line sits under the player hero rather than replacing it: `/`
@@ -446,6 +454,22 @@ export function LandingV4({
         leagues and the exchange are an EXAMPLE and labelled as one.
       */}
       <AllLeaguesChimmy copy={{ ...c.chimmy, soon: c.connects.soon }} />
+
+      {/* ── Trade values from real trades ───────────────────────────── */}
+      {/*
+        The free, no-import way in: grade any trade on values measured from completed trades in
+        AllFantasy-connected leagues. The board is live data (risers/fallers), not an example.
+      */}
+      <section className="af-lp-trade-market" id="trade-values" data-testid="landing-trade-market">
+        <TradeMarketMovers
+          limit={4}
+          lang={lang === 'es' ? 'es' : 'en'}
+          heading={lang === 'es' ? 'Valores de intercambio basados en intercambios reales' : 'Trade values built from real trades'}
+          ctaHref="/trade-evaluator"
+          ctaLabel={lang === 'es' ? 'Evalúa un intercambio gratis' : 'Grade a trade free'}
+          testId="landing-trade-market-movers"
+        />
+      </section>
 
       {/* ── How it works: what a new account actually does ─────────── */}
       {/*

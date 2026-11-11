@@ -92,6 +92,7 @@ import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { DynastyPickCapitalPanel, pickDealKey } from './DynastyPickCapitalPanel'
+import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 
 /**
  * Screen 36a — Trade Center.
@@ -467,6 +468,7 @@ function AllLeaguesTradeHub(props: {
         </div>
         <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} />
       </section>
+      <TradeMarketMovers limit={5} heading={copy('What real trades say right now')} testId="trade-hub-market" />
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
       {props.valueActions.length > 0 ? (
@@ -1770,6 +1772,14 @@ export function TradeCenter(props: {
         <details className="af-tc-switcher">
           <summary>{copy('Switch league')} <span>{props.leagues.length} {copy('connected')}</span></summary>
           <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
+        </details>
+      ) : null}
+
+      {/* Dynasty only — the board is measured on the dynasty chart. Folded so the builder still leads. */}
+      {props.dynasty && !props.embedded ? (
+        <details className="af-tc-switcher" data-testid="trade-center-market">
+          <summary>{copy('What real trades say')} <span>{copy('values from completed trades')}</span></summary>
+          <TradeMarketMovers limit={5} heading={copy('Risers and fallers from real trades')} testId="trade-center-market-movers" />
         </details>
       ) : null}
 

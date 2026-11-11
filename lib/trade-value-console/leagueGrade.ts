@@ -35,6 +35,15 @@ export type LeagueGradeInput = {
   /** What the chart was fetched as. `ppr` MUST be the weight the chart was requested with. */
   chart: { dynasty: boolean; superflex: boolean; teams: number | null; ppr: number }
   needFactors: NeedFactors | null
+  /**
+   * The AllFantasy trade market's move per line (`lib/trade-market/afTradeMarketReads.ts`), index-aligned
+   * with the lines like `needFactors`. Null entries and an absent field mean "no trade evidence" and leave
+   * the line exactly as before.
+   */
+  tradeMarket?: {
+    give: ReadonlyArray<LeagueValueAdjustment | null>
+    get: ReadonlyArray<LeagueValueAdjustment | null>
+  } | null
 }
 
 export type LeagueGrade = {
@@ -55,10 +64,21 @@ export function gradeOnLeagueValue(input: LeagueGradeInput): LeagueGrade {
     const fit = scoringFit(league.scoringSettings, l.position, chart.ppr)
     return fit && fit.multiplier !== 1 ? { kind: 'scoring', factor: fit.multiplier, reason: fit.reason } : null
   }
-  const value = (lines: TradeConsolePlayerLine[], priced: PricedAsset[], need: NeedFactors['give'] | undefined) =>
-    lines.map((l, i) => applyLeagueAdjustments(gradeBaseOf(l, priced[i]), [scoringAdjustment(l), need?.[i] ?? null]))
-  const giveValued: LeagueValuedLine[] = value(input.giveLines, input.givePriced, input.needFactors?.give)
-  const getValued: LeagueValuedLine[] = value(input.getLines, input.getPriced, input.needFactors?.get)
+  const value = (
+    lines: TradeConsolePlayerLine[],
+    priced: PricedAsset[],
+    need: NeedFactors['give'] | undefined,
+    market: ReadonlyArray<LeagueValueAdjustment | null> | undefined,
+  ) =>
+    lines.map((l, i) =>
+      applyLeagueAdjustments(gradeBaseOf(l, priced[i]), [
+        isNonPlayerLine(l) ? null : market?.[i] ?? null,
+        scoringAdjustment(l),
+        need?.[i] ?? null,
+      ]),
+    )
+  const giveValued: LeagueValuedLine[] = value(input.giveLines, input.givePriced, input.needFactors?.give, input.tradeMarket?.give)
+  const getValued: LeagueValuedLine[] = value(input.getLines, input.getPriced, input.needFactors?.get, input.tradeMarket?.get)
   const withLeagueValue = (lines: TradeConsolePlayerLine[], valued: LeagueValuedLine[]) =>
     lines.map((l, i) => ({ ...l, leagueValue: valued[i]?.leagueValue ?? null, valueAdjustments: valued[i]?.adjustments ?? [] }))
 
@@ -69,13 +89,20 @@ export function gradeOnLeagueValue(input: LeagueGradeInput): LeagueGrade {
     tePremium: league && typeof bonusTe === 'number' ? bonusTe : null,
   })
 
+  const marketCount = [...giveValued, ...getValued].filter((v) => v.adjustments.some((a) => a.kind === 'tradeMarket')).length
+  const marketWords = marketCount > 0
+    ? ` · ${marketCount} player${marketCount === 1 ? '' : 's'} adjusted by the AllFantasy trade market (completed trades)`
+    : ''
+
   return {
     giveLines: withLeagueValue(input.giveLines, giveValued),
     getLines: withLeagueValue(input.getLines, getValued),
     totals: leagueTradeTotals(giveValued, getValued),
     valueBasis: {
       graded: league ? 'league' : 'market',
-      label: league ? chartWords : `${chartWords} — no league selected, so no league rules apply`,
+      label: league ? `${chartWords}${marketWords}` : `${chartWords}${marketWords} — no league selected, so no league rules apply`,
+      // Present only when it happened, so a grade the market did not touch keeps its exact old shape.
+      ...(marketCount > 0 ? { tradeMarketAdjusted: true } : {}),
       scoringAdjusted: kinds.has('scoring'),
       needAdjusted: kinds.has('need'),
       needGap: input.needFactors?.gap ?? null,

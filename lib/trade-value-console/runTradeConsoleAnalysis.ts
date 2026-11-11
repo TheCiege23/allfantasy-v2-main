@@ -42,6 +42,7 @@ import {
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { clamp } from './sports-db-valuation'
 import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './leagueTradePricing'
+import { loadTradeMarketOverlay } from './tradeMarketOverlay'
 import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrader'
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
@@ -364,6 +365,23 @@ export async function runTradeConsoleAnalysis(
   const getMarket = tP.reduce((s, a) => s + a.assetValue.marketValue, 0)
 
   /*
+   * The AllFantasy trade market: what managers actually paid for these players in completed trades,
+   * as a visible per-line adjustment (`tradeMarket` kind), never a silent rewrite of the chart value.
+   * Null — and the grade byte-identical to before — on any chart it was not measured on, or when no
+   * fresh run covers these players.
+   */
+  const marketOverlay = await loadTradeMarketOverlay(prisma, {
+    effectiveSport: String(effectiveSport),
+    chartIsDynasty: chart.chartIsDynasty,
+    isSuperFlex: chart.isSuperFlex,
+    giveLines,
+    getLines,
+    givePriced: gP,
+    getPriced: tP,
+  }).catch(() => null)
+  mark('trade_market')
+
+  /*
    * ── THE VERDICT IS GRADED ON LEAGUE VALUE (Guap, 2026-09-24) ─────────────────────────────────
    *
    * 🛑 IT WAS GRADED ON A NUMBER NOBODY COULD SEE. `percentDiff` came from `compositeTotal` —
@@ -390,6 +408,7 @@ export async function runTradeConsoleAnalysis(
     withheld: assetPolicy?.pickRefusal([...give, ...get]) ?? null,
     allowGenericMarketGrade: !input.leagueId?.trim(),
     basisNotes: devyPricedCount > 0 ? [DEVY_BASIS_NOTE] : [],
+    tradeMarket: marketOverlay?.tradeMarket ?? null,
     mark,
   })
   const leagueGrade = graded.leagueGrade
@@ -1173,6 +1192,7 @@ export async function runTradeConsoleAnalysis(
     giveMarket,
     getMarket,
     valueBasis,
+    tradeMarket: marketOverlay?.summary ?? null,
     grade,
     degraded,
     dataGaps,
