@@ -25,7 +25,8 @@ import {
  * publish (refused as not centred, or nothing reaching the evidence threshold) are retried on a wider
  * window. Each attempt is ONE gather with the gate evaluated inside the write, so the population judged
  * is the population stored. The lineup factor table comes from the freshest window that publishes at
- * least one factor — this season's trades are the ones whose league lineup is actually known.
+ * least one factor; a wider window adds past seasons, each read on its own lineup (`seasonLeagueRow`),
+ * which is what lets thin formats like 4-QB gather enough trades to be measured at all.
  */
 export type ScheduledMarketRecalcResult = {
   written: number
@@ -54,8 +55,12 @@ export async function runScheduledMarketRecalc(
   let lineupTable: LineupFactorTable | null = null
   let tradesUsed = 0
 
-  for (const sinceSeason of marketWindows(opts.now)) {
-    if (done.size === MARKET_BOOKS.length && lineupTable?.factors.some((f) => f.published)) break
+  const windows = marketWindows(opts.now)
+  const published = (t: LineupFactorTable | null) => (t ? t.factors.filter((f) => f.published).length : -1)
+  const attempted = new Set<number>()
+  for (const sinceSeason of windows) {
+    if (done.size === MARKET_BOOKS.length) break
+    attempted.add(sinceSeason)
     const r = await recalc(prisma, { sinceSeason, dryRun: false, requireCentred: true, skipBooks: done, writeLineupFactors: false, now: opts.now })
     tradesUsed = Math.max(tradesUsed, r.tradesUsed)
     attempts.push({ sinceSeason, refused: r.books.filter((b) => b.refused).map((b) => b.concept), written: r.books.reduce((s, b) => s + b.written, 0) })
@@ -66,9 +71,21 @@ export async function runScheduledMarketRecalc(
         books.push({ ...b, sinceSeason })
       }
     }
-    if (!lineupTable || (!lineupTable.factors.some((f) => f.published) && r.lineup.factors.some((f) => f.published))) {
-      lineupTable = r.lineup
-    }
+    // Most published factors wins; on a tie the fresher (earlier) window is kept.
+    if (published(r.lineup) > published(lineupTable)) lineupTable = r.lineup
+  }
+
+  /*
+   * ⚠ LINEUP FACTORS ALWAYS GET THE WIDEST WINDOW. A lineup effect is structural — how many tight ends a
+   * league starts does not change week to week the way one player's price does — and the thin formats
+   * (4-QB, 2-TE) are exactly the ones a single season cannot measure. Past seasons are read on their own
+   * lineups (`seasonLeagueRow`). One extra gather, markets untouched (every book skipped).
+   */
+  const widest = windows[windows.length - 1]!
+  if (!attempted.has(widest)) {
+    const all = new Set(MARKET_BOOKS.map(bookKey))
+    const r = await recalc(prisma, { sinceSeason: widest, dryRun: false, requireCentred: true, skipBooks: all, writeLineupFactors: false, now: opts.now })
+    if (published(r.lineup) > published(lineupTable)) lineupTable = r.lineup
   }
 
   let lineup: ScheduledMarketRecalcResult['lineup'] = null

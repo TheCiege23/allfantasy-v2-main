@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { bookKey, gatherFormatObservations } from '@/lib/trade-market/formatMarkets'
+import { bookKey, gatherFormatObservations, seasonLeagueRow } from '@/lib/trade-market/formatMarkets'
 
 /**
  * 🛑 The point of the format split: a superflex trade is measured on the SUPERFLEX chart and lands in the
@@ -15,12 +15,15 @@ function fakePrisma() {
     { transactionId: 'one-1', historyId: 'h-1qb', season: 2025, tradeDate: null, playersGiven: ['1'], playersReceived: ['2'], picksGiven: [], picksReceived: [] },
     // Unknown league.
     { transactionId: 'x-1', historyId: 'h-unknown', season: 2026, tradeDate: null, playersGiven: ['1'], playersReceived: ['2'], picksGiven: [], picksReceived: [] },
+    // 2024 season of the league that is 1QB TODAY — but that season started four QBs.
+    { transactionId: 'old-4qb', historyId: 'h-2024', season: 2024, tradeDate: null, playersGiven: ['1'], playersReceived: ['2'], picksGiven: [], picksReceived: [] },
   ]
   const histories = [
     { id: 'h-sf', sleeperLeagueId: 'P-SF' },
     { id: 'h-sf-other-side', sleeperLeagueId: 'P-SF' },
     { id: 'h-1qb', sleeperLeagueId: 'P-OLD-1QB' },
     { id: 'h-unknown', sleeperLeagueId: 'P-GONE' },
+    { id: 'h-2024', sleeperLeagueId: 'P-2024' },
   ]
   const leagues = [
     { id: 'L-SF', platformLeagueId: 'P-SF', leagueType: 'dynasty', settings: { roster_positions: ['QB', 'SUPER_FLEX', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX'] } },
@@ -42,6 +45,12 @@ function fakePrisma() {
         a.where.platformLeagueId ? leagues.filter((l) => inList(a, 'platformLeagueId').includes(l.platformLeagueId)) : leagues.filter((l) => inList(a, 'id').includes(l.id)),
     },
     leagueSeason: { findMany: async (a: W) => (inList(a, 'platformLeagueId').includes('P-OLD-1QB') ? [{ platformLeagueId: 'P-OLD-1QB', leagueId: 'L-1QB' }] : []) },
+    leagueDynastySeason: {
+      findMany: async (a: W) =>
+        inList(a, 'platformLeagueId').includes('P-2024')
+          ? [{ platformLeagueId: 'P-2024', leagueId: 'L-1QB', metadata: { rosterPositions: ['QB', 'QB', 'QB', 'QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'BN'], rawSettings: { type: 2, max_keepers: 0 } } }]
+          : [],
+    },
     playerValueSnapshot: { findMany: async () => snapshots },
     sportsPlayer: {
       findMany: async () => [
@@ -55,8 +64,8 @@ function fakePrisma() {
 describe('gatherFormatObservations', () => {
   it('measures each trade on its own league’s chart, counts the trade once, and leaves an unknown league out', async () => {
     const g = await gatherFormatObservations(fakePrisma() as never, { sinceSeason: 2024 })
-    expect(g.tradesConsidered).toBe(3)
-    expect(g.tradesUsed).toBe(2)
+    expect(g.tradesConsidered).toBe(4)
+    expect(g.tradesUsed).toBe(3)
     expect(g.skipped).toMatchObject({ unknown_league_format: 1 })
 
     const sf = g.byBook.get(bookKey({ format: 'DYNASTY', qbFormat: 'SUPERFLEX' }))!
@@ -66,9 +75,32 @@ describe('gatherFormatObservations', () => {
     expect(sf.byPlayer.get('1')!.observations[0]!.observedValue).toBe(2800)
     // 1QB chart: the same QB is 2000 there, and that trade never reached the superflex book.
     expect(one.byPlayer.get('1')).toMatchObject({ baseValue: 2000 })
-    expect(sf.byPlayer.get('1')!.observations).toHaveLength(1)
+    // The 2024 trade is read on ITS season's four-QB lineup — superflex chart — not on today's 1QB one.
+    expect(sf.byPlayer.get('1')!.observations.map((o) => o.transactionId).sort()).toEqual(['old-4qb', 'sf-1'])
+    expect(one.byPlayer.get('1')!.observations.map((o) => o.transactionId)).toEqual(['one-1'])
 
     const lineupBooks = g.lineupObservations.map((o) => `${o.book.qbFormat}:${o.position}:${o.lineup.qbClass}`).sort()
-    expect(lineupBooks).toEqual(['ONE_QB:QB:ONE_QB', 'ONE_QB:RB:ONE_QB', 'SUPERFLEX:QB:SUPERFLEX', 'SUPERFLEX:RB:SUPERFLEX'])
+    expect(lineupBooks).toEqual([
+      'ONE_QB:QB:ONE_QB', 'ONE_QB:RB:ONE_QB',
+      'SUPERFLEX:QB:QB_HEAVY', 'SUPERFLEX:QB:SUPERFLEX', 'SUPERFLEX:RB:QB_HEAVY', 'SUPERFLEX:RB:SUPERFLEX',
+    ])
+  })
+})
+
+describe('seasonLeagueRow — a past season on its own settings', () => {
+  const current = { id: 'L', platformLeagueId: 'P-NOW', leagueType: 'redraft', settings: { roster_positions: ['QB', 'RB'], max_keepers: 3, scoring_settings: { rec: 1 } } }
+  it('takes that season’s lineup and Sleeper type, keeps everything else from the league', () => {
+    const row = seasonLeagueRow(current, 'P-2024', { rosterPositions: ['QB', 'SUPER_FLEX', 'RB'], rawSettings: { type: 2, max_keepers: 0 } })!
+    expect(row).toMatchObject({ id: 'L', platformLeagueId: 'P-2024', leagueType: 'dynasty' })
+    expect(row.settings).toMatchObject({ roster_positions: ['QB', 'SUPER_FLEX', 'RB'], max_keepers: 0, isDynasty: true, scoring_settings: { rec: 1 } })
+  })
+  it('reads the `{ position, count }` shape other importers store', () => {
+    const row = seasonLeagueRow(current, 'P', { rosterPositions: [{ position: 'QB', count: 2 }, { position: 'TE', count: 2 }] })!
+    expect((row.settings as Record<string, unknown>).roster_positions).toEqual(['QB:2', 'TE:2'])
+    expect(row.leagueType).toBe('redraft')
+  })
+  it('is null without a lineup, so the resolver falls through to the next source', () => {
+    expect(seasonLeagueRow(current, 'P', { rawSettings: { type: 2 } })).toBeNull()
+    expect(seasonLeagueRow(current, 'P', null)).toBeNull()
   })
 })

@@ -258,6 +258,21 @@ describe('the scheduled writer', () => {
     expect(r.lineup).toMatchObject({ published: 1, sinceSeason: 2026 })
   })
 
+  it('measures lineup factors over the widest window even when every book published in the first', async () => {
+    const all = [SF, ONE, { format: 'REDRAFT', qbFormat: 'ONE_QB' } as MarketBook, { format: 'REDRAFT', qbFormat: 'SUPERFLEX' } as MarketBook]
+    const recalc = vi.fn(async (_p: unknown, o: { sinceSeason: number; skipBooks?: ReadonlySet<string> }) => {
+      if (o.sinceSeason === 2026) return result(all.map((book) => ({ book, written: 50 })), false)
+      // The widest window: markets all skipped; more lineup evidence.
+      return { ...result([], true), lineup: { ...factorTable(), sinceSeason: 2024 } }
+    })
+    const writeLineup = vi.fn(async () => {})
+    const r = await runScheduledMarketRecalc({} as never, { now: NOW, recalc: recalc as never, writeLineup })
+    expect(recalc.mock.calls.map((c) => (c[1] as { sinceSeason: number }).sinceSeason)).toEqual([2026, 2024])
+    expect((recalc.mock.calls[1]![1] as { skipBooks: Set<string> }).skipBooks.size).toBe(4)
+    expect(r.books).toHaveLength(4)
+    expect(writeLineup.mock.calls[0]![1]).toMatchObject({ sinceSeason: 2024 })
+  })
+
   it('writes no market when every window is refused, and still records the lineup table it measured', async () => {
     const recalc = vi.fn(async () => result([{ book: SF, written: 0, refused: 'not_centred' }], false))
     const writeLineup = vi.fn(async () => {})
