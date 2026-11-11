@@ -181,6 +181,9 @@ export async function gradePricedSides(args: {
    * passes it today; every other grader omits it and grades exactly as before.
    */
   tradeMarket?: LeagueGradeInput['tradeMarket']
+  /** The measured lineup move per line, and the sentence for an unusual lineup that got none. Console only, like `tradeMarket`. */
+  lineup?: LeagueGradeInput['lineup']
+  lineupNote?: string | null
   mark?: (name: string) => void
 }): Promise<{ leagueGrade: LeagueGrade; grade: TradeGradeView; needFactors: NeedFactors | null }> {
   const { chart } = args
@@ -217,6 +220,8 @@ export async function gradePricedSides(args: {
     chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
     needFactors: null,
     tradeMarket: args.tradeMarket ?? null,
+    lineup: args.lineup ?? null,
+    lineupNote: args.lineupNote ?? null,
   })
 
   const rosterFitGrade = needFactors && !needFactors.gap
@@ -229,6 +234,8 @@ export async function gradePricedSides(args: {
         chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
         needFactors,
         tradeMarket: args.tradeMarket ?? null,
+        lineup: args.lineup ?? null,
+        lineupNote: args.lineupNote ?? null,
       })
     : null
 

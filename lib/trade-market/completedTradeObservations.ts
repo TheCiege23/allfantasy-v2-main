@@ -81,6 +81,55 @@ function pickValue(raw: unknown): number | null {
   return total
 }
 
+export type TradeAttribution =
+  | { kind: 'skip'; reason: 'no_players' | 'unparseable_pick' | 'unpriced_player' | 'side_worth_nothing' | 'picks_not_priced' }
+  | { kind: 'ok'; records: Array<{ id: string; own: number; observedValue: number }> }
+
+/**
+ * What one completed trade says each player in it was worth, against ONE chart. PURE.
+ *
+ * Shared by the legacy single-chart gather below and the format-split markets
+ * (`formatMarkets.ts`), so a trade is attributed the same way whichever chart it is measured on.
+ * `allowPicks: false` skips any trade with a pick in it — the pick curve is a DYNASTY curve, and a
+ * redraft trade's pick is a different asset.
+ */
+export function attributeTrade(
+  t: Pick<TradeRow, 'playersGiven' | 'playersReceived' | 'picksGiven' | 'picksReceived'>,
+  chart: ReadonlyMap<string, number>,
+  opts: { allowPicks?: boolean } = {},
+): TradeAttribution {
+  const given = asIds(t.playersGiven)
+  const received = asIds(t.playersReceived)
+  if (given.length === 0 && received.length === 0) return { kind: 'skip', reason: 'no_players' }
+
+  const gPicks = pickValue(t.picksGiven)
+  const rPicks = pickValue(t.picksReceived)
+  if (gPicks == null || rPicks == null) return { kind: 'skip', reason: 'unparseable_pick' }
+  if (opts.allowPicks === false && (gPicks > 0 || rPicks > 0)) return { kind: 'skip', reason: 'picks_not_priced' }
+
+  /*
+   * Every player on BOTH sides must be priced. Attributing a side's value while treating an
+   * unpriced player as worth nothing would load his entire value onto his team-mates, and the
+   * error lands on exactly the players we know least about.
+   */
+  if (![...given, ...received].every((id) => chart.has(id))) return { kind: 'skip', reason: 'unpriced_player' }
+
+  const gValue = given.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + gPicks
+  const rValue = received.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + rPicks
+  if (gValue <= 0 || rValue <= 0) return { kind: 'skip', reason: 'side_worth_nothing' }
+
+  const records: Array<{ id: string; own: number; observedValue: number }> = []
+  const record = (id: string, sideValue: number, otherValue: number) => {
+    const own = chart.get(id) ?? 0
+    if (own <= 0) return
+    // His share of what his own side was worth, applied to what the other side paid.
+    records.push({ id, own, observedValue: otherValue * (own / sideValue) })
+  }
+  for (const id of given) record(id, gValue, rValue)
+  for (const id of received) record(id, rValue, gValue)
+  return { kind: 'ok', records }
+}
+
 export async function gatherCompletedTradeObservations(args: {
   prisma: Pick<PrismaClient, 'playerValueSnapshot' | 'sportsPlayer'> & {
     leagueTrade: { findMany: (a: unknown) => Promise<TradeRow[]> }
@@ -158,44 +207,14 @@ export async function gatherCompletedTradeObservations(args: {
   let tradesUsed = 0
 
   for (const t of unique.values()) {
-    const given = asIds(t.playersGiven)
-    const received = asIds(t.playersReceived)
-    if (given.length === 0 && received.length === 0) {
-      bump('no_players')
+    const attributed = attributeTrade(t, chart)
+    if (attributed.kind === 'skip') {
+      bump(attributed.reason)
       continue
     }
-
-    const gPicks = pickValue(t.picksGiven)
-    const rPicks = pickValue(t.picksReceived)
-    if (gPicks == null || rPicks == null) {
-      bump('unparseable_pick')
-      continue
-    }
-
-    /*
-     * Every player on BOTH sides must be priced. Attributing a side's value while treating an
-     * unpriced player as worth nothing would load his entire value onto his team-mates, and the
-     * error lands on exactly the players we know least about.
-     */
-    if (![...given, ...received].every((id) => chart.has(id))) {
-      bump('unpriced_player')
-      continue
-    }
-
-    const gValue = given.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + gPicks
-    const rValue = received.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + rPicks
-    if (gValue <= 0 || rValue <= 0) {
-      bump('side_worth_nothing')
-      continue
-    }
-
     tradesUsed++
 
-    const record = (id: string, sideValue: number, otherValue: number) => {
-      const own = chart.get(id) ?? 0
-      if (own <= 0) return
-      // His share of what his own side was worth, applied to what the other side paid.
-      const observedValue = otherValue * (own / sideValue)
+    for (const { id, own, observedValue } of attributed.records) {
       const entry =
         byPlayer.get(id) ??
         {
@@ -213,9 +232,6 @@ export async function gatherCompletedTradeObservations(args: {
       })
       byPlayer.set(id, entry)
     }
-
-    for (const id of given) record(id, gValue, rValue)
-    for (const id of received) record(id, rValue, gValue)
   }
 
   return { byPlayer, skipped, tradesConsidered: unique.size, tradesUsed }

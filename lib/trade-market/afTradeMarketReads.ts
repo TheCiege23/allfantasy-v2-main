@@ -1,33 +1,33 @@
 import type { PrismaClient } from '@prisma/client'
 
 import type { LeagueValueAdjustment } from '@/lib/trade-value/leagueTradeValue'
+import type { LineupPosition, LineupProfile } from '@/lib/league/lineupProfile'
 import { COMPLETED_SOURCE_VERSION } from './completedTradeObservations'
+import {
+  bookConcept,
+  lineupDemand,
+  LINEUP_FACTORS_CACHE_KEY,
+  type LineupFactorTable,
+  type MarketBook,
+} from './formatMarkets'
 
 /**
  * DB-FIRST READS of the AllFantasy trade market — player values derived from trades that actually
- * happened in AllFantasy-connected leagues (`completedTradeObservations.ts` writes them; the daily
- * `/api/cron/af-market-values` job keeps them current). Request paths read here; nothing here calls a
- * provider.
+ * happened in AllFantasy-connected leagues (`formatMarkets.ts` writes them; the daily ADP cron runs the
+ * rebuild). Request paths read here; nothing here calls a provider.
  *
- * 🛑 A STALE ROW IS NOT A MARKET. The table holds whatever the last successful run wrote, and the run
- * refuses to write when the population is not centred (`isCentred`). If it keeps refusing, the rows
- * stop moving while the chart underneath them keeps moving every hour — so an adjustment measured
- * against an old chart would be applied to a new one. Rows older than `AF_MARKET_MAX_AGE_DAYS` are
- * therefore ignored, not served: the grade falls back to the chart alone and says nothing about a
- * trade market it no longer has evidence for.
+ * 🛑 ONE MARKET PER FORMAT. A trade is only evidence about the format it was made in, so values are
+ * kept per book — dynasty/redraft × 1QB/superflex — and a grade reads the book its own chart is. A
+ * superflex grade never sees a 1QB market, and quarterbacks are no longer left out: each book prices
+ * them on the right chart.
  *
- * ⚠ WHICH CHARTS IT APPLIES TO, AND WHY QBs ARE LEFT OUT. The observations are priced against the
- * DYNASTY · 1QB board, so the adjustment is only meaningful on that board. Quarterbacks are excluded
- * because the trade population mixes superflex and 1QB leagues without telling them apart: a QB
- * routinely bought at superflex prices would read as "rising" on the 1QB board for a reason that has
- * nothing to do with his market. Every other position trades at broadly the same price in both.
+ * 🛑 A STALE ROW IS NOT A MARKET. Each book is centring-gated on its own population and may stop
+ * publishing; when it does its rows stop moving while the chart underneath keeps moving. Rows (and the
+ * lineup factor table) older than `AF_MARKET_MAX_AGE_DAYS` are therefore ignored, not served.
  */
 
 export const AF_MARKET_SPORT = 'NFL'
-export const AF_MARKET_CONCEPT = 'dynasty'
 export const AF_MARKET_MAX_AGE_DAYS = 21
-/** Positions the adjustment is never applied to — see the header. */
-export const AF_MARKET_EXCLUDED_POSITIONS: ReadonlySet<string> = new Set(['QB'])
 
 export type AfMarketRow = {
   playerId: string
@@ -53,12 +53,10 @@ type MarketDelegate = {
   }
 }
 
-async function findRows(prisma: MarketDelegate, where: Record<string, unknown>): Promise<AfMarketRow[]> {
-  try {
-    const rows = await prisma.allFantasyMarketPlayerValue.findMany({ where, select: SELECT })
-    return Array.isArray(rows) ? (rows as AfMarketRow[]) : []
-  } catch {
-    return []
+type CacheDelegate = {
+  sportsDataCache: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    findUnique: (args: any) => PromiseLike<unknown>
   }
 }
 
@@ -75,56 +73,149 @@ const SELECT = {
   generatedAt: true,
 } as const
 
+async function findRows(prisma: MarketDelegate, where: Record<string, unknown>): Promise<AfMarketRow[]> {
+  try {
+    const rows = await prisma.allFantasyMarketPlayerValue.findMany({ where, select: SELECT })
+    return Array.isArray(rows) ? (rows as AfMarketRow[]) : []
+  } catch {
+    return []
+  }
+}
+
 function freshSince(now: Date): Date {
   return new Date(now.getTime() - AF_MARKET_MAX_AGE_DAYS * 24 * 60 * 60 * 1000)
 }
 
-function freshWhere(now: Date) {
+function freshWhere(book: MarketBook, now: Date) {
   return {
     sport: AF_MARKET_SPORT,
-    leagueConcept: AF_MARKET_CONCEPT,
+    leagueConcept: bookConcept(book),
     sourceVersion: COMPLETED_SOURCE_VERSION,
     published: true,
     generatedAt: { gte: freshSince(now) },
   }
 }
 
+/** The book a chart is: what the grade priced on, and therefore the only market it may read. */
+export function bookForChart(chart: { chartIsDynasty: boolean; isSuperFlex: boolean }): MarketBook {
+  return { format: chart.chartIsDynasty ? 'DYNASTY' : 'REDRAFT', qbFormat: chart.isSuperFlex ? 'SUPERFLEX' : 'ONE_QB' }
+}
+
+export function bookLabel(book: MarketBook): string {
+  return `${book.format === 'DYNASTY' ? 'Dynasty' : 'Redraft'} · ${book.qbFormat === 'SUPERFLEX' ? 'Superflex' : '1QB'}`
+}
+
 /** Is a row usable as an adjustment on a grade? Pure, so the rule is testable without a database. */
-export function isApplicableMarketRow(row: Pick<AfMarketRow, 'position' | 'adjustmentPercent' | 'sampleSize' | 'generatedAt'>, now = new Date()): boolean {
+export function isApplicableMarketRow(row: Pick<AfMarketRow, 'adjustmentPercent' | 'sampleSize' | 'generatedAt'>, now = new Date()): boolean {
   if (!Number.isFinite(row.adjustmentPercent) || row.adjustmentPercent === 0) return false
   if (row.sampleSize < 5) return false
-  if (row.generatedAt.getTime() < freshSince(now).getTime()) return false
-  const pos = String(row.position ?? '').trim().toUpperCase()
-  return !AF_MARKET_EXCLUDED_POSITIONS.has(pos)
+  return row.generatedAt.getTime() >= freshSince(now).getTime()
 }
 
 /** The visible grade adjustment one market row produces. */
-export function tradeMarketAdjustment(row: Pick<AfMarketRow, 'adjustmentPercent' | 'sampleSize'>): LeagueValueAdjustment {
+export function tradeMarketAdjustment(row: Pick<AfMarketRow, 'adjustmentPercent' | 'sampleSize'>, book?: MarketBook): LeagueValueAdjustment {
   const pct = Math.round(row.adjustmentPercent * 10) / 10
   const signed = `${pct > 0 ? '+' : ''}${pct}%`
   return {
     kind: 'tradeMarket',
     factor: 1 + pct / 100,
-    reason: `AllFantasy trade market ${signed}: what managers actually paid for him across ${row.sampleSize} completed trades in AllFantasy-connected leagues`,
+    reason: `AllFantasy trade market ${signed}: what managers actually paid for him across ${row.sampleSize} completed ${book ? `${bookLabel(book)} ` : ''}trades in AllFantasy-connected leagues`,
   }
 }
 
 /**
- * Fresh, applicable market rows for these Sleeper ids. Empty map on any read failure — the grade
- * then runs on the chart alone, which is exactly what it did before this layer existed.
+ * Fresh, applicable market rows for these Sleeper ids in ONE book. Empty map on any read failure — the
+ * grade then runs on the chart alone, which is exactly what it did before this layer existed.
  */
 export async function loadAfTradeMarketRows(
   prisma: MarketDelegate,
   sleeperIds: readonly string[],
+  book: MarketBook,
   now = new Date(),
 ): Promise<Map<string, AfMarketRow>> {
   const ids = [...new Set(sleeperIds.map((s) => s.trim()).filter((s) => /^\d+$/.test(s)))]
   const out = new Map<string, AfMarketRow>()
   if (ids.length === 0) return out
-  const rows = await findRows(prisma, { ...freshWhere(now), playerId: { in: ids } })
+  const rows = await findRows(prisma, { ...freshWhere(book, now), playerId: { in: ids } })
   for (const r of rows) if (isApplicableMarketRow(r, now)) out.set(r.playerId, r)
   return out
 }
+
+// ─── Lineup factors ─────────────────────────────────────────────────────────────────────────────────
+
+/** The measured lineup factor table, or null when it is missing or older than the market horizon. */
+export async function loadLineupFactors(prisma: CacheDelegate, now = new Date()): Promise<LineupFactorTable | null> {
+  try {
+    const row = (await prisma.sportsDataCache.findUnique({ where: { cacheKey: LINEUP_FACTORS_CACHE_KEY } })) as
+      | { data: unknown; expiresAt: Date }
+      | null
+    if (!row || row.expiresAt.getTime() < now.getTime()) return null
+    const table = row.data as LineupFactorTable
+    return Array.isArray(table?.factors) ? table : null
+  } catch {
+    return null
+  }
+}
+
+const POSITION_WORDS: Record<LineupPosition, [string, string]> = {
+  QB: ['quarterback', 'quarterbacks'],
+  RB: ['running back', 'running backs'],
+  WR: ['receiver', 'receivers'],
+  TE: ['tight end', 'tight ends'],
+}
+
+/**
+ * The lineup adjustment for one player in one lineup, or null. PURE.
+ *
+ * Only a PUBLISHED factor applies — one measured with `LINEUP_MIN_*` breadth. A league whose lineup is
+ * unusual but whose bucket has too little evidence gets no adjustment, and `lineupNote` says so.
+ */
+export function lineupAdjustment(
+  table: LineupFactorTable | null,
+  lineup: LineupProfile | null,
+  position: string | null | undefined,
+): LeagueValueAdjustment | null {
+  const pos = String(position ?? '').toUpperCase() as LineupPosition
+  if (!table || !lineup || !(pos in POSITION_WORDS)) return null
+  const d = lineupDemand(lineup, pos)
+  const band = table.usual[pos]
+  if (!band) return null
+  const bucket = d < band.low ? 'low' : d > band.high ? 'high' : null
+  if (!bucket) return null
+  const f = table.factors.find((x) => x.position === pos && x.bucket === bucket)
+  if (!f || !f.published || f.factor === 1) return null
+  const pct = Math.round((f.factor - 1) * 1000) / 10
+  const [, plural] = POSITION_WORDS[pos]
+  const startWords = pos === 'QB' ? `${lineup.qbDemand} quarterbacks (QB + superflex)` : `more ${plural}`
+  return {
+    kind: 'lineup',
+    factor: f.factor,
+    reason:
+      `Lineup ${pct > 0 ? '+' : ''}${pct}%: in leagues that start ${bucket === 'high' ? startWords : `fewer ${plural}`} than usual ` +
+      `(this one: ${lineup.label}), ${plural} trade ${Math.abs(pct)}% ${pct > 0 ? 'higher' : 'lower'} — ${f.note}`,
+  }
+}
+
+/** Why a lineup that IS unusual got no adjustment, for the basis line. Null when nothing to say. */
+export function lineupNote(table: LineupFactorTable | null, lineup: LineupProfile | null, positions: readonly string[]): string | null {
+  if (!lineup) return null
+  if (!table) return 'Lineup adjustments are not measured yet.'
+  const missing: string[] = []
+  for (const raw of new Set(positions.map((p) => String(p ?? '').toUpperCase()))) {
+    if (!(raw in POSITION_WORDS)) continue
+    const pos = raw as LineupPosition
+    const band = table.usual[pos]
+    if (!band) continue
+    const d = lineupDemand(lineup, pos)
+    const bucket = d < band.low ? 'low' : d > band.high ? 'high' : null
+    if (!bucket) continue
+    const f = table.factors.find((x) => x.position === pos && x.bucket === bucket)
+    if (!f?.published) missing.push(`${POSITION_WORDS[pos][1]} (${f?.note ?? 'not measured'})`)
+  }
+  return missing.length ? `This lineup (${lineup.label}) is unusual for ${missing.join('; ')} — no lineup adjustment applied.` : null
+}
+
+// ─── The public board ───────────────────────────────────────────────────────────────────────────────
 
 export type AfMarketMover = {
   playerId: string
@@ -172,14 +263,14 @@ export function rankMarketMovers(rows: readonly AfMarketRow[], limit: number, no
   }
 }
 
-/** The public "what the real trade market says" board: biggest risers and fallers from a FRESH run. */
+/** The public "what the real trade market says" board for one book: biggest risers and fallers. */
 export async function loadAfTradeMarketBoard(
   prisma: MarketDelegate,
-  opts: { limit?: number; now?: Date } = {},
+  opts: { book: MarketBook; limit?: number; now?: Date },
 ): Promise<AfMarketBoard> {
   const now = opts.now ?? new Date()
   const limit = Math.max(1, Math.min(25, opts.limit ?? 8))
-  const rows = await findRows(prisma, freshWhere(now))
+  const rows = await findRows(prisma, freshWhere(opts.book, now))
   return rankMarketMovers(rows, limit, now)
 }
 

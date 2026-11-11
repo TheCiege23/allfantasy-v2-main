@@ -50,6 +50,40 @@
   text-decoration: none;
 }
 
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.segment {
+  display: inline-flex;
+  border: 1px solid var(--line, rgba(148, 163, 184, 0.22));
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.segOn,
+.segOff {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segOn {
+  background: var(--accent-soft, rgba(34, 211, 238, 0.15));
+  color: var(--text, #e5e7eb);
+}
+
+.segOff {
+  background: transparent;
+  color: var(--muted, #94a3b8);
+}
+
 .cols {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
