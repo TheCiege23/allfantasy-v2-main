@@ -2,6 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
+import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
 import { type FantasyCalcSettings } from '@/lib/fantasycalc'
@@ -72,6 +73,14 @@ type ParsedRoster = {
 const SKILL_POSITIONS = ['QB', 'RB', 'WR', 'TE']
 
 export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", tool: "TradeFinderMatchmaking" })(async (req: NextRequest) => {
+  /*
+   * "Find Best Partners" — open to anyone, signed in or not, while its button was locked to
+   * `legacy_trade_finder` in the browser only. It also starts a league pre-analysis in the background,
+   * so a direct request spent real work for free. Sign-in and the plan now come first.
+   */
+  const plan = await requireEntitlement('legacy_trade_finder')
+  if (typeof plan !== 'string') return plan
+
   const ip = getClientIp(req)
   const rl = consumeRateLimit({
     scope: 'legacy',

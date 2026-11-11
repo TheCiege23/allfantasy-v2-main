@@ -86,6 +86,12 @@ export function DraftResultsClient({
   }
 
   const { managerRankings, pickLog, bestPickOfDraft, worstReachOfDraft, stealOfDraft } = data
+  // AI explanations are Draft Rankings (AF Commissioner); the rankings above them stay free.
+  const aiLock = data.aiExplainLocked ?? null
+  const aiLockHref =
+    aiLock?.upgradePath && aiLock.upgradePath.startsWith('/') && !aiLock.upgradePath.startsWith('//')
+      ? aiLock.upgradePath
+      : '/commissioner-upgrade'
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 pb-24">
@@ -109,11 +115,26 @@ export function DraftResultsClient({
             data-testid="draft-results-ai-explanations-toggle"
           >
             <Wand2 className="h-3.5 w-3.5" />
-            {aiExplainEnabled ? 'AI explanations on' : 'AI explanations off'}
+            {aiExplainEnabled && !aiLock ? 'AI explanations on' : 'AI explanations off'}
           </button>
-          <span className="text-xs text-white/50">
-            Rankings stay deterministic; AI only rewrites explanation text.
-          </span>
+          {aiLock ? (
+            <span
+              className="inline-flex flex-wrap items-center gap-2 text-xs text-amber-100"
+              data-testid="draft-results-ai-locked"
+            >
+              <span>🔒 {aiLock.message}</span>
+              <Link
+                href={aiLockHref}
+                className="inline-flex min-h-[40px] items-center rounded-lg border border-amber-400/40 bg-amber-400/15 px-3 font-semibold text-amber-50 hover:bg-amber-400/25"
+              >
+                See AF Commissioner
+              </Link>
+            </span>
+          ) : (
+            <span className="text-xs text-white/50">
+              Rankings stay deterministic; AI only rewrites explanation text.
+            </span>
+          )}
         </div>
       </header>
 
