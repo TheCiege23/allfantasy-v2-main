@@ -318,11 +318,7 @@ export function LandingV4({
             </a>
           </div>
           <p className="af-lp-reassure" data-testid="landing-hero-trade-link">
-            <Link href="/trade-evaluator">
-              {lang === 'es'
-                ? 'O evalúa un intercambio ahora, sin importar nada →'
-                : 'Or grade a trade right now — no import needed →'}
-            </Link>
+            <Link href="/trade-evaluator">{c.hero.tradeLink}</Link>
           </p>
           <p className="af-lp-reassure">{c.hero.reassure}</p>
           {/*
@@ -463,10 +459,10 @@ export function LandingV4({
       <section className="af-lp-trade-market" id="trade-values" data-testid="landing-trade-market">
         <TradeMarketMovers
           limit={4}
-          lang={lang === 'es' ? 'es' : 'en'}
-          heading={lang === 'es' ? 'Valores de intercambio basados en intercambios reales' : 'Trade values built from real trades'}
+          lang={lang}
+          heading={c.tradeMarket.heading}
           ctaHref="/trade-evaluator"
-          ctaLabel={lang === 'es' ? 'Evalúa un intercambio gratis' : 'Grade a trade free'}
+          ctaLabel={c.tradeMarket.cta}
           testId="landing-trade-market-movers"
         />
       </section>
