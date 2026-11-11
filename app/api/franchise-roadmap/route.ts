@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   computeFranchiseRoadmap,
   FranchiseRoadmapInputSchema,
@@ -16,6 +17,10 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
+
+    // Plan gate before any rate-limit spend or AI call: `ai_planning_3_5_year` (lib/monetization/entitlements.ts).
+    const gate = await requireFeatureEntitlement({ userId: session.user.id, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'ai_planning_3_5_year' })
+    if (!gate.ok) return gate.response
 
     const body = await request.json()
     const parsed = FranchiseRoadmapInputSchema.safeParse(body)
