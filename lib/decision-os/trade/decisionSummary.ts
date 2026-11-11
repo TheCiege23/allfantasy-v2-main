@@ -5,10 +5,18 @@ import { projectedLetterFor } from '@/lib/trade-intel/gradeScale'
 import type { PackageCost } from './packageCost'
 import { getIntlLocale, type LanguageCode } from '@/lib/i18n/constants'
 
-export function counterDecision(args:{before:TradeGradeView;after:TradeGradeView;addTo:'give'|'get';cost?:PackageCost|null;language?:LanguageCode}) {
+/**
+ * One counteroffer, in a sentence. `action` and `kind` arrived 2026-11-11 with pick and "ask for less"
+ * counters; both default to the original add-a-player case.
+ */
+export function counterDecision(args:{before:TradeGradeView;after:TradeGradeView;addTo:'give'|'get';action?:'add'|'remove';kind?:'player'|'pick'|'faab';cost?:PackageCost|null;language?:LanguageCode}) {
   const locale=getIntlLocale(args.language??'en')
   if (!args.before.graded || !args.after.graded) return 'Grade this counteroffer again to see what it changes.'
   const before=Math.abs(args.before.getValue-args.before.giveValue),after=Math.abs(args.after.getValue-args.after.giveValue)
+  const from=before.toLocaleString(locale),to=after.toLocaleString(locale)
+  if (args.action==='remove') return `Taking this out cuts the value gap from ${from} to ${to}. Grade it again to see the effect on your lineup and roster space.`
+  // A pick takes no roster spot, so there is no drop to count.
+  if (args.kind==='pick') return `Adding this pick cuts the value gap from ${from} to ${to}. Add it and grade again to see the new grade.`
   const net=args.addTo==='get'?1:-1
   const capacity=args.cost?.capacity
   const drops=capacity!=null&&args.cost?Math.max(0,args.cost.activeAfter+net-capacity):null

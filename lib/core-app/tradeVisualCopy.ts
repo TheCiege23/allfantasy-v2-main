@@ -2,6 +2,11 @@ import { coreUiCopy } from './coreUiCopy'
 
 /** Bundled display translations. Stored evaluations and player identities remain unchanged. */
 export const tradeVisualSpanish: Record<string,string> = {
+  "Ask for less: leave out":"Pide menos: deja fuera a",
+  "Send less: keep":"Envía menos: quédate con",
+  "leave out":"deja fuera a",
+  "keep":"quédate con",
+  "Take it out":"Quitarlo de la propuesta",
   "We couldn’t check your roster limit.":"No pudimos comprobar el límite de tu plantilla.",
   // Plain-language trade copy (2026-11-11).
   "sent,":"enviado,",
@@ -237,6 +242,8 @@ export const tradeVisualSpanish: Record<string,string> = {
 
 /** Templates use {n} slots. Captured player/team names are preserved, never machine-translated. */
 const templates: Array<[string,string]> = [
+  ["Adding this pick cuts the value gap from {0} to {1}. Add it and grade again to see the new grade.","Añadir esta selección reduce la diferencia de valor de {0} a {1}. Añádela y califica de nuevo para ver la nueva nota."],
+  ["Taking this out cuts the value gap from {0} to {1}. Grade it again to see the effect on your lineup and roster space.","Quitar esto reduce la diferencia de valor de {0} a {1}. Califica de nuevo para ver el efecto en tu alineación y en el espacio de tu plantilla."],
   // Plain-language trade copy (2026-11-11).
   ["You send {0} player and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugador y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],
   ["You send {0} players and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugadores y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],

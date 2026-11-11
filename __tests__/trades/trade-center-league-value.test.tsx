@@ -329,6 +329,26 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     await analyze(container)
     expect(screen.getByText(/Missing owned contract/).textContent).toContain('value grade does not establish cap legality')
   })
+  /* 2026-11-11: "ask for less" — a counter can take an asset OFF the side that is ahead. */
+  it('a removal counter says so and takes exactly that asset out', async () => {
+    const counterGrade = gradeTrade({ giveValue: 5000, getValue: 4900, giveMarket: 5000, getMarket: 4500,
+      unpriced: 0, giveCount: 1, getCount: 1, basis: 'League', scoringApplied: false, needApplied: false,
+      needGap: null, lines: [], moves: [] })
+    fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
+      ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, counterOffers: [{
+        action: 'remove', addTo: 'get', index: 0, name: 'Trey McBride', rosterPlayerId: 'remove:get:0', position: null, marketValue: 0,
+        asset: { kind: 'player', name: 'Trey McBride' }, assetLeagueValue: 5928, grade: counterGrade, remainingGap: 100, balanced: true,
+      }] }) } : { ok: false, status: 500, json: async () => ({}) })
+    const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    expect(container.querySelector('.af-tc-counters')!.textContent).toContain('Ask for less: leave out Trey McBride')
+    fireEvent.click(screen.getByRole('button', { name: 'Take it out' }))
+    // Off the deal (his roster row below still offers him back), and nothing else removed.
+    expect(screen.queryByRole('button', { name: 'Remove Trey McBride', exact: true })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove Kenneth Walker', exact: true })).toBeTruthy()
+    expect(container.querySelector('.af-tc-verdict')).toBeNull()
+  })
+
   it('adds a re-evaluated counter to the right side and clears the previous verdict', async () => {
     const counterGrade = gradeTrade({ giveValue: 5000, getValue: 5000, giveMarket: 5000, getMarket: 5000,
       unpriced: 0, giveCount: 1, getCount: 2, basis: 'League', scoringApplied: false, needApplied: false,
