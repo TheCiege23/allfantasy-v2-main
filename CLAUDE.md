@@ -194,6 +194,11 @@ provider call is the cache-MISS path, exactly as this file already sanctions for
 | `app/api/music/track-info/route.ts:66` | `theaudiodb.com` |
 | `server/api-route-modules/legacy/trade/analyze/route.ts:434` | `thesportsdb.com` |
 
+✅ **The trade/analyze row is RESOLVED, re-measured 2026-11-11** — `node scripts/check-db-first-api-boundary.mjs`
+no longer reports the file, it contains no `thesportsdb` reference, and none of its direct `@/lib`
+imports reaches one. The commit that removed it is outside this clone's shallow history, so it is not
+named here. The other five rows were not re-checked; re-run the guard before acting on them.
+
 ⚠ **THE TWO MFL ONES ALSO PUT A CREDENTIAL ON THE WIRE FROM A REQUEST PATH**, sending
 `Cookie: MFL_USER_ID=${connection.mflCookie}`. That is the `RSC_token`-in-a-query-parameter
 shape reached a different way — and note the `db-first-auth-exchange:` marker correctly
