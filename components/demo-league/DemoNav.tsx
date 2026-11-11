@@ -9,6 +9,7 @@ const TABS = [
   { href: '/demo/chimmy', label: 'Chimmy' },
   { href: '/demo/players', label: 'Player Finder' },
   { href: '/demo/trade-evaluator', label: 'Trade Evaluator' },
+  { href: '/demo/formats', label: 'League types' },
 ] as const
 
 export function DemoNav() {

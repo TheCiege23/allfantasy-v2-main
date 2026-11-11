@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type React from 'react'
 import type { DemoLeagueView, DemoPlayer, DemoTeam } from '@/lib/demo-league/types'
 import { TeamBadge } from './TeamBadge'
 
@@ -17,25 +18,48 @@ function syncedAgo(iso: string | null): string {
   return h < 48 ? `synced ${h} h ago` : `synced ${Math.round(h / 24)} days ago`
 }
 
-export function DemoOverview({ view }: { view: DemoLeagueView }) {
+export type DemoOverviewOptions = {
+  /** Sample (generated) league: no team pages to link to, no "synced N min ago", no header. */
+  sample?: boolean
+  /** Where "Create your own league" goes; a format demo pre-selects its format. */
+  createHref?: string
+  testLeagueHref?: string
+  /** Rendered between the header and the standings — a format demo's own panel goes here. */
+  children?: React.ReactNode
+  /**
+   * 'points' ranks by season points with no W-L column — for formats with no head-to-head
+   * record (Guilly, Survivor, Survivor Guilly), where a W-L column would be made up.
+   */
+  standingsMode?: 'record' | 'points'
+  standingsTitle?: string
+}
+
+export function DemoOverview({ view, sample = false, createHref = '/create-league', testLeagueHref = '/create-league?from=demo', children, standingsMode = 'record', standingsTitle = 'Standings' }: { view: DemoLeagueView } & DemoOverviewOptions) {
+  const byPoints = standingsMode === 'points'
+  const rows = byPoints ? [...view.standings].sort((a, b) => b.pointsFor - a.pointsFor).map((r, i) => ({ ...r, rank: i + 1 })) : view.standings
   const team = (slot: number) => view.teams.find((t) => t.slot === slot)
   const s = view.settings
+  // A sample league has no /demo/teams/<slot> pages behind it, so its badges are not links.
+  const TeamBadgeX = (props: Parameters<typeof TeamBadge>[0]) => <TeamBadge {...props} link={!sample && props.link !== false} />
 
   return (
     <div className="space-y-5">
-      <header className="pt-2">
-        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{view.leagueName}</h1>
-        <p className="mt-1 text-sm af-muted">
-          {s.teamCount} teams · {s.sport} {s.season}
-          {s.scoringLabel ? ` · ${s.scoringLabel}` : ''}
-          {s.isDynasty ? ' · Dynasty' : ''}
-          {view.currentWeek != null ? ` · Week ${view.currentWeek}` : ''} · {syncedAgo(view.lastSyncedAt)}
-        </p>
-      </header>
+      {sample ? null : (
+        <header className="pt-2">
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{view.leagueName}</h1>
+          <p className="mt-1 text-sm af-muted">
+            {s.teamCount} teams · {s.sport} {s.season}
+            {s.scoringLabel ? ` · ${s.scoringLabel}` : ''}
+            {s.isDynasty ? ' · Dynasty' : ''}
+            {view.currentWeek != null ? ` · Week ${view.currentWeek}` : ''} · {syncedAgo(view.lastSyncedAt)}
+          </p>
+        </header>
+      )}
+      {children}
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <section className="af-card min-w-0 p-4" aria-labelledby="demo-standings">
-          <h2 id="demo-standings" className="text-lg font-black">Standings</h2>
+          <h2 id="demo-standings" className="text-lg font-black">{standingsTitle}</h2>
           {view.standings.length === 0 ? (
             <p className="mt-2 text-sm af-muted">No games scored yet this season.</p>
           ) : (
@@ -45,19 +69,19 @@ export function DemoOverview({ view }: { view: DemoLeagueView }) {
                   <tr className="text-left text-xs uppercase af-tertiary">
                     <th className="py-2 pr-2">#</th>
                     <th className="py-2 pr-2">Team</th>
-                    <th className="py-2 pr-2 text-right">W-L</th>
-                    <th className="py-2 pr-2 text-right">PF</th>
-                    <th className="py-2 text-right">PA</th>
+                    {byPoints ? null : <th className="py-2 pr-2 text-right">W-L</th>}
+                    <th className="py-2 pr-2 text-right">{byPoints ? 'Season pts' : 'PF'}</th>
+                    {byPoints ? null : <th className="py-2 text-right">PA</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {view.standings.map((r) => (
+                  {rows.map((r) => (
                     <tr key={r.slot} className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
                       <td className="py-2 pr-2 font-bold">{r.rank}</td>
-                      <td className="py-2 pr-2"><TeamBadge team={team(r.slot)} size={28} /></td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}</td>
+                      <td className="py-2 pr-2"><TeamBadgeX team={team(r.slot)} size={28} /></td>
+                      {byPoints ? null : <td className="py-2 pr-2 text-right tabular-nums">{r.wins}-{r.losses}{r.ties ? `-${r.ties}` : ''}</td>}
                       <td className="py-2 pr-2 text-right tabular-nums">{r.pointsFor.toFixed(1)}</td>
-                      <td className="py-2 text-right tabular-nums">{r.pointsAgainst.toFixed(1)}</td>
+                      {byPoints ? null : <td className="py-2 text-right tabular-nums">{r.pointsAgainst.toFixed(1)}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -67,6 +91,7 @@ export function DemoOverview({ view }: { view: DemoLeagueView }) {
         </section>
 
         <div className="min-w-0 space-y-5">
+          {sample && view.matchups.length === 0 ? null : (
           <section className="af-card p-4" aria-labelledby="demo-matchups">
             <h2 id="demo-matchups" className="text-lg font-black">
               {view.currentWeek != null ? `Week ${view.currentWeek} scores` : 'Scores'}
@@ -77,17 +102,18 @@ export function DemoOverview({ view }: { view: DemoLeagueView }) {
               <ul className="mt-3 space-y-2">
                 {view.matchups.map((m, i) => (
                   <li key={i} className="af-card-soft grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 p-3 text-sm">
-                    <div className="min-w-0"><TeamBadge team={team(m.home.slot)} size={24} /></div>
+                    <div className="min-w-0"><TeamBadgeX team={team(m.home.slot)} size={24} /></div>
                     <div className="px-1 text-center tabular-nums">
                       <div className="font-black">{m.home.points.toFixed(1)} – {m.away ? m.away.points.toFixed(1) : '—'}</div>
                       <div className="text-[11px] uppercase af-tertiary">{m.status}</div>
                     </div>
-                    <div className="flex min-w-0 justify-end text-right">{m.away ? <TeamBadge team={team(m.away.slot)} size={24} /> : <span className="af-muted">Bye</span>}</div>
+                    <div className="flex min-w-0 justify-end text-right">{m.away ? <TeamBadgeX team={team(m.away.slot)} size={24} /> : <span className="af-muted">Bye</span>}</div>
                   </li>
                 ))}
               </ul>
             )}
           </section>
+          )}
 
           <section className="af-card p-4" aria-labelledby="demo-health">
             <h2 id="demo-health" className="text-lg font-black">League Health</h2>
@@ -117,10 +143,11 @@ export function DemoOverview({ view }: { view: DemoLeagueView }) {
         </div>
       </div>
 
+      {sample && view.trades.length === 0 ? null : (
       <section className="af-card p-4" aria-labelledby="demo-recent-trades">
         <div className="flex items-center justify-between">
           <h2 id="demo-recent-trades" className="text-lg font-black">Recent trades</h2>
-          <Link href="/demo/trades" className="text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>All trades</Link>
+          {sample ? null : <Link href="/demo/trades" className="text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>All trades</Link>}
         </div>
         {view.trades.length === 0 ? (
           <p className="mt-2 text-sm af-muted">No trades yet.</p>
@@ -131,7 +158,7 @@ export function DemoOverview({ view }: { view: DemoLeagueView }) {
                 <p className="text-xs af-tertiary">{t.date}</p>
                 {t.sides.map((sd) => (
                   <div key={sd.slot} className="mt-2">
-                    <TeamBadge team={team(sd.slot)} size={22} />
+                    <TeamBadgeX team={team(sd.slot)} size={22} />
                     <p className="mt-1 pl-8 af-muted">gets {sd.received.map((a) => a.name).join(', ') || '—'}</p>
                   </div>
                 ))}
@@ -140,6 +167,7 @@ export function DemoOverview({ view }: { view: DemoLeagueView }) {
           </ul>
         )}
       </section>
+      )}
 
       <section className="af-card flex flex-col items-start justify-between gap-3 p-5 sm:flex-row sm:items-center">
         <div>
@@ -147,8 +175,8 @@ export function DemoOverview({ view }: { view: DemoLeagueView }) {
           <p className="text-sm af-muted">Create a league, or start a test league with placeholder managers and try the whole flow solo.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/create-league" className="af-button-primary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold" data-testid="demo-create-league">Create your own league</Link>
-          <Link href="/create-league?from=demo" className="af-button-secondary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold" data-testid="demo-create-test-league">Create a test league</Link>
+          <Link href={createHref} className="af-button-primary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold" data-testid="demo-create-league">Create your own league</Link>
+          <Link href={testLeagueHref} className="af-button-secondary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold" data-testid="demo-create-test-league">Create a test league</Link>
         </div>
       </section>
     </div>

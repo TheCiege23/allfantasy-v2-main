@@ -24,11 +24,14 @@ import { getDefaultScoringPresetId, resolveScoringPresetId } from '@/lib/league-
 import { getSurvivorTribeOptions } from '@/lib/create-league-v2/rules-engine'
 import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { applyRequestedFormat, type RequestableFormat } from '@/lib/create-league-v2/requestedFormat'
 
 export interface CreateLeagueV2ClientProps {
   userId: string
   /** Opened from the demo league: offer "Create a test league" pre-selected. */
   fromDemo?: boolean
+  /** `?type=<format>` (from a format demo): start the wizard on that format. */
+  requestedFormat?: RequestableFormat
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
   importSourceLeagueId?: string
@@ -68,13 +71,16 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues, fromDemo }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues, fromDemo, requestedFormat }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
   // An import carries its own format; a fresh create starts on the sport's default format
   // (Survivor for the default NFL). A form restored from
   // this device's saved draft (below, localStorage) keeps whatever the manager had chosen.
-  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? freshCreateLeagueState(DEFAULT_V2_STATE)))
+  const [state, setState] = useState<CreateLeagueV2State>(() => {
+    const start = importTemplate ?? freshCreateLeagueState(DEFAULT_V2_STATE)
+    return normalizeInitialState(!importTemplate && requestedFormat ? applyRequestedFormat(start, requestedFormat) : start)
+  })
   const [acceptWeeklyLineups, setAcceptWeeklyLineups] = useState(false)
   const [testLeague, setTestLeague] = useState(fromDemo === true)
   const [hydrated, setHydrated] = useState(false)
@@ -97,7 +103,12 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     }
     const persisted = loadPersistedV2State()
     if (persisted) {
-      setState((current) => normalizeInitialState({ ...current, ...persisted }))
+      // A requested format is applied ON TOP of the restored draft: the manager keeps their
+      // name and choices, only the format changes to the one the link asked for.
+      setState((current) => {
+        const restored = { ...current, ...persisted }
+        return normalizeInitialState(requestedFormat ? applyRequestedFormat(restored, requestedFormat) : restored)
+      })
       const savedAt = getPersistedV2SavedAt()
       setRestoredAt(savedAt ?? Date.now())
       sendProductAnalyticsBeacon(CREATE_LEAGUE.DRAFT_RESTORED, {
@@ -114,7 +125,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       }
     }
     setHydrated(true)
-  }, [importTemplate])
+  }, [importTemplate, requestedFormat])
 
   useEffect(() => {
     if (!hydrated) return

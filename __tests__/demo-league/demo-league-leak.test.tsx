@@ -229,6 +229,10 @@ const PAGE_FILES = [
   'app/demo/chimmy/page.tsx',
   'app/demo/players/page.tsx',
   'app/demo/trade-evaluator/page.tsx',
+  // Generated sample leagues: no source data at all. Rendered, and checked to never touch the
+  // database, in demo-formats.test.tsx.
+  'app/demo/formats/page.tsx',
+  'app/demo/formats/[format]/page.tsx',
 ]
 
 function walk(dir: string, name: string): string[] {
@@ -399,9 +403,12 @@ describe('demo code never reaches a notification, email, push, SMS or ad-convers
     'twilio-client', 'notification-engine', 'chat-notifications', 'teamDeliveryReceipts', 'draft-notifications',
     'meta-capi', 'jobs/enqueue', 'automation/notifications', 'analytics/recordAnalyticsEvent',
   ]
+  const tree = (dir: string): string[] =>
+    fs.readdirSync(path.join(process.cwd(), dir), { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? tree(`${dir}/${e.name}`) : [`${dir}/${e.name}`])
   const files = [
-    ...fs.readdirSync(path.join(process.cwd(), 'lib/demo-league')).filter((f) => f !== 'testLeagueFill.ts').map((f) => `lib/demo-league/${f}`),
-    ...fs.readdirSync(path.join(process.cwd(), 'components/demo-league')).map((f) => `components/demo-league/${f}`),
+    ...tree('lib/demo-league').filter((f) => !f.endsWith('/testLeagueFill.ts')),
+    ...tree('components/demo-league'),
     ...API_ROUTE_FILES,
     ...PAGE_FILES,
     'app/demo/layout.tsx',
