@@ -10,6 +10,8 @@
 # guard survives a checkout that ignores this file. Both are deliberate: this
 # rule fixes the working copy, the installer fixes what actually runs.
 .githooks/** text eol=lf
+# Run by bash on Linux CI runners; a CRLF here is a "bad interpreter" failure.
+scripts/ci/*.sh text eol=lf
 
 # Prisma migrations MUST check out with LF endings, for a different reason.
 #
