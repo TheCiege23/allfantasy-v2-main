@@ -1916,3 +1916,9 @@
 .af-core .af-bd-sec-info .af-info-tip {
   margin-left: 0;
 }
+
+/* The league's status line under a trade card's header (2026-11-11): no rule above it — it belongs to the header. */
+.af-core .af-bd-card-status {
+  border-top: 0;
+  padding-top: 0;
+}

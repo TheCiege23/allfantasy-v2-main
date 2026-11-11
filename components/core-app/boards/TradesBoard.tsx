@@ -254,12 +254,18 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           </BoardActionLink>
         </header>
 
-        {t ? (
-          <TradeBody t={t} leagueId={row.leagueId} />
-        ) : (
-          <p className="af-bd-reason">No trade has been made in this league on any season we hold.</p>
-        )}
+        {/*
+          ⚠ THE LEAGUE'S STATUS SITS UNDER THE HEADER, NOT IN THE FOOT (2026-11-11). "4 weeks until the
+          week 13 deadline. 14 trades on file here." sat between the grades and the explanation of
+          them, and read on a phone as part of the verdict. It is about the league, so it goes with
+          the league's name; the foot is the trade's grades and why.
+        */}
+        <p className="af-bd-reason af-bd-card-status">{row.reasoning}</p>
 
+        {/* No trade: the status line above already says so, in the loader's own words. */}
+        {t ? <TradeBody t={t} leagueId={row.leagueId} /> : null}
+
+        {t ? (
         <div className="af-bd-card-foot">
           {/*
             ⚠ THE REFUSAL IS RENDERED HERE, NOT LEFT TO THE LOADER'S PROSE. The
@@ -325,8 +331,6 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
               </span>
             </span>
           ) : null}
-          {t ? <span className="af-bd-rule" aria-hidden /> : null}
-          <p className="af-bd-reason">{row.reasoning}</p>
           {/*
             WHY it graded that way, which is what a manager opens a trade card for.
 
@@ -350,6 +354,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             </ul>
           ) : null}
         </div>
+        ) : null}
       </article>
     </li>
   )

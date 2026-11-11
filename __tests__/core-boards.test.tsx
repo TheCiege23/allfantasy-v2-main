@@ -1721,6 +1721,17 @@ describe('TradesBoard — a priced pick shows its price', () => {
    * Reported from a phone, 2026-11-11: the card read "Latest grade A" — one letter, no team. Each
    * team's letter now sits under its own name.
    */
+  /* 2026-11-11: the deadline line sat between the grades and their explanation and read as part of the verdict. */
+  it('puts the league’s deadline line under the header, not among the grades', () => {
+    const { container } = render(<TradesBoard data={withPick(1231, 'D', 42)} allHref="/core/trades?all=1" />)
+    const status = container.querySelector('.af-bd-card-status')
+    expect(status?.textContent).toContain('1 week until the week 11 deadline.')
+    expect(container.querySelector('.af-bd-card-foot')?.textContent ?? '').not.toContain('deadline')
+    // Above the traded assets.
+    const body = container.querySelector('.af-bd-card-body')!
+    expect(status!.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('shows each team’s grade under that team’s name', () => {
     const d = withPick(1231, 'D', 42)
     const data = { ...d, windows: [{ ...d.windows[0]!, latest: { ...d.windows[0]!.latest!, partnerLetter: 'B' as const } }] }
