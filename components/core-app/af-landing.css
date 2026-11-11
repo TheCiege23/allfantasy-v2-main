@@ -359,6 +359,18 @@
   color: var(--good);
 }
 
+/* ── Trade values from real trades ───────────────────────────────────── */
+
+.af-lp-trade-market {
+  padding: 8px 40px 24px;
+}
+
+@media (max-width: 720px) {
+  .af-lp-trade-market {
+    padding: 4px 16px 16px;
+  }
+}
+
 /* ── Connects to ─────────────────────────────────────────────────────── */
 
 .af-lp-connects {

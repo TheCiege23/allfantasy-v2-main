@@ -5,7 +5,17 @@ import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { SG_CREATE_TRIBE_COUNTS } from '@/lib/survivor-guillotine/createFit'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getFormatExplainer } from '@/lib/create-league-v2/format-explainers'
+import {
+  fieldsTouchedByPatch,
+  issuesForStep,
+  placeIssues,
+  visibleFieldErrors,
+  type CreateWizardField,
+} from '@/lib/create-league-v2/step-validation'
+import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
@@ -81,6 +91,20 @@ type WizardProps = {
   onCancel: () => void
   /** Imported leagues this manager commissions, which can be converted to native leagues. */
   importedLeagues?: ImportedLeagueSummary[]
+  /** Autosave: when the draft was last written (ms). */
+  lastSavedAt?: number | null
+  /** When a saved draft was restored on arrival (ms). */
+  restoredAt?: number | null
+  onStartOver?: () => void
+}
+
+function formatSavedAgo(ts: number, now: number): string {
+  const mins = Math.round((now - ts) / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${hours} hr ago`
+  return new Date(ts).toLocaleDateString()
 }
 
 /*
@@ -134,6 +158,11 @@ const HELP = {
   draftDate: ['createLeague.g30.help.draftDate', 'Pick a date and time now, or choose Schedule later to invite managers first. You can set or change the draft date any time in Commissioner settings → Draft.'],
   timezone: ['createLeague.g30.help.timezone', "The draft time is set in this timezone, and it is your league's home timezone. It starts on your device's timezone."],
   tePremium: ['createLeague.g30.help.tePremium', 'TE premium gives tight ends extra points for every catch, on top of the league\'s normal points per catch. Turn it on, then choose how much each tight-end catch is worth.'],
+  medianGame: ['createLeague.g30.help.medianGame', 'Each week every team also plays the league median score. Beat it for an extra win, so a high score in a bad matchup still counts.'],
+  devy: ['createLeague.g30.help.devy', 'Extra draft rounds for college players. You hold their rights until they reach the NFL.'],
+  keeperMax: ['createLeague.g30.help.keeperMax', 'How many players each team may carry over into next season. Everyone else goes back into the draft pool.'],
+  keeperCost: ['createLeague.g30.help.keeperCost', 'What it costs to keep a player next season. With a round cost of 1, a player drafted in round 5 costs your round 4 pick to keep.'],
+  keeperYears: ['createLeague.g30.help.keeperYears', 'How many seasons in a row the same player can be kept before he goes back into the draft. "No limit" means forever.'],
   advanced: ['createLeague.g30.help.advanced', 'Optional extras that come with an AF Commissioner plan: Commissioner Intelligence tools, automatic trade approval and league health monitoring. Every format and setting above is free.'],
 } as const
 
@@ -386,6 +415,89 @@ export function CreateLeagueWizard(props: WizardProps) {
   }, [hasStalePremium, onChange])
   const canCreate = props.completionIssues.length === 0 && !props.createdLeagueHref
 
+  // ── Validation, per step and per field ──────────────────────────────────────────────────
+  // A blank form does not open covered in red: a field's error shows once it is edited, and every
+  // error on a step shows once the manager tries to leave that step with Next.
+  const [touched, setTouched] = useState<ReadonlySet<CreateWizardField>>(() => new Set())
+  const [attemptedSteps, setAttemptedSteps] = useState<ReadonlySet<WizardStep>>(() => new Set())
+  const [stepNotice, setStepNotice] = useState<string | null>(null)
+  const placed = useMemo(() => placeIssues(props.completionIssues, props.state), [props.completionIssues, props.state])
+  const clientFieldErrors = useMemo(
+    () => visibleFieldErrors(placed, { touched, attemptedSteps }),
+    [placed, touched, attemptedSteps],
+  )
+  // Server errors from a failed submit win: they are what the server actually refused.
+  const mergedFieldErrors = useMemo(
+    () => ({ ...clientFieldErrors, ...(props.fieldErrors ?? {}) }) as Partial<Record<string, string>>,
+    [clientFieldErrors, props.fieldErrors],
+  )
+  const onFieldChange = useCallback(
+    (patch: Partial<CreateLeagueV2State>) => {
+      const fields = fieldsTouchedByPatch(patch)
+      if (fields.length > 0) {
+        setTouched((prev) => {
+          if (fields.every((f) => prev.has(f))) return prev
+          const next = new Set(prev)
+          fields.forEach((f) => next.add(f))
+          return next
+        })
+      }
+      setStepNotice(null)
+      onChange(patch)
+    },
+    [onChange],
+  )
+
+  // ── Funnel analytics: step and field NAMES only, never what was typed ───────────────────
+  const reportedErrors = useRef(new Set<string>())
+  useEffect(() => {
+    for (const issue of placed) {
+      if (!issue.field || !(issue.field in clientFieldErrors)) continue
+      const key = `${issue.field}:${issue.code}`
+      if (reportedErrors.current.has(key)) continue
+      reportedErrors.current.add(key)
+      sendProductAnalyticsBeacon(CREATE_LEAGUE.VALIDATION_ERROR, {
+        step: issue.step,
+        field: issue.field,
+        code: issue.code,
+        leagueType: props.state.leagueType ?? 'redraft',
+      })
+    }
+  }, [placed, clientFieldErrors, props.state.leagueType])
+
+  const stepEnteredAt = useRef<{ step: WizardStep; at: number } | null>(null)
+  const submitAttempted = useRef(false)
+  const restoredOnOpen = useRef(Boolean(props.restoredAt))
+  useEffect(() => {
+    sendProductAnalyticsBeacon(CREATE_LEAGUE.FUNNEL_OPEN, { flow: 'g30', restored: restoredOnOpen.current })
+    let abandoned = false
+    const abandon = () => {
+      if (submitAttempted.current || abandoned) return
+      abandoned = true
+      sendProductAnalyticsBeacon(CREATE_LEAGUE.FUNNEL_ABANDON, { flow: 'g30', step: stepEnteredAt.current?.step ?? 'sport' })
+    }
+    // `pagehide` covers closing the tab and navigating away; the cleanup covers in-app routing.
+    window.addEventListener('pagehide', abandon)
+    return () => {
+      window.removeEventListener('pagehide', abandon)
+      abandon()
+    }
+  }, [])
+  useEffect(() => {
+    const prev = stepEnteredAt.current
+    if (prev && prev.step !== activeStep) {
+      sendProductAnalyticsBeacon(CREATE_LEAGUE.STEP_DURATION, { flow: 'g30', step: prev.step, ms: Date.now() - prev.at })
+    }
+    stepEnteredAt.current = { step: activeStep, at: Date.now() }
+    sendProductAnalyticsBeacon(CREATE_LEAGUE.STEP_ENTER, { flow: 'g30', step: activeStep, index: STEP_ORDER.indexOf(activeStep) })
+  }, [activeStep])
+
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
+
   /*
    * ⚠ ON A PHONE THE NEXT BUTTON IS BELOW A LONG STEP, so changing step without scrolling leaves
    * the manager in the middle of the new step with no sign that it changed. Bring the progress
@@ -406,8 +518,31 @@ export function CreateLeagueWizard(props: WizardProps) {
 
   const activeIndex = STEP_ORDER.indexOf(activeStep)
   const nextStep = STEP_ORDER[Math.min(STEP_ORDER.length - 1, activeIndex + 1)] ?? 'review'
-  const goBack = () => setActiveStep(STEP_ORDER[Math.max(0, activeIndex - 1)] ?? 'sport')
-  const goNext = () => setActiveStep(nextStep)
+  const goToStep = (step: WizardStep) => {
+    if (STEP_ORDER.indexOf(step) < activeIndex) {
+      sendProductAnalyticsBeacon(CREATE_LEAGUE.STEP_BACK, { flow: 'g30', from: activeStep, to: step })
+    }
+    setStepNotice(null)
+    setActiveStep(step)
+  }
+  const goBack = () => goToStep(STEP_ORDER[Math.max(0, activeIndex - 1)] ?? 'sport')
+  // Next checks the step it is leaving: a mistake is caught here, beside the field, rather than
+  // on Review three steps later. The step tabs still jump freely.
+  const goNext = () => {
+    const blocking = issuesForStep(placed, activeStep)
+    if (blocking.length > 0) {
+      setAttemptedSteps((prev) => new Set([...prev, activeStep]))
+      setStepNotice(
+        blocking.length === 1
+          ? `One thing to fix before you continue: ${blocking[0].message}`
+          : `${blocking.length} things to fix on this step before you continue. They are marked in red.`,
+      )
+      return
+    }
+    sendProductAnalyticsBeacon(CREATE_LEAGUE.STEP_COMPLETE, { flow: 'g30', step: activeStep })
+    goToStep(nextStep)
+  }
+  const stepsLeft = STEP_ORDER.length - 1 - activeIndex
   const stepsWithIssues = new Set(props.completionIssues.map((issue) => stepForIssue(issue.code)))
 
   return (
@@ -474,6 +609,46 @@ export function CreateLeagueWizard(props: WizardProps) {
             ) : null}
           </header>
 
+          {props.restoredAt ? (
+            <div
+              className="flex flex-col gap-2 rounded-xl border border-violet-500/30 bg-violet-600/10 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+              role="status"
+              data-testid="g30-draft-restored"
+            >
+              <span>
+                <span className="font-bold">Welcome back.</span> We kept your progress from {formatSavedAgo(props.restoredAt, now)}.
+              </span>
+              {props.onStartOver ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    props.onStartOver?.()
+                    setTouched(new Set())
+                    setAttemptedSteps(new Set())
+                    setStepNotice(null)
+                    setActiveStep('sport')
+                  }}
+                  className="min-h-11 self-start rounded-lg border border-[color:var(--border-subtle)] px-3 text-xs font-bold text-[color:var(--text-secondary)] hover:border-violet-400 sm:self-auto"
+                  data-testid="g30-start-over"
+                >
+                  Start over
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-between gap-3 text-xs font-bold text-[color:var(--text-secondary)]">
+            <span data-testid="g30-step-progress">
+              Step {activeIndex + 1} of {STEP_ORDER.length}
+              {stepsLeft > 0 ? ` · ${stepsLeft} ${stepsLeft === 1 ? 'step' : 'steps'} left` : ' · last step'}
+            </span>
+            {props.lastSavedAt ? (
+              <span className="text-[color:var(--text-tertiary)]" aria-live="polite" data-testid="g30-autosave">
+                Progress saved {formatSavedAgo(props.lastSavedAt, now)}
+              </span>
+            ) : null}
+          </div>
+
           {/* scroll-mt clears the theme toggle fixed to the top-right corner on this route. */}
           <nav ref={navRef} className="scroll-mt-[4.5rem] lg:scroll-mt-3" aria-label={t('createLeague.g30.steps.aria')}>
             <ol className="grid grid-cols-4 gap-1 sm:gap-2">
@@ -485,7 +660,7 @@ export function CreateLeagueWizard(props: WizardProps) {
                   <li key={step} className="min-w-0">
                     <button
                       type="button"
-                      onClick={() => setActiveStep(step)}
+                      onClick={() => goToStep(step)}
                       aria-current={selected ? 'step' : undefined}
                       className={cx(
                         'flex min-h-14 w-full touch-manipulation flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-bold transition sm:min-h-12 sm:flex-row sm:justify-start sm:gap-2 sm:border sm:px-2.5 sm:text-xs',
@@ -526,22 +701,22 @@ export function CreateLeagueWizard(props: WizardProps) {
 
           <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-3.5 shadow-xl shadow-black/5 sm:p-5">
             {activeStep === 'sport' ? (
-              <SportStep state={props.state} onChange={props.onChange} importCarryover={props.importCarryover} />
+              <SportStep state={props.state} onChange={onFieldChange} importCarryover={props.importCarryover} />
             ) : null}
             {activeStep === 'basics' ? (
-              <LeagueBasicsStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} importCarryover={props.importCarryover} hasCommissioner={isCommissioner} />
+              <LeagueBasicsStep state={props.state} onChange={onFieldChange} fieldErrors={mergedFieldErrors} importCarryover={props.importCarryover} hasCommissioner={isCommissioner} />
             ) : null}
             {activeStep === 'draft' ? (
-              <DraftStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} />
+              <DraftStep state={props.state} onChange={onFieldChange} fieldErrors={mergedFieldErrors} />
             ) : null}
             {activeStep === 'review' ? (
               <ReviewCreateStep
                 state={props.state}
                 completionIssues={props.completionIssues}
                 submitError={props.submitError}
-                onFixIssue={(code) => setActiveStep(stepForIssue(code))}
+                onFixIssue={(code) => goToStep(stepForIssue(code))}
                 onScheduleLater={() => props.onChange({ draftScheduleLater: true })}
-                onEditStep={setActiveStep}
+                onEditStep={goToStep}
                 onChange={props.onChange}
                 hasCommissioner={isCommissioner}
                 entitlementsLoading={entitlements.loading}
@@ -555,6 +730,12 @@ export function CreateLeagueWizard(props: WizardProps) {
             ordinary inline row. Cancel stays in the page flow on a phone: it is the one action a
             stray tap should not reach.
           */}
+          {stepNotice ? (
+            <p role="alert" className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-700 dark:text-rose-200" data-testid="g30-step-notice">
+              {stepNotice}
+            </p>
+          ) : null}
+
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[color:var(--border-subtle)] bg-[color:color-mix(in_srgb,var(--surface-app)_95%,transparent)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-3 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)] backdrop-blur-md sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
             <div className="flex items-center gap-3 sm:justify-between">
               <button
@@ -578,7 +759,10 @@ export function CreateLeagueWizard(props: WizardProps) {
                 {activeStep === 'review' ? (
                   <button
                     type="button"
-                    onClick={props.onSubmit}
+                    onClick={() => {
+                      submitAttempted.current = true
+                      props.onSubmit()
+                    }}
                     disabled={!canCreate || props.submitting}
                     className="inline-flex min-h-12 flex-1 touch-manipulation items-center justify-center rounded-xl bg-violet-600 px-5 text-sm font-black text-[#ffffff] shadow-lg shadow-violet-600/25 transition hover:bg-violet-500 active:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-55 sm:min-h-11 sm:flex-none"
                     data-testid="g30-create-league-submit"
@@ -589,6 +773,7 @@ export function CreateLeagueWizard(props: WizardProps) {
                   <button
                     type="button"
                     onClick={goNext}
+                    data-testid="g30-next"
                     className="inline-flex min-h-12 flex-1 touch-manipulation items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-5 text-sm font-black text-[#ffffff] shadow-lg shadow-violet-600/25 transition hover:bg-violet-500 active:bg-violet-700 sm:min-h-11 sm:flex-none"
                   >
                     {t('createLeague.g30.next')}
@@ -860,6 +1045,8 @@ export function LeagueBasicsStep({
           </div>
         </div>
       ) : null}
+      <FieldError message={fieldErrors?.leagueType} />
+      <FormatExplainerCard leagueType={getEffectiveLeagueType(state)} />
 
       {(getEffectiveLeagueType(state) === 'devy' || getEffectiveLeagueType(state) === 'c2c') ? (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-6">
@@ -941,6 +1128,7 @@ export function LeagueBasicsStep({
           <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
             {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
           </span>
+          <FieldError message={fieldErrors?.teamCount} />
           {lockedTeamCounts.length > 0 ? (
             <span className="block text-xs text-[color:var(--text-secondary)]" data-testid="g30-team-count-locked">
               <Lock aria-hidden="true" className="mr-1 inline h-3 w-3" />
@@ -1083,7 +1271,10 @@ export function LeagueBasicsStep({
           onChange={(checked) => onChange({ medianGame: checked })}
         />
         <span>
-          <span className="block font-bold">{t('createLeague.g30.medianGame.label')}</span>
+          <span className="block font-bold">
+            {t('createLeague.g30.medianGame.label')}
+            <HelpTip label={t('createLeague.g30.medianGame.label')} testId="g30-help-median-game">{help(t, 'medianGame')}</HelpTip>
+          </span>
           <span className="block text-xs leading-5 text-[color:var(--text-secondary)]">
             {t('createLeague.g30.medianGame.body')}
           </span>
@@ -1233,6 +1424,7 @@ export function DraftStep({
               </option>
             ))}
           </select>
+          <FieldError message={fieldErrors?.scoringPreset} />
         </label>
         {/* The chosen option's label plate. TE premium is part of the label (Full PPR + 0.5 = TE+). */}
         <ScoringLabel
@@ -1301,7 +1493,10 @@ export function DraftStep({
               onChange={(checked) => onChange({ dynasty: { ...state.dynasty, devyRoundsEnabled: checked } })}
               testId="g30-devy-rounds-toggle"
             />
-            <span>{t('createLeague.g30.devyRounds.enable')}</span>
+            <span>
+              {t('createLeague.g30.devyRounds.enable')}
+              <HelpTip label={t('createLeague.g30.devyRounds.enable')} testId="g30-help-devy">{help(t, 'devy')}</HelpTip>
+            </span>
           </label>
           <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">
             {t('createLeague.g30.devyRounds.body')}
@@ -1339,10 +1534,12 @@ export function DraftStep({
           <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">
             {t('createLeague.g30.keeper.body')}
           </p>
+          <FieldError message={fieldErrors?.keeper} />
           <div className="mt-3 grid grid-cols-1 gap-4 min-[420px]:grid-cols-3">
             <label className="space-y-2">
               <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
                 {t('createLeague.g30.keeper.maxKeepers')}
+                <HelpTip label={t('createLeague.g30.keeper.maxKeepers')} testId="g30-help-keeper-max">{help(t, 'keeperMax')}</HelpTip>
               </span>
               <select
                 value={state.keeper.keeperMaxKeepers}
@@ -1362,6 +1559,7 @@ export function DraftStep({
             <label className="space-y-2">
               <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
                 {t('createLeague.g30.keeper.roundPenalty')}
+                <HelpTip label={t('createLeague.g30.keeper.roundPenalty')} testId="g30-help-keeper-cost">{help(t, 'keeperCost')}</HelpTip>
               </span>
               <select
                 value={state.keeper.keeperRoundPenalty}
@@ -1381,6 +1579,7 @@ export function DraftStep({
             <label className="space-y-2">
               <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
                 {t('createLeague.g30.keeper.maxYears')}
+                <HelpTip label={t('createLeague.g30.keeper.maxYears')} testId="g30-help-keeper-years">{help(t, 'keeperYears')}</HelpTip>
               </span>
               <select
                 value={state.keeper.keeperMaxYears}
@@ -1459,8 +1658,10 @@ export function DraftStep({
             value={state.draftDate}
             onChange={(event) => onChange({ draftDate: event.target.value })}
             className={fieldClass(Boolean(fieldErrors?.draftDate))}
+            aria-invalid={Boolean(fieldErrors?.draftDate) || undefined}
             data-testid="g30-draft-date"
           />
+          <FieldError message={fieldErrors?.draftDate} />
         </label>
         <label className="min-w-0 space-y-2">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
@@ -1471,8 +1672,10 @@ export function DraftStep({
             value={state.draftTime}
             onChange={(event) => onChange({ draftTime: event.target.value })}
             className={fieldClass(Boolean(fieldErrors?.draftTime))}
+            aria-invalid={Boolean(fieldErrors?.draftTime) || undefined}
             data-testid="g30-draft-time"
           />
+          <FieldError message={fieldErrors?.draftTime} />
         </label>
         </>
         )}
@@ -1493,6 +1696,7 @@ export function DraftStep({
               </option>
             ))}
           </select>
+          <FieldError message={fieldErrors?.timezone} />
         </label>
       </div>
     </section>
@@ -1863,6 +2067,36 @@ export function LockedAdvancedSetupPanel({
       </div>
 
       {!hasCommissioner ? <AFCommissionerUpsellCard /> : null}
+    </section>
+  )
+}
+
+/** A plain-English validation message directly under the field it is about. */
+function FieldError({ message }: { message?: string | null }) {
+  if (!message) return null
+  return (
+    <span role="alert" className="block text-xs font-semibold leading-5 text-rose-600 dark:text-rose-300">
+      {message}
+    </span>
+  )
+}
+
+/** "How this format works" — under the format tiles, so the choice is an informed one. */
+export function FormatExplainerCard({ leagueType }: { leagueType: string | null }) {
+  const explainer = getFormatExplainer(leagueType)
+  if (!explainer) return null
+  return (
+    <section
+      className="rounded-xl border border-violet-500/25 bg-violet-600/8 p-4"
+      aria-label="How this format works"
+      data-testid="g30-format-explainer"
+    >
+      <p className="text-sm font-black">{explainer.summary}</p>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[color:var(--text-secondary)]">
+        {explainer.howItWorks.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
     </section>
   )
 }

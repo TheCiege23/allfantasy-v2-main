@@ -63,7 +63,9 @@ export const AI_COST_GATES = {
   trade_ai: { label: 'AI trade analysis', featureId: 'trade_analyzer', paidFromLaunch: true, perMinute: 10, dailyFree: 15, dailyPaid: 200 },
   // /api/trade-finder never required sign-in; a small anonymous allowance keeps any logged-out
   // use working until launch, after which it needs an account and the plan like its siblings.
-  trade_finder: { label: 'Trade Finder', featureId: 'trade_analyzer', paidFromLaunch: true, perMinute: 5, dailyFree: 10, dailyPaid: 100, dailyAnonymous: 3 },
+  // The plan is AF Legacy's `legacy_trade_finder` (owner decision 2026-11-11), the same key the
+  // AF Legacy Trade Finder's buttons were already locked to in the browser.
+  trade_finder: { label: 'Trade Finder', featureId: 'legacy_trade_finder', paidFromLaunch: true, perMinute: 5, dailyFree: 10, dailyPaid: 100, dailyAnonymous: 3 },
   draft_ai: { label: 'draft help', featureId: 'pro_draft_ai', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 300 },
   /**
    * The Trade Center's written "why". SOFT: callers use evaluateAiCostGate and fall back to the

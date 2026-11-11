@@ -623,6 +623,7 @@ function AuthModeSwitch({ mode }: { mode: AuthMode }) {
   const href = callback ? `${destination}?callbackUrl=${encodeURIComponent(callback)}` : destination
   return <span className="af-au-switch">
     {mode === 'signup' ? <>Already have an account? <Link href={href}>Sign in</Link></> : <>New here? <Link href={href}>Create account</Link></>}
+    {mode === 'signup' ? <> · Just looking? <Link href="/demo" data-testid="signup-try-demo">Try the demo</Link></> : null}
   </span>
 }
 

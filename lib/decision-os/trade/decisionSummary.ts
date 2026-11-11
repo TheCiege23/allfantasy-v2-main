@@ -28,7 +28,12 @@ export function decisionSummary(args: { grade: TradeGradeView; evaluatedAt?: str
   const { grade, visual, generic } = args
   if (!grade.graded && grade.divisionImpacts) return { headline: 'Campus and Canton impact', accept: [], hesitate: [grade.reason], change: [] }
   if (!grade.graded) return { headline: 'Not enough values to grade', accept: [], hesitate: [grade.reason], change: ['Fill in the missing values and grade it again.'] }
-  const giveValue=generic?grade.giveMarket:grade.giveValue,getValue=generic?grade.getMarket:grade.getValue
+  /*
+   * The graded totals in BOTH modes (2026-11-11). Generic mode used to read the chart totals, which matched
+   * the letter only while nothing moved a league-free value; the AllFantasy trade market now does, so the
+   * chart totals would print "gets 4,900 … (6% more)" beside a 6% gap measured on different numbers.
+   */
+  const giveValue=grade.giveValue,getValue=grade.getValue
   if (![giveValue,getValue].every(value=>Number.isFinite(value)&&value>0)) return {headline:'Not enough values to grade',accept:[],hesitate:['Some values are missing. Grade it again before you rely on this.'],change:['Fill in the missing values and grade it again.']}
   const locale=getIntlLocale(args.language??'en')
   const who = generic ? 'Team A' : 'Your team'

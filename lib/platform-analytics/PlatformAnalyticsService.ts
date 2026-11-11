@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { countRealLeagues, testLeagueCountsBy, testLeagueCreatedDays } from "@/lib/demo-league/analyticsExclusion"
 import type { LeagueSport } from "@prisma/client"
 import { resolveDateRange, startOfDayUTC } from "./AnalyticsQueryResolver"
 import { resolveSportFilter } from "./SportAnalyticsFilterResolver"
@@ -143,6 +144,8 @@ async function getLeaguesCreatedOverTime(
     const key = startOfDayUTC(row.createdAt).toISOString().slice(0, 10)
     byDay.set(key, (byDay.get(key) ?? 0) + row._count.id)
   }
+  // Test leagues ("Create a test league") are not real leagues.
+  for (const [key, n] of await testLeagueCreatedDays(where)) byDay.set(key, Math.max(0, (byDay.get(key) ?? 0) - n))
   return fillDateRange(fromDate, toDate, (key) => ({ date: key, count: byDay.get(key) ?? 0 }))
 }
 
@@ -154,7 +157,8 @@ async function getLeaguesBySport(sport: LeagueSport | null): Promise<{ sport: st
     _count: { id: true },
     where,
   })
-  return counts.map((c) => ({ sport: c.sport, count: c._count.id }))
+  const tests = await testLeagueCountsBy("sport", where)
+  return counts.map((c) => ({ sport: c.sport, count: Math.max(0, c._count.id - (tests.get(String(c.sport)) ?? 0)) }))
 }
 
 /** Tool usage: group by toolKey with count and unique users. */
@@ -375,7 +379,7 @@ export async function getPlatformAnalytics(opts: {
     getTradeVolume(fromDate, toDate),
   ])
 
-  const totalLeagues = await prisma.league.count(sport ? { where: { sport } } : {})
+  const totalLeagues = await countRealLeagues(sport ? { sport } : undefined)
 
   return {
     userGrowth: {

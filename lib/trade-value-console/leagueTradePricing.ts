@@ -994,7 +994,8 @@ export async function resolveLeagueTradeChart(args: {
   leagueRow: LoadedTradeLeague | null
   leagueSnapshot: TradeConsoleLeagueSnapshot | null
   leagueNormCtx: NormalizedLeagueContext | null
-  overrides?: { leagueSize?: number; tePremium?: boolean; isSuperFlex?: boolean; waiverBudget?: number }
+  /** `isDynasty` applies only with no league (the open analyzer's format picker); a league uses its own book. */
+  overrides?: { leagueSize?: number; tePremium?: boolean; isSuperFlex?: boolean; waiverBudget?: number; isDynasty?: boolean }
   mark?: (name: string) => void
   /**
    * Resolve the league's chart SETTINGS without loading today's market or this league's defender
@@ -1024,7 +1025,7 @@ export async function resolveLeagueTradeChart(args: {
    * those surfaces show. Global mode (no league) keeps the old dynasty default, and says so.
    */
   const marketCtx = leagueRow ? marketContextFor(leagueRow.settings, leagueRow.leagueType, leagueSize) : null
-  const chartIsDynasty = marketCtx ? pricesOnDynastyChart(marketCtx.variant) : true
+  const chartIsDynasty = marketCtx ? pricesOnDynastyChart(marketCtx.variant) : input.isDynasty ?? true
   const tePremium =
     input.tePremium ??
     leagueSnapshot?.tePremiumHint ??

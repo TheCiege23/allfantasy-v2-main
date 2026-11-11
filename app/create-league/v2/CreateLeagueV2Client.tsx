@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   DEFAULT_V2_STATE,
   clearPersistedV2State,
+  getPersistedV2SavedAt,
   getDefaultBestBallSetup,
   getDefaultKeeperSetup,
   getEffectiveLeagueType,
@@ -21,9 +22,13 @@ import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/opti
 import type { LeagueCreateOptionsCatalog } from '@/lib/league-creation/options-catalog-seed-data'
 import { getDefaultScoringPresetId, resolveScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
 import { getSurvivorTribeOptions } from '@/lib/create-league-v2/rules-engine'
+import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 export interface CreateLeagueV2ClientProps {
   userId: string
+  /** Opened from the demo league: offer "Create a test league" pre-selected. */
+  fromDemo?: boolean
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
   importSourceLeagueId?: string
@@ -63,14 +68,15 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues, fromDemo }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
   // An import carries its own format; a fresh create starts on the sport's default format
   // (Survivor for the default NFL). A form restored from
-  // this tab's sessionStorage (below) keeps whatever the manager had chosen.
+  // this device's saved draft (below, localStorage) keeps whatever the manager had chosen.
   const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? freshCreateLeagueState(DEFAULT_V2_STATE)))
   const [acceptWeeklyLineups, setAcceptWeeklyLineups] = useState(false)
+  const [testLeague, setTestLeague] = useState(fromDemo === true)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -79,6 +85,9 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   const [createdLeagueId, setCreatedLeagueId] = useState<string | null>(null)
   const [creationWarning, setCreationWarning] = useState<string | null>(null)
   const [retryingFinalization, setRetryingFinalization] = useState(false)
+  /** When a saved draft was restored on arrival (ms), for the "we kept your progress" notice. */
+  const [restoredAt, setRestoredAt] = useState<number | null>(null)
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
 
   useEffect(() => {
     if (importTemplate) {
@@ -89,6 +98,11 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     const persisted = loadPersistedV2State()
     if (persisted) {
       setState((current) => normalizeInitialState({ ...current, ...persisted }))
+      const savedAt = getPersistedV2SavedAt()
+      setRestoredAt(savedAt ?? Date.now())
+      sendProductAnalyticsBeacon(CREATE_LEAGUE.DRAFT_RESTORED, {
+        ageMinutes: savedAt ? Math.round((Date.now() - savedAt) / 60_000) : null,
+      })
     } else {
       // A fresh create starts on the device's timezone rather than New York. Read here, after
       // hydration, because the server cannot know it: setting it in the initial state would render
@@ -105,7 +119,18 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   useEffect(() => {
     if (!hydrated) return
     persistV2State(state)
+    setLastSavedAt(Date.now())
   }, [hydrated, state])
+
+  const handleStartOver = useCallback(() => {
+    clearPersistedV2State()
+    setRestoredAt(null)
+    setSubmitError(null)
+    setFieldErrors(null)
+    const fresh = normalizeInitialState(freshCreateLeagueState(DEFAULT_V2_STATE))
+    const deviceTimezone = readDeviceTimezone()
+    setState(deviceTimezone ? { ...fresh, timezone: deviceTimezone } : fresh)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -176,15 +201,31 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     setSubmitting(true)
     setSubmitError(null)
     setFieldErrors(null)
+    // Funnel meta is format-level only: no league name, no dates, nothing a person typed.
+    const funnelMeta = {
+      leagueType: state.leagueType ?? 'redraft',
+      sport: state.sport,
+      teamCount: state.teamCount,
+      draftType: state.draftType,
+      fromImport: Boolean(importSourceLeagueId),
+    }
+    // A test league is a tester's throwaway: it must not count in the create-league funnel.
+    const isTest = testLeague && !importSourceLeagueId
+    if (!isTest) sendProductAnalyticsBeacon(CREATE_LEAGUE.SUBMIT, funnelMeta)
     try {
-      const result = await submitCreateLeagueV2(state, importSourceLeagueId, acceptWeeklyLineups)
+      const result = await submitCreateLeagueV2(state, importSourceLeagueId, acceptWeeklyLineups, isTest)
       if (!result.ok) {
         setSubmitError(result.error ?? t('createLeague.v2.submitError'))
         if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
           setFieldErrors(result.fieldErrors)
         }
+        if (!isTest) sendProductAnalyticsBeacon(CREATE_LEAGUE.FAIL_CLIENT, {
+          ...funnelMeta,
+          fields: Object.keys(result.fieldErrors ?? {}).join(','),
+        })
         return
       }
+      if (!isTest) sendProductAnalyticsBeacon(CREATE_LEAGUE.SUCCESS_CLIENT, funnelMeta)
       clearPersistedV2State()
       if (result.warning) {
         const href = result.redirectTo ?? (result.leagueId ? `/core?league=${encodeURIComponent(result.leagueId)}` : '/core')
@@ -200,7 +241,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     } finally {
       setSubmitting(false)
     }
-  }, [router, state, t, importSourceLeagueId, finishImportedLeague, acceptWeeklyLineups])
+  }, [router, state, t, importSourceLeagueId, finishImportedLeague, acceptWeeklyLineups, testLeague])
 
   const retryFinalization = useCallback(async () => {
     if (!createdLeagueId || retryingFinalization) return
@@ -208,6 +249,10 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   }, [createdLeagueHref, createdLeagueId, retryingFinalization, finishImportedLeague])
 
   return (
+    <>
+    {!importSourceLeagueId ? (
+      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo={fromDemo === true} />
+    ) : null}
     <CreateLeagueWizard
       state={state}
       onChange={onChange}
@@ -226,6 +271,38 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       onSubmit={handleSubmit}
       onCancel={() => router.push('/core')}
       importedLeagues={importedLeagues}
+      lastSavedAt={hydrated && !importTemplate ? lastSavedAt : null}
+      restoredAt={restoredAt}
+      onStartOver={importTemplate ? undefined : handleStartOver}
     />
+    </>
+  )
+}
+
+function TestLeagueToggle({ checked, onChange, fromDemo }: { checked: boolean; onChange: (v: boolean) => void; fromDemo: boolean }) {
+  return (
+    <div className="bg-[color:var(--surface-app)] text-[color:var(--text-primary)]">
+      <section className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6" aria-label="Test league">
+        <label
+          data-testid="create-test-league-toggle"
+          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-4 pr-16 sm:pr-20 lg:pr-4"
+        >
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5 shrink-0 accent-[color:var(--color-primary)]"
+            checked={checked}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-bold">Create a test league</span>
+            <span className="mt-1 block text-sm leading-6 text-[color:var(--text-secondary)]">
+              Every empty team gets a placeholder AI manager, so you can run the whole flow — draft, lineups,
+              trades, scoring — on your own. Test leagues send no invites and don&apos;t count as real leagues.
+              {fromDemo ? ' Pre-selected because you came from the demo league.' : ''}
+            </span>
+          </span>
+        </label>
+      </section>
+    </div>
   )
 }

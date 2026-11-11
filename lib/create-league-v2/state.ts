@@ -397,13 +397,44 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
 
 export const V2_STORAGE_KEY = 'af:create-league-v2:state'
 
+/**
+ * Autosave. LOCAL storage, not session storage: a commissioner who closes the tab half-way and
+ * comes back tomorrow should find their league where they left it. Drafts from before this change
+ * (session storage) are still read once and migrated. A draft older than 30 days is dropped —
+ * by then the season, dates and defaults it captured are stale.
+ */
+export const V2_SAVED_AT_KEY = 'af:create-league-v2:savedAt'
+const V2_DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+function readStore(store: Storage | undefined): Partial<CreateLeagueV2State> | null {
+  if (!store) return null
+  const raw = store.getItem(V2_STORAGE_KEY)
+  if (!raw) return null
+  const parsed = JSON.parse(raw) as Partial<CreateLeagueV2State>
+  return parsed && typeof parsed === 'object' ? parsed : null
+}
+
 export function loadPersistedV2State(): Partial<CreateLeagueV2State> | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.sessionStorage.getItem(V2_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<CreateLeagueV2State>
-    return parsed && typeof parsed === 'object' ? parsed : null
+    const savedAt = getPersistedV2SavedAt()
+    if (savedAt !== null && Date.now() - savedAt > V2_DRAFT_TTL_MS) {
+      clearPersistedV2State()
+      return null
+    }
+    return readStore(window.localStorage) ?? readStore(window.sessionStorage)
+  } catch {
+    return null
+  }
+}
+
+/** When the draft was last saved (ms since epoch), or null when unknown. */
+export function getPersistedV2SavedAt(): number | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(V2_SAVED_AT_KEY)
+    const n = raw ? Number(raw) : NaN
+    return Number.isFinite(n) ? n : null
   } catch {
     return null
   }
@@ -412,7 +443,8 @@ export function loadPersistedV2State(): Partial<CreateLeagueV2State> | null {
 export function persistV2State(state: CreateLeagueV2State): void {
   if (typeof window === 'undefined') return
   try {
-    window.sessionStorage.setItem(V2_STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(V2_STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(V2_SAVED_AT_KEY, String(Date.now()))
   } catch {
     // Quota / disabled storage — safe to ignore.
   }
@@ -420,6 +452,12 @@ export function persistV2State(state: CreateLeagueV2State): void {
 
 export function clearPersistedV2State(): void {
   if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(V2_STORAGE_KEY)
+    window.localStorage.removeItem(V2_SAVED_AT_KEY)
+  } catch {
+    // ignore
+  }
   try {
     window.sessionStorage.removeItem(V2_STORAGE_KEY)
   } catch {

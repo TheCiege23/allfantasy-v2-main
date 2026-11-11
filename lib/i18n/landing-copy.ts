@@ -86,6 +86,8 @@ export type LandingCopy = {
     sub: string
     ctaPrimary: string
     ctaSecondary: string
+    /** Opens the public, anonymized demo league (/demo). No account needed. */
+    ctaDemo: string
     reassure: string
     /** The commissioner line under the hero, linking to /commissioners. */
     commishLine: string
@@ -96,6 +98,13 @@ export type LandingCopy = {
     cardFootBefore: string
     /** Second line under it — who produced the figure and over what. */
     cardFootMeta: string
+    /** The no-import way in, under the hero CTAs: links to /trade-evaluator. */
+    tradeLink: string
+  }
+  /** The live AllFantasy trade market board — values from completed trades in connected leagues. */
+  tradeMarket: {
+    heading: string
+    cta: string
   }
   /**
    * Two sport lists under two labels: what IMPORTS today (football) and what a league CREATED here
@@ -172,6 +181,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: 'Create a league or connect the ones you already play. Manage teams, drafts, trades and waivers in one place, with AI help from Chimmy.',
       ctaPrimary: 'Create free account',
       ctaSecondary: 'See how it works',
+      ctaDemo: 'Try the demo',
       reassure: 'Free for every league · Read-only — we never change your league · Sleeper needs just your username',
       commishLine: 'Built by a commissioner, for commissioners.',
       commishLink: 'See Commissioner OS →',
@@ -179,6 +189,11 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       cardWeek: 'Week 12 · example',
       cardFootBefore: 'Two fixes worth ',
       cardFootMeta: 'Chimmy, across all 4 leagues',
+      tradeLink: 'Or grade a trade right now — no import needed →',
+    },
+    tradeMarket: {
+      heading: 'Trade values built from real trades',
+      cta: 'Grade a trade free',
     },
     connects: {
       label: 'Connects to',
@@ -342,6 +357,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: 'Crea una liga o conecta las que ya juegas. Maneja equipos, drafts, cambios y agentes libres en un solo lugar, con ayuda de Chimmy.',
       ctaPrimary: 'Crea tu cuenta gratis',
       ctaSecondary: 'Mira cómo funciona',
+      ctaDemo: 'Prueba la demo',
       reassure: 'Gratis para todas tus ligas · Solo lectura: nunca cambiamos tu liga · En Sleeper basta con tu usuario',
       commishLine: 'Hecho por un comisionado, para comisionados.',
       commishLink: 'Conoce Commissioner OS →',
@@ -349,6 +365,11 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       cardWeek: 'Semana 12 · ejemplo',
       cardFootBefore: 'Dos ajustes que valen ',
       cardFootMeta: 'Chimmy, en las 4 ligas',
+      tradeLink: 'O evalúa un intercambio ahora, sin importar nada →',
+    },
+    tradeMarket: {
+      heading: 'Valores de intercambio basados en intercambios reales',
+      cta: 'Evalúa un intercambio gratis',
     },
     connects: {
       label: 'Se conecta con',

@@ -1,0 +1,517 @@
+/*
+ * "Review your import" — uses the `.af-core` tokens the import screen already resolves
+ * (--surface, --line, --text, --muted, --accent, --warn, --bad, --good and their -soft
+ * variants), so it follows the same light/dark theme as the rest of /import.
+ */
+
+.af-ir {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.af-ir-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-ir-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.af-ir-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.af-ir-fact {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--chip, rgba(255, 255, 255, 0.04));
+  min-width: 0;
+}
+
+.af-ir-fact dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.af-ir-fact dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.af-ir-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2, transparent);
+  min-width: 0;
+}
+
+.af-ir-h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-ir-count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.af-ir-allclear {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--good);
+  background: var(--good-soft, transparent);
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* ── Warnings ─────────────────────────────────────────────────────────── */
+
+.af-ir-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-ir-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+}
+
+.af-ir-warning--blocking {
+  border-left-color: var(--bad);
+  background: var(--bad-soft, transparent);
+}
+
+.af-ir-warning--warning {
+  border-left-color: var(--warn);
+  background: var(--warn-soft, transparent);
+}
+
+.af-ir-warning--info {
+  border-left-color: var(--accent);
+}
+
+.af-ir-warning--fixed {
+  border-left-color: var(--good);
+  background: var(--good-soft, transparent);
+  opacity: 0.85;
+}
+
+.af-ir-warning-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.af-ir-badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--chip, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--chip-line, var(--line));
+  color: var(--text);
+}
+
+.af-ir-warning-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* ── Inputs ───────────────────────────────────────────────────────────── */
+
+.af-ir-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line2, var(--line));
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.af-ir-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.af-ir-input--warn {
+  border-color: var(--warn);
+}
+
+.af-ir-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.af-ir-unmatched ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-ir-unmatched-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.af-ir-unmatched-who {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 0;
+}
+
+.af-ir-unmatched-who span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.af-ir-picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.af-ir-search {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.af-ir-hits {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.af-ir-hit {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.af-ir-hit:hover,
+.af-ir-hit:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+/* ── Teams ────────────────────────────────────────────────────────────── */
+
+.af-ir-teams {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-ir-team {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  padding: 10px;
+}
+
+.af-ir-team-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.af-ir-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.af-ir-inline-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.af-ir-roster-toggle {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2, var(--line));
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.af-ir-roster {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.af-ir-roster th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-ir-roster td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-ir-muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.af-ir-flag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--warn-soft, transparent);
+  border: 1px solid var(--warn);
+}
+
+.af-ir-roster-empty {
+  margin-top: 8px;
+}
+
+.af-ir-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Settings grid ────────────────────────────────────────────────────── */
+
+.af-ir-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.af-ir-rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-ir-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.af-ir-row dt {
+  color: var(--muted);
+}
+
+.af-ir-row dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+}
+
+.af-ir-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.af-ir-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line, var(--line));
+  background: var(--chip, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-ir-chip--missing {
+  border-color: var(--bad);
+}
+
+.af-ir-chip--partial {
+  border-color: var(--warn);
+}
+
+/* ── Changes ──────────────────────────────────────────────────────────── */
+
+.af-ir-changes {
+  border-color: var(--accent-line, var(--accent));
+}
+
+.af-ir-change-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.af-ir-change {
+  display: flex;
+  gap: 8px;
+}
+
+.af-ir-change-kind {
+  flex: none;
+  width: 16px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.af-ir-change--added .af-ir-change-kind {
+  color: var(--good);
+}
+
+.af-ir-change--removed .af-ir-change-kind {
+  color: var(--bad);
+}
+
+.af-ir-change--changed .af-ir-change-kind {
+  color: var(--warn);
+}
+
+.af-ir-ack {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--warn);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.af-ir-ack input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* ── Phone ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .af-ir-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .af-ir-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .af-ir-team-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .af-ir-roster-toggle {
+    justify-self: start;
+  }
+
+  .af-ir-unmatched-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

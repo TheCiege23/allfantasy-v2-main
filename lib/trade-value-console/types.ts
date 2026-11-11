@@ -69,6 +69,14 @@ export type TradeConsoleAnalyzeInput = {
    * (`lib/decision-os/trade/sportPointsContext.ts`). Ignored in a league, which uses its own settings.
    */
   scoringFormat?: 'points' | 'nba_9cat' | 'nba_8cat_standard' | 'mlb_5x5' | 'mlb_6x6' | null
+  /**
+   * With no league: the starting lineup the deal is valued in (the open analyzer's format picker). Two or
+   * more QB + superflex slots puts it on the superflex chart; the counts drive the measured lineup moves.
+   * Ignored in a league, which uses its own lineup.
+   */
+  lineup?: { qb?: number; sf?: number; rb?: number; wr?: number; te?: number; flex?: number } | null
+  /** With no league: dynasty (default) or redraft values. Ignored in a league. */
+  isDynasty?: boolean
 }
 
 export type TradeConsoleLeagueSnapshot = {
@@ -236,6 +244,34 @@ export type TradeIntelligence = {
   syncedDataHighlights?: string[]
 }
 
+/** One asset the AllFantasy trade market (or this lineup) moved, as shown beside the grade. */
+export type TradeConsoleTradeMarketLine = {
+  side: 'give' | 'get'
+  name: string
+  /** `market`: what this player trades for; `lineup`: what his position trades for in lineups like this one. */
+  source: 'market' | 'lineup'
+  /** The move on the chart value, in percent. */
+  adjustmentPercent: number
+  /** Completed trades behind the move. */
+  trades: number
+  chartValue: number | null
+  tradeMarketValue: number | null
+  /** The sentence the grade carries for this move. */
+  reason: string
+}
+
+export type TradeConsoleTradeMarket = {
+  /** When the market values were last rebuilt from completed trades (ISO). */
+  generatedAt: string | null
+  /** The market this grade read — "Dynasty · Superflex". */
+  book: string
+  /** The lineup the lineup moves were measured for — "1QB · 1SF · 2RB · 3WR · 1TE · 2FLEX" — or null. */
+  lineup: string | null
+  /** Why an unusual lineup got no adjustment, when it did not. */
+  note: string | null
+  lines: TradeConsoleTradeMarketLine[]
+}
+
 export type TradeConsoleAnalyzeResult = {
   visualImpact?: import('@/lib/decision-os/trade/loadVisualImpact').VisualImpactResult | null
   evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
@@ -268,9 +304,19 @@ export type TradeConsoleAnalyzeResult = {
     label: string
     scoringAdjusted: boolean
     needAdjusted: boolean
+    /** True when at least one line moved on the AllFantasy trade market (completed trades). */
+    tradeMarketAdjusted?: boolean
+    /** True when at least one line moved for this league's lineup (measured from completed trades). */
+    lineupAdjusted?: boolean
     /** Why roster need could not be priced, when it could not. Null when it ran or was not attempted. */
     needGap: string | null
   }
+  /**
+   * The AllFantasy trade market's contribution, per asset — values from trades that actually happened
+   * in AllFantasy-connected leagues. Absent when the market does not apply to this chart (redraft,
+   * superflex, non-NFL) or has no fresh run.
+   */
+  tradeMarket?: TradeConsoleTradeMarket | null
   /**
    * THE grade for this deal — letter, label and recommendation — from the one grader every trade
    * surface uses (`lib/decision-os/trade/leagueTradeGrader.ts`). The Trade Center reads its letters from

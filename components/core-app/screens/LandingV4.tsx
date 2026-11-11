@@ -12,6 +12,7 @@ import {
   getLandingImportSports,
 } from '@/components/core-app/screens/landingConnectPlatforms'
 import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
+import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
@@ -315,7 +316,13 @@ export function LandingV4({
             <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">
               {c.hero.ctaSecondary}
             </a>
+            <Link href="/demo" className="af-btn af-btn--ghost af-lp-cta-lg" data-testid="landing-try-demo">
+              {c.hero.ctaDemo}
+            </Link>
           </div>
+          <p className="af-lp-reassure" data-testid="landing-hero-trade-link">
+            <Link href="/trade-evaluator">{c.hero.tradeLink}</Link>
+          </p>
           <p className="af-lp-reassure">{c.hero.reassure}</p>
           {/*
             The commissioner line sits under the player hero rather than replacing it: `/`
@@ -446,6 +453,22 @@ export function LandingV4({
         leagues and the exchange are an EXAMPLE and labelled as one.
       */}
       <AllLeaguesChimmy copy={{ ...c.chimmy, soon: c.connects.soon }} />
+
+      {/* ── Trade values from real trades ───────────────────────────── */}
+      {/*
+        The free, no-import way in: grade any trade on values measured from completed trades in
+        AllFantasy-connected leagues. The board is live data (risers/fallers), not an example.
+      */}
+      <section className="af-lp-trade-market" id="trade-values" data-testid="landing-trade-market">
+        <TradeMarketMovers
+          limit={4}
+          lang={lang}
+          heading={c.tradeMarket.heading}
+          ctaHref="/trade-evaluator"
+          ctaLabel={c.tradeMarket.cta}
+          testId="landing-trade-market-movers"
+        />
+      </section>
 
       {/* ── How it works: what a new account actually does ─────────── */}
       {/*
