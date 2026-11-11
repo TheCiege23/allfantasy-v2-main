@@ -1722,6 +1722,24 @@ describe('TradesBoard — a priced pick shows its price', () => {
    * team's letter now sits under its own name.
    */
   /* 2026-11-11: the deadline line sat between the grades and their explanation and read as part of the verdict. */
+  /* 2026-11-11: every other trade screen had Spanish and this board had none. */
+  it('renders in Spanish when the reader’s language is Spanish', () => {
+    const d = withPick(1231, 'D', 42)
+    const data = { ...d, windows: [{ ...d.windows[0]!, latest: { ...d.windows[0]!.latest!, partnerLetter: 'B' as const,
+      breakdown: ['So TheCiege24 gets a D and Jordan a B.'] } }] }
+    const { container } = render(<TradesBoard data={data} allHref="/core/trades?all=1" language="es" />)
+    const text = container.textContent ?? ''
+    expect(text).toContain('Ver intercambios →')
+    expect(text).toContain('Nota de TheCiege24')
+    expect(text).toContain('Nota de Jordan')
+    expect(text).toContain('Parte del valor')
+    expect(text).toContain('Queda 1 semana para la fecha límite de la semana 11.')
+    expect(text).toContain('3 intercambios registrados aquí.')
+    expect(text).toContain('Así que TheCiege24 saca una D y Jordan una B.')
+    expect(text).not.toContain('Open trades')
+    expect(text).not.toContain('until the week')
+  })
+
   it('puts the league’s deadline line under the header, not among the grades', () => {
     const { container } = render(<TradesBoard data={withPick(1231, 'D', 42)} allHref="/core/trades?all=1" />)
     const status = container.querySelector('.af-bd-card-status')

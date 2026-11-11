@@ -20,6 +20,9 @@ import {
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { statusLine, tradesBoardCopy } from '@/lib/core-app/messages/tradesBoard'
+import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
+import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
 
 /**
  * `/core/trades` with no league held.
@@ -44,6 +47,8 @@ export type TradesBoardProps = {
   allHref: string
   /** Leagues on this account. 0 shows the no-leagues next steps instead of an empty board. */
   totalLeagues?: number
+  /** The reader's language (the page's `af_lang` cookie). English when absent. */
+  language?: string
 }
 
 const GRADE_SEV: Record<string, 'good' | 'warn' | 'bad'> = {
@@ -66,7 +71,7 @@ const GRADE_SEV: Record<string, 'good' | 'warn' | 'bad'> = {
  * The round sits in the same 26px circle a headshot would, so a mixed side stays on
  * one grid and needs no new CSS.
  */
-function PickAsset({ a }: { a: TradeAsset }) {
+function PickAsset({ a, language }: { a: TradeAsset; language: string }) {
   /* "2027 1st" -> "1st". `||`, not `??`: an empty last segment is not a label. */
   const round = a.name.split(' ').slice(-1)[0] || 'PK'
   return (
@@ -80,7 +85,7 @@ function PickAsset({ a }: { a: TradeAsset }) {
         {a.name}
         <span className="af-bd-pos" data-pos="PICK">
           {' '}
-          PICK
+          {tradesBoardCopy(language).pick}
         </span>
       </span>
       {/*
@@ -101,8 +106,8 @@ function PickAsset({ a }: { a: TradeAsset }) {
   )
 }
 
-function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
-  if (a.kind === 'pick') return <PickAsset a={a} />
+function Asset({ a, leagueId, language }: { a: TradeAsset; leagueId: string; language: string }) {
+  if (a.kind === 'pick') return <PickAsset a={a} language={language} />
   return (
     <span className="af-bd-asset">
       <PlayerFace
@@ -144,14 +149,15 @@ function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
  * what the grade above credited them with — the convention KeepTradeCut's "Team 1 gets…" uses. Read
  * as "<name> sent", the card put a manager's grade over the assets they gave away.
  */
-function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
+function TradeBody({ t, leagueId, language }: { t: BoardTrade; leagueId: string; language: string }) {
+  const m = tradesBoardCopy(language)
   return (
     <>
       <div className="af-bd-card-body">
         <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.fromName} received</span>
+          <span className="af-bd-side-label">{m.received(t.fromName)}</span>
           {t.received.length > 0 ? (
-            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
+            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} language={language} />)
           ) : (
             <span className="af-bd-asset">
               {/*
@@ -160,14 +166,14 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
                 empty side is genuinely empty: FAAB, or a side the importer never
                 captured. It no longer blames a category we simply were not reading.
               */}
-              <span className="af-bd-asset-name">Nothing on record for this side — FAAB only, or not captured.</span>
+              <span className="af-bd-asset-name">{m.nothingOnSide}</span>
             </span>
           )}
         </div>
         <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.toName} received</span>
+          <span className="af-bd-side-label">{m.received(t.toName)}</span>
           {t.sent.length > 0 ? (
-            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
+            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} language={language} />)
           ) : (
             <span className="af-bd-asset">
               {/*
@@ -176,7 +182,7 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
                 empty side is genuinely empty: FAAB, or a side the importer never
                 captured. It no longer blames a category we simply were not reading.
               */}
-              <span className="af-bd-asset-name">Nothing on record for this side — FAAB only, or not captured.</span>
+              <span className="af-bd-asset-name">{m.nothingOnSide}</span>
             </span>
           )}
         </div>
@@ -185,21 +191,22 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
   )
 }
 
-function WindowCard({ row }: { row: TradeWindowRow }) {
+function WindowCard({ row, language }: { row: TradeWindowRow; language: string }) {
   const t = row.latest
+  const m = tradesBoardCopy(language)
   const urgent = row.weeksLeft != null && row.weeksLeft >= 0 && row.weeksLeft <= 1
 
   const deadlineLabel = row.noDeadline
-    ? 'NO DEADLINE'
+    ? m.noDeadline
     : row.deadlineWeek == null
-      ? 'DEADLINE UNKNOWN'
+      ? m.deadlineUnknown
       : row.weeksLeft == null
-        ? `WEEK ${row.deadlineWeek}`
+        ? m.weekTag(row.deadlineWeek)
         : row.weeksLeft > 0
-          ? `${row.weeksLeft}W LEFT`
+          ? m.weeksLeft(row.weeksLeft)
           : row.weeksLeft === 0
-            ? 'THIS WEEK'
-            : 'CLOSED'
+            ? m.thisWeek
+            : m.closed
 
   return (
     <li>
@@ -223,7 +230,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
               <span className="af-bd-plat" data-platform={platformKey(row.platform)}>
                 {row.platform.toUpperCase()}
               </span>
-              {` · ${row.tradesOnFile} ${row.tradesOnFile === 1 ? 'trade' : 'trades'} on file`}
+              {m.tradesOnFile(row.tradesOnFile)}
             </span>
           </span>
           {/*
@@ -232,7 +239,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           */}
           {row.freshTrade ? (
             <span className="af-bd-tag" data-sev="good">
-              NEW TRADE
+              {m.newTrade}
             </span>
           ) : null}
           <span
@@ -250,7 +257,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             the button "not working when clicked". See BoardActionLink's header.
           */}
           <BoardActionLink className="af-bd-btn" href={row.href}>
-            Open trades →
+            {m.openTrades}
           </BoardActionLink>
         </header>
 
@@ -260,10 +267,10 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           them, and read on a phone as part of the verdict. It is about the league, so it goes with
           the league's name; the foot is the trade's grades and why.
         */}
-        <p className="af-bd-reason af-bd-card-status">{row.reasoning}</p>
+        <p className="af-bd-reason af-bd-card-status">{statusLine(row.reasoning, language, (r) => tradeVisualCopy(r, language))}</p>
 
         {/* No trade: the status line above already says so, in the loader's own words. */}
-        {t ? <TradeBody t={t} leagueId={row.leagueId} /> : null}
+        {t ? <TradeBody t={t} leagueId={row.leagueId} language={language} /> : null}
 
         {t ? (
         <div className="af-bd-card-foot">
@@ -282,16 +289,16 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           */}
           {t?.letter ? (
             <>
-              <StatPair k={`${t.fromName} grade`} v={t.letter} sev={GRADE_SEV[t.letter]} />
+              <StatPair k={m.gradeFor(t.fromName)} v={t.letter} sev={GRADE_SEV[t.letter]} />
               {t.partnerLetter ? (
-                <StatPair k={`${t.toName} grade`} v={t.partnerLetter} sev={GRADE_SEV[t.partnerLetter]} />
+                <StatPair k={m.gradeFor(t.toName)} v={t.partnerLetter} sev={GRADE_SEV[t.partnerLetter]} />
               ) : null}
             </>
           ) : t ? (
             <span className="af-bd-kv">
-              <span className="af-bd-k">Latest grade</span>
+              <span className="af-bd-k">{m.latestGrade}</span>
               <span className="af-bd-sub" style={{ maxWidth: 260 }}>
-                ungraded: {t.withheldReason ?? 'no reason recorded'}
+                {m.ungraded(t.withheldReason ? tradeVisualCopy(t.withheldReason, language) : m.noReason)}
               </span>
             </span>
           ) : null}
@@ -315,7 +322,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           */}
           {t?.letter && t.sharePct != null ? (
             <span className="af-bd-kv">
-              <span className="af-bd-k">Share of the value</span>
+              <span className="af-bd-k">{m.shareOfValue}</span>
               <span className="af-bd-sub" style={{ maxWidth: 260 }}>
                 {t.fromName} {Math.round(t.sharePct)}% · {t.toName} {100 - Math.round(t.sharePct)}%
               </span>
@@ -323,10 +330,10 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           ) : null}
           {t?.season != null ? (
             <span className="af-bd-tag" data-sev="muted">
-              LATEST
+              {m.latest}
               <span className="af-bd-tag-detail">
                 {' '}
-                {t.week != null ? `week ${t.week}, ` : ''}
+                {t.week != null ? m.weekOf(t.week) : ''}
                 {t.season}
               </span>
             </span>
@@ -349,7 +356,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           {t && t.breakdown.length > 0 ? (
             <ul className="af-bd-breakdown">
               {t.breakdown.map((line) => (
-                <li key={line}>{line}</li>
+                <li key={line}>{tradeUiCopy(line, language)}</li>
               ))}
             </ul>
           ) : null}
@@ -360,7 +367,8 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
   )
 }
 
-export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
+export function TradesBoard({ data, allHref, totalLeagues, language = 'en' }: TradesBoardProps) {
+  const m = tradesBoardCopy(language)
   const live = data.windows.filter((w) => w.weeksLeft != null && w.weeksLeft >= 0).length
   const anyDeadline = data.windows.some((w) => w.deadlineWeek != null || w.noDeadline)
   /*
@@ -378,19 +386,15 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
   if (totalLeagues === 0) {
     return (
       <div className="af-bd">
-        <BoardHead eyebrow="Core · Trades" title="Trades" blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded." />
-        <NoLeaguesYet what="Once one is, this board ranks your leagues' trade windows, soonest to close first, with each league's latest trade and how it graded." />
+        <BoardHead eyebrow={m.eyebrow} title={m.title} blurb={m.blurb} />
+        <NoLeaguesYet what={m.noLeagues} language={language} />
       </div>
     )
   }
 
   return (
     <div className="af-bd">
-      <BoardHead
-        eyebrow="Core · Trades"
-        title="Trades"
-        blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded."
-      />
+      <BoardHead eyebrow={m.eyebrow} title={m.title} blurb={m.blurb} />
 
       {/*
         Sleeper never shares an offer before it is accepted, so a manager looking here for one they
@@ -410,8 +414,8 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
         <section className="af-bd-sec" aria-labelledby="af-tr-pending">
           <SectionHead
             id="af-tr-pending"
-            label="Waiting on you"
-            count={`${data.pending.length} pending`}
+            label={m.waitingOnYou}
+            count={m.pending(data.pending.length)}
           />
           <ul className="af-bd-cards af-bd-cards--rich">
             {data.pending.map((p) => (
@@ -427,10 +431,8 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
                     <span className="af-bd-league">
                       <span className="af-bd-name">{p.leagueName}</span>
                       <span className="af-bd-sub">
-                        {p.youProposed ? 'You proposed this' : 'Proposed to you'}
-                        {p.expiresAt
-                          ? ` · expires ${new Date(p.expiresAt).toUTCString().slice(0, 16)}`
-                          : ''}
+                        {p.youProposed ? m.youProposed : m.proposedToYou}
+                        {p.expiresAt ? m.expires(new Date(p.expiresAt).toUTCString().slice(0, 16)) : ''}
                       </span>
                     </span>
                     <span className="af-bd-tag" data-sev="bad">
@@ -440,11 +442,11 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
                       className="af-bd-btn"
                       href={`/core/trades?league=${encodeURIComponent(p.leagueId)}`}
                     >
-                      Review it →
+                      {m.reviewIt}
                     </BoardActionLink>
                   </header>
                   <div className="af-bd-side">
-                    <span className="af-bd-side-label">On the table</span>
+                    <span className="af-bd-side-label">{m.onTheTable}</span>
                     {p.items.map((it, n) => (
                       <span className="af-bd-asset" key={`${p.id}-${n}`}>
                         <span className="af-bd-asset-name">
@@ -476,30 +478,28 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
             label={
               anyDeadline
                 ? anyFresh
-                  ? `Top ${data.windows.length} · newest trades first, then leagues with trades, then deadline`
+                  ? m.sectionFresh(data.windows.length)
                   : anyTrades
-                  ? `Top ${data.windows.length} · leagues with trades first, then deadline`
-                  : `Top ${data.windows.length} · ranked by deadline · no trades on file in any of them`
-                : `Your ${data.windows.length} ${data.windows.length === 1 ? 'league' : 'leagues'} · no deadline ingested for any of them`
+                  ? m.sectionTrades(data.windows.length)
+                  : m.sectionDeadline(data.windows.length)
+                : m.sectionNoDeadline(data.windows.length)
             }
             count={
               data.currentWeek != null
-                ? `${live} still open · currently week ${data.currentWeek}`
+                ? m.stillOpenWeek(live, data.currentWeek)
                 : anyDeadline
-                  ? `${live} still open`
+                  ? m.stillOpen(live)
                   : null
             }
           />
           <ul className="af-bd-cards af-bd-cards--rich">
             {data.windows.map((w) => (
-              <WindowCard key={w.leagueId} row={w} />
+              <WindowCard key={w.leagueId} row={w} language={language} />
             ))}
           </ul>
         </section>
       ) : (
-        <p className="af-bd-note">
-          No team of yours is claimed in a league we can read a trade window for.
-        </p>
+        <p className="af-bd-note">{m.noWindows}</p>
       )}
 
       {/*
@@ -510,26 +510,18 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
       */}
       {data.deadlineUnknown > 0 ? (
         <p className="af-bd-note">
-          <strong>
-            {data.deadlineUnknown} of your leagues have never published a trade deadline.
-          </strong>{' '}
-          They sort below the ones that have — not because their window is open, but because
-          we do not know when it shuts.
+          <strong>{m.deadlineUnknownCount(data.deadlineUnknown)}</strong> {m.deadlineUnknownWhy}
         </p>
       ) : null}
 
-      <p className="af-bd-note af-bd-note--plain">
-        Grades price both sides on this league&rsquo;s own values. A completed trade keeps the
-        grade it got the first time AllFantasy graded it, so it does not change as values move.
-        A trade whose assets could not all be priced is shown with its reason instead of a
-        letter — a &ldquo;C&rdquo; from no data would read as &ldquo;an average trade&rdquo;.
-      </p>
+      <p className="af-bd-note af-bd-note--plain">{m.gradesNote}</p>
 
       <FooterSummary
         hidden={Math.max(0, data.considered - data.windows.length)}
         total={data.considered}
         href={allHref}
-        quiet="have a window further out, or none we can read."
+        quiet={m.footerQuiet}
+        language={language}
       />
     </div>
   )

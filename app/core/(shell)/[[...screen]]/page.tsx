@@ -4919,7 +4919,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             viewerId={userId}
             league={null}
             leagues={tradeStripLeagues}
-            board={!showAllLeagues && tradesBoard ? <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" totalLeagues={playedLeagues.length} /> : null}
+            board={!showAllLeagues && tradesBoard ? <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" totalLeagues={playedLeagues.length} language={language} /> : null}
           />
         )
       ) : activeKey === 'waivers' ? (
