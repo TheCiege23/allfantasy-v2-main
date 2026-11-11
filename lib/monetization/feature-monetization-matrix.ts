@@ -596,11 +596,11 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "commissioner",
     tokenRuleCode: "ai_draft_rankings_explanation",
     lockedReason: "Draft rankings intelligence is part of AF Commissioner.",
-    backendEnforcement: "NOT enforced (audit 2026-11-10): only a premium link in CommissionerTab; no endpoint is gated on this key.",
+    backendEnforcement: "requireFeatureEntitlement(draft_rankings) on the AI explanations of GET /api/leagues/[leagueId]/draft-results (?aiExplain=1); the deterministic rankings stay free and aiExplainLocked carries the refusal.",
     frontendGateBehavior: "Premium link + in-context card where draft-ranking actions execute.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
-      routes: ["/app/league/[leagueId]?tab=Draft"],
+      routes: ["/league/[leagueId]/draft-results"],
       components: ["CommissionerTab"],
     },
   },
@@ -716,7 +716,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: "ai_war_room_multi_step_planning",
     lockedReason: "Roster construction planning is part of AF Legacy.",
-    backendEnforcement: "NOT enforced (audit 2026-11-10): the best-ball War Room computes roster construction with its state, ungated. Owner decision pending.",
+    backendEnforcement: "requireFeatureEntitlement(roster_construction_planning): GET best-ball-war-room omits construction (constructionLocked) and POST roster-construction refuses without the plan.",
     frontendGateBehavior: "FeatureGate + in-context card where planning runs.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -764,7 +764,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Finding real trade opportunities against your roster is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in components/TradeFinderV2.tsx.",
+    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on /api/trade-partner-match and POST /api/trade-finder/matchmaking. Client FeatureGate in components/TradeFinderV2.tsx; /trade-finder shows the refusal.",
     frontendGateBehavior: "FeatureGate around the 'Find Trades' / 'Find Best Partners' buttons.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {

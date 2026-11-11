@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware';
 import { prisma } from '@/lib/prisma';
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client';
 import { listReputationsByLeague } from '@/lib/reputation-engine/ManagerTrustQueryService';
@@ -13,6 +14,14 @@ export async function GET(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  // Trade partner matching runs OpenAI and is part of AF Legacy's Trade Finder (`legacy_trade_finder`).
+  const plan = await requireFeatureEntitlement({
+    userId: session.user.id,
+    userEmail: (session.user as { email?: string | null }).email ?? null,
+    featureId: 'legacy_trade_finder',
+  });
+  if (!plan.ok) return plan.response;
 
   const { searchParams } = new URL(req.url);
   const leagueId = searchParams?.get('leagueId');

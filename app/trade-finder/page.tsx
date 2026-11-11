@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { toFinderInsights, toFinderTrades, type FinderInsight, type FinderTrade } from '@/lib/trade-finder/pageModel'
+import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -425,6 +426,8 @@ export default function TradeFinderPage() {
   const [insights,     setInsights]     = useState<FinderInsight[]>([])
   const [partners,     setPartners]     = useState<PartnerMatch[]>([])
   const [error,        setError]        = useState<string | null>(null)
+  // A plan, sign-in or daily-limit refusal from the server — shown with its own sentence and button.
+  const [refusal,      setRefusal]      = useState<PlanRefusal | null>(null)
   const [savedOpps,    setSavedOpps]    = useState<TradeOpportunity[]>([])
   const partnerSortRef = useRef(false)
 
@@ -517,6 +520,11 @@ export default function TradeFinderPage() {
         body:    JSON.stringify(body),
       })
       const data = await res.json()
+      const tradeRefusal = readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() })
+      if (tradeRefusal) {
+        setRefusal(tradeRefusal)
+        return
+      }
       if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`)
 
       /*
@@ -541,6 +549,11 @@ export default function TradeFinderPage() {
     try {
       const res  = await fetch(`/api/trade-partner-match?leagueId=${league.sleeperLeagueId ?? league.id}`)
       const data = await res.json()
+      const partnerRefusal = readPlanRefusal(res.status, data, { returnTo: currentPathForReturn() })
+      if (partnerRefusal) {
+        setRefusal(partnerRefusal)
+        return
+      }
       const raw  = data.partners ?? data.matches ?? data ?? []
       setPartners((Array.isArray(raw) ? raw : []).map((p: Record<string,unknown>) => ({
         rosterId:      Number(p.rosterId ?? p.roster_id ?? 0),
@@ -612,6 +625,27 @@ export default function TradeFinderPage() {
           </div>
         </div>
       </div>
+
+      {/* Plan / sign-in / daily-limit refusal */}
+      {refusal && (
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-4 w-full">
+          <div
+            className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100 flex flex-wrap items-center gap-3"
+            data-testid="trade-finder-plan-refusal"
+          >
+            <span className="min-w-0 flex-1">🔒 {refusal.message}</span>
+            {refusal.actionHref && refusal.actionLabel && (
+              <Link
+                href={refusal.actionHref}
+                className="inline-flex min-h-[40px] items-center rounded-lg border border-amber-400/40 bg-amber-400/15 px-3 text-xs font-semibold text-amber-50 hover:bg-amber-400/25"
+              >
+                {refusal.actionLabel}
+              </Link>
+            )}
+            <button onClick={() => setRefusal(null)} aria-label="Dismiss" className="min-h-[40px] px-2 text-amber-300">✕</button>
+          </div>
+        </div>
+      )}
 
       {/* Error */}
       {error && (
