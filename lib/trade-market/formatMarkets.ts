@@ -30,11 +30,12 @@ import { isCentred } from './sinceSeasonArg'
  * centring gate. A trade whose league cannot be identified, or whose lineup cannot be read, is LEFT OUT
  * and counted as such: an unknown format is not evidence about any of the four.
  *
- * ⚠ OLDER SEASONS ARE MOSTLY UNKNOWN, AND THAT IS STATED RATHER THAN PAPERED OVER. Sleeper issues a new
- * league id every season and `LeagueTradeHistory` keeps the season's id; this season's trades resolve
- * to a stored league ~96% of the time, 2024–25 trades ~16–19% (via `league_seasons`). A past season
- * resolved through `league_seasons` is read on TODAY's settings for that league — usually the same
- * lineup, not always — so the freshest window is preferred (`scheduledMarketRecalc.ts`).
+ * ⚠ A PAST SEASON IS READ ON ITS OWN LINEUP. Sleeper issues a new league id every season and
+ * `LeagueTradeHistory` keeps the season's id, so a 2024 trade never matches a current `League` row. It
+ * matches `league_dynasty_seasons`, whose metadata keeps that season's own `rosterPositions` and Sleeper
+ * type (`seasonLeagueRow`) — 100% of 2024 and 2025 trades, measured 2026-11-11, against ~16–19% when
+ * the only route was `league_seasons` and today's settings. That route remains only as a last resort,
+ * flagged `carried`.
  */
 
 export type MarketBook = { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'ONE_QB' | 'SUPERFLEX' }
@@ -62,7 +63,7 @@ export type ResolvedTradeLeague = {
   leagueKey: string
   book: MarketBook
   lineup: LineupProfile
-  /** True when found only through `league_seasons`, i.e. read on today's settings. */
+  /** True when found only through `league_seasons`, i.e. read on today's settings rather than that season's. */
   carried: boolean
 }
 
@@ -82,7 +83,53 @@ export function resolveLeague(row: LeagueRow, carried: boolean): ResolvedTradeLe
   return { leagueKey: row.id, book: { format: vb.format, qbFormat: vb.qbFormat }, lineup, carried }
 }
 
-/** `LeagueTrade.historyId` → the league the trade happened in. */
+/** Sleeper `settings.type`: 0 redraft, 1 keeper, 2 dynasty. */
+const SLEEPER_LEAGUE_TYPE: Record<string, string> = { '0': 'redraft', '1': 'keeper', '2': 'dynasty' }
+
+/**
+ * A PAST SEASON of a league, on THAT season's own settings. PURE.
+ *
+ * `league_dynasty_seasons.metadata` holds what the historical import read for each season: its own
+ * `rosterPositions` and Sleeper `rawSettings` (incl. `type` and `max_keepers`). Measured on production
+ * 2026-11-11, every 2024 and 2025 trade's league has one — so an old trade is read on the lineup it was
+ * actually made under, not on today's.
+ *
+ * The season's facts are laid OVER the current league's settings, so everything the season does not
+ * record (a human-confirmed concept, specialty rules) still comes from the league — and
+ * `resolveLeagueConcept` lets a confirmed concept win over the season's provider type, the same
+ * precedence the grade uses. Null when the metadata carries no lineup.
+ */
+export function seasonLeagueRow(current: LeagueRow, seasonPlatformLeagueId: string, metadata: unknown): LeagueRow | null {
+  const m = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : null
+  const raw = Array.isArray(m?.rosterPositions) ? (m!.rosterPositions as unknown[]) : null
+  if (!raw || raw.length === 0) return null
+  // Sleeper stores one string per slot; other importers store `{ position, count }`.
+  const entries = raw.map((e) =>
+    e && typeof e === 'object' && !Array.isArray(e)
+      ? `${String((e as Record<string, unknown>).position ?? '')}:${Number((e as Record<string, unknown>).count ?? 1)}`
+      : e,
+  )
+  const rawSettings = m!.rawSettings && typeof m!.rawSettings === 'object' && !Array.isArray(m!.rawSettings) ? (m!.rawSettings as Record<string, unknown>) : {}
+  const typeName = rawSettings.type != null ? SLEEPER_LEAGUE_TYPE[String(rawSettings.type)] : undefined
+  const base = current.settings && typeof current.settings === 'object' && !Array.isArray(current.settings) ? (current.settings as Record<string, unknown>) : {}
+  const settings: Record<string, unknown> = {
+    ...base,
+    roster_positions: entries,
+    // `starter_slots` would otherwise shadow nothing (roster_positions is read first), but drop it so no
+    // reader can mistake today's slots for that season's.
+    starter_slots: undefined,
+    ...(typeof rawSettings.max_keepers === 'number' ? { max_keepers: rawSettings.max_keepers } : {}),
+    ...(typeName ? { isDynasty: typeName === 'dynasty' } : {}),
+  }
+  return { id: current.id, platformLeagueId: seasonPlatformLeagueId, settings, leagueType: typeName ?? current.leagueType }
+}
+
+/**
+ * `LeagueTrade.historyId` → the league the trade happened in, in this order:
+ *   1. a current league with that platform id (this season's trades);
+ *   2. that SEASON's own settings from `league_dynasty_seasons` (`seasonLeagueRow`);
+ *   3. `league_seasons` → the league's settings TODAY (`carried: true`), the last resort.
+ */
 export async function resolveTradeLeagues(
   prisma: PrismaClient,
   historyIds: readonly string[],
@@ -101,6 +148,33 @@ export async function resolveTradeLeagues(
     })) as LeagueRow[]
     for (const r of rows) if (!byPid.has(r.platformLeagueId)) byPid.set(r.platformLeagueId, { row: r, carried: false })
   }
+
+  // 2. Past seasons on their own settings.
+  const pastSeasons = new Map<string, { leagueId: string; metadata: unknown }>()
+  for (const ids of chunk(pids.filter((p) => !byPid.has(p)))) {
+    const rows = await prisma.leagueDynastySeason.findMany({
+      where: { platformLeagueId: { in: ids } },
+      select: { platformLeagueId: true, leagueId: true, metadata: true },
+      orderBy: { importedAt: 'desc' },
+    })
+    for (const r of rows) if (!pastSeasons.has(r.platformLeagueId)) pastSeasons.set(r.platformLeagueId, { leagueId: r.leagueId, metadata: r.metadata })
+  }
+  const pastLeagueIds = [...new Set([...pastSeasons.values()].map((s) => s.leagueId))]
+  const currentById = new Map<string, LeagueRow>()
+  for (const ids of chunk(pastLeagueIds)) {
+    const rows = (await prisma.league.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, platformLeagueId: true, settings: true, leagueType: true },
+    })) as LeagueRow[]
+    for (const r of rows) currentById.set(r.id, r)
+  }
+  for (const [pid, s] of pastSeasons) {
+    const current = currentById.get(s.leagueId)
+    const row = current ? seasonLeagueRow(current, pid, s.metadata) : null
+    if (row) byPid.set(pid, { row, carried: false })
+  }
+
+  // 3. Last resort: today's settings for that league.
   const missing = pids.filter((p) => !byPid.has(p))
   const seasonMap = new Map<string, string>()
   for (const ids of chunk(missing)) {
