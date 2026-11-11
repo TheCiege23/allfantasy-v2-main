@@ -47,10 +47,11 @@ async function rebuildTradeMarket(startedAt: number): Promise<
         rowsSkipped: r.written > 0 ? 0 : 1,
         // Every window refused is `partial`: it correctly declined a biased population, but the market is ageing out.
         status: r.written > 0 ? ('success' as const) : ('partial' as const),
-        warnings:
-          r.written > 0
-            ? undefined
-            : [`no centred window: ${r.attempts.map((a) => `${a.sinceSeason}=${a.medianAdjustment ?? 'n/a'}%`).join(', ')}`],
+        warnings: [
+          ...(r.written > 0 ? [] : ['no book published in any window']),
+          ...r.attempts.filter((a) => a.refused.length > 0).map((a) => `${a.sinceSeason}: not centred — ${a.refused.join(', ')}`),
+          ...(r.lineup ? [`lineup factors: ${r.lineup.published} of ${r.lineup.measured} published (since ${r.lineup.sinceSeason})`] : []),
+        ],
       }),
     )
     return { ran: true, result }

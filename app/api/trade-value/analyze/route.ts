@@ -101,6 +101,19 @@ const bodySchema = z.object({
   opponentTeamExternalId: z.string().min(1).max(128).nullable().optional(),
   // The open analyzer's scoring choice for a daily-sport deal; a league is scored by its own settings.
   scoringFormat: z.enum(['points', 'nba_9cat', 'nba_8cat_standard', 'mlb_5x5', 'mlb_6x6']).nullable().optional(),
+  // The open analyzer's format picker (no league): the starting lineup, and dynasty vs redraft values.
+  lineup: z
+    .object({
+      qb: z.number().int().min(0).max(6).optional(),
+      sf: z.number().int().min(0).max(4).optional(),
+      rb: z.number().int().min(0).max(6).optional(),
+      wr: z.number().int().min(0).max(6).optional(),
+      te: z.number().int().min(0).max(4).optional(),
+      flex: z.number().int().min(0).max(6).optional(),
+    })
+    .nullable()
+    .optional(),
+  isDynasty: z.boolean().optional(),
 })
 
 export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: 'TradeValueConsole' })(
