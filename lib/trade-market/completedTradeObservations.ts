@@ -96,7 +96,12 @@ export type TradeAttribution =
 export function attributeTrade(
   t: Pick<TradeRow, 'playersGiven' | 'playersReceived' | 'picksGiven' | 'picksReceived'>,
   chart: ReadonlyMap<string, number>,
-  opts: { allowPicks?: boolean } = {},
+  /**
+   * `extraGiven` / `extraReceived`: value on each side that is not a player or pick — FAAB, priced by the
+   * caller in chart units. It counts toward the side's worth (so "player for $35 FAAB" is no longer a
+   * side worth nothing) but is never attributed to anyone.
+   */
+  opts: { allowPicks?: boolean; extraGiven?: number; extraReceived?: number } = {},
 ): TradeAttribution {
   const given = asIds(t.playersGiven)
   const received = asIds(t.playersReceived)
@@ -114,8 +119,9 @@ export function attributeTrade(
    */
   if (![...given, ...received].every((id) => chart.has(id))) return { kind: 'skip', reason: 'unpriced_player' }
 
-  const gValue = given.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + gPicks
-  const rValue = received.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + rPicks
+  const extra = (v: number | undefined) => (Number.isFinite(v) && (v as number) > 0 ? (v as number) : 0)
+  const gValue = given.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + gPicks + extra(opts.extraGiven)
+  const rValue = received.reduce((s, id) => s + (chart.get(id) ?? 0), 0) + rPicks + extra(opts.extraReceived)
   if (gValue <= 0 || rValue <= 0) return { kind: 'skip', reason: 'side_worth_nothing' }
 
   const records: Array<{ id: string; own: number; observedValue: number }> = []

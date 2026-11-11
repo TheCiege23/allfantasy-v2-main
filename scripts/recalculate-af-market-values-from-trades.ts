@@ -1,4 +1,9 @@
 /**
+ * ⚠ RETIRED FOR GRADING (2026-11-11) — USE `scripts/recalculate-af-format-markets.ts`. This writes the
+ * single legacy `dynasty` market, measured on the 1QB dynasty chart for every trade whatever its league's
+ * format. No request path reads those rows any more: the grade reads the per-format `ct-*` markets
+ * (`lib/trade-market/formatMarkets.ts`), rebuilt daily by the ADP cron. Kept, unchanged, for comparison.
+ *
  * AllFantasy market values from COMPLETED trades. DRY-RUN BY DEFAULT.
  *
  *   npx tsx scripts/recalculate-af-market-values-from-trades.ts                          # dry-run

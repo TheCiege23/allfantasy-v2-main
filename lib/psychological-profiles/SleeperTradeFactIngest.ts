@@ -96,6 +96,8 @@ type SleeperTransaction = {
   adds?: Record<string, number> | null
   drops?: Record<string, number> | null
   draft_picks?: Array<Record<string, unknown>> | null
+  /** FAAB moved in the trade: Sleeper's own record, `sender`/`receiver` are roster ids. */
+  waiver_budget?: Array<{ sender?: number; receiver?: number; amount?: number }> | null
 }
 
 /**
@@ -132,6 +134,22 @@ export function buildTradeFactPayload(
   const playersInIds = idsFor(tx.adds)
   const playersOutIds = idsFor(tx.drops)
 
+  /*
+   * 🛑 FAAB WAS NOT RECORDED HERE AT ALL (2026-11-11). Sleeper carries a budget transfer in
+   * `waiver_budget`, not in `adds`/`draft_picks`, so a "player for $35 FAAB" trade was stored as a
+   * player for nothing, and the AllFantasy trade market (`formatMarkets.ts`) could not price the FAAB
+   * side of any trade. `faabIn`/`faabOut` are ALWAYS written — 0 when none moved — so a fact that has
+   * the keys says "FAAB known", and one without them (written before this) says "not recorded".
+   */
+  let faabIn = 0
+  let faabOut = 0
+  for (const w of tx.waiver_budget ?? []) {
+    const amount = Number(w?.amount)
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    if (w?.receiver === rosterId) faabIn += amount
+    if (w?.sender === rosterId) faabOut += amount
+  }
+
   return {
     sleeperTransactionId: transactionId,
     rosterIds,
@@ -147,6 +165,8 @@ export function buildTradeFactPayload(
      * keeps the information without inventing a schema for it.
      */
     pickDetail: tx.draft_picks ?? [],
+    faabIn,
+    faabOut,
     source: 'sleeper_transactions',
   }
 }

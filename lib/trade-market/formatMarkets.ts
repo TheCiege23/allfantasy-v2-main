@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { valueBookFor } from '@/lib/core-app/valueBook'
 import { lineupProfileFromSettings, type LineupPosition, type LineupProfile } from '@/lib/league/lineupProfile'
 import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
+import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import {
   attributeTrade,
   computeCompletedTradeValue,
@@ -65,9 +66,21 @@ export type ResolvedTradeLeague = {
   lineup: LineupProfile
   /** True when found only through `league_seasons`, i.e. read on today's settings rather than that season's. */
   carried: boolean
+  /** The league's FAAB budget, for pricing FAAB that moved in a trade. Null when the league states none. */
+  faabBudget: number | null
 }
 
 type LeagueRow = { id: string; platformLeagueId: string; settings: unknown; leagueType: string | null }
+
+/** The FAAB budget a league's settings state, under any of the names importers use. */
+export function faabBudgetFromSettings(settings: unknown): number | null {
+  const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
+  for (const key of ['waiver_budget', 'faab_budget', 'waiverBudget', 'faabBudget']) {
+    const v = Number(s[key])
+    if (Number.isFinite(v) && v > 0) return v
+  }
+  return null
+}
 
 const chunk = <T,>(xs: readonly T[], n = 1000): T[][] => {
   const out: T[][] = []
@@ -80,7 +93,7 @@ export function resolveLeague(row: LeagueRow, carried: boolean): ResolvedTradeLe
   const lineup = lineupProfileFromSettings(row.settings)
   if (!lineup || !lineup.qbClass) return null
   const vb = valueBookFor(row.settings, row.leagueType)
-  return { leagueKey: row.id, book: { format: vb.format, qbFormat: vb.qbFormat }, lineup, carried }
+  return { leagueKey: row.id, book: { format: vb.format, qbFormat: vb.qbFormat }, lineup, carried, faabBudget: faabBudgetFromSettings(row.settings) }
 }
 
 /** Sleeper `settings.type`: 0 redraft, 1 keeper, 2 dynasty. */
@@ -119,6 +132,8 @@ export function seasonLeagueRow(current: LeagueRow, seasonPlatformLeagueId: stri
     // reader can mistake today's slots for that season's.
     starter_slots: undefined,
     ...(typeof rawSettings.max_keepers === 'number' ? { max_keepers: rawSettings.max_keepers } : {}),
+    // That season's FAAB budget, so FAAB in a past trade is priced against the budget it was spent from.
+    ...(typeof rawSettings.waiver_budget === 'number' ? { waiver_budget: rawSettings.waiver_budget } : {}),
     ...(typeName ? { isDynasty: typeName === 'dynasty' } : {}),
   }
   return { id: current.id, platformLeagueId: seasonPlatformLeagueId, settings, leagueType: typeName ?? current.leagueType }
@@ -235,6 +250,56 @@ type TradeRow = {
 const asIds = (raw: unknown): string[] =>
   Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
 
+/** One roster's side of one trade, as the Sleeper trade-fact sweep recorded it. */
+export type TradeFactSide = { faabIn: number; faabOut: number; playersInIds: string[]; playersOutIds: string[] }
+
+const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
+/**
+ * The FAAB this trade row's own side sent and received, or null when it was not recorded. PURE.
+ *
+ * `LeagueTrade` stores one row per side but no roster id for its own side, so the side is found by its
+ * PLAYERS: the fact whose players-out are this row's players-given and whose players-in are its
+ * players-received. A trade with no recorded FAAB (the fact predates FAAB capture, or there is no fact)
+ * returns null, and the caller prices it exactly as before — never as a known zero.
+ */
+export function faabForTradeRow(
+  row: { playersGiven: unknown; playersReceived: unknown },
+  sides: readonly TradeFactSide[] | undefined,
+): { given: number; received: number } | null {
+  if (!sides || sides.length === 0) return null
+  const given = asIds(row.playersGiven)
+  const received = asIds(row.playersReceived)
+  const own = sides.filter((s) => sameSet(s.playersOutIds, given) && sameSet(s.playersInIds, received))
+  // Two matching sides (both sent nothing but FAAB/picks) cannot be told apart: no claim.
+  if (own.length !== 1) return null
+  return { given: own[0]!.faabOut, received: own[0]!.faabIn }
+}
+
+/** Recorded FAAB per Sleeper transaction id — only facts written since FAAB capture carry `faabIn`. */
+async function loadTradeFaab(prisma: PrismaClient, txIds: readonly string[]): Promise<Map<string, TradeFactSide[]>> {
+  const out = new Map<string, TradeFactSide[]>()
+  for (const ids of chunk([...new Set(txIds)])) {
+    const rows = await prisma.$queryRaw<Array<{ tx: string; payload: Record<string, unknown> }>>`
+      SELECT payload->>'sleeperTransactionId' AS tx, payload
+      FROM dw_transaction_facts
+      WHERE type = 'trade' AND payload ? 'faabIn' AND payload->>'sleeperTransactionId' = ANY(${ids}::text[])`
+    for (const r of rows) {
+      const p = r.payload ?? {}
+      const side: TradeFactSide = {
+        faabIn: Number(p.faabIn) || 0,
+        faabOut: Number(p.faabOut) || 0,
+        playersInIds: asIds(p.playersInIds),
+        playersOutIds: asIds(p.playersOutIds),
+      }
+      const list = out.get(r.tx) ?? []
+      list.push(side)
+      out.set(r.tx, list)
+    }
+  }
+  return out
+}
+
 export async function gatherFormatObservations(
   prisma: PrismaClient,
   opts: { sinceSeason: number },
@@ -260,6 +325,8 @@ export async function gatherFormatObservations(
   for (const t of rows) if (t.transactionId && !unique.has(t.transactionId)) unique.set(t.transactionId, t)
 
   const leagues = await resolveTradeLeagues(prisma, [...unique.values()].map((t) => t.historyId))
+  // Best-effort: a FAAB read failure prices trades as before rather than failing the whole run.
+  const faab = await loadTradeFaab(prisma, [...unique.keys()]).catch(() => new Map<string, TradeFactSide[]>())
 
   const ids = new Set<string>()
   for (const t of unique.values()) for (const id of [...asIds(t.playersGiven), ...asIds(t.playersReceived)]) ids.add(id)
@@ -308,7 +375,19 @@ export async function gatherFormatObservations(
     const gather = byBook.get(key)!
     gather.tradesConsidered++
     const chart = charts.get(key)!
-    const attributed = attributeTrade(t, chart, { allowPicks: league.book.format === 'DYNASTY' })
+    /*
+     * FAAB, where it was recorded, priced on the league's own budget by the same linear formula the
+     * grade uses with no live league state (`normalizedFaabValue`). Recorded-and-zero counts as known;
+     * unrecorded is priced as before (no FAAB), and counted so the gap stays visible.
+     */
+    const faabMoved = faabForTradeRow(t, faab.get(t.transactionId))
+    if (faabMoved == null) bump('faab_not_recorded')
+    else if (faabMoved.given > 0 || faabMoved.received > 0) bump('faab_priced')
+    const attributed = attributeTrade(t, chart, {
+      allowPicks: league.book.format === 'DYNASTY',
+      extraGiven: faabMoved ? normalizedFaabValue(faabMoved.given, league.faabBudget) : 0,
+      extraReceived: faabMoved ? normalizedFaabValue(faabMoved.received, league.faabBudget) : 0,
+    })
     if (attributed.kind === 'skip') {
       bump(attributed.reason)
       gather.skipped[attributed.reason] = (gather.skipped[attributed.reason] ?? 0) + 1
