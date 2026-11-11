@@ -10,6 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  applyImportReviewOverrides,
+  parseImportReviewOverrides,
+} from '@/lib/league-import/review/importReviewOverrides'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
@@ -184,6 +188,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
      * PUBLIC league imports without cookies as a member — see `espnPublicMemberImport.ts`.
      */
     espnLeagueRunBy?: string
+    /** Commissioner edits from the review screen — see `lib/league-import/review/importReviewOverrides.ts`. */
+    reviewOverrides?: unknown
   }
   try {
     body = await req.json()
@@ -287,11 +293,19 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
   }
 
   try {
-    const canonical = buildCanonicalImportBundle(result.normalized)
+    /*
+     * Edits the commissioner made on the "Review your import" screen. Keyed on SOURCE ids and
+     * applied to this fresh fetch — commit never trusts the preview's copy of the league.
+     */
+    const normalized = applyImportReviewOverrides(
+      result.normalized,
+      parseImportReviewOverrides(body.reviewOverrides),
+    )
+    const canonical = buildCanonicalImportBundle(normalized)
     const { persisted, runId, skipped } = await persistImportWithCanonicalAudit({
       userId: auth.userId,
       provider,
-      normalized: result.normalized,
+      normalized,
       canonical,
       allowUpdateExisting: Boolean(body.force),
       /*
