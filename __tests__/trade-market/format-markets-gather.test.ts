@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { bookKey, gatherFormatObservations, seasonLeagueRow } from '@/lib/trade-market/formatMarkets'
+import { bookKey, faabBudgetFromSettings, faabForTradeRow, gatherFormatObservations, seasonLeagueRow } from '@/lib/trade-market/formatMarkets'
+import { attributeTrade } from '@/lib/trade-market/completedTradeObservations'
 
 /**
  * 🛑 The point of the format split: a superflex trade is measured on the SUPERFLEX chart and lands in the
@@ -102,5 +103,65 @@ describe('seasonLeagueRow — a past season on its own settings', () => {
   it('is null without a lineup, so the resolver falls through to the next source', () => {
     expect(seasonLeagueRow(current, 'P', { rawSettings: { type: 2 } })).toBeNull()
     expect(seasonLeagueRow(current, 'P', null)).toBeNull()
+  })
+})
+
+describe('FAAB in the trade market', () => {
+  const sides = [
+    { faabIn: 35, faabOut: 0, playersInIds: [], playersOutIds: ['7'] },
+    { faabIn: 0, faabOut: 35, playersInIds: ['7'], playersOutIds: [] },
+  ]
+
+  it('finds this row’s own side by its players and reads its FAAB each way', () => {
+    expect(faabForTradeRow({ playersGiven: ['7'], playersReceived: [] }, sides)).toEqual({ given: 0, received: 35 })
+    expect(faabForTradeRow({ playersGiven: [], playersReceived: ['7'] }, sides)).toEqual({ given: 35, received: 0 })
+  })
+
+  it('makes no claim when FAAB was not recorded or the side cannot be told apart', () => {
+    expect(faabForTradeRow({ playersGiven: ['7'], playersReceived: [] }, undefined)).toBeNull()
+    expect(faabForTradeRow({ playersGiven: ['9'], playersReceived: [] }, sides)).toBeNull()
+    const twins = [{ faabIn: 5, faabOut: 0, playersInIds: [], playersOutIds: [] }, { faabIn: 0, faabOut: 5, playersInIds: [], playersOutIds: [] }]
+    expect(faabForTradeRow({ playersGiven: [], playersReceived: [] }, twins)).toBeNull()
+  })
+
+  it('a "player for FAAB" trade, once a side worth nothing, now prices the player', () => {
+    const t = { playersGiven: ['7'], playersReceived: [], picksGiven: [], picksReceived: [] }
+    const chart = new Map([['7', 600]])
+    expect(attributeTrade(t, chart)).toEqual({ kind: 'skip', reason: 'side_worth_nothing' })
+    const priced = attributeTrade(t, chart, { extraReceived: 630 })
+    expect(priced).toEqual({ kind: 'ok', records: [{ id: '7', own: 600, observedValue: 630 }] })
+  })
+
+  it('FAAB counts toward its side but is never attributed to a player', () => {
+    const t = { playersGiven: ['1'], playersReceived: ['2'], picksGiven: [], picksReceived: [] }
+    const r = attributeTrade(t, new Map([['1', 3000], ['2', 2000]]), { extraReceived: 1000 })
+    expect(r).toMatchObject({ kind: 'ok' })
+    // Player 2 is half of a 3000 side (2000 + 1000 FAAB), so he is credited with half of 3000, not all of it.
+    expect((r as { records: Array<{ id: string; observedValue: number }> }).records.find((x) => x.id === '2')!.observedValue).toBe(2000)
+  })
+
+  it('reads the league’s budget under any importer’s name', () => {
+    expect(faabBudgetFromSettings({ waiver_budget: 200 })).toBe(200)
+    expect(faabBudgetFromSettings({ faabBudget: 1000 })).toBe(1000)
+    expect(faabBudgetFromSettings({ waiver_budget: 0 })).toBeNull()
+    expect(faabBudgetFromSettings(null)).toBeNull()
+  })
+
+  it('the gather prices recorded FAAB and counts what was not recorded', async () => {
+    const base = fakePrisma()
+    const prisma = {
+      ...base,
+      leagueTrade: { findMany: async () => [{ transactionId: 'faab-1', historyId: 'h-sf', season: 2026, tradeDate: null, playersGiven: ['2'], playersReceived: [], picksGiven: [], picksReceived: [] }, ...(await base.leagueTrade.findMany())] },
+      $queryRaw: async () => [
+        { tx: 'faab-1', payload: { faabIn: 50, faabOut: 0, playersInIds: [], playersOutIds: ['2'] } },
+        { tx: 'faab-1', payload: { faabIn: 0, faabOut: 50, playersInIds: ['2'], playersOutIds: [] } },
+      ],
+    }
+    const g = await gatherFormatObservations(prisma as never, { sinceSeason: 2024 })
+    expect(g.skipped).toMatchObject({ faab_priced: 1 })
+    expect(g.skipped.faab_not_recorded).toBeGreaterThan(0)
+    const sf = g.byBook.get(bookKey({ format: 'DYNASTY', qbFormat: 'SUPERFLEX' }))!
+    // $50 of a $100 budget is half of the full-budget value (1800) = 900 for the RB.
+    expect(sf.byPlayer.get('2')!.observations.find((o) => o.transactionId === 'faab-1')!.observedValue).toBe(900)
   })
 })

@@ -162,6 +162,8 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
   const [teSlots, setTeSlots] = useState(1)
   const [flexSlots, setFlexSlots] = useState(2)
   const [dynasty, setDynasty] = useState(true)
+  // League size prices the chart itself (FantasyCalc is asked for this many teams), so it is not a lineup move.
+  const [teams, setTeams] = useState(12)
   const formatChange = <T,>(set: (v: T) => void) => (v: T) => { set(v); setResult(null) }
 
   function addFaab(side: 'A' | 'B') {
@@ -279,6 +281,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           ...(sport === 'NFL'
             ? {
                 isDynasty: dynasty,
+                leagueSize: teams,
                 lineup: { qb: QB_PRESETS[qbPreset].qb, sf: QB_PRESETS[qbPreset].sf, rb: rbSlots, wr: wrSlots, te: teSlots, flex: flexSlots },
               }
             : {}),
@@ -330,6 +333,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
               {(Object.keys(QB_PRESETS) as QbPreset[]).map((key) => <option key={key} value={key}>{copy(QB_PRESETS[key].label)}</option>)}
             </select>
           </label>
+          <label>{copy("Teams ")}<select value={teams} onChange={(event) => formatChange(setTeams)(Number(event.target.value))} data-testid="generic-teams">{[8, 10, 12, 14, 16].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
           <label>{copy("RB ")}<select value={rbSlots} onChange={(event) => formatChange(setRbSlots)(Number(event.target.value))}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
           <label>{copy("WR ")}<select value={wrSlots} onChange={(event) => formatChange(setWrSlots)(Number(event.target.value))}>{[2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
           <label>{copy("TE ")}<select value={teSlots} onChange={(event) => formatChange(setTeSlots)(Number(event.target.value))} data-testid="generic-te-slots">{[1, 2].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
