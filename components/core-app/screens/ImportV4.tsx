@@ -56,6 +56,9 @@ import {
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
 import { detectProviderFromLink } from '@/lib/league-import/detectProviderFromLink'
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
+import { ImportReviewPanel, type ImportReviewState } from '@/components/import/ImportReviewPanel'
+import { readImportReview } from '@/lib/league-import/review/readImportReview'
+import type { ImportReview, ImportReviewOverrides } from '@/lib/league-import/review/types'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 
 /**
@@ -238,6 +241,11 @@ type Phase =
        * Secret ID). Ticking "I'm the commissioner" sets `attested`, and the commit then records it.
        */
       canConfirmCommissioner: boolean
+      /*
+       * "Review your import", built server-side. Null when the server is older or the review could
+       * not be built — the panel below then shows exactly what it showed before this existed.
+       */
+      review: ImportReview | null
     }
   | { k: 'committing'; sourceId: string }
   | {
@@ -1267,9 +1275,23 @@ export function ImportV4({
 
   const deepLinked = useRef(false)
 
+  /*
+   * Edits from the review panel. A ref as well as state: the commit can be re-entered from the
+   * verification and attestation gates, long after the panel has unmounted, and the edits must
+   * still travel with it.
+   */
+  const reviewOverridesRef = useRef<ImportReviewOverrides | null>(null)
+  const [reviewState, setReviewState] = useState<ImportReviewState | null>(null)
+  const onReviewStateChange = useCallback((next: ImportReviewState) => {
+    reviewOverridesRef.current = next.overrides
+    setReviewState(next)
+  }, [])
+
   const runPreview = useCallback(
     async (sourceId: string, attest = false) => {
       setError(null)
+      reviewOverridesRef.current = null
+      setReviewState(null)
       setPhase({ k: 'previewing', sourceId })
       const res = await fetchImportPreview(
         provider,
@@ -1312,6 +1334,7 @@ export function ImportV4({
         importBlockedReason?: unknown
         managers?: unknown
         commissionerConfirmable?: unknown
+        review?: unknown
       }
       trackImportGateResult({
         provider,
@@ -1348,6 +1371,7 @@ export function ImportV4({
          * strength of a missing field.
          */
         coverage: readPreviewCoverage(payload?.dataQuality?.coverageNarrative),
+        review: readImportReview(payload?.review),
       })
     },
     [provider, espnConnected]
@@ -1381,12 +1405,13 @@ export function ImportV4({
         sourceId,
         '',
         attested ? { accepted: true } : undefined,
-        force || confirmReimportOfDeleted || claimTeamId || espnRunBy
+        force || confirmReimportOfDeleted || claimTeamId || espnRunBy || reviewOverridesRef.current
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
               ...(claimTeamId ? { claimSourceTeamId: claimTeamId } : {}),
               ...(espnRunBy ? { espnLeagueRunBy: espnRunBy } : {}),
+              ...(reviewOverridesRef.current ? { reviewOverrides: reviewOverridesRef.current } : {}),
             }
           : undefined
       )
@@ -3236,6 +3261,16 @@ export function ImportV4({
             We read this league from {providerLabel}. Importing builds a read-only copy — nothing
             changes on {providerLabel}.
           </p>
+          {phase.review ? (
+            <ImportReviewPanel
+              embedded
+              review={phase.review}
+              provider={provider}
+              blockedReason={phase.importBlockedReason}
+              onRerun={() => void runPreview(phase.sourceId, phase.attested)}
+              onReviewStateChange={onReviewStateChange}
+            />
+          ) : null}
           {/*
             ── What you are about to get ──────────────────────────────────────────
             Rendered ONLY when the preview actually said something. `phase.coverage` is null both
@@ -3425,11 +3460,17 @@ export function ImportV4({
             <button
               type="button"
               className="af-btn af-im-submit"
-              disabled={previewImportState(provider, phase).blocked || previewImportState(provider, phase).needsPick}
+              disabled={
+                previewImportState(provider, phase).blocked ||
+                previewImportState(provider, phase).needsPick ||
+                // The review's own gate: nothing blocking left, open warnings acknowledged.
+                Boolean(phase.review && reviewState && !reviewState.ready)
+              }
               // The second half of the contract described on the row button above:
               // `import-commit` is the step the canonical import spec proves.
               data-testid="import-commit"
-              onClick={() =>
+              onClick={() => {
+                reviewState?.markConfirmed()
                 void runCommit(
                   phase.sourceId,
                   phase.attested,
@@ -3437,7 +3478,7 @@ export function ImportV4({
                   phase.claimTeamId,
                   previewImportState(provider, phase).espnMember ? phase.espnRunBy : null,
                 )
-              }
+              }}
             >
               {importButtonLabel(provider, phase)}
             </button>

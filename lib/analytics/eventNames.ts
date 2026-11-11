@@ -55,6 +55,30 @@ export const CREATE_LEAGUE = {
   FUNNEL_ABANDON: 'product.create_league.funnel_abandon',
   SERVER_SUCCESS: 'product.create_league.server_success',
   SERVER_FAIL: 'product.create_league.server_fail',
+  /** A step's own checks passed and the commissioner moved forward from it. */
+  STEP_COMPLETE: 'product.create_league.step_complete',
+  /** Back button, or jumping to an earlier step from the progress bar or a review Edit link. */
+  STEP_BACK: 'product.create_league.step_back',
+  /**
+   * An inline validation message was shown. Meta carries `field`, `code` and `step` ONLY —
+   * never the value the person typed. Emitted once per field+code per visit.
+   */
+  VALIDATION_ERROR: 'product.create_league.validation_error',
+  /** A saved draft was restored on return. */
+  DRAFT_RESTORED: 'product.create_league.draft_restored',
+} as const
+
+/**
+ * "Review your import" screen. Meta carries warning CODES, counts and the provider id — never
+ * league, team, owner or player names.
+ */
+export const IMPORT_REVIEW = {
+  SHOWN: 'product.import_review.shown',
+  WARNING_SHOWN: 'product.import_review.warning_shown',
+  WARNING_FIXED: 'product.import_review.warning_fixed',
+  RERUN: 'product.import_review.rerun',
+  CONFIRMED: 'product.import_review.confirmed',
+  ABANDONED: 'product.import_review.abandoned',
 } as const
 
 /**

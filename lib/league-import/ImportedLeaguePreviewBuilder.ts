@@ -13,6 +13,7 @@ import {
   type ImportCoverageSummary,
 } from './importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { ImportReviewFacts } from '@/lib/league-import/review/types'
 import { getPrimaryLogoUrlForTeam, getTeamByAbbreviation } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { receptionScoringLabel } from './receptionScoringLabel'
 import {
@@ -166,6 +167,11 @@ export interface ImportPreviewResponse {
   transactionCount: number
   matchupWeeks: number
   source: NormalizedImportResult['source']
+  /**
+   * Facts the "Review your import" screen needs that the preview already had in hand and used to
+   * drop. Additive and optional — see `lib/league-import/review/types.ts`.
+   */
+  reviewFacts?: ImportReviewFacts
 }
 
 /**
@@ -413,5 +419,43 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     transactionCount: normalized.transactions?.length ?? 0,
     matchupWeeks: normalized.schedule?.length ?? 0,
     source: normalized.source,
+    reviewFacts: buildImportReviewFacts(normalized),
+  }
+}
+
+function finiteOrNull(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
+  return Number.isFinite(n) ? n : null
+}
+
+/** Pure projection of the normalized league onto the fields the review screen shows. */
+export function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
+  const l = normalized.league as NormalizedImportResult['league'] & Record<string, unknown>
+  const rawType = l.league_type ?? l.sleeper_league_type
+  return {
+    rosterSize: finiteOrNull(l.rosterSize),
+    regularSeasonLength: finiteOrNull(l.regular_season_length),
+    playoffStartWeek: finiteOrNull(l.playoff_start_week),
+    playoffTeamCount: finiteOrNull(l.playoff_team_count),
+    isDynasty: Boolean(l.isDynasty),
+    // Only the provider's own keeper flag. `max_keepers` is >= 1 on every imported Sleeper league
+    // (see the note on `is_keeper` in types.ts), so it cannot say "keeper league".
+    isKeeper: l.is_keeper === true,
+    maxKeepers: l.is_keeper === true ? finiteOrNull(l.max_keepers) : null,
+    rawLeagueType: rawType == null ? null : String(rawType),
+    scoringFormat: normalized.scoring?.scoring_format ?? (typeof l.scoring === 'string' ? l.scoring : null),
+    leagueScoring: typeof l.scoring === 'string' ? l.scoring : null,
+    scoringRuleCount: normalized.scoring?.rules.length ?? 0,
+    waiverType: typeof l.waiver_type === 'string' ? l.waiver_type : l.waiver_type == null ? null : String(l.waiver_type),
+    faabBudget: finiteOrNull(l.faab_budget),
+    tradeDeadlineWeek: finiteOrNull(l.trade_deadline_week),
+    taxiSlots: finiteOrNull(l.taxi_slots),
+    reserveSlots: finiteOrNull(l.reserve_slots),
+    orphanTeamIds: normalized.rosters
+      .filter((r) => r.is_orphan === true || !String(r.owner_name ?? '').trim())
+      .map((r) => r.source_team_id),
+    failedRosterTeamIds: normalized.rosters.filter((r) => r.fetch_status === 'failed').map((r) => r.source_team_id),
+    tradedPickCount: normalized.traded_picks?.length ?? 0,
+    standingsCount: normalized.standings?.length ?? 0,
   }
 }

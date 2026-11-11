@@ -5,6 +5,7 @@
 import { importComingSoonMessage, isImportProviderAvailable } from './provider-ui-config';
 import { parseFantraxLeagueId } from './fantrax/fantraxApi';
 import type { ImportProvider } from './types';
+import type { ImportReviewOverrides } from './review/types';
 
 export interface CommissionerAttestation {
   accepted: boolean;
@@ -313,6 +314,8 @@ export async function submitImportCreation(
      * imports with no cookies as a member (see `espnPublicMemberImport.ts`).
      */
     espnLeagueRunBy?: 'espn' | 'member' | 'me'
+    /** Edits from the "Review your import" screen, applied server-side to the fresh fetch. */
+    reviewOverrides?: ImportReviewOverrides | null
   }
 ): Promise<SubmitImportResult> {
   if (!isImportProviderAvailable(provider)) {
@@ -335,6 +338,7 @@ export async function submitImportCreation(
         ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
         ...(options?.claimSourceTeamId?.trim() ? { claimSourceTeamId: options.claimSourceTeamId.trim() } : {}),
         ...(provider === 'espn' && options?.espnLeagueRunBy ? { espnLeagueRunBy: options.espnLeagueRunBy } : {}),
+        ...(options?.reviewOverrides ? { reviewOverrides: options.reviewOverrides } : {}),
       }),
     });
     const data = await readImportResponseBody(res);
