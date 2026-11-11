@@ -27,6 +27,8 @@ import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 export interface CreateLeagueV2ClientProps {
   userId: string
+  /** Opened from the demo league: offer "Create a test league" pre-selected. */
+  fromDemo?: boolean
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
   importSourceLeagueId?: string
@@ -66,7 +68,7 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId, importedLeagues, fromDemo }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
   // An import carries its own format; a fresh create starts on the sport's default format
@@ -74,6 +76,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   // this device's saved draft (below, localStorage) keeps whatever the manager had chosen.
   const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? freshCreateLeagueState(DEFAULT_V2_STATE)))
   const [acceptWeeklyLineups, setAcceptWeeklyLineups] = useState(false)
+  const [testLeague, setTestLeague] = useState(fromDemo === true)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -206,21 +209,23 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       draftType: state.draftType,
       fromImport: Boolean(importSourceLeagueId),
     }
-    sendProductAnalyticsBeacon(CREATE_LEAGUE.SUBMIT, funnelMeta)
+    // A test league is a tester's throwaway: it must not count in the create-league funnel.
+    const isTest = testLeague && !importSourceLeagueId
+    if (!isTest) sendProductAnalyticsBeacon(CREATE_LEAGUE.SUBMIT, funnelMeta)
     try {
-      const result = await submitCreateLeagueV2(state, importSourceLeagueId, acceptWeeklyLineups)
+      const result = await submitCreateLeagueV2(state, importSourceLeagueId, acceptWeeklyLineups, isTest)
       if (!result.ok) {
         setSubmitError(result.error ?? t('createLeague.v2.submitError'))
         if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
           setFieldErrors(result.fieldErrors)
         }
-        sendProductAnalyticsBeacon(CREATE_LEAGUE.FAIL_CLIENT, {
+        if (!isTest) sendProductAnalyticsBeacon(CREATE_LEAGUE.FAIL_CLIENT, {
           ...funnelMeta,
           fields: Object.keys(result.fieldErrors ?? {}).join(','),
         })
         return
       }
-      sendProductAnalyticsBeacon(CREATE_LEAGUE.SUCCESS_CLIENT, funnelMeta)
+      if (!isTest) sendProductAnalyticsBeacon(CREATE_LEAGUE.SUCCESS_CLIENT, funnelMeta)
       clearPersistedV2State()
       if (result.warning) {
         const href = result.redirectTo ?? (result.leagueId ? `/core?league=${encodeURIComponent(result.leagueId)}` : '/core')
@@ -236,7 +241,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     } finally {
       setSubmitting(false)
     }
-  }, [router, state, t, importSourceLeagueId, finishImportedLeague, acceptWeeklyLineups])
+  }, [router, state, t, importSourceLeagueId, finishImportedLeague, acceptWeeklyLineups, testLeague])
 
   const retryFinalization = useCallback(async () => {
     if (!createdLeagueId || retryingFinalization) return
@@ -244,6 +249,10 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   }, [createdLeagueHref, createdLeagueId, retryingFinalization, finishImportedLeague])
 
   return (
+    <>
+    {!importSourceLeagueId ? (
+      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo={fromDemo === true} />
+    ) : null}
     <CreateLeagueWizard
       state={state}
       onChange={onChange}
@@ -266,5 +275,34 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       restoredAt={restoredAt}
       onStartOver={importTemplate ? undefined : handleStartOver}
     />
+    </>
+  )
+}
+
+function TestLeagueToggle({ checked, onChange, fromDemo }: { checked: boolean; onChange: (v: boolean) => void; fromDemo: boolean }) {
+  return (
+    <div className="bg-[color:var(--surface-app)] text-[color:var(--text-primary)]">
+      <section className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6" aria-label="Test league">
+        <label
+          data-testid="create-test-league-toggle"
+          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-4 pr-16 sm:pr-20 lg:pr-4"
+        >
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5 shrink-0 accent-[color:var(--color-primary)]"
+            checked={checked}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-bold">Create a test league</span>
+            <span className="mt-1 block text-sm leading-6 text-[color:var(--text-secondary)]">
+              Every empty team gets a placeholder AI manager, so you can run the whole flow — draft, lineups,
+              trades, scoring — on your own. Test leagues send no invites and don&apos;t count as real leagues.
+              {fromDemo ? ' Pre-selected because you came from the demo league.' : ''}
+            </span>
+          </span>
+        </label>
+      </section>
+    </div>
   )
 }

@@ -33,6 +33,7 @@ export default async function CreateLeaguePage(
   const e2eAuth = firstStringParam(sp.e2eAuth)
   const fromLeagueId = firstStringParam(sp.fromLeague)?.trim()
   const templateId = firstStringParam(sp.template)?.trim()
+  const fromDemo = firstStringParam(sp.from) === 'demo'
   const allowE2EBypass = process.env.NODE_ENV !== 'production' && e2eAuth === '1'
 
   const session = (await getServerSession(authOptions as never)) as {
@@ -47,7 +48,9 @@ export default async function CreateLeaguePage(
       ? `/create-league?fromLeague=${encodeURIComponent(fromLeagueId)}`
       : templateId
         ? `/create-league?template=${encodeURIComponent(templateId)}`
-        : '/create-league'
+        : fromDemo
+          ? '/create-league?from=demo'
+          : '/create-league'
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
   }
 
@@ -84,7 +87,7 @@ export default async function CreateLeaguePage(
     const imports = candidates
       .filter(league => !isNativePlatform(league.platform))
       .map(league => ({ id: league.id, name: league.name ?? '', sport: String(league.sport) }))
-    return <CreateLeaguePageClient userId={userId} importedLeagues={imports} />
+    return <CreateLeaguePageClient userId={userId} importedLeagues={imports} fromDemo={fromDemo} />
   }
 
   const source = await prisma.league.findUnique({

@@ -2272,6 +2272,12 @@ export function ImportV4({
               Create a new league <span aria-hidden>&rarr;</span>
             </Link>
           </p>
+          <p className="af-im-create-option">
+            Just looking?{' '}
+            <Link href="/demo" data-testid="import-try-demo">
+              Try the demo league <span aria-hidden>&rarr;</span>
+            </Link>
+          </p>
         </nav>
       </header>
 
