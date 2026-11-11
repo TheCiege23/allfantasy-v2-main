@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client'
 
-import { valueBookFor } from '@/lib/core-app/valueBook'
+import { leagueVariantFor, valueBookFor } from '@/lib/core-app/valueBook'
 import { lineupProfileFromSettings, type LineupPosition, type LineupProfile } from '@/lib/league/lineupProfile'
 import { authoritativeRowsBySleeperId } from '@/lib/player-match/authoritativePlayerRow'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
@@ -69,6 +69,12 @@ export type ResolvedTradeLeague = {
   carried: boolean
   /** The league's FAAB budget, for pricing FAAB that moved in a trade. Null when the league states none. */
   faabBudget: number | null
+  /**
+   * `LeagueTrade.leagueFormat` as `comprehensive-trade-learning` reads it ('dynasty' | 'keeper' ⇒ the
+   * dynasty chart). Derived from the BOOK, so a keeper league that prices on the redraft chart (low keeper
+   * share) is written 'redraft' — the two readers then cannot disagree about which chart a trade is on.
+   */
+  tradeFormat: 'dynasty' | 'keeper' | 'redraft'
 }
 
 type LeagueRow = { id: string; platformLeagueId: string; settings: unknown; leagueType: string | null }
@@ -94,7 +100,49 @@ export function resolveLeague(row: LeagueRow, carried: boolean): ResolvedTradeLe
   const lineup = lineupProfileFromSettings(row.settings)
   if (!lineup || !lineup.qbClass) return null
   const vb = valueBookFor(row.settings, row.leagueType)
-  return { leagueKey: row.id, book: { format: vb.format, qbFormat: vb.qbFormat }, lineup, carried, faabBudget: faabBudgetFromSettings(row.settings) }
+  const tradeFormat = vb.format === 'DYNASTY' ? (leagueVariantFor(row.settings, row.leagueType).keeper ? 'keeper' : 'dynasty') : 'redraft'
+  return {
+    leagueKey: row.id,
+    book: { format: vb.format, qbFormat: vb.qbFormat },
+    lineup,
+    carried,
+    faabBudget: faabBudgetFromSettings(row.settings),
+    tradeFormat,
+  }
+}
+
+/**
+ * Write `leagueFormat` / `isSuperFlex` onto stored trades that have none. Only EMPTY rows are touched —
+ * nothing else sets these columns today, and a value someone did set is never overwritten.
+ *
+ * 🛑 WHY THIS MATTERS: `comprehensive-trade-learning` reads a null `leagueFormat` as REDRAFT and a null
+ * `isSuperFlex` as 1QB, and no import path ever filled them — so it priced every dynasty and superflex
+ * trade on the wrong chart. The format markets already resolve each trade's league (incl. past seasons
+ * on their own settings), so they fill the columns as a by-product. Returns the rows updated.
+ */
+export async function stampTradeFormats(
+  prisma: PrismaClient,
+  stamps: ReadonlyArray<{ transactionId: string; tradeFormat: ResolvedTradeLeague['tradeFormat']; isSuperFlex: boolean }>,
+): Promise<number> {
+  const groups = new Map<string, string[]>()
+  for (const s of stamps) {
+    const key = `${s.tradeFormat}|${s.isSuperFlex}`
+    const list = groups.get(key) ?? []
+    list.push(s.transactionId)
+    groups.set(key, list)
+  }
+  let updated = 0
+  for (const [key, txIds] of groups) {
+    const [leagueFormat, sf] = key.split('|')
+    for (const ids of chunk(txIds)) {
+      const r = await prisma.leagueTrade.updateMany({
+        where: { transactionId: { in: ids }, leagueFormat: null },
+        data: { leagueFormat, isSuperFlex: sf === 'true' },
+      })
+      updated += r.count
+    }
+  }
+  return updated
 }
 
 /** Sleeper `settings.type`: 0 redraft, 1 keeper, 2 dynasty. */
@@ -232,6 +280,8 @@ export type LineupObservation = {
 export type FormatGather = {
   byBook: Map<string, CompletedTradeGather>
   lineupObservations: LineupObservation[]
+  /** Every trade whose league resolved, with the format to stamp on it (`stampTradeFormats`). */
+  formatStamps: Array<{ transactionId: string; tradeFormat: ResolvedTradeLeague['tradeFormat']; isSuperFlex: boolean }>
   skipped: Record<string, number>
   tradesConsidered: number
   tradesUsed: number
@@ -370,6 +420,7 @@ export async function gatherFormatObservations(
   const byBook = new Map<string, CompletedTradeGather>()
   for (const b of MARKET_BOOKS) byBook.set(bookKey(b), { byPlayer: new Map(), skipped: {}, tradesConsidered: 0, tradesUsed: 0 })
   const lineupObservations: LineupObservation[] = []
+  const formatStamps: FormatGather['formatStamps'] = []
   let tradesUsed = 0
 
   for (const t of unique.values()) {
@@ -378,6 +429,7 @@ export async function gatherFormatObservations(
       bump('unknown_league_format')
       continue
     }
+    formatStamps.push({ transactionId: t.transactionId, tradeFormat: league.tradeFormat, isSuperFlex: league.book.qbFormat === 'SUPERFLEX' })
     const key = bookKey(league.book)
     const gather = byBook.get(key)!
     gather.tradesConsidered++
@@ -423,7 +475,7 @@ export async function gatherFormatObservations(
     }
   }
 
-  return { byBook, lineupObservations, skipped, tradesConsidered: unique.size, tradesUsed }
+  return { byBook, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
 }
 
 // ─── Lineup factors ─────────────────────────────────────────────────────────────────────────────────
@@ -653,8 +705,17 @@ async function writeBook(
  */
 export async function recalculateFormatMarkets(
   prisma: PrismaClient,
-  opts: { sinceSeason: number; dryRun?: boolean; requireCentred?: boolean; skipBooks?: ReadonlySet<string>; writeLineupFactors?: boolean; now?: Date },
-): Promise<{ books: BookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; skipped: Record<string, number> }> {
+  opts: {
+    sinceSeason: number
+    dryRun?: boolean
+    requireCentred?: boolean
+    skipBooks?: ReadonlySet<string>
+    writeLineupFactors?: boolean
+    /** Also fill empty `LeagueTrade.leagueFormat` / `isSuperFlex` for every resolved trade (`stampTradeFormats`). */
+    stampTrades?: boolean
+    now?: Date
+  },
+): Promise<{ books: BookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
   const dryRun = opts.dryRun !== false
   const generatedAt = opts.now ?? new Date()
   const gathered = await gatherFormatObservations(prisma, { sinceSeason: opts.sinceSeason })
@@ -684,7 +745,9 @@ export async function recalculateFormatMarkets(
     await writeLineupFactorTable(prisma, lineup)
     lineupWritten = true
   }
-  return { books, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, skipped: gathered.skipped }
+  // Best-effort and last: a stamping failure must never cost the markets this run already wrote.
+  const tradesStamped = !dryRun && opts.stampTrades ? await stampTradeFormats(prisma, gathered.formatStamps).catch(() => 0) : 0
+  return { books, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, tradesStamped, skipped: gathered.skipped }
 }
 
 /** Store the lineup factor table for 21 days — the same horizon the per-player market is trusted for. */

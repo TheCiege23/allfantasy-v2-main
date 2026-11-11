@@ -282,3 +282,17 @@ describe('the scheduled writer', () => {
     expect(writeLineup).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('the scheduled writer stamps trade formats once, on the widest window', () => {
+  it('asks only the widest-window call to stamp, and sums what it reports', async () => {
+    const recalc = vi.fn(async (_p: unknown, o: { sinceSeason: number; stampTrades?: boolean }) => ({
+      books: [], lineup: factorTable(), lineupWritten: false, tradesUsed: 1, skipped: {},
+      tradesStamped: o.stampTrades ? 1234 : 0,
+    }))
+    const r = await runScheduledMarketRecalc({} as never, { now: NOW, recalc: recalc as never, writeLineup: vi.fn(async () => {}) })
+    const stampingCalls = recalc.mock.calls.filter((c) => (c[1] as { stampTrades?: boolean }).stampTrades)
+    expect(stampingCalls).toHaveLength(1)
+    expect((stampingCalls[0]![1] as { sinceSeason: number }).sinceSeason).toBe(2024)
+    expect(r.tradesStamped).toBe(1234)
+  })
+})

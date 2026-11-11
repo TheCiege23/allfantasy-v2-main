@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { jitterSleep, runWithConcurrency, sleep } from '@/lib/async-utils'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
@@ -84,7 +85,49 @@ export type SleeperTradeIngestResult = {
    * exactly like one that had nothing to skip.
    */
   providerCallsAvoided: number
+  /**
+   * Finished seasons re-read once because their stored trades predate FAAB capture (no `faabIn` key).
+   * Bounded per sweep by `maxFaabRefills`, so the backlog drains over several fires.
+   */
+  faabSeasonsRefilled: number
   errors: string[]
+}
+
+/**
+ * Finished seasons re-read for FAAB per sweep, at most (~18 week requests each). The sweep runs about
+ * twelve times a day, so 8 adds ~144 requests a fire and drains the backlog (~1,000 league-seasons
+ * across the last three seasons) in roughly ten days without multiplying a fire's normal load.
+ */
+export const DEFAULT_MAX_FAAB_REFILLS = 8
+/** How many seasons back FAAB is worth recovering — the trade market reads the last three. */
+export const FAAB_REFILL_SEASONS = 3
+
+/**
+ * Should a FINISHED season whose trades are already stored be re-read anyway, to record FAAB? PURE.
+ *
+ * Only when its stored trades lack FAAB (written before capture), it is recent enough for the trade
+ * market to read, and this sweep still has refill budget. Everything else keeps the completion skip.
+ */
+export function shouldRefillFaab(args: { lacksFaab: boolean; season: number; currentSeason: number; refillsLeft: number }): boolean {
+  return args.lacksFaab && args.refillsLeft > 0 && args.season > args.currentSeason - FAAB_REFILL_SEASONS
+}
+
+function nflSeasonNow(now = new Date()): number {
+  return now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
+}
+
+/** Does any stored trade of this league-season lack FAAB (written before capture)? False on any error. */
+async function seasonLacksFaab(leagueId: string, season: number): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ one: number }>>(Prisma.sql`
+      SELECT 1 AS one FROM dw_transaction_facts
+      WHERE "leagueId" = ${leagueId} AND season = ${season} AND type = 'trade' AND NOT (payload ? 'faabIn')
+      LIMIT 1`)
+    return rows.length > 0
+  } catch {
+    // Unknown is not "lacks": an error must never turn the completion skip off.
+    return false
+  }
 }
 
 type SleeperTransaction = {
@@ -339,6 +382,8 @@ export async function ingestSleeperTradeFacts(input?: {
    * because the default is what runs twelve times a day.
    */
   force?: boolean
+  /** Finished seasons this sweep may re-read to record FAAB (default `DEFAULT_MAX_FAAB_REFILLS`; 0 disables). */
+  maxFaabRefills?: number
 }): Promise<SleeperTradeIngestResult> {
   const result: SleeperTradeIngestResult = {
     leaguesConsidered: 0,
@@ -350,9 +395,12 @@ export async function ingestSleeperTradeFacts(input?: {
     seasonsConsidered: 0,
     seasonsSkippedComplete: 0,
     providerCallsAvoided: 0,
+    faabSeasonsRefilled: 0,
     errors: [],
   }
   rateLimitHits = 0
+  let refillsLeft = input?.maxFaabRefills ?? DEFAULT_MAX_FAAB_REFILLS
+  const currentSeason = nflSeasonNow()
   const currentWeek = makeCurrentWeekReader()
 
   const leagues = await prisma.league.findMany({
@@ -412,7 +460,24 @@ export async function ingestSleeperTradeFacts(input?: {
           .catch(() => null),
       )
 
-      if (hasExistingRows && shouldSkipImportedSeason({ force: input?.force, league: link })) {
+      /*
+       * ⚠ FAAB REFILL: the one exception to the completion skip. A finished season stored before FAAB
+       * capture (2026-11-11) has trades with no `faabIn`, and the trade market prices those as if no
+       * FAAB moved. Re-reading it once writes the keys (the upsert below), after which the season
+       * skips again. Bounded and recent-only (`shouldRefillFaab`) — see DEFAULT_MAX_FAAB_REFILLS.
+       */
+      let refillFaab = false
+      const skippable = hasExistingRows && shouldSkipImportedSeason({ force: input?.force, league: link })
+      if (skippable && refillsLeft > 0 && linkSeason > currentSeason - FAAB_REFILL_SEASONS) {
+        const lacksFaab = await seasonLacksFaab(league.id, linkSeason)
+        refillFaab = shouldRefillFaab({ lacksFaab, season: linkSeason, currentSeason, refillsLeft })
+        if (refillFaab) {
+          refillsLeft -= 1
+          result.faabSeasonsRefilled += 1
+        }
+      }
+
+      if (skippable && !refillFaab) {
         result.seasonsSkippedComplete += 1
         result.providerCallsAvoided += MAX_WEEKS
         anySkipped = true
@@ -436,7 +501,8 @@ export async function ingestSleeperTradeFacts(input?: {
        * thirds of the season. Caught by the test, not by reading: the gate above is the visible
        * half of `force` and it is easy to believe that is all of it.
        */
-      const incremental = hasExistingRows && !input?.force
+      // A FAAB refill reads the WHOLE season, like `force`: a narrowed week window would refill a third of it.
+      const incremental = hasExistingRows && !input?.force && !refillFaab
       const firstWeek = firstWeekToFetch({
         hasExistingRows: incremental,
         currentWeek: incremental ? await currentWeek() : null,
