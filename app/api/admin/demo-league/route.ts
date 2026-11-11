@@ -25,6 +25,37 @@ function allowedEmail(email: string | undefined): boolean {
   return Boolean(email && list.includes(email.trim().toLowerCase()))
 }
 
+/**
+ * Accept either id an operator is likely to have in hand: our `League.id` (a uuid), or the
+ * PROVIDER's league id (`League.platformLeagueId` — the long number in a Sleeper URL, an ESPN
+ * league id, …). The provider id is what a commissioner sees every day, and it is what was
+ * pasted the first time this page was used.
+ *
+ * A provider id can match several rows: Sleeper gives each season its own league id, but other
+ * providers keep one id across seasons, and two users can each import the same league. So: keep
+ * only rows this user commissions, then take the newest season — that is the league that is
+ * still syncing, which is the whole point of a live demo.
+ */
+async function resolveCommissionedLeague(
+  input: string,
+  userId: string,
+): Promise<{ kind: 'ok'; id: string } | { kind: 'not_found' } | { kind: 'not_commissioner' }> {
+  const byId = await prisma.league.findUnique({ where: { id: input }, select: { id: true } })
+  const candidates = byId
+    ? [{ id: byId.id, season: 0 }]
+    : await prisma.league.findMany({
+        where: { platformLeagueId: input },
+        select: { id: true, season: true },
+        orderBy: { season: 'desc' },
+        take: 20,
+      })
+  if (candidates.length === 0) return { kind: 'not_found' }
+  for (const c of candidates) {
+    if (isCommissionerRole(await getLeagueRole(c.id, userId))) return { kind: 'ok', id: c.id }
+  }
+  return { kind: 'not_commissioner' }
+}
+
 async function describe() {
   const cfg = await getDemoSourceConfig()
   if (!cfg) return { configured: false as const }
@@ -54,13 +85,18 @@ export async function PUT(req: Request) {
   }
   if (!leagueId) return NextResponse.json({ error: 'leagueId is required' }, { status: 400 })
 
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { id: true } })
-  if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (!isCommissionerRole(await getLeagueRole(leagueId, userId))) {
+  const resolved = await resolveCommissionedLeague(leagueId, userId)
+  if (resolved.kind === 'not_found') {
+    return NextResponse.json(
+      { error: 'No league with that ID. Use the AllFantasy league ID, or the ID from Sleeper, ESPN, Fantrax or another provider.' },
+      { status: 404 },
+    )
+  }
+  if (resolved.kind === 'not_commissioner') {
     return NextResponse.json({ error: 'You can only use a league you commission as the demo source.' }, { status: 403 })
   }
 
-  await setDemoSourceConfig(leagueId, userId)
+  await setDemoSourceConfig(resolved.id, userId)
   resetDemoCache()
   console.info('[admin/demo-league] demo source changed', { by: userId })
   return NextResponse.json(await describe())

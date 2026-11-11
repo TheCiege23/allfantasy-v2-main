@@ -65,14 +65,14 @@ export default function DemoLeagueAdminClient() {
       )}
 
       <label className="mt-5 block text-sm font-semibold" htmlFor="demo-league-id">
-        League ID (one you commission)
+        League ID — AllFantasy or provider (Sleeper, ESPN, Fantrax…). Must be one you commission.
       </label>
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
         <input
           id="demo-league-id"
           value={leagueId}
           onChange={(e) => setLeagueId(e.target.value)}
-          placeholder="AllFantasy league id (uuid)"
+          placeholder="e.g. 1313549607426334720 or an AllFantasy league id"
           className="min-h-11 flex-1 rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/35"
         />
         <button

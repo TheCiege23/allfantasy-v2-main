@@ -5,7 +5,11 @@ const config = new Map<string, string>()
 const state = {
   admin: { status: 'admin' as 'admin' | 'none', user: { id: 'usr-admin', email: 'owner@example.test' } as { id?: string; email?: string } },
   role: 'commissioner',
+  /** Per-league role override; falls back to `role`. */
+  roles: {} as Record<string, string>,
   leagues: new Set(['lg-1']),
+  /** Rows by provider id, as `league.findMany({ where: { platformLeagueId } })` would return them. */
+  byPlatform: {} as Record<string, Array<{ id: string; season: number }>>,
 }
 
 const tx = {
@@ -55,6 +59,9 @@ const prisma = {
   },
   $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
 }
+;(prisma.league as unknown as { findMany: unknown }).findMany = vi.fn(async ({ where }: { where: { platformLeagueId?: string } }) =>
+  [...(state.byPlatform[where.platformLeagueId ?? ''] ?? [])].sort((a, b) => b.season - a.season),
+)
 
 vi.mock('@/lib/prisma', () => ({ prisma }))
 vi.mock('@/lib/adminAuth', () => ({
@@ -65,7 +72,7 @@ vi.mock('@/lib/adminAuth', () => ({
   ),
 }))
 vi.mock('@/lib/league/permissions', () => ({
-  getLeagueRole: vi.fn(async () => state.role),
+  getLeagueRole: vi.fn(async (leagueId: string) => state.roles[leagueId] ?? state.role),
   isCommissionerRole: (r: string) => r === 'commissioner' || r === 'co_commissioner',
 }))
 
@@ -78,6 +85,8 @@ describe('/api/admin/demo-league — only the admin who commissions the league c
     config.clear()
     state.admin = { status: 'admin', user: { id: 'usr-admin', email: 'owner@example.test' } }
     state.role = 'commissioner'
+    state.roles = {}
+    state.byPlatform = {}
     delete process.env.DEMO_LEAGUE_ADMIN_EMAILS
   })
 
@@ -118,6 +127,44 @@ describe('/api/admin/demo-league — only the admin who commissions the league c
     expect((await (await GET()).json()).configured).toBe(true)
     expect((await DELETE()).status).toBe(200)
     expect(config.has('demo_league.source.v1')).toBe(false)
+  })
+})
+
+describe('/api/admin/demo-league — accepts the provider league id too', () => {
+  beforeEach(() => {
+    config.clear()
+    state.admin = { status: 'admin', user: { id: 'usr-admin', email: 'owner@example.test' } }
+    state.role = 'commissioner'
+    state.roles = {}
+    state.byPlatform = { '1313549607426334720': [{ id: 'lg-2025', season: 2025 }, { id: 'lg-2026', season: 2026 }] }
+  })
+
+  it('resolves a Sleeper-style id to the newest season the admin commissions', async () => {
+    const { PUT } = await import('@/app/api/admin/demo-league/route')
+    expect((await PUT(put({ leagueId: '1313549607426334720' }))).status).toBe(200)
+    expect(JSON.parse(config.get('demo_league.source.v1')!).leagueId).toBe('lg-2026')
+  })
+
+  it('skips a newer season the admin does not commission', async () => {
+    state.role = 'member'
+    state.roles = { 'lg-2025': 'commissioner' }
+    const { PUT } = await import('@/app/api/admin/demo-league/route')
+    expect((await PUT(put({ leagueId: '1313549607426334720' }))).status).toBe(200)
+    expect(JSON.parse(config.get('demo_league.source.v1')!).leagueId).toBe('lg-2025')
+  })
+
+  it('refuses a provider id whose leagues the admin does not commission', async () => {
+    state.role = 'member'
+    const { PUT } = await import('@/app/api/admin/demo-league/route')
+    expect((await PUT(put({ leagueId: '1313549607426334720' }))).status).toBe(403)
+    expect(config.size).toBe(0)
+  })
+
+  it('404s an id that matches neither our id nor a provider id, with a message naming both', async () => {
+    const { PUT } = await import('@/app/api/admin/demo-league/route')
+    const res = await PUT(put({ leagueId: '999' }))
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toMatch(/provider/i)
   })
 })
 
