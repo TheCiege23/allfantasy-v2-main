@@ -2637,7 +2637,7 @@ export function TradeCenter(props: {
           ) : null}
 
           {!noSignal && (result.counterOffers ?? []).length > 0 ? (
-            <div className="af-tc-moves">
+            <div className="af-tc-moves af-tc-counters">
               <div className="af-label">{copy('Re-evaluated counteroffers')}</div>
               <p className="af-tc-row-sub">{copy('Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.')}</p>
               <ul>
