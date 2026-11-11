@@ -9,7 +9,57 @@ import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { recomputeAllFantasyAdp } from '@/lib/adp/recomputeAllFantasyAdp'
 import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '@/lib/draft-archive/ingestion/referenceWriter'
-import { recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { prisma } from '@/lib/prisma'
+import { runScheduledMarketRecalc, type ScheduledMarketRecalcResult } from '@/lib/trade-market/scheduledMarketRecalc'
+
+/*
+ * ⚠ THE AllFantasy TRADE MARKET REBUILD RIDES THIS SLOT (2026-11-11) — the same reason MLB/NBA/NHL
+ * did: main sits at the 60-cron ceiling (`scripts/cron-budget-check.mjs`), and this is the daily job
+ * that already computes an AllFantasy-owned market number from our own data with no provider call.
+ * It runs AFTER every sport, isolated: its own try/catch and its own heartbeat
+ * (`cron-af-market-values`), so a refused or failed rebuild never turns an ADP fire red and an ADP
+ * failure never hides a rebuild. See `lib/trade-market/scheduledMarketRecalc.ts`.
+ *
+ * ⚠ DEADLINE, BECAUSE THE DISPATCHER CUTS AT 300 s. This fire measured p50 45 s, max 113 s over the
+ * 30 days to 2026-11-11 (`sync_job_runs`). The rebuild only starts if the sports finished inside
+ * `TRADE_MARKET_START_BUDGET_MS`; a skipped day costs nothing — the read layer serves rows up to 21
+ * days old, and the next day's fire rebuilds. `?includeTradeMarket=false` turns it off without a deploy.
+ */
+const TRADE_MARKET_JOB = 'cron-af-market-values'
+const TRADE_MARKET_START_BUDGET_MS = 150_000
+
+async function rebuildTradeMarket(startedAt: number): Promise<
+  { ran: true; result: ScheduledMarketRecalcResult } | { ran: false; reason: string }
+> {
+  const elapsed = Date.now() - startedAt
+  if (elapsed > TRADE_MARKET_START_BUDGET_MS) {
+    const reason = `skipped: ADP recompute used ${Math.round(elapsed / 1000)}s of the start budget`
+    await recordHeartbeat({ jobName: TRADE_MARKET_JOB, trigger: 'cron' }, { rowsWritten: 0, rowsSkipped: 1, status: 'partial', warnings: [reason] }, 0)
+    return { ran: false, reason }
+  }
+  try {
+    const result = await withSyncJobRun(
+      { jobName: TRADE_MARKET_JOB, trigger: 'cron' },
+      () => runScheduledMarketRecalc(prisma),
+      (r) => ({
+        rowsWritten: r.written,
+        rowsSkipped: r.written > 0 ? 0 : 1,
+        // Every window refused is `partial`: it correctly declined a biased population, but the market is ageing out.
+        status: r.written > 0 ? ('success' as const) : ('partial' as const),
+        warnings:
+          r.written > 0
+            ? undefined
+            : [`no centred window: ${r.attempts.map((a) => `${a.sinceSeason}=${a.medianAdjustment ?? 'n/a'}%`).join(', ')}`],
+      }),
+    )
+    return { ran: true, result }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240)
+    console.error('[recompute-allfantasy-adp] trade market rebuild failed:', reason)
+    return { ran: false, reason: `failed: ${reason}` }
+  }
+}
 
 /*
  * MLB / NBA / NHL dynasty values. Only the bare (NFL) fire was scheduled, so the dynasty War Room had
@@ -66,7 +116,8 @@ async function handle(req: NextRequest) {
   const season = seasonParam?.trim() ? seasonParam.trim() : null
 
   const refs = { includeTest, dryRun, includeReferences: url.searchParams.get('includeReferences') !== 'false' }
-  if (sports.length > 1) return handleMultiSport({ sports, season, includeImported, ...refs })
+  const includeTradeMarket = url.searchParams.get('includeTradeMarket') !== 'false'
+  if (sports.length > 1) return handleMultiSport({ sports, season, includeImported, includeTradeMarket, ...refs })
   const sport = sports[0] ?? 'NFL'
 
   try {
@@ -114,7 +165,7 @@ async function recomputeOne(args: RunArgs & { sport: string }) {
 }
 
 /** One sport at a time, so one sport throwing still lets the others recompute. */
-async function handleMultiSport(args: RunArgs & { sports: string[] }) {
+async function handleMultiSport(args: RunArgs & { sports: string[]; includeTradeMarket: boolean }) {
   const startedAt = Date.now()
   const reports: Record<string, unknown> = {}
   const errors: string[] = []
@@ -143,8 +194,15 @@ async function handleMultiSport(args: RunArgs & { sports: string[] }) {
       Date.now() - startedAt,
     )
   }
+  /*
+   * The trade market rebuild — scheduled fires only (never a dry or test-draft run), and it does not
+   * touch `status`: its outcome lives in its own heartbeat and in `tradeMarket` below.
+   */
+  const tradeMarket = !args.dryRun && !args.includeTest && args.includeTradeMarket
+    ? await rebuildTradeMarket(startedAt)
+    : null
   const status = failed === args.sports.length ? 500 : errors.length > 0 ? 207 : 200
-  return NextResponse.json({ ok: errors.length === 0, reports }, { status })
+  return NextResponse.json({ ok: errors.length === 0, reports, tradeMarket }, { status })
 }
 
 export async function GET(req: NextRequest) {

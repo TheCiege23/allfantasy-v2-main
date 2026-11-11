@@ -558,13 +558,6 @@ export const PROBES = {
   '/api/cron/trade-weekly-recalibration': { heartbeat: 'cron-trade-weekly-recalibration' },
 
   /*
-   * The AllFantasy trade market writer. A HEARTBEAT, because a run that refuses every window
-   * (population not centred) correctly writes nothing — an output probe on the table would read that
-   * as dead. The refusal is recorded as `partial` with the medians in `warnings`.
-   */
-  '/api/cron/af-market-values': { heartbeat: 'cron-af-market-values' },
-
-  /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
    * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
    * season a suppressed output probe would have left it completely unwatched for seven months --
