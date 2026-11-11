@@ -151,10 +151,26 @@ function pickName(pick: TradePickAsset): string {
   return Number.isFinite(pick.round) && pick.round > 0 ? `${pick.season} ${ordinal(pick.round)} round pick` : pick.label
 }
 
-function pickDetail(pick: TradePickAsset): string {
-  if (pick.rerouted) return 'Traded again before the draft'
-  if (pick.resolved?.name) return `Drafted: ${pick.resolved.name}`
-  return 'Draft pick'
+function pickDetail(pick: TradePickAsset, origin: string | null = null): string {
+  const base = pick.rerouted ? 'Traded again before the draft' : pick.resolved?.name ? `Drafted: ${pick.resolved.name}` : 'Draft pick'
+  return origin ? `${base} · ${origin}` : base
+}
+
+/**
+ * Whose pick each one was, ONLY where a side receives two picks of the same year and round. Without it
+ * the email printed "2028 1st round pick" twice under one manager and read as a duplicated row
+ * (reported 2026-11-11: two 2027 3rds and two 2028 1sts, one deal). The original roster is named when
+ * it is a side of this trade, else "another team's" — never guessed.
+ */
+function pickOrigins(picks: ReadonlyArray<TradePickAsset>, owners: ReadonlyMap<number, string>): Array<string | null> {
+  const key = (p: TradePickAsset) => `${p.season}:${p.round}`
+  const counts = new Map<string, number>()
+  for (const p of picks) counts.set(key(p), (counts.get(key(p)) ?? 0) + 1)
+  return picks.map((p) => {
+    if ((counts.get(key(p)) ?? 0) < 2) return null
+    const owner = owners.get(p.originalRosterId)
+    return owner ? `originally ${owner}'s` : "originally another team's"
+  })
 }
 
 function faabName(amount: number): string {
@@ -195,10 +211,16 @@ function withGradeValues(lines: Line[], shown: DisplayedAsset[], gradeLines: Rea
 }
 
 /** One side's received assets (players, then picks, then FAAB), each with the value the grade gave it. */
-function receivedLines(side: TradeSideGrade, gradeLines: ReadonlyArray<TradeGradeLine> | null, gradeSide: 'give' | 'get'): Line[] {
+function receivedLines(
+  side: TradeSideGrade,
+  gradeLines: ReadonlyArray<TradeGradeLine> | null,
+  gradeSide: 'give' | 'get',
+  owners: ReadonlyMap<number, string> = new Map(),
+): Line[] {
+  const origins = pickOrigins(side.picksIn, owners)
   const lines: Line[] = [
     ...side.playersIn.map((p) => ({ name: p.name, detail: p.position, value: null as number | null })),
-    ...side.picksIn.map((p) => ({ name: pickName(p), detail: pickDetail(p), value: null as number | null })),
+    ...side.picksIn.map((p, i) => ({ name: pickName(p), detail: pickDetail(p, origins[i] ?? null), value: null as number | null })),
     // Last, matching `completedTradeInputs`, which prices FAAB after players and picks.
     ...(side.faabIn != null && side.faabIn > 0 ? [{ name: faabName(side.faabIn), detail: 'FAAB', value: null as number | null }] : []),
   ]
@@ -267,11 +289,12 @@ export function completedSideLetter(trade: GradedTrade, grade: TradeGradeView | 
 
 function sideViews(trade: GradedTrade, grade: TradeGradeView | null, viewerOwnerId: string | null): SideView[] {
   const g = grade && grade.graded && trade.sides.length === 2 ? grade : null
+  const owners = new Map(trade.sides.map((s) => [s.rosterId, s.managerName] as const))
   return trade.sides.map((side, i) => ({
     side,
     letter: completedSideLetter(trade, grade, i),
     pct: g ? (i === 0 ? g.percentDiff : -g.percentDiff) : null,
-    lines: withRosterSpot(receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give'), g?.rosterSpot, i === 0 ? 'get' : 'give', 'received'),
+    lines: withRosterSpot(receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give', owners), g?.rosterSpot, i === 0 ? 'get' : 'give', 'received'),
     total: g ? (i === 0 ? g.getValue : g.giveValue) : null,
     isViewer: Boolean(viewerOwnerId) && side.ownerId != null && String(side.ownerId) === String(viewerOwnerId),
   }))

@@ -247,6 +247,26 @@ describe('the one grade, and only the one grade', () => {
     expect(at('2026 1st round pick')).toBeLessThan(at('6,100'))
   })
 
+  /*
+   * Reported 2026-11-11: one side received two 2027 3rds and two 2028 1sts, and the email printed each
+   * name twice with nothing to tell them apart — it read as a duplicated row.
+   */
+  it('two picks of the same year and round each say whose pick they were', () => {
+    const own = { ...pick(3, true), originalRosterId: 2 }
+    const thirdTeam = { ...pick(3, true), originalRosterId: 9 }
+    const lone = { ...pick(1, true), originalRosterId: 2 }
+    const twoThirds = trade([
+      side({ rosterId: 1, ownerId: 'u1', managerName: 'managerOne', picksIn: [own, thirdTeam, lone], playersOut: [player('Rashid Shaheed', 0)], net: 0 }),
+      side({ rosterId: 2, ownerId: 'u2', managerName: 'managerTwo', playersIn: [player('Rashid Shaheed', 0)], picksOut: [own, thirdTeam, lone], net: 0 }),
+    ])
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: twoThirds, ledgerUrl: URL, grade: graded() })
+    const text = html.replace(/&#39;|&#x27;/g, "'")
+    expect(text).toContain("Draft pick · originally managerTwo's")
+    expect(text).toContain("Draft pick · originally another team's")
+    // A pick with no twin keeps the plain detail.
+    expect(text.match(/originally/g)).toHaveLength(2)
+  })
+
   it('a count mismatch prints names without values rather than values against the wrong asset', () => {
     const g = graded({ lines: [{ side: 'get', name: 'Brenton Strange', marketValue: 5170, leagueValue: 5170 }] })
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })

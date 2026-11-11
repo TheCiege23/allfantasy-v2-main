@@ -2486,6 +2486,26 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-moves-why b { color: var(--text); }
 .af-tc-moves-why[data-dir='up'] b { color: var(--good); }
 .af-tc-moves-why[data-dir='down'] b { color: var(--bad); }
+/*
+ * Counteroffer rows STACK. They borrow `.af-tc-moves` for its spacing, but its `li` is a two-column
+ * grid built for "name | number" rows. A counter row has five children (title, sentence, two detail
+ * lines, button), so the grid paired them up: the long sentence took the `auto` column and squeezed
+ * the title, the value labels and the button into a sliver beside it — one word per line, text
+ * overlapping, "Add to proposal" spilling out of its button on a phone (reported 2026-11-11).
+ */
+.af-tc-counters li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.af-tc-counters li > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.af-tc-counters li > p { margin: 0; }
+.af-tc-counters li > .af-btn { margin-top: 4px; }
 
 /* ── Phone audit, 2026-10-01 ─────────────────────────────────────────────────
  *
