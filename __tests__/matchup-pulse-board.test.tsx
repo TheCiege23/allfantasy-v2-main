@@ -262,6 +262,21 @@ describe('MatchupPulseBoard', () => {
     ])
   })
 
+  it('names the first few leagues with no claimed team, so you can tell which they are', () => {
+    const { getByTestId } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={10}
+        unclaimedLeagues={6}
+        unclaimedLeagueNames={['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot']}
+        pulse={pulse({ leading: [row()], leadingTotal: 2, trailingTotal: 2, notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 } })}
+      />,
+    )
+    expect(getByTestId('matchup-coverage').textContent).toContain(
+      '6 have no team claimed to your account, so we can’t tell which matchup is yours (Alpha, Bravo, Charlie, Delta, and 2 more)',
+    )
+  })
+
   it('claims no remainder when the unclaimed count is unknown', () => {
     const { getByTestId } = render(
       <MatchupPulseBoard

@@ -56,6 +56,8 @@ export type MatchupPulseBoardProps = {
    * cannot see them. Null when unknown (a pulse cached before `claimedLeagueIds`).
    */
   unclaimedLeagues?: number | null
+  /** Their names, in league-list order — the board shows the first few beside the count. */
+  unclaimedLeagueNames?: string[]
   /**
    * The outstanding-issues queue, rendered as "Needs you first".
    *
@@ -324,11 +326,12 @@ function coverage(
   totalLeagues: number,
   unclaimed: number | null | undefined,
   language: string,
+  unclaimedNames: readonly string[] = [],
 ): { line: string; head: string | null; reasons: string[] } {
   const m = messagesFor(matchupPulseBoardMessages, language)
   const r = pulse.notRanked
   const groups: Array<[number, (n: number) => string]> = [
-    [unclaimed ?? 0, m.gapUnclaimed],
+    [unclaimed ?? 0, (n: number) => m.gapUnclaimed(n) + (unclaimedNames.length ? m.gapNames(unclaimedNames.slice(0, 4), Math.max(0, unclaimedNames.length - 4)) : '')],
     [r.notStarted ?? 0, m.gapNotStarted],
     [r.noOpponent, m.gapNoOpponent],
     [r.elimination ?? 0, m.gapElimination],
@@ -390,6 +393,7 @@ export function MatchupPulseBoard({
   allHref,
   totalLeagues,
   unclaimedLeagues,
+  unclaimedLeagueNames,
 }: MatchupPulseBoardProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -429,7 +433,7 @@ export function MatchupPulseBoard({
   const ahead = pulse.leadingTotal ?? pulse.leading.length
   const behind = pulse.trailingTotal ?? pulse.trailing.length
   const decided = ahead + behind
-  const cover = coverage(pulse, decided, totalLeagues, unclaimedLeagues, language)
+  const cover = coverage(pulse, decided, totalLeagues, unclaimedLeagues, language, unclaimedLeagueNames)
 
   return (
     <div className="af-bd">

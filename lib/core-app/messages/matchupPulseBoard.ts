@@ -39,6 +39,7 @@ export const matchupPulseBoardMessages = defineMessages({
     gapEven: (n: number) => `${n} ${n === 1 ? 'is' : 'are'} dead even right now (50/50), so ${n === 1 ? 'it sits' : 'they sit'} on neither side`,
     gapDuplicate: (n: number) => `${n} ${n === 1 ? 'is a second copy' : 'are second copies'} of a league already counted`,
     gapOther: (n: number) => `${n} we couldn’t place, and didn’t record why`,
+    gapNames: (names: string[], more: number) => ` (${names.join(', ')}${more > 0 ? `, and ${more} more` : ''})`,
     oddsOf: (withOdds: number, decided: number) => `· across ${withOdds} of ${decided} matchups with odds`,
     oddsAll: (withOdds: number) => `· across ${withOdds} matchups with odds`,
     noneRankable: (n: number) =>
@@ -81,6 +82,7 @@ export const matchupPulseBoardMessages = defineMessages({
     gapEven: (n) => (n === 1 ? '1 está empatada ahora mismo (50/50), así que no va a ningún lado' : `${n} están empatadas ahora mismo (50/50), así que no van a ningún lado`),
     gapDuplicate: (n) => (n === 1 ? '1 es una segunda copia de una liga ya contada' : `${n} son segundas copias de ligas ya contadas`),
     gapOther: (n) => `${n} que no pudimos ubicar, sin motivo registrado`,
+    gapNames: (names, more) => ` (${names.join(', ')}${more > 0 ? ` y ${more} más` : ''})`,
     oddsOf: (withOdds, decided) => `· en ${withOdds} de ${decided} enfrentamientos con probabilidades`,
     oddsAll: (withOdds) => `· de ${withOdds} enfrentamientos con probabilidades`,
     noneRankable: (n) =>

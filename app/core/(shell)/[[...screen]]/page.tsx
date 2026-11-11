@@ -4854,6 +4854,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 ? playedLeagues.filter((l) => !matchupPulse.claimedLeagueIds!.includes(String((l as { id: unknown }).id))).length
                 : null
             }
+            /* Named, so a manager can tell WHICH leagues they hold no claimed team in, not just how many. */
+            unclaimedLeagueNames={
+              matchupPulse.claimedLeagueIds
+                ? playedLeagues
+                    .filter((l) => !matchupPulse.claimedLeagueIds!.includes(String((l as { id: unknown }).id)))
+                    .map((l) => String((l as { name?: unknown }).name ?? '').trim())
+                    .filter(Boolean)
+                : undefined
+            }
           />
         )
       ) : activeKey === 'trades' ? (
