@@ -323,14 +323,14 @@ describe('why these letters', () => {
       'Both sides got a C: managerOne received 3,259 and managerTwo received 3,326 in this league’s values. ' +
         'That’s only 67 apart (2%), under 10%, so the trade counts as even.',
     )
-    expect(m![2]).toBe('The scale: a gap under 10% is a C for both sides · 10–24% is a B and a D · 25% or more is an A and an F.')
+    expect(m![2]).toBe('The scale (the gap is measured against the bigger side): under 10% is a C for both sides · 10–24% is a B and a D · 25% or more is an A and an F.')
   })
 
   it('a B/D names who gained, by how much, and the band', () => {
     const g = graded({ letter: 'D', partnerLetter: 'B', percentDiff: -18, giveValue: 4000, getValue: 3280 })
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
     expect(why(html)![1]).toBe(
-      'managerTwo got a B and managerOne a D: managerTwo received 4,000 in this league’s values for 3,280, 18% more. ' +
+      'managerTwo got a B and managerOne a D: managerTwo received 4,000 in this league’s values for 3,280 (18% apart). ' +
         'A gap of 10–24% is a B for the side that gained and a D for the side that gave; 25% or more would be an A and an F.',
     )
   })
@@ -338,7 +338,7 @@ describe('why these letters', () => {
   it('an A/F says the strong band, with "an"', () => {
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: graded() })
     expect(why(html)![1]).toBe(
-      'managerOne got an A and managerTwo an F: managerOne received 8,000 in this league’s values for 6,000, 25% more. ' +
+      'managerOne got an A and managerTwo an F: managerOne received 8,000 in this league’s values for 6,000 (25% apart). ' +
         'A gap of 25% or more is an A for the side that gained and an F for the side that gave.',
     )
   })
