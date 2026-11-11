@@ -269,9 +269,17 @@ async function finishCreatedLeague(
          * bench; IR is never filled by a draft). College basketball's preset was 12 rounds for 13 such
          * spots, so every team finished the draft one player short — while the first roster edit already
          * resizes a redraft draft to that same count (syncDraftRoundsToRoster). Found by the redraft
-         * simulation, 2026-11-09. Keeper drafts are left alone: their keepers fill the rest.
+         * simulation, 2026-11-09.
+         *
+         * A KEEPER league's first draft grows too. It was left alone on the reasoning that "keepers fill the
+         * rest", but a new league has no keepers, and in later years each keeper takes a pick on the board in
+         * the round he cost (createNextLeagueDraft) rather than a spot beside it. So the first draft left
+         * every team short — NFL 16 rounds for 17 spots — while the first roster edit resized it anyway
+         * (keeper simulation, 2026-11-10: 26 of 27 leagues).
          */
-        const redraftActive = engine.leagueFormatId === 'redraft' ? computeStartupDraftCapacity(template.template?.slots ?? []) : 0
+        const redraftActive = engine.leagueFormatId === 'redraft' || engine.leagueFormatId === 'keeper'
+          ? computeStartupDraftCapacity(template.template?.slots ?? [])
+          : 0
         const growTo = engine.leagueFormatId === 'dynasty' && startupCapacity > 0 && !devyRounds
           ? capacity
           : redraftActive > 0 && !devyRounds ? Math.min(template.totalRosterSlots, redraftActive) : 0
