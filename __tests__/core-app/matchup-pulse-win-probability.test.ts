@@ -187,6 +187,23 @@ describe('🛑 ranked by win probability, not by Thursday night', () => {
     expect(pulse.leading[0].pWin as number).toBeGreaterThan(pulse.leading[1].pWin as number)
   })
 
+  /*
+   * 2026-11-11: an 82-league account saw "23 favoured · 23 underdog" and nothing saying where the rest
+   * went. A coin flip sits in neither column, so it is counted rather than dropped, and every claimed
+   * league is reported so the page can count the leagues the board was never handed.
+   */
+  it('counts a dead-even matchup instead of dropping it, and reports every claimed league', async () => {
+    Object.assign(PLAYERS, { s1: [8, 'KC'], s2: [8, 'SF'], t1: [3, 'BUF'], t2: [3, 'LAR'], e1: [10, 'KC'], e2: [10, 'SF'] })
+    league('steady', ['s1', 's2'], ['t1', 't2'])
+    league('even', ['e1'], ['e2'])
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.leadingTotal + pulse.trailingTotal).toBe(1)
+    expect(pulse.evenTotal).toBe(1)
+    expect(pulse.duplicateTotal).toBe(0)
+    expect((pulse.leadingTotal ?? 0) + (pulse.trailingTotal ?? 0) + (pulse.evenTotal ?? 0)).toBe(pulse.ranked)
+    expect([...(pulse.claimedLeagueIds ?? [])].sort()).toEqual(['even', 'steady'])
+  })
+
   it('a final week is a result: 1 for the winner, with no model in it', async () => {
     Object.assign(PLAYERS, { x: [10, 'CIN'], y: [10, 'MIA'] })
     const plid = league('F', ['x'], ['y'], [40, 20])

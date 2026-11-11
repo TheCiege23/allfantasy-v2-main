@@ -4844,6 +4844,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             issues={issues}
             allHref="/core/matchup?all=1"
             totalLeagues={playedLeagues.length}
+            /*
+             * Leagues on this list with no team claimed to this account — the board is never handed
+             * them, so without this count they vanished from its arithmetic (82 leagues, "23 · 23").
+             * Null for a pulse cached before `claimedLeagueIds` existed: unknown, not zero.
+             */
+            unclaimedLeagues={
+              matchupPulse.claimedLeagueIds
+                ? playedLeagues.filter((l) => !matchupPulse.claimedLeagueIds!.includes(String((l as { id: unknown }).id))).length
+                : null
+            }
           />
         )
       ) : activeKey === 'trades' ? (

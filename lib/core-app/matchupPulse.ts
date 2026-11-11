@@ -169,6 +169,26 @@ export type MatchupPulse = {
    */
   leadingTotal: number
   trailingTotal: number
+  /**
+   * Ranked rows in NEITHER column: a coin flip (exactly 50%) or a level score. Optional so a cached
+   * pulse from before 2026-11-11 still reads. Counted so the board can account for every league.
+   */
+  evenTotal?: number
+  /**
+   * The same platform league claimed or imported under more than one `League.id`: shown once, and
+   * the extra copies counted here rather than silently folded away. Optional for cached pulses.
+   */
+  duplicateTotal?: number
+  /**
+   * Every league this user has a CLAIMED team in. The page diffs its league list against this to
+   * count the leagues the board cannot read at all — a league reached through another membership
+   * path (`get-dashboard-league-list.ts`) with no claimed team has no "your team" on any screen.
+   *
+   * 🛑 Reported from a phone, 2026-11-11: "if I'm in 82 leagues, why is it only saying 23 and 23?"
+   * The board accounted for its 46 and explained the rest only in a line at the very bottom, and
+   * never mentioned the leagues it was never handed. Optional for cached pulses.
+   */
+  claimedLeagueIds?: string[]
   /** Leagues that carry a head-to-head this week, ranked or not. */
   considered: number
   ranked: number
@@ -441,11 +461,14 @@ export async function getMatchupPulse(
    * See `notRanked.unidentifiedRoster`. Reporting `considered: 0` here told a
    * manager with four claimed teams that they had none.
    */
-  const { unidentifiedRoster, notStarted } = classifyUnplaced(claimed, mine)
+  const { unidentifiedRoster, notStarted, duplicate: duplicateClaims } = classifyUnplaced(claimed, mine)
+  const claimedLeagueIds = [...new Set(claimed.flatMap((c) => (c.league ? [c.league.id] : [])))]
   if (mine.length === 0) {
     return {
       ...EMPTY_PULSE,
       considered: claimed.length,
+      duplicateTotal: duplicateClaims,
+      claimedLeagueIds,
       notRanked: { ...EMPTY_PULSE.notRanked, unidentifiedRoster, notStarted },
     }
   }
@@ -1198,6 +1221,9 @@ export async function getMatchupPulse(
     trailing,
     leadingTotal: ahead.length,
     trailingTotal: behind.length,
+    evenTotal: deduped.length - ahead.length - behind.length,
+    duplicateTotal: ranked.length - deduped.length + duplicateClaims,
+    claimedLeagueIds,
     considered: claimed.length,
     ranked: ranked.length,
     basis: bases.size === 0 ? null : bases.size > 1 ? 'mixed' : [...bases][0],
@@ -1225,19 +1251,23 @@ type UnplacedClaim = {
  *
  * Exported so the rule can be tested without the loader's reads. PURE.
  */
-export function classifyUnplaced<T extends UnplacedClaim>(claimed: T[], placed: T[]): { unidentifiedRoster: number; notStarted: number } {
+export function classifyUnplaced<T extends UnplacedClaim>(claimed: T[], placed: T[]): { unidentifiedRoster: number; notStarted: number; duplicate: number } {
   const key = (c: T) => `${String(c.league?.platform ?? '').toLowerCase()}:${c.league?.platformLeagueId ?? ''}`
   const placedSet = new Set(placed)
   const placedLeagues = new Set(placed.map(key))
   let unidentifiedRoster = 0
   let notStarted = 0
+  let duplicate = 0
   for (const c of claimed) {
     if (placedSet.has(c)) continue
-    /* A second claimed copy of a league already on the board is not missing from it. */
-    if (c.league?.platformLeagueId && placedLeagues.has(key(c))) continue
+    /* A second claimed copy of a league already on the board is not missing from it — counted, not dropped. */
+    if (c.league?.platformLeagueId && placedLeagues.has(key(c))) {
+      duplicate++
+      continue
+    }
     /* League states in which no schedule exists yet — the one rule, in leagueNotStarted.ts. */
     if (isLeagueNotStarted(c.league)) notStarted++
     else unidentifiedRoster++
   }
-  return { unidentifiedRoster, notStarted }
+  return { unidentifiedRoster, notStarted, duplicate }
 }

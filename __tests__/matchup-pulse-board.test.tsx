@@ -224,6 +224,55 @@ describe('MatchupPulseBoard', () => {
   })
 
   /* Every reason a league is missing gets named — never a silent short list. */
+  /*
+   * Reported from a phone, 2026-11-11: "if I'm in 82 leagues, why is it only saying 23 and 23?" The
+   * 46 are the leagues on one side or the other; the board now says so under the score, and lists
+   * why each of the other 36 is not counted — including the groups it never mentioned before.
+   */
+  it('accounts for every league on the account, right under the score', () => {
+    const { getByTestId } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={82}
+        unclaimedLeagues={20}
+        pulse={pulse({
+          considered: 62,
+          ranked: 49,
+          leading: [row()],
+          leadingTotal: 23,
+          trailingTotal: 23,
+          evenTotal: 1,
+          duplicateTotal: 2,
+          notRanked: { noSchedule: 0, noOpponent: 5, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 3 },
+        })}
+      />,
+    )
+    const cover = getByTestId('matchup-coverage')
+    expect(cover.textContent).toContain('46 of your 82 leagues are counted above.')
+    expect(cover.textContent).toContain('Why the other 36 aren’t counted')
+    const items = [...cover.querySelectorAll('li')].map((li) => li.textContent)
+    expect(items).toEqual([
+      '20 have no team claimed to your account, so we can’t tell which matchup is yours',
+      '3 have not started yet',
+      '5 have no game for you this week (a bye, or no opponent scheduled)',
+      '1 is dead even right now (50/50), so it sits on neither side',
+      '2 are second copies of a league already counted',
+      // 82 − 46 − 31 listed: the remainder is stated, never absorbed into a plausible group.
+      '5 we couldn’t place, and didn’t record why',
+    ])
+  })
+
+  it('claims no remainder when the unclaimed count is unknown', () => {
+    const { getByTestId } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={82}
+        pulse={pulse({ leading: [row()], leadingTotal: 23, trailingTotal: 23, notRanked: { noSchedule: 0, noOpponent: 5, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 } })}
+      />,
+    )
+    expect(getByTestId('matchup-coverage').textContent).not.toContain('couldn’t place')
+  })
+
   it('accounts for every league it could not rank', () => {
     const { container } = render(
       <MatchupPulseBoard
@@ -238,10 +287,10 @@ describe('MatchupPulseBoard', () => {
       />,
     )
     const text = container.textContent ?? ''
-    expect(text).toContain('4 carry no schedule')
-    expect(text).toContain('3 have no game this week')
-    expect(text).toContain('2 could not be scored or priced')
-    expect(text).toContain('1 have lineups we cannot compare like for like')
+    expect(text).toContain('4 have no schedule synced yet')
+    expect(text).toContain('3 have no game for you this week')
+    expect(text).toContain('2 have no points or projections yet')
+    expect(text).toContain('1 has lineups we can’t compare fairly')
   })
 
   it('tells no-claimed-team apart from nothing-rankable', () => {
@@ -466,9 +515,9 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
     const text = container.textContent ?? ''
     expect(text).not.toMatch(/no claimed team yet/i)
     expect(text).toContain('None of your 4 claimed teams')
-    expect(text).toMatch(/roster id we cannot match to a schedule/i)
+    expect(text).toMatch(/a team we can’t match to the league’s schedule/i)
     /* And it says whose fault it is. */
-    expect(text).toMatch(/our gap, not theirs/i)
+    expect(text).toMatch(/that’s on us, not the league/i)
   })
 
   /* Production 2026-09-28: 7 native leagues in setup were reported as "our gap". */
@@ -485,7 +534,7 @@ describe('MatchupPulseBoard — the unidentified-roster gap', () => {
     )
     const text = container.textContent ?? ''
     expect(text).toContain('7 have not started yet')
-    expect(text).not.toMatch(/our gap/i)
+    expect(text).not.toMatch(/on us, not the league/i)
   })
 
   it('still says "no claimed team" when there genuinely is none', () => {

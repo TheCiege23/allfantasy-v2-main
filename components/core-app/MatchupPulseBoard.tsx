@@ -52,6 +52,11 @@ export type MatchupPulseBoardProps = {
    */
   totalLeagues: number
   /**
+   * Leagues on the account with no team claimed to it — never handed to the loader, so the board
+   * cannot see them. Null when unknown (a pulse cached before `claimedLeagueIds`).
+   */
+  unclaimedLeagues?: number | null
+  /**
    * The outstanding-issues queue, rendered as "Needs you first".
    *
    * ⚠ ONLY ROWS THAT NAME A LEAGUE. An issue we cannot route is noise on a
@@ -300,33 +305,52 @@ function basisNote(pulse: MatchupPulse, language: string): string | null {
 }
 
 /** "we could not rank six of them, and here is why" — never a silent short list. */
-function gapNote(pulse: MatchupPulse, language: string): string | null {
-  const { noSchedule, noOpponent, unpriceable, uncomparable, unidentifiedRoster } = pulse.notRanked
-  const notStarted = pulse.notRanked.notStarted ?? 0
-  const elimination = pulse.notRanked.elimination ?? 0
-  const scoringType = pulse.notRanked.scoringType ?? 0
+/**
+ * Every league on the account, accounted for, right under the score.
+ *
+ * 🛑 REPORTED FROM A PHONE, 2026-11-11: "if I'm in 82 leagues, why is it only saying 23 and 23?"
+ * The two numbers are the leagues ranked on one side or the other. The rest were explained, if at
+ * all, by a "Not ranked:" line under every row on the board — below the fold on a phone — and three
+ * groups were never mentioned anywhere: a coin flip in neither column, a second copy of a league
+ * already shown, and leagues with no team claimed to the account (never handed to the loader).
+ *
+ * ⚠ A REMAINDER IS STATED, NOT ABSORBED. If the groups do not add up to the league count, the
+ * difference is printed as "couldn't place, and didn't record why" rather than folded into a
+ * plausible bucket. It needs the unclaimed count to be known; without it no remainder is claimed.
+ */
+function coverage(
+  pulse: MatchupPulse,
+  counted: number,
+  totalLeagues: number,
+  unclaimed: number | null | undefined,
+  language: string,
+): { line: string; head: string | null; reasons: string[] } {
   const m = messagesFor(matchupPulseBoardMessages, language)
-  const parts: string[] = []
-  /* The league's own state, not ours: there is no schedule until it drafts. */
-  if (notStarted > 0) parts.push(m.gapNotStarted(notStarted))
-  /* Not a gap at all — the format plays the whole field, so there is no one opponent to rank against. */
-  if (elimination > 0) parts.push(m.gapElimination(elimination))
-  /* Also the format, not a gap: a categories or roto league is not won on a points margin. */
-  if (scoringType > 0) parts.push(m.gapScoringType(scoringType))
-  if (noSchedule > 0) parts.push(m.gapNoSchedule(noSchedule))
-  if (noOpponent > 0) parts.push(m.gapNoOpponent(noOpponent))
-  if (unpriceable > 0) parts.push(m.gapUnpriceable(unpriceable))
-  if (uncomparable > 0) parts.push(m.gapUncomparable(uncomparable))
-  /*
-   * 🛑 THE ONE THAT IS OUR FAULT, AND IT IS SAID DIFFERENTLY FOR THAT REASON.
-   * The others describe the league's state; this one describes a roster id this
-   * loader cannot use — an ESPN SWID or a Fantrax slug where it needs Sleeper's
-   * numeric roster_id. Wording it like the rest would blame the league for our
-   * gap. See `notRanked.unidentifiedRoster`.
-   */
-  if (unidentifiedRoster > 0) parts.push(m.gapUnidentified(unidentifiedRoster))
-  if (parts.length === 0) return null
-  return m.notRanked(parts.join(', '))
+  const r = pulse.notRanked
+  const groups: Array<[number, (n: number) => string]> = [
+    [unclaimed ?? 0, m.gapUnclaimed],
+    [r.notStarted ?? 0, m.gapNotStarted],
+    [r.noOpponent, m.gapNoOpponent],
+    [r.elimination ?? 0, m.gapElimination],
+    [r.scoringType ?? 0, m.gapScoringType],
+    [r.noSchedule, m.gapNoSchedule],
+    [r.unpriceable, m.gapUnpriceable],
+    [r.uncomparable, m.gapUncomparable],
+    [pulse.evenTotal ?? 0, m.gapEven],
+    [pulse.duplicateTotal ?? 0, m.gapDuplicate],
+    /* The one that is our fault, last and worded as ours — see `notRanked.unidentifiedRoster`. */
+    [r.unidentifiedRoster, m.gapUnidentified],
+  ]
+  const reasons = groups.filter(([n]) => n > 0).map(([n, say]) => say(n))
+  const listed = groups.reduce((sum, [n]) => sum + n, 0)
+  const other = unclaimed != null ? totalLeagues - counted - listed : 0
+  if (other > 0) reasons.push(m.gapOther(other))
+  const rest = Math.max(0, totalLeagues - counted)
+  return {
+    line: m.coverage(counted, totalLeagues),
+    head: rest > 0 && reasons.length > 0 ? m.notCountedHead(rest) : null,
+    reasons,
+  }
 }
 
 /**
@@ -365,6 +389,7 @@ export function MatchupPulseBoard({
   issues,
   allHref,
   totalLeagues,
+  unclaimedLeagues,
 }: MatchupPulseBoardProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -387,7 +412,6 @@ export function MatchupPulseBoard({
   const [aheadWord, behindWord] = done ? ['won', 'lost'] : byOdds ? ['favoured', 'underdog'] : ['leading', 'trailing']
   const [aheadHead, behindHead] = done ? ['Won', 'Lost'] : byOdds ? ['Favoured', 'Underdog'] : ['Leading', 'Trailing']
   const closest = pulse.closest ?? []
-  const gap = gapNote(pulse, language)
   const inPlay = anyInPlay(pulse)
 
   const routable = (issues ?? [])
@@ -405,6 +429,7 @@ export function MatchupPulseBoard({
   const ahead = pulse.leadingTotal ?? pulse.leading.length
   const behind = pulse.trailingTotal ?? pulse.trailing.length
   const decided = ahead + behind
+  const cover = coverage(pulse, decided, totalLeagues, unclaimedLeagues, language)
 
   return (
     <div className="af-bd">
@@ -497,6 +522,23 @@ export function MatchupPulseBoard({
           </p>
         ) : null}
 
+        {/*
+          Right under the score, so "23 · 23" on an 82-league account is answered where it is read.
+        */}
+        <div className="af-mp-coverage" data-testid="matchup-coverage">
+          <p className="af-mp-coverage-line">{cover.line}</p>
+          {cover.head ? (
+            <>
+              <p className="af-mp-coverage-head">{cover.head}</p>
+              <ul className="af-mp-coverage-list">
+                {cover.reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+
         {note ? <p className="af-mp-basis">{note}</p> : null}
 
         {pulse.ranked > 0 ? (
@@ -577,7 +619,6 @@ export function MatchupPulseBoard({
           </div>
         ) : null}
 
-        {gap ? <p className="af-mp-gap">{gap}</p> : null}
       </section>
 
       {/*
