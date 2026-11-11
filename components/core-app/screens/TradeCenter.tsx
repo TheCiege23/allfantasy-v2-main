@@ -297,15 +297,6 @@ function valueOf(l: Line): number | null | undefined {
   return l.leagueValue !== undefined ? l.leagueValue : l.marketValue
 }
 
-/** Sum that ignores unpriced lines rather than treating them as zero. */
-function totalOf(lines: Line[]): string {
-  const priced = lines
-    .map(valueOf)
-    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-  if (priced.length === 0) return '—'
-  return priced.reduce((a, b) => a + b, 0).toLocaleString(getAppIntlLocale())
-}
-
 /**
  * AllFantasy's weekly projection summed over one side — the points that side moves THIS WEEK, beside
  * the value total. Display only: the verdict never reads it. Null when no line on the side has one,
@@ -1470,9 +1461,21 @@ export function TradeCenter(props: {
    * the feed cannot price as zero would tilt the bar against whichever side
    * holds him — the same rule as the em dash on his row.
    */
+  /*
+   * THE GRADE'S ROSTER-SPOT CREDIT, ADDED TO THE SAME SIDE THE GRADE ADDED IT TO
+   * (`lib/trade-value/rosterSpotCharge.ts`). Without it the bar read Get 8,433 / +1,679 while the
+   * grade and every counter sentence on the same screen measured 8,485 / 1,731 — the 52 the side
+   * receiving fewer players earns for its open spot (reported 2026-11-11). Safe to read off the
+   * result: any change to the assets clears it, so a grade on screen is always this deal's.
+   */
+  const spotCredit = serverGrade?.graded && serverGrade.rosterSpot ? serverGrade.rosterSpot : null
+  const sideTotal = (lines: Line[], side: 'give' | 'get'): number | null => {
+    const t = pricedTotal(lines)
+    return t != null && spotCredit?.side === side ? t + spotCredit.value : t
+  }
   const balance = (() => {
-    const g = pricedTotal(give)
-    const k = pricedTotal(get)
+    const g = sideTotal(give, 'give')
+    const k = sideTotal(get, 'get')
     if (g == null && k == null) return null
     if (g == null || k == null || g + k === 0) {
       return { give: g, get: k, givePct: null as number | null, diff: null as number | null, pct: null as number | null }
@@ -1804,8 +1807,8 @@ export function TradeCenter(props: {
             nothing priced reads "—", never "0", for the reason every other total here gives.
           */}
           <span className="af-tc-stepbar-totals af-num" aria-live="polite">
-            <span>{copy('Get')} <b>{totalOf(get)}</b></span>
-            <span>{copy('Send')} <b>{totalOf(give)}</b></span>
+            <span>{copy('Get')} <b>{balance?.get != null ? balance.get.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
+            <span>{copy('Send')} <b>{balance?.give != null ? balance.give.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
             {balance?.diff != null && balance.diff !== 0 ? (
               <span className="af-tc-stepbar-delta" data-tone={balance.diff > 0 ? 'good' : 'bad'}>
                 {balance.diff > 0 ? '+' : '−'}
@@ -1954,8 +1957,11 @@ export function TradeCenter(props: {
                 {unpricedCount(side.lines) > 0 ? (
                   <span className="af-tc-total-note">{copy(" · ")}{unpricedCount(side.lines)}{copy(" unpriced")}</span>
                 ) : null}
+                {spotCredit?.side === side.side ? (
+                  <span className="af-tc-total-note" data-testid="trade-side-roster-spot">{copy(" · ")}{copy(spotCredit.spots === 1 ? 'incl. open roster spot' : 'incl. open roster spots')} {money(spotCredit.value)}</span>
+                ) : null}
               </span>
-              <b className="af-num">{totalOf(side.lines)}</b>
+              <b className="af-num">{(() => { const t = sideTotal(side.lines, side.side); return t == null ? '—' : t.toLocaleString(getAppIntlLocale()) })()}</b>
             </div>
 
             {side.lines.length === 0 ? (
@@ -2598,7 +2604,7 @@ export function TradeCenter(props: {
             {!depthLocked ? <TradePartnerEvidence notes={result.leverageNotes ?? []} copy={copy} /> : null}
             {!depthLocked && result.counterOffers?.[0] ? <div className="af-tc-partner-counter">
               <strong>{copy("Closer value package: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
-              <span>{result.counterOffers[0].balanced ? 'Within the even-value band' : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% apart`}{copy(" after regrading the package.")}</span>
+              <span>{result.counterOffers[0].balanced ? copy('Within the even-value band') : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% ${copy('apart')}`}{copy(" after regrading the package.")}</span>
               <button type="button" className="af-btn af-btn-ghost" onClick={() => {
                 const counter = result.counterOffers?.[0]
                 if (!counter) return
