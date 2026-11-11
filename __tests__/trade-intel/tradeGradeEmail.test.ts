@@ -293,7 +293,7 @@ describe('the one grade, and only the one grade', () => {
   it('no grade at all is not graded, never a neutral C', () => {
     const { subject, html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: null })
     expect(subject).toContain('not graded')
-    expect(html).toContain('could not be loaded')
+    expect(html).toContain('couldn’t load this league’s values')
     expect(html).not.toContain('Even on value')
   })
 
@@ -301,7 +301,7 @@ describe('the one grade, and only the one grade', () => {
     const three = trade([...PRESEASON.sides, side({ rosterId: 3, ownerId: 'u3', managerName: 'managerThree', net: 0 })])
     const { subject, html } = buildTradeGradeEmail({ leagueName: 'L', trade: three, ledgerUrl: URL, grade: graded() })
     expect(subject).toContain('not graded')
-    expect(html).toContain('Only two-team trades are graded')
+    expect(html).toContain('We only grade trades between two teams.')
     expect(html).toContain('managerThree')
   })
 })
@@ -321,7 +321,7 @@ describe('why these letters', () => {
     expect(m, 'why card present').not.toBeNull()
     expect(m![1]).toBe(
       'Both sides got a C: managerOne received 3,259 and managerTwo received 3,326 in this league’s values. ' +
-        'That is 67 apart, 2% of the bigger side — under 10%, so the trade reads as even and neither side earns a B.',
+        'That’s only 67 apart (2%), under 10%, so the trade counts as even.',
     )
     expect(m![2]).toBe('The scale: a gap under 10% is a C for both sides · 10–24% is a B and a D · 25% or more is an A and an F.')
   })
@@ -533,12 +533,12 @@ describe('a giveaway explains itself without the partial-deal line', () => {
   it('prints the giveaway reason and nothing after it', () => {
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: ZAY_GIVEAWAY, ledgerUrl: URL, grade: { graded: false, reason: REASON, basis: null } })
     expect(html).toContain(`>${REASON}</div>`)
-    expect(html).not.toContain('part of the deal')
+    expect(html).not.toContain('part of the trade')
   })
 
   it('every other withheld grade keeps the partial-deal line', () => {
     const g: TradeGradeView = { graded: false, reason: '1 asset has no value on this league’s chart.', basis: null }
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
-    expect(html).toContain('No letter is shown rather than one drawn from part of the deal.')
+    expect(html).toContain('We don’t show a grade based on only part of the trade.')
   })
 })

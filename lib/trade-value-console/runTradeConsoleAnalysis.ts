@@ -966,7 +966,7 @@ export async function runTradeConsoleAnalysis(
 
   if (input.leagueId && input.opponentTeamExternalId) {
     tradeIntelligence.rebalanceSuggestions = counterOffers.map(counter =>
-      `${counter.addTo === 'get' ? 'Ask for' : 'Offer'} ${counter.name}. Re-evaluating the full package gives you ${counter.grade.letter} and your partner ${counter.grade.partnerLetter}: ${Math.abs(counter.grade.percentDiff)}% apart, with ${counter.remainingGap.toLocaleString('en-US')} league value remaining. ${counter.balanced ? 'Within the even-value band.' : 'Closer in value, but still outside the even-value band.'} Re-analyze after editing the proposal.`,
+      `${counter.addTo === 'get' ? 'Ask for' : 'Offer'} ${counter.name}. With that change you’d grade ${counter.grade.letter} and they’d grade ${counter.grade.partnerLetter}: ${Math.abs(counter.grade.percentDiff)}% apart, with ${counter.remainingGap.toLocaleString('en-US')} in value left to even out. ${counter.balanced ? 'That’s about even.' : 'Closer, but not even yet.'} Grade it again after you change the trade.`,
     )
   }
 

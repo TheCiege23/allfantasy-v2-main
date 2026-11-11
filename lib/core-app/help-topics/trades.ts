@@ -82,12 +82,12 @@ export const TRADES_TOPICS = {
   },
   tradeRosterFit: {
     en: {
-      title: 'Your roster fit',
-      body: 'The same deal re-priced for your roster. A player who fills a starting slot you would otherwise leave open is worth more to you, most of all when the waiver wire has nobody at that position; sending a starter the deal doesn’t replace costs more, and sending surplus depth costs a little less. On your own trades your letter is taken on it — that is your grade for your team — and the market letter beside it is the same deal on league value alone, which is what the other manager and trade history see. Your team’s place in the standings doesn’t change it, and it isn’t a win probability.',
+      title: 'How it fits your roster',
+      body: 'The same trade, valued for your roster. A player who fills an empty starting spot is worth more to you, especially if nobody good is on waivers at that position. Sending away a starter you can’t replace costs more, and sending away extra depth costs a little less. On your own trades, your grade uses these numbers. The market grade next to it is the same trade on league value alone — that’s what the other manager and trade history see. Your place in the standings doesn’t change it, and it isn’t a chance of winning.',
     },
     es: {
-      title: 'Encaje en tu plantilla',
-      body: 'El mismo intercambio, revalorado para tu plantilla. Un jugador que cubre un puesto titular que quedaría vacío vale más para ti, sobre todo si no hay nadie en esa posición entre los agentes libres; enviar a un titular que el intercambio no reemplaza cuesta más, y enviar profundidad sobrante cuesta un poco menos. En tus propios intercambios tu letra se calcula con él — es tu calificación para tu equipo — y la letra de mercado a su lado es el mismo intercambio solo por valor de liga, que es lo que ven el otro mánager y el historial. Tu posición en la clasificación no la cambia, y no es una probabilidad de ganar.',
+      title: 'Cómo encaja en tu plantilla',
+      body: 'El mismo intercambio, valorado para tu plantilla. Un jugador que cubre un puesto titular vacío vale más para ti, sobre todo si no hay nadie bueno en esa posición entre los agentes libres. Enviar a un titular que no puedes reemplazar cuesta más, y enviar profundidad sobrante cuesta un poco menos. En tus propios intercambios, tu nota usa estos números. La nota de mercado a su lado es el mismo intercambio solo por valor de liga: es lo que ven el otro mánager y el historial. Tu posición en la clasificación no la cambia, y no es una probabilidad de ganar.',
     },
   },
   tradeAfThisWeek: {
@@ -152,12 +152,12 @@ export const TRADES_TOPICS = {
   },
   tradeEvidence: {
     en: {
-      title: 'Dated, mixed or limited evidence',
-      body: 'How good the price evidence is, not the odds the trade works out. Dated: every asset is priced from a dated source with nothing flagged. Mixed: everything is priced but something is flagged, such as a source more than 7 days old, a price from an estimate or formula, a value that isn’t a market quote, or a source or date that wasn’t recorded. Limited: an asset has no value, or no price carries a date.',
+      title: 'How good are these values?',
+      body: 'This rates the values behind the grade, not your chances of winning the trade. Up to date: every player has a recent, dated value. Some values need a check: everything has a value, but at least one is old (more than 7 days), an estimate, or missing its date or source. Some values are missing: at least one player has no value, or none of the values have a date.',
     },
     es: {
-      title: 'Datos con fecha, mixtos o limitados',
-      body: 'Qué tan buenos son los datos de precio, no las probabilidades de que el intercambio salga bien. Con fecha: cada activo tiene precio de una fuente con fecha y no hay nada señalado. Mixtos: todo tiene precio, pero algo está señalado, como una fuente de más de 7 días, un precio de una estimación o fórmula, un valor que no es una cotización de mercado, o una fuente o fecha sin registrar. Limitados: algún activo no tiene valor, o ningún precio tiene fecha.',
+      title: '¿Qué tan buenos son estos valores?',
+      body: 'Esto califica los valores detrás de la nota, no tus probabilidades de ganar el intercambio. Al día: cada jugador tiene un valor reciente y con fecha. Algunos valores requieren revisión: todo tiene valor, pero al menos uno es antiguo (más de 7 días), una estimación, o le falta la fecha o la fuente. Faltan algunos valores: al menos un jugador no tiene valor, o ningún valor tiene fecha.',
     },
   },
   completedTradeGrade: {

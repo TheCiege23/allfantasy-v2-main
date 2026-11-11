@@ -126,7 +126,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     expect(screen.getByTestId('trade-grade-market').textContent).toContain('C')
     // The totals stay the league values the lines add up to.
     expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,153')
-    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('what your grade is taken on')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('used for your grade')
     expect(screen.getByTestId('trade-roster-fit').textContent).toContain('you cannot fill 1 TE slot')
     expect(screen.getByTestId('trade-value-grade-basis').textContent).toContain('Your grade is for your team')
   })
@@ -340,7 +340,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
       }] }) } : { ok: false, status: 500, json: async () => ({}) })
     const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
     await analyze(container)
-    expect(screen.getByText('Re-evaluated counteroffers')).toBeTruthy()
+    expect(screen.getByText('Ways to even it out')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add to proposal' }))
     expect(container.querySelector(".af-tc-team[data-side='get']")!.textContent).toContain('Depth Receiver')
     expect(container.querySelector('.af-tc-verdict')).toBeNull()

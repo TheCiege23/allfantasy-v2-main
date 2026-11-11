@@ -199,7 +199,7 @@ describe('createLeagueTradeGrader', () => {
     expect(email.subject).toContain('you D, sharpshoooter B')
     expect(email.html).toContain('1,766')
     expect(email.html).toContain('1,584')
-    expect(email.html).toContain('Personal roster fit is shown separately')
+    expect(email.html).toContain('How it fits your roster is shown separately')
     expect(email.html).not.toContain('a bad season by the team that owes one moves this grade')
   })
   it('withholds a keeper grade without league terms and rejects a prohibited format', async () => {
@@ -337,7 +337,7 @@ describe('P0 package and team-direction regression through the shared league gra
     }))
     expect(view.letter).toBe('A')
     expect(view.action).toBe('review')
-    expect(view.recommendation).toContain('may require drops')
+    expect(view.recommendation).toContain('you’ll have to drop someone')
     expect(view.lines.map(line => line.assetKind)).toEqual(['player', 'player', 'player'])
   })
   it.each([0.85, 1.2])('roster utility factor %s moves the your-team letter and leaves the market letter alone', async factor => {
