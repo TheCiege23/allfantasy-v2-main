@@ -1782,7 +1782,7 @@ export function TradeCenter(props: {
         <div className="af-tc-banner af-tc-banner--blocked">
           <span className="af-tc-banner-glyph">{copy("!")}</span>
           <div>
-            <p className="af-tc-banner-title">{copy('This trade can’t be evaluated as shown')}</p>
+            <p className="af-tc-banner-title">{copy('We can’t grade this trade as it is')}</p>
             {(result?.formatNotes ?? []).map((n) => (
               <p key={n}>{n}</p>
             ))}
@@ -2414,7 +2414,7 @@ export function TradeCenter(props: {
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">{copy('The verdict')}</span>
             <span className="af-tc-row-sub">
-              {copy('trade value today — roster fit and realized production are separate')}
+              {copy('value today — not roster fit or future points')}
             </span>
             <TopicTip topic="tradeGrade" />
           </div>
@@ -2434,8 +2434,8 @@ export function TradeCenter(props: {
             <summary>{copy('How this was graded')}</summary>
             <p>{copy(result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.')}</p>
             <p>{copy(serverGrade?.graded && serverGrade.letterBasis === 'your_team'
-              ? 'Your grade compares trade value adjusted for your roster. Acceptance and realized production are separate.'
-              : 'The grade compares trade value. Roster fit, acceptance, and realized production are separate.')}</p>
+              ? 'Your grade compares value, adjusted for your roster. It doesn’t predict whether they’ll accept or how players will score.'
+              : 'The grade compares value only. Roster fit, whether they’ll accept, and how players score are separate.')}</p>
             {analyzedAt ? <p>{copy('Evaluated')} {new Date(analyzedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p> : null}
             {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{copy(line.side === 'give' ? 'You send' : 'You receive')} {line.name}{copy(": ")}{line.leagueValue == null ? copy('unpriced') : money(line.leagueValue)}</li>)}
               {/* The roster-spot credit is already inside the totals (`rosterSpotCharge.ts`); shown so they add up. */}
@@ -2466,12 +2466,12 @@ export function TradeCenter(props: {
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
               {copy(serverGrade.letterBasis === 'your_team'
-                ? 'Your grade is for your team: league value adjusted for your roster — an open starting slot you cannot fill off waivers raises a player, surplus depth lowers one. The market letter is the same deal on league value alone, which is what trade history and the other manager see. Your team’s place in the standings does not change the letter. Refreshed market values can change a later evaluation.'
-                : 'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Refreshed market values can change a later evaluation.')}
+                ? 'Your grade is for your team: league value, adjusted for your roster. A player who fills an empty starting spot counts for more; extra depth counts for less. The market grade is the same trade on league value alone — that’s what the other manager and trade history see. Your place in the standings doesn’t change it. Values change over time, so a later grade can differ.'
+                : 'This grade uses the same rules as your trade history and emails. Values change over time, so a later grade can differ.')}
             </p>
           ) : null}
-          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved evaluation')}</Link>{copy(" · ")}{copy('Original values preserved at')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
-            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('This evaluation could not be saved. Keep a copy before relying on it later.')}</p> : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved grade')}</Link>{copy(" · ")}{copy('Values saved')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('We couldn’t save this grade. Take a screenshot if you want to keep it.')}</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
               <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'How it fits your roster · used for your grade' : 'How it fits your roster')} <TopicTip topic="tradeRosterFit" /></div>
@@ -2501,7 +2501,7 @@ export function TradeCenter(props: {
                       <span className="af-tc-row-sub">{copy("Your commitments ")}{money(y.fromCapHit)}{copy(" / cap ")}{money(y.fromCap)}{copy(" · Their commitments ")}{money(y.toCapHit)}{copy(" / cap ")}{money(y.toCap)}{copy(" · ")}{copy(y.fromLegal && y.toLegal ? 'Passes configured rules' : 'Fails cap or floor rules')}</span>
                     </li>)}
                   </ul>
-                  <p className="af-tc-row-sub">{copy("Includes stored contracts and dead money. Unsigned rookie contracts and future acquisitions are not included. Revalidation is required when accepting.")}</p>
+                  <p className="af-tc-row-sub">{copy("Includes current contracts and dead money, but not unsigned rookies or future moves. It’s checked again when the trade is accepted.")}</p>
                 </>
               )}
             </div>

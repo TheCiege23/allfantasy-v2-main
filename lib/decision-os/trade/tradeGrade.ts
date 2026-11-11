@@ -342,7 +342,7 @@ export function gradeTrade(args: {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[letter] === 'accept' ? 'review' : ACTION_BY_LETTER[letter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter, giveValue: args.giveValue, getValue: args.getValue }),
     giveValue: Math.round(args.giveValue),
     getValue: Math.round(args.getValue),
@@ -409,7 +409,7 @@ export function withYourTeamLetter(view: TradeGradeView): TradeGradeView {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[letter] === 'accept' ? 'review' : ACTION_BY_LETTER[letter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter, giveValue: fit.giveValue, getValue: fit.getValue, basis: 'your_team' }),
     // `giveValue`/`getValue` stay the league-value totals the lines add up to — every asset table prints
     // them under the lines. The your-team totals the letter is taken on are `rosterFit`'s.
@@ -445,7 +445,7 @@ export function marketView(view: TradeGradeView): TradeGradeView {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[m.letter] === 'accept' ? 'review' : ACTION_BY_LETTER[m.letter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter: m.letter, giveValue: m.giveValue, getValue: m.getValue }),
     giveValue: m.giveValue,
     getValue: m.getValue,
@@ -497,7 +497,7 @@ export function mirrorTradeGrade(input: TradeGradeView): TradeGradeView {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[view.partnerLetter] === 'accept' ? 'review' : ACTION_BY_LETTER[view.partnerLetter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter: view.partnerLetter, giveValue: view.getValue, getValue: view.giveValue }),
     giveValue: view.getValue,
     getValue: view.giveValue,

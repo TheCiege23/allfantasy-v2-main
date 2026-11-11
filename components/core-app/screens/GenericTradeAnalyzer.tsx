@@ -242,7 +242,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
         <div>
           <div className="af-label">{copy("No league connection needed")}</div>
           <h2 id="af-tc-generic-title">{copy("Quick trade analyzer")}</h2>
-          <p>{copy("Compare an outside offer using general market values. Put each player or draft pick a team sends on a separate line.")}</p>
+          <p>{copy("Grade any trade with general market values. Put each player or pick a team sends on its own line.")}</p>
         </div>
         <label className="af-tc-generic-upload">
           {copy(extracting ? 'Reading screenshot…' : 'Import screenshot')}
@@ -252,9 +252,9 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
       {imageName ? (
         <div className={styles.review} role="status">
           <strong>{copy("Review screenshot import · ")}{copy(imageName)}</strong>
-          <p>{copy("Extraction is a draft. Edit or remove each line, add missing assets, and check which team sends them.")}</p>
+          <p>{copy("We read this from your screenshot, so check it. Fix or remove lines, add anything missing, and make sure each side is right.")}</p>
           {reviewNotes.length ? <ul aria-label={copy("Screenshot uncertainties")}>{reviewNotes.map((note, index) => <li key={`${index}-${note}`}>{copy(note)}</li>)}</ul>
-            : <p>{copy("No specific uncertainty was reported. Still compare every line with the image.")}</p>}
+            : <p>{copy("Nothing looked unclear, but still check every line against the screenshot.")}</p>}
           <button type="button" className="af-btn af-btn-ghost" onClick={swapSides}>{copy("Swap Team A and Team B")}</button>
         </div>
       ) : null}
@@ -304,7 +304,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
         <button type="button" onClick={() => addPick('A')}>{copy("Add to A")}</button>
         <button type="button" onClick={() => addPick('B')}>{copy("Add to B")}</button>
       </div>
-      <p className="af-tc-generic-hint">{copy("A known overall pick maps to an early, middle, or late range using a 12-team reference; the grade remains an estimate. General market grade only: no league scoring, roster needs, trade rules, or acceptance prediction. Screenshot images go to the configured vision provider for asset extraction and are not saved by this tool.")}</p>
+      <p className="af-tc-generic-hint">{copy("If you know the overall pick number, we treat it as early, mid or late (based on a 12-team league). This uses general market values only — no league scoring, roster needs or trade rules. Screenshots are sent to our image reader to pull out the players and aren’t saved.")}</p>
       <button type="button" className="af-btn" onClick={() => void analyze()} disabled={busy || extracting || Boolean(imageName && !screenshotConfirmed)}>
         {copy(busy ? 'Analyzing…' : 'Analyze trade')}
       </button>
@@ -318,8 +318,8 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                 <div><span>{copy("Team B")}</span><strong>{copy(result.grade.partnerLetter)}</strong><small>{copy("Receives Team A assets")}</small><TradeReaction letter={result.grade.partnerLetter} /></div>
               </div>
               <h3>{copy(result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value')}</h3>
-              <p>{copy("Team A receives ")}{copy(result.grade.getMarket.toLocaleString(locale))}{copy(" in general market value and sends ")}{copy(result.grade.giveMarket.toLocaleString(locale))}{copy("; Team B sees the reverse. The value gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the larger side.")} <TopicTip topic="tradeGrade" /></p>
-              <p className="af-tc-generic-hint">{copy("This grade compares market value only. Position matters only through each asset’s quoted value; there is no team-specific position adjustment. League scoring, roster needs, injury risk, acceptance likelihood, and future results are not priced separately.")}</p>
+              <p>{copy("Team A receives ")}{copy(result.grade.getMarket.toLocaleString(locale))}{copy(" in market value and sends ")}{copy(result.grade.giveMarket.toLocaleString(locale))}{copy("; Team B is the opposite. The gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the bigger side.")} <TopicTip topic="tradeGrade" /></p>
+              <p className="af-tc-generic-hint">{copy("This grade compares market value only. It doesn’t account for league scoring, roster needs, injuries, whether they’ll accept, or how players will perform.")}</p>
               <p className="af-tc-generic-hint">{copy("Value basis: ")}{copy(result.grade.basis)}{copy(/[.!?]\s*$/.test(result.grade.basis) ? " Valuation checked " : ". Valuation checked ")}{copy(result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString(locale) : 'at analysis time; source date unavailable')}{copy(".")}</p>
               <TradeDecisionSummary grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeEvidencePanel grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
@@ -344,7 +344,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                 </details>
               ) : null}
               {result.grade.lines.some((line) => line.marketValue == null || line.leagueValue == null) ? (
-                <p className="af-tc-generic-hint">{copy("Some assets could not be priced. Review the names and the data gaps before relying on this grade.")}</p>
+                <p className="af-tc-generic-hint">{copy("We couldn’t find values for some players. Check the names before relying on this grade.")}</p>
               ) : null}
             </>
           ) : <p>{copy(result.grade.reason)}</p>}
