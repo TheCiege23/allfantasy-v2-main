@@ -86,6 +86,8 @@ export type LandingCopy = {
     sub: string
     ctaPrimary: string
     ctaSecondary: string
+    /** Opens the public, anonymized demo league (/demo). No account needed. */
+    ctaDemo: string
     reassure: string
     /** The commissioner line under the hero, linking to /commissioners. */
     commishLine: string
@@ -172,6 +174,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: 'Create a league or connect the ones you already play. Manage teams, drafts, trades and waivers in one place, with AI help from Chimmy.',
       ctaPrimary: 'Create free account',
       ctaSecondary: 'See how it works',
+      ctaDemo: 'Try the demo',
       reassure: 'Free for every league · Read-only — we never change your league · Sleeper needs just your username',
       commishLine: 'Built by a commissioner, for commissioners.',
       commishLink: 'See Commissioner OS →',
@@ -342,6 +345,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: 'Crea una liga o conecta las que ya juegas. Maneja equipos, drafts, cambios y agentes libres en un solo lugar, con ayuda de Chimmy.',
       ctaPrimary: 'Crea tu cuenta gratis',
       ctaSecondary: 'Mira cómo funciona',
+      ctaDemo: 'Prueba la demo',
       reassure: 'Gratis para todas tus ligas · Solo lectura: nunca cambiamos tu liga · En Sleeper basta con tu usuario',
       commishLine: 'Hecho por un comisionado, para comisionados.',
       commishLink: 'Conoce Commissioner OS →',

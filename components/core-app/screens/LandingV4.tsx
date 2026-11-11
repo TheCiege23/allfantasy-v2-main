@@ -315,6 +315,9 @@ export function LandingV4({
             <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">
               {c.hero.ctaSecondary}
             </a>
+            <Link href="/demo" className="af-btn af-btn--ghost af-lp-cta-lg" data-testid="landing-try-demo">
+              {c.hero.ctaDemo}
+            </Link>
           </div>
           <p className="af-lp-reassure">{c.hero.reassure}</p>
           {/*
