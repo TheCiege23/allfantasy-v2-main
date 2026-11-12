@@ -7,6 +7,7 @@ import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { FocusComposerButton, HubBroadcast } from '@/components/core-app/hubs/HubBroadcast'
 import { OverviewQueue } from '@/components/core-app/hubs/OverviewQueue'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
 
 /**
  * Commissioner Hub, all leagues — `/core/commissioner` (five-doors restyle, 2026-09-17).
@@ -237,6 +238,17 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
               <HubBroadcast label="Broadcast to your AllFantasy leagues" leagueIds={data.broadcastLeagueIds} />
             </section>
           </div>
+
+          {/*
+            The inactive-manager ladder (2026-11-12): every quiet manager in the in-season leagues
+            whose activity was read, with the commissioner's next step and a message to copy. The
+            /core home's "Leagues you run" card shows the first three and links here.
+          */}
+          {(data.ladderLeagues ?? 0) > 0 ? (
+            <section className="afh-panel" id="af-ladder" aria-label="Inactive managers">
+              <InactiveLadderList entries={data.ladder ?? []} />
+            </section>
+          ) : null}
         </>
       ) : (
         <section className="afh-empty">

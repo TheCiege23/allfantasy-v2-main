@@ -157,6 +157,42 @@ describe('getCommissionerOverview', () => {
     expect(data.stats[2]).toMatchObject({ value: '1', label: 'trade awaiting review' })
   })
 
+  it('ladders the quiet managers of in-season leagues from the activity it already read', async () => {
+    run.listBroadcastLeagues.mockResolvedValue([
+      { id: 'I', platform: 'sleeper', native: false },
+      { id: 'P', platform: 'sleeper', native: false },
+    ])
+    m.league.findMany.mockResolvedValue([row('I'), row('P', { status: 'pre_draft', lifecycleState: 'pre_draft' })])
+    signals.readReviewSignals.mockResolvedValue({ byLeague: new Map(), partial: false })
+    const team = (leagueId: string, teamName: string, n: number) => ({
+      leagueId, teamName, ownerName: teamName.toLowerCase(), platformUserId: `p${n}`, claimedByUserId: null, isOrphan: false,
+    })
+    m.leagueTeam.findMany.mockResolvedValue([team('I', 'Busy', 1), team('I', 'Drifting', 2), team('I', 'Silent', 3), team('P', 'Offseason', 4)])
+    const DAY = 24 * HOUR
+    activity.readMemberActivityInputs.mockImplementation(async (id: string) => ({
+      native: false,
+      managers:
+        id === 'I'
+          ? [
+              { managerName: 'Busy', currentCount: 4, priorCount: 2, lastActionAt: new Date(NOW.getTime() - DAY) },
+              { managerName: 'Drifting', currentCount: 0, priorCount: 3, lastActionAt: new Date(NOW.getTime() - 16 * DAY) },
+            ]
+          : [{ managerName: 'Offseason', currentCount: 0, priorCount: 1, lastActionAt: new Date(NOW.getTime() - 40 * DAY) }],
+      window: { lastActivityAt: new Date(NOW.getTime() - HOUR), eventCount: 9 },
+    }))
+
+    const data = await getCommissionerOverview({ userId: USER, candidateLeagueIds: ['I', 'P'], issues: [], now: NOW })
+
+    // "Silent" has no move in the read window at all — the top rung, with no invented day count.
+    expect(data.ladder.map((e) => [e.step, e.manager, e.daysQuiet])).toEqual([
+      ['replace', 'Silent', null],
+      ['warn', 'Drifting', 16],
+    ])
+    expect(data.ladder[0].href).toBe('/core/commissioner?league=I#workflow-replace-manager')
+    // The pre-draft league was read but not laddered: quiet before the draft is normal.
+    expect(data.ladderLeagues).toBe(1)
+  })
+
   it('says a flood of never-synced leagues once instead of once per league', async () => {
     const ids = ['S1', 'S2', 'S3', 'S4']
     run.listBroadcastLeagues.mockResolvedValue(ids.map((id) => ({ id, platform: 'sleeper', native: false })))
@@ -271,6 +307,8 @@ function fixture(over: Partial<CommissionerOverviewData> = {}): CommissionerOver
     ownsAny: true,
     tournament: { count: 0, show: false },
     partial: false,
+    ladder: [],
+    ladderLeagues: 0,
     ...over,
   }
 }

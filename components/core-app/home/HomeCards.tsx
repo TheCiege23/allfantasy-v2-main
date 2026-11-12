@@ -447,6 +447,8 @@ async function CommishCard({ commish }: { commish: HomeLoads['commish'] }) {
         action: q.action,
       }))}
       partial={data.partial}
+      // Null when no in-season league's activity was read — "not measured", never "everyone active".
+      ladder={(data.ladderLeagues ?? 0) > 0 ? (data.ladder ?? []) : null}
     />
   )
 }
