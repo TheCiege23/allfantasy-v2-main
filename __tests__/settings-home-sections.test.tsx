@@ -35,7 +35,7 @@ describe('Settings → Home page', () => {
     expect(screen.getByTestId('home-section-warn-drafts').textContent).toMatch(/on-the-clock alerts/)
     expect(screen.getByTestId('home-section-warn-league-trades').textContent).toMatch(/trade offers sent to you/)
     expect(screen.queryByTestId('home-section-warn-rivals')).toBeNull()
-    expect(screen.getByTestId('home-sections-count').textContent).toBe('17 of 17 sections showing')
+    expect(screen.getByTestId('home-sections-count').textContent).toBe('18 of 18 sections showing')
   })
 
   it('flips instantly and saves the whole list on the click — no Save button', async () => {
@@ -99,14 +99,17 @@ describe('default layout keeps alerts', () => {
     expect(switchOf('drafts').checked).toBe(false)
     expect(row('drafts').textContent).not.toContain('{list}')
     expect(row('drafts').textContent).toContain('Draft alerts')
-    expect(switchOf('streak').checked).toBe(true)
+    // The 2026-11-12 trim: streak starts hidden; decisions still lead.
+    expect(switchOf('streak').checked).toBe(false)
+    expect(switchOf('decisions').checked).toBe(true)
     expect(screen.queryByTestId('home-section-warn-drafts')).toBeNull()
     expect(row('drafts').textContent).toContain('notification settings are unchanged')
-    fireEvent.click(switchOf('rivals'))
+    // A visible-by-default, visual-only card (rivals was this test's card until it became hidden by default).
+    fireEvent.click(switchOf('league-focus'))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     const prefs = JSON.parse(fetchMock.mock.calls[0][1].body).notificationPreferences
     expect(prefs.homeLayoutHiddenSections).toContain('drafts')
-    expect(prefs.homeLayoutHiddenSections).toContain('rivals')
-    expect(prefs.hiddenHomeSections).toEqual(['rivals'])
+    expect(prefs.homeLayoutHiddenSections).toContain('league-focus')
+    expect(prefs.hiddenHomeSections).toEqual(['league-focus'])
   })
 })
