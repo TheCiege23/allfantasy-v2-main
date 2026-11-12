@@ -35,8 +35,8 @@ describe('Settings → Home page', () => {
     expect(screen.getByTestId('home-section-warn-drafts').textContent).toMatch(/on-the-clock alerts/)
     expect(screen.getByTestId('home-section-warn-league-trades').textContent).toMatch(/trade offers sent to you/)
     expect(screen.queryByTestId('home-section-warn-rivals')).toBeNull()
-    // 20 since the guide cards (2026-11-12): "Leagues you run" and "How your season is going".
-    expect(screen.getByTestId('home-sections-count').textContent).toBe('20 of 20 sections showing')
+    // 22 since the guide cards (2026-11-12): leagues you run, your season, when things happen, your formats.
+    expect(screen.getByTestId('home-sections-count').textContent).toBe('22 of 22 sections showing')
   })
 
   it('flips instantly and saves the whole list on the click — no Save button', async () => {

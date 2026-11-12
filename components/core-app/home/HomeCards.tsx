@@ -44,6 +44,9 @@ import { HomeSeasonPulse } from '@/components/core-app/home/HomeSeasonPulse'
 import { HomeCommishCard } from '@/components/core-app/home/HomeCommishCard'
 import { buildSeasonPulse, foldInjuredStarters, type PulseLeague } from '@/lib/core-app/homeGuide'
 import type { CommissionerOverviewData } from '@/lib/core-app/commissionerOverview'
+import { HomeFormatGuide } from '@/components/core-app/home/HomeFormatGuide'
+import { HomePlatformCalendar, type CalendarDisplayRow } from '@/components/core-app/home/HomePlatformCalendar'
+import type { FormatCount } from '@/lib/core-app/homeFormats'
 
 /**
  * The /core home, one streamed card at a time.
@@ -131,6 +134,10 @@ export type HomeLoads = {
    * commissioner, the section hidden, or a failed read — hides the card.
    */
   commish?: Promise<CommissionerOverviewData | null>
+  /** The format guide's counts (lib/core-app/homeFormats.ts). Absent or null hides the card. */
+  formats?: Promise<FormatCount[] | null>
+  /** The platform calendar's rows (lib/core-app/platformCalendar.ts). Absent or null hides the card. */
+  calendar?: Promise<CalendarDisplayRow[] | null>
 }
 
 /**
@@ -162,6 +169,8 @@ export function emptyHomeLoads(): HomeLoads {
     drafts: none(null),
     standings: none(null),
     commish: none(null),
+    formats: none(null),
+    calendar: none(null),
   }
 }
 
@@ -170,6 +179,8 @@ export type HomeCardName =
   | 'headline'
   | 'season-pulse'
   | 'commish'
+  | 'calendar'
+  | 'formats'
   | 'since-last-visit'
   | 'game-day'
   | 'drafts'
@@ -451,6 +462,20 @@ async function CommishCard({ commish }: { commish: HomeLoads['commish'] }) {
       ladder={(data.ladderLeagues ?? 0) > 0 ? (data.ladder ?? []) : null}
     />
   )
+}
+
+/** "When things happen" — HomePlatformCalendar.tsx. The next kickoff is the summary's first lineup lock. */
+async function CalendarCard({ calendar, dash34 }: { calendar: HomeLoads['calendar']; dash34: HomeLoads['dash34'] }) {
+  const [rows, data] = await Promise.all([(calendar ?? Promise.resolve(null)).catch(() => null), dash34.catch(() => null)])
+  if (!rows) return null
+  return <HomePlatformCalendar rows={rows} nextKickoffIso={data?.firstLock?.countdownTo ?? null} />
+}
+
+/** "Your league formats" — HomeFormatGuide.tsx. Renders nothing when the read failed or found no league. */
+async function FormatsCard({ formats }: { formats: HomeLoads['formats'] }) {
+  const counts = await (formats ?? Promise.resolve(null)).catch(() => null)
+  if (!counts || counts.length === 0) return null
+  return <HomeFormatGuide formats={counts} />
 }
 
 async function TradeBandCard({ trades, tradeDepth, now }: { trades: HomeLoads['trades']; tradeDepth: HomeLoads['tradeDepth']; now: Date }) {
@@ -739,6 +764,9 @@ export function CoreHomeCards({
           {/* The two guide cards (2026-11-12): the leagues you run, then where you stand in yours. */}
           {card('commish', <CommishCard commish={loads.commish} />)}
           {card('season-pulse', <SeasonPulseCard standings={loads.standings} />)}
+          {/* The teaching cards (2026-11-12): when things happen on each platform, and what each format means. */}
+          {card('calendar', <CalendarCard calendar={loads.calendar} dash34={loads.dash34} />)}
+          {card('formats', <FormatsCard formats={loads.formats} />)}
 
           {/*
             The league trade evaluator, folded to one row (owner, 2026-11-06). After the news bands so

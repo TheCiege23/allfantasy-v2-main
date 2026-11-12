@@ -50,6 +50,8 @@ export type CoreCardRead =
   | 'urgency-badges'
   | 'season-pulse'
   | 'commish'
+  | 'formats'
+  | 'calendar'
 
 export function traceCard<T>(card: CoreCardRead, load: () => Promise<T>): Promise<T> {
   // Always a promise: a loader that throws synchronously still reaches the caller's `.catch`.

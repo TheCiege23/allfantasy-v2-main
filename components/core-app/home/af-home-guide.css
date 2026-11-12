@@ -188,3 +188,62 @@
   .af-run-risks li { flex-wrap: wrap; }
   .af-run-risks .af3a-btn { width: 100%; min-height: 44px; text-align: center; }
 }
+
+/* ── Format guide (HomeFormatGuide.tsx) ─────────────────────────────────── */
+.af-format-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.af-format-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-format-chip b {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface2, var(--bg));
+  color: var(--text2);
+  font: 800 11.5px/1.4 'JetBrains Mono', ui-monospace, monospace;
+  text-align: center;
+}
+.af-format-chip:hover { border-color: var(--accent-line); }
+.af-format-chip[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+.af-format-panel { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.af-format-panel[hidden] { display: none; }
+.af-format-panel p { margin: 0 0 6px; color: var(--text2); font-size: 13.5px; line-height: 1.5; }
+.af-format-panel b { color: var(--text); }
+.af-format-panel-name { color: var(--text) !important; font-size: 15px !important; font-weight: 800; }
+.af-format-panel-name span { color: var(--muted); font-weight: 500; }
+
+/* ── Platform calendar (HomePlatformCalendar.tsx) ───────────────────────── */
+.af-cal-kickoff { margin-bottom: 6px; }
+.af-cal-kickoff .af-guide-label { margin-top: 0; }
+.af-cal-kickoff-when { margin: 0; color: var(--text); font: 800 18px/1.2 'JetBrains Mono', ui-monospace, monospace; }
+.af-cal-rows { margin: 12px 0 0; padding: 0; list-style: none; }
+.af-cal-rows li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
+.af-cal-rows li + li { border-top: 1px solid var(--line); }
+.af-cal-plat {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--chip, var(--surface2));
+  color: var(--text2);
+  font: 800 11px/1 'JetBrains Mono', ui-monospace, monospace;
+}
+.af-cal-main { flex: 1; min-width: 0; }
+.af-cal-name { margin: 0; color: var(--text); font-size: 14px; font-weight: 700; }
+.af-cal-name span { color: var(--muted); font-weight: 500; }
+.af-cal-run { margin: 3px 0 0; color: var(--text2); font-size: 13px; }
+.af-cal-run b { color: var(--accent); font-weight: 800; }
+.af-cal-unread { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
