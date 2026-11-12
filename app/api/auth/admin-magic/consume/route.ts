@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { verifyAdminMagicToken, signAdminSessionCookie } from "@/lib/adminSession";
 import { isAdminEmailAllowed } from "@/lib/adminAuth";
 import { getDeploymentLinkOrigin } from "@/lib/site-public-origin";
+import { consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
+import { createHash } from "crypto";
 
 function sanitizeNext(next?: string) {
   if (!next) return "/admin";
@@ -41,6 +43,15 @@ export const GET = withApiUsage({ endpoint: "/api/auth/admin-magic/consume", too
   if (!payload?.email || !isAdminEmailAllowed(payload.email)) {
     // Send expired/invalid tokens back to the admin login page so the user lands in a
     // surface that understands "err=magic" and shows a clear retry prompt.
+    return NextResponse.redirect(new URL("/admin-login?err=magic", baseUrl));
+  }
+
+  // The email calls this link one-time; make it so. The token is a stateless HMAC valid for
+  // its whole window, so a forwarded or logged link otherwise mints a fresh admin session on
+  // every click. Claim it once (shared store; the window outlives the token's own expiry).
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const claim = await consumeSharedRateLimit(`admin-magic-used:${tokenHash}`, 1, 30 * 60);
+  if (!claim.success) {
     return NextResponse.redirect(new URL("/admin-login?err=magic", baseUrl));
   }
 
