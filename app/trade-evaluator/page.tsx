@@ -1216,7 +1216,7 @@ function TradeHubInner() {
               </button>
             ) : (
               <Link
-                href={`/player-compare?playerA=${encodeURIComponent(miniCompare.a)}&playerB=${encodeURIComponent(miniCompare.b)}&sport=${encodeURIComponent(sport)}`}
+                href={`/player-comparison-lab?playerA=${encodeURIComponent(miniCompare.a)}&playerB=${encodeURIComponent(miniCompare.b)}&sport=${encodeURIComponent(sport)}`}
                 data-testid="trade-evaluator-mini-compare-fallback"
                 className="inline-flex shrink-0 text-sm font-medium text-cyan-300 underline hover:text-cyan-100"
               >

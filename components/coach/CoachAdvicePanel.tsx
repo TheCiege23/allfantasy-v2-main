@@ -551,7 +551,7 @@ export function CoachAdvicePanel({
               } else if (typeof window !== 'undefined') {
                 const q = new URLSearchParams({ sport: compareSport });
                 if (leagueId) q.set('leagueId', leagueId);
-                window.location.href = `/player-compare?${q.toString()}`;
+                window.location.href = `/player-comparison-lab?${q.toString()}`;
               }
             }}
             className="gap-2 border-white/15 text-white/85"
@@ -561,7 +561,7 @@ export function CoachAdvicePanel({
             Player compare
           </Button>
           <Link
-            href={`/player-compare?sport=${encodeURIComponent(compareSport)}${leagueId ? `&leagueId=${encodeURIComponent(leagueId)}` : ''}`}
+            href={`/player-comparison-lab?sport=${encodeURIComponent(compareSport)}${leagueId ? `&leagueId=${encodeURIComponent(leagueId)}` : ''}`}
             className="text-xs text-cyan-300/85 underline hover:text-cyan-100"
             data-testid="coach-player-compare-full-page"
           >

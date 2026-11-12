@@ -299,6 +299,7 @@ function isAllowedChimmyToolLink(link: string): boolean {
     '/matchup-simulator',
     '/social-clips',
     '/player-compare',
+    '/player-comparison-lab',
     '/chimmy/',
     '/ai/',
     '/app/matchup-simulation',
