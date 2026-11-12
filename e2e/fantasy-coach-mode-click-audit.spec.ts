@@ -61,9 +61,10 @@ test.describe("@coach fantasy coach mode click audit", () => {
     await openHarness(page)
 
     const waiverTargetLink = page.getByTestId("coach-waiver-link-0")
-    await expect(waiverTargetLink).toHaveAttribute("href", /\/player-comparison\?player=/)
+    // The waiver targets are archetypes, not people: they open the waiver tool on that slot.
+    await expect(waiverTargetLink).toHaveAttribute("href", /\/waiver-ai\?.*focus=/)
     await Promise.all([
-      page.waitForURL(/\/player-comparison\?player=/, { timeout: 15_000 }),
+      page.waitForURL(/\/waiver-ai\?.*focus=/, { timeout: 15_000 }),
       waiverTargetLink.click(),
     ])
 

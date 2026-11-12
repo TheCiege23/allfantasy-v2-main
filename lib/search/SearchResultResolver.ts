@@ -3,6 +3,7 @@
  */
 
 import { getPrimaryChimmyEntry } from "@/lib/ai-product-layer"
+import { playerProfileHref } from "@/lib/player-links/playerProfileHref"
 
 export type SearchResultCategory = "page" | "tool" | "league" | "player" | "quick_action"
 
@@ -309,6 +310,8 @@ export interface PlayerSearchApiHit {
   position?: string | null
   team?: string | null
   sport?: string | null
+  /** /api/players/search's public-page slug (lib/core-app/playerSlug.ts) — names exactly one person. */
+  slug?: string | null
 }
 
 export function mapLeagueSearchHitsToResults(hits: LeagueSearchApiHit[]): SearchResultItem[] {
@@ -332,11 +335,13 @@ export function mapLeagueSearchHitsToResults(hits: LeagueSearchApiHit[]): Search
 
 export function mapPlayerSearchHitsToResults(hits: PlayerSearchApiHit[]): SearchResultItem[] {
   return hits.map((hit) => {
-    const params = new URLSearchParams()
-    params.set("playerId", String(hit.id))
-    params.set("playerName", String(hit.name))
-    if (hit.sport) params.set("sport", String(hit.sport).toUpperCase())
-    const href = `/player-comparison?${params.toString()}`
+    // 2026-11-12: a player result opens that player's page. It opened /player-comparison — the
+    // comparison tool's search landing page — which ignores the player entirely. The search route's
+    // slug names one person; without it, the name page narrows by sport, position and team.
+    const href =
+      (hit.slug ? `/players/${hit.slug}` : null) ??
+      playerProfileHref({ name: String(hit.name), sport: hit.sport, position: hit.position, team: hit.team }) ??
+      "/players"
     const details = [hit.position, hit.team].filter(Boolean).join(" · ")
     return {
       id: `player-${hit.id}`,
