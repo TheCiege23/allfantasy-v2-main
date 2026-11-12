@@ -4,6 +4,7 @@ import '@/components/core-app/af-war-brief.css'
 import type { FormatBrief, ScarcityRow } from '@/lib/core-app/warRoomFormat'
 import type { KeeperLine, NextSeasonView } from '@/lib/core-app/warRoomNextSeason'
 import { signedPts } from '@/lib/core-app/outlookCopy'
+import { dynastyFactSentence } from '@/lib/core-app/dynastyFactsSpanish'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { warRoomBriefMessages } from '@/lib/core-app/messages/warRoomBrief'
@@ -118,7 +119,7 @@ function KeeperList({ label, lines, m }: { label: string; lines: KeeperLine[]; m
   )
 }
 
-function NextSeasonSection({ plan, m }: { plan: NextSeasonView; m: Copy }) {
+function NextSeasonSection({ plan, m, language }: { plan: NextSeasonView; m: Copy; language: string }) {
   return (
     <section className="af-wb-section" aria-labelledby="af-wb-next">
       <h2 id="af-wb-next" className="af-label af-wb-heading">
@@ -141,8 +142,9 @@ function NextSeasonSection({ plan, m }: { plan: NextSeasonView; m: Copy }) {
           </p>
           {plan.facts.length > 0 ? (
             <ul className="af-wb-engine-facts">
+              {/* The engine writes English; translated here, where it is drawn (dynastyFactsSpanish.ts). */}
               {plan.facts.map((f) => (
-                <li key={f}>{f}</li>
+                <li key={f}>{dynastyFactSentence(f, language)}</li>
               ))}
             </ul>
           ) : null}
@@ -185,7 +187,7 @@ export function WarStrategyBrief({
    */
   plan?: { leagueId: string; input: WarPlanInput } | null
 }) {
-  const { m } = useCopy()
+  const { m, language } = useCopy()
   if (!format && !nextSeason && !plan) return null
   return (
     <div className="af-wb">
@@ -195,7 +197,7 @@ export function WarStrategyBrief({
         </div>
       ) : null}
       {format ? <FormatSection brief={format} m={m} /> : null}
-      {nextSeason ? <NextSeasonSection plan={nextSeason} m={m} /> : null}
+      {nextSeason ? <NextSeasonSection plan={nextSeason} m={m} language={language} /> : null}
     </div>
   )
 }

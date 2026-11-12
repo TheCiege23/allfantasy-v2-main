@@ -9,8 +9,8 @@ type Posture = Extract<NextSeasonView, { kind: 'dynasty' }>['posture']
  * next-season plan.
  *
  * ⚠ THE SCARCITY LINES ARE MEASUREMENTS AND READ AS SUCH — "starters average X, the best free agent
- * Y" — never "TEs are valuable". The engines' own explanation sentences (dynasty facts) are printed in
- * their wording and are English-only today; the labels around them are translated.
+ * Y" — never "TEs are valuable". The dynasty engine writes its explanation sentences in English; they
+ * are translated where they are drawn (dynastyFactsSpanish.ts). The labels around them live here.
  */
 export const warRoomBriefMessages = defineMessages({
   en: {
