@@ -98,19 +98,19 @@ export const HIDDEN_HOME_SECTIONS_KEY = 'hiddenHomeSections'
 /** Display choices are separate from explicit topic mutes. Defaults must never mute alerts. */
 export const HOME_LAYOUT_HIDDEN_KEY = 'homeLayoutHiddenSections'
 /*
- * ⚠ THE HOME TRIM, 2026-11-12 (owner's call after a no-league audit of /core). Five more sections
+ * ⚠ THE HOME TRIM, 2026-11-12 (owner's call after a no-league audit of /core). Four more sections
  * start hidden, each because another screen already carries it:
- *   streak           today's counts repeat the decision queue and injury check just below it
  *   trade-evaluator  the same LeagueTradeEvaluator + market movers the Trades hub opens with
  *   chimmy           the Chimmy button sits on every screen, with the same flagged count
  *   career, rivals   Your career and Your week → Rivalry Radar
- * What a default home leads with now: decisions, injuries, league trades, the league that needs
- * you, and the league list. Every one is a switch in Settings → Home page, and a person who has
+ * The daily streak STAYS on (owner, same day): it was proposed for this list and kept, so do not
+ * add it back here on the overlap argument. What a default home leads with now: the streak,
+ * decisions, injuries, league trades, the league that needs you, and the league list. Every one is a switch in Settings → Home page, and a person who has
  * saved their own layout keeps it — defaults only apply to a profile with no saved list
  * (`resolveHiddenHomeSections`). Defaults never mute alerts: muting reads the SAVED list only.
  */
 export const DEFAULT_HIDDEN_HOME_SECTIONS: readonly HomeSectionId[] = [
-  'streak', 'since-last-visit', 'live-games', 'drafts', 'lock-brief', 'schedule', 'trade-evaluator',
+  'since-last-visit', 'live-games', 'drafts', 'lock-brief', 'schedule', 'trade-evaluator',
   'routine', 'matchups', 'chimmy', 'career', 'rivals', 'insights',
 ]
 
