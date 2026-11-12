@@ -75,6 +75,12 @@ export type ScoutProps = {
    */
   leaguePlan?: ReactNode
   /**
+   * War Room phase 2: trades that move your odds in THIS league (warRoomTrades.ts), after the plan —
+   * what to fix this week, then what to trade for, then the rivals. A node for the same reason as
+   * `leaguePlan`: Scout stays a reader of standings; the page decides what the strategist shows.
+   */
+  tradeIdeas?: ReactNode
+  /**
    * Elimination formats: your place against the cut this week — the rail's own read (getRailMatchups
    * `standing`), handed down so this banner and the rail cannot disagree. Null outside an elimination
    * week or when the rail could not rank the league.
@@ -582,6 +588,7 @@ export function Scout({
   edge = null,
   edgeAccess = null,
   leaguePlan = null,
+  tradeIdeas = null,
   eliminationStanding = null,
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
@@ -627,6 +634,8 @@ export function Scout({
       {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
 
       {leaguePlan}
+
+      {tradeIdeas}
 
       {/*
         ⚠ BEFORE THE CARDS, ALWAYS. What the records are measured over changes how every one of them
