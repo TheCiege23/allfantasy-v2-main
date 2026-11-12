@@ -81,6 +81,11 @@ export type ScoutProps = {
    */
   tradeIdeas?: ReactNode
   /**
+   * War Room phase 3: how this league is won and the plan for next season (WarStrategyBrief), after
+   * the trade ideas. A node for the same reason as `leaguePlan`.
+   */
+  brief?: ReactNode
+  /**
    * Elimination formats: your place against the cut this week — the rail's own read (getRailMatchups
    * `standing`), handed down so this banner and the rail cannot disagree. Null outside an elimination
    * week or when the rail could not rank the league.
@@ -589,6 +594,7 @@ export function Scout({
   edgeAccess = null,
   leaguePlan = null,
   tradeIdeas = null,
+  brief = null,
   eliminationStanding = null,
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
@@ -636,6 +642,8 @@ export function Scout({
       {leaguePlan}
 
       {tradeIdeas}
+
+      {brief}
 
       {/*
         ⚠ BEFORE THE CARDS, ALWAYS. What the records are measured over changes how every one of them

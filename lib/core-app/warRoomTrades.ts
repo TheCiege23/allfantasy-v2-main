@@ -94,7 +94,7 @@ export type WarTrades =
 
 export type OddsRunner = (adjustments: SimAdjustment[]) => { playoff: number; title: number } | null
 
-/** What the page hands the screen for the league on display (warRoomTradesLoader.ts builds it). */
+/** What the page hands the screen for the league on display (warRoomLeagueLoader.ts builds it). */
 export type WarTradesView = {
   leagueId: string
   posture: WarPosture

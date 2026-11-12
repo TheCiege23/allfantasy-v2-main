@@ -55,7 +55,7 @@ import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
   Matchup, Waivers, DraftHq, DraftBoard,
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
-  GamePlan, WarRoomWeek, WarFront, WarTradeIdeas, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
+  GamePlan, WarRoomWeek, WarFront, WarTradeIdeas, WarStrategyBrief, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
   SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
   CareerShare,
@@ -142,7 +142,7 @@ import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { buildWarFront } from '@/lib/core-app/warRoomFront'
-import { loadWarTrades } from '@/lib/core-app/warRoomTradesLoader'
+import { loadWarLeagueStrategy } from '@/lib/core-app/warRoomLeagueLoader'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
 import { getDraftArchiveScreen } from '@/lib/draft-archive/screen'
 import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
@@ -3401,34 +3401,38 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   }))
 
   /*
-   * War Room phase 2 — trades that move your odds, for the league on screen (warRoomTrades.ts).
+   * The War Room's per-league strategy (warRoomLeagueLoader.ts): how this league is won and the
+   * next-season plan (phase 3, free), and trades that move your odds (phase 2, `trade_depth`).
    *
-   * ⚠ GATED ON `trade_depth`, THE TRADE CENTER FINDER'S OWN DEPTH, AND SKIPPED — NOT HIDDEN — WHEN
-   * LOCKED. A locked viewer is never sent the ideas; the screen draws the lock from the access alone,
-   * as Scout does for its edge. Before the paywall launches the depth is open to everyone.
+   * ⚠ THE PAYWALL GATES THE TRADES, NOT THE READ. The brief and the plan are for everyone; a viewer
+   * without `trade_depth` is never sent trade ideas — the loader does not compute them — and the screen
+   * draws the lock from the access alone, as Scout does for its edge. Before launch the depth is open.
    *
    * ⚠ ONE OUTLOOK READ WITH THIS LEAGUE AS FOCUS — the same Season Outlook's league page makes — started
    * here and awaited at render, so it runs beside the reads in between.
    */
   const warTradesAccess =
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId ? (corePaywall?.trade_depth ?? null) : null
-  const warTradesLeague =
-    warTradesAccess?.unlocked && userId && selectedLeagueId ? (outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null) : null
-  const warTradesRead =
-    warTradesLeague && userId
-      ? loadWarTrades({
+  const warStrategyLeague =
+    activeKey === 'war-room' && !gamePlanView && userId && selectedLeagueId
+      ? (outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null)
+      : null
+  const warStrategyRead =
+    warStrategyLeague && userId
+      ? loadWarLeagueStrategy({
           userId,
-          league: { ...warTradesLeague, currentWeek: tradeLeagueRow?.currentWeek ?? null },
+          league: { ...warStrategyLeague, currentWeek: tradeLeagueRow?.currentWeek ?? null },
           allLeagues: outlookLeagues,
           format: tradeLeagueTypeKey,
+          tradesUnlocked: warTradesAccess?.unlocked === true,
           now: ctx.now,
         }).catch((error: unknown) => {
-          console.error('[core/war-room] trade ideas failed', error)
+          console.error('[core/war-room] league strategy failed', error)
           return null
         })
       : Promise.resolve(null)
   // Marks the promise handled, so a throw before the await below cannot leave an unhandled rejection.
-  warTradesRead.catch(() => {})
+  warStrategyRead.catch(() => {})
 
   const standingsFresh =
     activeKey === 'standings' && selectedLeagueId && standingsOnSummary
@@ -3693,7 +3697,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * rail and the Trade Center use, so a card cannot call a league dynasty that the rail calls redraft.
    * Pure; the screen gets this small result, never the board.
    */
-  const warTrades = await warTradesRead
+  const warStrategy = await warStrategyRead
+  const warTrades = warStrategy?.trades ?? null
 
   const warFront = wantsWarFront
     ? buildWarFront({
@@ -5231,6 +5236,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 tradeIdeas={
                   warTrades || (warTradesAccess && !warTradesAccess.unlocked) ? (
                     <WarTradeIdeas view={warTrades} access={warTradesAccess} />
+                  ) : null
+                }
+                /* War Room phase 3: how this league is won, and next season. Free; each half drawn when read. */
+                brief={
+                  warStrategy && (warStrategy.format || warStrategy.nextSeason) ? (
+                    <WarStrategyBrief format={warStrategy.format} nextSeason={warStrategy.nextSeason} />
                   ) : null
                 }
                 eliminationStanding={
