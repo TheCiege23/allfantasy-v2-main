@@ -48,10 +48,10 @@ describe('phone bottom bar', () => {
     expect(barPaths({ selectedLeagueId: 'L1' })).toEqual(['/core', '/core/waivers', '/core/my-team', '/core/matchup', '/core/trades'])
   })
 
-  /* My team and Waivers are league-only since 2026-11-12; Your week and Player Finder take their slots. */
-  it('swaps My team and Waivers for Your week and Player Finder with no league selected', () => {
+  /* My team, Waivers and Matchup are league-only since 2026-11-12; Your week, Live and Player Finder take their slots. */
+  it('swaps the league-only tabs for Your week, Live and Player Finder with no league selected', () => {
     const paths = barPaths({ selectedLeagueId: null })
-    expect(paths).toEqual(['/core', '/core/week', '/core/matchup', '/core/players', '/core/trades'])
+    expect(paths).toEqual(['/core', '/core/week', '/core/live', '/core/players', '/core/trades'])
     expect(new Set(paths).size).toBe(paths.length)
   })
 

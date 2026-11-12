@@ -699,14 +699,22 @@ export default async function AfCorePage({
   }
 
   /*
-   * ⚠ MY TEAM AND WAIVERS NEED A LEAGUE SINCE 2026-11-12 (owner's call). Their no-league boards —
-   * the cross-league lineup check and the waiver-processing list — repeated Your week, which reads
-   * the same lineup pulse and carries every league's next waiver run in its calendar. Old links
-   * (notifications, calendars, bookmarks) land there instead of 404ing. With `?league=` both
-   * screens render exactly as before. Before the session read, so the bounce costs nothing.
+   * ⚠ THESE SCREENS NEED A LEAGUE SINCE 2026-11-12 (owner's call, after a no-league audit). Each
+   * no-league view repeated a screen that stays:
+   *   - My team, Waivers, Matchup, War Room → Your week. It reads the same lineup pulse, carries every
+   *     league's next waiver run in its calendar, ranks every matchup in leading/trailing columns, and
+   *     its priorities list is what War Room's Game Plan answered.
+   *   - Standings → Season Outlook. Both read the same playoff simulation; the board was a shorter
+   *     version of the outlook table.
+   * Old links (notifications, calendars, bookmarks, /matchup-simulator) land there instead of
+   * 404ing. With `?league=` every screen renders exactly as before. Before the session read, so the
+   * bounce costs nothing.
    */
-  if ((navKey === 'my-team' || navKey === 'waivers') && !selectedLeagueId) {
-    redirect('/core/week')
+  if (!selectedLeagueId) {
+    if (navKey === 'my-team' || navKey === 'waivers' || navKey === 'matchup' || navKey === 'war-room') {
+      redirect('/core/week')
+    }
+    if (navKey === 'standings') redirect('/core/season-outlook')
   }
 
   // `af.shell_ms` on the request's root span measures from here to "the shell has everything".
@@ -5158,7 +5166,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : selectedLeagueId && draftArchive ? (
           /* No Draft HQ data of its own (the draft ran on the platform): the archive is the screen, so it carries the title. */
           <DraftArchive {...draftArchive} asDraftHq />
-        ) : draftHqLoadFailed ? (
+        ) : draftHqLoadFailed && selectedLeagueId ? (
+          /*
+           * League-held only. With no league, `draftHqLoadFailed` can only mean the ARCHIVE read
+           * failed — the every-draft board below is a separate read (`homeDrafts`) — so an error
+           * here hid a board that had loaded fine. The archive slot is simply null then.
+           */
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
           <>{draftArchiveFirst ? draftArchiveSlot : null}<PickALeague
