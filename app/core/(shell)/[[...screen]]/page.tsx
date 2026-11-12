@@ -3144,7 +3144,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const draftArchive = activeKey === 'draft-hq'
     ? await getDraftArchiveScreen(playedLeagues.map(l => l.id), selectedLeagueId ?? null, userId, sp).catch((e: unknown) => {
         console.error('[core/draft-archive] read failed', e)
-        draftHqLoadFailed = true
+        /*
+         * A failed archive read is a Draft HQ failure only for a selected league. With no league the
+         * every-draft board is a separate read (`homeDrafts`), and flagging here replaced a board that
+         * had loaded fine with ScreenLoadError (2026-11-12). The archive slot is simply null then.
+         */
+        if (selectedLeagueId) draftHqLoadFailed = true
         return null
       })
     : null
@@ -5167,12 +5172,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : selectedLeagueId && draftArchive ? (
           /* No Draft HQ data of its own (the draft ran on the platform): the archive is the screen, so it carries the title. */
           <DraftArchive {...draftArchive} asDraftHq />
-        ) : draftHqLoadFailed && selectedLeagueId ? (
-          /*
-           * League-held only. With no league, `draftHqLoadFailed` can only mean the ARCHIVE read
-           * failed — the every-draft board below is a separate read (`homeDrafts`) — so an error
-           * here hid a board that had loaded fine. The archive slot is simply null then.
-           */
+        ) : draftHqLoadFailed ? (
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (
           <>{draftArchiveFirst ? draftArchiveSlot : null}<PickALeague
