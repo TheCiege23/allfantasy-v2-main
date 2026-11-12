@@ -323,6 +323,9 @@ export function LandingV4({
           <p className="af-lp-reassure" data-testid="landing-hero-trade-link">
             <Link href="/trade-evaluator">{c.hero.tradeLink}</Link>
           </p>
+          <p className="af-lp-reassure" data-testid="landing-hero-league-types-link">
+            <Link href="/demo/formats">{c.hero.leagueTypesLink}</Link>
+          </p>
           <p className="af-lp-reassure">{c.hero.reassure}</p>
           {/*
             The commissioner line sits under the player hero rather than replacing it: `/`
