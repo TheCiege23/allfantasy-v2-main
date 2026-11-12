@@ -99,8 +99,9 @@ describe('default layout keeps alerts', () => {
     expect(switchOf('drafts').checked).toBe(false)
     expect(row('drafts').textContent).not.toContain('{list}')
     expect(row('drafts').textContent).toContain('Draft alerts')
-    // The 2026-11-12 trim: streak starts hidden; decisions still lead.
-    expect(switchOf('streak').checked).toBe(false)
+    // The 2026-11-12 trim hides the trade evaluator by default; the streak stays on (owner's call).
+    expect(switchOf('streak').checked).toBe(true)
+    expect(switchOf('trade-evaluator').checked).toBe(false)
     expect(switchOf('decisions').checked).toBe(true)
     expect(screen.queryByTestId('home-section-warn-drafts')).toBeNull()
     expect(row('drafts').textContent).toContain('notification settings are unchanged')

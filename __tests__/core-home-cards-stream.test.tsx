@@ -304,12 +304,11 @@ describe('/core home cards stream independently', () => {
     g.account.preferences = {}
     const { cards } = await homeCards()
     /*
-     * The 2026-11-12 trim: streak, the trade evaluator, chimmy, career and rivals start hidden too
-     * (lib/core-app/homeSections.ts). Decisions, injuries, league trades, the league that needs you
-     * and the league list lead.
+     * The 2026-11-12 trim: the trade evaluator, chimmy, career and rivals start hidden too
+     * (lib/core-app/homeSections.ts). The streak stays on by the owner's call.
      */
     expect([...cards.keys()]).toEqual([
-      'connect', 'issues', 'triage', 'trade-band', 'user-os',
+      'connect', 'streak', 'issues', 'triage', 'trade-band', 'user-os',
       'following', 'leagues', 'coverage',
     ])
   })
