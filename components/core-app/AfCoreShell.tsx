@@ -258,13 +258,15 @@ export type CoreNavKey =
   | 'moves'
   | 'share'
   | 'notifications'
+  // My Leagues (21a) at /core/leagues. It was an exit to /leagues (the global site shell) until
+  // 2026-11-12; /leagues now redirects here so the screen keeps the rail, nav and topbar.
+  | 'my-leagues'
   // Full pages OUTSIDE /core, listed in the shell so the cutover to /core does
   // not orphan them. No /core segment maps to these keys, so they are never the
   // active item — they are exits, not screens.
   | 'live-scores'
   | 'brackets'
   | 'find-league'
-  | 'my-leagues'
   | 'settings'
   | 'plans'
   /*
@@ -298,7 +300,7 @@ export type CoreNavKey =
   | 'defense-hub'
   /*
    * The admin command center at /admin. A full page OUTSIDE /core, like
-   * `settings` and `my-leagues` above, so it is an exit and never the active item.
+   * `settings` above, so it is an exit and never the active item.
    *
    * ⚠ CONDITIONAL, AND THE GATE IS THE PREDICATE /admin ITSELF ENFORCES.
    * `navItems` omits it unless `isAdmin`, which the page resolves with
@@ -796,7 +798,7 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * home again, /core/sync already owns "is THIS league current" — reached from
      * in-page links, not the rail (see the note where its rail entry used to be).
      */
-    { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/leagues' },
+    { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/core/leagues' },
     /*
      * Restored: 'career' was pulled from the rail while it rendered "this screen
      * has not been built yet" — an apology occupying prime real estate. The
