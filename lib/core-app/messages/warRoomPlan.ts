@@ -41,6 +41,9 @@ export const warRoomPlanMessages = defineMessages({
     ready: (weeks: string, byes: string | null, hurt: string | null, thin: string | null) =>
       `Playoff weeks ${weeks}.${byes ? ` Starters on bye then: ${byes}.` : ' No starter on bye then.'}${hurt ? ` Injury designations now: ${hurt}.` : ''}${thin ? ` ${thin}` : ''}`,
     readyBye: (name: string, week: number) => `${name} (week ${week})`,
+    race: (cut: number, teams: string) => `The race (top ${cut} make it; schedule rank 1 = hardest left): ${teams}.`,
+    raceTeam: (name: string, seed: number, rec: string, pct: string | null, rank: number | null, of: number, vsMe: number[]) =>
+      `${name} #${seed} ${rec}${pct ? ` ${pct}%` : ''}${rank != null ? `, schedule ${rank}/${of}` : ''}${vsMe.length ? `, plays me wk ${vsMe.join('/')}` : ''}`,
     readyThin: (pos: string, name: string, drop: string) => `Thinnest spot: ${pos} — losing ${name} costs ${drop} pts/week to the next man up.`,
     faab: (amount: string, budget: string | null, rank: number, of: number, useIt: boolean) =>
       `FAAB: ${amount}${budget ? ` of ${budget}` : ''} left, rank ${rank} of ${of}${useIt ? ' — redraft, so it buys nothing after the season' : ''}.`,
@@ -81,6 +84,9 @@ export const warRoomPlanMessages = defineMessages({
     ready: (weeks, byes, hurt, thin) =>
       `Semanas de playoffs ${weeks}.${byes ? ` Titulares en descanso entonces: ${byes}.` : ' Ningún titular descansa entonces.'}${hurt ? ` Designaciones de lesión ahora: ${hurt}.` : ''}${thin ? ` ${thin}` : ''}`,
     readyBye: (name, week) => `${name} (semana ${week})`,
+    race: (cut, teams) => `La carrera (entran los ${cut} primeros; calendario 1 = el más difícil restante): ${teams}.`,
+    raceTeam: (name, seed, rec, pct, rank, of, vsMe) =>
+      `${name} #${seed} ${rec}${pct ? ` ${pct}%` : ''}${rank != null ? `, calendario ${rank}/${of}` : ''}${vsMe.length ? `, juega contra mí sem ${vsMe.join('/')}` : ''}`,
     readyThin: (pos, name, drop) => `Punto más débil: ${pos} — perder a ${name} cuesta ${drop} pts/semana frente al siguiente.`,
     faab: (amount, budget, rank, of, useIt) =>
       `FAAB: me quedan ${amount}${budget ? ` de ${budget}` : ''}, puesto ${rank} de ${of}${useIt ? ' — liga redraft, así que no compra nada después de la temporada' : ''}.`,

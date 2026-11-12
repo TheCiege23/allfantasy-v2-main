@@ -18,6 +18,7 @@ import { buildFormatBrief, measureScarcity, type FormatBrief } from './warRoomFo
 import { buildTradeMap } from './warRoomTradeMap'
 import { buildWarChest, type WarChest, type WarChestRow } from './warRoomWarChest'
 import { buildPlayoffReady, type PlayoffReady } from './warRoomPlayoffReady'
+import { buildWarRace, type WarRace } from './warRoomRace'
 import { myRosterCandidates } from './myRoster'
 import { buildWarCampaign, type WarCampaign } from './warRoomCampaign'
 import { dynastyView, keeperView, nextSeasonEngineFor, type NextSeasonView } from './warRoomNextSeason'
@@ -67,6 +68,8 @@ export type WarLeagueStrategy = {
   warChest: WarChest | null
   /** Playoff readiness (phase 7, free): byes, injuries and depth for your playoff weeks. Null when it could not be built. */
   playoffReady: PlayoffReady | null
+  /** The race (phase 8, free): the teams around the playoff cut and what each still plays. Null when it could not be built. */
+  race: WarRace | null
 }
 
 type FaabRead = { waiverType: string | null; budget: number | null; byTeam: Map<string, number | null> }
@@ -272,5 +275,15 @@ export async function loadWarLeagueStrategy(args: {
     }
   }
 
-  return { leagueId: league.id, card, format, trades, nextSeason, campaign, warChest, playoffReady }
+  /* Phase 8, failing alone like the rest. Head-to-head weeks need the roster model's schedule; without it the rows still draw. */
+  let race: WarRace | null = null
+  if (outlook) {
+    try {
+      race = buildWarRace({ row, posture: postureOf(row), remaining: model?.sim.remaining ?? null })
+    } catch (error) {
+      console.error('[core/war-room] race failed', error)
+    }
+  }
+
+  return { leagueId: league.id, card, format, trades, nextSeason, campaign, warChest, playoffReady, race }
 }
