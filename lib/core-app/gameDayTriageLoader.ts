@@ -12,6 +12,8 @@ import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import { resolveSportsWeek } from './sportsWeek'
 import { isEliminatedTeam } from './eliminatedTeam'
+import { isTranslatedSportLeague, translateSportRosters, type SportCatalogPlayer } from './sportRosterTranslate'
+import { rosterIdRouteFor } from './sportRosterKey'
 
 /**
  * Your flagged starters across every league — the finder's game-day home.
@@ -149,20 +151,34 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
    *     same collision applies, so those leagues are counted, not read.
    */
   const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
-  // A native league of another sport holds Rolling Insights ids, never Sleeper ids: counted, not read.
-  const sportOfLeague = new Map(leagues.map((l) => [l.id, l.sport]))
+  /*
+   * 🛑 ANOTHER SPORT'S LEAGUES ARE TRANSLATED, NOT COUNTED (2026-11-11). A Fantrax NHL league or a native
+   * NBA league holds ids that are never Sleeper ids, and every one of them used to land in "on a platform
+   * we can't read yet" — so a manager with NBA, NHL and college leagues saw a football-only list.
+   * sportRosterTranslate.ts reads them through PlayerIdentityMap into catalog players; only a platform
+   * with no id link at all in that sport (rosterIdRouteFor → null) is still counted as unreadable.
+   */
+  const otherSport = new Set(leagues.filter((l) => isTranslatedSportLeague(l)).map((l) => l.id))
+  const noRoute = new Set(leagues.filter((l) => otherSport.has(l.id) && !rosterIdRouteFor(l.platform, l.sport)).map((l) => l.id))
   const bridged = await loadBridgedLeagues(
-    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other'),
+    leagues.filter((l) => !bestBall.has(l.id) && !otherSport.has(l.id) && rosterIdSpaceOf(l.platform) === 'other'),
   )
   const bridgeReadable = (leagueId: string) => bridged.get(leagueId)?.readable === true
   const readable = rawRosters
-    .filter((r) => !bestBall.has(r.leagueId) && (rosterIdSpaceOf(platformOf.get(r.leagueId), sportOfLeague.get(r.leagueId)) !== 'other' || bridgeReadable(r.leagueId)))
+    .filter(
+      (r) =>
+        !bestBall.has(r.leagueId) &&
+        !noRoute.has(r.leagueId) &&
+        (otherSport.has(r.leagueId) || rosterIdSpaceOf(platformOf.get(r.leagueId)) !== 'other' || bridgeReadable(r.leagueId)),
+    )
     .map((r) => (bridgeReadable(r.leagueId) ? { ...r, playerData: applyBridge(r.playerData, bridged.get(r.leagueId)!.map) } : r))
-  const espnMap = await loadEspnToSleeperMap(
-    collectRosterIds(readable.filter((r) => rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn').map((r) => r.playerData)),
-  )
+  // ESPN → Sleeper is a football crosswalk; an ESPN league of another sport goes through the translator.
+  const isNflEspn = (leagueId: string) => !otherSport.has(leagueId) && rosterIdSpaceOf(platformOf.get(leagueId)) === 'espn'
+  const espnMap = await loadEspnToSleeperMap(collectRosterIds(readable.filter((r) => isNflEspn(r.leagueId)).map((r) => r.playerData)))
   const otherLeagues = new Set(
-    leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
+    leagues
+      .filter((l) => !bestBall.has(l.id) && (noRoute.has(l.id) || (!otherSport.has(l.id) && rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeReadable(l.id))))
+      .map((l) => l.id),
   )
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
 
@@ -223,8 +239,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     const empty = Array.isArray(pd.starters) ? pd.starters.filter((x) => String(x ?? '') === EMPTY_SLOT).length : 0
     if (empty > 0) emptyByLeague.set(r.leagueId, empty)
     const raw = Array.isArray(pd.starters) ? pd.starters.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== EMPTY_SLOT) : []
-    const isEspn = rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn'
-    const starters = isEspn ? raw.map((id) => espnMap.get(id) ?? '').filter(Boolean) : raw
+    const starters = isNflEspn(r.leagueId) ? raw.map((id) => espnMap.get(id) ?? '').filter(Boolean) : raw
     startersByLeague.set(r.leagueId, starters)
     /*
      * 🛑 THE AGE IS TAKEN HERE, AFTER EVERY SKIP — IT WAS TAKEN BEFORE THEM. A league skipped as complete,
@@ -238,7 +253,27 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       rosterAges.push({ leagueId: r.leagueId, leagueName: league.name ?? 'League', asOf: new Date(at).toISOString() })
     }
   }
+  /*
+   * Another sport's starters, still in their platform's ids, become catalog keys here (sportRosterKey.ts).
+   * A translator failure leaves that league unread and counted — never its raw ids read as Sleeper's.
+   */
+  const otherSportStarters = new Map([...startersByLeague].filter(([leagueId]) => otherSport.has(leagueId)).map(([leagueId, ids]) => [leagueId, { starters: ids }]))
+  const translated = otherSportStarters.size
+    ? await translateSportRosters(leagues.filter((l) => otherSportStarters.has(l.id)), otherSportStarters).catch(() => null)
+    : null
+  for (const leagueId of otherSportStarters.keys()) {
+    const t = translated?.rosters.get(leagueId)
+    if (t) {
+      startersByLeague.set(leagueId, t.starters)
+      continue
+    }
+    startersByLeague.delete(leagueId)
+    otherLeagues.add(leagueId)
+  }
+  const sportCatalog = translated?.catalog ?? new Map<string, SportCatalogPlayer>()
+  const unidentifiedStarters = [...(translated?.rosters.values() ?? [])].reduce((n, r) => n + r.unidentified, 0)
   const coverage = {
+    unidentifiedStarters,
     leaguesNotRead,
     bestBallLeagues: bestBall.size,
     unsupportedLeagues: otherLeagues.size,
@@ -292,12 +327,20 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
 
   const groups = await Promise.all(
     [...idsBySport].map(async ([sport, ids]) => {
-      const players = await prisma.sportsPlayer
-        .findMany({
-          where: { sport, sleeperId: { in: [...ids] } },
-          select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true, source: true, fetchedAt: true },
-        })
-        .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null; source: string; fetchedAt: Date }>)
+      type CatalogRow = { sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null; source: string; fetchedAt: Date }
+      // Another sport's ids are already catalog keys; its rows come from the translator's read, in this shape.
+      const players: CatalogRow[] =
+        sport !== 'NFL'
+          ? [...ids].flatMap((key) => {
+              const p = sportCatalog.get(key)
+              return p ? [{ sleeperId: key, sport: p.sport, externalId: p.externalId, name: p.name, position: p.position, team: p.team, imageUrl: p.imageUrl, source: p.source, fetchedAt: new Date(0) }] : []
+            })
+          : await prisma.sportsPlayer
+              .findMany({
+                where: { sport, sleeperId: { in: [...ids] } },
+                select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true, source: true, fetchedAt: true },
+              })
+              .catch(() => [] as CatalogRow[])
       // The catalog holds several provider rows per Sleeper id. Compose fields, as My Team and
       // Matchup do; the arbitrary headshot-first row can carry the wrong club or position.
       const identities = composePlayerIdentities(players)

@@ -92,6 +92,12 @@ export type GameDayTriage = {
    * player's Sleeper id.
    */
   unsupportedLeagues?: number
+  /**
+   * Starters in another sport's leagues (Fantrax, native…) whose id reached no catalog player
+   * (sportRosterTranslate.ts). Dropped rather than read raw — and counted, because a starter we could
+   * not identify is one we could not check, and the list must not read as a clean bill for him.
+   */
+  unidentifiedStarters?: number
   /** When the OLDEST lineup read was last synced (Roster.updatedAt), ISO — the list is only as current as that. */
   rostersAsOf?: string | null
   /**

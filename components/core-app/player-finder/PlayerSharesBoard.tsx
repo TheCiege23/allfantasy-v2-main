@@ -86,6 +86,7 @@ export function PlayerSharesBoard({
         <span className="af-pf-shares-sub af-num">
           {t.sharesSub(playersHeld, leaguesRead)}
           {unsupportedLeagues > 0 ? t.sharesUnsupported(unsupportedLeagues) : ''}
+          {(state.data.unidentifiedPlayers ?? 0) > 0 ? t.sharesUnidentified(state.data.unidentifiedPlayers ?? 0) : ''}
         </span>
       </header>
 

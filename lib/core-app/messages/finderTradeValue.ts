@@ -92,6 +92,7 @@ export const finderTradeValueMessages = defineMessages<TradeValueCopy>({
     sharesTitleIn: (league) => `Your shares · in ${league}`,
     sharesSub: (players, rosters) => `${players} players across ${rosters} ${rosters === 1 ? 'roster' : 'rosters'}`,
     sharesUnsupported: (n) => ` · ${n} on a platform we can't read yet`,
+    sharesUnidentified: (n) => ` · ${n} ${n === 1 ? 'player' : 'players'} we couldn't identify`,
     sharesNone: 'No rostered players found in the leagues read.',
     sharesOf: 'of',
     sharesStarting: (n) => `${n} starting`,
@@ -211,6 +212,7 @@ export const finderTradeValueMessages = defineMessages<TradeValueCopy>({
     sharesSub: (players, rosters) =>
       `${players} ${plural(players, 'jugador', 'jugadores')} en ${rosters} ${plural(rosters, 'plantilla', 'plantillas')}`,
     sharesUnsupported: (n) => ` · ${n} en una plataforma que aún no podemos leer`,
+    sharesUnidentified: (n) => ` · ${n} ${plural(n, 'jugador', 'jugadores')} que no pudimos identificar`,
     sharesNone: 'No se encontraron jugadores en las plantillas de las ligas leídas.',
     sharesOf: 'de',
     sharesStarting: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
