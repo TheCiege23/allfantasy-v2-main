@@ -1,0 +1,27 @@
+/*
+ * "Plan with Chimmy" (components/core-app/WarPlanAsk.tsx) — War Room phase 4. An outlined accent
+ * pill: an action, but a secondary one beside the room's own content. Min 24px tall for touch, and
+ * text at the 11px floor or above (__tests__/core-app/type-floor.test.ts).
+ */
+
+.af-core .af-war-plan-ask {
+  min-height: 28px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line, var(--accent));
+  background: var(--accent-soft, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.af-core .af-war-plan-ask:hover {
+  border-color: var(--accent);
+}
+
+.af-core .af-war-plan-ask:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

@@ -10,7 +10,7 @@ import { getSeasonOutlook, type LeagueInput } from './seasonOutlook'
 import { BRANCH_ITERATIONS } from './seasonOutlookFocus'
 import { pctOf, simulateSeason } from './outlookSim'
 import { playoffStartWeek, tradeDeadlineWeek } from './seasonTimeline'
-import { horizonOf, postureOf } from './warRoomFront'
+import { buildWarFront, horizonOf, postureOf, type WarFrontCard } from './warRoomFront'
 import { buildWarTrades, type OddsRunner, type WarTradesView } from './warRoomTrades'
 import { buildFormatBrief, type FormatBrief } from './warRoomFormat'
 import { dynastyView, keeperView, nextSeasonEngineFor, type NextSeasonView } from './warRoomNextSeason'
@@ -39,6 +39,12 @@ export type { WarTradesView }
 
 export type WarLeagueStrategy = {
   leagueId: string
+  /**
+   * This league's card from The Front (warRoomFront.ts), built from the same outlook read — so the
+   * league view's war plan (phase 4) carries the posture and odds the home showed. Null when the
+   * outlook could not be read.
+   */
+  card: WarFrontCard | null
   /** Null when the outlook could not be read. */
   format: FormatBrief | null
   /** Null when locked (never computed) or when the outlook could not be read. */
@@ -150,5 +156,20 @@ export async function loadWarLeagueStrategy(args: {
     }
   }
 
-  return { leagueId: league.id, format, trades, nextSeason }
+  const card: WarFrontCard | null = outlook
+    ? (buildWarFront({
+        outlook,
+        leagues: [
+          {
+            id: league.id,
+            name: String(league.name ?? 'League'),
+            format: args.format,
+            tradeDeadlineWeek: deadline,
+            currentWeek: league.currentWeek ?? null,
+          },
+        ],
+      }).cards[0] ?? null)
+    : null
+
+  return { leagueId: league.id, card, format, trades, nextSeason }
 }

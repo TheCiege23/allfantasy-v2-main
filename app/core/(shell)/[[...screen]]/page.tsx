@@ -5240,8 +5240,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 }
                 /* War Room phase 3: how this league is won, and next season. Free; each half drawn when read. */
                 brief={
-                  warStrategy && (warStrategy.format || warStrategy.nextSeason) ? (
-                    <WarStrategyBrief format={warStrategy.format} nextSeason={warStrategy.nextSeason} />
+                  warStrategy && (warStrategy.format || warStrategy.nextSeason || warStrategy.card) ? (
+                    <WarStrategyBrief
+                      format={warStrategy.format}
+                      nextSeason={warStrategy.nextSeason}
+                      /*
+                        War Room phase 4: "Plan with Chimmy", prefilled with everything this view computed.
+                        `trades` is null for a viewer without trade_depth, so a paid idea never reaches their prompt.
+                      */
+                      plan={{
+                        leagueId: scout.league.id,
+                        input: {
+                          leagueName: scout.league.name,
+                          card: warStrategy.card,
+                          trades: warStrategy.trades?.trades ?? null,
+                          format: warStrategy.format,
+                          nextSeason: warStrategy.nextSeason,
+                        },
+                      }}
+                    />
                   ) : null
                 }
                 eliminationStanding={
