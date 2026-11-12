@@ -5,6 +5,8 @@ import Link from 'next/link'
 import '@/components/core-app/af-war-trades.css'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { WarTradesView, WinNowIdea } from '@/lib/core-app/warRoomTrades'
+import type { TradeMap } from '@/lib/core-app/warRoomTradeMap'
+import { warRoomTradeMapMessages } from '@/lib/core-app/messages/warRoomTradeMap'
 import { pct, signedPts } from '@/lib/core-app/outlookCopy'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -47,6 +49,42 @@ function WinNowRow({ idea, rankedBy, href, m }: { idea: WinNowIdea; rankedBy: 'p
         {m.build} &rarr;
       </Link>
     </li>
+  )
+}
+
+/** Phase 6: the trade map — rivals deep where you are thin, thin where you are deep (warRoomTradeMap.ts). */
+function TradeMapBlock({ map }: { map: TradeMap }) {
+  const m = useMessages(warRoomTradeMapMessages)
+  const p1 = (n: number) => n.toFixed(1)
+  return (
+    <div className="af-wt-map">
+      <h3 className="af-label af-wt-map-heading">{m.heading}</h3>
+      <p className="af-wt-note">{m.lead(map.basisWeek?.week ?? null)}</p>
+      {map.partners.length === 0 ? (
+        <p className="af-wt-note">{m.none}</p>
+      ) : (
+        <ul className="af-wt-map-list">
+          {map.partners.map((p) => (
+            <li key={p.rosterId} className="af-wt-map-team">
+              <p className="af-wt-map-name">{p.name}</p>
+              <ul className="af-wt-map-facts">
+                {p.theyHave.map((f) => (
+                  <li key={`h:${f.player.id}`} data-side="get">
+                    {m.theyHave(f.player.position, f.player.name, p1(f.player.points), signedPts(f.upgrade))}
+                  </li>
+                ))}
+                {p.theyNeed.map((f) => (
+                  <li key={`n:${f.position}`} data-side="give">
+                    {m.theyNeed(f.position, p1(Math.abs(f.underLeague)), f.yourPlayer.name, signedPts(f.upgrade))}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+      {map.matched > map.partners.length ? <p className="af-wt-note">{m.more(map.matched - map.partners.length)}</p> : null}
+    </div>
   )
 }
 
@@ -122,6 +160,8 @@ export function WarTradeIdeas({ view, access }: { view: WarTradesView | null; ac
                 : m.noneUnplaced}
         </p>
       )}
+
+      {view.map ? <TradeMapBlock map={view.map} /> : null}
     </section>
   )
 }

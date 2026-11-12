@@ -38,6 +38,8 @@ export const warRoomPlanMessages = defineMessages({
       `Biggest game left: week ${week}${opp ? ` vs ${opp}` : ''} — win ${win}%, lose ${lose}%.`,
     tiebreakTeam: (name: string, rec: string, gap: string) => `${name} ${rec}, ${gap} pts for vs me`,
     tiebreak: (teams: string) => `Within a win of me (ties broken by points for): ${teams}.`,
+    faab: (amount: string, budget: string | null, rank: number, of: number, useIt: boolean) =>
+      `FAAB: ${amount}${budget ? ` of ${budget}` : ''} left, rank ${rank} of ${of}${useIt ? ' — redraft, so it buys nothing after the season' : ''}.`,
     deadline: (week: number, left: number) => `Trade deadline: week ${week} (${left === 0 ? 'this week' : `${left} ${left === 1 ? 'week' : 'weeks'} away`}).`,
     deadlinePassed: 'Trades are closed.',
     trade: (send: string, get: string, partner: string, delta: string, odds: 'playoff' | 'title') =>
@@ -72,6 +74,8 @@ export const warRoomPlanMessages = defineMessages({
     biggestGame: (week, opp, win, lose) => `Partido más importante que queda: semana ${week}${opp ? ` contra ${opp}` : ''} — si gano ${win}%, si pierdo ${lose}%.`,
     tiebreakTeam: (name, rec, gap) => `${name} ${rec}, ${gap} pts a favor frente a mí`,
     tiebreak: (teams) => `A una victoria o menos de mí (los empates se rompen por puntos a favor): ${teams}.`,
+    faab: (amount, budget, rank, of, useIt) =>
+      `FAAB: me quedan ${amount}${budget ? ` de ${budget}` : ''}, puesto ${rank} de ${of}${useIt ? ' — liga redraft, así que no compra nada después de la temporada' : ''}.`,
     deadline: (week, left) => `Fecha límite de cambios: semana ${week} (${left === 0 ? 'esta semana' : left === 1 ? 'en 1 semana' : `en ${left} semanas`}).`,
     deadlinePassed: 'Los cambios están cerrados.',
     trade: (send, get, partner, delta, odds) =>

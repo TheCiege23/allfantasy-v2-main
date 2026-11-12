@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { prisma } from '@/lib/prisma'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { buildDynastyWarRoomContext } from '@/lib/dynasty-war-room/dynastyWarRoomContext'
 import { evaluateUserDynastyDirection } from '@/lib/dynasty-war-room/dynastyTeamDirectionEngine'
 import { buildKeeperWarRoomContext } from '@/lib/keeper-war-room/keeperWarRoomContext'
@@ -12,7 +14,10 @@ import { pctOf, simulateSeason } from './outlookSim'
 import { playoffStartWeek, tradeDeadlineWeek } from './seasonTimeline'
 import { buildWarFront, horizonOf, postureOf, type WarFrontCard } from './warRoomFront'
 import { buildWarTrades, type OddsRunner, type WarTradesView } from './warRoomTrades'
-import { buildFormatBrief, type FormatBrief } from './warRoomFormat'
+import { buildFormatBrief, measureScarcity, type FormatBrief } from './warRoomFormat'
+import { buildTradeMap } from './warRoomTradeMap'
+import { buildWarChest, type WarChest, type WarChestRow } from './warRoomWarChest'
+import { myRosterCandidates } from './myRoster'
 import { buildWarCampaign, type WarCampaign } from './warRoomCampaign'
 import { dynastyView, keeperView, nextSeasonEngineFor, type NextSeasonView } from './warRoomNextSeason'
 
@@ -57,6 +62,35 @@ export type WarLeagueStrategy = {
    * picture. Null when the outlook or its roster model could not be read, or the pricing threw.
    */
   campaign: WarCampaign | null
+  /** The war chest (phase 6, free): FAAB left, yours against every team's. Null when it could not be read. */
+  warChest: WarChest | null
+}
+
+type FaabRead = { waiverType: string | null; budget: number | null; byTeam: Map<string, number | null> }
+
+/**
+ * Each team's stored FAAB balance, keyed by the outlook's roster id. The roster ↔ team match is the
+ * shared identity rule (`resolveRostersForTeams`, the one Season Outlook's roster model uses), so a
+ * team is matched here exactly when its players are matched there.
+ */
+async function readFaab(leagueId: string): Promise<FaabRead> {
+  const [settings, teams, rosters] = await Promise.all([
+    prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverType: true, faabBudget: true } }),
+    prisma.leagueTeam.findMany({
+      where: { leagueId },
+      select: { externalId: true, platformUserId: true, claimedByUserId: true },
+    }),
+    prisma.roster.findMany({
+      where: { leagueId },
+      select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+    }),
+  ])
+  const byTeam = new Map<string, number | null>()
+  if (String(settings?.waiverType ?? '').toLowerCase() === 'faab') {
+    const matched = resolveRostersForTeams(teams, rosters, (team) => myRosterCandidates(team, team.claimedByUserId ?? ''))
+    for (const [rosterId, row] of matched) byTeam.set(rosterId, typeof row.faabRemaining === 'number' ? row.faabRemaining : null)
+  }
+  return { waiverType: settings?.waiverType ?? null, budget: settings?.faabBudget ?? null, byTeam }
 }
 
 async function loadNextSeason(args: { userId: string; leagueId: string; format: string | null }): Promise<NextSeasonView> {
@@ -93,13 +127,17 @@ export async function loadWarLeagueStrategy(args: {
   const { userId, league } = args
   const tradeCenterHref = `/core/trades?league=${encodeURIComponent(league.id)}`
 
-  const [outlook, nextSeason] = await Promise.all([
+  const [outlook, nextSeason, faab] = await Promise.all([
     getSeasonOutlook(userId, [league], league.id, args.now, args.allLeagues).catch((error: unknown) => {
       console.error('[core/war-room] league outlook failed', error)
       return null
     }),
     loadNextSeason({ userId, leagueId: league.id, format: args.format }).catch((error: unknown) => {
       console.error('[core/war-room] next-season plan failed', error)
+      return null
+    }),
+    readFaab(league.id).catch((error: unknown) => {
+      console.error('[core/war-room] war chest read failed', error)
       return null
     }),
   ])
@@ -187,5 +225,33 @@ export async function loadWarLeagueStrategy(args: {
     }
   }
 
-  return { leagueId: league.id, card, format, trades, nextSeason, campaign }
+  /* Phase 6: the trade map rides with the ideas — computed only when they are, so a locked viewer gets neither. */
+  if (trades && model) {
+    try {
+      trades = { ...trades, map: buildTradeMap(model, format?.scarcity ?? measureScarcity(model)) }
+    } catch (error) {
+      console.error('[core/war-room] trade map failed', error)
+    }
+  }
+
+  /* Phase 6: the war chest — one row per team on the board, its stored balance or unknown. */
+  let warChest: WarChest | null = null
+  if (faab && row) {
+    const teams: WarChestRow[] = row.teams.map((t) => ({
+      rosterId: t.rosterId,
+      name: t.name,
+      isYou: t.isYou,
+      remaining: faab.byTeam.get(t.rosterId) ?? null,
+    }))
+    warChest = buildWarChest({
+      waiverType: faab.waiverType,
+      budget: faab.budget,
+      teams,
+      weeksRemaining: row.weeksRemaining,
+      horizon: horizonOf(args.format),
+      posture: postureOf(row),
+    })
+  }
+
+  return { leagueId: league.id, card, format, trades, nextSeason, campaign, warChest }
 }

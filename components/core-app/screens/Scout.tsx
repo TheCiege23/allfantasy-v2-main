@@ -87,6 +87,11 @@ export type ScoutProps = {
    */
   road?: ReactNode
   /**
+   * War Room phase 6: the war chest (WarChest) — FAAB left, yours against every team's. After the trade
+   * ideas. A node for the same reason as `leaguePlan`.
+   */
+  chest?: ReactNode
+  /**
    * War Room phase 3: how this league is won and the plan for next season (WarStrategyBrief), after
    * the trade ideas. A node for the same reason as `leaguePlan`.
    */
@@ -601,6 +606,7 @@ export function Scout({
   leaguePlan = null,
   tradeIdeas = null,
   road = null,
+  chest = null,
   brief = null,
   eliminationStanding = null,
 }: ScoutProps) {
@@ -651,6 +657,8 @@ export function Scout({
       {road}
 
       {tradeIdeas}
+
+      {chest}
 
       {brief}
 

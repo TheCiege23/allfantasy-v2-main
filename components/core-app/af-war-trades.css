@@ -101,3 +101,73 @@
   font-size: 12.5px;
   color: var(--accent);
 }
+
+/* Phase 6: the trade map, under the ideas. Facts per team; the two sides marked by a coloured rule. */
+.af-core .af-wt-map {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.af-core .af-wt-map-heading {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-core .af-wt-map-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 10px;
+}
+
+.af-core .af-wt-map-team {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.af-core .af-wt-map-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.af-core .af-wt-map-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-core .af-wt-map-facts li {
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+}
+
+.af-core .af-wt-map-facts li[data-side='get'] {
+  border-left-color: var(--good);
+}
+
+.af-core .af-wt-map-facts li[data-side='give'] {
+  border-left-color: var(--accent);
+}
