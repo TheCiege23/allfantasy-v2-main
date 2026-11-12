@@ -3,6 +3,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getResendClient } from "@/lib/resend-client";
+import { consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
+import { getClientIp } from "@/lib/rate-limit";
+
+/**
+ * 🛑 THIS ROUTE IS PUBLIC AND SENDS MAIL FROM OUR DOMAIN TO AN ADDRESS THE CALLER TYPES.
+ * Every caller-supplied value is escaped before it reaches HTML and stripped of line
+ * breaks before it reaches a subject, or the form is a free branded phishing relay.
+ * The per-recipient cap is what stops it being aimed at one victim's inbox.
+ */
+function esc(value: string | null | undefined): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function subjectSafe(value: string): string {
+  return String(value).replace(/[\r\n\t]+/g, " ").slice(0, 120);
+}
 
 const submissionSchema = z.object({
   leagueTypeName: z.string().min(1).max(200),
@@ -49,9 +70,9 @@ function getConfirmationEmailHtml(data: {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#0f172a; color:#e2e8f0; padding:20px;">
   <div style="max-width:600px; margin:0 auto; background:#111827; border-radius:14px; border:1px solid #334155; padding:24px;">
     <h2 style="margin:0 0 12px; color:#4ade80;">Submission Received \u2705</h2>
-    <p>Hi ${data.creditName},</p>
+    <p>Hi ${esc(data.creditName)},</p>
     <p>Thanks for submitting your league idea to AllFantasy.</p>
-    <p><strong>League:</strong> ${data.leagueTypeName}<br/><strong>Sports:</strong> ${data.sports.join(", ")}<br/><strong>Submitted:</strong> ${data.submittedAt}</p>
+    <p><strong>League:</strong> ${esc(data.leagueTypeName)}<br/><strong>Sports:</strong> ${esc(data.sports.join(", "))}<br/><strong>Submitted:</strong> ${esc(data.submittedAt)}</p>
     <p>Our team will review this and follow up if needed.</p>
   </div>
 </body>
@@ -79,14 +100,14 @@ function getAdminNotificationHtml(data: {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#0f172a; color:#e2e8f0; padding:20px;">
   <div style="max-width:620px; margin:0 auto; background:#111827; border-radius:14px; border:1px solid #334155; padding:24px;">
     <h2 style="margin:0 0 14px; color:#f8fafc;">New League Type Submission</h2>
-    <p><strong>League Name:</strong> ${data.leagueTypeName}</p>
-    <p><strong>Creator:</strong> ${data.creditName}</p>
-    <p><strong>Email:</strong> ${data.email}</p>
-    <p><strong>Sports:</strong> ${data.sports.join(", ")}</p>
+    <p><strong>League Name:</strong> ${esc(data.leagueTypeName)}</p>
+    <p><strong>Creator:</strong> ${esc(data.creditName)}</p>
+    <p><strong>Email:</strong> ${esc(data.email)}</p>
+    <p><strong>Sports:</strong> ${esc(data.sports.join(", "))}</p>
     <p><strong>Special Scoring:</strong> ${data.hasSpecialScoring ? "Yes" : "No"}</p>
     <p><strong>Permission:</strong> ${data.permissionConsent ? "Yes" : "No"} | <strong>Rights:</strong> ${data.rightsConsent ? "Yes" : "No"}</p>
     <p><strong>Can Contact:</strong> ${data.canContact ? "Yes" : "No"}</p>
-    <p><strong>Attached document:</strong> ${data.documentMeta || "None"}</p>
+    <p><strong>Attached document:</strong> ${esc(data.documentMeta || "None")}</p>
     <a href="https://allfantasy.ai/admin?tab=ideas" style="display:inline-block; margin-top:8px; background:#22d3ee; color:#001018; padding:10px 14px; border-radius:10px; text-decoration:none; font-weight:600;">Review in Admin Ideas</a>
   </div>
 </body>
@@ -167,6 +188,16 @@ export const POST = withApiUsage({ endpoint: "/api/submit-league", tool: "Submit
 
     const data = payload;
 
+    const ipLimit = await consumeSharedRateLimit(`submit-league:ip:${getClientIp(request)}`, 5, 60 * 60);
+    const recipientLimit = await consumeSharedRateLimit(
+      `submit-league:to:${data.email.toLowerCase()}`,
+      3,
+      24 * 60 * 60,
+    );
+    if (!ipLimit.success || !recipientLimit.success) {
+      return NextResponse.json({ error: "Too many submissions. Please try again later." }, { status: 429 });
+    }
+
     const submission = await prisma.leagueTypeSubmission.create({
       data: {
         leagueTypeName: data.leagueTypeName,
@@ -211,7 +242,7 @@ export const POST = withApiUsage({ endpoint: "/api/submit-league", tool: "Submit
       await client.emails.send({
         from: fromEmail,
         to: data.email,
-        subject: `We received your AllFantasy league idea: ${data.leagueTypeName}`,
+        subject: `We received your AllFantasy league idea: ${subjectSafe(data.leagueTypeName)}`,
         html: getConfirmationEmailHtml({
           creditName: data.creditName,
           leagueTypeName: data.leagueTypeName,
@@ -229,7 +260,7 @@ export const POST = withApiUsage({ endpoint: "/api/submit-league", tool: "Submit
         await client.emails.send({
           from: fromEmail,
           to: adminEmails,
-          subject: `New League Type Submission: ${data.leagueTypeName}`,
+          subject: `New League Type Submission: ${subjectSafe(data.leagueTypeName)}`,
           html: getAdminNotificationHtml({
             leagueTypeName: data.leagueTypeName,
             creditName: data.creditName,

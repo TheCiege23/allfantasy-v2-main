@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
+import { requireAdmin } from '@/lib/adminAuth'
 import { runAiProtection } from '@/lib/ai-protection'
 import { assertLeagueMember } from '@/lib/league-access'
 import { logAiOutput } from '@/lib/ai/output-logger'
@@ -38,6 +39,9 @@ export async function GET() {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // Operator tooling: it spends OUR OpenClaw token, so a signed-in account is not enough.
+  const adminGate = await requireAdmin()
+  if (!adminGate.ok) return adminGate.res
 
   try {
     const meta = getOpenClawPublicMeta()
@@ -55,6 +59,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // Operator tooling: it spends OUR OpenClaw token, so a signed-in account is not enough.
+  const adminGate = await requireAdmin()
+  if (!adminGate.ok) return adminGate.res
 
   const protection = await runAiProtection(req, {
     action: 'chat',
