@@ -8,6 +8,7 @@ import type { NextSeasonView } from './warRoomNextSeason'
 import type { WarCampaign } from './warRoomCampaign'
 import type { WarChest } from './warRoomWarChest'
 import type { PlayoffReady } from './warRoomPlayoffReady'
+import type { WarRace } from './warRoomRace'
 import type { warRoomPlanMessages } from './messages/warRoomPlan'
 import type { warRoomBriefMessages } from './messages/warRoomBrief'
 
@@ -54,6 +55,8 @@ export type WarPlanInput = {
   warChest?: WarChest | null
   /** Playoff readiness (phase 7). Optional for the same reason. */
   playoffReady?: PlayoffReady | null
+  /** The race (phase 8). Optional for the same reason. */
+  race?: WarRace | null
 }
 
 /** A line and how readily it is dropped when the brief is too long: higher drops first. */
@@ -106,6 +109,24 @@ export function warPlanPrompt(input: WarPlanInput, m: PlanCopy, b: BriefCopy, la
       .filter((r) => !r.isYou && r.name)
       .map((r) => m.tiebreakTeam(r.name!, `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`, signedPts(r.pointsGap)))
     if (near.length > 0) add(m.tiebreak(near.join('; ')), 3)
+  }
+
+  const race = input.race ?? null
+  if (race?.kind === 'race') {
+    const rivals = race.rows
+      .filter((r) => !r.isYou && r.name)
+      .map((r) =>
+        m.raceTeam(
+          r.name!,
+          r.seed,
+          `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`,
+          r.playoffPct == null ? null : pct(r.playoffPct),
+          r.scheduleRank,
+          race.ranked,
+          r.vsYou,
+        ),
+      )
+    if (rivals.length > 0) add(m.race(race.playoffTeams, rivals.join('; ')), 2)
   }
 
   const ready = input.playoffReady ?? null
