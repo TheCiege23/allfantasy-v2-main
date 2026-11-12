@@ -92,6 +92,11 @@ export type ScoutProps = {
    */
   chest?: ReactNode
   /**
+   * War Room phase 7: playoff readiness (WarPlayoffReady) — byes, injuries and depth for your playoff
+   * weeks. After the road ahead: the season's games, then whether the lineup will be there for the title.
+   */
+  ready?: ReactNode
+  /**
    * War Room phase 3: how this league is won and the plan for next season (WarStrategyBrief), after
    * the trade ideas. A node for the same reason as `leaguePlan`.
    */
@@ -607,6 +612,7 @@ export function Scout({
   tradeIdeas = null,
   road = null,
   chest = null,
+  ready = null,
   brief = null,
   eliminationStanding = null,
 }: ScoutProps) {
@@ -655,6 +661,8 @@ export function Scout({
       {leaguePlan}
 
       {road}
+
+      {ready}
 
       {tradeIdeas}
 

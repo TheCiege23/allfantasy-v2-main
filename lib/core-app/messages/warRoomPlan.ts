@@ -38,6 +38,10 @@ export const warRoomPlanMessages = defineMessages({
       `Biggest game left: week ${week}${opp ? ` vs ${opp}` : ''} — win ${win}%, lose ${lose}%.`,
     tiebreakTeam: (name: string, rec: string, gap: string) => `${name} ${rec}, ${gap} pts for vs me`,
     tiebreak: (teams: string) => `Within a win of me (ties broken by points for): ${teams}.`,
+    ready: (weeks: string, byes: string | null, hurt: string | null, thin: string | null) =>
+      `Playoff weeks ${weeks}.${byes ? ` Starters on bye then: ${byes}.` : ' No starter on bye then.'}${hurt ? ` Injury designations now: ${hurt}.` : ''}${thin ? ` ${thin}` : ''}`,
+    readyBye: (name: string, week: number) => `${name} (week ${week})`,
+    readyThin: (pos: string, name: string, drop: string) => `Thinnest spot: ${pos} — losing ${name} costs ${drop} pts/week to the next man up.`,
     faab: (amount: string, budget: string | null, rank: number, of: number, useIt: boolean) =>
       `FAAB: ${amount}${budget ? ` of ${budget}` : ''} left, rank ${rank} of ${of}${useIt ? ' — redraft, so it buys nothing after the season' : ''}.`,
     deadline: (week: number, left: number) => `Trade deadline: week ${week} (${left === 0 ? 'this week' : `${left} ${left === 1 ? 'week' : 'weeks'} away`}).`,
@@ -74,6 +78,10 @@ export const warRoomPlanMessages = defineMessages({
     biggestGame: (week, opp, win, lose) => `Partido más importante que queda: semana ${week}${opp ? ` contra ${opp}` : ''} — si gano ${win}%, si pierdo ${lose}%.`,
     tiebreakTeam: (name, rec, gap) => `${name} ${rec}, ${gap} pts a favor frente a mí`,
     tiebreak: (teams) => `A una victoria o menos de mí (los empates se rompen por puntos a favor): ${teams}.`,
+    ready: (weeks, byes, hurt, thin) =>
+      `Semanas de playoffs ${weeks}.${byes ? ` Titulares en descanso entonces: ${byes}.` : ' Ningún titular descansa entonces.'}${hurt ? ` Designaciones de lesión ahora: ${hurt}.` : ''}${thin ? ` ${thin}` : ''}`,
+    readyBye: (name, week) => `${name} (semana ${week})`,
+    readyThin: (pos, name, drop) => `Punto más débil: ${pos} — perder a ${name} cuesta ${drop} pts/semana frente al siguiente.`,
     faab: (amount, budget, rank, of, useIt) =>
       `FAAB: me quedan ${amount}${budget ? ` de ${budget}` : ''}, puesto ${rank} de ${of}${useIt ? ' — liga redraft, así que no compra nada después de la temporada' : ''}.`,
     deadline: (week, left) => `Fecha límite de cambios: semana ${week} (${left === 0 ? 'esta semana' : left === 1 ? 'en 1 semana' : `en ${left} semanas`}).`,
