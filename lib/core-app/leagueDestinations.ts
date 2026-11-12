@@ -37,7 +37,8 @@ export const NAV_SECTION_ORDER: ReadonlyArray<{ id: NavSectionId; heading: strin
     // No 'portfolio' (2026-11-12): it is the second view behind My Leagues — see AfCoreShell `navItems`.
     keys: ['week', 'my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
   },
-  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'tools', 'admin'] },
+  // No 'tools' (2026-11-12): its links moved to their screens — see AfCoreShell `navItems`.
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
 ]
 
 /**
@@ -61,7 +62,7 @@ export const NAV_SECTION_ORDER_NO_LEAGUE: ReadonlyArray<{ id: NavSectionId; head
     heading: 'All leagues',
     keys: ['my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
   },
-  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'tools', 'admin'] },
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
 ]
 
 /** The section the rail names the selected league above — the first league-scoped one. */

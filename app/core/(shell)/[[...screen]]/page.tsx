@@ -116,6 +116,8 @@ import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-a
 import { loadTrendingAdds } from '@/lib/core-app/trendingAdds'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import { LeaguesPortfolioSwitch } from '@/components/core-app/LeaguesPortfolioSwitch'
+import { MoreToolsLinks } from '@/components/core-app/MoreToolsLinks'
+import { moreToolsScreenFor } from '@/lib/core-app/moreTools'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
 import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
@@ -2111,6 +2113,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * My Leagues (21a). Same read the old /leagues page made; a failed read renders the screen's own
    * empty state rather than an error, as it did there.
    */
+  const moreToolsScreen = moreToolsScreenFor(activeKey)
   const myLeagues =
     activeKey === 'my-leagues'
       ? await getMyLeaguesData(userId).catch((err) => {
@@ -5942,6 +5945,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           </p>
         </div>
       )}
+      {/* The Tools hub's links that had no other home, at the foot of the screen each belongs to (2026-11-12). */}
+      {moreToolsScreen ? <MoreToolsLinks screen={moreToolsScreen} language={language} /> : null}
     </>
   );
 }
