@@ -9,8 +9,8 @@
  *
  * The trade tools are one tool since 2026-11-12: the Trade Analyzer at `/trade-evaluator`, and the
  * finder on the Trades screen itself — which is where this list renders, so it needs no link.
- * ⚠ THE THREE PLAYER-COMPARISON PAGES ARE STILL AN OPEN PRODUCT CALL (toolsHub.ts `openDecision`).
- * This lists them; it does not merge or retire any of them.
+ * The player-comparison pages are one tool since 2026-11-12 too: the Player Comparison Lab.
+ * `/player-compare` redirects into it, and `/player-comparison` is its search landing page.
  */
 export type MoreToolsScreen = 'trades' | 'draft' | 'rankings' | 'players'
 
@@ -22,8 +22,6 @@ export type MoreToolLink = {
     | 'mockDraft'
     | 'warRoom'
     | 'managerCompare'
-    | 'playerCompare'
-    | 'playerComparison'
     | 'playerComparisonLab'
   href: string
   /** A full page outside the /core shell. */
@@ -43,8 +41,6 @@ export const MORE_TOOLS: Readonly<Record<MoreToolsScreen, readonly MoreToolLink[
   ],
   rankings: [{ key: 'managerCompare', href: '/manager-compare', leavesShell: true, pro: true }],
   players: [
-    { key: 'playerCompare', href: '/player-compare', leavesShell: true },
-    { key: 'playerComparison', href: '/player-comparison', leavesShell: true },
     { key: 'playerComparisonLab', href: '/player-comparison-lab', leavesShell: true },
   ],
 }

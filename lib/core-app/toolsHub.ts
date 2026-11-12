@@ -26,10 +26,10 @@ import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-
  * Trades screen (`/trade-finder` redirects there). So the card links the tool itself, not the
  * landing page a click away from it.
  *
- * ⚠ STILL AN OPEN PRODUCT DECISION: the THREE player-comparison routes (`/player-compare`,
- * `/player-comparison`, `/player-comparison-lab`), which all exist and all work. One is promoted
- * as the primary card and the rest are alternates, under a note that says the merge is undecided.
- * Picking silently would be the one thing the handoff rules out.
+ * The player-comparison pages are one tool too (owner's call, 2026-11-12): the Player Comparison
+ * Lab, `/player-comparison-lab`. `/player-compare` redirects into it (the Lab now carries that page's
+ * league start/sit read), and `/player-comparison` is its search landing page. So `openDecision` is
+ * null — nothing is undecided here any more.
  */
 
 export type ToolTier = 'free' | 'pro' | 'commissioner' | 'unknown'
@@ -254,11 +254,7 @@ export function buildToolsHub(input: {
           },
           tokenCost: null,
           tier: 'pro',
-          alternates: [
-            { label: 'Player Compare', href: '/player-compare' },
-            { label: 'Player Comparison', href: '/player-comparison' },
-            { label: 'Player Comparison Lab', href: '/player-comparison-lab' },
-          ],
+          alternates: [{ label: 'Player Comparison Lab', href: '/player-comparison-lab' }],
         },
         {
           id: 'power-rankings',
@@ -363,14 +359,6 @@ export function buildToolsHub(input: {
       'Trade finder and projections are scoped to one league, so they live inside that ' +
       'league’s own nav rather than here — open a league from the rail and they are on its screens. ' +
       'They are not missing; they are somewhere a league is already selected.',
-    openDecision: {
-      title: 'Undecided: three player-comparison pages',
-      body:
-        'The codebase carries /player-compare, /player-comparison and /player-comparison-lab. All ' +
-        'of them work. The design recommendation is to merge them into one tool with modes, and ' +
-        'that is a product call nobody has made — so this page promotes one and lists the rest as ' +
-        'alternates rather than quietly retiring live routes. (The trade tools were merged on ' +
-        '2026-11-12.)',
-    },
+    openDecision: null,
   }
 }
