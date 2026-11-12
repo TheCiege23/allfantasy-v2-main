@@ -1,11 +1,13 @@
 import { pct, signedPts } from './outlookCopy'
 import { seasonOutlookSentence } from './outlookSpanish'
+import { coreUiCopy } from './coreUiCopy'
 import type { WarFrontCard, WarOrder } from './warRoomFront'
 import type { WarTrades } from './warRoomTrades'
 import type { FormatBrief } from './warRoomFormat'
 import type { NextSeasonView } from './warRoomNextSeason'
 import type { WarCampaign } from './warRoomCampaign'
 import type { WarChest } from './warRoomWarChest'
+import type { PlayoffReady } from './warRoomPlayoffReady'
 import type { warRoomPlanMessages } from './messages/warRoomPlan'
 import type { warRoomBriefMessages } from './messages/warRoomBrief'
 
@@ -50,6 +52,8 @@ export type WarPlanInput = {
   campaign?: WarCampaign | null
   /** The war chest (phase 6). Optional for the same reason. */
   warChest?: WarChest | null
+  /** Playoff readiness (phase 7). Optional for the same reason. */
+  playoffReady?: PlayoffReady | null
 }
 
 /** A line and how readily it is dropped when the brief is too long: higher drops first. */
@@ -102,6 +106,18 @@ export function warPlanPrompt(input: WarPlanInput, m: PlanCopy, b: BriefCopy, la
       .filter((r) => !r.isYou && r.name)
       .map((r) => m.tiebreakTeam(r.name!, `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`, signedPts(r.pointsGap)))
     if (near.length > 0) add(m.tiebreak(near.join('; ')), 3)
+  }
+
+  const ready = input.playoffReady ?? null
+  if (ready?.kind === 'ready') {
+    const span = ready.weeks.length > 1 ? `${ready.weeks[0]}–${ready.weeks[ready.weeks.length - 1]}` : `${ready.weeks[0]}`
+    const byes = ready.onBye.map((s) => m.readyBye(s.player.name, s.byeWeeks[0]!)).join(', ')
+    const hurt = ready.injured.map((s) => `${s.player.name} (${coreUiCopy(s.injury!.status, language)})`).join(', ')
+    const thin = ready.thinnest[0]
+    add(
+      m.ready(span, byes || null, hurt || null, thin ? m.readyThin(thin.player.position, thin.player.name, p1(thin.dropOff)) : null),
+      ready.onBye.length > 0 || ready.injured.length > 0 ? 1 : 3,
+    )
   }
 
   const chest = input.warChest ?? null

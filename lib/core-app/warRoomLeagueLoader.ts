@@ -17,6 +17,7 @@ import { buildWarTrades, type OddsRunner, type WarTradesView } from './warRoomTr
 import { buildFormatBrief, measureScarcity, type FormatBrief } from './warRoomFormat'
 import { buildTradeMap } from './warRoomTradeMap'
 import { buildWarChest, type WarChest, type WarChestRow } from './warRoomWarChest'
+import { buildPlayoffReady, type PlayoffReady } from './warRoomPlayoffReady'
 import { myRosterCandidates } from './myRoster'
 import { buildWarCampaign, type WarCampaign } from './warRoomCampaign'
 import { dynastyView, keeperView, nextSeasonEngineFor, type NextSeasonView } from './warRoomNextSeason'
@@ -64,6 +65,8 @@ export type WarLeagueStrategy = {
   campaign: WarCampaign | null
   /** The war chest (phase 6, free): FAAB left, yours against every team's. Null when it could not be read. */
   warChest: WarChest | null
+  /** Playoff readiness (phase 7, free): byes, injuries and depth for your playoff weeks. Null when it could not be built. */
+  playoffReady: PlayoffReady | null
 }
 
 type FaabRead = { waiverType: string | null; budget: number | null; byTeam: Map<string, number | null> }
@@ -253,5 +256,21 @@ export async function loadWarLeagueStrategy(args: {
     })
   }
 
-  return { leagueId: league.id, card, format, trades, nextSeason, campaign, warChest }
+  /* Phase 7, failing alone like the rest. */
+  let playoffReady: PlayoffReady | null = null
+  if (outlook) {
+    try {
+      playoffReady = buildPlayoffReady({
+        model,
+        row,
+        posture: postureOf(row),
+        playoffStartWeek: playoffStartWeek(league.settings),
+        playoffTeams: row?.playoffTeams ?? null,
+      })
+    } catch (error) {
+      console.error('[core/war-room] playoff readiness failed', error)
+    }
+  }
+
+  return { leagueId: league.id, card, format, trades, nextSeason, campaign, warChest, playoffReady }
 }
