@@ -35,6 +35,9 @@ vi.mock('@/lib/ai/output-logger', () => ({
   logAiOutput: logAiOutputMock,
 }))
 
+const requireAdminMock = vi.fn()
+vi.mock('@/lib/adminAuth', () => ({ requireAdmin: requireAdminMock }))
+
 describe('Openclaw growth marketing assistant route contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -51,6 +54,20 @@ describe('Openclaw growth marketing assistant route contract', () => {
     })
     buildOpenClawGrowthTargetUrlMock.mockReturnValue('https://webui.clawship.ai/allfantasy-growth-marketing-assistant/')
     vi.stubGlobal('fetch', vi.fn())
+    requireAdminMock.mockResolvedValue({ ok: true, user: { id: 'user-1', role: 'admin' } })
+  })
+
+  it('returns 403 for a signed-in NON-admin and never calls upstream', async () => {
+    requireAdminMock.mockResolvedValueOnce({ ok: false, res: new Response(null, { status: 403 }) })
+    const { POST } = await import('@/app/api/ai/openclaw/growth-marketing-assistant/route')
+    const req = createMockNextRequest('http://localhost/api/ai/openclaw/growth-marketing-assistant', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'hi' }),
+    })
+    const res = await POST(req as never)
+    expect(res.status).toBe(403)
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('returns 401 when unauthenticated', async () => {
