@@ -10,6 +10,7 @@ import { getLeagueTypeMedia } from '@/lib/league-media/leagueTypeMedia'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { warRoomFrontMessages } from '@/lib/core-app/messages/warRoomFront'
+import { WarPlanAsk } from '@/components/core-app/WarPlanAsk'
 
 /**
  * The Front — the War Room's strategist view: every team you run, where it stands, and the play it
@@ -118,9 +119,16 @@ function Card({ card }: { card: WarFrontCard }) {
             ))}
           </ol>
         ) : null}
-        <Link className="af-wf-scout" href={card.scoutHref}>
-          {m.scout} &rarr;
-        </Link>
+        <div className="af-wf-actions">
+          <Link className="af-wf-scout" href={card.scoutHref}>
+            {m.scout} &rarr;
+          </Link>
+          {/*
+            War Room phase 4: a war plan from Chimmy, prefilled with this card's own facts (never sent for
+            the user). The home holds no trade ideas or brief — the league view's button carries those.
+          */}
+          <WarPlanAsk leagueId={card.leagueId} input={{ leagueName: card.leagueName, card, trades: null, format: null, nextSeason: null }} />
+        </div>
       </article>
     </li>
   )

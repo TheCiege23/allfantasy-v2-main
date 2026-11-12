@@ -194,8 +194,16 @@
   text-decoration-color: var(--accent);
 }
 
-.af-core .af-wf-scout {
+/* The card's footer: Scout and the war plan, pinned to the bottom so cards in a row line up. */
+.af-core .af-wf-actions {
   margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.af-core .af-wf-scout {
   align-self: flex-start;
   min-height: 24px;
   line-height: 24px;

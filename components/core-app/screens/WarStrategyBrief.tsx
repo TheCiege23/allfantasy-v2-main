@@ -7,6 +7,8 @@ import { signedPts } from '@/lib/core-app/outlookCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { warRoomBriefMessages } from '@/lib/core-app/messages/warRoomBrief'
+import type { WarPlanInput } from '@/lib/core-app/warRoomPlanPrompt'
+import { WarPlanAsk } from '@/components/core-app/WarPlanAsk'
 
 /**
  * War Room phase 3, for the league on screen: how this league is won (format brief) and the plan for
@@ -170,11 +172,28 @@ function NextSeasonSection({ plan, m }: { plan: NextSeasonView; m: Copy }) {
   )
 }
 
-export function WarStrategyBrief({ format, nextSeason }: { format: FormatBrief | null; nextSeason: NextSeasonView | null }) {
+export function WarStrategyBrief({
+  format,
+  nextSeason,
+  plan = null,
+}: {
+  format: FormatBrief | null
+  nextSeason: NextSeasonView | null
+  /**
+   * War Room phase 4: the "Plan with Chimmy" button for this league, carrying everything this view
+   * computed (card, trades the viewer may see, this brief, next season). Null hides it.
+   */
+  plan?: { leagueId: string; input: WarPlanInput } | null
+}) {
   const { m } = useCopy()
-  if (!format && !nextSeason) return null
+  if (!format && !nextSeason && !plan) return null
   return (
     <div className="af-wb">
+      {plan ? (
+        <div className="af-wb-plan">
+          <WarPlanAsk leagueId={plan.leagueId} input={plan.input} />
+        </div>
+      ) : null}
       {format ? <FormatSection brief={format} m={m} /> : null}
       {nextSeason ? <NextSeasonSection plan={nextSeason} m={m} /> : null}
     </div>

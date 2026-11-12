@@ -157,3 +157,9 @@
 .af-core .af-wb-keepers li[data-verdict='keep'] {
   color: var(--text);
 }
+
+/* War Room phase 4: "Plan with Chimmy" leads the brief. */
+.af-core .af-wb-plan {
+  display: flex;
+  justify-content: flex-start;
+}
