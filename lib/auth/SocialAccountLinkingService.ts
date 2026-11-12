@@ -410,7 +410,22 @@ export async function linkSocialAccountToAppUser(
     }
   }
 
-  if (user && !user.emailVerified && normalizedEmail && providerVerifiedEmail) {
+  /*
+   * ⚠ ONLY THE ADDRESS THE PROVIDER VOUCHED FOR MAY BE MARKED VERIFIED. When the
+   * provider email could not be copied onto this account (another row holds it),
+   * the account keeps its OWN address — one nobody has proven. Stamping
+   * `emailVerified` there certified an arbitrary, attacker-chosen address: it
+   * passed `isEmailProvenForUser` (admin allowlist) and switched off the
+   * pre-takeover neutralisation above for every later sign-in.
+   */
+  const resultingEmail = (userUpdates.email ?? user?.email ?? "").trim().toLowerCase();
+  if (
+    user &&
+    !user.emailVerified &&
+    normalizedEmail &&
+    providerVerifiedEmail &&
+    resultingEmail === normalizedEmail.toLowerCase()
+  ) {
     userUpdates.emailVerified = new Date();
   }
 
@@ -446,6 +461,17 @@ export async function linkSocialAccountToAppUser(
     // sign-in is about to mint is issued now, and `iat <= cutoff` would
     // otherwise revoke the rightful owner on arrival.
     await revokeAllSessionsForUser(user.id, Math.floor(Date.now() / 1000) - 1).catch(() => undefined);
+
+    /*
+     * The password is not the only credential an unproven holder can plant. An
+     * attacker who linked THEIR OWN Google/Discord login to this account before
+     * switching its email to the victim's keeps signing straight back in through
+     * that link after the password is gone. Every provider identity attached
+     * before this proof is untrusted for the same reason the password is. The
+     * link being created for this sign-in is written below, after this delete.
+     * Not swallowed: a takeover defence that half-applies must fail the sign-in.
+     */
+    await prisma.authAccount.deleteMany({ where: { userId: user.id } });
   }
 
   const accountPayload = {
