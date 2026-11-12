@@ -147,6 +147,21 @@ describe('the rail, grouped by job', () => {
     }
   })
 
+  /* 2026-11-12: Portfolio is the second view behind My Leagues, not an entry of its own. */
+  it('has one My Leagues entry and no Portfolio entry, with or without a league', () => {
+    for (const selectedLeagueId of ['l1', null]) {
+      const { hrefs } = shell({ selectedLeagueId })
+      expect(hrefs.filter((h) => h.startsWith('/core/leagues'))).toEqual(['/core/leagues'])
+      expect(hrefs.some((h) => h.startsWith('/core/portfolio'))).toBe(false)
+    }
+  })
+
+  it('lights My Leagues on the Portfolio screen', () => {
+    const { container } = shell({ selectedLeagueId: null, active: 'portfolio' })
+    const lit = Array.from(container.querySelectorAll('#af-nav a[aria-current="page"]')).map((a) => a.getAttribute('href'))
+    expect(lit).toEqual(['/core/leagues'])
+  })
+
   it('regroups the rail with no league: Your week leads This week, and there is no League group', () => {
     const { groups } = shell({ selectedLeagueId: null })
     expect(groups.map((g) => g.heading).filter(Boolean)).toEqual(['This week', 'Plan ahead', 'All leagues', 'Manage'])

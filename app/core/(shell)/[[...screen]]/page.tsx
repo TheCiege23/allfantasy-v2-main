@@ -115,6 +115,7 @@ import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import { loadTrendingAdds } from '@/lib/core-app/trendingAdds'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
+import { LeaguesPortfolioSwitch } from '@/components/core-app/LeaguesPortfolioSwitch'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
 import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
@@ -5800,6 +5801,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           />
         )
       ) : activeKey === 'my-leagues' ? (
+        <>
+        <LeaguesPortfolioSwitch current="leagues" language={language} />
         <MyLeaguesV4
           leagues={applyLeagueOrder(myLeagues?.leagues ?? [], ctx.leaguePrefs.order)}
           hiddenIds={ctx.leaguePrefs.hidden}
@@ -5822,8 +5825,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           notice={myLeagues?.notice ?? null}
           importHref="/import"
         />
+        </>
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
+          <>
+          <LeaguesPortfolioSwitch current="portfolio" language={language} />
           <Portfolio
             data={portfolio}
             insights={portfolioInsights?.data ?? null}
@@ -5836,6 +5842,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             initialFilter={portfolioFilter ?? undefined}
             initialView={portfolioView}
           />
+          </>
         ) : (
           <ScreenUnavailable
             language={language}
