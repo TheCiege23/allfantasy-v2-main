@@ -344,6 +344,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
             </select>
           </label>
           <small className="af-tc-generic-hint">{copy("Two or more QB/superflex starters prices on the superflex chart. Lineup moves (like 2-TE or 4-QB) apply only where enough completed trades in lineups like this one measured them.")}</small>
+          <small className="af-tc-generic-hint" data-testid="generic-college-hint">{copy("Devy: search a college player's name to trade him for pros. College prospects are valued on the same dynasty chart — the chance he is drafted, times what a player like him is worth on arrival, discounted for the wait. Dynasty values only.")}</small>
         </fieldset>
       ) : null}
       {/* NBA and MLB leagues are mostly category leagues; the grade values each the way it is won. */}

@@ -29,7 +29,12 @@ export function campusPointsToMarket(campus: readonly number[], canton: readonly
   return sum(proRanks) / (sum(campusRanks) * collegeGames * proHorizon)
 }
 
-async function optionChartFactor(chart: LeagueTradeChart): Promise<number | null> {
+/**
+ * Rescale a devy option value (priced on the dynasty Superflex 12-team PPR board) to THIS chart: 1 on that
+ * board, the median ratio of skill players' values on any other dynasty chart, null on a redraft chart.
+ * Exported for the open analyzer's college prospects (`lib/devy/openMarketDevy.ts`).
+ */
+export async function optionChartFactor(chart: LeagueTradeChart): Promise<number | null> {
   if (!chart.chartIsDynasty) return null
   if (chart.isSuperFlex && chart.leagueSize === 12 && chart.pprNfl === 1) return 1
   const reference = await readStoredLeagueTradeChart({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
