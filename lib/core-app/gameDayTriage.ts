@@ -104,6 +104,98 @@ export type GameDayTriage = {
    * leagues behind an old `rostersAsOf` instead of letting one stale league date the whole list.
    */
   rosterAges?: Array<{ leagueId: string; leagueName: string; asOf: string }>
+  /**
+   * EVERY league handed to the loader whose lineup was not read, each with the reason — so
+   * `leaguesRead + skipped.length` is the whole account. See `classifySkippedLeagues`.
+   * Optional so older callers and fixtures need not carry it.
+   */
+  skipped?: SkippedLeague[]
+}
+
+/**
+ * Why a league's lineup was not read. One reason per league, the FIRST that applied in the
+ * loader's order — so the reasons partition the skipped set and their counts add up.
+ */
+export type SkipReason =
+  | 'not_read' // past the loader's bound
+  | 'no_team' // no team claimed by this user, so there is no lineup that is theirs
+  | 'best_ball' // the platform sets the lineup
+  | 'unsupported' // a platform whose player ids we cannot translate yet
+  | 'pre_season' // pre-draft / drafting: no lineup to set yet
+  | 'season_over' // complete / archived
+  | 'eliminated' // a guillotine (or similar) team already out
+  | 'no_roster' // a claimed team, but no synced roster of theirs to read
+
+export type SkippedLeague = { leagueId: string; leagueName: string | null; platform: string | null; reason: SkipReason }
+
+/** The order the screen lists them in: the ones pointing at the user's own setup first. */
+export const SKIP_REASON_ORDER: readonly SkipReason[] = [
+  'no_team',
+  'no_roster',
+  'unsupported',
+  'not_read',
+  'best_ball',
+  'pre_season',
+  'season_over',
+  'eliminated',
+]
+
+/** League stages with no lineup to fix, split by which side of the season they fall on. */
+const PRE_SEASON_STAGES = new Set(['pre_draft', 'predraft', 'setup', 'drafting', 'draft'])
+const SEASON_OVER_STAGES = new Set(['complete', 'completed', 'season_over', 'archived'])
+
+/** `pre_season` / `season_over` for a stage with no lineup to fix; null for an in-season league. */
+export function offSeasonReason(stage: string): 'pre_season' | 'season_over' | null {
+  const s = stage.toLowerCase()
+  if (PRE_SEASON_STAGES.has(s)) return 'pre_season'
+  if (SEASON_OVER_STAGES.has(s)) return 'season_over'
+  return null
+}
+
+/**
+ * Every league asked for and not read, with why.
+ *
+ * 🛑 THE POINT IS THAT NOTHING IS SILENT. The loader used to count only three of its eight skips
+ * (best ball, unsupported, over the bound). A league with no claimed team, no synced roster, an
+ * off-season stage or an eliminated team dropped out with no trace, so "N starters checked across
+ * 48 leagues" could not be squared with the user's own league count — reported from the War Room
+ * as "shows less leagues than I am actually in" (2026-11-11).
+ *
+ * Precedence follows the loader: a league is classified by the first gate that stopped it. The
+ * roster loop's own reason (`loopReasons`) only applies when no earlier gate did, and a league
+ * that was READ is never listed, whatever a loop reason says about another of its rosters.
+ */
+export function classifySkippedLeagues(args: {
+  /** De-duplicated ids, in the order asked. */
+  ids: readonly string[]
+  /** Ids past the loader's bound. */
+  overflow: ReadonlySet<string>
+  /** Ids with a team claimed by the viewer. */
+  claimed: ReadonlySet<string>
+  bestBall: ReadonlySet<string>
+  unsupported: ReadonlySet<string>
+  /** Reasons the roster loop recorded (off-season, eliminated). */
+  loopReasons: ReadonlyMap<string, SkipReason>
+  /** Ids whose lineup was read. */
+  read: ReadonlySet<string>
+  leagueInfo: ReadonlyMap<string, { name: string | null; platform: string | null }>
+}): SkippedLeague[] {
+  const out: SkippedLeague[] = []
+  for (const id of args.ids) {
+    if (args.read.has(id)) continue
+    const reason: SkipReason = args.overflow.has(id)
+      ? 'not_read'
+      : !args.claimed.has(id)
+        ? 'no_team'
+        : args.bestBall.has(id)
+          ? 'best_ball'
+          : args.unsupported.has(id)
+            ? 'unsupported'
+            : (args.loopReasons.get(id) ?? 'no_roster')
+    const info = args.leagueInfo.get(id)
+    out.push({ leagueId: id, leagueName: info?.name ?? null, platform: info?.platform ?? null, reason })
+  }
+  return out
 }
 
 const SEVERITY: Record<MoveTone, number> = { bad: 0, warn: 1, good: 2 }

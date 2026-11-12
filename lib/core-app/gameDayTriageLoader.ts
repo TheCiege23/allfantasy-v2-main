@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { compareTriageRows, triageRows, type GameDayTriage, type TriageLeague, type TriageStarter } from './gameDayTriage'
+import { classifySkippedLeagues, compareTriageRows, offSeasonReason, triageRows, type GameDayTriage, type SkipReason, type TriageLeague, type TriageStarter } from './gameDayTriage'
 import { readInjuryClaims } from './injuryClaims'
 import type { SectionState } from './leagueHome'
 import { isBestBallLeagueRow } from './leagueBestBall'
@@ -87,10 +87,15 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     settings: unknown
     sport: string | null
   }
-  const [leagues, rawRosters, chopped, eliminations] = await Promise.all([
+  /*
+   * ⚠ THE LEAGUE READ COVERS EVERY ID ASKED, NOT ONLY THE CLAIMED ONES — so a league skipped for
+   * having no claimed team can still be NAMED in `skipped`. Same single `IN (…)` query; everything
+   * below works on `leagues`, the claimed subset, exactly as before.
+   */
+  const [leagueRowsAsked, rawRosters, chopped, eliminations] = await Promise.all([
     prisma.league
       .findMany({
-        where: { id: { in: claimedLeagueIds } },
+        where: { id: { in: ids } },
         select: {
           id: true,
           name: true,
@@ -117,6 +122,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       select: { leagueId: true, eliminatedOwnerId: true, season: { select: { season: true } } },
     }).catch(() => []),
   ])
+  const leagues = leagueRowsAsked.filter((l) => candidatesByLeague.has(l.id))
   const leagueById = new Map<string, LeagueRow>(leagues.map((l) => [l.id, l]))
 
   /*
@@ -170,6 +176,8 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
   let oldestRosterMs: number | null = null
   const rosterAges: Array<{ leagueId: string; leagueName: string; asOf: string }> = []
   const emptyByLeague = new Map<string, number>()
+  // Why the loop passed over a league, for `skipped` — a league with no entry here and no lineup read is `no_roster`.
+  const loopReasons = new Map<string, SkipReason>()
   for (const r of readable) {
     if (startersByLeague.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
@@ -178,7 +186,11 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     if (!league) continue
     // A league that is not in season has no lineup to fix (559c56580).
     const stage = String(pd.leagueStatus ?? league.status ?? league.lifecycleState ?? '').toLowerCase()
-    if (['pre_draft', 'predraft', 'setup', 'drafting', 'draft', 'complete', 'completed', 'season_over', 'archived'].includes(stage)) continue
+    const offSeason = offSeasonReason(stage)
+    if (offSeason) {
+      loopReasons.set(r.leagueId, offSeason)
+      continue
+    }
     // The roster's own best-ball flag, for a league the column/settings rule above missed — counted like the rest.
     if (pd.bestBall === true) {
       bestBall.add(r.leagueId)
@@ -197,7 +209,10 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       eliminated: new Set(eliminations.filter((e) => e.leagueId === r.leagueId && e.season.season === league.season).map((e) => e.eliminatedOwnerId)),
       elimination: guillotine,
     })
-    if (eliminated) continue
+    if (eliminated) {
+      loopReasons.set(r.leagueId, 'eliminated')
+      continue
+    }
     /*
      * ⚠ '0' IS AN EMPTY STARTING SLOT, AND IT WAS FILTERED OUT AS NOISE. An empty slot is the
      * most certain zero a lineup can carry — more urgent than any Questionable tag — and this
@@ -229,6 +244,16 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     unsupportedLeagues: otherLeagues.size,
     rostersAsOf: oldestRosterMs === null ? null : new Date(oldestRosterMs).toISOString(),
     rosterAges,
+    skipped: classifySkippedLeagues({
+      ids: unique,
+      overflow: new Set(unique.slice(MAX_LEAGUES)),
+      claimed: new Set(claimedLeagueIds),
+      bestBall,
+      unsupported: otherLeagues,
+      loopReasons,
+      read: new Set(startersByLeague.keys()),
+      leagueInfo: new Map(leagueRowsAsked.map((l) => [l.id, { name: l.name, platform: l.platform }])),
+    }),
   }
   const leagueRef = (leagueId: string): TriageLeague => {
     const league = leagueById.get(leagueId)

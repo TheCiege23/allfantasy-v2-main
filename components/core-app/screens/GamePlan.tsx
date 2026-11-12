@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-import type { GameDayTriage, TriageLeague, TriageRow } from '@/lib/core-app/gameDayTriage'
-import { splitRosterAges } from '@/lib/core-app/gameDayTriage'
+import type { GameDayTriage, SkippedLeague, SkipReason, TriageLeague, TriageRow } from '@/lib/core-app/gameDayTriage'
+import { SKIP_REASON_ORDER, splitRosterAges } from '@/lib/core-app/gameDayTriage'
 import { lockState } from '@/lib/core-app/lineupLock'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import { playerRef } from '@/lib/core-app/playerRef'
@@ -199,7 +199,11 @@ function Summary({
     .map((r) => r.kickoff)
     .filter((k): k is string => Boolean(k))
     .sort()[0]
-  const skipped = [
+  /*
+   * The counts-only line, for a payload without `skipped`. When the loader names every skip,
+   * `SkippedLeagues` below the coverage line says all of this and more, so it is not said twice.
+   */
+  const skipped = data.skipped ? [] : [
     data.bestBallLeagues ? m.bestBallSkipped(data.bestBallLeagues) : null,
     data.unsupportedLeagues ? m.unsupported(data.unsupportedLeagues) : null,
     data.leaguesNotRead ? m.notRead(data.leaguesNotRead) : null,
@@ -260,6 +264,63 @@ function Summary({
         </p>
       ) : null}
     </section>
+  )
+}
+
+/**
+ * Every league whose lineup was not read, grouped by why — collapsed behind one line.
+ *
+ * 🛑 THIS EXISTS BECAUSE THE COUNT COULD NOT BE CHECKED. "544 starters checked across 48 leagues"
+ * named 16 skips and left the rest silent, so a manager in more leagues than that had no way to see
+ * where the others went ("why does the war room show less leagues than I am actually in?",
+ * 2026-11-11). Now `leaguesRead + skipped.length` is every league asked for, and each one is named.
+ *
+ * ⚠ OUTSIDE `Summary` ON PURPOSE. Summary renders only when something was read; a list that read
+ * NOTHING is exactly when "why" matters most.
+ *
+ * A `<details>`, so 16 names do not push the flagged starters below the fold; the reasons that
+ * point at something in the user's own setup (no team claimed, no roster synced) sort first.
+ */
+function SkippedLeagues({ skipped }: { skipped: SkippedLeague[] }) {
+  const { m } = useGpCopy()
+  if (skipped.length === 0) return null
+  const byReason = new Map<SkipReason, SkippedLeague[]>()
+  for (const s of skipped) byReason.set(s.reason, [...(byReason.get(s.reason) ?? []), s])
+  const groups = SKIP_REASON_ORDER.filter((r) => byReason.has(r)).map((r) => [r, byReason.get(r)!] as const)
+
+  return (
+    <details className="af-gp-skips">
+      <summary>{m.skipsSummary(skipped.length)}</summary>
+      <dl aria-label={m.skipsLabel}>
+        {groups.map(([reason, leagues]) => (
+          <div key={reason} data-reason={reason}>
+            <dt>{m.skipReason(reason, leagues.length)}</dt>
+            <dd>
+              {leagues.map((l, i) => {
+                const name = l.leagueName || m.unnamedLeague
+                const plat = l.platform ? ` (${platformLabel(l.platform)})` : ''
+                return (
+                  <span key={l.leagueId}>
+                    {i > 0 ? ', ' : ''}
+                    {/*
+                      A roster that is missing is one a sync can fetch — the same link the stale note uses.
+                      ⚠ `no_team` is deliberately NOT linked: a team is claimed at import, and no league
+                      screen offers a claim, so a link would send the user somewhere that cannot help.
+                    */}
+                    {reason === 'no_roster' ? (
+                      <Link href={`/core/sync?league=${encodeURIComponent(l.leagueId)}`}>{name}</Link>
+                    ) : (
+                      name
+                    )}
+                    {plat}
+                  </span>
+                )
+              })}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   )
 }
 
@@ -408,7 +469,15 @@ export function GamePlan({
       <p className="af-gp-coverage">
         <span className="af-num">{data.startersRead}</span> {m.startersCheckedAcross}{' '}
         <span className="af-num">{data.leaguesRead}</span>{' '}
-        {m.leagues(data.leaguesRead)}
+        {/* The denominator, once the loader accounts for every league: "48 of 64 leagues". */}
+        {data.skipped && data.skipped.length > 0 ? (
+          <>
+            {m.ofTotal(data.leaguesRead + data.skipped.length)}{' '}
+            {m.leagues(data.leaguesRead + data.skipped.length)}
+          </>
+        ) : (
+          m.leagues(data.leaguesRead)
+        )}
         {locked > 0 ? (
           <>
             {' · '}
@@ -417,6 +486,8 @@ export function GamePlan({
         ) : null}
         .
       </p>
+
+      {data.skipped ? <SkippedLeagues skipped={data.skipped} /> : null}
 
       {/*
         Empty slots first: a hole in a lineup is a certain zero, where a Questionable tag
