@@ -190,14 +190,14 @@ const loadEvaluation: CoachEvaluationLoader = async ({
         position: sport === "SOCCER" ? "MID" : sport === "NBA" ? "G" : "FLEX",
         reason: "This waiver target covers the weakest slot with a steadier short-term floor.",
         priority: "high",
-        playerHref: `/player-comparison?player=${encodeURIComponent("Harness Streamer Midfielder")}&source=coach-mode&e2e=1`,
+        playerHref: `/waiver-ai?source=coach-mode&sport=${encodeURIComponent(sport)}&focus=${sport === "SOCCER" ? "MID" : sport === "NBA" ? "G" : "FLEX"}&e2e=1`,
       },
       {
         playerName: "Harness Glue Utility",
         position: "UTIL",
         reason: "A second add gives you lineup flexibility if the first claim misses.",
         priority: "medium",
-        playerHref: `/player-comparison?player=${encodeURIComponent("Harness Glue Utility")}&source=coach-mode&e2e=1`,
+        playerHref: `/waiver-ai?source=coach-mode&sport=${encodeURIComponent(sport)}&focus=UTIL&e2e=1`,
       },
     ],
     tradeSuggestions: [

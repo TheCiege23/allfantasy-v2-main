@@ -86,6 +86,26 @@ export function readPlayerPageLookup(searchParams: SearchParams): PlayerPageLook
   }
 }
 
+/**
+ * The `normalizedName` keys a name slug can stand for (2026-11-12).
+ *
+ * A slug joins words with `-`, and `normalizedName` KEEPS an in-name hyphen ("amon-ra st brown",
+ * lib/team-abbrev.ts `normalizePlayerName`), so `amon-ra-st-brown` is ambiguous between a separator
+ * and a hyphen at each `-`. Reading every `-` as a space — the old lookup — could never find a
+ * hyphenated name. So each `-` is tried both ways. Names have one or two; past MAX_SLUG_HYPHENS
+ * (2^4 = 16 keys) only the all-spaces reading is tried, which is the old behaviour.
+ */
+const MAX_SLUG_HYPHENS = 4
+
+export function slugNameCandidates(slug: string): string[] {
+  const parts = slug.toLowerCase().split('-')
+  const spaced = parts.join(' ')
+  if (parts.length - 1 > MAX_SLUG_HYPHENS) return [spaced]
+  let out = [parts[0] ?? '']
+  for (const part of parts.slice(1)) out = out.flatMap((head) => [`${head} ${part}`, `${head}-${part}`])
+  return [spaced, ...out.filter((k) => k !== spaced)]
+}
+
 export async function resolvePlayerPageIdentity(
   playerId: string,
   lookup: PlayerPageLookup,
@@ -97,7 +117,7 @@ export async function resolvePlayerPageIdentity(
 
   const name = playerId.toLowerCase().replace(/-/g, ' ')
   const rows = await prisma.playerIdentityMap
-    .findMany({ where: { sport: lookup.sport, normalizedName: name }, orderBy: { id: 'asc' }, take: 50 })
+    .findMany({ where: { sport: lookup.sport, normalizedName: { in: slugNameCandidates(playerId) } }, orderBy: { id: 'asc' }, take: 50 })
     .catch(() => [] as PlayerIdentityMap[])
 
   let pool = rows

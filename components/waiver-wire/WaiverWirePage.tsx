@@ -1255,6 +1255,7 @@ export default function WaiverWirePage({
                       seasonStatsSummary: row.seasonStatsSummary,
                     }}
                     sport={settings?.sport ?? null}
+                    leagueId={leagueId}
                     prospect={isNhlProspectWireRow(p)}
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
                     addMode={immediateAddAllowed && !holdUntil}

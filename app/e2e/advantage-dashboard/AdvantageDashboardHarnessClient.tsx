@@ -251,7 +251,7 @@ const loadCoachEvaluation: AdvantageCoachLoader = async ({
         position: sport === 'SOCCER' ? 'MID' : 'FLEX',
         reason: 'This is the cleanest short-term patch for the weakest room.',
         priority: 'high',
-        playerHref: '/player-comparison?player=Harness%20Flex%20Booster&e2e=1',
+        playerHref: '/waiver-ai?source=coach-mode&focus=FLEX&e2e=1',
       },
     ],
     tradeSuggestions: [
