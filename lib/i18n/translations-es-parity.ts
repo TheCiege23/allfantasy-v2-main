@@ -1463,9 +1463,13 @@ export const translationsEsParity: Record<string, string> = {
   "settings.connected.signInProviders": "Proveedores de inicio de sesión",
   "settings.connected.spotifyBlurb": "Música mientras gestionas tus ligas.",
   "settings.connected.spotifyComingSoon": "Spotify — próximamente",
+  "settings.connected.connectSpotify": "Conectar Spotify",
+  "settings.connected.spotifyTesterNote": "Spotify está en pruebas limitadas. Tu cuenta está en la lista de probadores.",
   "settings.connected.spotifyConnectedFallback": "Spotify conectado",
   "settings.connected.spotifyStatus.connected":
     "Spotify conectado. Los controles de música ya están disponibles donde se admiten.",
+  "settings.connected.spotifyStatus.notAvailable":
+    "Spotify está en pruebas limitadas y aún no está disponible para todas las cuentas. Se abrirá a todos cuando Spotify apruebe AllFantasy.",
   "settings.connected.spotifyStatus.error":
     "No se pudo conectar Spotify. Revisa la URL de redirección de la app de Spotify e inténtalo de nuevo.",
   "settings.connected.subtitle":
