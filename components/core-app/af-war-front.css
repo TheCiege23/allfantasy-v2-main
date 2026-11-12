@@ -152,7 +152,8 @@
 }
 
 .af-core .af-wf-odds dt {
-  font-size: 10.5px;
+  /* 11px is the app's type floor (__tests__/core-app/type-floor.test.ts). */
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
