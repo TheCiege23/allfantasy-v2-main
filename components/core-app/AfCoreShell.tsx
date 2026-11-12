@@ -94,7 +94,12 @@ import '@/components/core-app/af-core-redraft.css'
 import '@/components/core-app/af-core-dynasty.css'
 import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
-import { LEAGUE_CHIP_SECTION, NAV_SECTION_ORDER, leagueDestinationHidden } from '@/lib/core-app/leagueDestinations'
+import {
+  LEAGUE_CHIP_SECTION,
+  NAV_SECTION_ORDER,
+  NAV_SECTION_ORDER_NO_LEAGUE,
+  leagueDestinationHidden,
+} from '@/lib/core-app/leagueDestinations'
 
 /**
  * The chrome every AF Core screen sits inside: league rail, primary nav, top bar.
@@ -661,15 +666,18 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
           },
         ]
       : []),
-    /* Reads a scored week — hidden until this league has one. */
-    ...gated({
-      key: 'matchup',
-      label: navLabel('matchup'),
-      glyph: '⚔',
-      href: props.selectedLeagueId
-        ? `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/matchup',
-    }),
+    /*
+     * Reads a scored week — hidden until this league has one. League-only since 2026-11-12: with no
+     * league its "where you stand" board repeated Your week's leading/trailing columns.
+     */
+    ...(props.selectedLeagueId
+      ? gated({
+          key: 'matchup',
+          label: navLabel('matchup'),
+          glyph: '⚔',
+          href: `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`,
+        })
+      : []),
     ...gated({
       key: 'trades',
       label: navLabel('trades'),
@@ -739,14 +747,20 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
         ? { text: String(props.liveGameCount), tone: 'live' }
         : undefined,
     },
-    {
-      key: 'war-room',
-      label: navLabel('war-room'),
-      glyph: '◆',
-      href: props.selectedLeagueId
-        ? `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/war-room',
-    },
+    /*
+     * League-only since 2026-11-12: with no league it was a league picker under three panels that
+     * repeated Your week, Season Outlook and Home's injury check.
+     */
+    ...(props.selectedLeagueId
+      ? [
+          {
+            key: 'war-room' as const,
+            label: navLabel('war-room'),
+            glyph: '◆',
+            href: `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+        ]
+      : []),
     /* Gated on the import's draft coverage, as the tab row always was (leagueDestinations.ts). */
     ...gated({
       key: 'draft-hq',
@@ -841,15 +855,18 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * is not a thing, because two leagues' scoring settings make their point
      * values incomparable.
      */
-    /* Ranks by points scored, so it needs a scored week. */
-    ...gated({
-      key: 'standings',
-      label: navLabel('standings'),
-      glyph: '≡',
-      href: props.selectedLeagueId
-        ? `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/standings',
-    }),
+    /*
+     * Ranks by points scored, so it needs a scored week. League-only since 2026-11-12: with no league
+     * its playoff-picture board was a shorter Season Outlook, read from the same simulation.
+     */
+    ...(props.selectedLeagueId
+      ? gated({
+          key: 'standings',
+          label: navLabel('standings'),
+          glyph: '≡',
+          href: `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`,
+        })
+      : []),
     /*
      * Schedule and Moves lived only in the in-league tab row, which is gone on desktop and phone
      * since 2026-11-05 — so they join the rail, and with it the tablet icon nav and the phone More
@@ -981,11 +998,11 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
  * Manage — from lib/core-app/leagueDestinations.ts, the one list the in-league tab row reads too.
  * No sync entry: both the account-wide page and the per-league rail item are gone.
  */
-const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> = NAV_SECTION_ORDER.map((s) => ({
-  id: s.id,
-  heading: s.heading,
-  keys: s.keys as CoreNavKey[],
-}))
+const toNavSections = (order: typeof NAV_SECTION_ORDER): Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> =>
+  order.map((s) => ({ id: s.id, heading: s.heading, keys: s.keys as CoreNavKey[] }))
+const NAV_SECTIONS = toNavSections(NAV_SECTION_ORDER)
+/* With no league held — see NAV_SECTION_ORDER_NO_LEAGUE for why the groups differ. */
+const NAV_SECTIONS_NO_LEAGUE = toNavSections(NAV_SECTION_ORDER_NO_LEAGUE)
 
 /** Manage entries folded under "More" in the rail; only when at least two of them are present. */
 const NAV_MORE_KEYS = new Set<CoreNavKey>(['plans', 'tools', 'admin'])
@@ -995,7 +1012,7 @@ function navSections(props: AfCoreShellProps): NavSection[] {
   const byKey = new Map(items.map((i) => [i.key, i]))
   const placed = new Set<CoreNavKey>()
 
-  const sections: NavSection[] = NAV_SECTIONS.map((s) => {
+  const sections: NavSection[] = (props.selectedLeagueId ? NAV_SECTIONS : NAV_SECTIONS_NO_LEAGUE).map((s) => {
     const picked = s.keys.flatMap((k) => {
       const item = byKey.get(k)
       if (!item) return []
@@ -1027,11 +1044,12 @@ function navSections(props: AfCoreShellProps): NavSection[] {
 const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'waivers', 'my-team', 'matchup', 'trades']
 
 /*
- * The bar with NO league selected (2026-11-12). My team and Waivers are league-only now (see the
- * note in `navItems`), so their slots go to Your week — which took over the cross-league lineup
- * check and waiver times — and Player Finder. Inside a league the bar above is unchanged.
+ * The bar with NO league selected (2026-11-12). My team, Waivers and Matchup are league-only now
+ * (see the notes in `navItems`), so their slots go to Your week — which took over the cross-league
+ * lineup check, waiver times and matchup columns — Live scores and Player Finder. Inside a league
+ * the bar above is unchanged.
  */
-const MOBILE_BAR_KEYS_NO_LEAGUE: CoreNavKey[] = ['home', 'week', 'matchup', 'players', 'trades']
+const MOBILE_BAR_KEYS_NO_LEAGUE: CoreNavKey[] = ['home', 'week', 'live', 'players', 'trades']
 
 /*
  * ⚠ WAIVERS TOOK THE "LEAGUES" SLOT (2026-11-07, owner's call). Waivers is a weekly in-season job and
