@@ -720,6 +720,10 @@ export function CommsDrawer({
         */}
         <header className="af-cm-head">
           <div className="af-cm-headtop">
+            {/* 2026-11-12 visual pass: a mark beside the title, so the panel reads as a product and not a form. */}
+            <span className="af-cm-brandmark" aria-hidden="true">
+              <MessagesSquare size={18} strokeWidth={2.2} />
+            </span>
             <span className="af-cm-brand">
               <h2 className="af-cm-title">{coreUiCopy('Chat', language)}</h2>
               {/*

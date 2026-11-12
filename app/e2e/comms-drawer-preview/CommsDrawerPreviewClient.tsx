@@ -16,6 +16,10 @@ const LEAGUES = [
 ]
 
 function respond(url: string): unknown {
+  // next-auth re-reads the session on mount; an empty body signs the viewer out and every "You" message drew on the left.
+  if (url.includes('/api/auth/session')) {
+    return { user: { id: ME, name: 'You' }, expires: new Date(Date.now() + 864e5).toISOString() }
+  }
   if (url.includes('/chat/moves')) {
     return {
       moves: [
@@ -49,6 +53,19 @@ function respond(url: string): unknown {
         { id: 'a2', type: 'trade', userName: 'Bolt Up', description: 'Bolt Up traded George Pickens for a 2026 1st', timestamp: minsAgo(95), leagueId: 'L1', leagueName: "Dynasty Bros '26" },
         { id: 'a3', type: 'waiver', userName: 'Gridiron Gang', description: 'Gridiron Gang claimed Samaje Perine ($1)', timestamp: minsAgo(180), leagueId: 'L1', leagueName: "Dynasty Bros '26" },
         { id: 'a4', type: 'injury', userName: 'Kendrick Bourne', description: 'Kendrick Bourne (WR) → Questionable — on 2 of your rosters', timestamp: minsAgo(200), leagueId: null, leagueName: null, href: '/my-players' },
+      ],
+    }
+  }
+  if (/\/api\/shared\/chat\/threads\/[^/]+\/messages/.test(url)) {
+    const them = { senderUserId: 'u5', senderName: 'Gridiron Gang' }
+    const me = { senderUserId: ME, senderName: 'You' }
+    return {
+      messages: [
+        { id: 'd1', ...them, body: 'You still shopping Pickens?', createdAt: minsAgo(60 * 26) },
+        { id: 'd2', ...me, body: 'Depends what you have in mind 👀', createdAt: minsAgo(60 * 26 - 3) },
+        { id: 'd3', ...them, body: 'I can do my 2026 1st. Probably a late one but still', createdAt: minsAgo(9) },
+        { id: 'd4', ...them, body: 'Would you move Pickens for a 2026 1st?', createdAt: minsAgo(2) },
+        { id: 'd5', ...me, body: 'Add a 2nd and we can talk', createdAt: minsAgo(1) },
       ],
     }
   }
