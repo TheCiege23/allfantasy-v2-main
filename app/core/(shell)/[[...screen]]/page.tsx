@@ -2952,7 +2952,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const myTeamPulse =
     activeKey === 'week' && sp.view !== 'rivalries'
-      ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined, undefined, selectedLeagueId).catch((error: unknown) => {
+      ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined, selectedLeagueId).catch((error: unknown) => {
           console.error('[core/my-team] pulse read failed', error)
           myTeamLoadFailed = true
           return null
