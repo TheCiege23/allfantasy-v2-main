@@ -65,8 +65,6 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   /* Phase 2 (2026-09-27): an existing trade by reference — loadTrade() → the one engine. */
   { file: 'lib/decision-os/trade/evaluateStoredTrade.ts', entry: /evaluate:\s*evaluateTrade,/, what: 'evaluateStoredTrade, whose default grader is the one engine' },
   { file: 'app/api/trades/evaluate/route.ts', entry: /evaluateStoredTrade\(/, what: 'POST /api/trades/evaluate' },
-  /* 2026-09-27: the dynasty trade analyzer's letter, in the league the viewer chose. */
-  { file: 'app/api/dynasty-trade-analyzer/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the dynasty trade analyzer' },
   /* 2026-09-27: /trade-finder's candidates (see lib/trade-finder/candidateGrades.ts). */
   { file: 'app/api/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the /trade-finder page’s suggested trades' },
   /* 2026-09-29: the /core Player Finder's "trade for him" card — it printed a second engine's verdict until then. */
@@ -311,17 +309,10 @@ describe('no screen prints a second engine’s verdict beside the one grade', ()
     expect(src).toMatch(/tradeGrade = receiptGradeFields\(receipt\)/)
   })
 
-  it('the dynasty trade analyzer names no winner but the letter’s', () => {
-    const src = code('components/DynastyTradeForm.tsx')
-    expect(src).not.toMatch(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/)
-    expect(src).toMatch(/winnerFromLeagueGrade\(tradeGrade,/)
-  })
-
   it('positive controls: each shape matches the code it replaced', () => {
     expect(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/.test("Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}")).toBe(true)
     expect(/runTradeAnalysis\(/.test('engine = await runTradeAnalysis({')).toBe(true)
     expect(/\bverdict:|fairnessScore|fairnessConfidence/.test('      verdict: deterministicVerdict,')).toBe(true)
-    expect(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/.test("winner: a.winner || 'Even',")).toBe(true)
   })
 })
 
@@ -670,27 +661,6 @@ describe('the /trade/[id] share page prints the stored one grade, never the stor
     expect(SHARE_PRIVATE.test('<span className="ml-2 font-semibold text-cyan-300">{analysis.valueDelta}</span>')).toBe(true)
     expect(SHARE_PRIVATE.test('<span className="text-sm text-white">{analysis.confidence}%</span>')).toBe(true)
     expect(SHARE_PRIVATE.test('const analysis = share.analysis as TradeAnalysis;')).toBe(true)
-  })
-})
-
-/*
- * 2026-09-29: the dynasty trade analyzer printed the dual-brain engine's confidence, net delta,
- * acceptance %, side totals, veto risk, partner-fit score and "Ready to Send" call beside the one grade.
- * The route sends an allowlisted view; behaviour in __tests__/dynasty-trade/dynasty-analyzer-no-private-verdict.test.ts.
- */
-describe('the dynasty trade analyzer sends and prints no dual-brain verdict', () => {
-  const ROUTE_PRIVATE = /deterministicVerdict: detVerdict|dynastyVerdict:|aiVerdict:|winner: detVerdict|acceptanceProbability:|\bsections,\n/
-
-  it('the route sends the allowlisted sections and no verdict fields', () => {
-    const src = code('app/api/dynasty-trade-analyzer/route.ts')
-    expect(src).toMatch(/sections: dynastyAnalyzerSectionsForClient\(sections, gate\.filteredCounters\)/)
-    expect(ROUTE_PRIVATE.test(src)).toBe(false)
-  })
-
-  it('positive control: the shape matches the lines the route sent', () => {
-    expect(ROUTE_PRIVATE.test('      deterministicVerdict: detVerdict,')).toBe(true)
-    expect(ROUTE_PRIVATE.test('        dynastyVerdict: detVerdict.winnerLabel,')).toBe(true)
-    expect(ROUTE_PRIVATE.test('      sections,\n      deterministicVerdict')).toBe(true)
   })
 })
 

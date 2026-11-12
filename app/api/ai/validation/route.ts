@@ -37,7 +37,6 @@ const AREAS = [
     description: "Trades: trade analyzer, AI grades, orphan trade decision",
     endpoints: [
       "POST /api/trade-evaluator",
-      "POST /api/dynasty-trade-analyzer",
       "POST /api/legacy/trade/analyze",
       "POST /api/leagues/[leagueId]/trade/ai-decision",
     ],

@@ -28,7 +28,7 @@ describe('generateTradeGradeRecommendations', () => {
     const context = baseCommissionerOsContext({ shared: sharedWithTradeCount(3) })
     const recs = generateTradeGradeRecommendations(context, '2026-07-12T00:00:00.000Z')
     expect(recs[0].title).toContain('3 trade')
-    expect(recs[0].action?.href).toBe('/dynasty-trade-analyzer')
+    expect(recs[0].action?.href).toBe('/trade-evaluator?mode=league')
   })
 
   it('never recommends intervention merely because a trade is uneven — governanceSeverity is always none here', () => {

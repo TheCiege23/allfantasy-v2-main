@@ -25,7 +25,6 @@ const PROTECTED_PREFIXES = [
   "/mock-draft-simulator",
   "/trade-finder",
   "/trade-history",
-  "/dynasty-trade-analyzer",
   "/startup-dynasty",
   "/legacy-import",
   "/verify",

@@ -136,10 +136,11 @@ describe('POST /api/trade/share', () => {
   })
 })
 
-describe('the form shares the grade', () => {
+describe('the Share button shares the grade', () => {
+  // 2026-11-12: sharing moved from the retired dynasty form to /trade-evaluator's Share button.
   it('builds the share from the grade and the explanatory lists, never by spreading the analysis', () => {
-    const form = fs.readFileSync(path.join(process.cwd(), 'components/DynastyTradeForm.tsx'), 'utf8')
-    expect(form).toMatch(/leagueGrade: shareableLeagueGrade\(tradeGrade\),/)
+    const form = fs.readFileSync(path.join(process.cwd(), 'components/trade-evaluator/TradeShareButton.tsx'), 'utf8')
+    expect(form).toMatch(/leagueGrade: shareableLeagueGrade\(grade\),/)
     expect(form).not.toMatch(/analysis: \{ \.\.\.result/)
   })
 

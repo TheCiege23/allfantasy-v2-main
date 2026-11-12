@@ -13,6 +13,7 @@ import { IdpTradeLineupWarning } from "@/components/idp/IdpTradeLineupWarning"
 import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
 import { GenericTradeAnalyzer } from "@/components/core-app/screens/GenericTradeAnalyzer"
 import { TradeMarketMovers } from "@/components/trade-market/TradeMarketMovers"
+import { TradeShareButton, type ShareAsset } from "@/components/trade-evaluator/TradeShareButton"
 import "@/components/core-app/af-core.css"
 import "@/components/core-app/af-trade-center.css"
 import {
@@ -361,6 +362,17 @@ function emptyPick(): TradePick {
     round: "1",
     projectedRange: "mid",
   }
+}
+
+/** A side as the share link stores it: named players and labelled picks only. */
+function shareAssetsOf(side: TradeSide): ShareAsset[] {
+  const players = side.players
+    .filter((p) => p.name.trim())
+    .map((p) => ({ id: (p.id || p.name).slice(0, 100), name: p.name.trim().slice(0, 200), type: "player" as const }))
+  const picks = side.picks
+    .filter((k) => k.year && k.round)
+    .map((k) => ({ id: k.id.slice(0, 100), name: `${k.year} Round ${k.round}`, type: "pick" as const }))
+  return [...players, ...picks]
 }
 
 function emptySide(name: string, firstPlayerName = ""): TradeSide {
@@ -868,6 +880,8 @@ function TradeHubInner() {
   const [phase, setPhase] = useState<PhaseKey>("plan")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TradeResult | null>(null)
+  /* The two sides as they were GRADED — what a share link stores, even if the inputs change after. */
+  const [gradedSides, setGradedSides] = useState<{ sender: TradeSide; receiver: TradeSide } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
 
@@ -1061,6 +1075,7 @@ function TradeHubInner() {
       }
 
       setResult({ ...mapApiResponse(data, response.headers, asOfDate), gradedLeagueId: linkedLeagueId || null })
+      setGradedSides({ sender, receiver })
     } catch (requestError: unknown) {
       setError(requestError instanceof Error ? requestError.message : "Trade analysis failed.")
     } finally {
@@ -1591,6 +1606,23 @@ function TradeHubInner() {
                       ))}
                     </ol>
                   </div>
+                ) : null}
+
+                {/*
+                  Share — moved here from the retired /dynasty-trade-analyzer (2026-11-12). Only on a
+                  live league grade: the share page prints THE grade, and a historical (as-of-date)
+                  comparison carries no letter to print.
+                */}
+                {result.live && result.rawPayload.tradeGrade && gradedSides ? (
+                  <TradeShareButton
+                    sideA={shareAssetsOf(gradedSides.sender)}
+                    sideB={shareAssetsOf(gradedSides.receiver)}
+                    grade={result.rawPayload.tradeGrade}
+                    teamAName={gradedSides.sender.teamName}
+                    teamBName={gradedSides.receiver.teamName}
+                    factors={result.analysisBullets}
+                    leagueContext={null}
+                  />
                 ) : null}
 
                 {result.betterAlternatives.length > 0 ? (
