@@ -13,6 +13,7 @@ import { playoffStartWeek, tradeDeadlineWeek } from './seasonTimeline'
 import { buildWarFront, horizonOf, postureOf, type WarFrontCard } from './warRoomFront'
 import { buildWarTrades, type OddsRunner, type WarTradesView } from './warRoomTrades'
 import { buildFormatBrief, type FormatBrief } from './warRoomFormat'
+import { buildWarCampaign, type WarCampaign } from './warRoomCampaign'
 import { dynastyView, keeperView, nextSeasonEngineFor, type NextSeasonView } from './warRoomNextSeason'
 
 /**
@@ -51,6 +52,11 @@ export type WarLeagueStrategy = {
   trades: WarTradesView | null
   /** Null when the engine threw; `kind: 'none'` when nothing carries over. */
   nextSeason: NextSeasonView | null
+  /**
+   * The road ahead (phase 5, free): each remaining game of yours priced both ways, and the tiebreak
+   * picture. Null when the outlook or its roster model could not be read, or the pricing threw.
+   */
+  campaign: WarCampaign | null
 }
 
 async function loadNextSeason(args: { userId: string; leagueId: string; format: string | null }): Promise<NextSeasonView> {
@@ -171,5 +177,15 @@ export async function loadWarLeagueStrategy(args: {
       }).cards[0] ?? null)
     : null
 
-  return { leagueId: league.id, card, format, trades, nextSeason }
+  /* Phase 5 fails alone, like every section here: a throw costs the road ahead and nothing else. */
+  let campaign: WarCampaign | null = null
+  if (row && model) {
+    try {
+      campaign = buildWarCampaign({ row, sim: model.sim, seed: model.seed, iterations: BRANCH_ITERATIONS })
+    } catch (error) {
+      console.error('[core/war-room] road ahead failed', error)
+    }
+  }
+
+  return { leagueId: league.id, card, format, trades, nextSeason, campaign }
 }

@@ -55,7 +55,7 @@ import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
   Matchup, Waivers, DraftHq, DraftBoard,
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
-  GamePlan, WarRoomWeek, WarFront, WarTradeIdeas, WarStrategyBrief, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
+  GamePlan, WarRoomWeek, WarFront, WarTradeIdeas, WarStrategyBrief, WarCampaign, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
   SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
   CareerShare,
@@ -5252,6 +5252,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   Elimination formats (step 4d): your place against the cut, from the rail's own read
                   — so the banner and the rail cannot disagree. Only an unpaired (elimination) row has one.
                 */
+                /* War Room phase 5: the road ahead — each game you have left priced both ways, and the tiebreak. Free. */
+                road={warStrategy?.campaign ? <WarCampaign view={warStrategy.campaign} /> : null}
                 /*
                   War Room phase 2: trades that move your odds here. Drawn when there is something to say —
                   the ideas, or the lock for a viewer whose plan does not include them.
@@ -5279,6 +5281,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                           trades: warStrategy.trades?.trades ?? null,
                           format: warStrategy.format,
                           nextSeason: warStrategy.nextSeason,
+                          campaign: warStrategy.campaign,
                         },
                       }}
                     />
