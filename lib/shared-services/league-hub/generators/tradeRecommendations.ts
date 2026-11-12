@@ -63,7 +63,11 @@ export function generateTradeRecommendations(context: UserOsContext, generatedAt
       sourceFreshness: context.syncFreshness,
       // Never claims a trade was evaluated/proposed here — points to the real engines.
       executionCapability: 'recommendation_only',
-      action: { label: 'Open Trade Finder', href: '/trade-finder', payloadType: 'trade_finder_open' },
+      action: {
+        label: 'Open Trade Finder',
+        href: `/core/trades?league=${encodeURIComponent(context.canonicalLeagueId)}#trade-finder`,
+        payloadType: 'trade_finder_open',
+      },
       generatedAt,
     }),
   ]
