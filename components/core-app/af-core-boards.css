@@ -1040,6 +1040,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* "Leagues | Portfolio" above both views of the one My Leagues entry (LeaguesPortfolioSwitch). */
+.af-core .af-lp-switch {
+  margin: 0 0 18px;
+}
+
 /* ── stat-card grid (Career records) ────────────────────────────────────── */
 
 .af-core .af-bd-grid {

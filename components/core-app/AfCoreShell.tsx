@@ -810,7 +810,11 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
           },
         ]
       : []),
-    { key: 'portfolio', label: 'Portfolio', glyph: '◈', href: inLeague('/core/portfolio') },
+    /*
+     * ⚠ NO 'portfolio' ENTRY SINCE 2026-11-12 — it and My Leagues listed the same leagues. The one
+     * "My Leagues" entry below leads to both: each screen opens with a Leagues | Portfolio switch
+     * (LeaguesPortfolioSwitch), and `navActive` lights My Leagues on either.
+     */
     /*
      * ⚠ LEAGUE SYNC IS GONE FROM THE RAIL, AND FROM THE APP. /leagues/sync was
      * the account-wide connect/re-sync dashboard; it is retired because it was a
@@ -1352,6 +1356,12 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     })
   }, [props])
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
+  /*
+   * The nav entry to light for this screen. Portfolio has no entry of its own since 2026-11-12; it
+   * is the second view behind My Leagues, so that entry stays lit on it. Everything that is about
+   * the SCREEN rather than the nav (refresh cadence, prompts) still reads `active`.
+   */
+  const navActive: CoreNavKey = active === 'portfolio' ? 'my-leagues' : active
 
   /*
    * A /core navigation in flight — see coreNavPending.tsx for the whole argument. A click on a
@@ -1730,7 +1740,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   }
   // "More" is current whenever the screen you are on is not one of the five
   // pinned ones — otherwise the bar shows nothing as active and reads broken.
-  const activeInBar = mobileItems.some((i) => i.key === active)
+  const activeInBar = mobileItems.some((i) => i.key === navActive)
   /*
    * ⚠ SAME-NAMED LEAGUES READ AS ONE. Measured 2026-09-28: one account's rail held two
    * "…8-Team NFL Redraft League (manual)" and four "…12-Team NFL Redraft League (manual)" rows,
@@ -2416,8 +2426,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     className="af-nav-item"
                     data-core-nav=""
                     prefetch={false}
-                    data-active={item.key === active}
-                    aria-current={item.key === active ? 'page' : undefined}
+                    data-active={item.key === navActive}
+                    aria-current={item.key === navActive ? 'page' : undefined}
                   >
                     <span className="af-nav-glyph" aria-hidden>
                       <CoreNavIcon navKey={item.key} size={16} />
@@ -2444,7 +2454,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   {shown.map(renderItem)}
                   {folded.length > 1 ? (
                     <li>
-                      <details className="af-nav-more" open={folded.some((i) => i.key === active) || undefined}>
+                      <details className="af-nav-more" open={folded.some((i) => i.key === navActive) || undefined}>
                         <summary className="af-nav-item">
                           <span className="af-nav-glyph" aria-hidden>
                             <CoreNavIcon navKey="more" size={16} />
@@ -2930,8 +2940,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 href={item.href}
                 className="af-tabbar-item"
                 data-core-nav=""
-                data-active={item.key === active}
-                aria-current={item.key === active ? 'page' : undefined}
+                data-active={item.key === navActive}
+                aria-current={item.key === navActive ? 'page' : undefined}
               >
                 <span className="af-tabbar-glyph" aria-hidden>
                   <CoreNavIcon navKey={item.key} size={20} />
@@ -3042,7 +3052,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       href={item.href}
                       className="af-mobile-more-link"
                       data-core-nav=""
-                      data-active={item.key === active}
+                      data-active={item.key === navActive}
                       onClick={() => setMobileMoreOpen(false)}
                     >
                       {/*
