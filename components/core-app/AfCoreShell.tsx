@@ -6,7 +6,7 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { RedraftSportTheme } from '@/lib/league-media/redraftIdentity'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { ModeToggle } from '@/components/theme/ModeToggle'
-import { navLabel } from '@/lib/core-app/navLabels'
+import { CORE_NAV_LABELS, navLabel } from '@/lib/core-app/navLabels'
 import { themeNavItems, themeSectionHeading, type LeagueTheme } from '@/lib/core-app/survivorTheme'
 import { CoreLanguageChip } from '@/components/core-app/CoreLanguageChip'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
@@ -959,7 +959,11 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
      * the commissioner hub's "Re-sync this league"; only the rail entry went. The
      * `urgencyBadges.sync` count it used to show now has no reader here.
      */
-    { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
+    /*
+     * ⚠ NO 'tools' ENTRY SINCE 2026-11-12. Most of the Tools hub's cards repeated a nav entry; the
+     * rest moved to the screen each belongs to (lib/core-app/moreTools.ts — "More tools" at the foot
+     * of Trades, Draft HQ, Rankings and Player Finder). /core/tools still renders for old links.
+     */
     // Full page outside /core, like My Leagues and League Sync above. The rail's
     // bottom profile tile was the only way there — a single-letter tile nobody
     // reads as "settings". Not ⚙: Tools owns that glyph, and two identical marks
@@ -1074,6 +1078,18 @@ const MOBILE_BAR_KEYS_NO_LEAGUE: CoreNavKey[] = ['home', 'week', 'live', 'player
  * four. Player Finder is unconditional, so the bar stays at five in every state.
  */
 const MOBILE_BAR_FALLBACK_KEYS: CoreNavKey[] = ['week', 'players']
+
+/**
+ * The phone bar's label for a nav item: its short form where it has one ("Live", "Players").
+ *
+ * ⚠ ONLY WHEN THE LABEL IS STILL THE DEFAULT. Since 2026-11-12 the no-league bar carries Live scores
+ * and Player Finder, whose full labels wrapped to two lines at 390px. A themed league renames items
+ * (Survivor's "Your shelter"), and a renamed label is kept as the theme wrote it.
+ */
+function tabbarLabel(item: NavItem): string {
+  const entry = (CORE_NAV_LABELS as Record<string, { label: string; short?: string }>)[item.key]
+  return entry?.short && item.label === entry.label ? entry.short : item.label
+}
 
 /** The league-first Play sheet: starting or joining something, as opposed to a league you are in. */
 const LEAGUE_FIRST_PLAY_LINKS: ReadonlyArray<{ href: string; label: string; glyph: string }> = [
@@ -2947,7 +2963,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   <CoreNavIcon navKey={item.key} size={20} />
                   {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
                 </span>
-                <span className="af-tabbar-label">{copy(item.label)}</span>
+                <span className="af-tabbar-label">{copy(tabbarLabel(item))}</span>
               </Link>
             </Fragment>
           ))}

@@ -156,6 +156,14 @@ describe('the rail, grouped by job', () => {
     }
   })
 
+  /* 2026-11-12: Tools' links moved to the screens they belong to (lib/core-app/moreTools.ts). */
+  it('has no Tools entry, with or without a league', () => {
+    for (const selectedLeagueId of ['l1', null]) {
+      const { hrefs } = shell({ selectedLeagueId, isAdmin: true })
+      expect(hrefs.some((h) => h.startsWith('/core/tools'))).toBe(false)
+    }
+  })
+
   it('lights My Leagues on the Portfolio screen', () => {
     const { container } = shell({ selectedLeagueId: null, active: 'portfolio' })
     const lit = Array.from(container.querySelectorAll('#af-nav a[aria-current="page"]')).map((a) => a.getAttribute('href'))

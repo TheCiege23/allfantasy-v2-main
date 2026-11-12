@@ -1045,6 +1045,52 @@
   margin: 0 0 18px;
 }
 
+/* "More tools" at the foot of Trades, Draft HQ, Rankings, Player Finder (MoreToolsLinks). */
+.af-core .af-more-tools {
+  margin: 28px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-more-tools-h {
+  margin: 0 0 10px;
+  color: var(--faint);
+  font: 700 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-core .af-more-tools-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-more-tools-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+.af-core .af-more-tools-link:hover { border-color: var(--accent); text-decoration: none; }
+.af-core .af-more-tools-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; }
+.af-core .af-more-tools-desc { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.af-core .af-more-tools-pro {
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.af-core .af-more-tools-out { margin-left: auto; color: var(--faint); }
+
 /* ── stat-card grid (Career records) ────────────────────────────────────── */
 
 .af-core .af-bd-grid {
