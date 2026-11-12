@@ -125,6 +125,19 @@ export function layoutMessages<M extends ChatLayoutMessage>(
   return out
 }
 
+/**
+ * Which of the eight avatar colours an initials avatar wears (`data-tone` in af-comms.css). Hashed
+ * from the name, so one person is the same colour in every list and every conversation — without it
+ * every manager without a photo was the same grey circle and a DM list read as a column of clones.
+ */
+export const AVATAR_TONES = 8
+export function avatarToneFor(name: string | null | undefined): number {
+  const s = String(name ?? '').trim().toLowerCase()
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h) % AVATAR_TONES
+}
+
 /** "Sam Darnold" → "SD"; "chimmy" → "C"; "" → "?". Two letters at most. */
 export function initialsFor(name: string | null | undefined): string {
   const words = String(name ?? '')

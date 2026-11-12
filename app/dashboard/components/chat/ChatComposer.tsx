@@ -1,6 +1,6 @@
 'use client'
 
-import { Send } from 'lucide-react'
+import { BarChart3, ImagePlus, Mic, Send, Smile, Video } from 'lucide-react'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -914,7 +914,7 @@ export function ChatComposer({
                   aria-pressed={activePicker === 'emoji'}
                   data-testid={testIds?.emoji}
                 >
-                  😀
+                  <Smile size={17} strokeWidth={2} aria-hidden />
                 </button>
                 <button
                   type="button"
@@ -923,7 +923,7 @@ export function ChatComposer({
                   aria-label="Poll"
                   data-testid={testIds?.poll}
                 >
-                  📊
+                  <BarChart3 size={17} strokeWidth={2} aria-hidden />
                 </button>
                 <button
                   type="button"
@@ -931,7 +931,7 @@ export function ChatComposer({
                   onClick={() => setIsRecording(true)}
                   aria-label="Voice note"
                 >
-                  🎤
+                  <Mic size={17} strokeWidth={2} aria-hidden />
                 </button>
                 <button
                   type="button"
@@ -941,7 +941,7 @@ export function ChatComposer({
                   data-testid={testIds?.photo}
                   title="Add photos — or drop / paste them into the chat"
                 >
-                  📷
+                  <ImagePlus size={17} strokeWidth={2} aria-hidden />
                 </button>
                 <input
                   ref={imageInputRef}
@@ -958,7 +958,7 @@ export function ChatComposer({
                   aria-label="Video"
                   data-testid={testIds?.video}
                 >
-                  🎥
+                  <Video size={17} strokeWidth={2} aria-hidden />
                 </button>
                 <input
                   ref={videoInputRef}
@@ -979,7 +979,7 @@ export function ChatComposer({
                   aria-label={chatType === 'league' ? 'Send league message' : 'Send message'}
                   data-testid={testIds?.send ?? 'league-chat-send'}
                 >
-                  <Send size={14} strokeWidth={2} />
+                  <Send size={16} strokeWidth={2.2} />
                 </button>
                 {onAskChimmy ? (
                   <button
