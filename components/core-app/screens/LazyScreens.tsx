@@ -25,7 +25,6 @@ export const DraftArchive = dynamic(() => import('./DraftArchive').then((m) => m
 export const Scout = dynamic(() => import('./Scout'))
 export const GamePlan = dynamic(() => import('./GamePlan'))
 export const WarRoomWeek = dynamic(() => import('./WarRoomWeek'))
-export const WarFront = dynamic(() => import('./WarFront'))
 export const WarTradeIdeas = dynamic(() => import('./WarTradeIdeas'))
 export const WarStrategyBrief = dynamic(() => import('./WarStrategyBrief'))
 export const WarCampaign = dynamic(() => import('./WarCampaign'))

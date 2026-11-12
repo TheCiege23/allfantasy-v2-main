@@ -461,7 +461,7 @@ html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='fantrax'] {
   }
 }
 
-/* ── 2026-10-02 visual pass (components/core-app/MatchupPulseBoard.tsx) ──────
+/* ── 2026-10-02 visual pass (the cross-league MatchupPulseBoard, removed 2026-11-12) ──────
  *
  * Top-level rules and sibling @media blocks, appended at end of file.
  */

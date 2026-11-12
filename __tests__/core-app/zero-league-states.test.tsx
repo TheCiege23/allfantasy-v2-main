@@ -16,7 +16,6 @@ vi.mock('next/navigation', () => ({
 }))
 
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
-import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import { NO_LEAGUE_ACTIONS } from '@/components/core-app/boards/BoardKit'
@@ -24,9 +23,6 @@ import { PickALeague } from '@/components/core-app/PickALeague'
 import { Dash3AChimmy, connectedLeagueCount } from '@/components/core-app/screens/Dashboard3A'
 
 const trades = { pending: [], windows: [], considered: 0, deadlineUnknown: 0, currentWeek: null } as never
-const waivers = {
-  rows: [], considered: 0, withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 }, marketLeagues: 0, at: null,
-} as never
 const drafts = { rows: [], counts: { live: 0, upcoming: 0, done: 0, unknown: 0 }, withoutDraft: 0 } as never
 const week = {
   season: 2026, week: 3, coinFlips: [], leaning: [], unprojected: [], eliminationWeeks: [],
@@ -35,7 +31,6 @@ const week = {
 
 const BOARDS = [
   ['Trades', (n: number) => <TradesBoard data={trades} allHref="/core/trades?all=1" totalLeagues={n} />, 'No team of yours is claimed'],
-  ['Waivers', (n: number) => <WaiversBoard data={waivers} allHref="/core/waivers?all=1" totalLeagues={n} />, 'no wire to read'],
   ['Draft HQ', (n: number) => <DraftHqBoard data={drafts} allHref="/core/draft-hq?all=1" totalLeagues={n} picks={null as never} />, 'No draft to show yet'],
   ['Week', (n: number) => <WeekBoard board={week} outlook={null} rivalriesHref="/core/week?view=rivalries" allHref="/core/week?all=1" totalLeagues={n} />, 'No league is ahead on its available scoreboard or historical estimate.'],
 ] as const
