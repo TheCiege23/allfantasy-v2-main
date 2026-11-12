@@ -314,6 +314,20 @@ function fixture(over: Partial<CommissionerOverviewData> = {}): CommissionerOver
 }
 
 describe('<CommissionerOverview />', () => {
+  it('says why the ladder is empty when activity was read but no league is mid-season', () => {
+    // Found on a real account: 103 managers inactive and no ladder at all, which read as broken.
+    const { container } = render(<CommissionerOverview data={fixture({ activityChecked: 3, ladder: [], ladderLeagues: 0 })} />)
+    const panel = container.querySelector('#af-ladder')
+    expect(panel).not.toBeNull()
+    expect(panel!.textContent).toContain('None of the leagues checked is mid-season')
+    expect(panel!.textContent).not.toContain('has made a move in the last week')
+  })
+
+  it('draws no ladder panel when no league’s activity was read at all', () => {
+    const { container } = render(<CommissionerOverview data={fixture({ activityChecked: 0, ladder: [], ladderLeagues: 0 })} />)
+    expect(container.querySelector('#af-ladder')).toBeNull()
+  })
+
   it('puts "All leagues" first in the one switcher, marked current, with the formats after it', () => {
     render(<CommissionerOverview data={fixture()} />)
     const nav = screen.getByRole('navigation', { name: 'Commissioner hubs' })

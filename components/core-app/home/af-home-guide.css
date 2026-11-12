@@ -4,28 +4,28 @@
  */
 
 /* ── Headline ───────────────────────────────────────────────────────────── */
-.af-guide-head {
+.af-hg-head {
   margin: 0 0 18px;
   padding: 18px 20px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
 }
-.af-guide-head-top {
+.af-hg-head-top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 6px 12px;
 }
-.af-guide-eyebrow {
+.af-hg-eyebrow {
   margin: 0;
   color: var(--muted);
   font: 700 11px/1.3 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.af-guide-streak {
+.af-hg-streak {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -37,22 +37,22 @@
   font-size: 12px;
   font-weight: 700;
 }
-.af-guide-streak span { color: var(--warn); font-size: 11px; }
-.af-guide-title {
+.af-hg-streak span { color: var(--warn); font-size: 11px; }
+.af-hg-title {
   margin: 8px 0 4px;
   color: var(--text);
   font-size: clamp(22px, 2.4vw, 28px);
   font-weight: 800;
   line-height: 1.15;
 }
-.af-guide-intro {
+.af-hg-intro {
   max-width: 68ch;
   margin: 0;
   color: var(--text2);
   font-size: 13.5px;
   line-height: 1.5;
 }
-.af-guide-chips {
+.af-hg-chips {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
@@ -60,7 +60,7 @@
   padding: 0;
   list-style: none;
 }
-.af-guide-chip {
+.af-hg-chip {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -72,33 +72,33 @@
   text-decoration: none;
   transition: border-color 0.15s ease;
 }
-.af-guide-chip:hover { border-color: var(--accent-line); }
-.af-guide-chip b { color: var(--text); font: 800 20px/1.1 'JetBrains Mono', ui-monospace, monospace; }
-.af-guide-chip span { font-size: 12px; }
-.af-guide-chip[data-tone='warn'] { border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: var(--bad-soft); }
-.af-guide-chip[data-tone='warn'] b { color: var(--bad); }
-.af-guide-chip[data-tone='info'] b { color: var(--accent); }
-.af-guide-chip[data-tone='ok'] b { color: var(--muted); }
+.af-hg-chip:hover { border-color: var(--accent-line); }
+.af-hg-chip b { color: var(--text); font: 800 20px/1.1 'JetBrains Mono', ui-monospace, monospace; }
+.af-hg-chip span { font-size: 12px; }
+.af-hg-chip[data-tone='warn'] { border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: var(--bad-soft); }
+.af-hg-chip[data-tone='warn'] b { color: var(--bad); }
+.af-hg-chip[data-tone='info'] b { color: var(--accent); }
+.af-hg-chip[data-tone='ok'] b { color: var(--muted); }
 
 /* ── Cards ──────────────────────────────────────────────────────────────── */
-.af-guide-card { margin: 0 0 18px; }
-.af-guide-cardhead {
+.af-hg-card { margin: 0 0 18px; }
+.af-hg-cardhead {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 12px;
   margin-bottom: 12px;
 }
-.af-guide-cardhead h2 { margin: 0; color: var(--text); font-size: 18px; font-weight: 800; }
-.af-guide-cardhead span { color: var(--muted); font-size: 12.5px; }
-.af-guide-label {
+.af-hg-cardhead h2 { margin: 0; color: var(--text); font-size: 18px; font-weight: 800; }
+.af-hg-cardhead span { color: var(--muted); font-size: 12.5px; }
+.af-hg-label {
   margin: 14px 0 6px;
   color: var(--muted);
   font: 700 11px/1.3 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.af-guide-stats {
+.af-hg-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 8px;
@@ -106,7 +106,7 @@
   padding: 0;
   list-style: none;
 }
-.af-guide-stats li {
+.af-hg-stats li {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -114,13 +114,13 @@
   border-radius: 12px;
   background: var(--surface2, var(--bg));
 }
-.af-guide-stats b { color: var(--text); font: 800 20px/1.1 'JetBrains Mono', ui-monospace, monospace; }
-.af-guide-stats span { color: var(--muted); font-size: 12px; line-height: 1.3; }
-.af-guide-stats li[data-tone='good'] b { color: var(--good); }
-.af-guide-stats li[data-tone='warn'] b { color: var(--warn); }
-.af-guide-stats li[data-tone='bad'] b { color: var(--bad); }
-.af-guide-empty, .af-guide-note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
-.af-guide-why {
+.af-hg-stats b { color: var(--text); font: 800 20px/1.1 'JetBrains Mono', ui-monospace, monospace; }
+.af-hg-stats span { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.af-hg-stats li[data-tone='good'] b { color: var(--good); }
+.af-hg-stats li[data-tone='warn'] b { color: var(--warn); }
+.af-hg-stats li[data-tone='bad'] b { color: var(--bad); }
+.af-hg-empty, .af-hg-note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+.af-hg-why {
   margin: 14px 0 0;
   padding: 6px 10px;
   border-left: 2px solid var(--accent-line);
@@ -129,8 +129,8 @@
   font-size: 12.5px;
   line-height: 1.45;
 }
-.af-guide-why b { color: var(--accent); font-weight: 800; }
-.af-guide-more {
+.af-hg-why b { color: var(--accent); font-weight: 800; }
+.af-hg-more {
   display: inline-block;
   margin-top: 12px;
   color: var(--accent);
@@ -138,7 +138,7 @@
   font-weight: 700;
   text-decoration: none;
 }
-.af-guide-more:hover { text-decoration: underline; }
+.af-hg-more:hover { text-decoration: underline; }
 
 /* ── Season pulse ───────────────────────────────────────────────────────── */
 .af-pulse-cols {
@@ -183,8 +183,8 @@
 .af-run-detail { margin: 2px 0 0; color: var(--text2); font-size: 12.5px; line-height: 1.4; }
 
 @media (max-width: 560px) {
-  .af-guide-head { padding: 14px; }
-  .af-guide-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-hg-head { padding: 14px; }
+  .af-hg-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .af-run-risks li { flex-wrap: wrap; }
   .af-run-risks .af3a-btn { width: 100%; min-height: 44px; text-align: center; }
 }
@@ -225,7 +225,7 @@
 
 /* ── Platform calendar (HomePlatformCalendar.tsx) ───────────────────────── */
 .af-cal-kickoff { margin-bottom: 6px; }
-.af-cal-kickoff .af-guide-label { margin-top: 0; }
+.af-cal-kickoff .af-hg-label { margin-top: 0; }
 .af-cal-kickoff-when { margin: 0; color: var(--text); font: 800 18px/1.2 'JetBrains Mono', ui-monospace, monospace; }
 .af-cal-rows { margin: 12px 0 0; padding: 0; list-style: none; }
 .af-cal-rows li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }

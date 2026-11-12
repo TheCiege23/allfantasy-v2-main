@@ -47,26 +47,26 @@ export function HomeHeadline({
     run: g.chipRun,
   }
   return (
-    <section className="af-guide-head" aria-labelledby="af-guide-head-title">
-      <div className="af-guide-head-top">
-        <p className="af-guide-eyebrow">{g.eyebrow(weekLabel, leagueCount)}</p>
+    <section className="af-hg-head" aria-labelledby="af-hg-head-title">
+      <div className="af-hg-head-top">
+        <p className="af-hg-eyebrow">{g.eyebrow(weekLabel, leagueCount)}</p>
         {streakDays != null && streakDays > 0 ? (
-          <span className="af-guide-streak" title={g.streak(streakDays)}>
+          <span className="af-hg-streak" title={g.streak(streakDays)}>
             <span aria-hidden="true">●</span> {g.streak(streakDays)}
           </span>
         ) : null}
       </div>
-      <h1 id="af-guide-head-title" className="af-guide-title">
+      <h1 id="af-hg-head-title" className="af-hg-title">
         {openCount == null ? g.introShort : openCount > 0 ? g.needsYou(openCount) : g.allClear}
       </h1>
-      <p className="af-guide-intro">{firstVisit ? g.intro : g.introShort}</p>
+      <p className="af-hg-intro">{firstVisit ? g.intro : g.introShort}</p>
       {chips.length > 0 ? (
-        <ul className="af-guide-chips">
+        <ul className="af-hg-chips">
           {chips.map((chip) => (
             <li key={chip.key}>
               <Link
                 href={chip.href}
-                className="af-guide-chip"
+                className="af-hg-chip"
                 data-tone={chip.count > 0 ? (chip.key === 'trades' ? 'info' : 'warn') : 'ok'}
               >
                 <b>{chip.count}</b>

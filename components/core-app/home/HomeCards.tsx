@@ -420,8 +420,14 @@ async function HeadlineCard({
   }
   return (
     <HomeHeadline
-      weekLabel={data?.weekLabel ?? null}
-      leagueCount={(data ? connectedLeagueCount(data) : null) ?? scope.count}
+      /*
+       * ⚠ NO WEEK LABEL, AND THE SCOPE'S COUNT (measured on a real account, 2026-11-12). The summary's
+       * `weekLabel` names the next game in ANY sport played, so a mostly-NFL portfolio read "NHL WK 7"
+       * (the top bar already carries it), and `connectedLeagueCount` counts past seasons too — it said
+       * 574 for a person with 82 leagues. `scope.count` is the number the rail and switcher show.
+       */
+      weekLabel={null}
+      leagueCount={scope.count}
       openCount={openCount}
       chips={chips}
       streakDays={streak?.current ?? null}
@@ -459,7 +465,13 @@ async function CommishCard({ commish }: { commish: HomeLoads['commish'] }) {
       }))}
       partial={data.partial}
       // Null when no in-season league's activity was read — "not measured", never "everyone active".
-      ladder={(data.ladderLeagues ?? 0) > 0 ? (data.ladder ?? []) : null}
+      ladder={
+        (data.ladderLeagues ?? 0) > 0
+          ? (data.ladder ?? [])
+          : data.activityChecked > 0
+            ? 'off-season'
+            : null
+      }
     />
   )
 }

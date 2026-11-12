@@ -19,8 +19,8 @@ export function HomeFormatGuide({ formats }: { formats: FormatCount[] }) {
   const panelId = useId()
   if (formats.length === 0) return null
   return (
-    <section className="af3a-card af-guide-card" aria-labelledby="af-formats-title">
-      <header className="af-guide-cardhead">
+    <section className="af3a-card af-hg-card" aria-labelledby="af-formats-title">
+      <header className="af-hg-cardhead">
         <h2 id="af-formats-title">{t.formatsTitle}</h2>
         <span>{t.formatsSub}</span>
       </header>
@@ -52,7 +52,7 @@ export function HomeFormatGuide({ formats }: { formats: FormatCount[] }) {
             <p>
               <b>{t.formatWatch}</b> {t.formatWatchLine(open)}
             </p>
-            <p className="af-guide-note">{t.formatSettingsNote}</p>
+            <p className="af-hg-note">{t.formatSettingsNote}</p>
           </>
         ) : null}
       </div>
