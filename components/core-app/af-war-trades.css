@@ -1,0 +1,103 @@
+/*
+ * Trades that move your odds (components/core-app/screens/WarTradeIdeas.tsx) — War Room phase 2.
+ * Same tokens and rhythm as The Front (af-war-front.css), so the two read as one room.
+ */
+
+.af-core .af-wt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scroll-margin-top: 72px;
+}
+
+.af-core .af-wt-heading {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-core .af-wt-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 72ch;
+}
+
+.af-core .af-wt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 10px;
+}
+
+.af-core .af-wt-idea {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.af-core .af-wt-deal {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.af-core .af-wt-numbers {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.af-core .af-wt-delta {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-core .af-wt-delta[data-tone='good'] {
+  color: var(--good);
+}
+
+.af-core .af-wt-gains,
+.af-core .af-wt-fact {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-wt-partners {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+  color: var(--text2, var(--text));
+}
+
+.af-core .af-wt-build {
+  margin-top: auto;
+  align-self: flex-start;
+  min-height: 24px;
+  line-height: 24px;
+  font-size: 12.5px;
+  color: var(--accent);
+}

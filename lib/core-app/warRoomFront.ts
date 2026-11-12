@@ -265,7 +265,8 @@ export function buildWarFront(args: { leagues: WarFrontLeagueInput[]; outlook: S
     const enc = encodeURIComponent(input.id)
     const hrefs = {
       outlook: league?.href ?? `/core/season-outlook?league=${enc}`,
-      trades: `/core/trades?league=${enc}`,
+      // The league's War Room view, at its trade ideas (WarTradeIdeas.tsx) — priced in odds, unlike the Trade Center.
+      trades: `/core/war-room?league=${enc}#war-trades`,
       draft: `/core/draft-hq?league=${enc}`,
     }
     const posture = postureOf(league)
