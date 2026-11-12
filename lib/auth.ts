@@ -34,6 +34,46 @@ import { isPostOAuthRedirectPreservedPath } from "@/lib/auth/postOAuthRedirectPo
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute";
 import { refreshAccountGeoLock } from "@/lib/geo/accountGeoLockServer";
 import type { JWT } from "next-auth/jwt";
+import { isAllFantasyTestEmail } from "@/lib/auth/admin";
+
+/**
+ * 🛑 AN ADMIN / ALL-ACCESS EMAIL IN THE SESSION IS A CREDENTIAL, SO IT MUST BE PROVEN.
+ *
+ * About twenty checks across the product (`isAdminEmailAllowed(session.user.email)`,
+ * `hasAllFantasyTestAccess`, the entitlement and token-spend bypass) read the session
+ * email synchronously and treat an allowlisted address as admin. That email is copied
+ * from the AppUser row, and registration and email-change both let a row hold an
+ * address nobody has verified — so claiming an allowlisted address that had no account
+ * yet granted admin on every one of those paths (`/admin` alone re-checks proof, in
+ * lib/adminAuth.ts `isEmailProvenForUser`).
+ *
+ * Fixing it HERE, once, covers every reader: a privileged address reaches the token only
+ * when the row holds it AND has verified it. Otherwise the token carries no email, so no
+ * allowlist can match it. Checked on every jwt pass, not only at sign-in, so an
+ * already-issued cookie is corrected too — the database is read only for the handful of
+ * tokens that carry a privileged address. A failed read withholds the email (fail closed).
+ */
+async function withholdUnprovenPrivilegedEmail(token: JWT): Promise<void> {
+  const email = typeof token.email === "string" ? token.email.trim().toLowerCase() : "";
+  if (!email || !isAllFantasyTestEmail(email)) return;
+  const userId = typeof token.id === "string" ? token.id : "";
+  let proven = false;
+  if (userId) {
+    try {
+      const row = await prisma.appUser.findUnique({
+        where: { id: userId },
+        select: { email: true, emailVerified: true },
+      });
+      proven = Boolean(row?.emailVerified) && String(row?.email ?? "").trim().toLowerCase() === email;
+    } catch {
+      proven = false;
+    }
+  }
+  if (!proven) {
+    console.warn("[auth] withholding unverified privileged email from session token", { userId });
+    token.email = null;
+  }
+}
 
 /**
  * Stamp the account-level Washington lock onto the session token, from the
@@ -746,6 +786,7 @@ export const authOptions: NextAuthOptions = {
               .catch(() => undefined)
             if (fresh !== undefined) token.username = fresh?.username ?? null
           }
+          await withholdUnprovenPrivilegedEmail(token)
           // From the database, never from `updatePayload` — see applyAccountGeoLock.
           await applyAccountGeoLock(token)
           return token
@@ -764,6 +805,8 @@ export const authOptions: NextAuthOptions = {
           token.sid = newSessionId();
         }
 
+        await withholdUnprovenPrivilegedEmail(token)
+
         // Sign-in included: a Washington sign-in over a normal connection is
         // exactly the observation that locks the account (lib/geo/accountGeoLock).
         await applyAccountGeoLock(token)
@@ -778,7 +821,9 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.email = typeof token.email === "string" ? token.email : session.user.email;
+        // `null` is a decision (withholdUnprovenPrivilegedEmail), not a gap to back-fill.
+        session.user.email =
+          typeof token.email === "string" ? token.email : token.email === null ? null : session.user.email;
         session.user.name =
           typeof token.name === "string" ? token.name : session.user.name;
         session.user.username =
