@@ -106,7 +106,5 @@ describe('screens that printed raw API errors', () => {
     expect(src).not.toMatch(raw)
   })
 
-  it('the Waivers board no longer shows the internal field name scoring_settings', () => {
-    expect(read('components/core-app/boards/WaiversBoard.tsx')).not.toMatch(/<code>scoring_settings<\/code>/)
-  })
+  /* The Waivers board's scoring_settings check went with that board (removed 2026-11-12). */
 })
