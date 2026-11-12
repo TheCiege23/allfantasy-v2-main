@@ -100,5 +100,7 @@
 @media (max-width: 560px) {
   .af-ladder-row { flex-wrap: wrap; }
   .af-ladder-actions { flex-direction: row; align-items: center; width: 100%; justify-content: space-between; }
-  .af-ladder-actions .af3a-btn { min-height: 44px; }
+  /* af-dash-3a.css makes every .af3a-btn full width on a phone; here it shares the row with its link. */
+  .af-ladder-actions .af3a-btn { flex: 1 1 auto; width: auto; min-height: 44px; }
+  .af-ladder-link { flex: none; }
 }
