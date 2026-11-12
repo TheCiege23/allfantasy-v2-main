@@ -122,6 +122,7 @@ export type TradeValueCopy = {
   sharesTitleIn: (leagueName: string) => string
   sharesSub: (players: number, rosters: number) => string
   sharesUnsupported: (n: number) => string
+  sharesUnidentified: (n: number) => string
   sharesNone: string
   sharesOf: string
   sharesStarting: (n: number) => string

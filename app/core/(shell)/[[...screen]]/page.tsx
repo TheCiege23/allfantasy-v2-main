@@ -2682,8 +2682,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             : null,
         })
       : []
-  // Most added this week — one aggregate for every viewer, cached 15 minutes (trendingAdds.ts).
-  const trendingAdds = activeKey === 'players' ? await loadTrendingAdds().catch(() => null) : null
+  /*
+   * The home's sport tabs (2026-11-11): `?sport=` already scoped the rail's search; on the "My players"
+   * home it now scopes every list to that sport's leagues too, so a manager with NBA, NHL and college
+   * leagues gets each sport's flagged starters, shares and follows instead of a football-only page. The
+   * tabs list only sports the finder's leagues are in, with their counts. No sport = every league, as before.
+   */
+  const leagueSportById = new Map(playedLeagues.map((l) => [l.id, String((l as { sport?: string | null }).sport ?? 'NFL').toUpperCase()]))
+  const homeLeagueIds = playerSport ? finderLeagueIds.filter((id) => leagueSportById.get(id) === playerSport) : finderLeagueIds
+  const finderHomeSports = (() => {
+    const counts = new Map<string, number>()
+    for (const id of finderLeagueIds) {
+      const s = leagueSportById.get(id)
+      if (s) counts.set(s, (counts.get(s) ?? 0) + 1)
+    }
+    return [...counts].map(([sport, leagues]) => ({ sport, leagues }))
+  })()
+
+  // Most added this week — one aggregate per sport for every viewer, cached 15 minutes (trendingAdds.ts).
+  const trendingAdds = activeKey === 'players' ? await loadTrendingAdds(new Date(), playerSport ?? 'NFL').catch(() => null) : null
 
   /*
    * Game-day home (2026-09-06): your flagged starters across every league,
@@ -2692,7 +2709,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const gameDayTriage =
     activeKey === 'players' && userId && !playerDetail
-      ? await loadGameDayTriage(userId, finderLeagueIds).catch(() => null)
+      ? await loadGameDayTriage(userId, homeLeagueIds).catch(() => null)
       : null
 
   /*
@@ -2705,7 +2722,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * game, and the leagues of yours where he is unclaimed — read in the same wave as the shares board.
    * Null when follows are unavailable, which hides the board. The same leagues the finder reads.
    */
-  const finderLeagueSet = new Set(finderLeagueIds)
+  const finderLeagueSet = new Set(homeLeagueIds)
   const finderLeagueRefs = playedLeagues
     .filter((l) => finderLeagueSet.has(l.id))
     .map((l) => ({
@@ -2724,9 +2741,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const [playerShares, playerFollowing, weeklyMvp, trendingFreeIn] =
     activeKey === 'players' && userId && !playerDetail
       ? await Promise.all([
-          loadPlayerShares(userId, finderLeagueIds).catch(() => null),
-          getFollowingCard(userId, new Date(), finderLeagueRefs).catch(() => null),
-          loadWeeklyMvp(userId).catch(() => null),
+          loadPlayerShares(userId, homeLeagueIds).catch(() => null),
+          getFollowingCard(userId, new Date(), finderLeagueRefs)
+            .then((card) => (card && playerSport ? { ...card, rows: card.rows.filter((r) => String(r.sport).toUpperCase() === playerSport) } : card))
+            .catch(() => null),
+          // Last week's MVP is read from Sleeper NFL scores only (weeklyMvp.ts): no card on another sport's tab.
+          !playerSport || playerSport === 'NFL' ? loadWeeklyMvp(userId).catch(() => null) : Promise.resolve(null),
           trendingIds.length > 0 ? loadTrendingFreeIn(userId, finderLeagueRefs, trendingIds).catch(() => null) : Promise.resolve(null),
         ])
       : [null, null, null, null]
@@ -5285,9 +5305,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           sport={playerSport}
           matches={playerMatches}
           detail={playerDetail}
-          leagueCount={finderPlayerLeagueIds.length}
+          leagueCount={playerDetail ? finderPlayerLeagueIds.length : homeLeagueIds.length}
           selectedLeagueId={selectedLeagueId}
           shares={playerShares}
+          homeSports={finderHomeSports}
           following={playerFollowing}
           followingPlayer={followingOpenPlayer}
           weeklyMvp={weeklyMvp}

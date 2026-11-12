@@ -4462,6 +4462,21 @@
   color: var(--muted);
   font-size: 13px;
 }
+/* Sport tabs over the home (HomeSportTabs.tsx, 2026-11-11): the shared chip row, as links. */
+.af-core .af-pf-home-sports {
+  margin: 0 0 16px;
+}
+.af-core .af-pf-home-sports .af-pg-chip {
+  text-decoration: none;
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.af-core .af-pf-home-sports .af-pg-chip[data-active='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 .af-core .af-pf-following {
   margin-top: 14px;
 }

@@ -75,7 +75,8 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
         <span className="af-pf-triage-sub af-num">
           {m.triageRead(leaguesRead, leagueCount)}
           {bestBall > 0 ? m.triageBestBall(bestBall) : ''}
-          {unsupported > 0 ? m.triageUnsupported(unsupported) : ''} · {weekLabel}
+          {unsupported > 0 ? m.triageUnsupported(unsupported) : ''}
+          {(state.data.unidentifiedStarters ?? 0) > 0 ? m.triageUnidentified(state.data.unidentifiedStarters ?? 0) : ''} · {weekLabel}
         </span>
       </header>
       {/*

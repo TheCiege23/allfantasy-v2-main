@@ -42,24 +42,33 @@ export type TrendingAdds = {
 
 type Row = { sid: string; leagues: number; active_leagues: number; newest: Date | null }
 
-let cached: { at: number; value: Promise<TrendingAdds | null> } | null = null
+/*
+ * One list per sport (2026-11-11), for the Player Finder home's sport tabs. A Sleeper league's adds are
+ * in ITS sport's Sleeper numbers, so an NBA league's adds must never be resolved against the NFL catalog
+ * (Sleeper NBA 1234 is not Sleeper NFL 1234) — the league's own sport filters the transactions and picks
+ * the catalog. Only Sleeper leagues sync transactions here, so a sport with no Sleeper leagues on file
+ * (college, NHL today) reads an empty list and the card hides itself.
+ */
+const cache = new Map<string, { at: number; value: Promise<TrendingAdds | null> }>()
 
 /** Tests only. */
 export function clearTrendingAddsCache(): void {
-  cached = null
+  cache.clear()
 }
 
-export function loadTrendingAdds(now: Date = new Date()): Promise<TrendingAdds | null> {
-  if (cached && now.getTime() - cached.at < TTL_MS) return cached.value
-  const value = read(now).catch(() => {
-    cached = null // a failed read is not cached as "nobody added anyone"
+export function loadTrendingAdds(now: Date = new Date(), sport: string = 'NFL'): Promise<TrendingAdds | null> {
+  const s = String(sport || 'NFL').toUpperCase()
+  const hit = cache.get(s)
+  if (hit && now.getTime() - hit.at < TTL_MS) return hit.value
+  const value = read(now, s).catch(() => {
+    cache.delete(s) // a failed read is not cached as "nobody added anyone"
     return null
   })
-  cached = { at: now.getTime(), value }
+  cache.set(s, { at: now.getTime(), value })
   return value
 }
 
-async function read(now: Date): Promise<TrendingAdds | null> {
+async function read(now: Date, sport: string): Promise<TrendingAdds | null> {
   const since = new Date(now.getTime() - TRENDING_WINDOW_DAYS * 86_400_000)
   const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
     WITH tx AS (
@@ -70,6 +79,7 @@ async function read(now: Date): Promise<TrendingAdds | null> {
       JOIN leagues l ON l.id = t."leagueId"
       WHERE t.type IN ('free_agent', 'waiver')
         AND lower(l.platform) = 'sleeper'
+        AND l.sport::text = ${sport}
         AND l."platformLeagueId" IS NOT NULL
         AND coalesce(t.payload->>'status', 'complete') = 'complete'
         AND t.payload->>'createdAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
@@ -89,7 +99,7 @@ async function read(now: Date): Promise<TrendingAdds | null> {
   `)
   if (rows.length === 0) return { rows: [], activeLeagues: 0, through: null }
   // A margin past the limit: an id with no catalog row (a team defense, a retired id) drops out.
-  const players = await resolveSleeperPlayers(rows.map((r) => r.sid))
+  const players = await resolveSleeperPlayers(rows.map((r) => r.sid), sport)
   const out: TrendingAdd[] = []
   for (const r of rows) {
     const p = players.get(r.sid)
