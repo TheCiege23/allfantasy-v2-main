@@ -45,3 +45,4 @@ export const LiveGameView = dynamic(() => import('./LiveGameView').then((m) => m
 export const Standings = dynamic(() => import('./Standings'))
 export const NotificationsCenter = dynamic(() => import('./NotificationsCenter'))
 export const CareerShare = dynamic(() => import('./CareerShare'))
+export const MyLeaguesV4 = dynamic(() => import('./MyLeaguesV4').then((m) => m.MyLeaguesV4))

@@ -59,6 +59,7 @@ import {
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
   SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
   CareerShare,
+  MyLeaguesV4,
 } from '@/components/core-app/screens/LazyScreens'
 import { getDevyCoreData, leagueDevyNav, looksLikeDevyFormat, NO_DEVY_NAV } from '@/lib/core-app/devy'
 import { loadDevyLeagueTab } from '@/lib/core-app/devyLeagueTab'
@@ -189,6 +190,7 @@ import {
 } from '@/lib/core-app/rankings'
 import { filterParams, parseRankingFilters } from '@/lib/core-app/rankingsEngine'
 import { getPortfolio } from '@/lib/core-app/portfolio'
+import { getMyLeaguesData } from '@/lib/core-app/myLeagues'
 import { readPortfolioInsights, readRecordedValueDays } from '@/lib/core-app/portfolioInsightsSummary'
 import { parseFilter, parseView, type LineupSignal } from '@/lib/core-app/portfolioView'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
@@ -345,6 +347,12 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   devy: 'devy',
   'devy-league': 'devy-league',
   portfolio: 'portfolio',
+  /*
+   * My Leagues (21a), inside the shell. It used to render at /leagues inside the global site shell,
+   * so the core nav's own "My Leagues" entry dropped the reader out of the app: no league rail, no
+   * core nav, a different header. /leagues now redirects here.
+   */
+  leagues: 'my-leagues',
   career: 'career',
   rankings: 'rankings',
   commissioner: 'commissioner',
@@ -459,6 +467,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
     description: 'This league’s devy slots, free agents, draft board and prospect values.',
   },
   portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
+  leagues: { title: 'My Leagues', description: 'Every league you play, sorted by what needs you.' },
   career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
   // (league-scoped career shares this key; the title is accurate either way)
   rankings: { title: 'Rankings', description: 'Community, portfolio and league rankings — normalised, filterable and explained.' },
@@ -1640,6 +1649,7 @@ export default async function AfCorePage({
         pausedSyncLeagueIds,
         rail,
         hiddenLeagueIds: shellHiddenIds,
+        leaguePrefs,
         tradeLeagueRow,
         tradeLeagueTypeKey,
         tradeStripLeagues,
@@ -1974,6 +1984,8 @@ type CoreScreenContext = {
   rail: RailLeague[]
   /** The rail's hidden list (the account's own plus every archived league) — what the rail leaves out. */
   hiddenLeagueIds: string[]
+  /** The account's own league preferences, unmerged — My Leagues orders by them and hides only what the account hid. */
+  leaguePrefs: Awaited<ReturnType<typeof getLeaguePreferences>>
   tradeLeagueRow: UserLeague | null
   tradeLeagueTypeKey: ReturnType<typeof resolveLeagueCardTypeKey> | null
   tradeStripLeagues: Array<{ id: string; name: string; platform: string; mark: string; meta: string | null }>
@@ -2075,6 +2087,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     hiddenHomeSections,
     hiddenLeagueSections,
   } = ctx
+  /*
+   * My Leagues (21a). Same read the old /leagues page made; a failed read renders the screen's own
+   * empty state rather than an error, as it did there.
+   */
+  const myLeagues =
+    activeKey === 'my-leagues'
+      ? await getMyLeaguesData(userId).catch((err) => {
+          console.error('[core/leagues] getMyLeaguesData failed', err)
+          return null
+        })
+      : null
   /* A Survivor league opens Camp, Tribe standings and Immunity challenge with the island banner. */
   const survivorBanner = (variant: 'full' | 'compact') =>
     leagueThemeForTypeKey(tradeLeagueTypeKey) === 'survivor' && selectedLeagueId ? (
@@ -5749,6 +5772,29 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             body="We could not read your career history just now. This is a read failure on our side, not a sign that you have none."
           />
         )
+      ) : activeKey === 'my-leagues' ? (
+        <MyLeaguesV4
+          leagues={applyLeagueOrder(myLeagues?.leagues ?? [], ctx.leaguePrefs.order)}
+          hiddenIds={ctx.leaguePrefs.hidden}
+          history={myLeagues?.history ?? []}
+          counts={
+            myLeagues?.counts ?? {
+              live: 0,
+              history: 0,
+              all: 0,
+              needs: 0,
+              playing: 0,
+              quiet: 0,
+              commissioner: 0,
+              drafting: 0,
+              dynasty: 0,
+            }
+          }
+          platforms={myLeagues?.platforms ?? []}
+          coverage={myLeagues?.coverage ?? []}
+          notice={myLeagues?.notice ?? null}
+          importHref="/import"
+        />
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
           <Portfolio
