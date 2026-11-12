@@ -34,6 +34,8 @@ export type HomeSectionId =
   | 'league-trades'
   | 'lock-brief'
   | 'league-focus'
+  | 'commish'
+  | 'season-pulse'
   | 'schedule'
   | 'trade-evaluator'
   | 'routine'
@@ -74,6 +76,13 @@ export const HOME_SECTIONS: readonly HomeSectionDef[] = [
   { id: 'lock-brief', group: 'top', cards: ['carryover'], categories: [] },
   { id: 'league-focus', group: 'top', cards: ['user-os'], categories: [] },
   { id: 'schedule', group: 'top', cards: ['schedule'], categories: [] },
+  /*
+   * The two guide cards (2026-11-12, owner: the home is "a teaching tool and a notification system").
+   * `commish` draws only for someone who runs a league; neither mutes an alert. Drawn after the bands,
+   * so they sit after `schedule` here to keep the Settings list in page order.
+   */
+  { id: 'commish', group: 'top', cards: ['commish'], categories: [] },
+  { id: 'season-pulse', group: 'top', cards: ['season-pulse'], categories: [] },
   /* The folded "Evaluate a trade" row (owner, 2026-11-06) — a switch since 2026-11-12; see the defaults. */
   { id: 'trade-evaluator', group: 'top', cards: ['trade-evaluator'], categories: [] },
   { id: 'routine', group: 'week', cards: ['routine'], categories: ['lineup_reminders'] },
@@ -108,9 +117,15 @@ export const HOME_LAYOUT_HIDDEN_KEY = 'homeLayoutHiddenSections'
  * decisions, injuries, league trades, the league that needs you, and the league list. Every one is a switch in Settings → Home page, and a person who has
  * saved their own layout keeps it — defaults only apply to a profile with no saved list
  * (`resolveHiddenHomeSections`). Defaults never mute alerts: muting reads the SAVED list only.
+ *
+ * ⚠ AND `league-focus` JOINED THEM LATER THE SAME DAY (owner, the "simplify /core" pass). Its card,
+ * "Your team · <one league>", showed one league picked out of many with no reason given, and its
+ * figures (waiver claims, an activity trend) did not answer "am I winning". The season pulse card
+ * (`season-pulse`) answers that for every league at once. The streak still stays on — it now
+ * renders as a pill inside the home's headline rather than a strip of its own.
  */
 export const DEFAULT_HIDDEN_HOME_SECTIONS: readonly HomeSectionId[] = [
-  'since-last-visit', 'live-games', 'drafts', 'lock-brief', 'schedule', 'trade-evaluator',
+  'since-last-visit', 'live-games', 'drafts', 'lock-brief', 'league-focus', 'schedule', 'trade-evaluator',
   'routine', 'matchups', 'chimmy', 'career', 'rivals', 'insights',
 ]
 
