@@ -35,6 +35,7 @@ export type HomeSectionId =
   | 'lock-brief'
   | 'league-focus'
   | 'schedule'
+  | 'trade-evaluator'
   | 'routine'
   | 'matchups'
   | 'chimmy'
@@ -73,6 +74,8 @@ export const HOME_SECTIONS: readonly HomeSectionDef[] = [
   { id: 'lock-brief', group: 'top', cards: ['carryover'], categories: [] },
   { id: 'league-focus', group: 'top', cards: ['user-os'], categories: [] },
   { id: 'schedule', group: 'top', cards: ['schedule'], categories: [] },
+  /* The folded "Evaluate a trade" row (owner, 2026-11-06) — a switch since 2026-11-12; see the defaults. */
+  { id: 'trade-evaluator', group: 'top', cards: ['trade-evaluator'], categories: [] },
   { id: 'routine', group: 'week', cards: ['routine'], categories: ['lineup_reminders'] },
   { id: 'matchups', group: 'week', cards: ['matchups'], categories: ['matchup_results'] },
   { id: 'chimmy', group: 'side', cards: ['chimmy'], categories: ['ai_alerts'] },
@@ -94,8 +97,21 @@ export const HIDDEN_HOME_SECTIONS_KEY = 'hiddenHomeSections'
 
 /** Display choices are separate from explicit topic mutes. Defaults must never mute alerts. */
 export const HOME_LAYOUT_HIDDEN_KEY = 'homeLayoutHiddenSections'
+/*
+ * ⚠ THE HOME TRIM, 2026-11-12 (owner's call after a no-league audit of /core). Five more sections
+ * start hidden, each because another screen already carries it:
+ *   streak           today's counts repeat the decision queue and injury check just below it
+ *   trade-evaluator  the same LeagueTradeEvaluator + market movers the Trades hub opens with
+ *   chimmy           the Chimmy button sits on every screen, with the same flagged count
+ *   career, rivals   Your career and Your week → Rivalry Radar
+ * What a default home leads with now: decisions, injuries, league trades, the league that needs
+ * you, and the league list. Every one is a switch in Settings → Home page, and a person who has
+ * saved their own layout keeps it — defaults only apply to a profile with no saved list
+ * (`resolveHiddenHomeSections`). Defaults never mute alerts: muting reads the SAVED list only.
+ */
 export const DEFAULT_HIDDEN_HOME_SECTIONS: readonly HomeSectionId[] = [
-  'since-last-visit', 'live-games', 'drafts', 'lock-brief', 'schedule', 'routine', 'matchups', 'insights',
+  'streak', 'since-last-visit', 'live-games', 'drafts', 'lock-brief', 'schedule', 'trade-evaluator',
+  'routine', 'matchups', 'chimmy', 'career', 'rivals', 'insights',
 ]
 
 /** An explicit empty list means show everything; existing personalized layouts take precedence. */

@@ -160,6 +160,7 @@ export type HomeCardName =
   | 'carryover'
   | 'user-os'
   | 'schedule'
+  | 'trade-evaluator'
   | 'routine'
   | 'issues'
   | 'streak'
@@ -646,10 +647,16 @@ export function CoreHomeCards({
             The league trade evaluator, folded to one row (owner, 2026-11-06). After the news bands so
             decisions and news still lead; it opens into the Trades hub's own picker and builder.
           */}
-          {/* Shown to everyone: with no trade league it opens the open-market grade instead. */}
-          <CoreCardBoundary card="trade-evaluator" resetKey={resetKey}>
-            <Suspense fallback={null}><HomeTradeEvaluatorCard leagues={tradeLeagues ?? []} viewerId={viewerId} /></Suspense>
-          </CoreCardBoundary>
+          {/*
+            With no trade league it opens the open-market grade instead. A Settings → Home page
+            switch since 2026-11-12, off by default (lib/core-app/homeSections.ts). Still no
+            `data-home-card`: it was never part of the per-viewer card ORDER, and it is not now.
+          */}
+          {isHidden('trade-evaluator') ? null : (
+            <CoreCardBoundary card="trade-evaluator" resetKey={resetKey}>
+              <Suspense fallback={null}><HomeTradeEvaluatorCard leagues={tradeLeagues ?? []} viewerId={viewerId} /></Suspense>
+            </CoreCardBoundary>
+          )}
 
           {/*
             3a mounted as the screen BODY. It ships its own rail/nav/topbar

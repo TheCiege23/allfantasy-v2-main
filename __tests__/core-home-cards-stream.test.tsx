@@ -303,11 +303,14 @@ describe('/core home cards stream independently', () => {
   it('renders the simpler default layout when no personal layout is saved', { timeout: 180_000 }, async () => {
     g.account.preferences = {}
     const { cards } = await homeCards()
+    /*
+     * The 2026-11-12 trim: streak, the trade evaluator, chimmy, career and rivals start hidden too
+     * (lib/core-app/homeSections.ts). Decisions, injuries, league trades, the league that needs you
+     * and the league list lead.
+     */
     expect([...cards.keys()]).toEqual([
-      'connect', 'streak', 'issues', 'triage', 'trade-band', 'user-os',
-      // The folded trade evaluator (2026-11-06), after the bands.
-      'trade-evaluator',
-      'chimmy', 'career', 'rivals', 'following', 'leagues', 'coverage',
+      'connect', 'issues', 'triage', 'trade-band', 'user-os',
+      'following', 'leagues', 'coverage',
     ])
   })
 

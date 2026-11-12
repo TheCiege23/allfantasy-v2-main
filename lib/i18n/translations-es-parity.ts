@@ -1627,6 +1627,8 @@ export const translationsEsParity: Record<string, string> = {
   "settings.home.section.league-focus.desc": "Un vistazo de cerca a la liga que más te necesita ahora mismo.",
   "settings.home.section.schedule.title": "Rivales de esta semana",
   "settings.home.section.schedule.desc": "Contra quién juegas esta semana en cada liga.",
+  "settings.home.section.trade-evaluator.title": "Evaluador de intercambios",
+  "settings.home.section.trade-evaluator.desc": "Una forma rápida de calificar un intercambio desde el inicio. La pantalla de Intercambios tiene la misma herramienta.",
   "settings.home.section.routine.title": "Rutina semanal",
   "settings.home.section.routine.desc": "Tu lista de la semana, con las revisiones de alineación y agentes libres de Chimmy.",
   "settings.home.section.matchups.title": "Enfrentamientos",

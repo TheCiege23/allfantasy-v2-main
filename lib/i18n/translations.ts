@@ -3862,6 +3862,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.home.section.league-focus.desc": "A closer look at the one league that needs you most right now.",
     "settings.home.section.schedule.title": "This week's opponents",
     "settings.home.section.schedule.desc": "Who you play this week in each league.",
+    "settings.home.section.trade-evaluator.title": "Trade evaluator",
+    "settings.home.section.trade-evaluator.desc": "A quick way to grade a trade from the home page. The Trades screen has the same tool.",
     "settings.home.section.routine.title": "Weekly routine",
     "settings.home.section.routine.desc": "Your checklist for the week, including Chimmy's lineup and waiver checks.",
     "settings.home.section.matchups.title": "Matchups",
