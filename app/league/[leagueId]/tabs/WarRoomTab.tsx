@@ -244,7 +244,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         featureId: 'war_room_pipeline_analysis',
         title: 'Pipeline analysis',
         description: 'Prospect and pipeline evaluation (AF Legacy).',
-        href: '/trade-finder',
+        href: `/core/trades?league=${encodeURIComponent(league.id)}#trade-finder`,
         cta: 'Analyze pipeline',
       },
     ],

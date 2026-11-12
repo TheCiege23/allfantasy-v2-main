@@ -104,21 +104,6 @@ describe('1. Trade Finder is AF Legacy', () => {
     expect(AI_COST_GATES.trade_finder.paidFromLaunch).toBe(true)
   })
 
-  it('trade partner match refuses before any lookup or OpenAI call', async () => {
-    const { GET } = await import('@/app/api/trade-partner-match/route')
-    const res = await GET(new Request('http://x/api/trade-partner-match?leagueId=L1'))
-    expect(res.status).toBe(403)
-    expect(gateCalls).toEqual(['legacy_trade_finder'])
-    expect(spend).not.toHaveBeenCalled()
-  })
-
-  it('trade partner match still sends signed-out callers a 401 first', async () => {
-    session.mockResolvedValue(null)
-    const { GET } = await import('@/app/api/trade-partner-match/route')
-    expect((await GET(new Request('http://x/api/trade-partner-match?leagueId=L1'))).status).toBe(401)
-    expect(gateCalls).toEqual([])
-  })
-
   it('matchmaking (Find Best Partners) refuses before rate limits or the pre-analysis', async () => {
     const { POST } = await import('@/app/api/trade-finder/matchmaking/route')
     const res = await (POST as (r: Request) => Promise<Response>)(new Request('http://x/api', json({ leagueId: 'L1' })))

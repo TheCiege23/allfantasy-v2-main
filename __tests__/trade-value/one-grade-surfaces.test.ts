@@ -669,19 +669,21 @@ describe('the /trade/[id] share page prints the stored one grade, never the stor
  * app/trade-finder/page.tsx) — carried a private letter (`computeTradeGrade`), an invented "+12%" win
  * probability and a read of the analyzer's `dynastyVerdict`. Deleted rather than repointed.
  */
-describe('/trade-finder has one client, and it is the graded one', () => {
-  it('the old client with its own letter is gone, and the page reads the graded candidates', () => {
+describe('/trade-finder has no client of its own', () => {
+  it('the old client with its own letter is gone, and the page only redirects to the Trades screen finder', () => {
     expect(existsSync(resolve(process.cwd(), 'components/TradeFinderClient.tsx'))).toBe(false)
+    // 2026-11-12: /trade-finder retired into /core/trades#trade-finder.
     const page = code('app/trade-finder/page.tsx')
-    expect(page).toMatch(/toFinderTrades/)
-    expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict/)
+    expect(page).toMatch(/permanentRedirect\(/)
+    expect(page).toMatch(/\/core\/trades/)
+    expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict|fetch\(/)
   })
 
   /*
    * 2026-09-30: TradeFinderClient was the only importer of components/PartnerMatchView.tsx, which was
    * the only importer of ManagerStyleBadge (a null compatibility stub), ReputationBadge and
    * LegacyScoreBadge. Censused in all four import forms, tests and mocks — nothing else named them.
-   * The API routes they fetched stay: /trade-finder still calls /api/trade-partner-match itself.
+   * (2026-11-12: /trade-finder itself then retired, and /api/trade-partner-match with it.)
    */
   it.each([
     'components/PartnerMatchView.tsx',

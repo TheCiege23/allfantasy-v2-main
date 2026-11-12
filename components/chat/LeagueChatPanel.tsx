@@ -425,7 +425,7 @@ export default function LeagueChatPanel({
                   Open waiver planner
                 </Link>
                 <Link
-                  href={`/trade-finder?leagueId=${encodeURIComponent(leagueId)}`}
+                  href={`/core/trades?league=${encodeURIComponent(leagueId)}#trade-finder`}
                   className="rounded-md border px-2 py-1 text-xs"
                   style={{ borderColor: "var(--border)", color: "var(--text)" }}
                 >

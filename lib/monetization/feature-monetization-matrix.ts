@@ -764,7 +764,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Finding real trade opportunities against your roster is part of AF Legacy.",
-    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on /api/trade-partner-match and POST /api/trade-finder/matchmaking. Client FeatureGate in components/TradeFinderV2.tsx; /trade-finder shows the refusal.",
+    backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on POST /api/trade-finder/matchmaking. Client FeatureGate in components/TradeFinderV2.tsx (the AF Legacy finder tab). /trade-finder redirects to the Trades screen finder.",
     frontendGateBehavior: "FeatureGate around the 'Find Trades' / 'Find Best Partners' buttons.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {

@@ -172,7 +172,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   {
     id: "trade-finder",
     label: "Trade Finder",
-    href: "/trade-finder",
+    href: "/core/trades#trade-finder",
     category: "tool",
     keywords: ["trade", "finder", "partners"],
     description: "Find trade partners",

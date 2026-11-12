@@ -252,7 +252,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'AI Trade Finder',
     benefitSummary:
       'Scan your full league for realistic trade paths, partner fits, and analyzer-ready packages without manually checking every roster.',
-    openToolHref: '/trade-finder',
+    openToolHref: '/core/trades#trade-finder',
     examples: [
       'Scan the full league for win-now, rebuild, or balanced trade paths',
       'Surface partner matches before sending a package into the analyzer',

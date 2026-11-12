@@ -23,7 +23,6 @@ const PROTECTED_PREFIXES = [
   "/onboarding",
   "/mock-draft",
   "/mock-draft-simulator",
-  "/trade-finder",
   "/trade-history",
   "/startup-dynasty",
   "/legacy-import",
