@@ -698,6 +698,17 @@ export default async function AfCorePage({
     redirect(query ? `/core?${query}` : '/core')
   }
 
+  /*
+   * ⚠ MY TEAM AND WAIVERS NEED A LEAGUE SINCE 2026-11-12 (owner's call). Their no-league boards —
+   * the cross-league lineup check and the waiver-processing list — repeated Your week, which reads
+   * the same lineup pulse and carries every league's next waiver run in its calendar. Old links
+   * (notifications, calendars, bookmarks) land there instead of 404ing. With `?league=` both
+   * screens render exactly as before. Before the session read, so the bounce costs nothing.
+   */
+  if ((navKey === 'my-team' || navKey === 'waivers') && !selectedLeagueId) {
+    redirect('/core/week')
+  }
+
   // `af.shell_ms` on the request's root span measures from here to "the shell has everything".
   const shellStartedAt = Date.now()
   // And `af.loop.busy_shell_pct`: how busy the thread was over that same window (lib/observability/loopBusy.ts).

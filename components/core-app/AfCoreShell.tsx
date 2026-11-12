@@ -630,18 +630,26 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
     // Top level rather than only in the Play sheet: finding a league to join is how a
     // new player starts, and the sheet is two taps deep.
     { key: 'find-league', label: 'Find a League', glyph: '⌕', href: '/find-league' },
-    // My team is league-scoped in the handoff, so the link carries the selected
-    // league rather than dropping the user on a screen that has to ask which one.
-    {
-      key: 'my-team',
-      label: navLabel('my-team'),
-      glyph: '◈',
-      href: props.selectedLeagueId
-        ? `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/my-team',
-      /* Leagues with an empty starting slot or a starter ruled out — see urgencyBadges. */
-      badge: urgencyBadge(props.urgencyBadges?.myTeam),
-    },
+    /*
+     * ⚠ MY TEAM AND WAIVERS ARE LEAGUE-ONLY IN THE NAV SINCE 2026-11-12 (owner's call). With no
+     * league selected they were cross-league boards ("10 lineups need a look", "processing in the
+     * next 24 hours") that repeated what Your week already shows: its blueprint reads the same
+     * `getMyTeamPulse` and its calendar carries every league's next waiver run. The no-league
+     * routes now redirect to /core/week (app/core/(shell)/[[...screen]]/page.tsx). Inside a league
+     * both stay — they are the only in-app roster and free-agent screens a league has.
+     */
+    ...(props.selectedLeagueId
+      ? [
+          {
+            key: 'my-team' as const,
+            label: navLabel('my-team'),
+            glyph: '◈',
+            href: `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`,
+            /* Leagues with an empty starting slot or a starter ruled out — see urgencyBadges. */
+            badge: urgencyBadge(props.urgencyBadges?.myTeam),
+          },
+        ]
+      : []),
     /* Only for leagues that actually roster defenders — see the CoreNavKey note. */
     ...(props.hasIdpDefense && props.selectedLeagueId
       ? [
@@ -672,14 +680,17 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
       /* Leagues with an offer waiting on you, from a trade scan in the last 10 minutes. */
       badge: urgencyBadge(props.urgencyBadges?.trades),
     }),
-    {
-      key: 'waivers',
-      label: navLabel('waivers'),
-      glyph: '◷',
-      href: props.selectedLeagueId
-        ? `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/core/waivers',
-    },
+    /* League-only, like My team above — see the note there. */
+    ...(props.selectedLeagueId
+      ? [
+          {
+            key: 'waivers' as const,
+            label: navLabel('waivers'),
+            glyph: '◷',
+            href: `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+        ]
+      : []),
     {
       key: 'players',
       label: navLabel('players'),
@@ -708,6 +719,8 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/week?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/week',
+      /* With no league, My team is off the nav and Your week carries its lineup check — and its badge. */
+      badge: props.selectedLeagueId ? undefined : urgencyBadge(props.urgencyBadges?.myTeam),
     }),
     /*
      * 38a — the live slate, inside the shell. Cross-league by definition: the
@@ -1014,6 +1027,13 @@ function navSections(props: AfCoreShellProps): NavSection[] {
 const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'waivers', 'my-team', 'matchup', 'trades']
 
 /*
+ * The bar with NO league selected (2026-11-12). My team and Waivers are league-only now (see the
+ * note in `navItems`), so their slots go to Your week — which took over the cross-league lineup
+ * check and waiver times — and Player Finder. Inside a league the bar above is unchanged.
+ */
+const MOBILE_BAR_KEYS_NO_LEAGUE: CoreNavKey[] = ['home', 'week', 'matchup', 'players', 'trades']
+
+/*
  * ⚠ WAIVERS TOOK THE "LEAGUES" SLOT (2026-11-07, owner's call). Waivers is a weekly in-season job and
  * was two taps away under More; Leagues duplicated the switcher at the top of every screen, which
  * changes league in one tap. The league TRAY is still one tap from More: the first entry there,
@@ -1302,11 +1322,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
+    const primary = props.selectedLeagueId ? MOBILE_BAR_KEYS : MOBILE_BAR_KEYS_NO_LEAGUE
+    /* A stand-in already on the bar would appear twice — the no-league bar holds both of them. */
     const fallbacks = MOBILE_BAR_FALLBACK_KEYS.flatMap((k) => {
-      const item = byKey.get(k)
+      const item = primary.includes(k) ? undefined : byKey.get(k)
       return item ? [item] : []
     })
-    return MOBILE_BAR_KEYS.flatMap((k) => {
+    return primary.flatMap((k) => {
       const item = byKey.get(k) ?? fallbacks.shift()
       return item ? [item] : []
     })
