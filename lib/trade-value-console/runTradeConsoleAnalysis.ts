@@ -41,7 +41,15 @@ import {
 } from './load-league-structured-context'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { clamp } from './sports-db-valuation'
-import { applyChartTePremium, resolveAssets, resolveLeagueTradeChart } from './leagueTradePricing'
+import { applyChartTePremium, lineFromPriced as lineFromPricedAsset, resolveAssets, resolveLeagueTradeChart, unpricedAsset } from './leagueTradePricing'
+import {
+  devyIdOf,
+  loadDevyCandidates,
+  mergeDevyPlaceholders,
+  nflSeasonNow,
+  priceOpenMarketDevySide,
+  splitDevyInputs,
+} from '@/lib/devy/openMarketDevy'
 import { loadTradeMarketOverlay } from './tradeMarketOverlay'
 import { lineupProfileFromCounts, lineupProfileFromSettings } from '@/lib/league/lineupProfile'
 import { gradePricedSides } from '@/lib/decision-os/trade/leagueTradeGrader'
@@ -49,7 +57,7 @@ import { createNcaafLeagueGrader } from '@/lib/decision-os/trade/ncaafLeagueGrad
 import { applyCollegeGrade } from '@/lib/decision-os/trade/ncaafRedraftValue'
 import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
 import { createFootballTradeFormatGrader } from '@/lib/decision-os/trade/footballTradeFormatGrade'
-import { createFootballCombinedPickQuote } from '@/lib/decision-os/trade/footballCampusTradeValue'
+import { createFootballCombinedPickQuote, optionChartFactor } from '@/lib/decision-os/trade/footballCampusTradeValue'
 import { createFootballCampusDraftGrader } from '@/lib/decision-os/trade/footballCampusDraftGrade'
 import { createGuillotineGrader } from '@/lib/decision-os/trade/guillotineGrader'
 import { createZombieGrader } from '@/lib/decision-os/trade/zombieGrader'
@@ -279,7 +287,16 @@ export async function runTradeConsoleAnalysis(
   // The chart and its request settings now live in `leagueTradePricing.ts`, shared with every grade.
   const { marketCtx, tePremium, isSuperFlex, waiverBudget, fcPlayers, nflCtx, faabState } = chart
 
-  let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(give, {
+  /*
+   * College prospects with NO league (the open analyzer's "college player for a pro player"): a prospect
+   * picked from search is set aside before the NFL pricer, which matches by name and would price a namesake
+   * pro — see `lib/devy/openMarketDevy.ts`. Inside a league the league's own devy policy runs instead.
+   */
+  const openMarketDevy = !leagueRow && effectiveSport === 'NFL'
+  const giveSplit = openMarketDevy ? splitDevyInputs(give) : null
+  const getSplit = openMarketDevy ? splitDevyInputs(get) : null
+
+  let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(giveSplit?.rest ?? give, {
     effectiveSport,
     nflCtx,
     waiverBudget,
@@ -289,7 +306,7 @@ export async function runTradeConsoleAnalysis(
     pickSlots: chart.pickSlots ?? null, combinedPickQuote,
   })
   mark('assets_give')
-  let { priced: getPriced, lines: getLines, unresolved: getUnresolved } = await resolveAssets(get, {
+  let { priced: getPriced, lines: getLines, unresolved: getUnresolved } = await resolveAssets(getSplit?.rest ?? get, {
     effectiveSport,
     nflCtx,
     waiverBudget,
@@ -298,6 +315,23 @@ export async function runTradeConsoleAnalysis(
     fcPlayers,
     pickSlots: chart.pickSlots ?? null, combinedPickQuote,
   })
+  let giveInputs: TradeAssetInput[] = [...give]
+  let getInputs: TradeAssetInput[] = [...get]
+  if (giveSplit && getSplit) {
+    const placeholder = (input: TradeAssetInput) => {
+      const name = input.kind === 'player' ? String(input.name ?? 'College prospect') : 'College prospect'
+      const pa = unpricedAsset({ name, type: 'player', reason: { code: 'no_value_on_file', label: 'College prospect not found' } })
+      return { priced: pa, line: lineFromPricedAsset(pa, { sport: 'NFL', pricedSource: 'unknown' }) }
+    }
+    const g = mergeDevyPlaceholders(give, giveSplit, { lines: giveLines, priced: givePriced }, placeholder)
+    const t = mergeDevyPlaceholders(get, getSplit, { lines: getLines, priced: getPriced }, placeholder)
+    giveInputs = g.inputs
+    giveLines = g.lines
+    givePriced = g.priced
+    getInputs = t.inputs
+    getLines = t.lines
+    getPriced = t.priced
+  }
 
   const unresolved = [...giveUnresolved, ...getUnresolved]
   if (unresolved.length > 0) {
@@ -338,6 +372,33 @@ export async function runTradeConsoleAnalysis(
     getLines = td.lines
     getPriced = td.priced
     devyPricedCount = gd.devyPriced + td.devyPriced
+  }
+  if (openMarketDevy) {
+    const ids = [...giveInputs, ...getInputs].map(devyIdOf).filter((x): x is string => Boolean(x))
+    const names = [...giveLines, ...getLines].filter((l) => l.unpriced).map((l) => l.name)
+    const candidates = ids.length || names.length ? await loadDevyCandidates(prisma, { ids, names }) : []
+    if (candidates.length > 0) {
+      // Prospects live on the dynasty Superflex 12 board; rescale to this chart, or refuse on a redraft one.
+      const factor = await optionChartFactor(chart).catch(() => null)
+      const season = nflSeasonNow()
+      const gd = priceOpenMarketDevySide({ inputs: giveInputs, lines: giveLines, priced: givePriced }, candidates, season, factor)
+      const td = priceOpenMarketDevySide({ inputs: getInputs, lines: getLines, priced: getPriced }, candidates, season, factor)
+      giveLines = gd.lines
+      givePriced = gd.priced
+      getLines = td.lines
+      getPriced = td.priced
+      devyPricedCount += gd.devyPriced + td.devyPriced
+      const refused = [...gd.redraftRefused, ...td.redraftRefused]
+      if (refused.length) {
+        dataGaps.push(`${refused.join(', ')}: college prospects are valued only on a dynasty chart — switch Values to Dynasty to grade them.`)
+      }
+      for (const u of [...gd.unmeasured, ...td.unmeasured]) dataGaps.push(u)
+    }
+    for (const l of [...giveLines, ...getLines]) {
+      if (l.unpriced && ids.length && l.unpricedReason?.label === 'College prospect not found') {
+        dataGaps.push(`${l.name}: this college prospect is no longer on file (he may have been drafted). Search again.`)
+      }
+    }
   }
   const [giveEnriched, getEnriched] = await Promise.all([
     enrichTradeConsolePlayerLines({
