@@ -34,7 +34,7 @@ it('does not turn a failed primary read into a healthy empty account', async () 
  expect(db.roster.findMany).not.toHaveBeenCalled()
 })
 it('filters a focused weekly league in the database before the display cap',async()=>{
- await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'),undefined,null,'L64')
+ await getMyTeamPulse('user',new Date('2026-09-27T12:00:00Z'),undefined,'L64')
  expect(db.leagueTeam.findMany).toHaveBeenCalledWith(expect.objectContaining({where:{claimedByUserId:'user',leagueId:'L64'}}))
 })
 it('treats explicit Best Ball rules as an automatic lineup, not a manual issue', async () => {
