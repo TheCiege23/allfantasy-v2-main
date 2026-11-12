@@ -55,7 +55,7 @@ import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
   Matchup, Waivers, DraftHq, DraftBoard,
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
-  GamePlan, WarRoomWeek, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
+  GamePlan, WarRoomWeek, WarFront, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
   SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
   CareerShare,
@@ -141,6 +141,7 @@ import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
+import { buildWarFront } from '@/lib/core-app/warRoomFront'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
 import { getDraftArchiveScreen } from '@/lib/draft-archive/screen'
 import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
@@ -1637,6 +1638,7 @@ export default async function AfCorePage({
         playedLeagues,
         pausedSyncLeagueIds,
         rail,
+        hiddenLeagueIds: shellHiddenIds,
         tradeLeagueRow,
         tradeLeagueTypeKey,
         tradeStripLeagues,
@@ -1969,6 +1971,8 @@ type CoreScreenContext = {
   playedLeagues: UserLeague[]
   pausedSyncLeagueIds: ReadonlySet<string> | null
   rail: RailLeague[]
+  /** The rail's hidden list (the account's own plus every archived league) — what the rail leaves out. */
+  hiddenLeagueIds: string[]
   tradeLeagueRow: UserLeague | null
   tradeLeagueTypeKey: ReturnType<typeof resolveLeagueCardTypeKey> | null
   tradeStripLeagues: Array<{ id: string; name: string; platform: string; mark: string; meta: string | null }>
@@ -3574,8 +3578,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * The cost only lands on a standings request that has NO league held; with a
    * league selected the per-league screen loads instead and this stays null.
    */
+  /*
+   * ⚠ THE WAR ROOM HOME READS THIS SAME BOARD — The Front (lib/core-app/warRoomFront.ts) places every
+   * team from it. Same call, same `selectedLeagueId` (null here) and so the same summary key as Season
+   * Outlook's own board: a visit to either warms the other, and the two can never disagree about a
+   * team's odds. Not `?view=plan`, which is Game Plan alone.
+   */
+  const wantsWarFront = activeKey === 'war-room' && !selectedLeagueId && !gamePlanView && Boolean(userId)
   const wantsOutlook =
     activeKey === 'season-outlook' ||
+    wantsWarFront ||
     ((activeKey === 'standings' || activeKey === 'week') && !selectedLeagueId && !rivalriesView)
 
   /*
@@ -3622,6 +3634,32 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     ? outlookOnSummary
       ? (outlookFresh?.data ?? null)
       : await getSeasonOutlook(userId, outlookLeagues, selectedLeagueId).catch(() => null)
+    : null
+
+  /*
+   * The Front: one card per league in the rail — archived and hidden leagues stay out, as they do
+   * there — placed from the outlook above. Format and trade deadline through the SAME resolvers the
+   * rail and the Trade Center use, so a card cannot call a league dynasty that the rail calls redraft.
+   * Pure; the screen gets this small result, never the board.
+   */
+  const warFront = wantsWarFront
+    ? buildWarFront({
+        outlook,
+        leagues: playedLeagues
+          .filter((l) => !ctx.hiddenLeagueIds.includes(l.id))
+          .map((l) => ({
+            id: l.id,
+            name: String(l.name ?? 'League'),
+            format: resolveLeagueCardTypeKey({
+              leagueType: l.leagueType,
+              leagueVariant: l.leagueVariant,
+              settings: l.settings ?? undefined,
+              isDynasty: l.isDynasty,
+            }),
+            tradeDeadlineWeek: tradeDeadlineWeek(l.settings),
+            currentWeek: typeof l.currentWeek === 'number' && l.currentWeek > 0 ? l.currentWeek : null,
+          })),
+      })
     : null
 
   // Your Week reads only the selected league's existing model, including its scenarios.
@@ -5176,7 +5214,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             */
             blurb={
               gamePlan?.available
-                ? 'Flagged starters in active manual lineups, soonest deadline first; locked players follow. Scouting a room is per-league — pick one below for that.'
+                ? 'Every team you run — where it stands and the play it calls for — then this week’s flagged starters, soonest deadline first. Scouting a room is per-league — pick one below for that.'
                 : 'Scouting a room means scouting one room — pick the league whose managers you want read.'
             }
             issues={issues}
@@ -5213,6 +5251,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 was before this change.
               */
               <>
+                {/*
+                  The Front first: the War Room is the strategist — where each team stands and the play
+                  it calls for (lib/core-app/warRoomFront.ts). Then this week's lineup orders, then the
+                  matchups.
+                */}
+                {warFront ? <WarFront data={warFront} /> : null}
                 {gamePlan?.available ? (
                   <GamePlan
                     data={gamePlan.data}

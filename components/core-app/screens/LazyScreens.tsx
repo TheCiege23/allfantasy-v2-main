@@ -25,6 +25,7 @@ export const DraftArchive = dynamic(() => import('./DraftArchive').then((m) => m
 export const Scout = dynamic(() => import('./Scout'))
 export const GamePlan = dynamic(() => import('./GamePlan'))
 export const WarRoomWeek = dynamic(() => import('./WarRoomWeek'))
+export const WarFront = dynamic(() => import('./WarFront'))
 export const Partners = dynamic(() => import('./Partners'))
 export const BusinessRetention = dynamic(() => import('./BusinessRetention').then((m) => m.BusinessRetention))
 export const DiscordBridge = dynamic(() => import('./DiscordBridge').then((m) => m.DiscordBridge))
