@@ -63,7 +63,7 @@ export const dashTriageMessages = defineMessages({
     openPlayerFinder: 'Open Player Finder',
     moreFlagged: (n: number) => `+${n} more starters flagged — full exposure audit`,
     valuesBasis: (format: string, qb: string) =>
-      `Trade values are FantasyCalc market prices (${format}, ${qb}, NFL) — a guide, not your league’s scoring.`,
+      `Trade values are FantasyCalc market prices (${format}, ${qb}, NFL only) — not tuned to your league’s scoring.`,
   },
   es: {
     safePivot: (bench) => `relevo seguro: ${bench.join(' o ')}`,
@@ -112,7 +112,7 @@ export const dashTriageMessages = defineMessages({
     openPlayerFinder: `Abrir ${coreUiCopy('Player Finder', 'es')}`,
     moreFlagged: (n) => `+${n} titulares señalados más: auditoría completa de exposición`,
     valuesBasis: (format, qb) =>
-      `Los valores son precios de mercado de FantasyCalc (${format}, ${qb}, NFL): una guía, no la puntuación de tu liga.`,
+      `Los valores son precios de mercado de FantasyCalc (${format}, ${qb}, solo NFL): no están ajustados a la puntuación de tu liga.`,
   },
 })
 
