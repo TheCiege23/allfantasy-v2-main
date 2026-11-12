@@ -55,7 +55,7 @@ import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
   Matchup, Waivers, DraftHq, DraftBoard,
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
-  GamePlan, WarRoomWeek, WarFront, WarTradeIdeas, WarStrategyBrief, WarCampaign, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
+  GamePlan, WarRoomWeek, WarFront, WarTradeIdeas, WarStrategyBrief, WarCampaign, WarChest, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
   SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
   CareerShare,
@@ -5279,6 +5279,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 */
                 /* War Room phase 5: the road ahead — each game you have left priced both ways, and the tiebreak. Free. */
                 road={warStrategy?.campaign ? <WarCampaign view={warStrategy.campaign} /> : null}
+                /* War Room phase 6: the war chest — FAAB left against every team's. Free; nothing for a non-FAAB league. */
+                chest={warStrategy?.warChest ? <WarChest view={warStrategy.warChest} /> : null}
                 /*
                   War Room phase 2: trades that move your odds here. Drawn when there is something to say —
                   the ideas, or the lock for a viewer whose plan does not include them.
@@ -5307,6 +5309,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                           format: warStrategy.format,
                           nextSeason: warStrategy.nextSeason,
                           campaign: warStrategy.campaign,
+                          warChest: warStrategy.warChest,
                         },
                       }}
                     />

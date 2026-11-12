@@ -5,6 +5,7 @@ import type { WarTrades } from './warRoomTrades'
 import type { FormatBrief } from './warRoomFormat'
 import type { NextSeasonView } from './warRoomNextSeason'
 import type { WarCampaign } from './warRoomCampaign'
+import type { WarChest } from './warRoomWarChest'
 import type { warRoomPlanMessages } from './messages/warRoomPlan'
 import type { warRoomBriefMessages } from './messages/warRoomBrief'
 
@@ -47,6 +48,8 @@ export type WarPlanInput = {
   nextSeason: NextSeasonView | null
   /** The road ahead (phase 5). Optional so a caller without it still builds a brief. */
   campaign?: WarCampaign | null
+  /** The war chest (phase 6). Optional for the same reason. */
+  warChest?: WarChest | null
 }
 
 /** A line and how readily it is dropped when the brief is too long: higher drops first. */
@@ -99,6 +102,12 @@ export function warPlanPrompt(input: WarPlanInput, m: PlanCopy, b: BriefCopy, la
       .filter((r) => !r.isYou && r.name)
       .map((r) => m.tiebreakTeam(r.name!, `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`, signedPts(r.pointsGap)))
     if (near.length > 0) add(m.tiebreak(near.join('; ')), 3)
+  }
+
+  const chest = input.warChest ?? null
+  if (chest?.kind === 'faab' && chest.you != null && chest.rank != null) {
+    // Use-it-or-lose-it is decisive this late; otherwise the balance is context and drops early.
+    add(m.faab(`$${chest.you}`, chest.budget == null ? null : `$${chest.budget}`, chest.rank, chest.known, chest.useIt), chest.useIt ? 1 : 4)
   }
 
   if (trades?.mode === 'win_now' && trades.ideas[0]) {

@@ -2,6 +2,7 @@ import { bestLineup, EMPTY_SCENARIO, scenarioEffect, type ScenarioModel, type Sc
 import type { SimAdjustment } from './outlookSim'
 import { agingThreshold } from './dynastyAging'
 import type { WarHorizon, WarPosture } from './warRoomFront'
+import type { TradeMap } from './warRoomTradeMap'
 
 /**
  * War Room phase 2 — trades that move YOUR odds, for one league.
@@ -101,6 +102,12 @@ export type WarTradesView = {
   trades: WarTrades
   /** Where a deal is built. */
   tradeCenterHref: string
+  /**
+   * The trade map (phase 6, warRoomTradeMap.ts): rivals deep where you are thin and thin where you are
+   * deep. Gated with the ideas. Optional so a view built without it still renders; null when the
+   * rosters could not be read.
+   */
+  map?: TradeMap | null
 }
 
 export type WarTradesInput = {
