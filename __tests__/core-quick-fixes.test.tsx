@@ -48,6 +48,13 @@ describe('phone bottom bar', () => {
     expect(barPaths({ selectedLeagueId: 'L1' })).toEqual(['/core', '/core/waivers', '/core/my-team', '/core/matchup', '/core/trades'])
   })
 
+  /* My team and Waivers are league-only since 2026-11-12; Your week and Player Finder take their slots. */
+  it('swaps My team and Waivers for Your week and Player Finder with no league selected', () => {
+    const paths = barPaths({ selectedLeagueId: null })
+    expect(paths).toEqual(['/core', '/core/week', '/core/matchup', '/core/players', '/core/trades'])
+    expect(new Set(paths).size).toBe(paths.length)
+  })
+
   /* Waivers took the Leagues slot (2026-11-07, owner's call); the league tray opens from More. */
   it('puts Waivers second, and opens the league tray from More in place rather than navigating away', async () => {
     const { container } = render(

@@ -130,6 +130,13 @@ describe('the rail, grouped by job', () => {
     const { hrefs } = shell({ selectedLeagueId: null })
     expect(hrefs.some((h) => h.startsWith('/core/schedule') || h.startsWith('/core/moves'))).toBe(false)
   })
+
+  /* 2026-11-12: the no-league boards repeated Your week, so both routes now need a league. */
+  it('offers My team and Waivers only with a league held', () => {
+    const { hrefs } = shell({ selectedLeagueId: null })
+    expect(hrefs.some((h) => h.startsWith('/core/my-team') || h.startsWith('/core/waivers'))).toBe(false)
+    expect(hrefs).toContain('/core/week')
+  })
 })
 
 describe('nothing the tab row carried became unreachable', () => {
