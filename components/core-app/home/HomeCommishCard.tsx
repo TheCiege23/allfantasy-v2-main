@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useMessages } from '@/components/i18n/useMessages'
 import { homeGuideMessages } from '@/lib/core-app/messages/homeGuide'
+import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
+import type { LadderEntry } from '@/lib/core-app/commissioner/inactiveLadder'
 import '@/components/core-app/home/af-home-guide.css'
 
 /**
@@ -25,17 +27,25 @@ export type CommishRisk = {
 }
 
 const RISK_LIMIT = 3
+/** Ladder rows on the home; the rest are on the Commissioner Hub, which draws every one. */
+const LADDER_LIMIT = 3
 
 export function HomeCommishCard({
   runCount,
   stats,
   risks,
   partial,
+  ladder,
 }: {
   runCount: number
   stats: CommishStat[]
   risks: CommishRisk[]
   partial: boolean
+  /**
+   * The inactive-manager ladder (lib/core-app/commissioner/inactiveLadder.ts). Null when it was not
+   * measured, which draws nothing — an empty array is the measured "everyone is active".
+   */
+  ladder?: LadderEntry[] | null
 }) {
   const g = useMessages(homeGuideMessages)
   const shown = risks.slice(0, RISK_LIMIT)
@@ -87,6 +97,8 @@ export function HomeCommishCard({
           ))}
         </ul>
       )}
+      {/* The card's own "why it matters" line explains the ladder, so the list does not repeat it. */}
+      {ladder ? <InactiveLadderList entries={ladder} limit={LADDER_LIMIT} showTeach={false} /> : null}
       {partial ? <p className="af-guide-note">{g.runPartial}</p> : null}
       <p className="af-decision-why af-guide-why">
         <b>{g.why}</b> {g.runTeach}

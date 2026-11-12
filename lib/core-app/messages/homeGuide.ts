@@ -67,7 +67,7 @@ export const homeGuideMessages = defineMessages({
     runNoRisks: 'Nothing needs a commissioner right now.',
     runOpen: 'Open Commissioner Hub',
     runTeach:
-      'A healthy league is one where every team sets a lineup. An inactive manager hands free wins to whoever plays them and can tip the playoff race — nudge early, replace before the deadline.',
+      'A healthy league is one where every team sets a lineup — an inactive manager hands free wins to whoever plays them. The ladder: one quiet week gets a nudge, two a warning, three means line up a replacement before your trade deadline.',
     runPartial: 'Some leagues couldn’t be read this time, so these counts may be low.',
   },
   es: {
@@ -122,7 +122,7 @@ export const homeGuideMessages = defineMessages({
     runNoRisks: 'Nada necesita a un comisionado ahora mismo.',
     runOpen: 'Abrir el Centro del Comisionado',
     runTeach:
-      'Una liga sana es una donde cada equipo alinea. Un mánager inactivo regala victorias a quien juega contra él y puede inclinar la carrera de playoffs: avísale pronto y reemplázalo antes de la fecha límite.',
+      'Una liga sana es una donde cada equipo alinea: un mánager inactivo regala victorias a quien juega contra él. La escalera: una semana sin movimientos merece un recordatorio, dos una advertencia y tres significa buscar un reemplazo antes de la fecha límite de intercambios.',
     runPartial: 'Algunas ligas no se pudieron leer esta vez, así que estos números pueden quedarse cortos.',
   },
 })

@@ -7,6 +7,36 @@ import { HomeCommishCard } from '@/components/core-app/home/HomeCommishCard'
 import { HomeSeasonPulse } from '@/components/core-app/home/HomeSeasonPulse'
 import { buildSeasonPulse, foldInjuredStarters } from '@/lib/core-app/homeGuide'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
+import { buildInactiveLadder } from '@/lib/core-app/commissioner/inactiveLadder'
+import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
+
+/** SAMPLE managers for the inactive-manager ladder — invented names and quiet spells. */
+const SAMPLE_LADDER = buildInactiveLadder(
+  [
+    {
+      leagueId: 'c1',
+      leagueName: 'Sample Commish League',
+      hubHref: '#',
+      replaceHref: '#',
+      managers: [
+        { name: 'Sample Manager A', status: 'inactive', lastActionAt: null },
+        { name: 'Sample Manager B', status: 'inactive', lastActionAt: new Date(Date.parse('2026-11-12T21:00:00Z') - 16 * 86_400_000).toISOString() },
+        { name: 'Sample Manager C', status: 'active', lastActionAt: new Date(Date.parse('2026-11-12T21:00:00Z') - 2 * 86_400_000).toISOString() },
+      ],
+    },
+    {
+      leagueId: 'c2',
+      leagueName: 'Sample Keeper League',
+      hubHref: '#',
+      replaceHref: '#',
+      managers: [
+        { name: 'Sample Manager D', status: 'inactive', lastActionAt: new Date(Date.parse('2026-11-12T21:00:00Z') - 24 * 86_400_000).toISOString() },
+        { name: 'Sample Manager E', status: 'active', lastActionAt: new Date(Date.parse('2026-11-12T21:00:00Z') - 9 * 86_400_000).toISOString() },
+      ],
+    },
+  ],
+  new Date('2026-11-12T21:00:00Z'),
+)
 
 /**
  * Harness only (app/e2e is 404 in production). SAMPLE data throughout — league names, players and
@@ -157,8 +187,8 @@ export default function HomeGuideHarnessClient({ commissioner, empty }: { commis
                     {
                       id: 'r1',
                       severity: 'bad',
-                      title: '3 managers have not set a lineup in 2 weeks',
-                      detail: 'Their opponents are getting free wins. Nudge them, or line up replacements before the trade deadline.',
+                      title: '2 teams with nobody running them',
+                      detail: 'No owner: Sample Team F, Sample Team G. Open orphan teams to assign them.',
                       leagueName: 'Sample Commish League',
                       action: { label: 'Review managers', href: '#', external: false },
                     },
@@ -181,9 +211,16 @@ export default function HomeGuideHarnessClient({ commissioner, empty }: { commis
                   ]
             }
             partial={false}
+            ladder={empty ? [] : SAMPLE_LADDER}
           />
         ) : null}
         <HomeSeasonPulse pulse={SAMPLE_PULSE} />
+        {commissioner && !empty ? (
+          /* The Commissioner Hub draws every rung, with the ladder explained; the home card shows three. */
+          <section className="af3a-card af-guide-card" data-testid="hub-ladder">
+            <InactiveLadderList entries={SAMPLE_LADDER} />
+          </section>
+        ) : null}
       </div>
     </AfCoreShell>
   )
