@@ -190,7 +190,7 @@ import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { getCrossLeagueValueActions } from '@/lib/core-app/crossLeagueValueActions'
-import { getSinceLastVisit } from '@/lib/core-app/sinceLastVisit'
+import { getSinceLastVisit, snapshotStandings } from '@/lib/core-app/sinceLastVisit'
 import { getUrgencyBadges, recordPendingOffers } from '@/lib/core-app/urgencyBadges'
 import { isSpeculativeRequestHeaders } from '@/lib/http/speculativeRequest'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
@@ -4398,6 +4398,39 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           ).catch(() => null),
           brief,
           drafts,
+          /*
+           * The season pulse (2026-11-12): your claimed team's rank and record in every league in view,
+           * from the same set-based read the "since your last visit" brief diffs (one query, plus one
+           * for AllFantasy-native leagues). Skipped entirely when the section is off.
+           */
+          standings: hiddenHomeSections.has('season-pulse')
+            ? Promise.resolve(null)
+            : traceCard('season-pulse', () =>
+                snapshotStandings(userId, homePlayed.map((l) => l.id)).then((snap) =>
+                  homePlayed.map((l) => {
+                    const size = l as { leagueSize?: number | null; teamCount?: number | null }
+                    return {
+                      id: l.id,
+                      name: String(l.name ?? 'League'),
+                      platform: String(l.platform ?? ''),
+                      teams: Number(size.leagueSize ?? size.teamCount ?? 0) || null,
+                      standing: snap[l.id] ?? null,
+                    }
+                  }),
+                ),
+              ).catch(() => null),
+          /*
+           * Leagues you run (2026-11-12): the Commissioner Hub's own overview over the same candidate
+           * set the hub uses, so the two never disagree. Read only for someone who runs a league in
+           * view, and only when the section is on; it chains on the merged issues it needs anyway.
+           */
+          commish: (() => {
+            const runIds = homePlayed.filter((l) => Boolean(l.isCommissioner)).map((l) => l.id)
+            if (runIds.length === 0 || hiddenHomeSections.has('commish')) return Promise.resolve(null)
+            return traceCard('commish', () =>
+              mergedIssues.then((list) => getCommissionerOverview({ userId, candidateLeagueIds: runIds, issues: list, now })),
+            ).catch(() => null)
+          })(),
         }
       })()
 

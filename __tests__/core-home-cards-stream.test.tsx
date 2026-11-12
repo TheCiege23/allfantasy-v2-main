@@ -180,7 +180,8 @@ vi.mock('@/lib/core-app/recentTrades', () => ({
     },
   ),
 }))
-vi.mock('@/lib/core-app/sinceLastVisit', () => ({ getSinceLastVisit: held('brief') }))
+vi.mock('@/lib/core-app/sinceLastVisit', () => ({ getSinceLastVisit: held('brief'), snapshotStandings: held('standings') }))
+vi.mock('@/lib/core-app/commissionerOverview', () => ({ getCommissionerOverview: held('commish') }))
 vi.mock('@/lib/core-app/matchup', () => ({ getMatchupData: held('matchup') }))
 vi.mock('@/lib/core-app/draftHqAll', () => ({ getDraftHqAll: held('drafts') }))
 vi.mock('@/lib/decision-os/userOs', () => ({ resolveUserOsSnapshot: held('userOs') }))
@@ -305,10 +306,13 @@ describe('/core home cards stream independently', () => {
     const { cards } = await homeCards()
     /*
      * The 2026-11-12 trim: the trade evaluator, chimmy, career and rivals start hidden too
-     * (lib/core-app/homeSections.ts). The streak stays on by the owner's call.
+     * (lib/core-app/homeSections.ts). The streak stays on by the owner's call. The same day's
+     * "simplify /core" pass: the headline leads (the streak is a pill inside it), "Your team"
+     * (user-os) starts hidden, and the two guide cards follow the bands — each renders nothing for a
+     * reader it does not apply to.
      */
     expect([...cards.keys()]).toEqual([
-      'connect', 'streak', 'issues', 'triage', 'trade-band', 'user-os',
+      'connect', 'headline', 'issues', 'triage', 'trade-band', 'commish', 'season-pulse',
       'following', 'leagues', 'coverage',
     ])
   })
@@ -333,8 +337,9 @@ describe('/core home cards stream independently', () => {
       // "Connect your league" (2026-09-25) — above everything, and renders nothing once a team is
       // claimed; see components/core-app/home/ConnectLeagueCard.tsx.
       'connect',
-      // The daily streak strip (2026-10-08) — one compact row above the decisions.
-      'streak',
+      // The headline (2026-11-12) — the page explained and the open count said once; the daily
+      // streak (2026-10-08) is a pill inside it rather than a strip of its own.
+      'headline',
       // The decision queue leads the home (2026-09-16) — ahead of every band.
       'issues',
       'since-last-visit',
@@ -345,6 +350,9 @@ describe('/core home cards stream independently', () => {
       'carryover',
       'user-os',
       'schedule',
+      // The guide cards (2026-11-12): leagues you run, then where you stand in yours.
+      'commish',
+      'season-pulse',
       // The folded trade evaluator (2026-11-06): one closed row after the bands, before the dashboard.
       'trade-evaluator',
       'routine',

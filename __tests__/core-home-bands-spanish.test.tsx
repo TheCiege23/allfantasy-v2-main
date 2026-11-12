@@ -129,7 +129,7 @@ describe('Starters in doubt (Dash3ATriage)', () => {
       expect(out).toContain('+2 más')
       expect(out).toContain('Buscar agentes libres en Bla bla bla')
       expect(out).toContain('+1 titulares señalados más: auditoría completa de exposición')
-      expect(out).toContain('Valores de FantasyCalc (dynasty, 1QB, PPR de 12 equipos)')
+      expect(out).toContain('Los valores son precios de mercado de FantasyCalc (dynasty, 1QB, NFL)')
       cleanup()
     }
     expect(es(<Dash3ATriage book={[triageRow({ nextKickoffAt: new Date(T_NOW.getTime() - 60_000).toISOString() })]} now={T_NOW} valueBasis={BASIS} />)).toContain('partido en curso')
@@ -158,7 +158,7 @@ describe('Starters in doubt (Dash3ATriage)', () => {
     expect(out).toContain('kickoff in 2h')
     expect(out).toContain('swap in Tyjae Spears or Zach Charbonnet')
     expect(out).toContain('Find free agents in Bla bla bla')
-    expect(out).toContain('Values from FantasyCalc (dynasty, 1QB, 12-team PPR). Not tuned to your league’s settings, and NFL only.')
+    expect(out).toContain('Trade values are FantasyCalc market prices (dynasty, 1QB, NFL) — a guide, not your league’s scoring.')
   })
 })
 
@@ -326,7 +326,7 @@ describe('Dash34Carryover and Dash34Coverage', () => {
   it('coverage reads Spanish, every fixed item and the ambiguous names', () => {
     const out = es(<Dash34Coverage data={dash({ coverage: COVERAGE as never })} />)
     expectSpanish(out, ENGLISH, 'coverage')
-    expect(out).toContain('Lo que esta pantalla no vigila (7)')
+    expect(out).toContain('Lo que Inicio aún no sigue (7)')
     expect(out).toContain('Marcadores en vivo')
     expect(out).toContain('Estado de lesión de Josh Allen, Mike Williams, Josh Johnson y 2 más')
     expect(out).toContain('más de un jugador comparte ese nombre y no vamos a adivinar cuál')
@@ -354,7 +354,7 @@ describe('Dash34Carryover and Dash34Coverage', () => {
     ]) expect(out).toContain(s)
     cleanup()
     const cov = en(<Dash34Coverage data={dash({ coverage: COVERAGE as never })} />)
-    expect(cov).toContain('What this screen is not watching (7)')
+    expect(cov).toContain('What Home doesn’t track yet (7)')
     expect(cov).toContain('Injury status for Josh Allen, Mike Williams, Josh Johnson and 2 more — more than one player shares that name and we will not guess which')
   })
 })

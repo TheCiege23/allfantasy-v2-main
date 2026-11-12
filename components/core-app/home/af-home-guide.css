@@ -1,0 +1,190 @@
+/*
+ * The /core home as a guide (2026-11-12): headline, season pulse, leagues you run.
+ * Token layer only — the light-mode clamp rewrites bare colours.
+ */
+
+/* ── Headline ───────────────────────────────────────────────────────────── */
+.af-guide-head {
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.af-guide-head-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+.af-guide-eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font: 700 11px/1.3 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-guide-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--chip-line, var(--line2));
+  border-radius: 999px;
+  background: var(--chip, transparent);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 700;
+}
+.af-guide-streak span { color: var(--warn); font-size: 9px; }
+.af-guide-title {
+  margin: 8px 0 4px;
+  color: var(--text);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+.af-guide-intro {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--text2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.af-guide-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-guide-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  color: var(--text2);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.af-guide-chip:hover { border-color: var(--accent-line); }
+.af-guide-chip b { color: var(--text); font: 800 20px/1.1 'JetBrains Mono', ui-monospace, monospace; }
+.af-guide-chip span { font-size: 12px; }
+.af-guide-chip[data-tone='warn'] { border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: var(--bad-soft); }
+.af-guide-chip[data-tone='warn'] b { color: var(--bad); }
+.af-guide-chip[data-tone='info'] b { color: var(--accent); }
+.af-guide-chip[data-tone='ok'] b { color: var(--muted); }
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+.af-guide-card { margin: 0 0 18px; }
+.af-guide-cardhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+}
+.af-guide-cardhead h2 { margin: 0; color: var(--text); font-size: 18px; font-weight: 800; }
+.af-guide-cardhead span { color: var(--muted); font-size: 12.5px; }
+.af-guide-label {
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font: 700 11px/1.3 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-guide-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-guide-stats li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--surface2, var(--bg));
+}
+.af-guide-stats b { color: var(--text); font: 800 20px/1.1 'JetBrains Mono', ui-monospace, monospace; }
+.af-guide-stats span { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.af-guide-stats li[data-tone='good'] b { color: var(--good); }
+.af-guide-stats li[data-tone='warn'] b { color: var(--warn); }
+.af-guide-stats li[data-tone='bad'] b { color: var(--bad); }
+.af-guide-empty, .af-guide-note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+.af-guide-why {
+  margin: 14px 0 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--accent-line);
+  border-radius: 0;
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-guide-why b { color: var(--accent); font-weight: 800; }
+.af-guide-more {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-guide-more:hover { text-decoration: underline; }
+
+/* ── Season pulse ───────────────────────────────────────────────────────── */
+.af-pulse-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 18px;
+}
+.af-pulse-list ul { margin: 0; padding: 0; list-style: none; }
+.af-pulse-list li + li { border-top: 1px solid var(--line); }
+.af-pulse-list a {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  color: var(--text);
+  text-decoration: none;
+}
+.af-pulse-list a:hover .af-pulse-name { color: var(--accent); }
+.af-pulse-rank { font: 800 12px/1 'JetBrains Mono', ui-monospace, monospace; }
+.af-pulse-list[data-tone='good'] .af-pulse-rank { color: var(--good); }
+.af-pulse-list[data-tone='warn'] .af-pulse-rank { color: var(--warn); }
+.af-pulse-name { overflow: hidden; font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+.af-pulse-rec { color: var(--muted); font: 600 12px/1 'JetBrains Mono', ui-monospace, monospace; }
+
+/* ── Leagues you run ────────────────────────────────────────────────────── */
+.af-run-risks { margin: 0; padding: 0; list-style: none; }
+.af-run-risks li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+.af-run-risks li + li { border-top: 1px solid var(--line); }
+.af-run-risks li > div { flex: 1; min-width: 0; }
+.af-run-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.af-run-risks li[data-sev='bad'] .af-run-dot { background: var(--bad); }
+.af-run-risks li[data-sev='warn'] .af-run-dot { background: var(--warn); }
+.af-run-risks li[data-sev='info'] .af-run-dot { background: var(--accent); }
+.af-run-title { margin: 0; color: var(--text); font-size: 14px; font-weight: 700; }
+.af-run-league { color: var(--muted); font-weight: 500; }
+.af-run-detail { margin: 2px 0 0; color: var(--text2); font-size: 12.5px; line-height: 1.4; }
+
+@media (max-width: 560px) {
+  .af-guide-head { padding: 14px; }
+  .af-guide-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-run-risks li { flex-wrap: wrap; }
+  .af-run-risks .af3a-btn { width: 100%; min-height: 44px; text-align: center; }
+}

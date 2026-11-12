@@ -100,6 +100,12 @@ function textOf(p: CoreIssueParts): IssueText | null {
         meta: `${p.platform} › Draft · en curso ahora`,
         actionLabel: `Abrir el ${coreUiCopy('Draft HQ', 'es')}`,
       }
+    case 'injury-summary':
+      return {
+        title: `${p.starters} ${p.starters === 1 ? 'titular lesionado' : 'titulares lesionados'} en ${p.leagues} ${p.leagues === 1 ? 'liga' : 'ligas'}`,
+        meta: 'Alineación · cada uno muestra su mejor cambio en el informe de lesiones de abajo',
+        actionLabel: 'Ver cambios',
+      }
     default:
       return null
   }

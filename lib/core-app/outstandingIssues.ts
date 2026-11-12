@@ -72,6 +72,8 @@ export type CoreIssueParts =
       checkedAt: string | null
     }
   | { kind: 'drafting'; leagueName: string; platform: string }
+  /** The home's one row standing for every `starter-out` row while the injury report is shown (homeGuide.ts). */
+  | { kind: 'injury-summary'; starters: number; leagues: number }
 
 export type IssueDetector =
   | 'stale_sync'
