@@ -18,10 +18,18 @@ const mockAcceptance = vi.hoisted(() => vi.fn())
 const mockLogOffer = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/telemetry/usage', () => ({ withApiUsage: () => (handler: unknown) => handler }))
+// Origin is CSRF protection only. Identity comes from the shared legacy gate: the caller is signed
+// in as the account linked to Sleeper user `me`, the username the request body names.
 vi.mock('@/lib/api-auth', () => ({
-  requireAuthOrOrigin: vi.fn(() => ({ authenticated: true, user: null })),
-  forbiddenResponse: vi.fn(),
+  validateRequestOrigin: vi.fn(() => true),
+  forbiddenResponse: vi.fn((msg: string) => new Response(JSON.stringify({ error: msg }), { status: 403 })),
 }))
+const mockGate = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/legacy/requireLegacySleeperIdentity', () => ({
+  requireLegacySleeperIdentity: (...args: unknown[]) => mockGate(...args),
+}))
+const SIGNED_IN_AS_ME = { ok: true, identity: { sleeperUsername: 'me', actorId: 'af-user-1', source: 'session' } }
+const refused = (status: number) => ({ ok: false, response: new Response(JSON.stringify({ error: 'refused' }), { status }) })
 vi.mock('@/lib/rate-limit', () => ({
   consumeRateLimit: vi.fn(() => ({ success: true, remaining: 9, retryAfterSec: 0 })),
   getClientIp: vi.fn(() => '127.0.0.1'),
@@ -97,6 +105,8 @@ function post(body: unknown) {
 
 beforeEach(() => {
   for (const m of [mockCreateGrader, mockGradeOf, mockSessionUser, mockChat, mockAcceptance, mockLogOffer]) m.mockReset()
+  mockGate.mockReset()
+  mockGate.mockResolvedValue(SIGNED_IN_AS_ME)
   mockSessionUser.mockResolvedValue('af-user-1')
   mockCreateGrader.mockResolvedValue(mockGradeOf)
   mockGradeOf.mockResolvedValue(graded('C'))
@@ -161,5 +171,42 @@ describe('/api/legacy/trade/proposal-generator — packages carry the one grade'
       expect(arg.acceptProb).toBeNull()
       expect(arg.verdict).toBe('C')
     }
+  })
+})
+
+describe('/api/legacy/trade/proposal-generator — a paid model call, as the caller only', () => {
+  it('refuses an anonymous caller (Origin alone is not authentication) with no model call and no writes', async () => {
+    mockGate.mockResolvedValueOnce(refused(401))
+    const { autoLogDecision } = await import('@/lib/decision-log')
+    vi.mocked(autoLogDecision).mockClear()
+    const res = await post(BODY)
+    expect(res.status).toBe(401)
+    expect(mockChat).not.toHaveBeenCalled()
+    expect(mockLogOffer).not.toHaveBeenCalled()
+    expect(autoLogDecision).not.toHaveBeenCalled()
+  })
+
+  it('the body username is only COMPARED: a mismatch the gate refuses is a 403', async () => {
+    mockGate.mockResolvedValueOnce(refused(403))
+    const res = await post({ ...BODY, username: 'victim' })
+    expect(res.status).toBe(403)
+    expect(mockGate).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ requestedUsername: 'victim' }))
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('no guests (model spend), and a per-actor rate limit', async () => {
+    await post(BODY)
+    const opts = mockGate.mock.calls[0]![1] as { allowGuest?: boolean; rateLimit?: unknown }
+    expect(opts.allowGuest).toBeFalsy()
+    expect(opts.rateLimit).toBeDefined()
+  })
+
+  it('decision-log and trade-offer writes are keyed on the VERIFIED username, not the body string', async () => {
+    const { autoLogDecision } = await import('@/lib/decision-log')
+    vi.mocked(autoLogDecision).mockClear()
+    expect((await post({ ...BODY, username: 'ME' })).status).toBe(200)
+    expect(autoLogDecision).toHaveBeenCalledWith(expect.objectContaining({ userId: 'me' }))
+    for (const [arg] of mockLogOffer.mock.calls) expect((arg as { senderUserId: string }).senderUserId).toBe('me')
+    expect(mockLogOffer).toHaveBeenCalled()
   })
 })

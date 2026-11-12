@@ -1,7 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { evaluateAction, logGuardianIntervention } from '@/lib/analytics/decision-guardian'
 import type { TradeActionInput, DropActionInput, FaabActionInput } from '@/lib/analytics/decision-guardian'
 
@@ -260,8 +261,13 @@ function buildRecommendedAction(mode: GuardianMode): string {
 }
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/decision-guardian/evaluate", tool: "LegacyDecisionGuardianEvaluate" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse()
+  /*
+   * The evaluation itself is a stateless computation over the action in the body, so it keeps
+   * only the CSRF origin check. What was wrong was treating that check as authentication for
+   * the WRITE below: `logIntervention` + `userId` recorded a GuardianIntervention under any
+   * username the caller named, via `requireAuthOrOrigin` — which passes anonymous callers.
+   */
+  if (!validateRequestOrigin(req)) return forbiddenResponse('Invalid request origin')
 
   try {
     const body = await req.json()
@@ -274,7 +280,19 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/decision-guardian/eval
       )
     }
 
-    const { action, userId, leagueId, logIntervention } = parsed.data
+    const { action, leagueId, logIntervention } = parsed.data
+
+    // Logging writes a row owned by `userId` — that needs a real identity, and the named user
+    // must be the caller. The caller's value is only compared, never used as the key.
+    let userId: string | undefined
+    if (logIntervention && parsed.data.userId) {
+      const gate = await requireLegacySleeperIdentity(req, {
+        allowGuest: true,
+        requestedUsername: parsed.data.userId,
+      })
+      if (!gate.ok) return gate.response
+      userId = gate.identity.sleeperUsername
+    }
 
     const evaluation = evaluateAction(action as TradeActionInput | DropActionInput | FaabActionInput)
 

@@ -2,7 +2,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { aiCostGate } from '@/lib/ai-protection/costGate'
@@ -350,10 +351,8 @@ function buildSnapshotPromptSection(ctx: ChatDeterministicContext): string {
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/chat", tool: "LegacyChat" })(async (request: NextRequest) => {
   try {
-    const auth = requireAuthOrOrigin(request)
-    if (!auth.authenticated) {
-      return forbiddenResponse(auth.error || 'Unauthorized')
-    }
+    // CSRF protection only. This was `requireAuthOrOrigin`, which authenticates nobody.
+    if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
     /*
      * ⚠ requireAuthOrOrigin only checks the request ORIGIN — `authenticated` is true for any
@@ -365,17 +364,14 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/chat", tool: "LegacyCh
     const appSession = (await getServerSession(authOptions as never).catch(() => null)) as
       | { user?: { id?: string; email?: string | null } }
       | null
-    const gated = await aiCostGate(request, 'legacy_chat', appSession?.user?.id ?? null, {
-      email: appSession?.user?.email ?? null,
-    })
-    if (gated) return gated
+    const appUserId = appSession?.user?.id ?? null
 
     const body = await request.json()
 
     const {
       messages,
       imageBase64,
-      sleeperUsername,
+      sleeperUsername: requestedSleeperUsername,
       yahooUserId,
       fantraxUsername,
       mflUsername,
@@ -391,6 +387,47 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/chat", tool: "LegacyCh
       leagueId?: string
       contextKey?: string
     } = body
+
+    /*
+     * 🛑 EVERY PLATFORM HANDLE BELOW SELECTS SOMEONE'S IMPORTED LEAGUES INTO THE PROMPT.
+     * They came straight from the body, so naming a victim's handle put the victim's leagues,
+     * rosters and snapshots in front of the model -- and the caller could just ask for them.
+     *
+     *  - Sleeper: resolved through the shared legacy gate; the body's value is only compared
+     *    (403 on mismatch). allowGuest: a guest's signed session is a real binding to the
+     *    handle it imported, and spend is still bounded by aiCostGate below.
+     *  - Yahoo: must be the Yahoo identity linked to the caller's own account.
+     *  - Fantrax / MFL: no server-side record binds these handles to an account, so ownership
+     *    CANNOT be proven here. A signed-in session is required so use is at least
+     *    attributable; that is a reduction, not a closed door.
+     */
+    let sleeperUsername: string | undefined
+    if (requestedSleeperUsername) {
+      const gate = await requireLegacySleeperIdentity(request, {
+        allowGuest: true,
+        requestedUsername: requestedSleeperUsername,
+      })
+      if (!gate.ok) return gate.response
+      sleeperUsername = gate.identity.sleeperUsername
+    }
+    if (yahooUserId) {
+      const { getYahooIdentityForUser } = await import('@/lib/yahoo/yahooCredentialStore')
+      const ownYahoo = appUserId ? await getYahooIdentityForUser(appUserId) : null
+      if (!ownYahoo || ownYahoo.yahooUserId !== String(yahooUserId).trim()) {
+        return NextResponse.json(
+          { error: 'You can only use your own connected Yahoo account.', code: 'YAHOO_USER_MISMATCH' },
+          { status: appUserId ? 403 : 401 },
+        )
+      }
+    }
+    if ((fantraxUsername || mflUsername) && !appUserId) {
+      return NextResponse.json({ error: 'Sign in to use your Fantrax or MFL leagues in chat.' }, { status: 401 })
+    }
+
+    const gated = await aiCostGate(request, 'legacy_chat', appUserId, {
+      email: appSession?.user?.email ?? null,
+    })
+    if (gated) return gated
 
     if (!messages || messages.length === 0) {
       return NextResponse.json({ error: 'No messages provided' }, { status: 400 })
