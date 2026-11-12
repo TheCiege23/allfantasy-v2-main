@@ -1,9 +1,32 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { z } from 'zod'
 import { resolveDecision } from '@/lib/decision-log'
+import { prisma } from '@/lib/prisma'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+
+/*
+ * Was gated only by `requireAuthOrOrigin` — an anonymous caller with a matching `Origin`
+ * header could mark anyone's decision as followed/ignored by id. Now the log must belong to
+ * the caller's own Sleeper identity (username, or Sleeper user id — the two keys the writers
+ * use). Someone else's log answers 404, exactly like a missing one.
+ */
+async function callerOwnsDecisionLog(decisionLogId: string, sleeperUsername: string): Promise<boolean> {
+  const [log, linked] = await Promise.all([
+    prisma.decisionLog.findUnique({ where: { id: decisionLogId }, select: { userId: true } }),
+    prisma.legacyUser
+      .findUnique({ where: { sleeperUsername }, select: { sleeperUserId: true } })
+      .catch(() => null),
+  ])
+  if (!log) return false
+  const key = String(log.userId || '').trim()
+  return (
+    key.toLowerCase() === sleeperUsername.trim().toLowerCase() ||
+    (!!linked?.sleeperUserId && key === linked.sleeperUserId.trim())
+  )
+}
 
 const ResolveSchema = z.object({
   decisionLogId: z.string().uuid(),
@@ -12,8 +35,11 @@ const ResolveSchema = z.object({
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/decision-log/resolve", tool: "LegacyDecisionLogResolve" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
+  // CSRF protection for a state-changing call — legitimate, but NOT authentication.
+  if (!validateRequestOrigin(req)) return forbiddenResponse('Invalid request origin')
+
+  const gate = await requireLegacySleeperIdentity(req)
+  if (!gate.ok) return gate.response
 
   const ip = getClientIp(req)
   const rl = consumeRateLimit({
@@ -36,6 +62,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/decision-log/resolve",
     const parsed = ResolveSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid request', details: parsed.error.issues }, { status: 400 })
+    }
+
+    if (!(await callerOwnsDecisionLog(parsed.data.decisionLogId, gate.identity.sleeperUsername))) {
+      return NextResponse.json({ error: 'Decision log not found' }, { status: 404 })
     }
 
     const updated = await resolveDecision({

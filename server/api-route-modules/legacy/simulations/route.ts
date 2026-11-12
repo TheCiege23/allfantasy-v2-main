@@ -1,23 +1,25 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { runMonteCarloSimulation, saveSimulationRun, getSimulationHistory, SimulationScenario } from '@/lib/simulation-engine'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { checkMilestoneBadges } from '@/lib/badge-engine'
 import { prisma } from '@/lib/prisma'
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/simulations", tool: "LegacySimulations" })(async (request: NextRequest) => {
-  const auth = requireAuthOrOrigin(request)
-  if (!auth.authenticated) {
-    return forbiddenResponse(auth.error || 'Unauthorized')
-  }
-
+  /*
+   * Was `requireAuthOrOrigin` (passes anonymous callers with a matching `Origin` header) and
+   * then returned the simulation history of whatever `username` was named. The param is now
+   * only compared; the history is the caller's own.
+   */
   const { searchParams } = new URL(request.url)
-  const username = searchParams?.get('username')
-
-  if (!username) {
-    return NextResponse.json({ error: 'Username required' }, { status: 400 })
-  }
+  const gate = await requireLegacySleeperIdentity(request, {
+    allowGuest: true,
+    requestedUsername: searchParams?.get('username'),
+  })
+  if (!gate.ok) return gate.response
+  const username = gate.identity.sleeperUsername
 
   try {
     const history = await getSimulationHistory(username, 10)
@@ -29,10 +31,8 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/simulations", tool: "Le
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/simulations", tool: "LegacySimulations" })(async (request: NextRequest) => {
-  const auth = requireAuthOrOrigin(request)
-  if (!auth.authenticated) {
-    return forbiddenResponse(auth.error || 'Unauthorized')
-  }
+  // CSRF protection for a state-changing call -- legitimate, but NOT authentication.
+  if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
   const ip = getClientIp(request)
   const rateLimitResult = consumeRateLimit({
@@ -52,9 +52,17 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/simulations", tool: "L
 
   try {
     const body = await request.json()
-    const { username, leagueId, scenario, iterations = 1000 } = body
+    const { leagueId, scenario, iterations = 1000 } = body
 
-    if (!username || !scenario) {
+    // Writes a SimulationRun and milestone badges for `username` -- the caller's own only.
+    const gate = await requireLegacySleeperIdentity(request, {
+      allowGuest: true,
+      requestedUsername: typeof body?.username === 'string' ? body.username : null,
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
+
+    if (!scenario) {
       return NextResponse.json({ error: 'Username and scenario required' }, { status: 400 })
     }
 

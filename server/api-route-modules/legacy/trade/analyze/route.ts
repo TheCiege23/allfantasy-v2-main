@@ -2,7 +2,8 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
@@ -1262,10 +1263,8 @@ function buildTradeIntelReconciliationDirective(audit: TradeProviderAudit): stri
 }
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: "LegacyTradeAnalyze" })(async (request: NextRequest) => {
   try {
-    const auth = requireAuthOrOrigin(request)
-    if (!auth.authenticated) {
-      return forbiddenResponse(auth.error || 'Unauthorized')
-    }
+    // CSRF protection only. This was `requireAuthOrOrigin`, which authenticates nobody.
+    if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
     const body = await request.json()
     const parsedReq = TradeAnalyzeRequestSchema.safeParse(body)
@@ -1376,6 +1375,27 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     if (errA) return NextResponse.json({ error: errA }, { status: 400 })
     const errB = validateSideAssets(assetsBRaw, 'Side B')
     if (errB) return NextResponse.json({ error: errB }, { status: 400 })
+
+    /*
+     * 🛑 A PAID MODEL CALL (OpenAI + Grok news) THAT ANY ANONYMOUS CALLER COULD RUN, AS ANYONE.
+     *
+     * Identity is now the caller's own linked Sleeper account (no guests: model spend). It is
+     * resolved here -- after the cheap request-shape validation above, before any provider,
+     * roster or model work below.
+     *
+     * `sleeper_username_a` is deliberately NOT compared against it. The analyzer legitimately
+     * grades any two teams in a league -- the trade hub sends DISPLAY names, and the analyzer
+     * page lets you put any manager on either side -- so a mismatch is not an attack and a 403
+     * would break the screen. What Side A must not do is select someone ELSE's private data.
+     * So every read and write that is keyed on Side A's identity (manager DNA, historical hit
+     * rate, confidence-risk history, the decision log, the private coaching DM, the trade-offer
+     * event) runs only when Side A resolves to the caller -- see `ownSideA` below.
+     */
+    const gate = await requireLegacySleeperIdentity(request, {
+      rateLimit: { action: 'trade_analyze', maxRequests: 20, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const viewerSleeperUsername = gate.identity.sleeperUsername
 
     // Client-provided rosters (already prepared by frontend)
     const clientRosterA = (reqData.rosterA || []) as RosteredPlayer[]
@@ -1637,6 +1657,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         rosterIds: { userRosterId: resolvedUserRosterId, partnerRosterId: resolvedPartnerRosterId },
       })
     }
+
+    // Side A's identity, but ONLY when Side A is the caller. Everything that reads or writes
+    // per-user private state keys on this, never on the caller-chosen `canonicalA`.
+    const ownSideA =
+      canonicalA && canonicalA.trim().toLowerCase() === viewerSleeperUsername.trim().toLowerCase()
+        ? canonicalA
+        : ''
 
     // Prefer client-provided rosters, fallback to API-fetched rosters
     const finalRosterA = clientRosterA.length > 0 ? clientRosterA : sideARoster
@@ -1961,9 +1988,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     }
 
     let managerDnaContext = '';
-    if (canonicalA) {
+    if (ownSideA) {
       try {
-        const dna = await getCachedDNA(canonicalA);
+        const dna = await getCachedDNA(ownSideA);
         if (dna) {
           managerDnaContext = formatDNAForPrompt(dna);
         }
@@ -2203,6 +2230,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       leagueId: leagueId || null,
       userId: sleeperA || null,
       partnerId: sleeperB || null,
+      // Results built with the caller's own manager DNA must never be served to someone
+      // naming that caller as Side A, so the owner and non-owner views cache apart.
+      viewerOwnsSideA: Boolean(ownSideA),
       sport,
       format,
       leagueType,
@@ -2352,7 +2382,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       }
     })
 
-    const hitRate = await getHistoricalHitRate(canonicalA, 'trade', leagueId || undefined).catch(() => null)
+    const hitRate = ownSideA
+      ? await getHistoricalHitRate(ownSideA, 'trade', leagueId || undefined).catch(() => null)
+      : null
 
     // Honesty (Task 2): classify every valuation that entered the balance math. Since the one engine
     // (2026-09-26) a balance exists only when EVERY asset was priced on league values, so nothing
@@ -2376,7 +2408,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     const crResult = computeConfidenceRisk({
       category: 'trade',
-      userId: canonicalA || undefined,
+      userId: ownSideA || undefined,
       leagueId: leagueId || undefined,
       assets: tradeAssets,
       dataCompleteness: {
@@ -2395,9 +2427,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       historicalHitRate: hitRate,
     })
 
-    if (canonicalA && leagueId) {
+    if (ownSideA && leagueId) {
       autoLogDecision({
-        userId: canonicalA,
+        userId: ownSideA,
         leagueId: leagueId || 'unknown',
         decisionType: 'trade',
         aiRecommendation: {
@@ -2631,9 +2663,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     })
 
     const notifications = {
-      private_dm: canonicalA
+      private_dm: ownSideA
         ? buildPrivateTradeCoachingNotification({
-            userId: canonicalA,
+            userId: ownSideA,
             recommendation: recommendationLabel,
             summary:
               recommendationLabel === 'accept'
@@ -2663,7 +2695,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     logTradeOfferEvent({
       leagueId: leagueId || null,
-      senderUserId: canonicalA || null,
+      senderUserId: ownSideA || null,
       // The sender is Team A, which GIVES `assetsB` and RECEIVES `assetsA`.
       assetsGiven: assetsB.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
       assetsReceived: assetsA.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
