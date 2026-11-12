@@ -55,11 +55,15 @@ type LeagueFixture = {
   guillotine?: boolean
   /** Extra keys on the roster's playerData (e.g. a roster-level `bestBall` flag). */
   playerData?: Record<string, unknown>
+  /** No team in this league is claimed by the viewer. */
+  noTeam?: boolean
+  /** The team is claimed but no roster row of theirs has been synced. */
+  noRoster?: boolean
 }
 
 function wire(leagues: LeagueFixture[]) {
   mockTeamFindMany.mockImplementation(async ({ where }: { where: { leagueId: { in: string[] } } }) =>
-    leagues.filter((l) => where.leagueId.in.includes(l.id)).map((l) => ({ leagueId: l.id, platformUserId: `pu-${l.id}`, externalId: l.teamExternalId ?? '1' })),
+    leagues.filter((l) => !l.noTeam && where.leagueId.in.includes(l.id)).map((l) => ({ leagueId: l.id, platformUserId: `pu-${l.id}`, externalId: l.teamExternalId ?? '1' })),
   )
   mockLeagueFindMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
     leagues
@@ -81,7 +85,7 @@ function wire(leagues: LeagueFixture[]) {
   )
   mockRosterFindMany.mockImplementation(async ({ where }: { where: { leagueId: { in: string[] } } }) =>
     leagues
-      .filter((l) => where.leagueId.in.includes(l.id))
+      .filter((l) => !l.noRoster && where.leagueId.in.includes(l.id))
       .map((l) => ({ id: `r-${l.id}`, leagueId: l.id, platformUserId: `pu-${l.id}`, playerData: { starters: l.starters, players: l.starters, ...(l.playerData ?? {}) } })),
   )
   mockSportsPlayerFindMany.mockImplementation(async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
@@ -241,5 +245,83 @@ describe('loadGameDayTriage — bridged Fleaflicker leagues', () => {
     expect(out.data.unsupportedLeagues).toBe(1)
     expect(out.data.leaguesRead).toBe(0)
     expect(out.data.rows).toEqual([])
+  })
+})
+
+/*
+ * Every league asked for is either read or named in `skipped` with a reason — reported from the War
+ * Room as "shows less leagues than I am actually in" (2026-11-11), when five of the eight skips were
+ * silent. The invariant pinned here: leaguesRead + skipped.length === leagues asked.
+ */
+describe('loadGameDayTriage — every league not read is named, with why', () => {
+  const one = (id: string, over: Partial<LeagueFixture> = {}): LeagueFixture => ({ id, name: `League ${id}`, platform: 'sleeper', starters: [`p-${id}`], ...over })
+
+  it('accounts for every league, one reason each', async () => {
+    const leagues = [
+      one('READ'),
+      one('NOTEAM', { noTeam: true }),
+      one('NOROSTER', { noRoster: true }),
+      one('BB', { bestBallMode: true }),
+      one('YAHOO', { platform: 'yahoo' }),
+      one('PRE', { status: 'pre_draft' }),
+      one('DONE', { status: 'complete' }),
+      one('CHOP', { guillotine: true }),
+    ]
+    wire(leagues)
+    mockChoppedFindMany.mockResolvedValue([{ leagueId: 'CHOP', rosterId: 'r-CHOP' }])
+    const ids = leagues.map((l) => l.id)
+    const out = await loadGameDayTriage(USER, ids, NOW)
+    if (!out.available) throw new Error(out.reason)
+
+    expect(out.data.leaguesRead).toBe(1)
+    expect(out.data.leaguesRead + (out.data.skipped ?? []).length).toBe(ids.length)
+    expect(Object.fromEntries((out.data.skipped ?? []).map((s) => [s.leagueId, s.reason]))).toEqual({
+      NOTEAM: 'no_team',
+      NOROSTER: 'no_roster',
+      BB: 'best_ball',
+      YAHOO: 'unsupported',
+      PRE: 'pre_season',
+      DONE: 'season_over',
+      CHOP: 'eliminated',
+    })
+    // A league with no claimed team is still NAMED — the league read covers every id asked.
+    expect(out.data.skipped!.find((s) => s.leagueId === 'NOTEAM')).toMatchObject({ leagueName: 'League NOTEAM', platform: 'sleeper' })
+    // The existing counts agree with the list.
+    expect(out.data.bestBallLeagues).toBe(1)
+    expect(out.data.unsupportedLeagues).toBe(1)
+  })
+
+  it('a no-team league does not change the claimed-league counts', async () => {
+    wire([one('S'), one('BBX', { noTeam: true, bestBallMode: true })])
+    const out = await loadGameDayTriage(USER, ['S', 'BBX'], NOW)
+    if (!out.available) throw new Error(out.reason)
+    // Unclaimed: reported as no_team, NOT counted as best ball, which describes a lineup you have.
+    expect(out.data.bestBallLeagues).toBe(0)
+    expect(out.data.skipped).toEqual([{ leagueId: 'BBX', leagueName: 'League BBX', platform: 'sleeper', reason: 'no_team' }])
+  })
+
+  it('names leagues past the bound as not_read', async () => {
+    const leagues = Array.from({ length: 252 }, (_, i) => one(`L${i}`))
+    wire(leagues)
+    const out = await loadGameDayTriage(USER, leagues.map((l) => l.id), NOW)
+    if (!out.available) throw new Error(out.reason)
+    expect(out.data.skipped!.map((s) => [s.leagueId, s.reason])).toEqual([
+      ['L250', 'not_read'],
+      ['L251', 'not_read'],
+    ])
+  })
+
+  it('lists nothing when every league is read, and survives the nothing-read early return', async () => {
+    wire([one('A'), one('B')])
+    const all = await loadGameDayTriage(USER, ['A', 'B'], NOW)
+    if (!all.available) throw new Error(all.reason)
+    expect(all.data.skipped).toEqual([])
+
+    // Every league off-season: no starters at all, so the loader returns early — the list must still be there.
+    wire([one('A', { status: 'complete' }), one('B', { status: 'drafting' })])
+    const none = await loadGameDayTriage(USER, ['A', 'B'], NOW)
+    if (!none.available) throw new Error(none.reason)
+    expect(none.data.leaguesRead).toBe(0)
+    expect(none.data.skipped!.map((s) => s.reason)).toEqual(['season_over', 'pre_season'])
   })
 })
