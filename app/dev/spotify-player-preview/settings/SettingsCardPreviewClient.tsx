@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { ConnectedAccountsSettingsSection } from '@/app/settings/components/sections/ConnectedAccountsSettingsSection'
-import type { SettingsProfile } from '@/lib/user-settings/types'
+import type { SettingsProfile } from '@/app/settings/components/sections/settings-types'
 
 function fixture(spotifyConnectAllowed: boolean): SettingsProfile {
   return {
