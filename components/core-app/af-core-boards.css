@@ -36,17 +36,6 @@
   flex-direction: column;
   gap: 4px;
 }
-
-.af-core .af-mt-board-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px 16px;
-  padding: 4px 4px 10px;
-  color: var(--muted);
-  font-size: 11px;
-}
 .af-core .af-mt-intelligence { min-height: 44px; white-space: normal; text-align: left; }
 
 .af-core .af-bd-eyebrow {
@@ -287,18 +276,6 @@
 .af-core .af-bd-stat[data-sev='warn'] { color: var(--warn); }
 .af-core .af-bd-stat[data-sev='good'] { color: var(--good); }
 
-.af-core .af-bd-cta {
-  width: 130px;
-  flex: none;
-  text-align: right;
-  font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--accent);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.af-core .af-bd-cta:hover { text-decoration: underline; }
-
 /* ── compact two-column rows (Week, Standings) — handoff 2026-09-13 ───────
  *
  * Opt-in on the <ul>. Half-width columns cannot hold the full row's fixed
@@ -322,15 +299,6 @@
   border-radius: 7px;
 }
 .af-core .af-bd-rows--compact .af-bd-crest--sm.af-bd-crest--none { font-size: 11px; }
-
-/* A second, quieter sub line — e.g. what decides a standings race. */
-.af-core .af-bd-sub2 {
-  font: 500 11px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* The row's headline value, right-aligned, with a qualifier under it. */
 .af-core .af-bd-val {
@@ -759,141 +727,6 @@
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v[data-sev='good'] { color: var(--good); }
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v[data-sev='bad'] { color: var(--bad); }
 
-/* ── waiver swap (Waivers) — handoff 2026-09-13 ─────────────────────────────
- *
- * Rides the rich card. Net gain as a tinted pill, the add and the drop as two
- * tinted panels with an arrow between, the reasoning in its own box.
- *
- * 🛑 `.af-bd-gain`, NOT `.af-bd-pill`. This block used to be `.af-bd-pill`, and so is the filter
- * chip further down this file — same specificity, later in the cascade, so the chip's
- * `font: 700 11px Archivo`, padding and border silently won. The loudest number on every Waivers
- * card, the ranking key, rendered as an 11px filter chip. Brace balance, lint and tests were all
- * clean; only the computed style showed it. A distinct name cannot collide.
- */
-.af-core .af-bd-gain {
-  flex: none;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  font: 900 13px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--muted) 12%, transparent);
-  white-space: nowrap;
-}
-/* Tinted from the token, not `currentColor` — Chromium resolved that mix grey. */
-.af-core .af-bd-gain[data-sev='good'] { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
-.af-core .af-bd-gain[data-sev='bad'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
-.af-core .af-bd-gain-unit { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-
-/* Under a swap side: who the add starts over, or why this player is the drop. */
-.af-core .af-bd-swap .af-bd-side-note {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text2);
-}
-
-.af-core .af-bd-cards--rich .af-bd-swap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
-  align-items: stretch;
-  gap: 12px;
-}
-.af-core .af-bd-swap-arrow {
-  align-self: center;
-  text-align: center;
-  font: 700 14px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  color: var(--faint);
-}
-.af-core .af-bd-swap .af-bd-side {
-  min-width: 0;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-.af-core .af-bd-swap .af-bd-side[data-tone='good'] {
-  background: color-mix(in srgb, var(--good) 7%, transparent);
-  border-color: color-mix(in srgb, var(--good) 32%, transparent);
-}
-.af-core .af-bd-swap .af-bd-side[data-tone='bad'] {
-  background: color-mix(in srgb, var(--bad) 6%, transparent);
-  border-color: color-mix(in srgb, var(--bad) 28%, transparent);
-}
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-side-label { padding-bottom: 0; font-weight: 800; }
-.af-core .af-bd-swap .af-bd-side[data-tone='good'] .af-bd-side-label { color: var(--good); }
-.af-core .af-bd-swap .af-bd-side[data-tone='bad'] .af-bd-side-label { color: var(--bad); }
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-asset {
-  padding: 0;
-  gap: 10px;
-  border-bottom: 0;
-  font: 800 14px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--text);
-}
-/* A panel has room to wrap; a clipped name or "no drop" reason is a lost fact. */
-.af-core .af-bd-swap .af-bd-asset-name { white-space: normal; }
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-asset--empty {
-  font: 500 12px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--muted);
-}
-.af-core .af-bd-swap .af-bd-asset-team {
-  display: block;
-  font: 500 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-}
-.af-core .af-bd-swap .af-bd-proj { display: flex; align-items: baseline; gap: 6px; }
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-proj .af-bd-asset-val {
-  font: 900 22px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  color: var(--good);
-}
-/* The drop's number is what you give up, not a warning — the design greys it. */
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-proj .af-bd-asset-val[data-sev='bad'] { color: var(--muted); }
-/* AllFantasy's own engine, beside the provider figure and beside the net-gain pill. */
-.af-core .af-bd-af,
-.af-core .af-bd-af-net {
-  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-variant-numeric: tabular-nums;
-  color: var(--accent);
-  white-space: nowrap;
-}
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow {
-  display: flex;
-  gap: 14px;
-  padding: 0;
-  border: 0;
-}
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow .af-bd-kv {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 5px;
-  padding: 0;
-  border-left: 0;
-}
-.af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow .af-bd-v {
-  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  color: var(--text2);
-}
-
-.af-core .af-bd-why {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-}
-.af-core .af-bd-why-label {
-  flex: none;
-  font: 800 11px/1.9 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.af-core .af-bd-cards--rich .af-bd-why .af-bd-reason { font-size: 12px; color: var(--text2); }
-.af-core .af-bd-card-foot .af-bd-cta { width: auto; margin-left: auto; }
-
 .af-core .af-bd-reason {
   font: 500 11.5px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
@@ -1178,12 +1011,6 @@
     flex: none;
   }
 
-  .af-core .af-bd-cta {
-    width: auto;
-    order: 4;
-    margin-left: auto;
-  }
-
   .af-core .af-bd-crest { width: 30px; height: 30px; border-radius: 9px; }
   .af-core .af-bd-card-body { gap: 12px; }
   .af-core .af-bd-side { min-width: 0; flex-basis: 100%; }
@@ -1275,14 +1102,6 @@
     row-gap: 6px;
   }
 
-  /* Same 11px line-box problem as `.af-bd-foot-cta` above — this is the "View
-     all" style link inside a board card rather than its footer. */
-  .af-core .af-bd-cta {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-
   /* Rich cards on a phone: the filled button keeps a thumb-sized target without
      stretching, and the two sides stack. */
   .af-core .af-bd-btn { min-height: 44px; align-self: center; margin-left: auto; }
@@ -1302,11 +1121,6 @@
   }
   .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv { padding: 0 12px; }
   .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv:nth-child(3n + 1) { padding-left: 0; border-left: 0; }
-  /* Waiver swap: panels stack, the arrow points down between them, and the
-     market line stays a flex row rather than the draft strip's grid. */
-  .af-core .af-bd-cards--rich .af-bd-swap { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .af-core .af-bd-swap-arrow { transform: rotate(90deg); }
-  .af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow { display: flex; }
 }
 
 /*
@@ -1407,11 +1221,6 @@
     width: auto;
     flex: none;
   }
-  .af-core .af-bd-cta {
-    width: auto;
-    order: 4;
-    margin-left: auto;
-  }
   .af-core .af-bd-side { min-width: 0; flex-basis: 100%; }
   .af-core .af-bd-sec-head,
   .af-core .af-bd-card-head {
@@ -1453,188 +1262,6 @@
   min-height: 44px;
 }
 
-/* Standings board: the week's stakes and the schedule ahead, under "what decides it". */
-.af-core .af-bd-sub3 {
-  color: var(--faint);
-}
-
-/*
- * ── Standings board: the account at a glance, and the week's biggest game ──
- *
- * TOP-LEVEL on purpose, appended after every query above: a rule inserted inside
- * a query silently moves into it. The narrow layout keys on the BOARD's width
- * (`af-board` container), for the reason the block above records.
- */
-.af-core .af-bd-pulse-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-  gap: 12px;
-  margin-bottom: 22px;
-}
-.af-core .af-bd-pulse,
-.af-core .af-bd-mustwin {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-.af-core .af-bd-pulse-lead {
-  margin: 0;
-  font: 900 20px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--text);
-  letter-spacing: -0.01em;
-}
-.af-core .af-bd-pulse-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.af-core .af-bd-pulse-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  padding: 10px 12px;
-  background: var(--chip);
-  border-radius: 9px;
-}
-.af-core .af-bd-pulse-v {
-  font: 900 22px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-.af-core .af-bd-pulse-tile[data-sev='good'] .af-bd-pulse-v { color: var(--good); }
-.af-core .af-bd-pulse-tile[data-sev='warn'] .af-bd-pulse-v { color: var(--warn); }
-.af-core .af-bd-pulse-k {
-  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--muted);
-}
-.af-core .af-bd-pulse-s {
-  font: 500 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.af-core .af-bd-pulse-note {
-  margin: 0;
-  font: 400 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--faint);
-}
-
-/* The card is one link — the whole thing is the tap target. */
-.af-core a.af-bd-mustwin {
-  gap: 4px;
-  color: inherit;
-  text-decoration: none;
-  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
-}
-.af-core a.af-bd-mustwin:hover,
-.af-core a.af-bd-mustwin:focus-visible {
-  background: var(--chip);
-}
-.af-core .af-bd-mustwin-k {
-  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--warn);
-}
-.af-core .af-bd-mustwin-title {
-  margin-top: 4px;
-  font: 800 16px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--text);
-}
-.af-core .af-bd-mustwin-league {
-  font: 500 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.af-core .af-bd-mustwin-branches {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 8px;
-}
-.af-core .af-bd-mustwin-branches > span {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font: 900 18px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-variant-numeric: tabular-nums;
-}
-.af-core .af-bd-mustwin-branches > span[data-sev='good'] {
-  color: var(--good);
-  background: color-mix(in srgb, var(--good) 11%, transparent);
-}
-.af-core .af-bd-mustwin-branches > span[data-sev='bad'] {
-  color: var(--bad);
-  background: color-mix(in srgb, var(--bad) 10%, transparent);
-}
-.af-core .af-bd-mustwin-bk {
-  font: 700 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.af-core .af-bd-mustwin-note {
-  margin-top: 6px;
-  font: 500 12px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  color: var(--muted);
-}
-
-/*
- * Seed meter under "#3 of 12": the field as a track, the playoff places shaded,
- * your seed as a dot. Decorative — the text beside it carries the fact.
- */
-.af-core .af-bd-seedbar {
-  position: relative;
-  display: block;
-  width: 64px;
-  height: 4px;
-  margin: 2px 0;
-  border-radius: 2px;
-  background: var(--line);
-}
-.af-core .af-bd-seedbar-in {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--good) 35%, transparent);
-}
-.af-core .af-bd-seedbar-dot {
-  position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: var(--muted);
-  box-shadow: 0 0 0 2px var(--surface);
-}
-.af-core .af-bd-seedbar-dot[data-sev='good'] { background: var(--good); }
-.af-core .af-bd-seedbar-dot[data-sev='warn'] { background: var(--warn); }
-.af-core .af-bd-seedbar-dot[data-sev='bad'] { background: var(--bad); }
-
-@container af-board (max-width: 760px) {
-  .af-core .af-bd-pulse-row { grid-template-columns: minmax(0, 1fr); }
-}
-
-@media (max-width: 760px) {
-  .af-core .af-bd-pulse-row { grid-template-columns: minmax(0, 1fr); }
-  .af-core .af-bd-pulse-lead { font-size: 18px; }
-  .af-core .af-bd-pulse-v { font-size: 19px; }
-  .af-core .af-bd-pulse-tiles { gap: 6px; }
-  .af-core .af-bd-pulse-tile { padding: 9px 10px; }
-}
-
 /*
  * ── Waivers board on a phone: Add and Drop side by side (2026-10-01 audit) ──
  *
@@ -1645,261 +1272,8 @@
  * extra class out-ranks the shared rule however the bundle orders the files. Hiding the faces as
  * well would buy only 18px more, so the headshots stay.
  */
-@media (max-width: 720px) {
-  .af-core .af-bd-cards--rich.af-bd-cards--waivers .af-bd-swap {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 8px;
-  }
-  .af-core .af-bd-cards--waivers .af-bd-swap-arrow {
-    display: none;
-  }
-  .af-core .af-bd-cards--waivers .af-bd-swap .af-bd-side {
-    padding: 10px 12px;
-  }
-  .af-core .af-bd-cards--rich.af-bd-cards--waivers .af-bd-swap .af-bd-kvrow {
-    flex-wrap: wrap;
-    gap: 2px 10px;
-  }
-  /* "13.1 PROJ PTS AF 13.7" measured 131px in a 125px half; it wraps rather than crowding the padding. */
-  .af-core .af-bd-cards--waivers .af-bd-swap .af-bd-proj {
-    flex-wrap: wrap;
-    row-gap: 2px;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   Waivers board — sort/filter, the 24h strip, alternatives, multi-league.
-   Own top-level blocks at end of file: nothing here can be carried into
-   another rule's @media band (see the af-matchup.css incident in CLAUDE.md).
-   ══════════════════════════════════════════════════════════════════════ */
-.af-core .af-wvb { display: flex; flex-direction: column; gap: 12px; }
-.af-core .af-wvb-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.af-core .af-wvb-sort { display: inline-flex; align-items: center; gap: 8px; }
-.af-core .af-wvb-sort select {
-  min-height: 36px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line2, rgba(255, 255, 255, 0.12));
-  background: var(--surface, #12152b);
-  color: var(--text, #eef0fa);
-  font: 600 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-}
-.af-core .af-wvb-pos { display: flex; flex-wrap: wrap; gap: 6px; }
-.af-core .af-wvb-chip {
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--chip-line, rgba(255, 255, 255, 0.1));
-  background: var(--chip, rgba(255, 255, 255, 0.04));
-  color: var(--text2, #c9cee8);
-  font: 700 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  cursor: pointer;
-}
-.af-core .af-wvb-chip[data-active='true'] {
-  background: var(--accent-soft);
-  border-color: var(--accent-line);
-  color: var(--accent);
-}
-.af-core .af-wvb-chip:focus-visible,
-.af-core .af-wvb-more:focus-visible,
-.af-core .af-wvb-alts summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.af-core .af-wvb-more {
-  align-self: center;
-  min-height: 44px;
-  padding: 0 20px;
-  border-radius: 10px;
-  border: 1px solid var(--line2, rgba(255, 255, 255, 0.12));
-  background: var(--surface2, rgba(255, 255, 255, 0.04));
-  color: var(--text, #eef0fa);
-  font: 700 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
-  cursor: pointer;
-}
-
-.af-core .af-wvb-due {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--warn, #fbbf24) 35%, transparent);
-  background: color-mix(in srgb, var(--warn, #fbbf24) 8%, transparent);
-}
-.af-core .af-wvb-due ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; }
-.af-core .af-wvb-due a { color: var(--text); font-weight: 700; }
-.af-core .af-wvb-due-at { font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
-
-.af-core .af-wvb-alts { border-top: 1px solid var(--line, rgba(255, 255, 255, 0.07)); padding-top: 8px; }
-.af-core .af-wvb-alts summary {
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text2);
-}
-.af-core .af-wvb-alts ul { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
-.af-core .af-wvb-alts li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 0;
-  font-size: 13px;
-}
-.af-core .af-wvb-alt-who { min-width: 0; overflow-wrap: anywhere; }
-.af-core .af-wvb-alt-gain {
-  flex: none;
-  font: 800 13px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  color: var(--good);
-}
-
-.af-core .af-wvb-multi { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.af-core .af-wvb-multi li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.07));
-  background: var(--surface, rgba(255, 255, 255, 0.02));
-}
-.af-core .af-wvb-multi-who { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
-.af-core .af-wvb-multi-n { font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
-.af-core .af-wvb-multi-leagues { grid-column: 1 / -1; font-size: 12.5px; color: var(--text2); line-height: 1.5; }
-.af-core .af-wvb-multi-leagues a { color: var(--text); }
 
 /* Touch screens: every new control at the 44px tap-target floor. */
-@media (pointer: coarse) {
-  .af-core .af-wvb-chip,
-  .af-core .af-wvb-sort select,
-  .af-core .af-wvb-alts summary { min-height: 44px; }
-}
-@media (max-width: 560px) {
-  .af-core .af-wvb-multi li { grid-template-columns: minmax(0, 1fr); }
-  .af-core .af-wvb-multi-n { white-space: normal; }
-}
-
-/* "How to read a card" — one "?" per term, wrapping onto as many lines as a phone needs. */
-.af-core .af-wvb-legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: 14px;
-  row-gap: 4px;
-}
-.af-core .af-wvb-legend > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  white-space: nowrap;
-}
-
-/*
- * ── My Team board: players hurting more than one lineup (2026-10-03) ────────
- * Appended at depth 0. Sits between the section head and the ranked rows.
- */
-.af-core .af-bd-xl {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--bad);
-  border-radius: 12px;
-  background: var(--bad-soft);
-}
-.af-core .af-bd-xl-label {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text2);
-}
-.af-core .af-bd-xl-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.af-core .af-bd-xl-list li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  font-size: 13px;
-}
-.af-core .af-bd-xl-name {
-  font-weight: 800;
-  color: var(--text);
-}
-.af-core .af-bd-xl-count {
-  color: var(--muted);
-  font-size: 12px;
-}
-.af-core .af-bd-xl-leagues a {
-  color: var(--accent);
-}
-@media (pointer: coarse) {
-  .af-core .af-bd-xl-leagues a {
-    display: inline-block;
-    padding: 6px 0;
-  }
-}
-
-/* Row freshness (2026-10-03): "synced 3h ago" is quiet; older than a day, or a failed sync, is the warn tone. */
-.af-core .af-bd-sync[data-stale='true'] {
-  color: var(--warn);
-  font-weight: 700;
-}
-
-/* This week's score on each row (2026-10-03). Tone only on the word and the numbers; level stays quiet. */
-.af-core .af-bd-score { font-variant-numeric: tabular-nums; }
-.af-core .af-bd-score[data-lead='ahead'] { color: var(--good); font-weight: 700; }
-.af-core .af-bd-score[data-lead='behind'] { color: var(--bad); font-weight: 700; }
-
-/* Filter chips (2026-10-03) — links, so a filtered board is a URL. One active at a time; a gap marks where format ends and sport/platform begin.
-   Scrolls sideways on a phone rather than wrapping into three ragged rows. */
-.af-core .af-bd-filters {
-  display: flex;
-  gap: 6px;
-  margin: 0 0 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.af-core .af-bd-filters::-webkit-scrollbar { display: none; }
-.af-core .af-bd-chip {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 4px 11px;
-  border: 1px solid var(--chip-line);
-  border-radius: 999px;
-  background: var(--chip);
-  color: var(--text2);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.af-core .af-bd-chip[data-group-start='true'] { margin-left: 8px; }
-.af-core .af-bd-chip[aria-current='true'] {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.af-core .af-bd-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.af-core .af-bd-chip-n { color: var(--faint); font-weight: 600; font-variant-numeric: tabular-nums; }
-.af-core .af-bd-chip[aria-current='true'] .af-bd-chip-n { color: inherit; opacity: 0.75; }
-@media (pointer: coarse) {
-  .af-core .af-bd-chip { min-height: 36px; }
-}
 
 /*
  * ── My Team board on a phone: two lines per league, not four (2026-10-03) ─────
@@ -1919,38 +1293,6 @@
  *
  * Its own top-level block at end of file, per this stylesheet's convention.
  */
-@container af-board (max-width: 500px) {
-  .af-core .af-mt-board-row .af-bd-league { flex: 1 1 calc(100% - 120px); }
-  .af-core .af-mt-board-row .af-bd-mid { flex: 1 1 calc(100% - 140px); min-width: 0; }
-  .af-core .af-mt-board-row .af-mt-board-actions {
-    flex-wrap: nowrap;
-    gap: 8px;
-    font-size: 12px;
-    padding-top: 0;
-  }
-  .af-core .af-mt-board-row .af-mt-board-actions > span:first-child { flex: 1 1 auto; min-width: 0; }
-  .af-core .af-mt-board-row .af-mt-intelligence {
-    flex: none;
-    width: 44px;
-    padding: 0;
-    justify-content: center;
-  }
-  .af-core .af-mt-board-row .af-mt-intelligence-label { display: none; }
-}
-
-/* "+9 more" in the cross-league strip — inline, so the list reads as one sentence when opened. */
-.af-core .af-bd-xl-more { display: inline; }
-.af-core .af-bd-xl-more > summary {
-  display: inline;
-  margin-left: 4px;
-  cursor: pointer;
-  list-style: none;
-  color: var(--accent);
-  font-weight: 700;
-}
-.af-core .af-bd-xl-more > summary::-webkit-details-marker { display: none; }
-.af-core .af-bd-xl-more[open] > summary { display: none; }
-.af-core .af-bd-xl-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /*
  * ── A section's "?" (`SectionHead`'s `info`, 2026-10-03) ──
