@@ -20,16 +20,16 @@ import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-
  * code is not in it shows no price rather than a guessed one. A made-up number
  * on a paywall is worse than no number.
  *
- * ⚠ OPEN PRODUCT DECISION, DELIBERATELY NOT RESOLVED IN CODE. The repo has FOUR
- * trade tools (`/trade-analyzer`, `/trade-evaluator`, `/trade-finder`,
- * `/dynasty-trade-analyzer`) and THREE player-comparison routes
- * (`/player-compare`, `/player-comparison`, `/player-comparison-lab`), all of
- * which exist and all of which work. The handoff recommends merging each family
- * into one tool with modes, and explicitly flags the choice as needing a product
- * call first. So this file does NOT merge them and does NOT hide them: one is
- * promoted as the primary card, the rest are listed as alternates under a note
- * that says the consolidation is undecided. Picking silently would be the one
- * thing the handoff rules out.
+ * ⚠ THE TRADE TOOLS ARE ONE TOOL NOW (owner's call, 2026-11-12). `/trade-evaluator` is the Trade
+ * Analyzer: "Any trade" (no login) and "My league". `/trade-analyzer` is its search landing page,
+ * `/dynasty-trade-analyzer` redirects into the league tab, and the trade finder is the one on the
+ * Trades screen (`/trade-finder` redirects there). So the card links the tool itself, not the
+ * landing page a click away from it.
+ *
+ * ⚠ STILL AN OPEN PRODUCT DECISION: the THREE player-comparison routes (`/player-compare`,
+ * `/player-comparison`, `/player-comparison-lab`), which all exist and all work. One is promoted
+ * as the primary card and the rest are alternates, under a note that says the merge is undecided.
+ * Picking silently would be the one thing the handoff rules out.
  */
 
 export type ToolTier = 'free' | 'pro' | 'commissioner' | 'unknown'
@@ -171,16 +171,13 @@ export function buildToolsHub(input: {
           id: 'trade',
           title: 'Trade Analyzer',
           desc: 'Fairness and value on a proposal, graded in that league’s own scoring.',
-          href: '/trade-analyzer',
+          href: '/trade-evaluator',
           leavesShell: true,
           live: liveFrom(tradeIssue, 'No trade offer is waiting on you.'),
           tokenCost: costOf('ai_trade_analyzer_full_review'),
           tier: tierOf('ai_trade_analyzer_full_review'),
-          alternates: [
-            { label: 'Trade Evaluator', href: '/trade-evaluator' },
-            { label: 'Trade Finder (Sleeper only)', href: '/trade-finder' },
-            { label: 'Dynasty Trade Analyzer', href: '/dynasty-trade-analyzer' },
-          ],
+          /* The one trade finder — inside the Trades screen, scoped to a league (Sleeper leagues). */
+          alternates: [{ label: 'Trade Finder (Sleeper leagues)', href: `${withLeague('/core/trades')}#trade-finder` }],
         },
         {
           id: 'draft',
@@ -367,14 +364,13 @@ export function buildToolsHub(input: {
       'league’s own nav rather than here — open a league from the rail and they are on its screens. ' +
       'They are not missing; they are somewhere a league is already selected.',
     openDecision: {
-      title: 'Undecided: four trade tools and three player-comparison pages',
+      title: 'Undecided: three player-comparison pages',
       body:
-        'The codebase carries /trade-analyzer, /trade-evaluator, /trade-finder and ' +
-        '/dynasty-trade-analyzer, plus /player-compare, /player-comparison and ' +
-        '/player-comparison-lab. All of them work. The design recommendation is to merge each ' +
-        'family into one tool with modes, and that is a product call nobody has made — so this ' +
-        'page promotes one of each and lists the rest as alternates rather than quietly retiring ' +
-        'six live routes.',
+        'The codebase carries /player-compare, /player-comparison and /player-comparison-lab. All ' +
+        'of them work. The design recommendation is to merge them into one tool with modes, and ' +
+        'that is a product call nobody has made — so this page promotes one and lists the rest as ' +
+        'alternates rather than quietly retiring live routes. (The trade tools were merged on ' +
+        '2026-11-12.)',
     },
   }
 }

@@ -2882,7 +2882,8 @@ export function TradeCenter(props: {
         why that section carries `data-section="breakdown"` and neither is selected by class alone.
       */}
       {props.embedded ? null : (
-        <div className="af-tc-mstep-wrap">
+        /* `#trade-finder`: where the Tools hub and the retired /trade-finder page land (2026-11-12). */
+        <div className="af-tc-mstep-wrap" id="trade-finder">
           <CoreDepthGate access={depthAccess} what={lockSubjectText('The trade finder', language)} lang={language} showFreeUntil={false}>
             <TradeFinderPanel leagueId={props.league?.id ?? null} />
           </CoreDepthGate>

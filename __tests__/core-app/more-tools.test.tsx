@@ -14,6 +14,7 @@ afterEach(cleanup)
 
 /** Hub links that already had a home in /core, and where. Base path only (query dropped). */
 const ALREADY_REACHABLE: Record<string, string> = {
+  '/core/trades': 'nav: Trades — the one trade finder lives there (2026-11-12)',
   '/core/waivers': 'nav: Waivers (inside a league)',
   '/core/draft-hq': 'nav: Draft HQ',
   '/core/season-outlook': 'nav: Season Outlook',
@@ -26,7 +27,7 @@ const ALREADY_REACHABLE: Record<string, string> = {
   '/core/commissioner': 'nav: Commissioner (for anyone who runs a league)',
 }
 
-const base = (href: string) => href.split('?')[0]!
+const base = (href: string) => href.split(/[?#]/)[0]!
 
 describe('the Tools hub, after it left the nav', () => {
   it('every link it offered still has a home', () => {
@@ -49,19 +50,14 @@ describe('the Tools hub, after it left the nav', () => {
 })
 
 describe('MoreToolsLinks', () => {
-  it('lists the trade tools on Trades, with Trade History marked Pro', () => {
+  /* The trade tools are one tool since 2026-11-12; the finder is on the Trades screen this list sits on. */
+  it('lists the Trade Analyzer and Trade History on Trades, with Trade History marked Pro', () => {
     render(<MoreToolsLinks screen="trades" language="en" />)
     const section = screen.getByTestId('more-tools-trades')
     expect(within(section).getByRole('heading').textContent).toBe('More tools')
     const links = within(section).getAllByRole('link')
-    expect(links.map((a) => a.getAttribute('href'))).toEqual([
-      '/trade-analyzer',
-      '/trade-evaluator',
-      '/trade-finder',
-      '/dynasty-trade-analyzer',
-      '/af-legacy?tab=finder',
-    ])
-    const history = links[4]!
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/trade-evaluator', '/af-legacy?tab=finder'])
+    const history = links[1]!
     expect(history.textContent).toContain('Trade History')
     expect(history.textContent).toContain('Pro')
     expect(links[0]!.textContent).not.toContain('Pro')
