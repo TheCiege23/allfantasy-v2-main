@@ -129,7 +129,7 @@ describe('Starters in doubt (Dash3ATriage)', () => {
       expect(out).toContain('+2 más')
       expect(out).toContain('Buscar agentes libres en Bla bla bla')
       expect(out).toContain('+1 titulares señalados más: auditoría completa de exposición')
-      expect(out).toContain('Los valores son precios de mercado de FantasyCalc (dynasty, 1QB, NFL)')
+      expect(out).toContain('Los valores son precios de mercado de FantasyCalc (dynasty, 1QB, solo NFL)')
       cleanup()
     }
     expect(es(<Dash3ATriage book={[triageRow({ nextKickoffAt: new Date(T_NOW.getTime() - 60_000).toISOString() })]} now={T_NOW} valueBasis={BASIS} />)).toContain('partido en curso')
@@ -158,7 +158,7 @@ describe('Starters in doubt (Dash3ATriage)', () => {
     expect(out).toContain('kickoff in 2h')
     expect(out).toContain('swap in Tyjae Spears or Zach Charbonnet')
     expect(out).toContain('Find free agents in Bla bla bla')
-    expect(out).toContain('Trade values are FantasyCalc market prices (dynasty, 1QB, NFL) — a guide, not your league’s scoring.')
+    expect(out).toContain('Trade values are FantasyCalc market prices (dynasty, 1QB, NFL only) — not tuned to your league’s scoring.')
   })
 })
 

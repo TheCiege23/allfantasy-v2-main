@@ -34,7 +34,7 @@
   border: 1px solid var(--line2, var(--line));
   border-radius: 999px;
   color: var(--text2);
-  font: 800 10.5px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  font: 800 11px/1.2 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.08em;
   text-align: center;
   text-transform: uppercase;
