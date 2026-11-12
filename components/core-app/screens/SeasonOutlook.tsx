@@ -63,6 +63,18 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
     .slice(0, 3)
   const anyByes = data.leagues.some((l) => l.byeTeams > 0)
   const next = data.priorities[0] ?? null
+  /*
+   * Leagues with no odds still get a ROW: elimination formats say whether you are alive, and leagues
+   * that have not started say why. Only the rest — data we could not read — stay in the footer.
+   * `?? []` and the `kind` test because a cached board from before this shape has neither.
+   */
+  const statusOrder = (w: (typeof data.withheld)[number]) =>
+    w.kind === 'elimination' ? ({ alive: 0, eliminated: 1 } as Record<string, number>)[w.survival?.status ?? ''] ?? 2 : 3
+  const statusRows = (data.withheld ?? [])
+    .filter((w) => w.leagueId && (w.kind === 'elimination' || w.kind === 'not-started'))
+    .sort((a, b) => statusOrder(a) - statusOrder(b))
+  const footerRows = (data.withheld ?? []).filter((w) => !statusRows.includes(w))
+  const hasRows = hasLeagues || statusRows.length > 0
 
   return (
     <div className="af-so af-olk">
@@ -162,7 +174,10 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
               ? m.runsReused(data.runs.reused, data.runs.reused + data.runs.computed)
               : ''}
           </p>
+        </>
+      ) : null}
 
+      {hasRows ? (
           <section className="af-so-tablewrap">
             <table className="af-so-table">
               <thead>
@@ -237,11 +252,39 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                     </tr>
                   )
                 })}
+                {statusRows.map((w, i) => {
+                  const s = w.survival ?? null
+                  const pill =
+                    w.kind === 'not-started' || s?.status === 'not-started'
+                      ? { status: 'waiting', label: copy('Not started') }
+                      : s?.status === 'alive'
+                        ? { status: 'alive', label: copy('Alive') }
+                        : s?.status === 'eliminated'
+                          ? { status: 'eliminated', label: copy('Eliminated') }
+                          : { status: 'unknown', label: copy('Status unknown') }
+                  return (
+                    <tr key={`status-${w.leagueId}-${i}`} className="af-so-statusrow" data-kind={w.kind}>
+                      <th scope="row">
+                        <Link href={`/core?league=${encodeURIComponent(w.leagueId!)}`} className="af-so-league">
+                          {w.leagueName}
+                        </Link>
+                        <span className="af-so-leaguemeta">
+                          {w.kind === 'elimination' ? copy('No playoff odds in this format') : copy('No schedule yet')}
+                        </span>
+                        <span className="af-olk-pill" data-status={pill.status}>{pill.label}</span>
+                      </th>
+                      <td className="af-so-decides af-so-statusline" colSpan={anyByes ? 6 : 5}>
+                        {seasonOutlookSentence(w.reason, language)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </section>
-        </>
-      ) : preseasonKickoffLabel ? (
+      ) : null}
+
+      {hasRows ? null : preseasonKickoffLabel ? (
         <div className="af-so-empty">
           <p className="af-so-empty-t">{copy('The season has not started yet.')}</p>
           <p className="af-so-empty-b">
@@ -261,14 +304,14 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
       )}
 
       {/* Withheld leagues, listed. A league that silently vanished reads as a league you are not in. */}
-      {data.withheld.length > 0 ? (
+      {footerRows.length > 0 ? (
         <section className="af-so-withheld">
           <h2 className="af-so-withheld-t">
-            {m.withheld(data.withheld.length)}
+            {m.withheld(footerRows.length)}
           </h2>
           <ul>
             {/* Keyed by position too: two withheld leagues can share a name (one per season). */}
-            {data.withheld.map((w, i) => (
+            {footerRows.map((w, i) => (
               <li key={`${w.leagueName}-${i}`}>
                 <b>{w.leagueName}</b> — {seasonOutlookSentence(w.reason, language)}
               </li>
