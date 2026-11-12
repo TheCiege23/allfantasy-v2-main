@@ -280,6 +280,56 @@ describe('SeasonOutlook (cross-league)', () => {
     expect(text).toContain('Old League')
   })
 
+  it('puts elimination and not-started leagues IN the table, with a survival pill — only unread data stays in the footer', () => {
+    const withRows: Board = {
+      ...board,
+      withheld: [
+        ...board.withheld,
+        {
+          leagueName: 'Chop Shop',
+          leagueId: 'G1',
+          kind: 'elimination',
+          format: 'guillotine',
+          survival: { status: 'alive', remaining: 9, field: 18 },
+          reason: 'Guillotine — you are still alive, 9 of 18 teams left.',
+        },
+        {
+          leagueName: 'Axed',
+          leagueId: 'G2',
+          kind: 'elimination',
+          format: 'survivor',
+          survival: { status: 'eliminated', remaining: 9, field: 20 },
+          reason: 'Survivor — you have been eliminated (9 of 20 teams left).',
+        },
+        { leagueName: 'Draft Day', leagueId: 'P1', kind: 'not-started', reason: 'Pre-draft — odds start once the draft is done and the schedule is set.' },
+      ],
+    }
+    render(<SeasonOutlook data={slimOutlookForBoard(withRows)} />)
+    const rows = [...document.querySelectorAll('.af-so-table tbody tr.af-so-statusrow')]
+    expect(rows.map((r) => r.querySelector('.af-so-league')?.textContent)).toEqual(['Chop Shop', 'Axed', 'Draft Day'])
+    expect(rows.map((r) => r.querySelector('.af-olk-pill')?.getAttribute('data-status'))).toEqual(['alive', 'eliminated', 'waiting'])
+    expect(rows[0]!.textContent).toContain('you are still alive, 9 of 18 teams left')
+    expect(screen.getByRole('link', { name: 'Chop Shop' }).getAttribute('href')).toBe('/core?league=G1')
+    // The footer keeps only the league whose data could not be read.
+    const footer = document.querySelector('.af-so-withheld')!
+    expect(footer.textContent).toContain('1 league is not on this page')
+    expect(footer.textContent).toContain('Old League')
+    expect(footer.textContent).not.toContain('Chop Shop')
+  })
+
+  it('still draws the table when every league is a status row and none simulates', () => {
+    const onlyRows: Board = {
+      ...board,
+      leagues: [],
+      swingByLeague: {},
+      priorities: [],
+      withheld: [{ leagueName: 'Draft Day', leagueId: 'P1', kind: 'not-started', reason: 'Draft in progress — odds start once the schedule is set.' }],
+    }
+    render(<SeasonOutlook data={slimOutlookForBoard(onlyRows)} />)
+    expect(document.querySelectorAll('.af-so-statusrow')).toHaveLength(1)
+    expect(document.querySelector('.af-so-empty')).toBeNull()
+  })
+
   it('keeps its odds tiles glyph-free: the icons belong to the league screen only', () => {
     render(<SeasonOutlook data={slimOutlookForBoard(board)} />)
     expect(document.querySelectorAll('.af-olk-odds-ic')).toHaveLength(0)
