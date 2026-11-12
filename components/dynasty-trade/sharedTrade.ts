@@ -62,7 +62,9 @@ function storedGrade(raw: unknown): DynastyTradeGrade | null {
  * ⚠ An old share's `factors` are not read either: when the AI was unavailable they were the
  * deterministic engine's reasons, whose first line IS its verdict on the private scale ("Side A has a
  * 12% value edge: 5,000 (A) vs 4,400 (B)"). A share that carries the grade was made by the analyzer
- * that no longer sends those (app/api/dynasty-trade-analyzer/route.ts, the same change).
+ * that no longer sends those (the retired dynasty analyzer's route, the same change). Since 2026-11-12
+ * new shares come from /trade-evaluator's Share button (components/trade-evaluator/TradeShareButton.tsx),
+ * whose factors are the receipt's own explanation lines.
  */
 export function readSharedTrade(analysis: unknown): SharedTradeView {
   const a = (analysis && typeof analysis === 'object' ? analysis : {}) as Record<string, unknown>

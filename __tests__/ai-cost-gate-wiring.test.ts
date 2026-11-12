@@ -237,7 +237,6 @@ describe('every audited paid-model route asks the gate', () => {
     'app/api/chimmy/voice/route.ts',
     'app/api/share/generate-copy/route.ts',
     'app/api/ai/trade-analysis/route.ts',
-    'app/api/dynasty-trade-analyzer/route.ts',
     'app/api/trade-finder/route.ts',
     'app/api/ai/draft-help/route.ts',
     'app/api/draft-ai/route.ts',

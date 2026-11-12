@@ -17,7 +17,7 @@
  * recommendation — framed by the real `strategy` domain's classification
  * (contender → buy-low framing, retool/rebuild → sell-high framing) —
  * directing the user to the real, authoritative trade surfaces
- * (`/dynasty-trade-analyzer`, `/trade-finder`) rather than inventing
+ * (the Trade Analyzer, `/trade-evaluator`, and the Trades screen's finder) rather than inventing
  * player-level trade math this generator has no safe way to compute.
  * `executionCapability` is honestly `open_provider`/`recommendation_only`
  * for every provider — this generator never claims a trade was evaluated
