@@ -100,6 +100,8 @@ export type LandingCopy = {
     cardFootMeta: string
     /** The no-import way in, under the hero CTAs: links to /trade-evaluator. */
     tradeLink: string
+    /** Opens /demo/formats: an example league for every league type. No account needed. */
+    leagueTypesLink: string
   }
   /** The live AllFantasy trade market board — values from completed trades in connected leagues. */
   tradeMarket: {
@@ -190,6 +192,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       cardFootBefore: 'Two fixes worth ',
       cardFootMeta: 'Chimmy, across all 4 leagues',
       tradeLink: 'Or grade a trade right now — no import needed →',
+      leagueTypesLink: 'See an example of every league type — Guilly, Survivor, Zombie and more →',
     },
     tradeMarket: {
       heading: 'Trade values built from real trades',
@@ -366,6 +369,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       cardFootBefore: 'Dos ajustes que valen ',
       cardFootMeta: 'Chimmy, en las 4 ligas',
       tradeLink: 'O evalúa un intercambio ahora, sin importar nada →',
+      leagueTypesLink: 'Mira un ejemplo de cada tipo de liga — Guilly, Survivor, Zombie y más →',
     },
     tradeMarket: {
       heading: 'Valores de intercambio basados en intercambios reales',
