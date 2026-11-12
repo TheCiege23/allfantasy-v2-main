@@ -4,6 +4,7 @@ import type { WarFrontCard, WarOrder } from './warRoomFront'
 import type { WarTrades } from './warRoomTrades'
 import type { FormatBrief } from './warRoomFormat'
 import type { NextSeasonView } from './warRoomNextSeason'
+import type { WarCampaign } from './warRoomCampaign'
 import type { warRoomPlanMessages } from './messages/warRoomPlan'
 import type { warRoomBriefMessages } from './messages/warRoomBrief'
 
@@ -44,6 +45,8 @@ export type WarPlanInput = {
   trades: WarTrades | null
   format: FormatBrief | null
   nextSeason: NextSeasonView | null
+  /** The road ahead (phase 5). Optional so a caller without it still builds a brief. */
+  campaign?: WarCampaign | null
 }
 
 /** A line and how readily it is dropped when the brief is too long: higher drops first. */
@@ -82,6 +85,20 @@ export function warPlanPrompt(input: WarPlanInput, m: PlanCopy, b: BriefCopy, la
     if (decides) add(m.decides(seasonOutlookSentence(decides.text, language)), 2)
     const deadline = orderOf(card, 'trade_deadline')
     if (deadline) add(m.deadline(deadline.week, deadline.weeksLeft), 1)
+  }
+
+  const campaign = input.campaign ?? null
+  if (campaign?.kind === 'games') {
+    const big = campaign.games.find((g) => g.biggest)
+    // The card's swing order already names next week's game; repeat it only when a later week matters more.
+    const swingWeek = orderOf(card, 'swing_game')?.week ?? null
+    if (big && big.week !== swingWeek) add(m.biggestGame(big.week, big.opponent.name, pct(big.ifWin), pct(big.ifLose)), 1)
+  }
+  if (campaign?.tiebreak) {
+    const near = campaign.tiebreak.rows
+      .filter((r) => !r.isYou && r.name)
+      .map((r) => m.tiebreakTeam(r.name!, `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`, signedPts(r.pointsGap)))
+    if (near.length > 0) add(m.tiebreak(near.join('; ')), 3)
   }
 
   if (trades?.mode === 'win_now' && trades.ideas[0]) {

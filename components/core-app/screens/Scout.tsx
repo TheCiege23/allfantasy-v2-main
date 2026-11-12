@@ -81,6 +81,12 @@ export type ScoutProps = {
    */
   tradeIdeas?: ReactNode
   /**
+   * War Room phase 5: the road ahead (WarCampaign) — every game you have left priced both ways, and the
+   * tiebreak picture. After the plan and before the trade ideas: what this week decides, then what to
+   * trade for. A node for the same reason as `leaguePlan`.
+   */
+  road?: ReactNode
+  /**
    * War Room phase 3: how this league is won and the plan for next season (WarStrategyBrief), after
    * the trade ideas. A node for the same reason as `leaguePlan`.
    */
@@ -594,6 +600,7 @@ export function Scout({
   edgeAccess = null,
   leaguePlan = null,
   tradeIdeas = null,
+  road = null,
   brief = null,
   eliminationStanding = null,
 }: ScoutProps) {
@@ -640,6 +647,8 @@ export function Scout({
       {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
 
       {leaguePlan}
+
+      {road}
 
       {tradeIdeas}
 
