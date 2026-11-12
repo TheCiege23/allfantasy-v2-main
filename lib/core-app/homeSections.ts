@@ -36,6 +36,8 @@ export type HomeSectionId =
   | 'league-focus'
   | 'commish'
   | 'season-pulse'
+  | 'calendar'
+  | 'formats'
   | 'schedule'
   | 'trade-evaluator'
   | 'routine'
@@ -83,6 +85,9 @@ export const HOME_SECTIONS: readonly HomeSectionDef[] = [
    */
   { id: 'commish', group: 'top', cards: ['commish'], categories: [] },
   { id: 'season-pulse', group: 'top', cards: ['season-pulse'], categories: [] },
+  /* The teaching cards (2026-11-12): when waivers run per platform, and what each format means. */
+  { id: 'calendar', group: 'top', cards: ['calendar'], categories: [] },
+  { id: 'formats', group: 'top', cards: ['formats'], categories: [] },
   /* The folded "Evaluate a trade" row (owner, 2026-11-06) — a switch since 2026-11-12; see the defaults. */
   { id: 'trade-evaluator', group: 'top', cards: ['trade-evaluator'], categories: [] },
   { id: 'routine', group: 'week', cards: ['routine'], categories: ['lineup_reminders'] },

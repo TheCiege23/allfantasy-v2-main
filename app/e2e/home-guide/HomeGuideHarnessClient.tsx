@@ -9,6 +9,38 @@ import { buildSeasonPulse, foldInjuredStarters } from '@/lib/core-app/homeGuide'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { buildInactiveLadder } from '@/lib/core-app/commissioner/inactiveLadder'
 import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
+import { HomeFormatGuide } from '@/components/core-app/home/HomeFormatGuide'
+import { HomePlatformCalendar, type CalendarDisplayRow } from '@/components/core-app/home/HomePlatformCalendar'
+import { countFormats } from '@/lib/core-app/homeFormats'
+import { buildPlatformCalendar } from '@/lib/core-app/platformCalendar'
+import { scheduleLabel, type WaiverSchedule } from '@/lib/core-app/waiverRunClock'
+
+/** SAMPLE leagues for the format guide — the format columns only, invented. */
+const SAMPLE_FORMATS = countFormats([
+  ...Array.from({ length: 40 }, () => ({ isDynasty: true, scoring: 'PPR Superflex' })),
+  ...Array.from({ length: 12 }, () => ({ isDynasty: true, leagueVariant: 'DYNASTY_IDP', scoring: 'PPR TEP' })),
+  ...Array.from({ length: 18 }, () => ({ leagueType: 'Redraft', scoring: 'PPR' })),
+  ...Array.from({ length: 8 }, () => ({ leagueType: 'Redraft', guillotineMode: true })),
+  ...Array.from({ length: 5 }, () => ({ leagueType: 'Redraft', bestBallMode: true })),
+])
+
+/** SAMPLE platform calendar — schedules invented; ESPN and Fantrax show the "not readable" state. */
+const SAMPLE_CALENDAR: CalendarDisplayRow[] = buildPlatformCalendar(
+  [
+    ...Array.from({ length: 60 }, (_, i) => ({ id: `s${i}`, platform: 'sleeper' })),
+    ...Array.from({ length: 12 }, (_, i) => ({ id: `e${i}`, platform: 'espn' })),
+    ...Array.from({ length: 6 }, (_, i) => ({ id: `f${i}`, platform: 'fantrax' })),
+  ],
+  new Map<string, WaiverSchedule>([
+    ...Array.from({ length: 41 }, (_, i) => [`s${i}`, { dayOfWeek: 3, time: '00:00', timeZone: 'America/Los_Angeles' }] as [string, WaiverSchedule]),
+    ...Array.from({ length: 15 }, (_, i) => [`s${41 + i}`, { dayOfWeek: null, time: '03:00', timeZone: 'America/Los_Angeles' }] as [string, WaiverSchedule]),
+  ]),
+  Date.parse('2026-11-12T21:00:00Z'),
+).map((r) => ({
+  ...r,
+  label: r.platform === 'sleeper' ? 'Sleeper' : r.platform === 'espn' ? 'ESPN' : 'Fantrax',
+  serverLabels: r.waivers.map((w) => scheduleLabel(w.schedule)),
+}))
 
 /** SAMPLE managers for the inactive-manager ladder — invented names and quiet spells. */
 const SAMPLE_LADDER = buildInactiveLadder(
@@ -215,6 +247,8 @@ export default function HomeGuideHarnessClient({ commissioner, empty }: { commis
           />
         ) : null}
         <HomeSeasonPulse pulse={SAMPLE_PULSE} />
+        <HomePlatformCalendar rows={SAMPLE_CALENDAR} nextKickoffIso="2026-11-15T18:00:00.000Z" />
+        <HomeFormatGuide formats={SAMPLE_FORMATS} />
         {commissioner && !empty ? (
           /* The Commissioner Hub draws every rung, with the ladder explained; the home card shows three. */
           <section className="af3a-card af-guide-card" data-testid="hub-ladder">

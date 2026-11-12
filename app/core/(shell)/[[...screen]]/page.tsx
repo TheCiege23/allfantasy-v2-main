@@ -191,6 +191,10 @@ import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { getCrossLeagueValueActions } from '@/lib/core-app/crossLeagueValueActions'
 import { getSinceLastVisit, snapshotStandings } from '@/lib/core-app/sinceLastVisit'
+import { countFormats } from '@/lib/core-app/homeFormats'
+import { buildPlatformCalendar, platformKey } from '@/lib/core-app/platformCalendar'
+import { loadSleeperWaiverSchedules } from '@/lib/waivers/sleeperWaiverSchedule'
+import { scheduleLabel } from '@/lib/core-app/waiverRunClock'
 import { getUrgencyBadges, recordPendingOffers } from '@/lib/core-app/urgencyBadges'
 import { isSpeculativeRequestHeaders } from '@/lib/http/speculativeRequest'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
@@ -4431,6 +4435,43 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               mergedIssues.then((list) => getCommissionerOverview({ userId, candidateLeagueIds: runIds, issues: list, now })),
             ).catch(() => null)
           })(),
+          /*
+           * The format guide (2026-11-12): which formats the leagues in view are. Read from `League`
+           * itself in one set query, because the league list does not carry the guillotine, best ball
+           * and variant columns for every source.
+           */
+          formats: hiddenHomeSections.has('formats') || homePlayed.length === 0
+            ? Promise.resolve(null)
+            : traceCard('formats', () =>
+                prisma.league
+                  .findMany({
+                    where: { id: { in: homePlayed.map((l) => l.id) } },
+                    select: { isDynasty: true, leagueType: true, leagueVariant: true, guillotineMode: true, bestBallMode: true, scoring: true },
+                  })
+                  .then((rows) => countFormats(rows)),
+              ).catch(() => null),
+          /*
+           * The platform calendar (2026-11-12): waiver run times per platform. Sleeper's are the only
+           * ones stored (observed from processed claims, else Sleeper's own setting); every other
+           * platform's row says it is not readable. See lib/core-app/platformCalendar.ts.
+           */
+          calendar: hiddenHomeSections.has('calendar')
+            ? Promise.resolve(null)
+            : traceCard('calendar', async () => {
+                const sleeperIds = homePlayed.filter((l) => platformKey(String(l.platform ?? '')) === 'sleeper').map((l) => l.id)
+                const loaded = await loadSleeperWaiverSchedules(prisma, sleeperIds)
+                const schedules = new Map([...loaded].map(([id, s]) => [id, s.schedule] as const))
+                const rows = buildPlatformCalendar(
+                  homePlayed.map((l) => ({ id: l.id, platform: String(l.platform ?? '') })),
+                  schedules,
+                  now.getTime(),
+                )
+                return rows.map((r) => ({
+                  ...r,
+                  label: platformLabel(r.platform === 'allfantasy' ? null : r.platform),
+                  serverLabels: r.waivers.map((w) => scheduleLabel(w.schedule)),
+                }))
+              }).catch(() => null),
         }
       })()
 
