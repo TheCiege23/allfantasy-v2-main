@@ -55,7 +55,7 @@ import {
   DevyCore, DevyLeagueTab, LeagueHome, PlayerFinder, MyTeam,
   Matchup, Waivers, DraftHq, DraftBoard,
   LeagueSchedule, ConnectedFranchiseWarRoom, TradeCenter, FormatHub, DraftArchive, Scout,
-  GamePlan, WarRoomWeek, WarFront, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
+  GamePlan, WarRoomWeek, WarFront, WarTradeIdeas, Partners, BusinessRetention, DiscordBridge, BracketChallenge,
   Portfolio, Tools, Career, YourWeek, RivalryRadar, YourWeekLeague, SeasonOutlook,
   SeasonOutlookLeague, LiveScores, LiveGameView, Standings, NotificationsCenter,
   CareerShare,
@@ -142,6 +142,7 @@ import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { buildWarFront } from '@/lib/core-app/warRoomFront'
+import { loadWarTrades } from '@/lib/core-app/warRoomTradesLoader'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
 import { getDraftArchiveScreen } from '@/lib/draft-archive/screen'
 import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
@@ -3399,6 +3400,36 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     settings: (l as { settings?: unknown }).settings ?? null,
   }))
 
+  /*
+   * War Room phase 2 — trades that move your odds, for the league on screen (warRoomTrades.ts).
+   *
+   * ⚠ GATED ON `trade_depth`, THE TRADE CENTER FINDER'S OWN DEPTH, AND SKIPPED — NOT HIDDEN — WHEN
+   * LOCKED. A locked viewer is never sent the ideas; the screen draws the lock from the access alone,
+   * as Scout does for its edge. Before the paywall launches the depth is open to everyone.
+   *
+   * ⚠ ONE OUTLOOK READ WITH THIS LEAGUE AS FOCUS — the same Season Outlook's league page makes — started
+   * here and awaited at render, so it runs beside the reads in between.
+   */
+  const warTradesAccess =
+    activeKey === 'war-room' && !gamePlanView && selectedLeagueId ? (corePaywall?.trade_depth ?? null) : null
+  const warTradesLeague =
+    warTradesAccess?.unlocked && userId && selectedLeagueId ? (outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null) : null
+  const warTradesRead =
+    warTradesLeague && userId
+      ? loadWarTrades({
+          userId,
+          league: { ...warTradesLeague, currentWeek: tradeLeagueRow?.currentWeek ?? null },
+          allLeagues: outlookLeagues,
+          format: tradeLeagueTypeKey,
+          now: ctx.now,
+        }).catch((error: unknown) => {
+          console.error('[core/war-room] trade ideas failed', error)
+          return null
+        })
+      : Promise.resolve(null)
+  // Marks the promise handled, so a throw before the await below cannot leave an unhandled rejection.
+  warTradesRead.catch(() => {})
+
   const standingsFresh =
     activeKey === 'standings' && selectedLeagueId && standingsOnSummary
       ? await readLeagueStandingsSummary(selectedLeagueId, userId, leagueCtx).catch(() => null)
@@ -3662,6 +3693,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * rail and the Trade Center use, so a card cannot call a league dynasty that the rail calls redraft.
    * Pure; the screen gets this small result, never the board.
    */
+  const warTrades = await warTradesRead
+
   const warFront = wantsWarFront
     ? buildWarFront({
         outlook,
@@ -5191,6 +5224,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   Elimination formats (step 4d): your place against the cut, from the rail's own read
                   — so the banner and the rail cannot disagree. Only an unpaired (elimination) row has one.
                 */
+                /*
+                  War Room phase 2: trades that move your odds here. Drawn when there is something to say —
+                  the ideas, or the lock for a viewer whose plan does not include them.
+                */
+                tradeIdeas={
+                  warTrades || (warTradesAccess && !warTradesAccess.unlocked) ? (
+                    <WarTradeIdeas view={warTrades} access={warTradesAccess} />
+                  ) : null
+                }
                 eliminationStanding={
                   ctx.weekLineups?.byLeague[scout.league.id]?.unpaired
                     ? (ctx.weekLineups.byLeague[scout.league.id]?.standing ?? null)

@@ -135,7 +135,7 @@ describe('buildWarFront — orders follow posture and horizon', () => {
     const card = front.cards[0]!
     expect(card.posture).toBe('bubble')
     expect(kinds(card.orders)).toEqual(['swing_game', 'what_decides', 'trade_deadline'])
-    expect(card.orders[2]).toMatchObject({ kind: 'trade_deadline', week: 12, weeksLeft: 2, intent: 'buy', href: '/core/trades?league=b' })
+    expect(card.orders[2]).toMatchObject({ kind: 'trade_deadline', week: 12, weeksLeft: 2, intent: 'buy', href: '/core/war-room?league=b#war-trades' })
   })
 
   it('a passed deadline is never an order', () => {
@@ -204,7 +204,7 @@ describe('buildWarFront — orders follow posture and horizon', () => {
 
   it('an eliminated keeper team plans next season, saying whether trades are still open', () => {
     const closed = buildWarFront({ leagues: [input('e', { format: 'keeper', tradeDeadlineWeek: 8 })], outlook: outlook([league('e', { playoffPct: 0, status: 'eliminated' })]) })
-    expect(closed.cards[0]!.orders).toEqual([{ kind: 'build_next_season', deadlineOpen: false, href: '/core/trades?league=e' }])
+    expect(closed.cards[0]!.orders).toEqual([{ kind: 'build_next_season', deadlineOpen: false, href: '/core/war-room?league=e#war-trades' }])
   })
 
   it('never more than three orders', () => {
