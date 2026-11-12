@@ -21,7 +21,8 @@ export const homeGuideMessages = defineMessages({
     chipLineups: 'Lineups to fix',
     chipInjuries: 'Injured starters',
     chipTrades: 'Trades today',
-    chipRun: 'Leagues you run need you',
+    /* A count of the Hub's open tasks, not of leagues — one league can have several. */
+    chipRun: 'Commissioner tasks',
     streak: (days: number) => `${days}-day streak`,
 
     /* Tiers */
@@ -80,7 +81,7 @@ export const homeGuideMessages = defineMessages({
     chipLineups: 'Alineaciones por corregir',
     chipInjuries: 'Titulares lesionados',
     chipTrades: 'Intercambios hoy',
-    chipRun: 'Ligas que diriges te necesitan',
+    chipRun: 'Tareas de comisionado',
     streak: (days) => `Racha de ${days} días`,
 
     tierNow: 'Te cuesta puntos ahora',

@@ -93,8 +93,15 @@ export function InactiveLadderList({
   entries,
   limit,
   showTeach = true,
+  offSeason = false,
 }: {
   entries: LadderEntry[]
+  /**
+   * Activity WAS read, but no league read is mid-season, so none was laddered (2026-11-12, found on
+   * a real account: 103 managers inactive and no ladder, which read as broken). Says why instead of
+   * the "everyone is active" line, which would be false.
+   */
+  offSeason?: boolean
   /** Rows drawn before "+N more in the Commissioner Hub". Omit to draw every row. */
   limit?: number
   showTeach?: boolean
@@ -110,7 +117,7 @@ export function InactiveLadderList({
         {entries.length > 0 ? <span>{t.summary(counts.replace, counts.warn, counts.nudge)}</span> : null}
       </p>
       {entries.length === 0 ? (
-        <p className="af-ladder-none">{t.none}</p>
+        <p className="af-ladder-none">{offSeason ? t.noneOffSeason : t.none}</p>
       ) : (
         <ul className="af-ladder-list">
           {shown.map((entry) => (

@@ -251,7 +251,7 @@ export default function HomeGuideHarnessClient({ commissioner, empty }: { commis
         <HomeFormatGuide formats={SAMPLE_FORMATS} />
         {commissioner && !empty ? (
           /* The Commissioner Hub draws every rung, with the ladder explained; the home card shows three. */
-          <section className="af3a-card af-guide-card" data-testid="hub-ladder">
+          <section className="af3a-card af-hg-card" data-testid="hub-ladder">
             <InactiveLadderList entries={SAMPLE_LADDER} />
           </section>
         ) : null}

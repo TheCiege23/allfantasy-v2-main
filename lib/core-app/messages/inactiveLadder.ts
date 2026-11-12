@@ -22,6 +22,7 @@ export const inactiveLadderMessages = defineMessages({
         .filter(Boolean)
         .join(' · '),
     none: 'Every manager in the leagues checked has made a move in the last week.',
+    noneOffSeason: 'None of the leagues checked is mid-season, so no one is on the ladder — a quiet manager before the draft or after the final is normal.',
     stepNudge: 'Nudge',
     stepWarn: 'Warn',
     stepReplace: 'Replace',
@@ -53,6 +54,7 @@ export const inactiveLadderMessages = defineMessages({
         .filter(Boolean)
         .join(' · '),
     none: 'Todos los mánagers de las ligas revisadas han hecho un movimiento en la última semana.',
+    noneOffSeason: 'Ninguna de las ligas revisadas está en plena temporada, así que nadie entra en la escalera: es normal que un mánager esté quieto antes del draft o después de la final.',
     stepNudge: 'Recordar',
     stepWarn: 'Advertir',
     stepReplace: 'Reemplazar',

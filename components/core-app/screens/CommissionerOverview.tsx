@@ -244,9 +244,9 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
             whose activity was read, with the commissioner's next step and a message to copy. The
             /core home's "Leagues you run" card shows the first three and links here.
           */}
-          {(data.ladderLeagues ?? 0) > 0 ? (
+          {(data.ladderLeagues ?? 0) > 0 || data.activityChecked > 0 ? (
             <section className="afh-panel" id="af-ladder" aria-label="Inactive managers">
-              <InactiveLadderList entries={data.ladder ?? []} />
+              <InactiveLadderList entries={data.ladder ?? []} offSeason={(data.ladderLeagues ?? 0) === 0} />
             </section>
           ) : null}
         </>

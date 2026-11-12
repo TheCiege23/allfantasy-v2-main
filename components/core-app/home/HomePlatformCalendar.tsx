@@ -54,22 +54,22 @@ export function HomePlatformCalendar({
   const kickoff = mounted && nextKickoffIso ? localWhen(nextKickoffIso, locale, false, t.calDaily) : null
 
   return (
-    <section className="af3a-card af-guide-card" aria-labelledby="af-cal-title">
-      <header className="af-guide-cardhead">
+    <section className="af3a-card af-hg-card" aria-labelledby="af-cal-title">
+      <header className="af-hg-cardhead">
         <h2 id="af-cal-title">{t.calTitle}</h2>
         <span>{t.calSub}</span>
       </header>
       {nextKickoffIso ? (
         <div className="af-cal-kickoff">
-          <p className="af-guide-label">{t.calNextKickoff}</p>
+          <p className="af-hg-label">{t.calNextKickoff}</p>
           <p className="af-cal-kickoff-when" suppressHydrationWarning>
             {kickoff ?? new Date(nextKickoffIso).toUTCString().slice(0, 22) + ' UTC'}
           </p>
-          <p className="af-guide-note">{t.calLockNote}</p>
+          <p className="af-hg-note">{t.calLockNote}</p>
         </div>
       ) : null}
       {rows.length === 0 ? (
-        <p className="af-guide-empty">{t.calNoLeagues}</p>
+        <p className="af-hg-empty">{t.calNoLeagues}</p>
       ) : (
         <ul className="af-cal-rows">
           {rows.map((row) => (
@@ -104,7 +104,7 @@ export function HomePlatformCalendar({
           ))}
         </ul>
       )}
-      <p className="af-decision-why af-guide-why">
+      <p className="af-decision-why af-hg-why">
         <b>{g.why}</b> {t.calTeach}
       </p>
     </section>

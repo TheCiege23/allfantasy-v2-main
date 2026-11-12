@@ -22,7 +22,7 @@ function Rows({ title, rows, tone }: { title: string; rows: PulseRow[]; tone: 'g
   if (rows.length === 0) return null
   return (
     <div className="af-pulse-list" data-tone={tone}>
-      <p className="af-guide-label">{title}</p>
+      <p className="af-hg-label">{title}</p>
       <ul>
         {rows.map((row) => (
           <li key={row.id}>
@@ -42,16 +42,16 @@ export function HomeSeasonPulse({ pulse }: { pulse: SeasonPulse }) {
   const g = useMessages(homeGuideMessages)
   const record = pulse.ties > 0 ? `${pulse.wins}-${pulse.losses}-${pulse.ties}` : `${pulse.wins}-${pulse.losses}`
   return (
-    <section className="af3a-card af-guide-card" aria-labelledby="af-pulse-title">
-      <header className="af-guide-cardhead">
+    <section className="af3a-card af-hg-card" aria-labelledby="af-pulse-title">
+      <header className="af-hg-cardhead">
         <h2 id="af-pulse-title">{g.pulseTitle}</h2>
         <span>{g.pulseSub}</span>
       </header>
       {pulse.ranked === 0 ? (
-        <p className="af-guide-empty">{g.pulseNone}</p>
+        <p className="af-hg-empty">{g.pulseNone}</p>
       ) : (
         <>
-          <ul className="af-guide-stats">
+          <ul className="af-hg-stats">
             <li data-tone="good">
               <b>{pulse.topHalf}</b>
               <span>{g.pulseTopHalf}</span>
@@ -77,13 +77,13 @@ export function HomeSeasonPulse({ pulse }: { pulse: SeasonPulse }) {
             <Rows title={g.pulseBest} rows={pulse.best} tone="good" />
             <Rows title={g.pulseWorst} rows={pulse.worst} tone="warn" />
           </div>
-          {pulse.unranked > 0 ? <p className="af-guide-note">{g.pulseUnranked(pulse.unranked)}</p> : null}
+          {pulse.unranked > 0 ? <p className="af-hg-note">{g.pulseUnranked(pulse.unranked)}</p> : null}
         </>
       )}
-      <p className="af-decision-why af-guide-why">
+      <p className="af-decision-why af-hg-why">
         <b>{g.why}</b> {g.pulseTeach}
       </p>
-      <Link className="af-guide-more" href="/core/standings">
+      <Link className="af-hg-more" href="/core/standings">
         {g.pulseStandings} →
       </Link>
     </section>

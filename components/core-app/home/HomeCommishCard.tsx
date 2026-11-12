@@ -45,18 +45,18 @@ export function HomeCommishCard({
    * The inactive-manager ladder (lib/core-app/commissioner/inactiveLadder.ts). Null when it was not
    * measured, which draws nothing — an empty array is the measured "everyone is active".
    */
-  ladder?: LadderEntry[] | null
+  ladder?: LadderEntry[] | 'off-season' | null
 }) {
   const g = useMessages(homeGuideMessages)
   const shown = risks.slice(0, RISK_LIMIT)
   return (
-    <section className="af3a-card af-guide-card" aria-labelledby="af-run-title">
-      <header className="af-guide-cardhead">
+    <section className="af3a-card af-hg-card" aria-labelledby="af-run-title">
+      <header className="af-hg-cardhead">
         <h2 id="af-run-title">{g.runTitle}</h2>
         <span>{g.runSub(runCount)}</span>
       </header>
       {stats.length > 0 ? (
-        <ul className="af-guide-stats">
+        <ul className="af-hg-stats">
           {stats.map((s) => (
             <li key={s.label} data-tone={s.tone === 'bad' ? 'bad' : s.tone === 'good' ? 'good' : undefined}>
               <b>{s.value}</b>
@@ -65,9 +65,9 @@ export function HomeCommishCard({
           ))}
         </ul>
       ) : null}
-      <p className="af-guide-label">{g.runRisks}</p>
+      <p className="af-hg-label">{g.runRisks}</p>
       {shown.length === 0 ? (
-        <p className="af-guide-empty">{g.runNoRisks}</p>
+        <p className="af-hg-empty">{g.runNoRisks}</p>
       ) : (
         <ul className="af-run-risks">
           {shown.map((risk) => (
@@ -98,12 +98,16 @@ export function HomeCommishCard({
         </ul>
       )}
       {/* The card's own "why it matters" line explains the ladder, so the list does not repeat it. */}
-      {ladder ? <InactiveLadderList entries={ladder} limit={LADDER_LIMIT} showTeach={false} /> : null}
-      {partial ? <p className="af-guide-note">{g.runPartial}</p> : null}
-      <p className="af-decision-why af-guide-why">
+      {ladder === 'off-season' ? (
+        <InactiveLadderList entries={[]} offSeason showTeach={false} />
+      ) : ladder ? (
+        <InactiveLadderList entries={ladder} limit={LADDER_LIMIT} showTeach={false} />
+      ) : null}
+      {partial ? <p className="af-hg-note">{g.runPartial}</p> : null}
+      <p className="af-decision-why af-hg-why">
         <b>{g.why}</b> {g.runTeach}
       </p>
-      <Link className="af-guide-more" href="/core/commissioner">
+      <Link className="af-hg-more" href="/core/commissioner">
         {g.runOpen} →
       </Link>
     </section>
