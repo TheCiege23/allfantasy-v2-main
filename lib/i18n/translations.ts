@@ -4691,6 +4691,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.connected.confirmDisconnectDiscordBody":
       "This also unlinks the AllFantasy bot from your Discord server. You can reconnect any time.",
     "settings.connected.spotifyComingSoon": "Spotify — coming soon",
+    "settings.connected.connectSpotify": "Connect Spotify",
+    "settings.connected.spotifyTesterNote": "Spotify is in limited testing. Your account is on the tester list.",
     "settings.connected.errorLockout":
       "Disconnect blocked to prevent account lockout. Add another provider or password first.",
     "settings.connected.errorDisconnect": "Could not disconnect provider right now.",
@@ -4736,6 +4738,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.connected.discordStatus.botError":
       "The server installation could not be verified or is linked to another AllFantasy account. Restart the connection from Settings.",
     "settings.connected.spotifyStatus.connected": "Spotify connected. Music controls are now available where supported.",
+    "settings.connected.spotifyStatus.notAvailable":
+      "Spotify is in limited testing and isn't open to every account yet. It will open to everyone once Spotify approves AllFantasy.",
     "settings.connected.spotifyStatus.error":
       "Spotify could not be connected. Check the Spotify app redirect URL and try again.",
     "settings.connected.confirmDisconnectLabel": "Disconnect {{provider}}",
