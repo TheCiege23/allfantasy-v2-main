@@ -7,8 +7,10 @@
  * Power Rankings, Settings, Plans (nav entries); Share a card (Career links it); Tokens (Plans
  * links it); Import a league (the rail's connect card); Commissioner Hub (its own nav entry).
  *
- * ⚠ THE FOUR TRADE TOOLS AND THREE PLAYER-COMPARISON PAGES ARE STILL AN OPEN PRODUCT CALL
- * (toolsHub.ts `openDecision`). This moves the links; it does not merge or retire any of them.
+ * The trade tools are one tool since 2026-11-12: the Trade Analyzer at `/trade-evaluator`, and the
+ * finder on the Trades screen itself — which is where this list renders, so it needs no link.
+ * ⚠ THE THREE PLAYER-COMPARISON PAGES ARE STILL AN OPEN PRODUCT CALL (toolsHub.ts `openDecision`).
+ * This lists them; it does not merge or retire any of them.
  */
 export type MoreToolsScreen = 'trades' | 'draft' | 'rankings' | 'players'
 
@@ -16,9 +18,6 @@ export type MoreToolLink = {
   /** Key into moreToolsMessages for the label; `${key}Desc` is the one-line description. */
   key:
     | 'tradeAnalyzer'
-    | 'tradeEvaluator'
-    | 'tradeFinder'
-    | 'dynastyTradeAnalyzer'
     | 'tradeHistory'
     | 'mockDraft'
     | 'warRoom'
@@ -35,10 +34,7 @@ export type MoreToolLink = {
 
 export const MORE_TOOLS: Readonly<Record<MoreToolsScreen, readonly MoreToolLink[]>> = {
   trades: [
-    { key: 'tradeAnalyzer', href: '/trade-analyzer', leavesShell: true },
-    { key: 'tradeEvaluator', href: '/trade-evaluator', leavesShell: true },
-    { key: 'tradeFinder', href: '/trade-finder', leavesShell: true },
-    { key: 'dynastyTradeAnalyzer', href: '/dynasty-trade-analyzer', leavesShell: true },
+    { key: 'tradeAnalyzer', href: '/trade-evaluator', leavesShell: true },
     { key: 'tradeHistory', href: '/af-legacy?tab=finder', leavesShell: true, pro: true },
   ],
   draft: [
