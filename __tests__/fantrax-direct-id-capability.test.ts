@@ -4,7 +4,7 @@
  *
  * 🛑 THE GAP WAS DECLARED IN THREE FILES AND CLOSED IN NONE. `PlayerIdentityMap`
  * gained a `fantraxId` column on 2026-08-31, written weekly by
- * `lib/devy/ingestFantraxPlayerIdentities.ts` — but the capability table, the
+ * the CFB identity ingestion (now `lib/player-identity/ingestNcaafFantraxIdentities.ts`) — but the capability table, the
  * Identity Service's column map and the underlying resolver's column map each
  * independently said Fantrax had no column, each citing "requires a schema
  * migration, out of scope". The migration happened; the three declarations did
