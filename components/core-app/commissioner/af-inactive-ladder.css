@@ -103,4 +103,8 @@
   /* af-dash-3a.css makes every .af3a-btn full width on a phone; here it shares the row with its link. */
   .af-ladder-actions .af3a-btn { flex: 1 1 auto; width: auto; min-height: 44px; }
   .af-ladder-link { flex: none; }
+  /* The row's text links, and "Show message", get a 44px tap height like the button beside them. */
+  .af-ladder-link,
+  .af-ladder-more { display: inline-flex; align-items: center; min-height: 44px; }
+  .af-ladder-msg summary { display: flex; align-items: center; min-height: 44px; }
 }

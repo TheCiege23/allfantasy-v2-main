@@ -187,6 +187,11 @@
   .af-hg-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .af-run-risks li { flex-wrap: wrap; }
   .af-run-risks .af3a-btn { width: 100%; min-height: 44px; text-align: center; }
+  /*
+   * Text links that end a card ("All standings →", "Open Commissioner Hub →") measured 21px tall on a
+   * real account at 375px (2026-11-12). A thumb needs 44.
+   */
+  .af-hg-more { display: inline-flex; align-items: center; min-height: 44px; }
 }
 
 /* ── Format guide (HomeFormatGuide.tsx) ─────────────────────────────────── */
