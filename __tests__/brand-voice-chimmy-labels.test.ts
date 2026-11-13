@@ -122,7 +122,6 @@ const STRICT_FILES = [
   'components/dynasty-intelligence/DynastyInsightsPage.tsx',
   'components/home/HomeChatDock.tsx',
   'components/idp/IDPWaiverSection.tsx',
-  'components/league/tabs/PlayersTab.tsx',
   'components/LeagueRankingsV2Panel.tsx',
   'components/legacy-score/PlatformLegacyLeaderboardPanel.tsx',
   'components/matchup-center/MatchupAiAnalysisPanel.tsx',

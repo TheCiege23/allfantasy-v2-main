@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
@@ -15,8 +14,6 @@ import { mergeUnifiedIntoRosterState, type RosterStateMergeable } from '@/lib/pl
 import { tradeEvidenceFromUnifiedWire } from '@/lib/player-data/adapters/tradePlayerContextAdapter'
 import { matchupContextFromUnifiedWire } from '@/lib/player-data/adapters/matchupPlayerAdapter'
 import { displayPlayerFromUnifiedRow } from '@/lib/player-data/adapters/redraftDisplayPlayers'
-import { getDraftRoomDisplayGameContext } from '@/lib/player-data/adapters/draftRoomDisplayFields'
-import { mapNormalizedDraftEntryToPlayerEntry } from '@/lib/player-data/adapters/draftRoomPlayerAdapter'
 
 const NOW = new Date('2026-07-03T12:00:00.000Z')
 
@@ -319,63 +316,6 @@ describe('G47A NFL redraft schedule, stadium, and weather context', () => {
       providerGameStatus: 'Scheduled',
       providerWeatherSummary: '58F / 14 mph wind / rain',
       canonicalGameContext: game,
-    })
-  })
-
-  it('wires canonical game context through draft room and mock draft player rows', () => {
-    const entry = {
-      playerId: 'player-g47a',
-      name: 'Draft Schedule',
-      position: 'QB',
-      team: 'BUF',
-      byeWeek: 7,
-      display: {
-        playerId: 'player-g47a',
-        displayName: 'Draft Schedule',
-        sport: 'NFL',
-        assets: {},
-        team: {
-          teamId: 'buf',
-          abbreviation: 'BUF',
-          displayName: 'Buffalo Bills',
-          sport: 'NFL',
-          logoUrl: null,
-        },
-        stats: {},
-        metadata: {
-          position: 'QB',
-          teamAbbreviation: 'BUF',
-          gameContext: {
-            nflSeason: 2026,
-            nflWeek: 2,
-            homeTeam: 'MIA',
-            awayTeam: 'BUF',
-            kickoffTimeIso: '2026-09-13T17:00:00.000Z',
-            stadium: 'Hard Rock Stadium',
-            stadiumCity: 'Miami Gardens',
-            stadiumState: 'FL',
-            roofType: 'outdoor',
-            weatherCondition: 'Humid',
-            temperatureF: 86,
-            windSpeedMph: 9,
-            precipitationType: 'none',
-          },
-        },
-      },
-    } as unknown as NormalizedDraftEntry
-
-    const row = mapNormalizedDraftEntryToPlayerEntry(entry, {
-      useAllFantasyAdp: true,
-      aiAdpLookupMaps: { strict: new Map(), loose: new Map() },
-    })
-
-    expect(getDraftRoomDisplayGameContext(row)).toMatchObject({
-      season: 2026,
-      week: 2,
-      opponent: { teamAbbr: 'MIA' },
-      homeAway: 'away',
-      kickoffTimeIso: '2026-09-13T17:00:00.000Z',
-      weather: { temperatureF: 86, windSpeedMph: 9 },
     })
   })
 

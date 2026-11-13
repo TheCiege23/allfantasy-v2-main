@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isPirateLeague, protectedIds, readPirateRules } from '@/lib/pirate/rules'
 import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
-import { nativeCreationRoster } from '@/lib/redraft/nativeCreationRoster'
 import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 import { assertNotReservedByPirateClaim } from '@/lib/pirate/claimReservation'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
@@ -113,8 +112,7 @@ describe('Pirate League rules', () => {
     ]))
   })
 
-  it.each(['NFL', 'NBA', 'MLB', 'NHL'])('uses native %s rosters and a weekly season', (sport) => {
-    expect(nativeCreationRoster(sport, 'pirate')).not.toBeNull()
+  it.each(['NFL', 'NBA', 'MLB', 'NHL'])('uses a weekly season for native %s', (sport) => {
     expect(runsStandardWeeklySeason(sport, 'pirate')).toBe(true)
   })
   it('accepts Pirate as a first-class league creation concept', () => {

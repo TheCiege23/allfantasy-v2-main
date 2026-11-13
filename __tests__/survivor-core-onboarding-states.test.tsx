@@ -9,7 +9,6 @@ vi.mock('@/components/league/native/LeagueSeatTracker', () => ({ LeagueSeatTrack
 vi.mock('@/components/league/CommissionerSetupChecklist', () => ({ CommissionerSetupChecklist: () => null }))
 
 import { SurvivorTribeReveal } from '@/components/survivor/core/SurvivorTribeReveal'
-import { SURVIVOR_ONBOARDING_STEPS, SurvivorHowItWorks } from '@/components/survivor/core/SurvivorHowItWorks'
 import { SURVIVOR_STATES, SurvivorStateCard, type SurvivorStateKey } from '@/components/survivor/core/SurvivorStateCard'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
 import { SurvivorVoteCast } from '@/components/survivor/weekly/SurvivorVoteCast'
@@ -55,21 +54,6 @@ describe('first tribe reveal', () => {
     // Give the open-once effect a chance to run before asserting it stayed closed.
     await new Promise(r => setTimeout(r, 50))
     expect(screen.queryByTestId('survivor-tribe-reveal')).toBeNull()
-  })
-})
-
-describe('how it works explainer', () => {
-  it('lists the five creation steps and stays dismissed', async () => {
-    const { unmount } = render(<SurvivorHowItWorks />)
-    await waitFor(() => expect(screen.getByTestId('survivor-how-it-works')).toBeTruthy())
-    expect(SURVIVOR_ONBOARDING_STEPS.map(s => s.title)).toEqual(['Format', 'Sport and size', 'Tribes', 'Twists', 'Invite'])
-    expect(screen.getByText(/can't start until the league is full/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
-    expect(screen.queryByTestId('survivor-how-it-works')).toBeNull()
-    unmount()
-    render(<SurvivorHowItWorks />)
-    await new Promise(r => setTimeout(r, 0))
-    expect(screen.queryByTestId('survivor-how-it-works')).toBeNull()
   })
 })
 

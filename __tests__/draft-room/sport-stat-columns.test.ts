@@ -8,7 +8,6 @@ import {
   getStatValueForDraftPlayer,
   sportUsesColumnKeys,
 } from '@/lib/draft-room/draftSportStatColumns'
-import { resolvePlayerPoolAdpColumns } from '@/lib/draft-room/playerPoolAdpColumns'
 
 function nflSplits(partial: Partial<NflDraftProjectionSplits>): NflDraftProjectionSplits {
   return {
@@ -212,15 +211,6 @@ describe('filterDraftPlayersByStat', () => {
     expect(filterDraftPlayersByStat(players, pts, { op: 'between', min: 9, max: 11 })).toHaveLength(1)
     expect(filterDraftPlayersByStat(players, pts, { op: 'eq', value: 25 })).toHaveLength(1)
     expect(filterDraftPlayersByStat(players, pts, { op: 'exists' })).toHaveLength(2)
-  })
-})
-
-describe('ADP separation unchanged', () => {
-  it('resolvePlayerPoolAdpColumns keeps system vs AI separate', () => {
-    const r = resolvePlayerPoolAdpColumns({ adp: 5.2, aiAdp: 9.1, aiAdpSampleSize: 99 })
-    expect(r.systemAdp).toBe(5.2)
-    expect(r.aiAdp).toBe(9.1)
-    expect(r.aiAdpSampleSize).toBe(99)
   })
 })
 

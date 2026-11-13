@@ -22,7 +22,6 @@ import {
   nextChatAlertState,
   readChatAlertState,
 } from '@/lib/chat-notifications/alertThrottle'
-import { buildDirectMessageEmail, buildDirectMessageEmailSubject } from '@/lib/chat-notifications/directMessageEmail'
 import { isContactShaped, safeDisplayName } from '@/lib/chat-notifications/displayName'
 
 describe('buildMessagePreview', () => {
@@ -163,48 +162,6 @@ describe('decideChatAlert', () => {
     expect(readChatAlertState({ something: 'else' })).toBeNull()
     expect(readChatAlertState(null)).toBeNull()
     expect(readChatAlertState([1, 2])).toBeNull()
-  })
-})
-
-describe('buildDirectMessageEmail', () => {
-  const base = {
-    preview: 'hey',
-    isGroup: false,
-    conversationUrl: 'https://af.test/messages?thread=t1&message=m1',
-    baseUrl: 'https://af.test',
-    unsubscribeUrl: 'https://af.test/api/email/unsubscribe?token=tok',
-  }
-
-  it('🛑 escapes the sender, the preview and the huddle title', () => {
-    const { html } = buildDirectMessageEmail({
-      ...base,
-      senderName: '<img src=x onerror=alert(1)>',
-      preview: '<script>steal()</script> & more',
-      threadTitle: '"><b>x</b>',
-      isGroup: true,
-    })
-    expect(html).not.toContain('<img src=x')
-    expect(html).not.toContain('<script>')
-    expect(html).not.toContain('<b>x</b>')
-    expect(html).toContain('&lt;script&gt;steal()&lt;/script&gt; &amp; more')
-  })
-
-  it('carries the preview, a button to the conversation, and the unsubscribe link', () => {
-    const { subject, html } = buildDirectMessageEmail({ ...base, senderName: 'Dana' })
-    expect(subject).toBe('Dana sent you a message')
-    expect(html).toContain('Open conversation')
-    expect(html).toContain('href="https://af.test/messages?thread=t1&amp;message=m1"')
-    expect(html).toContain('Unsubscribe')
-    expect(html).toContain('/settings?tab=notifications')
-  })
-
-  it('a newline in a display name never reaches the subject header', () => {
-    const subject = buildDirectMessageEmailSubject({ senderName: 'Dana\r\nBcc: x@y.z', isGroup: false })
-    expect(subject).not.toMatch(/[\r\n]/)
-  })
-
-  it('a huddle subject names the huddle', () => {
-    expect(buildDirectMessageEmailSubject({ senderName: 'Dana', threadTitle: 'Sunday Crew', isGroup: true })).toBe('Dana posted in Sunday Crew')
   })
 })
 

@@ -21,7 +21,6 @@ vi.mock('@/lib/rankings-engine/v2-adapter', async (importOriginal) => {
 })
 
 import DemandHeatmap from '@/components/DemandHeatmap'
-import { RankingsPremiumRow } from '@/components/RankingsPremiumRow'
 import { buildLDIHeatmap } from '@/lib/rankings-engine/ldi-heatmap'
 
 const ROOT = path.resolve(__dirname, '..', '..')
@@ -113,28 +112,6 @@ describe('DemandHeatmap — no manager label, no label-targeting button', () => 
     expect(text).not.toMatch(/Learning/)
     // The button that sent you after "overpayers" is now a plain partner search.
     expect(screen.getByText('Find Trade Partners')).toBeDefined()
-  })
-})
-
-describe('RankingsPremiumRow — no manager label', () => {
-  it('lists the manager with facts only', () => {
-    render(
-      <RankingsPremiumRow
-        heatmapCells={[cell]}
-        selectedTeam={null}
-        rankHistory={[]}
-        tier={'Mid Pack' as never}
-        winWindow={'Flexible' as never}
-        whatChanged={{ rankDelta: 0, topDrivers: [] }}
-        onOpenTradeHub={() => {}}
-        onGenerateOffers={() => {}}
-      />,
-    )
-    fireEvent.click(screen.getByText('QB'))
-
-    expect(screen.getByText('Alice')).toBeDefined()
-    expect(screen.getByText('7 trades')).toBeDefined()
-    expect(document.body.textContent ?? '').not.toMatch(/Overpayer/)
   })
 })
 

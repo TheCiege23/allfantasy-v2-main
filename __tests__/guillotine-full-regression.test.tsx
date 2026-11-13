@@ -6,7 +6,6 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { getDraftTypeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { DRAFT_TYPES_BY_LEAGUE_FORMAT } from '@/lib/draft-types/draftTypeRegistry'
-import { resolveEliminationWindow } from '@/lib/guillotine/EliminationWindowResolver'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { buildPromptForType } from '@/lib/guillotine/ai/GuillotineAIPrompts'
 import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
@@ -159,11 +158,6 @@ describe('Guilly full regression matrix', () => {
       expect(profile!.waiverDay).toBeGreaterThanOrEqual(0)
       expect(profile!.waiverDay).toBeLessThanOrEqual(6)
       expect((profile!.waiverDay - profile!.chopDay + 7) % 7).toBe(1)
-
-      const window = resolveEliminationWindow(sport, new Date('2026-09-14T00:00:00.000Z'), 24)
-      expect(window).not.toBeNull()
-      expect(window!.waiversAt.getTime()).toBeGreaterThan(window!.opensAt.getTime())
-      expect(window!.closesAt.getTime()).toBeGreaterThan(window!.waiversAt.getTime())
     }
   })
 

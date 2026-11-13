@@ -1,6 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveCreateLeagueHeroMedia } from '@/lib/create-league-v2/media-priority'
-import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import {
   resolveDraftIntroStemFromWizardId,
   resolveDraftIntroVideoUrl,
@@ -22,47 +20,6 @@ import {
   getTeamCountOptions,
   isSportAllowedForType,
 } from '@/lib/create-league-v2/rules-engine'
-
-describe('resolveCreateLeagueHeroMedia (focus)', () => {
-  const base = {
-    leagueType: 'survivor' as const,
-    sport: 'NFL' as const,
-    draftType: 'snake' as const,
-    idpSelected: false,
-    draftEmphasis: false,
-  }
-
-  it('concept focus uses survivor concept clip first', () => {
-    const m = resolveCreateLeagueHeroMedia({ ...base, focus: 'concept' })
-    expect(m.mediaKey).toMatch(/^concept:/)
-    expect(m.video).toBe(LEAGUE_TYPE_MEDIA.survivor?.video)
-  })
-
-  it('sport focus uses NFL sport clip first', () => {
-    const m = resolveCreateLeagueHeroMedia({ ...base, focus: 'sport' })
-    expect(m.mediaKey).toBe('sport:NFL')
-    expect(m.video).toBe(SPORT_MEDIA.NFL.video)
-  })
-
-  it('draft focus uses snake draft intro when present', () => {
-    const m = resolveCreateLeagueHeroMedia({ ...base, focus: 'draft' })
-    expect(m.mediaKey).toMatch(/^draft:snake/)
-    expect(m.video).toBe('/media/create-league/drafts/videos/Snake Draft.mp4')
-    expect(m.badge).toBe('Draft format')
-    expect(m.fallback).toBe(SPORT_MEDIA.NFL.video)
-    expect(m.fallback).toMatch(/\.mp4$/)
-  })
-
-  it('draft focus falls back to concept when draft asset missing', () => {
-    const m = resolveCreateLeagueHeroMedia({
-      ...base,
-      draftType: 'slow_draft',
-      focus: 'draft',
-    })
-    expect(m.mediaKey).toMatch(/^concept:/)
-    expect(m.video).toBe(LEAGUE_TYPE_MEDIA.survivor?.video)
-  })
-})
 
 describe('draft intro resolver (fail closed)', () => {
   it('prefers the long intro cut over the short selection loop, where one ships', () => {

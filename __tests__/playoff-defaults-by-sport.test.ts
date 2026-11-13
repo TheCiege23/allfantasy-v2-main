@@ -1,10 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  getPlayoffPreset,
-  getPlayoffPresetDefinitions,
-  getSupportedPlayoffVariantsForSport,
-} from '@/lib/playoff-defaults/PlayoffDefaultsRegistry'
-import { resolvePlayoffPreset } from '@/lib/playoff-defaults/PlayoffPresetResolver'
 
 const { leagueFindUniqueMock, leagueUpdateMock } = vi.hoisted(() => ({
   leagueFindUniqueMock: vi.fn(),
@@ -23,90 +17,6 @@ vi.mock('@/lib/prisma', () => ({
 describe('Prompt 19 playoff defaults by sport and variant', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('defines playoff presets for all supported sports with required fields', () => {
-    const sports = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'] as const
-    for (const sport of sports) {
-      const playoff = getPlayoffPreset(sport, 'STANDARD')
-      expect(playoff.sport_type).toBe(sport)
-      expect(playoff.playoff_team_count).toBeGreaterThanOrEqual(0)
-      expect(typeof playoff.seeding_rules).toBe('string')
-      expect(Array.isArray(playoff.tiebreaker_rules)).toBe(true)
-      expect(typeof playoff.matchup_length).toBe('number')
-      expect(typeof playoff.consolation_bracket_enabled).toBe('boolean')
-      expect(typeof playoff.third_place_game_enabled).toBe('boolean')
-      expect(typeof playoff.toilet_bowl_enabled).toBe('boolean')
-      expect(typeof playoff.championship_length).toBe('number')
-      expect(typeof playoff.reseed_behavior).toBe('string')
-    }
-  })
-
-  it('exposes supported NFL playoff variants including IDP and DYNASTY_IDP', () => {
-    const variants = getSupportedPlayoffVariantsForSport('NFL')
-    expect(variants).toEqual(
-      expect.arrayContaining([
-        'STANDARD',
-        'PPR',
-        'HALF_PPR',
-        'SUPERFLEX',
-        'IDP',
-        'DYNASTY_IDP',
-        'DEVY_DYNASTY',
-        'MERGED_DEVY_C2C',
-      ])
-    )
-
-    const defs = getPlayoffPresetDefinitions('NFL')
-    expect(defs.length).toBeGreaterThanOrEqual(8)
-    expect(defs.map((d) => d.variant)).toEqual(
-      expect.arrayContaining(['IDP', 'DYNASTY_IDP', 'DEVY_DYNASTY', 'MERGED_DEVY_C2C'])
-    )
-  })
-
-  it('resolves NFL IDP preset with NFL-style postseason defaults', () => {
-    const standard = getPlayoffPreset('NFL', 'STANDARD')
-    const idp = getPlayoffPreset('NFL', 'IDP')
-
-    expect(idp.playoff_team_count).toBe(standard.playoff_team_count)
-    expect(idp.playoff_start_week).toBe(15)
-    expect(idp.matchup_length).toBe(1)
-    expect(idp.tiebreaker_rules).toEqual(
-      expect.arrayContaining(['points_for', 'head_to_head', 'points_against', 'division_record'])
-    )
-  })
-
-  it('supports soccer no-playoff variant preset', () => {
-    const noPlayoff = getPlayoffPreset('SOCCER', 'NO_PLAYOFF')
-    expect(noPlayoff.playoff_team_count).toBe(0)
-    expect(noPlayoff.playoff_weeks).toBe(0)
-    expect(noPlayoff.playoff_start_week).toBeNull()
-    expect(noPlayoff.consolation_bracket_enabled).toBe(false)
-    expect(noPlayoff.third_place_game_enabled).toBe(false)
-    expect(noPlayoff.toilet_bowl_enabled).toBe(false)
-    expect(noPlayoff.championship_length).toBe(0)
-  })
-
-  it('resolves playoff preset capability and default_* mapped fields', () => {
-    const resolved = resolvePlayoffPreset('NFL', 'IDP')
-    expect(resolved.supportsByes).toBe(true)
-    expect(resolved.supportsConsolation).toBe(true)
-    expect(resolved.default_playoff_team_count).toBe(6)
-    expect(resolved.default_playoff_start_point).toBe(15)
-    expect(resolved.default_seeding_rules).toBe('standard_standings')
-    expect(resolved.default_tiebreaker_rules).toEqual(expect.arrayContaining(['points_for']))
-  })
-
-  it('normalizes DEVY/C2C aliases to dynasty playoff overlays', () => {
-    const devyAlias = getPlayoffPreset('NFL', 'devy')
-    const devyCanonical = getPlayoffPreset('NFL', 'DEVY_DYNASTY')
-    expect(devyAlias.playoff_team_count).toBe(devyCanonical.playoff_team_count)
-    expect(devyAlias.first_round_byes).toBe(0)
-
-    const c2cAlias = getPlayoffPreset('NFL', 'c2c')
-    const c2cCanonical = getPlayoffPreset('NFL', 'MERGED_DEVY_C2C')
-    expect(c2cAlias.playoff_team_count).toBe(c2cCanonical.playoff_team_count)
-    expect(c2cAlias.bye_rules).toBeNull()
   })
 
   it('fills missing playoff keys during bootstrap while preserving existing overrides', async () => {

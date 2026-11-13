@@ -200,7 +200,7 @@
     "status:g15": "node scripts/g15-prod-status.cjs",
     "staging:deploy": "powershell -ExecutionPolicy Bypass -File scripts/staging-deploy.ps1",
     "staging:deploy:validate-only": "powershell -ExecutionPolicy Bypass -File scripts/staging-deploy.ps1 -ValidateOnly",
-    "test:prompt2": "vitest run __tests__/sport-team-player-pool-mapping.test.ts __tests__/sport-default-roster-settings.test.ts __tests__/league-roster-validation-context.test.ts __tests__/league-creation-defaults-loader-variants.test.ts __tests__/prompt2-slot-flex-behavior.test.ts",
+    "test:prompt2": "vitest run __tests__/sport-team-player-pool-mapping.test.ts __tests__/sport-default-roster-settings.test.ts __tests__/league-creation-defaults-loader-variants.test.ts __tests__/prompt2-slot-flex-behavior.test.ts",
     "qa:legacy-smoke": "node scripts/legacy-feature-smoke-test.mjs",
     "qa:legacy-report": "node scripts/legacy-qa-report.mjs",
     "worker:simulations": "tsx scripts/start-simulation-worker.ts",

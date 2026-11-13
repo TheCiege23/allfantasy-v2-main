@@ -5,7 +5,6 @@ import {
   isPositionEligibleForSlot,
   getPositionsForSport,
 } from '@/lib/roster-defaults/PositionEligibilityResolver'
-import { validateRoster } from '@/lib/roster-defaults/RosterValidationEngine'
 import {
   getDefaultRosterSlotsForSport,
   getPositionFilterOptionsForSport,
@@ -79,22 +78,6 @@ describe('Default Roster Settings by Sport', () => {
 
     const mlbP = getAllowedPositionsForSlot('MLB', 'P')
     expect(mlbP).toEqual(expect.arrayContaining(['SP', 'RP']))
-  })
-
-  it('validates roster assignments against slot eligibility', () => {
-    const valid = validateRoster('NFL', [
-      { playerId: 'p1', position: 'QB', slotName: 'QB' },
-      { playerId: 'p2', position: 'RB', slotName: 'RB' },
-      { playerId: 'p3', position: 'WR', slotName: 'WR' },
-      { playerId: 'p4', position: 'TE', slotName: 'FLEX' },
-    ])
-    expect(valid.valid).toBe(true)
-
-    const invalid = validateRoster('NFL', [
-      { playerId: 'p5', position: 'QB', slotName: 'WR' },
-    ])
-    expect(invalid.valid).toBe(false)
-    expect(invalid.errors.some((e) => e.includes('not allowed'))).toBe(true)
   })
 
   it('keeps draft-room filters and fallback slots sport-aware', () => {

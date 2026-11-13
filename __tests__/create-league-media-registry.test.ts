@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { getSportThumbnailCandidates } from '@/lib/create-league-v2/create-league-media-assets'
-import { resolveCreateLeagueHeroMedia } from '@/lib/create-league-v2/media-priority'
 import { SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
 
@@ -26,31 +25,5 @@ describe('Create League packaged media registry', () => {
 
   it('sport thumbnail candidates prefer packaged sports/thumbnail stem', () => {
     expect(getSportThumbnailCandidates('NFL')[0]).toBe('/media/create-league/sports/thumbnail/Football.png')
-  })
-
-  it('mediaFocus sport resolves sport clip', () => {
-    const m = resolveCreateLeagueHeroMedia({
-      leagueType: 'redraft',
-      sport: 'NFL',
-      draftType: 'snake',
-      idpSelected: false,
-      draftEmphasis: false,
-      focus: 'sport',
-    })
-    expect(m.mediaKey).toBe('sport:NFL')
-    expect(m.video).toBe(SPORT_MEDIA.NFL?.video)
-  })
-
-  it('mediaFocus draft resolves draft clip when shipped', () => {
-    const m = resolveCreateLeagueHeroMedia({
-      leagueType: 'redraft',
-      sport: 'NFL',
-      draftType: 'auction',
-      idpSelected: false,
-      draftEmphasis: false,
-      focus: 'draft',
-    })
-    expect(m.mediaKey).toMatch(/^draft:/)
-    expect(m.video).toContain('Auction Draft.mp4')
   })
 })

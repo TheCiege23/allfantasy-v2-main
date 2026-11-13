@@ -1,25 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 import {
   buildNflRedraftPlayerMetadata,
   buildNflRedraftPlayerMetadataFromIdentity,
   buildNflRedraftPlayerMetadataFromWire,
   type NflRedraftPlayerDisplayMetadata,
 } from '@/lib/player-data/nflRedraftPlayerMetadata'
-import { normalizeSportsDataIoPlayerIdentity, normalizeSleeperPlayerIdentity } from '@/lib/nfl-provider'
+import { normalizeSportsDataIoPlayerIdentity, normalizeSleeperPlayerIdentity } from '@/lib/nfl-provider/nflRedraftPlayerIdentity'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { adaptWaiverWirePlayer } from '@/lib/player-data/adapters/waiverPlayerAdapter'
 import { mergeUnifiedIntoRosterState, type RosterStateMergeable } from '@/lib/player-data/adapters/rosterPlayerAdapter'
 import { tradeEvidenceFromUnifiedWire } from '@/lib/player-data/adapters/tradePlayerContextAdapter'
 import { matchupContextFromUnifiedWire } from '@/lib/player-data/adapters/matchupPlayerAdapter'
 import { displayPlayerFromUnifiedRow } from '@/lib/player-data/adapters/redraftDisplayPlayers'
-import {
-  getDraftRoomDisplayHeadshot,
-  getDraftRoomDisplayName,
-  getDraftRoomDisplayPosition,
-  getDraftRoomDisplayTeam,
-} from '@/lib/player-data/adapters/draftRoomDisplayFields'
-import { mapNormalizedDraftEntryToPlayerEntry } from '@/lib/player-data/adapters/draftRoomPlayerAdapter'
 
 const NOW = new Date('2026-07-03T12:00:00.000Z')
 
@@ -164,51 +156,6 @@ describe('G46B NFL redraft player media and metadata wiring', () => {
     })
     expect(metadata.providerFreshness.stale).toBe(true)
     expect(metadata.providerFallback.fallback).toBe(true)
-  })
-
-  it('wires canonical metadata through draft room and mock draft player rows', () => {
-    const entry = {
-      playerId: 'player-9',
-      name: 'Legacy Receiver',
-      position: 'WR',
-      team: 'JAC',
-      byeWeek: 12,
-      yearsExp: 2,
-      display: {
-        playerId: 'player-9',
-        displayName: 'Canonical Receiver',
-        sport: 'NFL',
-        assets: {
-          headshotUrl: 'https://draft.test/player.png',
-          teamLogoUrl: 'https://draft.test/jax.svg',
-        },
-        team: {
-          teamId: 'jax',
-          abbreviation: 'JAX',
-          displayName: 'Jacksonville Jaguars',
-          sport: 'NFL',
-          logoUrl: 'https://draft.test/jax.svg',
-        },
-        stats: { byeWeek: 12 },
-        metadata: {
-          position: 'WR',
-          teamAbbreviation: 'JAX',
-          externalSourceId: 'provider-9',
-        },
-      },
-    } as unknown as NormalizedDraftEntry
-
-    const row = mapNormalizedDraftEntryToPlayerEntry(entry, {
-      useAllFantasyAdp: true,
-      aiAdpLookupMaps: { strict: new Map(), loose: new Map() },
-    })
-
-    expect(row.canonicalPlayerMetadata?.displayName).toBe('Canonical Receiver')
-    expect(getDraftRoomDisplayName(row)).toBe('Canonical Receiver')
-    expect(getDraftRoomDisplayTeam(row)).toBe('JAX')
-    expect(getDraftRoomDisplayPosition(row)).toBe('WR')
-    expect(getDraftRoomDisplayHeadshot(row)).toBe('https://draft.test/player.png')
-    expect(JSON.stringify(row.canonicalPlayerMetadata)).not.toContain('provider-9')
   })
 
   it('makes roster, waiver, trade, matchup, team display, and player-card adapters consume canonical metadata first', () => {

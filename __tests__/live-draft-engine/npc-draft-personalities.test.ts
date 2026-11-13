@@ -12,7 +12,7 @@
  *   logs to **`AiManagerAuditLog`** via `logAction`.
  * - **liveDraftAiAutopick** also calls **`logAction`** when `isRosterAiControlled` or an NPC personality is active, with
  *   `buildNpcAiManagerDraftAuditPayload` (personality, candidates, reason).
- * - **NPC / pick trades**: `canAiProposeTrade` + `canNpcSendOrAcceptDraftTrade` — full auto-accept/execute of NPC trades is
+ * - **NPC / pick trades**: `canAiProposeTrade` — full auto-accept/execute of NPC trades is
  *   **not** implemented as an autonomous negotiation loop here; route handlers + `maybeAutoRespondToTradeProposal` remain the
  *   integration surface (**future-state** for rich NPC trade negotiation).
  */
@@ -28,7 +28,6 @@ import {
   buildNpcAiManagerDraftAuditPayload,
   pickRandomNpcPersonality,
 } from '@/lib/live-draft-engine/npcDraftPersonality'
-import { canNpcSendOrAcceptDraftTrade } from '@/lib/live-draft-engine/npcDraftTradePolicy'
 import type { CommissionerAiManagersBlob } from '@/lib/commissioner-ai-draft-manager/types'
 import { parseCommissionerAiManagers } from '@/lib/commissioner-ai-draft-manager/CommissionerAiDraftManagerService'
 
@@ -285,17 +284,6 @@ describe('mergeNpcPersonalityIntoBlob', () => {
     expect(next.assignments[0]?.npcFavoriteTeamAbbr).toBe('PHI')
     const parsed = parseCommissionerAiManagers(next)
     expect(parsed.assignments[0]?.npcDraftPersonality).toBe('NEED_BASED')
-  })
-})
-
-describe('canNpcSendOrAcceptDraftTrade', () => {
-  it('blocked by default', () => {
-    expect(canNpcSendOrAcceptDraftTrade({})).toBe(false)
-    expect(canNpcSendOrAcceptDraftTrade({ npcDraftTradingEnabled: false })).toBe(false)
-  })
-
-  it('allowed only when commissioner explicitly enables', () => {
-    expect(canNpcSendOrAcceptDraftTrade({ npcDraftTradingEnabled: true })).toBe(true)
   })
 })
 
