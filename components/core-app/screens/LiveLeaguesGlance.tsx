@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { GlanceRow, LeaguesAtAGlance } from '@/lib/live/leaguesAtAGlance'
+import { useMessages } from '@/components/i18n/useMessages'
+import { liveGuideMessages } from '@/lib/core-app/messages/liveGuide'
 
 /** How many leagues the strip names before "Show all". */
 const ATTENTION_SHOWN = 4
@@ -38,10 +40,18 @@ function saveChoice(open: boolean) {
 export function LiveLeaguesGlance({
   glance,
   sportLabel,
+  guided = false,
 }: {
   glance: LeaguesAtAGlance | null
   sportLabel: string
+  /**
+   * Under the /core/live guide headline (2026-11-13): the ahead/behind/close counts are the headline's
+   * chips now, so they are not said a second time here. The section is named in words ("Matchups to
+   * watch") and carries one "why it matters" line. The chips link here, hence the id.
+   */
+  guided?: boolean
 }) {
+  const guide = useMessages(liveGuideMessages)
   const [showAll, setShowAll] = useState(false)
   /*
    * ⚠ COLLAPSIBLE, AND CLOSED ON A PHONE BY DEFAULT (2026-10-12). Open, the league list put the first
@@ -62,6 +72,19 @@ export function LiveLeaguesGlance({
     mq.addEventListener?.('change', sync)
     return () => mq.removeEventListener?.('change', sync)
   }, [])
+  /*
+   * The guide headline's "Matchups behind" / "Close matchups" chips link here. On a phone this card
+   * starts closed, so arriving by that link opens it — a chip that lands on a folded card answers nothing.
+   */
+  useEffect(() => {
+    if (!guided) return
+    const openOnHash = () => {
+      if (window.location.hash === '#af-live-glance') setOpen(true)
+    }
+    openOnHash()
+    window.addEventListener('hashchange', openOnHash)
+    return () => window.removeEventListener('hashchange', openOnHash)
+  }, [guided])
   if (!glance) return null
   const { counts, attention, rows } = glance
   const shown = showAll ? rows : attention.slice(0, ATTENTION_SHOWN)
@@ -78,7 +101,8 @@ export function LiveLeaguesGlance({
   return (
     <section
       className="af-live-glance"
-      aria-label="Your matchups this week"
+      id={guided ? 'af-live-glance' : undefined}
+      aria-label={guided ? guide.glanceTitle : 'Your matchups this week'}
       data-open={open == null ? 'auto' : open ? 'true' : 'false'}
     >
       <h2 className="af-live-glance-h">
@@ -89,12 +113,20 @@ export function LiveLeaguesGlance({
         aria-controls={bodyId}
         onClick={toggle}
       >
-        <span className="af-label af-live-glance-head">
-          {sportLabel} · your matchups · {rows.length} {rows.length === 1 ? 'league' : 'leagues'}
-        </span>
+        {guided ? (
+          <span className="af-live-glance-head af-lg-glance-head">
+            <b>{guide.glanceTitle}</b>
+            <span>{guide.glanceSub(rows.length)}</span>
+          </span>
+        ) : (
+          <span className="af-label af-live-glance-head">
+            {sportLabel} · your matchups · {rows.length} {rows.length === 1 ? 'league' : 'leagues'}
+          </span>
+        )}
         <span className="af-live-glance-chev" aria-hidden />
       </button>
       </h2>
+      {guided ? null : (
       <p className="af-live-glance-counts af-num">
         <Count n={counts.ahead} label="ahead" tone="good" />
         <Count n={counts.behind} label="behind" tone="bad" />
@@ -104,6 +136,7 @@ export function LiveLeaguesGlance({
         </span>
         {counts.pending > 0 ? <Count n={counts.pending} label="not started" /> : null}
       </p>
+      )}
 
       <div className="af-live-glance-body" id={bodyId}>
       {shown.length > 0 ? (
@@ -125,6 +158,11 @@ export function LiveLeaguesGlance({
         >
           {showAll ? 'Show only the ones to watch' : `Show all ${rows.length} leagues`}
         </button>
+      ) : null}
+      {guided ? (
+        <p className="af-lg-teach">
+          <b>{guide.why}</b> {guide.glanceTeach}
+        </p>
       ) : null}
       </div>
     </section>

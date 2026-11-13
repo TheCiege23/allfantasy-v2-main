@@ -150,8 +150,15 @@ describe('your matchups strip', () => {
   it('leads the cross-league view with ahead / behind and the league to look at', () => {
     const { container } = render(<LiveScores data={page([game('1')])} leagueWeek={{ byLeague, leagues }} />)
     const strip = container.querySelector('.af-live-glance') as HTMLElement
-    expect(strip.textContent).toContain('1 ahead')
-    expect(strip.textContent).toContain('1 behind')
+    /*
+     * 2026-11-13: the counts are the guide headline's chips now, said once, and the chip links to this
+     * strip. The strip itself names the leagues to look at.
+     */
+    const behind = container.querySelector('.af-lg-chips [data-chip="behind"]') as HTMLAnchorElement
+    expect(behind.textContent).toBe('1Matchups behind')
+    expect(behind.getAttribute('href')).toBe('#af-live-glance')
+    expect(strip.id).toBe('af-live-glance')
+    expect(strip.textContent).not.toContain('1 behind')
     const rows = strip.querySelectorAll('.af-live-glance-row')
     expect(rows).toHaveLength(1)
     expect(rows[0]!.textContent).toContain('Alpha League')
@@ -193,13 +200,18 @@ describe('your live impact — starters in action, not points summed across leag
     const live = game('1', { tieIns: [tie({ playerId: 'same', playerName: 'Same Guy', points: 20 }), shared, tie({ playerId: 'x', playerName: 'Other' })] })
     const later = game('2', { isLive: false, completed: false, clockLabel: null, tieIns: [tie({ playerId: 'y', playerName: 'Later' })] })
     const { container } = render(<LiveScores data={page([live, later, final('3')])} />)
-    const panel = container.querySelector('.af-live-impact') as HTMLElement
-    // 'same' starts in two leagues and counts once; 'x' is the other live starter.
-    expect(panel.querySelector('.af-live-impact-total')!.textContent).toBe('2starters playing now')
-    expect(panel.querySelector('.af-live-impact-sub')!.textContent).toBe('across 1 game · 1 still to play · 1 done')
-    // The old headline summed 20 + 30 + 8.4 across leagues; that number must not lead the panel.
-    expect(panel.textContent).not.toContain('58.4')
-    expect(panel.textContent).not.toMatch(/fantasy pts scored/)
+    /*
+     * 2026-11-13: the starter count is the page headline now (the panel stays only for a failed or empty
+     * roster). 'same' starts in two leagues and counts once; 'x' is the other live starter.
+     */
+    const head = container.querySelector('.af-lg-head') as HTMLElement
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2 of your starters are playing right now')
+    expect(head.querySelector('[data-chip="playing"]')!.textContent).toBe('2Playing now')
+    expect(head.querySelector('[data-chip="done"]')!.textContent).toBe('1Done today')
+    expect(container.querySelector('.af-live-impact')).toBeNull()
+    // The old headline summed 20 + 30 + 8.4 across leagues; that number must not lead the page.
+    expect(head.textContent).not.toContain('58.4')
+    expect(head.textContent).not.toMatch(/fantasy pts scored/)
   })
 
   it('names the play card for what it is', () => {
@@ -275,7 +287,8 @@ describe('before kickoff a starter shows his projection, not 0.0', () => {
 
 describe('phone order: one summary above the games, the rest of the panel after them (2026-10-11)', () => {
   it('renders the summary twice — before the grid (phone) and inside the side panel (desktop)', () => {
-    const { container } = render(<LiveScores data={page([game('1')])} />)
+    // Since 2026-11-13 the summary appears only when it explains something: here, no roster yet.
+    const { container } = render(<LiveScores data={{ ...page([game('1')]), hasRosterData: false }} />)
     const inline = container.querySelector('.af-live-impact[data-placement="inline"]') as HTMLElement
     const side = container.querySelector('.af-live-side .af-live-impact[data-placement="side"]') as HTMLElement
     const grid = container.querySelector('.af-live-grid') as HTMLElement
@@ -301,14 +314,15 @@ describe('your matchups strip is collapsible (2026-10-12)', () => {
     window.localStorage.removeItem('af-live-glance-open')
     const { container } = render(<LiveScores data={page([game('1')])} leagueWeek={{ byLeague, leagues }} />)
     expect(strip(container).getAttribute('data-open')).toBe('auto')
-    expect(strip(container).querySelector('.af-live-glance-counts')!.textContent).toContain('1 behind')
-    expect(screen.getByRole('heading', { name: /your matchups/ })).toBeInTheDocument()
+    // The counts moved to the headline chips (2026-11-13), which show whether this strip is open or not.
+    expect(container.querySelector('.af-lg-chips [data-chip="behind"]')!.textContent).toBe('1Matchups behind')
+    expect(screen.getByRole('heading', { name: /Matchups to watch/ })).toBeInTheDocument()
   })
 
   it('the header toggles it, and the choice is remembered', () => {
     window.localStorage.removeItem('af-live-glance-open')
     const { container, unmount } = render(<LiveScores data={page([game('1')])} leagueWeek={{ byLeague, leagues }} />)
-    const toggle = screen.getByRole('button', { name: /your matchups/ })
+    const toggle = screen.getByRole('button', { name: /Matchups to watch/ })
     expect(toggle.getAttribute('aria-expanded')).toBe('true') // jsdom has no matchMedia: desktop default
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
