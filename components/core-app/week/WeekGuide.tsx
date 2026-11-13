@@ -8,11 +8,15 @@ import type { WeeklyCalendar } from '@/lib/core-app/weeklyCalendar'
 import { weeklyCalendarTitle } from '@/lib/core-app/weeklyCalendar'
 import {
   closeGames,
+  gameAction,
   groupKickoffs,
+  lineupsToFix,
   otherDeadlines,
   rankSurvival,
   summarizeWeek,
   survivalStatus,
+  type GameAction,
+  type LineupFact,
 } from '@/lib/core-app/weekGuide'
 import { weekGuideMessages } from '@/lib/core-app/messages/weekGuide'
 import { WeekDateRange } from '@/components/core-app/WeekDateRange'
@@ -71,16 +75,38 @@ function gameStatus(m: WeekMatchup, t: Text): string {
   return ''
 }
 
-function Headline({ board, totalLeagues, t }: { board: WeekBoard; totalLeagues: number; t: Text }) {
+type Chip = { key: string; value: string; label: string; tone: 'warn' | 'bad' | 'plain'; href: string | null }
+
+function Headline({
+  board,
+  totalLeagues,
+  facts,
+  t,
+}: {
+  board: WeekBoard
+  totalLeagues: number
+  facts: ReadonlyMap<string, LineupFact>
+  t: Text
+}) {
   const s = summarizeWeek(board)
   const kickoff = useLocalWhen(s.firstKickoffAt)
-  const chips: Array<{ key: string; value: string; label: string; tone: 'warn' | 'bad' | 'plain' }> = [
-    { key: 'close', value: String(s.close), label: t.chipClose, tone: s.close > 0 ? 'warn' : 'plain' },
-    ...(s.survival > 0
-      ? [{ key: 'survival', value: String(s.survivalAtRisk), label: t.chipSurvival, tone: (s.survivalAtRisk > 0 ? 'bad' : 'plain') as 'bad' | 'plain' }]
+  const fix = lineupsToFix(facts)
+  /*
+   * Every chip that names something you can act on links there (2026-11-13, owner: users should know
+   * exactly what to do). "No game this week" and "0 lineups to fix" have nowhere to go, so they stay
+   * plain text — /core/my-team with no league redirects back to this page.
+   */
+  const chips: Chip[] = [
+    ...(facts.size > 0
+      ? [{ key: 'lineups', value: String(fix.count), label: t.chipLineups, tone: (fix.count > 0 ? 'bad' : 'plain') as Chip['tone'], href: fix.firstHref }]
       : []),
-    ...(s.firstKickoffAt ? [{ key: 'kickoff', value: kickoff ?? '—', label: t.chipKickoff, tone: 'plain' as const }] : []),
-    { key: 'nogame', value: String(s.noGame), label: t.chipNoGame, tone: 'plain' },
+    { key: 'close', value: String(s.close), label: t.chipClose, tone: s.close > 0 ? 'warn' : 'plain', href: '#af-wg-close' },
+    ...(s.survival > 0
+      ? [{ key: 'survival', value: String(s.survivalAtRisk), label: t.chipSurvival, tone: (s.survivalAtRisk > 0 ? 'bad' : 'plain') as Chip['tone'], href: '#af-wg-survival' }]
+      : []),
+    ...(s.firstKickoffAt ? [{ key: 'kickoff', value: kickoff ?? '—', label: t.chipKickoff, tone: 'plain' as const, href: '#af-wg-kick' }] : []),
+    // With the lineups chip present, "no game" is the least useful of five; drop it so the row stays four.
+    ...(facts.size > 0 ? [] : [{ key: 'nogame', value: String(s.noGame), label: t.chipNoGame, tone: 'plain' as const, href: null }]),
   ]
   return (
     <section className="af-hg-head af-wg-head" aria-labelledby="af-wg-title">
@@ -94,20 +120,96 @@ function Headline({ board, totalLeagues, t }: { board: WeekBoard; totalLeagues: 
       </h1>
       <p className="af-hg-intro">{t.intro}</p>
       <ul className="af-hg-chips">
-        {chips.map((c) => (
-          <li key={c.key}>
-            <span className="af-hg-chip af-wg-chip" data-tone={c.tone === 'bad' ? 'warn' : c.tone === 'warn' ? 'info' : 'ok'}>
+        {chips.map((c) => {
+          const tone = c.tone === 'bad' ? 'warn' : c.tone === 'warn' ? 'info' : 'ok'
+          const body = (
+            <>
               <b suppressHydrationWarning>{c.value}</b>
               <span>{c.label}</span>
-            </span>
-          </li>
-        ))}
+            </>
+          )
+          return (
+            <li key={c.key}>
+              {c.href ? (
+                <Link className="af-hg-chip" data-tone={tone} href={c.href}>
+                  {body}
+                </Link>
+              ) : (
+                <span className="af-hg-chip af-wg-chip" data-tone={tone}>
+                  {body}
+                </span>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </section>
   )
 }
 
-function CloseGames({ board, allHref, t }: { board: WeekBoard; allHref: string; t: Text }) {
+/** The button a close game gets: the one move worth making, with a deadline when one is known. */
+function ActionButton({ action, t }: { action: GameAction; t: Text }) {
+  const label =
+    action.kind === 'fill'
+      ? t.actFill(action.count)
+      : action.kind === 'swap'
+        ? t.actSwap(action.count)
+        : action.kind === 'check'
+          ? t.actCheck(action.count)
+          : action.kind === 'set'
+            ? t.actSet
+            : action.kind === 'auto'
+              ? t.actAuto
+              : action.kind === 'locked'
+                ? t.actLocked
+                : t.actUnknown
+  const urgent = action.kind === 'fill' || action.kind === 'swap'
+  return (
+    <Link className={`af3a-btn${urgent ? ' af3a-btn-accent' : ''}`} href={action.href}>
+      {label}
+    </Link>
+  )
+}
+
+/** The reason under a close game, said once: why the button says what it says, and by when. */
+function ActionWhy({ action, t }: { action: GameAction; t: Text }) {
+  const lockAt = action.kind === 'fill' || action.kind === 'swap' || action.kind === 'check' ? action.lockAt : null
+  const why =
+    action.kind === 'swap'
+      ? t.actSwapWhy
+      : action.kind === 'set'
+        ? t.actSetWhy
+        : action.kind === 'auto'
+          ? t.actAutoWhy
+          : action.kind === 'locked'
+            ? t.actLockedWhy
+            : null
+  if (!why && !lockAt) return null
+  return (
+    <p className="af-wg-row-sub af-wg-why">
+      {why}
+      {why && lockAt ? ' · ' : ''}
+      {lockAt ? <BeforeWhen iso={lockAt} t={t} /> : null}
+    </p>
+  )
+}
+
+function BeforeWhen({ iso, t }: { iso: string; t: Text }) {
+  const text = useLocalWhen(iso)
+  return text ? <span suppressHydrationWarning>{t.before(text)}</span> : null
+}
+
+function CloseGames({
+  board,
+  allHref,
+  facts,
+  t,
+}: {
+  board: WeekBoard
+  allHref: string
+  facts: ReadonlyMap<string, LineupFact>
+  t: Text
+}) {
   const games = closeGames(board)
   const shown = games.slice(0, CLOSE_LIMIT)
   return (
@@ -120,24 +222,28 @@ function CloseGames({ board, allHref, t }: { board: WeekBoard; allHref: string; 
         <p className="af-hg-empty">{t.closeNone}</p>
       ) : (
         <ul className="af-wg-rows">
-          {shown.map((m) => (
-            <li key={m.leagueId}>
-              <div className="af-wg-row-main">
-                <p className="af-wg-row-title">
-                  {m.leagueName}
-                  {m.opponent.name ? <span> · {t.vs(m.opponent.name)}</span> : null}
-                </p>
-                <p className="af-wg-row-sub">
-                  {gameStatus(m, t)}
-                  {/* The win chance is a pre-game number; once points are on the board the score is the fact. */}
-                  {m.projection && !m.live ? ` · ${t.toWin(Math.round(m.projection.winProbability * 100))}` : ''}
-                </p>
-              </div>
-              <Link className="af3a-btn" href={m.href}>
-                {t.openGame}
-              </Link>
-            </li>
-          ))}
+          {shown.map((m) => {
+            const action = gameAction(facts.get(m.leagueId), m.href)
+            return (
+              <li key={m.leagueId}>
+                <div className="af-wg-row-main">
+                  <p className="af-wg-row-title">
+                    <Link className="af-wg-row-name" href={m.href}>
+                      {m.leagueName}
+                    </Link>
+                    {m.opponent.name ? <span> · {t.vs(m.opponent.name)}</span> : null}
+                  </p>
+                  <p className="af-wg-row-sub">
+                    {gameStatus(m, t)}
+                    {/* The win chance is a pre-game number; once points are on the board the score is the fact. */}
+                    {m.projection && !m.live ? ` · ${t.toWin(Math.round(m.projection.winProbability * 100))}` : ''}
+                  </p>
+                  <ActionWhy action={action} t={t} />
+                </div>
+                <ActionButton action={action} t={t} />
+              </li>
+            )
+          })}
         </ul>
       )}
       {games.length > shown.length ? (
@@ -253,6 +359,7 @@ export function WeekGuide({
   totalLeagues,
   allHref,
   isCommissioner,
+  lineups = [],
 }: {
   board: WeekBoard
   /** The 7-day calendar the Blueprint already builds; null when it could not be read. */
@@ -262,12 +369,18 @@ export function WeekGuide({
   allHref: string
   /** Runs at least one league in view — draws the "Leagues you run" row. */
   isCommissioner: boolean
+  /**
+   * Each league's lineup facts (`lineupFacts(myTeamPulse)`, weekGuide.ts), so every close game can say
+   * the one move to make. Empty when the lineups could not be read: buttons then fall back to "Check lineup".
+   */
+  lineups?: LineupFact[]
 }) {
   const t = useMessages(weekGuideMessages)
+  const facts = new Map(lineups.map((f) => [f.leagueId, f]))
   return (
     <div className="af-wg">
-      <Headline board={board} totalLeagues={totalLeagues} t={t} />
-      <CloseGames board={board} allHref={allHref} t={t} />
+      <Headline board={board} totalLeagues={totalLeagues} facts={facts} t={t} />
+      <CloseGames board={board} allHref={allHref} facts={facts} t={t} />
       <div className="af-wg-pair">
         <Survival board={board} t={t} />
         <Kickoffs calendar={calendar} t={t} />

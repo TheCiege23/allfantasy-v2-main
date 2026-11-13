@@ -213,6 +213,7 @@ import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
 import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
 import { WeekGuide, WeekToolsDisclosure } from '@/components/core-app/week/WeekGuide'
+import { lineupFacts } from '@/lib/core-app/weekGuide'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
 import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import { buildDraftOrderPreview, readDraftOrderRule } from '@/lib/core-app/standingsDraftOrder'
@@ -5394,6 +5395,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   totalLeagues={playedLeagues.length}
                   allHref="/core/week?all=1"
                   isCommissioner={playedLeagues.some((l) => Boolean(l.isCommissioner))}
+                  lineups={[...lineupFacts(myTeamPulse).values()]}
                 />
                 <WeekBoard
                   priorityLeagueIds={weeklyBlueprint?.attentionLeagueIds}

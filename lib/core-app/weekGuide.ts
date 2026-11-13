@@ -139,3 +139,117 @@ export function otherDeadlines(calendar: Pick<WeeklyCalendar, 'events'> | null |
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
     .slice(0, limit)
 }
+
+/* ── What to do in each game (2026-11-13, owner: "users know exactly what they need to do") ─── */
+
+/** The lineup facts the week guide needs for one league, from `MyTeamPulse` (myTeamPulse.ts). */
+export type LineupFact = {
+  leagueId: string
+  empty: number
+  out: number
+  /** Null when byes could not be read for this league. */
+  bye: number | null
+  questionable: number
+  /** When the lineup (or its first starter) locks, ISO; null when unknown. */
+  lockAt: string | null
+  locked: boolean
+  /** Best ball or a lineup the platform sets itself — nothing for the manager to set. */
+  automatic: boolean
+  /** Where the lineup is changed: the league's My Team screen. */
+  href: string
+}
+
+type PulseRowLike = {
+  leagueId: string
+  empty: number
+  out: number
+  bye: number | null
+  questionable: number
+  lockAt: string | null
+  locked: boolean
+  bestBall?: boolean
+  automatic?: boolean
+  archived?: boolean
+  href: string
+}
+
+/**
+ * One fact per league from the pulse's rows. `inventory` is every league in view, uncapped; `needs`
+ * and `set` are capped lists, used only when inventory is absent. Archived rows are not this week.
+ */
+export function lineupFacts(pulse: { inventory?: PulseRowLike[]; needs: PulseRowLike[]; set: PulseRowLike[] } | null | undefined): Map<string, LineupFact> {
+  const out = new Map<string, LineupFact>()
+  if (!pulse) return out
+  const rows = pulse.inventory && pulse.inventory.length > 0 ? pulse.inventory : [...pulse.needs, ...pulse.set]
+  for (const r of rows) {
+    if (r.archived || out.has(r.leagueId)) continue
+    out.set(r.leagueId, {
+      leagueId: r.leagueId,
+      empty: Math.max(0, r.empty || 0),
+      out: Math.max(0, r.out || 0),
+      bye: r.bye == null ? null : Math.max(0, r.bye),
+      questionable: Math.max(0, r.questionable || 0),
+      lockAt: r.lockAt,
+      locked: Boolean(r.locked),
+      automatic: Boolean(r.bestBall || r.automatic),
+      href: r.href,
+    })
+  }
+  return out
+}
+
+/**
+ * The single most useful thing to do in one game, worst problem first:
+ *   fill     an empty starting slot (scores zero)
+ *   swap     starters ruled out or on bye
+ *   check    questionable starters — a decision, not a certain hole
+ *   set      nothing wrong we can see; the edge left is the free-agent pool
+ *   auto     best ball / platform-set lineup — nothing to set
+ *   locked   the lineup has locked
+ *   unknown  no lineup read for this league
+ */
+export type GameAction =
+  | { kind: 'fill'; count: number; lockAt: string | null; href: string }
+  | { kind: 'swap'; count: number; lockAt: string | null; href: string }
+  | { kind: 'check'; count: number; lockAt: string | null; href: string }
+  | { kind: 'set'; href: string }
+  | { kind: 'auto'; href: string }
+  | { kind: 'locked'; href: string }
+  | { kind: 'unknown'; href: string }
+
+export function gameAction(fact: LineupFact | undefined, gameHref: string): GameAction {
+  if (!fact) return { kind: 'unknown', href: gameHref }
+  if (fact.automatic) return { kind: 'auto', href: fact.href }
+  if (fact.locked) return { kind: 'locked', href: gameHref }
+  if (fact.empty > 0) return { kind: 'fill', count: fact.empty, lockAt: fact.lockAt, href: fact.href }
+  const holes = fact.out + (fact.bye ?? 0)
+  if (holes > 0) return { kind: 'swap', count: holes, lockAt: fact.lockAt, href: fact.href }
+  if (fact.questionable > 0) return { kind: 'check', count: fact.questionable, lockAt: fact.lockAt, href: fact.href }
+  return { kind: 'set', href: `/core/waivers?league=${encodeURIComponent(fact.leagueId)}` }
+}
+
+/** Lineups with a certain hole (empty slot, starter out or on bye) that can still be changed. */
+export function lineupsToFix(facts: ReadonlyMap<string, LineupFact>): { count: number; firstHref: string | null } {
+  let count = 0
+  let firstHref: string | null = null
+  for (const f of facts.values()) {
+    if (f.automatic || f.locked) continue
+    if (f.empty + f.out + (f.bye ?? 0) > 0) {
+      count += 1
+      firstHref ??= f.href
+    }
+  }
+  return { count, firstHref }
+}
+
+/**
+ * "Ahead so far, projected to lose" — a scored game whose live lead points the other way from its
+ * pre-game projection. The board listed such a game under LEADING with nothing to say it was expected
+ * to turn; null when the two agree, or when there is no live score or no projection to compare.
+ */
+export function projectionDisagrees(m: Pick<WeekMatchup, 'live' | 'projection'>): 'ahead-projected-lose' | 'behind-projected-win' | null {
+  if (!m.live || m.live.final || !m.projection) return null
+  if (m.live.margin > 0 && m.projection.margin < 0) return 'ahead-projected-lose'
+  if (m.live.margin < 0 && m.projection.margin > 0) return 'behind-projected-win'
+  return null
+}
