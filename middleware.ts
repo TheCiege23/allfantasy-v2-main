@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { untrustedEdgeHeaderNames } from "@/lib/http/edgeHeaderTrust"
 import { isSpeculativeRequestHeaders } from "@/lib/http/speculativeRequest"
 import { hasMachineCredential } from "@/lib/http/machineCredential"
 import { LEAGUE_FIRST_COOKIE, LEAGUE_FIRST_PARAM, parseLeagueFirstToggle } from "@/lib/core-app/leagueFirst"
 import { SELECTABLE_LANGUAGES } from "@/lib/i18n/constants"
-import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
@@ -1048,8 +1048,19 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const response = await routeMiddleware(request)
-  return applyBaselineSecurityHeaders(applyAttributionCapture(request, response))
+  // Edge-location headers no edge of ours vouched for are removed BEFORE any gate reads
+  // them — and the cleaned set is what reaches route handlers (nextWithRouteHeaders
+  // forwards `request.headers`). See lib/http/edgeHeaderTrust.
+  const untrusted = untrustedEdgeHeaderNames(request.headers)
+  let trusted: NextRequest = request
+  if (untrusted.length > 0) {
+    const cleaned = new Headers(request.headers)
+    for (const name of untrusted) cleaned.delete(name)
+    trusted = new NextRequest(request, { headers: cleaned })
+  }
+
+  const response = await routeMiddleware(trusted)
+  return applyBaselineSecurityHeaders(applyAttributionCapture(trusted, response))
 }
 
 /*
