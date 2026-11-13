@@ -52,6 +52,7 @@ import {
   suggestionToPickedAssets,
 } from '@/components/core-app/screens/TradePartnerSuggestions'
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
+import { RebuildPlanCard } from '@/components/core-app/screens/RebuildPlanCard'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { coreLang } from '@/lib/core-app/messages/coreLocale'
@@ -91,6 +92,7 @@ import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { DynastyPickCapitalPanel, pickDealKey } from './DynastyPickCapitalPanel'
+import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 
 /**
  * Screen 36a — Trade Center.
@@ -296,15 +298,6 @@ function valueOf(l: Line): number | null | undefined {
   return l.leagueValue !== undefined ? l.leagueValue : l.marketValue
 }
 
-/** Sum that ignores unpriced lines rather than treating them as zero. */
-function totalOf(lines: Line[]): string {
-  const priced = lines
-    .map(valueOf)
-    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-  if (priced.length === 0) return '—'
-  return priced.reduce((a, b) => a + b, 0).toLocaleString(getAppIntlLocale())
-}
-
 /**
  * AllFantasy's weekly projection summed over one side — the points that side moves THIS WEEK, beside
  * the value total. Display only: the verdict never reads it. Null when no line on the side has one,
@@ -316,7 +309,7 @@ function afWeekTotal(lines: Line[]): number | null {
   return Math.round(pts.reduce((a, b) => a + b, 0) * 10) / 10
 }
 
-/** The same sum as a number, null when nothing on the side is priced. */
+/** Sum that ignores unpriced lines rather than treating them as zero; null when nothing on the side is priced. */
 function pricedTotal(lines: Line[]): number | null {
   const priced = lines
     .map(valueOf)
@@ -387,6 +380,59 @@ function sportFromMeta(meta: string | null | undefined): string | null {
   return ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'].includes(first) ? first : null
 }
 
+/**
+ * The league trade evaluator on its own: a league picker, then that league's builder with Team A as
+ * you and Team B a manager dropdown — or, for an offer from somewhere AllFantasy cannot see, the
+ * no-league analyzer. The Trades hub renders it in its evaluator section; Home renders it inside a
+ * folded card (HomeTradeEvaluatorCard). One component, so the two cannot drift apart.
+ */
+export function LeagueTradeEvaluator(props: { leagues: StripLeague[]; viewerId?: string | null }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
+  /*
+   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
+   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
+   * from somewhere AllFantasy cannot see.
+   */
+  const OUTSIDE = 'outside'
+  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
+  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
+  return (
+    <>
+      <label className="af-tc-hub-league-select">
+        <span>{copy('League')}</span>
+        <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
+          {props.leagues.map((league) => (
+            <option key={league.id} value={league.id}>
+              {league.name}{league.meta ? ` · ${league.meta}` : ''}
+            </option>
+          ))}
+          <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
+        </select>
+      </label>
+      {evalLeague ? (
+        <>
+          <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
+          {/*
+            The league's own Trade Center builder, keyed by league so switching leagues starts a
+            clean deal instead of carrying one team's players into another league.
+          */}
+          <TradeCenter
+            key={evalLeague.id}
+            embedded
+            viewerId={props.viewerId}
+            league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
+            platform={evalLeague.platform}
+            sport={sportFromMeta(evalLeague.meta)}
+          />
+        </>
+      ) : (
+        <GenericTradeAnalyzer viewerId={props.viewerId} />
+      )}
+    </>
+  )
+}
+
 function AllLeaguesTradeHub(props: {
   leagues: StripLeague[]
   valueActions: CrossLeagueValueAction[]
@@ -396,14 +442,6 @@ function AllLeaguesTradeHub(props: {
   const language = useOptionalLanguage().language
   const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   const [query, setQuery] = useState('')
-  /*
-   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
-   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
-   * from somewhere AllFantasy cannot see.
-   */
-  const OUTSIDE = 'outside'
-  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
-  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
   const needle = query.trim().toLowerCase()
   const visibleLeagues = needle
     ? props.leagues.filter((league) => `${league.name} ${league.platform} ${league.meta ?? ''}`.toLowerCase().includes(needle))
@@ -428,37 +466,9 @@ function AllLeaguesTradeHub(props: {
             <h2>{copy('Build a trade in one of your leagues')}</h2>
           </div>
         </div>
-        <label className="af-tc-hub-league-select">
-          <span>{copy('League')}</span>
-          <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
-            {props.leagues.map((league) => (
-              <option key={league.id} value={league.id}>
-                {league.name}{league.meta ? ` · ${league.meta}` : ''}
-              </option>
-            ))}
-            <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
-          </select>
-        </label>
-        {evalLeague ? (
-          <>
-            <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
-            {/*
-              The league's own Trade Center builder, keyed by league so switching leagues starts a
-              clean deal instead of carrying one team's players into another league.
-            */}
-            <TradeCenter
-              key={evalLeague.id}
-              embedded
-              viewerId={props.viewerId}
-              league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
-              platform={evalLeague.platform}
-              sport={sportFromMeta(evalLeague.meta)}
-            />
-          </>
-        ) : (
-          <GenericTradeAnalyzer viewerId={props.viewerId} />
-        )}
+        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} />
       </section>
+      <TradeMarketMovers limit={5} heading={copy('What real trades say right now')} testId="trade-hub-market" />
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
       {props.valueActions.length > 0 ? (
@@ -1142,7 +1152,8 @@ export function TradeCenter(props: {
    * different one.
    */
   const startSuggestedDeal = useCallback(
-    (p: PartnerRecommendation) => {
+    // Only the partner and the two sides are read, so a rebuild-plan package loads through here too.
+    (p: Pick<PartnerRecommendation, 'rosterId' | 'ownerName' | 'suggestion'>) => {
       if (!p.suggestion || !rosterData) return
       setDraftTouched(true)
       setRecoverableDraft(null)
@@ -1452,9 +1463,21 @@ export function TradeCenter(props: {
    * the feed cannot price as zero would tilt the bar against whichever side
    * holds him — the same rule as the em dash on his row.
    */
+  /*
+   * THE GRADE'S ROSTER-SPOT CREDIT, ADDED TO THE SAME SIDE THE GRADE ADDED IT TO
+   * (`lib/trade-value/rosterSpotCharge.ts`). Without it the bar read Get 8,433 / +1,679 while the
+   * grade and every counter sentence on the same screen measured 8,485 / 1,731 — the 52 the side
+   * receiving fewer players earns for its open spot (reported 2026-11-11). Safe to read off the
+   * result: any change to the assets clears it, so a grade on screen is always this deal's.
+   */
+  const spotCredit = serverGrade?.graded && serverGrade.rosterSpot ? serverGrade.rosterSpot : null
+  const sideTotal = (lines: Line[], side: 'give' | 'get'): number | null => {
+    const t = pricedTotal(lines)
+    return t != null && spotCredit?.side === side ? t + spotCredit.value : t
+  }
   const balance = (() => {
-    const g = pricedTotal(give)
-    const k = pricedTotal(get)
+    const g = sideTotal(give, 'give')
+    const k = sideTotal(get, 'get')
     if (g == null && k == null) return null
     if (g == null || k == null || g + k === 0) {
       return { give: g, get: k, givePct: null as number | null, diff: null as number | null, pct: null as number | null }
@@ -1478,22 +1501,22 @@ export function TradeCenter(props: {
     ),
   )
   const yourIncentive = noSignal
-    ? 'The complete proposal value is unavailable. Review the priced assets and your roster before deciding.'
+    ? 'We couldn’t value the whole trade. Check the players we could value and your roster before deciding.'
     : intel?.contenderRecommendation ?? intel?.why ??
     (balance?.diff != null && balance.diff >= 0
-      ? `You receive about ${money(balance.diff)} more in current league value.`
-      : 'The deal may improve your roster construction even when the raw market total is close.')
+      ? `You get about ${money(balance.diff)} more in value.`
+      : 'It could still help your roster even if the values are close.')
   const theirIncentive = balance?.diff != null && balance.diff <= 0
-    ? `They receive about ${money(Math.abs(balance.diff))} more in current league value.`
-    : `They receive ${give.length} asset${give.length === 1 ? '' : 's'}, which may fit a different timeline or positional need.`
+    ? `They get about ${money(Math.abs(balance.diff))} more in value.`
+    : `They get ${give.length} asset${give.length === 1 ? '' : 's'} that may fit their plans or fill a need.`
   const agreementBlocker = noSignal
-    ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'The complete proposal could not be valued.'
+    ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'We couldn’t value the whole trade.'
     : intel?.tradeWarnings?.[0] ??
     (balance?.diff != null && balance.diff > 0
-      ? `The displayed league value favors you by ${money(balance.diff)}, so they may ask for another asset.`
+      ? `You come out ${money(balance.diff)} ahead, so they may ask for more.`
       : unpricedCount([...give, ...get]) > 0
-        ? 'One or more assets are unpriced, which lowers confidence until fresh data is available.'
-        : 'Manager preference, roster limits, and each team’s competitive window can still prevent agreement.')
+        ? 'Some players have no value yet, so this grade is less certain.'
+        : 'They might still say no because of their roster, their plans, or personal preference.')
 
   /*
    * Hand the deal to Chimmy.
@@ -1752,6 +1775,14 @@ export function TradeCenter(props: {
         </details>
       ) : null}
 
+      {/* Dynasty only — the board is measured on the dynasty chart. Folded so the builder still leads. */}
+      {props.dynasty && !props.embedded ? (
+        <details className="af-tc-switcher" data-testid="trade-center-market">
+          <summary>{copy('What real trades say')} <span>{copy('values from completed trades')}</span></summary>
+          <TradeMarketMovers limit={5} heading={copy('Risers and fallers from real trades')} testId="trade-center-market-movers" />
+        </details>
+      ) : null}
+
       {/*
         ⚠ FORMAT BLOCKERS LEAD THE PAGE. This is a correctness statement rather
         than another piece of advice, which is why it is not styled like the
@@ -1761,7 +1792,7 @@ export function TradeCenter(props: {
         <div className="af-tc-banner af-tc-banner--blocked">
           <span className="af-tc-banner-glyph">{copy("!")}</span>
           <div>
-            <p className="af-tc-banner-title">{copy('This trade can’t be evaluated as shown')}</p>
+            <p className="af-tc-banner-title">{copy('We can’t grade this trade as it is')}</p>
             {(result?.formatNotes ?? []).map((n) => (
               <p key={n}>{n}</p>
             ))}
@@ -1786,8 +1817,8 @@ export function TradeCenter(props: {
             nothing priced reads "—", never "0", for the reason every other total here gives.
           */}
           <span className="af-tc-stepbar-totals af-num" aria-live="polite">
-            <span>{copy('Get')} <b>{totalOf(get)}</b></span>
-            <span>{copy('Send')} <b>{totalOf(give)}</b></span>
+            <span>{copy('Get')} <b>{balance?.get != null ? balance.get.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
+            <span>{copy('Send')} <b>{balance?.give != null ? balance.give.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
             {balance?.diff != null && balance.diff !== 0 ? (
               <span className="af-tc-stepbar-delta" data-tone={balance.diff > 0 ? 'good' : 'bad'}>
                 {balance.diff > 0 ? '+' : '−'}
@@ -1936,8 +1967,11 @@ export function TradeCenter(props: {
                 {unpricedCount(side.lines) > 0 ? (
                   <span className="af-tc-total-note">{copy(" · ")}{unpricedCount(side.lines)}{copy(" unpriced")}</span>
                 ) : null}
+                {spotCredit?.side === side.side ? (
+                  <span className="af-tc-total-note" data-testid="trade-side-roster-spot">{copy(" · ")}{copy(spotCredit.spots === 1 ? 'incl. open roster spot' : 'incl. open roster spots')} {money(spotCredit.value)}</span>
+                ) : null}
               </span>
-              <b className="af-num">{totalOf(side.lines)}</b>
+              <b className="af-num">{(() => { const t = sideTotal(side.lines, side.side); return t == null ? '—' : t.toLocaleString(getAppIntlLocale()) })()}</b>
             </div>
 
             {side.lines.length === 0 ? (
@@ -2231,6 +2265,30 @@ export function TradeCenter(props: {
         attention. Children stay mounted while closed, so the inbox still loads and still reports
         its count.
       */}
+      {/*
+        The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a
+        team out of the race or rebuilding by choice in a dynasty or keeper league. Open by default for a
+        team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
+      */}
+      {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
+        <details className="af-tc-fold af-tc-rebuild-fold" open={rosterData?.rebuildPlan?.trigger === 'eliminated' || undefined}>
+          <summary>
+            <span>{copy('Rebuild plan')}</span>
+            <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
+          </summary>
+          {rosterData?.rebuildPlanLocked && depthAccess ? (
+            <CoreDepthLock access={depthAccess} what={lockSubjectText('Your rebuild plan', language)} lang={language} />
+          ) : (
+            <RebuildPlanCard
+              plan={rosterData?.rebuildPlan ?? null}
+              onStartWith={(pkg) =>
+                startSuggestedDeal({ rosterId: pkg.rosterId, ownerName: pkg.ownerName, suggestion: { give: pkg.give, get: pkg.get, percentApart: pkg.percentApart } })
+              }
+            />
+          )}
+        </details>
+      ) : null}
+
       {otherRosters.length > 0 && !props.embedded ? (
         <details className="af-tc-fold af-tc-ideas">
           <summary>
@@ -2366,7 +2424,7 @@ export function TradeCenter(props: {
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">{copy('The verdict')}</span>
             <span className="af-tc-row-sub">
-              {copy('trade value today — roster fit and realized production are separate')}
+              {copy('value today — not roster fit or future points')}
             </span>
             <TopicTip topic="tradeGrade" />
           </div>
@@ -2386,8 +2444,8 @@ export function TradeCenter(props: {
             <summary>{copy('How this was graded')}</summary>
             <p>{copy(result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.')}</p>
             <p>{copy(serverGrade?.graded && serverGrade.letterBasis === 'your_team'
-              ? 'Your grade compares trade value adjusted for your roster. Acceptance and realized production are separate.'
-              : 'The grade compares trade value. Roster fit, acceptance, and realized production are separate.')}</p>
+              ? 'Your grade compares value, adjusted for your roster. It doesn’t predict whether they’ll accept or how players will score.'
+              : 'The grade compares value only. Roster fit, whether they’ll accept, and how players score are separate.')}</p>
             {analyzedAt ? <p>{copy('Evaluated')} {new Date(analyzedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p> : null}
             {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{copy(line.side === 'give' ? 'You send' : 'You receive')} {line.name}{copy(": ")}{line.leagueValue == null ? copy('unpriced') : money(line.leagueValue)}</li>)}
               {/* The roster-spot credit is already inside the totals (`rosterSpotCharge.ts`); shown so they add up. */}
@@ -2418,20 +2476,20 @@ export function TradeCenter(props: {
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
               {copy(serverGrade.letterBasis === 'your_team'
-                ? 'Your grade is for your team: league value adjusted for your roster — an open starting slot you cannot fill off waivers raises a player, surplus depth lowers one. The market letter is the same deal on league value alone, which is what trade history and the other manager see. Your team’s place in the standings does not change the letter. Refreshed market values can change a later evaluation.'
-                : 'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Refreshed market values can change a later evaluation.')}
+                ? 'Your grade is for your team: league value, adjusted for your roster. A player who fills an empty starting spot counts for more; extra depth counts for less. The market grade is the same trade on league value alone — that’s what the other manager and trade history see. Your place in the standings doesn’t change it. Values change over time, so a later grade can differ.'
+                : 'This grade uses the same rules as your trade history and emails. Values change over time, so a later grade can differ.')}
             </p>
           ) : null}
-          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved evaluation')}</Link>{copy(" · ")}{copy('Original values preserved at')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
-            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('This evaluation could not be saved. Keep a copy before relying on it later.')}</p> : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved grade')}</Link>{copy(" · ")}{copy('Values saved')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('We couldn’t save this grade. Take a screenshot if you want to keep it.')}</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
-              <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'Your roster fit · what your grade is taken on' : 'Your roster fit')} <TopicTip topic="tradeRosterFit" /></div>
-              <p>{copy('Personal utility:')} {money(serverGrade.rosterFit.giveValue)} {copy('given,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
-                {' '}{copy('This is a roster-fit estimate, not a win probability.')}</p>
+              <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'How it fits your roster · used for your grade' : 'How it fits your roster')} <TopicTip topic="tradeRosterFit" /></div>
+              <p>{copy('Value to your team:')} {money(serverGrade.rosterFit.giveValue)} {copy('sent,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
+                {' '}{copy('This shows how the trade fits your roster. It doesn’t predict who wins the trade.')}</p>
               {serverGrade.rosterFit.moves.map((move, index) => (
                 <p key={`${move.side}:${move.name}:${index}`}>
-                  {move.name}{copy(": ")}{money(move.base)} {copy('base →')} {money(move.leagueValue)} {copy('personal utility.')} {move.reasons.map(reason=>copy(reason)).join('; ')}{copy(". ")}</p>
+                  {move.name}{copy(": ")}{money(move.base)} {copy('market →')} {money(move.leagueValue)} {copy('for your team.')} {move.reasons.map(reason=>copy(reason)).join('; ')}{copy(". ")}</p>
               ))}
             </div>
           ) : null}
@@ -2453,7 +2511,7 @@ export function TradeCenter(props: {
                       <span className="af-tc-row-sub">{copy("Your commitments ")}{money(y.fromCapHit)}{copy(" / cap ")}{money(y.fromCap)}{copy(" · Their commitments ")}{money(y.toCapHit)}{copy(" / cap ")}{money(y.toCap)}{copy(" · ")}{copy(y.fromLegal && y.toLegal ? 'Passes configured rules' : 'Fails cap or floor rules')}</span>
                     </li>)}
                   </ul>
-                  <p className="af-tc-row-sub">{copy("Includes stored contracts and dead money. Unsigned rookie contracts and future acquisitions are not included. Revalidation is required when accepting.")}</p>
+                  <p className="af-tc-row-sub">{copy("Includes current contracts and dead money, but not unsigned rookies or future moves. It’s checked again when the trade is accepted.")}</p>
                 </>
               )}
             </div>
@@ -2552,11 +2610,11 @@ export function TradeCenter(props: {
           {!noSignal && serverGrade?.graded ? <div className="af-tc-partner-summary">
             <div><strong>{copy("Why ")}{theirLabel}{copy(" might accept")}</strong><p>{copy(theirIncentive)}</p></div>
             <p>{copy(agreementBlocker)}</p>
-            <small>{copy("Value fairness and acceptance are separate. Manager preference and roster needs can change the answer.")}</small>
+            <small>{copy("A fair trade isn’t always an accepted one. Their needs and preferences matter too.")}</small>
             {!depthLocked ? <TradePartnerEvidence notes={result.leverageNotes ?? []} copy={copy} /> : null}
             {!depthLocked && result.counterOffers?.[0] ? <div className="af-tc-partner-counter">
-              <strong>{copy("Closer value package: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
-              <span>{result.counterOffers[0].balanced ? 'Within the even-value band' : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% apart`}{copy(" after regrading the package.")}</span>
+              <strong>{copy("Make it more even: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
+              <span>{result.counterOffers[0].balanced ? copy('About even') : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% ${copy('apart')}`}{copy(" once it’s added.")}</span>
               <button type="button" className="af-btn af-btn-ghost" onClick={() => {
                 const counter = result.counterOffers?.[0]
                 if (!counter) return
@@ -2564,7 +2622,7 @@ export function TradeCenter(props: {
                   playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
                   providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
                   position: counter.position, team: null, value: counter.marketValue })
-              }}>{copy("Try this package")}</button>
+              }}>{copy("Try this deal")}</button>
             </div> : null}
           </div> : null}
 
@@ -2595,17 +2653,17 @@ export function TradeCenter(props: {
           ) : null}
 
           {!noSignal && (result.counterOffers ?? []).length > 0 ? (
-            <div className="af-tc-moves">
-              <div className="af-label">{copy('Re-evaluated counteroffers')}</div>
-              <p className="af-tc-row-sub">{copy('Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.')}</p>
+            <div className="af-tc-moves af-tc-counters">
+              <div className="af-label">{copy('Ways to even it out')}</div>
+              <p className="af-tc-row-sub">{copy('Each idea is graded the same way as your trade. Grades compare value only — they don’t predict whether the other manager will accept.')}</p>
               <ul>
                 {result.counterOffers!.map(counter => (
                   <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
                     <strong>{copy(counter.addTo === 'get' ? 'Ask for' : 'Offer')} {counter.name}</strong>
                     {serverGrade ? <p className="af-tc-row-sub">{copy(counterDecision({before:serverGrade,after:counter.grade,addTo:counter.addTo,cost:result.visualImpact?.packageCost,language}))}</p> : null}
-                    <span className="af-tc-row-sub">{copy('Base value')} {money(counter.marketValue)}{copy(" · ")}{copy('League value in this package')} {money(counter.assetLeagueValue)}</span>
+                    <span className="af-tc-row-sub">{copy('Market value')} {money(counter.marketValue)}{copy(" · ")}{copy('Value in your league')} {money(counter.assetLeagueValue)}</span>
                     <span className="af-tc-row-sub">
-                      {copy('You')} {counter.grade.letter}{copy(" / ")}{theirLabel} {counter.grade.partnerLetter}{copy(" · ")}{counter.balanced ? copy('Within the even-value band') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`}{copy(" · ")}{money(counter.remainingGap)} {copy('value gap remaining')}
+                      {copy('You')} {counter.grade.letter}{copy(" / ")}{theirLabel} {counter.grade.partnerLetter}{copy(" · ")}{counter.balanced ? copy('About even') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`}{copy(" · ")}{money(counter.remainingGap)} {copy('gap left')}
                     </span>
                     <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
                       playerId: counter.asset.kind === 'player'
@@ -2824,7 +2882,8 @@ export function TradeCenter(props: {
         why that section carries `data-section="breakdown"` and neither is selected by class alone.
       */}
       {props.embedded ? null : (
-        <div className="af-tc-mstep-wrap">
+        /* `#trade-finder`: where the Tools hub and the retired /trade-finder page land (2026-11-12). */
+        <div className="af-tc-mstep-wrap" id="trade-finder">
           <CoreDepthGate access={depthAccess} what={lockSubjectText('The trade finder', language)} lang={language} showFreeUntil={false}>
             <TradeFinderPanel leagueId={props.league?.id ?? null} />
           </CoreDepthGate>

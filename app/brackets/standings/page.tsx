@@ -20,7 +20,7 @@ export default async function UniversalBracketStandings(props: {
     select: {
       id: true, name: true, tiebreakerTotalScore: true, finalizedAt: true,
       user: { select: { displayName: true, username: true } },
-      picks: { select: { seriesId: true, pickTeamName: true } },
+      picks: { select: { seriesId: true, pickTeamName: true, confirmedAt: true } },
       challenge: {
         select: { id: true, name: true, config: true, series: {
           select: { id: true, round: true, startsAt: true, winnerTeamName: true, homeTeamName: true,
@@ -31,7 +31,7 @@ export default async function UniversalBracketStandings(props: {
   }) as Array<{
     id: string; name: string; tiebreakerTotalScore: number | null; finalizedAt: Date | null
     user: { displayName: string | null; username: string | null }
-    picks: Array<{ seriesId: string; pickTeamName: string }>
+    picks: Array<{ seriesId: string; pickTeamName: string; confirmedAt: Date | null }>
     challenge: { id: string; name: string; config: { visibility?: string } | null; series: any[] }
   }>
   const completedFinal = entries.map((entry) => championshipTotal(entry.challenge.series)).find((total) => total != null) ?? null

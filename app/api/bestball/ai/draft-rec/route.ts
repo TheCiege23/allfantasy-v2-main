@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   let body: {
     currentRoster: { playerId: string; name: string; pos: string; team?: string }[]
-    availablePlayers: { playerId: string; name: string; pos: string; adp?: number }[]
+    availablePlayers: { playerId: string; name: string; pos: string; adp?: number; team?: string }[]
     sport?: string
     variant?: string
     draftSlot?: number

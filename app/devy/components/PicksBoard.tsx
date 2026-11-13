@@ -20,9 +20,12 @@ const PALETTE = ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#ec4899
 export function PicksBoard({
   picks,
   rosterIdByColumn,
+  teamLabel,
 }: {
   picks: PickRow[]
   rosterIdByColumn: string[]
+  /** Column header for a roster — its team name. Without it, a numbered team, never the raw id. */
+  teamLabel?: (rosterId: string) => string
 }) {
   const colorByRoster = useMemo(() => {
     const m = new Map<string, string>()
@@ -46,13 +49,13 @@ export function PicksBoard({
             <th className="sticky left-0 z-10 border border-white/[0.06] bg-[#0a1228] px-2 py-2 text-white/50">
               Rd
             </th>
-            {rosterIdByColumn.map((rid) => (
+            {rosterIdByColumn.map((rid, i) => (
               <th
                 key={rid}
                 className="min-w-[72px] border border-white/[0.06] px-1 py-2 text-center font-semibold"
                 style={{ borderBottomColor: colorByRoster.get(rid) }}
               >
-                {rid.slice(0, 6)}…
+                {teamLabel ? teamLabel(rid) : `Team ${i + 1}`}
               </th>
             ))}
           </tr>

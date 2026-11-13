@@ -454,6 +454,8 @@ const HEALTH_PROBLEM_ES: Array<[RegExp, (n: string) => string]> = [
   [/^(\d+) inactive managers — engagement at risk$/, (n) => `${n} mánagers inactivos: la participación está en riesgo.`],
   [/^(\d+) abandoned teams — immediate action needed$/, (n) => `${n} equipos abandonados: hace falta actuar de inmediato.`],
   [/^(\d+) unresolved disputes eroding trust$/, (n) => `${n} disputas sin resolver están minando la confianza.`],
+  [/^(\d+) managers said they might leave the league$/, (n) => `${n} mánagers dijeron que podrían dejar la liga.`],
+  [/^(\d+) collusion complaints — managers are losing trust in trades$/, (n) => `${n} denuncias de colusión: los mánagers pierden la confianza en los intercambios.`],
   [/^Low engagement — league activity is below healthy levels$/, () => 'Participación baja: la actividad de la liga está por debajo de lo saludable.'],
   [/^Poor lineup submission rate — managers are checked out$/, () => 'Pocas alineaciones enviadas: los mánagers se han desconectado.'],
 ]

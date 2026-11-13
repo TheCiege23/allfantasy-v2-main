@@ -15,7 +15,10 @@ const source = fs.readFileSync(
 describe('import page provider flow', () => {
   it('treats import as a league-import experience instead of the old sleeper legacy flow', () => {
     expect(source).toContain('Connect your league')
-    expect(source).toContain('Connect your Sleeper, ESPN, Yahoo, Fantrax, or MFL league to')
+    // The platform list is read from provider-ui-config, so a coming-soon platform (Yahoo) can
+    // never be named here as importable.
+    expect(source).toContain('Connect your {availableImportPlatformsPhrase()} league to')
+    expect(source).not.toMatch(/Connect your Sleeper, ESPN, Yahoo/)
     expect(source).not.toContain('useLegacySleeperImport')
     expect(source).not.toContain('Build My Legacy Profile')
   })

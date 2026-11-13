@@ -10,6 +10,7 @@ import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { StatStrip } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-season-outlook.css'
 import '@/components/core-app/af-outlook.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -42,15 +43,6 @@ export type SeasonOutlookProps = {
   freshness?: { meta: FreshnessMeta; initialLabel: string; initialWarn: boolean } | null
 }
 
-function Tile({ value, label, tone }: { value: string; label: string; tone?: 'good' | 'warn' | 'accent' }) {
-  return (
-    <div className="af-so-tile" data-tone={tone ?? 'neutral'}>
-      <span className="af-so-tile-v af-num">{value}</span>
-      <span className="af-so-tile-l">{label}</span>
-    </div>
-  )
-}
-
 /** Moved to `lib/core-app/outlookSpanish.ts` so the league screen can share it without importing this one. */
 export { seasonOutlookSentence }
 
@@ -71,6 +63,18 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
     .slice(0, 3)
   const anyByes = data.leagues.some((l) => l.byeTeams > 0)
   const next = data.priorities[0] ?? null
+  /*
+   * Leagues with no odds still get a ROW: elimination formats say whether you are alive, and leagues
+   * that have not started say why. Only the rest — data we could not read — stay in the footer.
+   * `?? []` and the `kind` test because a cached board from before this shape has neither.
+   */
+  const statusOrder = (w: (typeof data.withheld)[number]) =>
+    w.kind === 'elimination' ? ({ alive: 0, eliminated: 1 } as Record<string, number>)[w.survival?.status ?? ''] ?? 2 : 3
+  const statusRows = (data.withheld ?? [])
+    .filter((w) => w.leagueId && (w.kind === 'elimination' || w.kind === 'not-started'))
+    .sort((a, b) => statusOrder(a) - statusOrder(b))
+  const footerRows = (data.withheld ?? []).filter((w) => !statusRows.includes(w))
+  const hasRows = hasLeagues || statusRows.length > 0
 
   return (
     <div className="af-so af-olk">
@@ -98,24 +102,23 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
 
       {hasLeagues ? (
         <>
-          <section className="af-so-tiles" aria-label={copy('Your odds across leagues')}>
-            <Tile
-              value={String(data.summary.makingPlayoffs)}
-              label={m.onTrack(data.leagues.length)}
-              tone="accent"
-            />
-            <Tile value={String(data.summary.clinched)} label={copy('already clinched')} tone="good" />
-            <Tile value={String(data.summary.onTheBubble)} label={copy('on the bubble')} tone="warn" />
-            {anyByes ? <Tile value={String(data.summary.onByePace)} label={copy('on pace for a bye')} /> : null}
-            <Tile
-              value={data.summary.bestTitle ? `${pct(data.summary.bestTitle.pct)}%` : '—'}
-              label={
-                data.summary.bestTitle
-                  ? m.bestTitleOdds(data.summary.bestTitle.leagueName)
-                  : copy('no title odds yet')
-              }
-            />
-          </section>
+          {/* Value first: each label finishes its figure's sentence ("3 · already clinched"). */}
+          <StatStrip
+            className="af-so-tiles"
+            ariaLabel={copy('Your odds across leagues')}
+            order="value-first"
+            items={[
+              { key: 'playoffs', value: String(data.summary.makingPlayoffs), label: m.onTrack(data.leagues.length), tone: 'accent' },
+              { key: 'clinched', value: String(data.summary.clinched), label: copy('already clinched'), tone: 'good' },
+              { key: 'bubble', value: String(data.summary.onTheBubble), label: copy('on the bubble'), tone: 'warn' },
+              ...(anyByes ? [{ key: 'bye', value: String(data.summary.onByePace), label: copy('on pace for a bye') }] : []),
+              {
+                key: 'title',
+                value: data.summary.bestTitle ? `${pct(data.summary.bestTitle.pct)}%` : '—',
+                label: data.summary.bestTitle ? m.bestTitleOdds(data.summary.bestTitle.leagueName) : copy('no title odds yet'),
+              },
+            ]}
+          />
 
           <section className="af-olk-hero-grid af-so-lead" aria-label={copy('What to do next')}>
             <div className="af-olk-next">
@@ -171,7 +174,10 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
               ? m.runsReused(data.runs.reused, data.runs.reused + data.runs.computed)
               : ''}
           </p>
+        </>
+      ) : null}
 
+      {hasRows ? (
           <section className="af-so-tablewrap">
             <table className="af-so-table">
               <thead>
@@ -246,11 +252,39 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                     </tr>
                   )
                 })}
+                {statusRows.map((w, i) => {
+                  const s = w.survival ?? null
+                  const pill =
+                    w.kind === 'not-started' || s?.status === 'not-started'
+                      ? { status: 'waiting', label: copy('Not started') }
+                      : s?.status === 'alive'
+                        ? { status: 'alive', label: copy('Alive') }
+                        : s?.status === 'eliminated'
+                          ? { status: 'eliminated', label: copy('Eliminated') }
+                          : { status: 'unknown', label: copy('Status unknown') }
+                  return (
+                    <tr key={`status-${w.leagueId}-${i}`} className="af-so-statusrow" data-kind={w.kind}>
+                      <th scope="row">
+                        <Link href={`/core?league=${encodeURIComponent(w.leagueId!)}`} className="af-so-league">
+                          {w.leagueName}
+                        </Link>
+                        <span className="af-so-leaguemeta">
+                          {w.kind === 'elimination' ? copy('No playoff odds in this format') : copy('No schedule yet')}
+                        </span>
+                        <span className="af-olk-pill" data-status={pill.status}>{pill.label}</span>
+                      </th>
+                      <td className="af-so-decides af-so-statusline" colSpan={anyByes ? 6 : 5}>
+                        {seasonOutlookSentence(w.reason, language)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </section>
-        </>
-      ) : preseasonKickoffLabel ? (
+      ) : null}
+
+      {hasRows ? null : preseasonKickoffLabel ? (
         <div className="af-so-empty">
           <p className="af-so-empty-t">{copy('The season has not started yet.')}</p>
           <p className="af-so-empty-b">
@@ -270,14 +304,14 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
       )}
 
       {/* Withheld leagues, listed. A league that silently vanished reads as a league you are not in. */}
-      {data.withheld.length > 0 ? (
+      {footerRows.length > 0 ? (
         <section className="af-so-withheld">
           <h2 className="af-so-withheld-t">
-            {m.withheld(data.withheld.length)}
+            {m.withheld(footerRows.length)}
           </h2>
           <ul>
             {/* Keyed by position too: two withheld leagues can share a name (one per season). */}
-            {data.withheld.map((w, i) => (
+            {footerRows.map((w, i) => (
               <li key={`${w.leagueName}-${i}`}>
                 <b>{w.leagueName}</b> — {seasonOutlookSentence(w.reason, language)}
               </li>

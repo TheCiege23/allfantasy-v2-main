@@ -149,7 +149,7 @@ export interface TradeGrade {
    * `insufficientData` state instead of a letter.
    */
   grade: string | null
-  /** sideA.total − sideB.total (positive = sideA receives more) */
+  /** sideA.total − sideB.total. Sides total what they send, so a positive gap favors sideB. */
   valueDifference: number
   /** 0–100, 100 = perfectly even. `null` when insufficientData. */
   fairnessScore: number | null

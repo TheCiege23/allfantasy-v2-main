@@ -7,11 +7,10 @@ import { formatRecord, type BoardTeam, type StandingsBoard, type Zone } from '@/
 import { DEFAULT_STANDINGS_VIEW, type StandingsViewState } from '@/lib/core-app/standingsView'
 import {
   StandingsBoardView,
-  Move,
   eliminationStatusOf,
   type EliminationZones,
 } from '@/components/core-app/standings/StandingsBoardView'
-import { EmptyState, PageHeader } from '@/components/core-app/primitives'
+import { EmptyState, PageHeader, StatStrip, type StatMovement } from '@/components/core-app/primitives'
 import '@/components/core-app/af-standings.css'
 import '@/components/core-app/af-empty-state.css'
 // The redraft overrides load last, after every stylesheet of this screen's own.
@@ -121,6 +120,18 @@ function zoneLine(t: BoardTeam, elimination: EliminationZones | null): string {
   if (t.clinched === 'bye') return 'bye clinched'
   if (t.clinched === 'playoff') return 'playoff spot clinched'
   return ZONE_WORD[t.zone]
+}
+
+/**
+ * A tile's place movement, for StatStrip: drawn as ▲2 / ▼1, read as "up 2 places" — the same words
+ * the board's own Move marker reads. Nothing for no change, or for the first final week (no prior
+ * position, which is not "no change").
+ */
+function moveOf(value: number | null | undefined, copy: (english: string) => string): StatMovement | undefined {
+  if (value == null || value === 0) return undefined
+  const up = value > 0
+  const abs = Math.abs(value)
+  return { direction: up ? 'up' : 'down', amount: abs, label: `${copy(up ? 'up' : 'down')} ${abs} ${copy(abs === 1 ? 'place' : 'places')}` }
 }
 
 function lineText(t: BoardTeam, field: number, language: string): string {
@@ -466,7 +477,7 @@ export function Standings({
         actionsClassName="af-st-headactions"
         eyebrow={league.name}
         title={copy('Standings')}
-        sub={m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek })}
+        sub={m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek, headToHead: board.hasHeadToHead })}
         actions={
           <>
             {chip}
@@ -487,50 +498,61 @@ export function Standings({
       />
 
       {me ? (
-        <div className="af-st-tiles">
-          <div className="af-st-tile">
-            <span className="af-label">{copy('Table position')}</span>
-            <span className="af-st-tile-row">
-              <span className="af-st-tile-v af-num">{m.seedPlace(me.seed, ordinal(me.seed))}</span>
-              {/* Null movement is the first final week — no prior position, which is not "no change". */}
-              {me.seedMove != null && me.seedMove !== 0 ? <Move value={me.seedMove} /> : null}
-            </span>
-            <span className="af-st-tile-s">
-              {copy('of')} {n}
-              {zoneLine(me, elimination) ? ` · ${copy(zoneLine(me, elimination))}` : ''}
-            </span>
-          </div>
-
-          <div className="af-st-tile">
-            <span className="af-label">{copy('Record')}</span>
-            <span className="af-st-tile-v af-num">{board.hasHeadToHead ? formatRecord(me.record) : '—'}</span>
-            <span className="af-st-tile-s">{copy(lineText(me, Math.min(board.rules.playoffTeams, n), language))}</span>
-          </div>
-
-          <div className="af-st-tile">
-            <span className="af-label">
-              {copy('AF Power')} <TopicTip topic="afPowerScore" />
-            </span>
-            <span className="af-st-tile-row">
-              <span className="af-st-tile-v af-num" data-tone="accent">
-                {ordinal(me.powerRank)}
-              </span>
-              {me.powerMove != null && me.powerMove !== 0 ? <Move value={me.powerMove} /> : null}
-            </span>
-            <span className="af-st-tile-s af-num">
-              {copy('score')} {me.powerScore.toFixed(1)} · {copy('all-play')} {formatRecord(me.allPlay)}
-            </span>
-          </div>
-
-          <div className="af-st-tile">
-            <span className="af-label">{copy('Points for')}</span>
-            <span className="af-st-tile-v af-num">{pts1(me.pointsFor)}</span>
-            <span className="af-st-tile-s">
-              {me.average != null ? `${n1(me.average)} ${copy('a week')} · ` : ''}
-              {m.pfRankInLeague(me.pfRank, ordinal(me.pfRank))}
-            </span>
-          </div>
-        </div>
+        <StatStrip
+          className="af-st-tiles"
+          items={[
+            {
+              key: 'seed',
+              className: 'af-st-tile',
+              label: copy('Table position'),
+              value: m.seedPlace(me.seed, ordinal(me.seed)),
+              /* Null movement is the first final week — no prior position, which is not "no change". */
+              movement: moveOf(me.seedMove, copy),
+              sub: (
+                <>
+                  {copy('of')} {n}
+                  {zoneLine(me, elimination) ? ` · ${copy(zoneLine(me, elimination))}` : ''}
+                </>
+              ),
+            },
+            {
+              key: 'record',
+              className: 'af-st-tile',
+              label: copy('Record'),
+              value: board.hasHeadToHead ? formatRecord(me.record) : '—',
+              sub: copy(lineText(me, Math.min(board.rules.playoffTeams, n), language)),
+            },
+            {
+              key: 'power',
+              className: 'af-st-tile',
+              label: (
+                <>
+                  {copy('AF Power')} <TopicTip topic="afPowerScore" />
+                </>
+              ),
+              value: ordinal(me.powerRank),
+              tone: 'accent',
+              movement: moveOf(me.powerMove, copy),
+              sub: (
+                <span className="af-num">
+                  {copy('score')} {me.powerScore.toFixed(1)} · {copy('all-play')} {formatRecord(me.allPlay)}
+                </span>
+              ),
+            },
+            {
+              key: 'pf',
+              className: 'af-st-tile',
+              label: copy('Points for'),
+              value: pts1(me.pointsFor),
+              sub: (
+                <>
+                  {me.average != null ? `${n1(me.average)} ${copy('a week')} · ` : ''}
+                  {m.pfRankInLeague(me.pfRank, ordinal(me.pfRank))}
+                </>
+              ),
+            },
+          ]}
+        />
       ) : (
         <div className="af-st-noteam">
           {copy('We cannot tell which team in this league is yours, so there are no tiles about you. The full table is still below.')}
@@ -629,10 +651,13 @@ export function Standings({
         </>
       ) : null}
 
-      <p className="af-st-foot">
-        {copy('Projected records on this page are a model’s expectation.')} {' '}
-        <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
-      </p>
+      {/* About projected records and playoff odds: a points-only or elimination league has neither. */}
+      {board.hasHeadToHead && !elimination ? (
+        <p className="af-st-foot">
+          {copy('Projected records on this page are a model’s expectation.')} {' '}
+          <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
+        </p>
+      ) : null}
       <SeasonHistory rows={history} />
     </div>
   )

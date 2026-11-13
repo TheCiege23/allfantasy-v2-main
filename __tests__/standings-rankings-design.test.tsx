@@ -104,10 +104,10 @@ describe('Standings — the per-league Rankings design', () => {
 
   it('gives the record its own tile whether or not there is a projection', () => {
     const { unmount } = render(<Standings data={standings()} />)
-    expect(screen.getByText('Record', { selector: '.af-st-tile .af-label' })).toBeTruthy()
+    expect(screen.getByText('Record', { selector: '.af-st-tile .af-pg-stat-label' })).toBeTruthy()
     unmount()
     render(<Standings data={standings({ projection: { available: false, reason: 'Too few weeks scored.' } })} />)
-    expect(screen.getByText('Record', { selector: '.af-st-tile .af-label' })).toBeTruthy()
+    expect(screen.getByText('Record', { selector: '.af-st-tile .af-pg-stat-label' })).toBeTruthy()
     expect(screen.getByText('Too few weeks scored.')).toBeTruthy()
   })
 

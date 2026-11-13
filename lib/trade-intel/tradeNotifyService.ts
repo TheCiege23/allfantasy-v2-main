@@ -26,8 +26,8 @@ import {
   type FeedTrade,
   type SleeperRoster,
 } from '@/lib/trade-intel/sleeperTradeSync'
-import { buildTradeAssetsForRoster, recentWeeksFromState } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { getAllPlayers, getLeagueUsers, getSleeperState, type SleeperSportState } from '@/lib/api-cache/SleeperCacheLayer'
+import { buildTradeAssetsForRoster, loadSleeperTradePlayers, recentWeeksFromState, type SleeperPlayerRow } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import { getLeagueUsers, getSleeperState, type SleeperSportState } from '@/lib/api-cache/SleeperCacheLayer'
 import { resolveSourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 
@@ -440,7 +440,6 @@ function transactionIdOf(tradeId: string): string {
 }
 
 type SleeperUserRow = { user_id?: string; display_name?: string; metadata?: { team_name?: string } }
-type SleeperPlayerRow = { full_name?: string; first_name?: string; last_name?: string; position?: string; team?: string }
 
 /** Detect + notify for one Sleeper league id (may map to several AF league rows). */
 export async function detectAndNotifyLeague(
@@ -874,7 +873,7 @@ async function notifyOffers(args: {
 
   // Names are decoration: an unavailable directory costs a label, never the alert.
   const isNfl = String(afLeagues[0].sport ?? 'NFL').toUpperCase() === 'NFL'
-  const players = (isNfl ? await getAllPlayers().catch(() => ({})) : {}) as Record<string, SleeperPlayerRow>
+  const players = await loadSleeperTradePlayers(afLeagues[0].sport, offers.map(offer => offer.tx))
   const users = (await getLeagueUsers(sleeperLeagueId).catch(() => [])) as SleeperUserRow[]
   const proposerNameOf = (creator: string | null): string | null => {
     if (!creator) return null

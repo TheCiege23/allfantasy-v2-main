@@ -61,7 +61,24 @@ export function inspectPlaybackScopes(scope: string | null | undefined): Playbac
  * check their speakers, their Premium status, and their network before
  * discovering that the fix is reconnecting.
  */
-export function describePlaybackGap(cap: PlaybackCapability, isPremium: boolean): string | null {
+export const PREMIUM_REQUIRED_MESSAGE =
+  'In-browser playback needs Spotify Premium. Your account is connected and everything else works.'
+
+/**
+ * `isPremium` is THREE-valued on purpose: true, false, or null for "unknown".
+ *
+ * ⚠ SPOTIFY STOPPED TELLING US. The February 2026 Web API changes removed `product`
+ * from GET /v1/me for Development Mode apps, so the connect callback can no longer
+ * learn the subscription tier. It used to store `product === 'premium'`, which an
+ * absent field turns into `false` — so every Premium listener was told to buy
+ * Premium. Sign-in through NextAuth never wrote the flag at all, with the same
+ * result. Unknown is not "free": the Web Playback SDK reports a free account itself
+ * (`account_error`), and the player surfaces that when it happens.
+ */
+export function describePlaybackGap(
+  cap: PlaybackCapability,
+  isPremium: boolean | null
+): string | null {
   if (cap.canPlay) {
     /*
      * ⚠ PREMIUM IS CHECKED ONLY AFTER SCOPES PASS, AND THE ORDER MATTERS. Spotify
@@ -70,12 +87,34 @@ export function describePlaybackGap(cap: PlaybackCapability, isPremium: boolean)
      * problem is a stale grant sends them to buy a subscription that will not fix
      * it.
      */
-    return isPremium
-      ? null
-      : 'In-browser playback needs Spotify Premium. Your account is connected and everything else works.'
+    return isPremium === false ? PREMIUM_REQUIRED_MESSAGE : null
   }
   if (!cap.needsReauthorization) {
     return 'Connect Spotify to play music here.'
   }
   return 'Reconnect Spotify to enable playback — your existing connection was made before playback permissions were added.'
+}
+
+/** Scopes GET /v1/me/playlists needs to return the listener's PRIVATE playlists too. */
+export const REQUIRED_PLAYLIST_SCOPES = ['playlist-read-private', 'playlist-read-collaborative'] as const
+
+/**
+ * Can this grant see the listener's whole library, or only their public playlists?
+ *
+ * ⚠ WITHOUT THESE SCOPES SPOTIFY DOES NOT FAIL — IT QUIETLY RETURNS LESS. A grant made
+ * before they were added still lists public playlists, so the picker looks like it works
+ * and is simply missing things. Report it so the UI can say "reconnect" instead.
+ */
+export function inspectPlaylistScopes(scope: string | null | undefined): {
+  canListPrivate: boolean
+  missing: string[]
+} {
+  const granted = new Set(
+    (scope ?? '')
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  )
+  const missing = REQUIRED_PLAYLIST_SCOPES.filter((s) => !granted.has(s))
+  return { canListPrivate: missing.length === 0, missing }
 }

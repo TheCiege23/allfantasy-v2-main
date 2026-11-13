@@ -464,6 +464,15 @@ export function Dashboard3A(props: Dashboard3AProps) {
   const mainOrder = props.order?.main ?? (['routine', 'issues', 'matchups'] as const)
   const sideOrder = props.order?.side ?? (['chimmy', 'career', 'rivals'] as const)
   const stackOrder = props.order?.stack ?? (['exposure', 'following', 'receipts'] as const)
+  /*
+   * ⚠ AN EMPTY MAIN COLUMN STILL TOOK HALF THE ROW (measured 2026-11-12 at 1440px: a 528px blank
+   * column beside the 360px side cards). The /core home hides both main-column cards — routine and
+   * matchups — by default (lib/core-app/homeSections.ts), and `issues` is always null here because
+   * the decision queue leads the page instead. So the default home drew its side cards squeezed
+   * against the right edge of an empty grid. With nothing to put in the main column, the side cards
+   * take the full width (`data-no-main`).
+   */
+  const mainShown = mainOrder.filter((key) => slots[key] != null)
   // The hidden standalone rail below reads these; with slots it has no data, and it is hidden in the shell.
   const data = props.slots ? null : props.data
   const career = props.slots ? null : props.career
@@ -603,13 +612,17 @@ export function Dashboard3A(props: Dashboard3AProps) {
         <div className="af3a-home-leagues">{slots.leagues}</div>
 
         {/* No side cards (all switched off in Settings → Home page): the main column takes the width. */}
-        <div className="af3a-body" data-no-side={sideOrder.length === 0 ? '' : undefined}>
+        <div
+          className="af3a-body"
+          data-no-side={sideOrder.length === 0 ? '' : undefined}
+          data-no-main={mainShown.length === 0 && sideOrder.length > 0 ? '' : undefined}
+        >
           <div className="af3a-col-main">
             {/*
               Your week (the weekly routine), outstanding issues and this week's matchups — in the
               order `order.main` gives, which on /core puts a live slate's matchups first.
             */}
-            {mainOrder.map((key) => (
+            {mainShown.map((key) => (
               <Fragment key={key}>{slots[key]}</Fragment>
             ))}
           </div>

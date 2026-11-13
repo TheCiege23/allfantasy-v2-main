@@ -1,3 +1,4 @@
+import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { seedNullFaabBalances } from '@/lib/waiver-wire/settings-service'
@@ -22,6 +23,7 @@ import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/Guillo
 import { resolveSeasonStartWeek } from '@/lib/redraft/seasonStartWeek'
 import { STANDARD_WEEKLY_SEASON_FORMATS } from '@/lib/season-week/standardSeasonScope'
 import { afterDynastyNewSeasonActivated } from '@/lib/redraft/offseason/dynastyRolloverHousekeeping'
+import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -203,7 +205,7 @@ export async function ensureRedraftSeason(leagueId: string) {
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
   const playoffStartCap = maxPlayoffStartWeekFor(league)
-  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
+  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(league) ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
     // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
     (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)
@@ -630,6 +632,25 @@ export async function syncCompletedDraftToRedraftSeason(
 
     redraftPlayersCreated += 1
   }
+
+  /*
+   * 🛑 LINK EVERY TEAM'S LEAGUE ROSTER TO THE SEASON ROSTER IT JUST GOT, NOT ONLY SURVIVOR'S.
+   * Trades, waiver claims, free-agent adds and trade reversals reach the season roster — the one
+   * lineups and scoring read — only through `Roster.redraftRosterId` (applyRedraftRosterMoves). With
+   * the link unset that write is skipped without an error, so in a league that drafted here a traded
+   * player kept scoring for his old team. Only the Survivor branch above linked, and the reconciler's
+   * other callers are import paths: a native dynasty or redraft league was never linked at all. Found
+   * by the dynasty season simulation (0 of 12 linked when trading opened). This is the moment the
+   * reconciler's own doc names — where the correspondence first becomes knowable. Idempotent, fills
+   * only NULL links, and must not fail draft completion.
+   */
+  await reconcileRosterRedraftLinks(leagueId).catch((err) => {
+    console.warn('[syncCompletedDraftToRedraftSeason] roster season links not reconciled', {
+      leagueId,
+      seasonId: season.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
 
   /*
    * A season drafted mid-season starts at its sport's next unplayed week (seasonStartWeek.ts) —

@@ -21,16 +21,18 @@ import nhlPlayers from './fixtures/fantrax/nhl-player-ids-public.json'
 import mlb from './fixtures/fantrax/mlb-points-public.json'
 import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 import { fantraxScoringRules } from '@/lib/league-import/fantrax/fantraxScoring'
-import { fantraxImportSeason, mapFantraxRosterSlots } from '@/lib/league-import/fantrax/fantraxProSports'
+import { fantraxImportSeason, mapFantraxLineupSlots, mapFantraxRosterSlots } from '@/lib/league-import/fantrax/fantraxProSports'
 
 const h = vi.hoisted(() => ({
   findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), userUpsert: vi.fn(),
   info: vi.fn(), rosters: vi.fn(), standings: vi.fn(), players: vi.fn(), schedule: vi.fn(), draft: vi.fn(),
+  identities: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   fantraxLeague: { findUnique: h.findUnique, findMany: h.findMany, updateMany: h.updateMany, upsert: h.upsert },
   fantraxUser: { upsert: h.userUpsert },
+  playerIdentityMap: { findMany: h.identities },
 } }))
 vi.mock('@/lib/league-import/fantrax/fantraxApi', async (original) => ({
   ...await original<object>(),
@@ -58,6 +60,7 @@ function serve(capture: Capture) {
 beforeEach(() => {
   vi.resetAllMocks()
   h.findUnique.mockResolvedValue(null)
+  h.identities.mockResolvedValue([])
   h.userUpsert.mockResolvedValue({ id: 'fantrax-user' })
   h.upsert.mockResolvedValue({ id: 'snapshot' })
   h.standings.mockResolvedValue({ ok: true, data: [] })
@@ -115,6 +118,13 @@ describe('real Fantrax captures — season and lineup', () => {
     })
   })
 
+  it('EPL position maxima do not imply a fixed 14-slot lineup in an 11-starter league', () => {
+    expect(mapFantraxLineupSlots('SOCCER', epl.info.rosterInfo)).toEqual({
+      slots: [],
+      gaps: ['Fantrax lineup slots add up to 14, but the league starts 11'],
+    })
+  })
+
   it('NHL forwards map to the C/W flex and its stated reserve is the bench', () => {
     expect(mapFantraxRosterSlots('NHL', nhl.info.rosterInfo)).toEqual({
       slots: [{ position: 'D', count: 3 }, { position: 'FLEX_CW', count: 5 }, { position: 'G', count: 2 }, { position: 'BN', count: 6 }],
@@ -134,11 +144,51 @@ describe('real Fantrax captures — a league that has not drafted yet', () => {
     expect(h.upsert.mock.calls[0]![0].create).toMatchObject({ sport: stored, season: 2026 })
   })
 
-  it('EPL: a soccer pool matches no supported sport and is refused with a plain reason', async () => {
-    serve(epl as unknown as Capture)
-    const outcome = await importFantraxLeague({ leagueId: 'public', teamName: 'Team 01', appUserId: 'owner' })
-    expect(outcome).toMatchObject({ ok: false })
-    expect((outcome as { error: string }).error).toMatch(/do not match .* player lists, so it was not imported\. Nothing was saved\./)
+  it('imports an NHL league when its player map is the only directory available', async () => {
+    serve(nhl as unknown as Capture)
+    const unavailable = { ok: false, failure: { kind: 'unavailable', message: 'Directory unavailable' } }
+    h.players.mockImplementation(async (code: string) => code === 'NHL'
+      ? { ok: true, data: MAPS.NHL }
+      : unavailable)
+
+    const args = { leagueId: 'public', teamName: 'Team 01', appUserId: 'owner' }
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
+    expect(h.players.mock.calls.map(([code]) => code)).toEqual(['CFB', 'NFL', 'MLB', 'NBA', 'NHL', 'NCAAB'])
+    expect(h.upsert.mock.calls[0]![0].create).toMatchObject({ sport: 'nhl' })
+
+    h.upsert.mockClear()
+    h.players.mockResolvedValue(unavailable)
+    expect(await importFantraxLeague(args)).toEqual({ ok: false, error: 'Directory unavailable', kind: 'unavailable' })
     expect(h.upsert).not.toHaveBeenCalled()
+  })
+
+  it('EPL: scoring groups identify Soccer and roster ids survive missing or ambiguous links', async () => {
+    serve(epl as unknown as Capture)
+    h.identities.mockResolvedValue([
+      { fantraxId: '06ex4', canonicalName: 'Named Defender', position: 'DEF', currentTeam: 'ARS' },
+      { fantraxId: '06v51', canonicalName: 'First Match' },
+      { fantraxId: '06v51', canonicalName: 'Second Match' },
+    ])
+    const outcome = await importFantraxLeague({ leagueId: 'public', teamName: 'Team 01', appUserId: 'owner' })
+    expect(outcome).toMatchObject({ ok: true, season: 2026, resolved: 1, total: 3 })
+    expect(h.players).not.toHaveBeenCalled()
+    expect(h.identities).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ sport: 'SOCCER' }) }))
+    expect(h.upsert.mock.calls[0]![0].create).toMatchObject({
+      sport: 'soccer', season: 2026, roster: expect.arrayContaining([
+        expect.objectContaining({ fantraxId: '06ex4', name: 'Named Defender' }),
+        expect.objectContaining({ fantraxId: '06v51', name: null }),
+        expect.objectContaining({ fantraxId: '072zs', name: null }),
+      ]),
+    })
+  })
+
+  it('EPL: pre-draft teams can import with empty rosters and no identity links', async () => {
+    const capture = epl as unknown as Capture
+    serve({ ...capture, rosters: { rosters: { team01: { teamName: 'Team 01', rosterItems: [] } } } })
+    const outcome = await importFantraxLeague({ leagueId: 'public', teamName: 'Team 01', appUserId: 'owner' })
+    expect(outcome).toMatchObject({ ok: true, resolved: 0, total: 0 })
+    expect(h.upsert.mock.calls[0]![0].create).toMatchObject({ sport: 'soccer', roster: [] })
+    expect(h.players).not.toHaveBeenCalled()
+    expect(h.identities).not.toHaveBeenCalled()
   })
 })

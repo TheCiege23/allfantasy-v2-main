@@ -11,10 +11,23 @@ import {
   YAHOO_FANTASY_SCOPE,
   YAHOO_RETURN_TO_COOKIE,
 } from '@/lib/yahoo/oauthConfig';
+import { isYahooImportLive, YAHOO_COMING_SOON_ERROR } from '@/lib/yahoo/yahooAvailability';
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { relativeRedirect } from '@/lib/http/relative-redirect';
 
 export async function GET(request: NextRequest) {
+  /*
+   * Yahoo is coming soon — see lib/yahoo/yahooAvailability.ts. Checked first, before the session,
+   * so nobody signs in only to be refused. Lands on the sanitized returnTo (default /import) with a
+   * notice rather than on Yahoo's consent screen.
+   */
+  if (!isYahooImportLive()) {
+    // sanitizeYahooReturnTo only ever returns an internal path, which may already carry a query.
+    const back = sanitizeYahooReturnTo(request.nextUrl.searchParams.get('returnTo'));
+    const joiner = back.includes('?') ? '&' : '?';
+    return relativeRedirect(`${back}${joiner}yahoo_error=${YAHOO_COMING_SOON_ERROR}`);
+  }
+
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
   const userId = session?.user?.id;
 

@@ -437,7 +437,9 @@ export function LeagueSettingsTab({
   const isHeadCommissioner =
     userRole != null ? userRole === 'commissioner' : Boolean(isHeadCommissionerShell)
 
-  const isBestBall = isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null)
+  // The server's one answer (Classic Best Ball or best ball Guilly); the column is the fallback for a
+  // payload that predates it.
+  const isBestBall = league.lineupSetsItself ?? isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null)
 
   const handleAutoCoachLeagueToggle = async () => {
     const next = !(league.autoCoachEnabled ?? true)

@@ -90,6 +90,15 @@
   background: var(--bad-soft);
   border-color: transparent;
 }
+/* Season Outlook's survival rows (guillotine / survivor / tournament). */
+.af-olk-pill[data-status='alive'] {
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: transparent;
+}
+.af-so-statusrow .af-so-statusline {
+  max-width: none;
+}
 .af-olk-pill[data-status='risk'] {
   color: var(--warn);
   background: var(--warn-soft);
@@ -103,7 +112,7 @@
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  border-radius: 16px;
+  border-radius: var(--af-radius-card, 16px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -130,7 +139,7 @@
   gap: 5px;
   min-width: 0;
   padding: 13px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -218,7 +227,7 @@
   gap: 8px;
   min-width: 0;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--bg);
 }
@@ -392,7 +401,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 13px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
 }
@@ -462,7 +471,7 @@
   flex-direction: column;
   gap: 4px;
   padding: 12px 13px;
-  border-radius: 11px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -484,7 +493,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -562,7 +571,7 @@
 .af-olk-tablewrap {
   overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
 }
 .af-olk-table {
@@ -635,7 +644,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--warn-soft);
   font-size: 12.5px;
   line-height: 1.45;
@@ -655,7 +664,7 @@
   gap: 6px;
   min-width: 0;
   padding: 13px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -693,7 +702,7 @@
 }
 .af-olk-dl > div {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -724,7 +733,7 @@
   align-items: stretch;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   background: var(--surface);
   border: 1px solid var(--accent-line);
   position: sticky;
@@ -809,7 +818,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
 }
@@ -831,7 +840,7 @@
   width: 100%;
   min-height: 36px;
   padding: 0 8px;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line2);
   background: var(--bg);
   color: var(--text);
@@ -846,7 +855,7 @@
 .af-olk-btn {
   min-height: 36px;
   padding: 0 12px;
-  border-radius: 9px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--accent-line);
   background: var(--accent-soft);
   color: var(--text);
@@ -956,7 +965,7 @@
     margin-bottom: 8px;
     padding: 12px 13px;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: var(--af-radius-inner, 12px);
     background: var(--surface);
   }
   .af-olk .af-so-table tbody tr:last-child {

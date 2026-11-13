@@ -3,6 +3,7 @@ import { getServerNowISO } from '@/lib/time-engine/serverClock'
 import { getLineupActionThresholds } from '@/lib/lineup-actions/thresholds'
 import { mergeAiLineupSignals } from '@/lib/lineup-actions/mergeAiLineupSignals'
 import { scanNativeLeagueLineup } from '@/lib/lineup-actions/nativeLineupScan'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { scanSleeperLeagueLineup } from '@/lib/lineup-actions/sleeperLineupScan'
 import type {
   LineupActionDisplayMode,
@@ -115,6 +116,11 @@ export async function computeLineupActionsForUser(userId: string): Promise<Lineu
       platformLeagueId: true,
       avatarUrl: true,
       bestBallMode: true,
+      // The rest of the best ball shape: a best ball Guilly league is `guillotineMode` + `settings.best_ball`.
+      leagueType: true,
+      leagueVariant: true,
+      guillotineMode: true,
+      settings: true,
       teams: {
         where: { claimedByUserId: userId },
         select: { platformUserId: true },
@@ -230,7 +236,8 @@ export async function computeLineupActionsForUser(userId: string): Promise<Lineu
       leagueName,
       sport,
       platform: league.platform,
-      bestBallMode: league.bestBallMode ?? false,
+      // Classic Best Ball or best ball Guilly: either way no start/sit row (lib/bestball/bestBallLeagueState.ts).
+      bestBallMode: bestBallLineupSetsItself(league),
       playerData: roster.playerData,
       thresholds,
     })

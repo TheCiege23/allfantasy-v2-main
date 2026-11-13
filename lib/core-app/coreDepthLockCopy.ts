@@ -83,6 +83,7 @@ const SUBJECT_ES: Record<string, string> = {
   'Who to trade with': 'Con quién intercambiar',
   'The full trade breakdown': 'Desglose completo de cambios',
   'The trade finder': 'Buscador de intercambios',
+  'Your rebuild plan': 'Tu plan de reconstrucción',
   // Competitive Edge (Draft HQ, Trade Center) — the product name stays
   'Competitive Edge': 'Competitive Edge',
 }

@@ -480,6 +480,7 @@ export function CommissionerSettingsModal({
             <DraftSettingsPanel
               draftRow={payload?.settings ?? null}
               league={payload?.league ?? null}
+              leagueId={leagueId}
               canEdit={canEdit}
               save={save}
               debouncedSave={debouncedSave}

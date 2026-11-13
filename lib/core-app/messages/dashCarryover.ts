@@ -30,7 +30,7 @@ export const dashCarryoverMessages = defineMessages({
   en: {
     mostUrgent: 'Most urgent',
     chimmyBrief: 'Chimmy brief',
-    notWatching: 'What this screen is not watching',
+    notWatching: 'What Home doesn’t track yet',
     fixed: (english: string): string => english,
     lockKickoff: (lock: FirstLock): string => lock.kickoffLabel,
     lockHeadline: (lock: FirstLock): string => lock.headline,
@@ -47,7 +47,7 @@ export const dashCarryoverMessages = defineMessages({
   es: {
     mostUrgent: 'Lo más urgente',
     chimmyBrief: 'Resumen de Chimmy',
-    notWatching: 'Lo que esta pantalla no vigila',
+    notWatching: 'Lo que Inicio aún no sigue',
     fixed: (english) => dash34FixedText(english) ?? english,
     lockKickoff: (lock) => firstLockText(lock)?.kickoffLabel ?? lock.kickoffLabel,
     lockHeadline: (lock) => firstLockText(lock)?.headline ?? lock.headline,

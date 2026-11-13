@@ -267,6 +267,10 @@
 
 .af3a-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
 .af3a-body[data-no-side] { grid-template-columns: minmax(0, 1fr); }
+/* Nothing in the main column (Dashboard3A `mainShown`): the side cards share the full width instead. */
+.af3a-body[data-no-main] { grid-template-columns: minmax(0, 1fr); }
+.af3a-body[data-no-main] > .af3a-col-main { display: none; }
+.af3a-body[data-no-main] > .af3a-col-side { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 .af3a-col-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
 .af3a-col-side { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 

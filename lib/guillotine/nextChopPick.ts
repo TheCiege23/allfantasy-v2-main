@@ -6,7 +6,8 @@
  * The rules, and why:
  *  - Only a manager whose team has been chopped picks. It is their game, not a side bet for survivors.
  *  - A pick is for NEXT week's chop and locks when that week starts, so nobody picks with the week's
- *    scores in front of them (the live chop line shows them all week).
+ *    scores in front of them (the live chop line shows them all week). In an MLB two-week league it is
+ *    for the next PERIOD's chop and locks when the period's first week starts (`openPickWeek`).
  *  - One pick a week, changeable until it locks; only a team still alive can be picked.
  *  - One point when the pick is chopped; on a double chop, either team counts.
  *
@@ -64,8 +65,23 @@ export function nextChopLeaderboard(
 /**
  * The week a pick can be made for: the one after the week being played, from the first chop week to
  * the last. Null when the chops are over.
+ *
+ * Two-week periods (MLB, ./eliminationPeriods.ts): a pick is for the next PERIOD that has not started,
+ * keyed by its last week (the week its chop lands, which is what `choppedInPeriod` records), and it
+ * locks when that period's FIRST week starts. A week in the middle of a period never chops, so it is
+ * never offered. `periodWeeks` absent or 1 is the one-week rule above, unchanged.
  */
-export function openPickWeek(args: { calendarWeek: number; eliminationStartWeek: number; eliminationEndWeek: number | null }): number | null {
-  const week = Math.max(args.calendarWeek + 1, args.eliminationStartWeek)
+export function openPickWeek(args: { calendarWeek: number; eliminationStartWeek: number; eliminationEndWeek: number | null; periodWeeks?: number }): number | null {
+  const n = Math.max(1, args.periodWeeks ?? 1)
+  let first = Math.max(args.calendarWeek + 1, args.eliminationStartWeek)
+  // Already inside a period that has begun: the next one is the first that has not.
+  const offset = (first - args.eliminationStartWeek) % n
+  if (offset !== 0) first += n - offset
+  const week = first + n - 1
   return args.eliminationEndWeek != null && week > args.eliminationEndWeek ? null : week
+}
+
+/** The first week of the period keyed `week` — the week a pick for it locks. */
+export function pickLockWeek(week: number, periodWeeks?: number): number {
+  return week - Math.max(1, periodWeeks ?? 1) + 1
 }

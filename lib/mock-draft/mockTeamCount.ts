@@ -12,6 +12,7 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
+import { NFL_DYNASTY_TEAM_COUNTS } from '@/lib/league-creation-wizard/sport-team-limits'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 
@@ -62,7 +63,7 @@ export function resolveLeagueMockTeamCount(leagueSize: number | null | undefined
 }
 
 /** Largest team count any league may have — the league-derived tools read this many team rows. */
-export const MAX_LEAGUE_MOCK_TEAMS = Math.max(...UNIVERSAL_CREATE_TEAM_COUNTS)
+export const MAX_LEAGUE_MOCK_TEAMS = Math.max(...UNIVERSAL_CREATE_TEAM_COUNTS, ...NFL_DYNASTY_TEAM_COUNTS)
 
 /**
  * A league's pick order: snake or linear, and third-round reversal (snake only). Resolved for a real

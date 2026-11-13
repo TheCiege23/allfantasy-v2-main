@@ -92,6 +92,8 @@ export interface CreateLeagueSuccessResponse {
   /** Non-fatal preset warnings (e.g. odd team count). */
   warnings?: ValidationIssue[]
   metaEvent?: MetaEventPayload
+  /** Present for a "Create a test league" request: open seats filled with placeholder AI managers. */
+  testLeague?: { placeholdersFilled: number }
 }
 
 export interface CreateLeagueErrorResponse {

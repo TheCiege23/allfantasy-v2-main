@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { isBestBallLeague } from '@/lib/autocoach/AutoCoachEngine'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { parseAutoCoachUserPreferences } from '@/lib/autocoach/autoCoachPreferences'
 import { listAutoCoachRosterPlayers } from '@/lib/autocoach/autoCoachRosterPlayers'
 
@@ -121,11 +121,12 @@ export async function POST(req: NextRequest) {
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { leagueVariant: true, bestBallMode: true, autoCoachEnabled: true },
+    select: { leagueVariant: true, bestBallMode: true, autoCoachEnabled: true, leagueType: true, guillotineMode: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
-  if (isBestBallLeague(league.leagueVariant, league.bestBallMode)) {
+  // Classic Best Ball or best ball Guilly: there is no lineup for AutoCoach to set (lib/bestball/bestBallLeagueState.ts).
+  if (bestBallLineupSetsItself(league)) {
     return NextResponse.json(
       { error: 'AutoCoach is not available for Best Ball leagues.' },
       { status: 400 }

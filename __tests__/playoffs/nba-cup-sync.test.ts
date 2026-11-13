@@ -141,9 +141,95 @@ describe("scheduled NBA Cup publisher", () => {
     const result = await syncNbaCupTournament({ season: 2026, apply: true })
     expect(result).toMatchObject({ applied: true, gamesPublished: 9, poolsUpdated: 1, failures: [] })
     expect(fetch).toHaveBeenCalledTimes(4)
-    expect(db.playoffBracketChallenge.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { sport: "nba_cup", seasonYear: 2026, isTestMode: false }, take: 100 }))
+    expect(db.playoffBracketChallenge.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { sport: "nba_cup", seasonYear: 2026, isTestMode: false }, orderBy: { id: "asc" }, take: 101 }))
     expect(db.playoffBracketSeries.createMany).toHaveBeenCalledWith(expect.objectContaining({ skipDuplicates: true, data: expect.arrayContaining([expect.objectContaining({ round: "cup_group_play", homeTeamName: "Atlanta Hawks", providerGamesJson: expect.objectContaining({ provider: "espn_nba_cup", eventId: "401909287" }) })]) }))
   })
+  it("catches up league 101 when the only new result is already in the snapshot", async () => {
+    vi.setSystemTime(new Date("2026-11-07T00:10:00Z"))
+    const games = assignNbaCupSlots(parseNbaCupScoreboard(group, 2026))
+    games[0] = { ...games[0], status: "in_progress", winnerTeamName: null }
+    let snapshot: any = { games, checkedDates: {}, cursor: 0, syncedAt: "2026-11-07T00:00:00Z" }
+    db.sportsDataCache.findUnique.mockImplementation(async () => ({ data: snapshot }))
+    db.sportsDataCache.upsert.mockImplementation(async (args: any) => { snapshot = args.update.data })
+    const ids = Array.from({ length: 101 }, (_, i) => ({ id: `pool-${String(i).padStart(3, "0")}` }))
+    db.playoffBracketChallenge.findMany.mockImplementation(async (args: any) =>
+      ids.filter((row) => !args.where.id?.gt || row.id > args.where.id.gt).slice(0, args.take))
+    const finished = structuredClone(group) as any
+    finished.events[0].status = { period: 4, type: { name: "STATUS_FINAL", state: "post", completed: true, shortDetail: "Final" } }
+    finished.events[0].competitions[0].competitors.forEach((team: any) => { team.score = team.homeAway === "home" ? "110" : "100" })
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(finished), { status: 200 }))
+
+    expect(await syncNbaCupTournament({ season: 2026, apply: true, liveOnly: true })).toMatchObject({ poolsUpdated: 100 })
+    expect(snapshot.fanout).toMatchObject({ cursor: "pool-099", eventIds: expect.arrayContaining([games[0].eventId]), restart: false })
+    expect(db.playoffBracketSeries.updateMany.mock.calls.some(([args]: any) => args.where.challengeId.in.includes("pool-000") && args.data.winnerTeamName)).toBe(true)
+
+    // No new provider response is due: the already verified result must still
+    // be delivered to the remaining league from the durable snapshot.
+    vi.mocked(fetch).mockClear()
+    vi.setSystemTime(new Date("2026-11-07T00:10:01Z"))
+    expect(await syncNbaCupTournament({ season: 2026, apply: true, liveOnly: true })).toMatchObject({ poolsUpdated: 1 })
+    expect(fetch).not.toHaveBeenCalled()
+    expect(db.playoffBracketSeries.updateMany.mock.calls.some(([args]: any) => args.where.challengeId.in.includes("pool-100") && args.data.winnerTeamName)).toBe(true)
+    expect(snapshot.fanout).toBeNull()
+  })
+
+  it("restarts the sweep if another game changes after earlier leagues were visited", async () => {
+    vi.setSystemTime(new Date("2026-11-07T00:10:00Z"))
+    const games = assignNbaCupSlots(parseNbaCupScoreboard(group, 2026))
+    games[0] = { ...games[0], status: "in_progress", winnerTeamName: null }
+    let snapshot: any = { games, checkedDates: {}, cursor: 0, syncedAt: "2026-11-07T00:00:00Z" }
+    db.sportsDataCache.findUnique.mockImplementation(async () => ({ data: snapshot }))
+    db.sportsDataCache.upsert.mockImplementation(async (args: any) => { snapshot = args.update.data })
+    const ids = Array.from({ length: 101 }, (_, i) => ({ id: `pool-${String(i).padStart(3, "0")}` }))
+    db.playoffBracketChallenge.findMany.mockImplementation(async (args: any) =>
+      ids.filter((row) => !args.where.id?.gt || row.id > args.where.id.gt).slice(0, args.take))
+    const first = structuredClone(group) as any
+    first.events[0].status = { period: 4, type: { name: "STATUS_FINAL", state: "post", completed: true, shortDetail: "Final" } }
+    first.events[0].competitions[0].competitors.forEach((team: any) => { team.score = team.homeAway === "home" ? "110" : "100" })
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(first), { status: 200 }))
+    await syncNbaCupTournament({ season: 2026, apply: true, mode: "live" })
+
+    const second = structuredClone(first) as any
+    second.events[1].status = { period: 4, type: { name: "STATUS_FINAL", state: "post", completed: true, shortDetail: "Final" } }
+    second.events[1].competitions[0].competitors.forEach((team: any) => { team.score = team.homeAway === "home" ? "120" : "101" })
+    vi.setSystemTime(new Date("2026-11-07T00:10:31Z"))
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(second), { status: 200 }))
+    await syncNbaCupTournament({ season: 2026, apply: true, mode: "live" })
+    expect(snapshot.fanout).toMatchObject({ cursor: null, restart: false })
+    expect(snapshot.fanout.eventIds).toContain(games[1].eventId)
+
+    vi.mocked(fetch).mockClear()
+    vi.setSystemTime(new Date("2026-11-07T00:10:32Z"))
+    await syncNbaCupTournament({ season: 2026, apply: true, mode: "live" })
+    expect(db.playoffBracketSeries.updateMany.mock.calls.some(([args]: any) =>
+      args.where.challengeId.in.includes("pool-000") && args.data.seriesNumber === games[1].seriesNumber && args.data.winnerTeamName)).toBe(true)
+    expect(snapshot.fanout).toMatchObject({ cursor: "pool-099", restart: false })
+    vi.setSystemTime(new Date("2026-11-07T00:10:33Z"))
+    await syncNbaCupTournament({ season: 2026, apply: true, mode: "live" })
+    expect(snapshot.fanout).toBeNull()
+  })
+
+  it("keeps the cursor pending when a batch fails so the next run can retry", async () => {
+    vi.setSystemTime(new Date("2026-11-07T00:10:00Z"))
+    const games = assignNbaCupSlots(parseNbaCupScoreboard(group, 2026))
+    games[0] = { ...games[0], status: "final", winnerTeamName: games[0].homeTeamName }
+    let snapshot: any = { games, checkedDates: { "20261106": "2026-11-07T00:10:00Z" }, cursor: 0,
+      syncedAt: "2026-11-07T00:10:00Z", fanout: { eventIds: [games[0].eventId], cursor: "pool-099", restart: false } }
+    db.sportsDataCache.findUnique.mockImplementation(async () => ({ data: snapshot }))
+    db.sportsDataCache.upsert.mockImplementation(async (args: any) => { snapshot = args.update.data })
+    db.playoffBracketChallenge.findMany.mockResolvedValue([{ id: "pool-100" }])
+    db.$transaction.mockImplementation(async (fn: any) => {
+      const before = snapshot
+      try { return await fn(db) } catch (error) { snapshot = before; throw error }
+    })
+    db.playoffBracketSeries.updateMany.mockRejectedValueOnce(new Error("database unavailable"))
+    await expect(syncNbaCupTournament({ season: 2026, apply: true, liveOnly: true })).rejects.toThrow("database unavailable")
+    expect(snapshot.fanout).toMatchObject({ cursor: "pool-099", eventIds: [games[0].eventId] })
+    db.playoffBracketSeries.updateMany.mockResolvedValue({ count: 1 })
+    await syncNbaCupTournament({ season: 2026, apply: true, liveOnly: true })
+    expect(snapshot.fanout).toBeNull()
+  })
+
   it("dry-runs without changing the cache, matchups or any pool", async () => {
     const result = await syncNbaCupTournament({ season: 2026, apply: false })
     expect(result).toMatchObject({ applied: false, gamesDiscovered: 9 })

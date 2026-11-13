@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { InfoTip } from '@/components/core-app/InfoTip';
@@ -40,6 +40,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
     const draftLabel = (c: { key: string; season: number | null; format: string; status: string; sourceId: string }) =>
         choices.some(o => o.key !== c.key && baseLabel(o) === baseLabel(c)) ? `${baseLabel(c)} · …${c.sourceId.slice(-4)}` : baseLabel(c);
     const [pickPage, setPickPage] = useState(0), [team, setTeam] = useState(''), [player, setPlayer] = useState('');
+    const [pickDetails, setPickDetails] = useState(false);
     useEffect(() => { setPickPage(0); setTeam(''); setPlayer(''); }, [detail?.choice.key, detail?.choice.leagueId]);
     const href = (key?: string, league = leagueId, nextPage = 1) => { const p = new URLSearchParams(); if (league)
         p.set('league', league); if (key)
@@ -49,6 +50,13 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
         p.set('archiveSeason', season); return '/core/draft-hq?' + p.toString(); };
     const help = (title: string, text: string) => <InfoTip label={m.archiveAboutPrefix + title} title={title}><span className="af-info-para">{text}</span></InfoTip>;
     const picks = detail?.picks.filter(p => (!team || p.rosterId === team) && (!player || p.playerName.toLowerCase().includes(player.toLowerCase()))) ?? [];
+    // An imported Sleeper draft has no owner of the original slot, no selection time, no clock and no price,
+    // so four columns read "—" on all 168 rows (live /core, 2026-11-06). A column shows only when some pick
+    // in the draft has a value for it; the coverage notes in Timing and source details say what is missing.
+    const all = detail?.picks ?? [];
+    const has = { owner: all.some(p => p.originalTeamName || p.originalRosterId), slot: all.some(p => p.slot != null), actor: all.some(p => p.actorName), at: all.some(p => p.selectedAt), otc: all.some(p => p.elapsedMs != null || p.activeMs != null || p.allowanceSeconds != null), price: all.some(p => p.amount != null), adp: all.some(p => p.adp != null) };
+    const heads: [string, boolean][] = [[m.archivePick, true], [m.archivePlayer, true], [m.archiveReceivingTeam, true], [has.owner ? m.archiveOriginalSlotOwner : m.archiveOriginalSlot, has.owner || has.slot], [m.archiveSelectedBy, has.actor], [m.archiveSelectedAt, has.at], [m.archiveOtcColumns, has.otc], [m.archivePriceSource, has.price], [m.archiveDraftTimeAdpDifference, has.adp]];
+    const hidden = heads.some(([, shown]) => !shown);
     const teams = [...new Map((detail?.picks ?? []).filter(p => p.rosterId).map(p => [p.rosterId!, p.teamName ?? p.rosterId!])).entries()];
     const time = (v: string | null) => v ? new Date(v).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : '—';
     const duration = (v: number | null) => v == null ? '—' : Math.floor(v / 3600000) + 'h ' + Math.floor(v % 3600000 / 60000) + 'm ' + Math.floor(v % 60000 / 1000) + 's';
@@ -76,8 +84,8 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
    {!detail.picks.length&&<p>{m.archiveNoSelections}</p>}
    <div className="af-archive-filters"><label>{m.archiveTeam}<select value={team} onChange={e => { setTeam(e.target.value); setPickPage(0); }}><option value="">{m.archiveAllTeams}</option>{teams.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>{m.archivePlayer}<input value={player} onChange={e => { setPlayer(e.target.value); setPickPage(0); }}/></label></div>
    <p>{m.archiveAdpComparison} {help(m.archiveAdpDifference, m.archiveHelpAdpDifference)}</p>
-   <h3>{m.archiveSelectionsAndOwnership} {help(m.archiveSelectionDetails, m.archiveHelpSelectionDetails)}</h3>
-   <div className="af-archive-table" tabIndex={0} role="region" aria-label={m.archiveArchivedPicks}><table><thead><tr>{[m.archivePick, m.archivePlayer, m.archiveReceivingTeam, m.archiveOriginalSlotOwner, m.archiveSelectedBy, m.archiveSelectedAt, m.archiveOtcColumns, m.archivePriceSource, m.archiveDraftTimeAdpDifference].map(c => <th key={c}>{c}</th>)}</tr></thead><tbody>{picks.slice(pickPage * 25, pickPage * 25 + 25).map(p => <tr key={p.id}><td>#{p.overall} <small>{m.archiveRound} {p.round} · {m.archiveOverall} #{p.overall}</small></td><td>{p.playerName}<small>{p.position} · {p.club ?? '—'}</small><small>{p.keeper ? m.archiveKeeper : ''}</small><details><summary>{m.archiveIdentityAndOwnerTime}</summary><p>{p.playerId ?? '—'} · {p.identityBasis}</p><p>{m.archiveOtcStarted}: {time(p.onClockAt ?? null)}</p><p>{m.archivePausedOtc}: {duration(p.pausedMs ?? null)}</p>{p.ownerTime && Object.entries(p.ownerTime).map(([owner, ms]) => <p key={owner}>{owner}: {duration(ms)}</p>)}</details></td><td>{p.teamName ?? p.rosterId ?? '—'}</td><td>{p.slot ?? '—'} / {p.originalTeamName ?? p.originalRosterId ?? '—'}</td><td>{p.actorName ?? '—'}</td><td>{time(p.selectedAt)}</td><td>{duration(p.elapsedMs ?? null)} / {duration(p.activeMs)} / {p.allowanceSeconds == null ? '—' : p.allowanceSeconds + 's'}</td><td>{p.amount ?? '—'} / {p.source ?? '—'}</td><td>{p.adp == null ? '—' : p.adp.toFixed(1)} / {p.adpDifference == null ? '—' : (p.adpDifference > 0 ? '+' : '') + p.adpDifference.toFixed(1)}<small>{p.adpSample == null ? '' : m.archiveSample + ': ' + p.adpSample}</small><small>{p.adpObservedAt ? time(p.adpObservedAt) : ''}</small></td></tr>)}</tbody></table></div>
+   <div className="af-picks-head"><h3>{m.archiveSelectionsAndOwnership} {help(m.archiveSelectionDetails, m.archiveHelpSelectionDetails)}</h3><button type="button" className="af-pick-details-toggle" aria-pressed={pickDetails} onClick={() => setPickDetails(v => !v)}>{pickDetails ? m.archiveHidePickDetails : m.archiveShowPickDetails}</button></div>
+   <div className="af-archive-table" tabIndex={0} role="region" aria-label={m.archiveArchivedPicks}><table style={{ '--af-cols': heads.filter(([, shown]) => shown).length } as CSSProperties}><thead><tr>{heads.filter(([, shown]) => shown).map(([c]) => <th key={c}>{c}</th>)}</tr></thead><tbody>{picks.slice(pickPage * 25, pickPage * 25 + 25).map(p => <tr key={p.id}><td>#{p.overall} <small>{m.archiveRound} {p.round} · {m.archiveOverall} #{p.overall}</small></td><td>{p.playerName}<small>{p.position} · {p.club ?? '—'}</small><small>{p.keeper ? m.archiveKeeper : ''}</small>{pickDetails && <div className="af-pick-details" aria-label={m.archiveIdentityAndOwnerTime}><small>{p.playerId ?? '—'} · {p.identityBasis}</small><small>{m.archiveOtcStarted}: {time(p.onClockAt ?? null)}</small><small>{m.archivePausedOtc}: {duration(p.pausedMs ?? null)}</small>{p.ownerTime && Object.entries(p.ownerTime).map(([owner, ms]) => <small key={owner}>{owner}: {duration(ms)}</small>)}</div>}</td><td>{p.teamName ?? p.rosterId ?? '—'}</td>{has.owner ? <td>{p.slot ?? '—'} / {p.originalTeamName ?? p.originalRosterId ?? '—'}</td> : has.slot && <td>{p.slot ?? '—'}</td>}{has.actor && <td>{p.actorName ?? '—'}</td>}{has.at && <td>{time(p.selectedAt)}</td>}{has.otc && <td>{duration(p.elapsedMs ?? null)} / {duration(p.activeMs)} / {p.allowanceSeconds == null ? '—' : p.allowanceSeconds + 's'}</td>}{has.price && <td>{p.amount ?? '—'} / {p.source ?? '—'}</td>}{has.adp && <td>{p.adp == null ? '—' : p.adp.toFixed(1)} / {p.adpDifference == null ? '—' : (p.adpDifference > 0 ? '+' : '') + p.adpDifference.toFixed(1)}<small>{p.adpSample == null ? '' : m.archiveSample + ': ' + p.adpSample}</small><small>{p.adpObservedAt ? time(p.adpObservedAt) : ''}</small></td>}</tr>)}</tbody></table></div>{hidden && <p className="af-archive-cols-note">{m.archiveColumnsHidden}</p>}
    <nav><button disabled={pickPage === 0} onClick={() => setPickPage(v => v - 1)}>{m.archivePreviousPicks}</button><span>{picks.length} {m.archivePicks}</span><button disabled={(pickPage + 1) * 25 >= picks.length} onClick={() => setPickPage(v => v + 1)}>{m.archiveNextPicks}</button></nav>
    <DraftReferences references={detail.references}/>
    <DraftAnalysis report={detail.analysisReport} results={detail.resultsReport}/>
@@ -85,7 +93,6 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
        duplicate sibling keys made React append a fresh DraftPhase4 on every server refresh instead of
        reconciling — one language switch left five on Draft HQ, only the last one live (2026-10-06). */}
    <DraftPhase4 key={'phase4:' + detail.choice.key} detail={detail}/>
-   {detail.canRefreshResults && <DraftResultsRefresh key={'results:' + detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key} observedAt={detail.resultsObservedAt}/>}
    {!detail.analysisReport && detail.analysis && <section aria-label={m.archiveDraftAnalysisCoverage}>
     <h3>{m.archiveDraftAnalysis} {help(m.archiveAnalysisBasis, m.archiveHelpAnalysisBasis)}</h3>
     <div className="af-archive-summary">
@@ -93,13 +100,17 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
      <p>{m.archiveResultsToDateGrade}<small>{detail.analysis.resultsToDate.coveredPicks}/{detail.analysis.totalPicks} {m.archiveVerifiedSelections}</small></p>
     </div>
    </section>}
+   <section className="af-archive-records" aria-label={m.archiveRecordsHeading}>
+   <h3>{m.archiveRecordsHeading}</h3>
+   {detail.canRefreshResults && <DraftResultsRefresh key={'results:' + detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key} observedAt={detail.resultsObservedAt}/>}
    {[[m.archiveDraftTimeSnapshot, detail.snapshot], [m.archiveClockTimeline, detail.events], [m.archiveCommissionerCorrections, detail.corrections], [m.archiveTradePackages, detail.trades], [m.archiveExecutedTradesDuring, detail.playerTrades ?? []]].map(([title, data], index) => <details key={String(title)}><summary>{String(title)} {help(String(title), sectionHelp[index])}</summary><DraftRecordView value={data} language={coreLang(language)}/></details>)}
-   <nav aria-label={m.archiveTimelinePages}>
+   {(timelinePage > 1 || detail.eventsMore || detail.correctionsMore || detail.tradesMore || detail.playerTradesMore) && <nav aria-label={m.archiveTimelinePages}>
     {timelinePage > 1 && <Link href={timelineHref(timelinePage - 1)}>{m.archiveNewerRecords}</Link>}
     <span>{m.archiveTimelinePage} {timelinePage}</span>
     {(detail.eventsMore || detail.correctionsMore || detail.tradesMore || detail.playerTradesMore) && <Link href={timelineHref(timelinePage + 1)}>{m.archiveOlderRecords}</Link>}
-   </nav>
-   <p>{m.archiveTimelineNote}</p>
+   </nav>}
+   <p className="af-archive-records-note">{m.archiveTimelineNote}</p>
+   </section>
   </>}
  </section>;
 }

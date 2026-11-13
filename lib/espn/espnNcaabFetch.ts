@@ -45,6 +45,8 @@ export type EspnNcaabAthlete = {
   fullName: string
   jersey: string | null
   position: string | null
+  /** Standard class year from the season-qualified ESPN roster. */
+  classYear?: number
   /** Present only when ESPN has a photo; absent means none (R-05). */
   headshotUrl: string | null
 }
@@ -90,11 +92,14 @@ export function parseEspnNcaabRoster(body: unknown): { seasonYear: number | null
     const id = str(a?.id)
     const fullName = str(a?.fullName) ?? str(a?.displayName)
     if (!id || !fullName) { rejectedCount++; continue }
+    const experience = a.experience as { years?: unknown; abbreviation?: unknown } | undefined
+    const classYear = ['FR', 'SO', 'JR', 'SR'].indexOf(str(experience?.abbreviation) ?? '') + 1
     athletes.push({
       id,
       fullName,
       jersey: str(a.jersey),
       position: str((a.position as { abbreviation?: unknown } | undefined)?.abbreviation),
+      ...(classYear > 0 && experience?.years === classYear ? { classYear } : {}),
       headshotUrl: str((a.headshot as { href?: unknown } | undefined)?.href),
     })
   }

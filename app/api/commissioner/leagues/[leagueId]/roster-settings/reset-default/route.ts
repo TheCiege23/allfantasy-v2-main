@@ -15,6 +15,8 @@ import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
 import { normalizeRosterSlots } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +28,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   const permission = await checkCommissionerPermission(session.user.id, leagueId)
   if (!permission.isCommissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: {
+      sport: true,
+      // The best ball pool check below, exactly as the roster-settings PUT reads it.
+      leagueType: true, leagueVariant: true, settings: true, bestBallMode: true, guillotineMode: true, leagueSize: true,
+    },
+  })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const registry = getRosterEngineRegistry()
@@ -40,7 +49,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   const locked = await settingsLockedResponse(leagueId, 'rosters')
 
   if (locked) return locked
-  const previousSlots = (await registry.getService(league.sport).getConfig(leagueId)).slots ?? {}
+  const service = registry.getService(league.sport)
+  const previousSlots = (await service.getConfig(leagueId)).slots ?? {}
+  /*
+   * Best ball: the default template is a seat layout like any other, and it can be one this league is too
+   * large for (a 32-team best ball league that dropped its K seat, then resets back to one). The same
+   * pool check as the roster-settings PUT (lib/bestball/poolCapacity.ts), on the template
+   * resetLeagueRosterToDefault is about to write: refused before anything is written, tight comes back as a
+   * warning.
+   */
+  // Only a best ball league is checked, so a lineup league never resolves the template here.
+  const poolCheck = league.leagueSize && lineupSetsItself(league)
+    ? checkLeagueBestBallPool(league, {
+        teamCount: league.leagueSize,
+        rosterSlots: service.resolveDefaultTemplate(league.leagueType ?? 'redraft').slots,
+      })
+    : null
+  if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
   await resetLeagueRosterToDefault(leagueId, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
   // A reset to the sport default is a request for the default shape, rounds included.
@@ -59,5 +84,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   })
 
   await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/reset-default' })
-  return NextResponse.json({ ok: true, config, unifiedConfig, draftRounds })
+  return NextResponse.json({
+    ok: true, config, unifiedConfig, draftRounds,
+    bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],
+  })
 }

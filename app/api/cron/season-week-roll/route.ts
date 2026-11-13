@@ -62,7 +62,15 @@ async function run(options: { dryRun: boolean; limit?: number }) {
       nbaCampusCarryover = await seedNbaCampusCarryover(prisma, { now: new Date(), deadlineAt: Math.min(Date.now() + 15_000, carryoverDeadline), maxRosters: 100 })
     } catch (err) { nbaCampusCarryover = { error: String(err).slice(0, 200) } }
   }
-  return { ok: true as const, dryRun: options.dryRun, ...regular, postseason, nbaCampusCarryover }
+  // A best ball league whose first scoring week has started with its draft still open has no season
+  // for the passes above to roll, so nothing else would ever notice it. One commissioner-only log row
+  // per league per season; dryRun reports without writing. Contained: it must not fail the roll.
+  let bestBallDraftUnfinished: unknown = null
+  try {
+    const { recordBestBallDraftsUnfinishedAtSeasonStart } = await import('@/lib/bestball/draftUnfinishedAtSeasonStart')
+    bestBallDraftUnfinished = await recordBestBallDraftsUnfinishedAtSeasonStart({ dryRun: options.dryRun })
+  } catch (err) { bestBallDraftUnfinished = { error: String(err).slice(0, 200) } }
+  return { ok: true as const, dryRun: options.dryRun, ...regular, postseason, nbaCampusCarryover, bestBallDraftUnfinished }
 }
 
 function readOptions(request: Request): { dryRun: boolean; limit?: number } {

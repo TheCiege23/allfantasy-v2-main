@@ -1,3 +1,4 @@
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import { LeagueSport, type Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRosters } from '@/lib/sleeper-client'
@@ -46,8 +47,9 @@ export async function upsertSleeperRankingImportLeague(
   const playoffTeams =
     typeof playoffTeamsRaw === 'number' && playoffTeamsRaw >= 1
       ? playoffTeamsRaw
-      : Math.max(1, Math.ceil(totalTeams / 3))
+      : null
 
+  const providerStatus = leagueData.status?.trim() || 'ranking_only'
   const settings = (mine?.settings ?? {}) as Record<string, unknown>
   const finalStandingRaw = settings.final_standing ?? settings.rank
   const finalStanding =
@@ -60,7 +62,9 @@ export async function upsertSleeperRankingImportLeague(
   const losses = typeof settings.losses === 'number' ? settings.losses : Number(settings.losses ?? 0) || 0
   const ties = typeof settings.ties === 'number' ? settings.ties : Number(settings.ties ?? 0) || 0
   const madePlayoffs =
-    finalStanding != null && Number.isFinite(finalStanding) ? finalStanding <= playoffTeams : false
+    finalStanding != null && Number.isFinite(finalStanding) && playoffTeams != null
+      ? finalStanding <= playoffTeams
+      : null
   const wonChampionship = finalStanding === 1
 
   const fpts =
@@ -120,7 +124,8 @@ export async function upsertSleeperRankingImportLeague(
       sport: sportLabel,
       scoring: getScoringType(leagueData),
       isDynasty: leagueData.settings?.type === 2,
-      status: 'ranking_only',
+      status: providerStatus,
+      playoffTeams,
       leagueVariant: 'legacy_summary',
       importWins: wins,
       importLosses: losses,
@@ -143,7 +148,8 @@ export async function upsertSleeperRankingImportLeague(
       sport: sportLabel,
       scoring: getScoringType(leagueData),
       isDynasty: leagueData.settings?.type === 2,
-      status: 'ranking_only',
+      status: providerStatus,
+      playoffTeams,
       leagueVariant: 'legacy_summary',
       importWins: wins,
       importLosses: losses,
@@ -156,6 +162,8 @@ export async function upsertSleeperRankingImportLeague(
       settings: { ...baseSettings, ...rankMeta },
     },
   })
+
+  await importSleeperSurvival({ userId, platformLeagueId, season }, leagueData, rosters, sleeperUserId)
 
   return { leagueId: league.id }
 }

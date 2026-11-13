@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,11 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Plan gate before the model call: `pro_start_sit` — the key the League Settings panel already shows
+  // its upgrade prompt for (LEAGUE_SETTINGS_AI_PANEL_FEATURE).
+  const gate = await requireFeatureEntitlement({ userId: session.user.id, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'pro_start_sit' })
+  if (!gate.ok) return gate.response
 
   let body: {
     targetDisplayName?: string

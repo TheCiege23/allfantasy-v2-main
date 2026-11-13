@@ -190,7 +190,7 @@ export function ZombieCommissionerModal({
                 className={clsx(
                   'flex w-full items-center gap-2 px-4 py-2 text-[12px] text-left transition-colors',
                   tab === t.id
-                    ? 'bg-[var(--zombie-crimson)]/10 text-[var(--zombie-crimson)] font-semibold'
+                    ? 'bg-zombie-crimson/10 text-[var(--zombie-crimson)] font-semibold'
                     : 'text-[var(--zombie-text-dim)] hover:bg-white/[0.03] hover:text-[var(--zombie-text-mid)]',
                 )}
               >
@@ -210,7 +210,7 @@ export function ZombieCommissionerModal({
                 className={clsx(
                   'flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] whitespace-nowrap transition',
                   tab === t.id
-                    ? 'bg-[var(--zombie-crimson)]/15 text-[var(--zombie-crimson)] font-semibold'
+                    ? 'bg-zombie-crimson/15 text-[var(--zombie-crimson)] font-semibold'
                     : 'text-[var(--zombie-text-dim)]',
                 )}
               >

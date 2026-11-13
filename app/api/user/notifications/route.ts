@@ -154,9 +154,9 @@ export async function PUT(req: Request) {
   try {
     // This write needs a verified row read, not a display loader's empty fallback.
     const current = await prisma.userProfile.findUnique({ where: { userId: session.user.id }, select: { notificationPreferences: true } })
-    const previous = z.record(z.unknown()).safeParse(current?.notificationPreferences ?? {})
+    const previous = z.record(z.string(), z.unknown()).safeParse(current?.notificationPreferences ?? {})
     if (!previous.success) return NextResponse.json({ error: 'Could not verify saved preferences. Reload before retrying.' }, { status: 503 })
-    const oldToggles = z.record(z.boolean()).safeParse(previous.data.dashboardToggles ?? {})
+    const oldToggles = z.record(z.string(), z.boolean()).safeParse(previous.data.dashboardToggles ?? {})
     if (!oldToggles.success) return NextResponse.json({ error: 'Could not verify saved preferences. Reload before retrying.' }, { status: 503 })
     const nextToggles = { ...DEFAULT_DASHBOARD_TOGGLES, ...oldToggles.data, ...parsed.data.dashboardToggles }
     const merged = { ...previous.data, dashboardToggles: nextToggles } as Prisma.InputJsonObject

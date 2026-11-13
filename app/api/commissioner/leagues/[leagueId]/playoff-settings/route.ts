@@ -17,6 +17,7 @@ import {
 } from '@/lib/playoff-settings'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 const featureGate = new FeatureGateService()
 
@@ -35,7 +36,7 @@ export async function GET(
     select: { userId: true, sport: true, leagueVariant: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const config = await getPlayoffConfig(leagueId)
   const stages = getPlayoffStagesBySport(league.sport)
@@ -68,7 +69,7 @@ export async function PUT(
     select: { userId: true, sport: true, leagueVariant: true, platform: true, playoffStartWeek: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const locked = await settingsLockedResponse(leagueId, 'playoffs')
 

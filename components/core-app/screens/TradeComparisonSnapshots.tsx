@@ -208,7 +208,7 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
   return (
     <section className="af-tc-snapshots" aria-label={copy("Saved trade comparisons")}>
       <div className="af-tc-snapshots-head">
-        <div><h3>{copy("Trade comparisons")}</h3><p>{copy(account ? 'Saved to your account across devices.' : 'Saved on this device.')}{copy(" Values are snapshots, not live offers.")}</p></div>
+        <div><h3>{copy("Trade comparisons")}</h3><p>{copy(account ? 'Saved to your account across devices.' : 'Saved on this device.')}{copy(" Values are from when you saved it.")}</p></div>
         <button type="button" className="af-btn af-btn-ghost" onClick={() => void save()} disabled={!snapshot || busy || !historyAvailable}>{copy("Save this comparison")}</button>
       </div>
       {notice ? <p role="status">{copy(notice)}</p> : null}
@@ -224,7 +224,7 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
             <div key={`${side}-${index}`}><span>{copy(side)}</span><strong>{copy(card.grades[index])}</strong><small>{copy("Sends ")}{copy(card.assets[index].map(asset=>copy(asset)).join(', '))}</small></div>
           ))}</div>
           <p>{copy("Value verdict: ")}{copy(card.verdict)}</p>
-          <small>{copy("As of ")}{copy(safeDate(card.at,locale))}{copy(" · ")}{copy(card.uncertainty)}{copy(". Fairness does not predict acceptance or future performance.")}</small>
+          <small>{copy("As of ")}{copy(safeDate(card.at,locale))}{copy(" · ")}{copy(card.uncertainty)}{copy(". A fair grade doesn’t mean they’ll accept or that it will work out.")}</small>
           <button type="button" className="af-btn af-btn-ghost" onClick={() => {
             try { setNotice(downloadCard(card,language) ? 'Share card downloaded as PNG.' : 'The share card could not be created in this browser.') }
             catch { setNotice('The share card could not be created in this browser.') }
@@ -233,11 +233,11 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
       ) : null}
       {selected && card && snapshot && card.id !== snapshot.id ? (
         card.sport === snapshot.sport ? <details className="af-tc-variant-comparison">
-          <summary>{copy('Compare saved and current variants')}</summary>
-          <p>{copy('Compare the assets and value basis before comparing grades. These are separate snapshots, not an acceptance forecast.')}</p>
+          <summary>{copy('Compare saved and current versions')}</summary>
+          <p>{copy('Check that the players and value settings match before comparing grades. Neither one predicts whether they’ll accept.')}</p>
           <div className="af-tc-variant-grid">
-            {[card, snapshot].map((variant, index) => <section key={index} aria-label={copy(index === 0 ? 'Saved variant' : 'Current variant')}>
-              <h4>{copy(index === 0 ? 'Saved variant' : 'Current variant')}</h4>
+            {[card, snapshot].map((variant, index) => <section key={index} aria-label={copy(index === 0 ? 'Saved version' : 'Current version')}>
+              <h4>{copy(index === 0 ? 'Saved version' : 'Current version')}</h4>
               <p>{variant.sport}{copy(' · ')}{copy(variant.basis)}</p>
               {variant.sides.map((side, sideIndex) => <div key={sideIndex}>
                 <strong>{copy(side)}{copy(' · ')}{variant.grades[sideIndex]}</strong>
@@ -247,7 +247,7 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
               <small>{copy(variant.uncertainty)}</small>
             </section>)}
           </div>
-        </details> : <p role="status">{copy('Choose a saved comparison for the current sport before comparing variants.')}</p>
+        </details> : <p role="status">{copy('Pick a saved comparison for this sport first.')}</p>
       ) : null}
       {visible.length ? (
         <details className="af-tc-saved-list"><summary>{copy("Saved comparisons (")}{copy(visible.length)}{copy(")")}</summary>

@@ -8,6 +8,8 @@ import { getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFiel
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
 import { classifyRiSeasonType, type RiSeasonType } from '@/lib/sports-data/riSeasonType'
 import { easternCalendarDay, gameDayFromRiGameId } from '@/lib/sports-data/easternGameDay'
+import { certifyFinalRiBox } from './gameBoxCoverage'
+import { dailyBoxCoverage, invalidateGameStatCoverage, writeStatCoverage } from './statCoverage'
 import { carryOfficialNhlGameWinningGoals } from '@/lib/nhl-scoring/officialGameWinningGoals'
 import { carryOfficialNhlGoalieStats } from '@/lib/nhl-scoring/officialGoalieGameStats'
 
@@ -611,6 +613,30 @@ export async function writeRiGameRows(opts: {
       gameDate: box.gameDay,
       fetchedAt: now,
     })
+
+    if (sport === 'NBA' && box.seasonType === 'regular') {
+      const proof = certifyFinalRiBox(sport, rawGame, box, identityByRiId)
+      try {
+        await prisma.$transaction(async tx => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${sport + ":" + box.providerGameId}, 0))`
+          if (!proof) await invalidateGameStatCoverage(tx, sport, box.providerGameId)
+          for (const { line, playerId, gameId } of prepared) {
+            const data = dataFor(line, normalizedStatMapFor(line, box))
+            await tx.playerGameStat.upsert({
+              where: { playerId_sportType_gameId: { playerId, sportType: sport, gameId } },
+              update: data, create: { playerId, sportType: sport, gameId, ...data },
+            })
+          }
+          if (proof && prepared.length === box.lines.length) await writeStatCoverage(tx, dailyBoxCoverage(proof))
+        }, { timeout: 30_000 })
+        result.written += prepared.length
+      } catch (e) {
+        if (result.errors.length < 10) result.errors.push(
+          'NBA game ' + box.providerGameId + ': ' + (e instanceof Error ? e.message : String(e)),
+        )
+      }
+      continue
+    }
 
     if (sport === 'NHL') {
       if (!prepared.length) continue

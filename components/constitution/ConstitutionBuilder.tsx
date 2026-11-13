@@ -11,7 +11,9 @@ import {
   HOUSE_RULES_MAX,
   SECTION_BODY_MAX,
   SECTION_TITLE_MAX,
+  DECLINE_REASON_MAX,
   describeChange,
+  describeChangePreview,
   type Amendment,
   type ConstitutionAnswers,
   type ConstitutionSection,
@@ -36,6 +38,8 @@ const BLANK: ConstitutionSection[] = [
 ]
 
 const STATUS_LABEL: Record<Amendment['status'], [string, string]> = {
+  pending_approval: ['Waiting for the commissioner', 'Esperando al comisionado'],
+  declined: ['Declined by the commissioner', 'Rechazada por el comisionado'],
   voting: ['Voting', 'En votación'],
   passed: ['Passed', 'Aprobada'],
   failed: ['Failed', 'Rechazada'],
@@ -181,44 +185,55 @@ export function ConstitutionBuilder({ leagueId }: { leagueId: string }) {
         {view.amendments.length === 0 && <p className="mt-2 text-white/50">{t('No amendments yet.', 'Todavía no hay enmiendas.')}</p>}
         <ul className="mt-3 space-y-3">
           {view.amendments.map((a) => (
-            <li key={a.id} className="rounded-xl border border-white/10 p-3">
-              <p className="font-medium">{a.title}</p>
-              {a.change && <p className="text-xs text-white/60">{describeChange(a.change)} · {a.effective === 'now' ? t('takes effect now', 'aplica ahora') : t('takes effect next season', 'aplica la próxima temporada')}</p>}
-              {a.text && <p className="mt-1 whitespace-pre-line text-white/80">{a.text}</p>}
-              <p className="mt-1 text-xs text-white/50">
-                {t(...STATUS_LABEL[a.status])}
-                {a.yes != null ? ` · ${a.yes} ${t('yes', 'sí')} / ${a.no} ${t('no', 'no')}` : ''}
-                {a.status === 'voting' ? ` · ${t('closes', 'cierra')} ${new Date(a.closesAt).toLocaleString(es ? 'es' : 'en')}` : ''}
-                {a.applyError ? ` · ${a.applyError}` : ''}
-              </p>
-              {view.isCommissioner && (a.status === 'passed' || a.status === 'apply_failed') && a.change && (
-                <button type="button" className="af-btn mt-2" disabled={busy} onClick={async () => { if (await post({ action: 'apply', id: a.id })) { setMessage(t('Applied.', 'Aplicada.')); await load() } }}>
-                  {t('Apply now', 'Aplicar ahora')}
-                </button>
-              )}
-              {view.isCommissioner && a.status === 'voting' && (
-                <button type="button" className="mt-2 text-xs text-white/60 underline" disabled={busy} onClick={async () => { if (await post({ action: 'withdraw', id: a.id })) await load() }}>
-                  {t('Withdraw', 'Retirar')}
-                </button>
-              )}
-            </li>
+            <AmendmentRow
+              key={a.id}
+              a={a}
+              t={t}
+              es={es}
+              busy={busy}
+              isCommissioner={view.isCommissioner}
+              isMine={a.proposedBy === view.viewerUserId}
+              onAction={async (payload, done) => {
+                if (await post({ ...payload, id: a.id })) {
+                  setMessage(done)
+                  await load()
+                }
+              }}
+            />
           ))}
         </ul>
-        {view.isCommissioner && (
-          <ProposeForm
-            t={t}
-            busy={busy}
-            onSubmit={async (p) => {
-              const r = await post({ action: 'propose', ...p })
-              if (r) {
-                setMessage(t('Amendment proposed. The vote is open in league chat.', 'Enmienda propuesta. La votación está abierta en el chat.'))
-                await load()
-              }
-              return Boolean(r)
-            }}
-          />
-        )}
+        <ProposeForm
+          t={t}
+          busy={busy}
+          isCommissioner={view.isCommissioner}
+          onSubmit={async (p) => {
+            const r = await post({ action: 'propose', ...p })
+            if (r) {
+              setMessage(
+                view.isCommissioner
+                  ? t('Amendment proposed. The vote is open in league chat.', 'Enmienda propuesta. La votación está abierta en el chat.')
+                  : t('Sent to your commissioner. If they approve it, the league votes in league chat.', 'Enviada a tu comisionado. Si la aprueba, la liga vota en el chat.'),
+              )
+              await load()
+            }
+            return Boolean(r)
+          }}
+        />
       </section>
+
+      {view.log.length > 0 && (
+        <section data-testid="rule-log">
+          <h2 className="text-base font-semibold">{t('Rule change log', 'Registro de cambios de reglas')}</h2>
+          <p className="mt-1 text-xs text-white/50">{t('Every change this league has made to its rules, newest first. It is never edited.', 'Cada cambio que esta liga hizo a sus reglas, del más reciente al más antiguo. Nunca se edita.')}</p>
+          <ol className="mt-2 space-y-1 text-white/70">
+            {view.log.map((e, i) => (
+              <li key={`${e.at}-${i}`}>
+                <span className="text-white/45">{new Date(e.at).toLocaleDateString(es ? 'es' : 'en')}</span> · {e.text}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {view.history.length > 1 && (
         <section>
@@ -299,14 +314,104 @@ function Editor({ t, busy, sections, onCancel, onPublish }: { t: Copy; busy: boo
   )
 }
 
-function ProposeForm({ t, busy, onSubmit }: { t: Copy; busy: boolean; onSubmit: (p: Record<string, unknown>) => Promise<boolean> }) {
+export function AmendmentRow({
+  a,
+  t,
+  es,
+  busy,
+  isCommissioner,
+  isMine,
+  onAction,
+}: {
+  a: Amendment
+  t: Copy
+  es: boolean
+  busy: boolean
+  isCommissioner: boolean
+  isMine: boolean
+  onAction: (payload: Record<string, unknown>, done: string) => Promise<void>
+}) {
+  const [declining, setDeclining] = useState(false)
+  const [reason, setReason] = useState('')
+  const when =
+    a.effective === 'now'
+      ? t('Takes effect when it passes', 'Aplica al aprobarse')
+      : typeof a.effectiveSeason === 'number'
+        ? t(`Takes effect in the ${a.effectiveSeason} season`, `Aplica en la temporada ${a.effectiveSeason}`)
+        : t('Takes effect next season', 'Aplica la próxima temporada')
+  return (
+    <li className="rounded-xl border border-white/10 p-3" data-status={a.status}>
+      <p className="font-medium">{a.title}</p>
+      {a.change && (
+        <p className="text-xs text-white/60">
+          {a.previousValue !== undefined ? describeChangePreview(a.change, a.previousValue) : describeChange(a.change)} · {when}
+        </p>
+      )}
+      {!a.change && <p className="text-xs text-white/60">{t('Rule text only — no setting changes', 'Solo texto — no cambia la configuración')} · {when}</p>}
+      {a.text && <p className="mt-1 whitespace-pre-line text-white/80">{a.text}</p>}
+      <p className="mt-1 text-xs text-white/50">
+        {t(...STATUS_LABEL[a.status])}
+        {a.proposedByRole === 'member' ? ` · ${t('proposed by a member', 'propuesta por un miembro')}` : ''}
+        {a.yes != null ? ` · ${a.yes} ${t('yes', 'sí')} / ${a.no} ${t('no', 'no')}` : ''}
+        {a.status === 'voting' ? ` · ${t('closes', 'cierra')} ${new Date(a.closesAt).toLocaleString(es ? 'es' : 'en')}` : ''}
+        {a.applyError ? ` · ${a.applyError}` : ''}
+        {a.status === 'declined' && a.declineReason ? ` · ${a.declineReason}` : ''}
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {isCommissioner && a.status === 'pending_approval' && !declining && (
+          <>
+            <button type="button" className="af-btn" disabled={busy} onClick={() => void onAction({ action: 'approve' }, t('Approved. The vote is open in league chat.', 'Aprobada. La votación está abierta en el chat.'))}>
+              {t('Approve and open the vote', 'Aprobar y abrir la votación')}
+            </button>
+            <button type="button" className="af-btn" disabled={busy} onClick={() => setDeclining(true)}>
+              {t('Decline', 'Rechazar')}
+            </button>
+          </>
+        )}
+        {isCommissioner && (a.status === 'passed' || a.status === 'apply_failed') && a.change && (
+          <button type="button" className="af-btn" disabled={busy} onClick={() => void onAction({ action: 'apply' }, t('Applied.', 'Aplicada.'))}>
+            {t('Apply now', 'Aplicar ahora')}
+          </button>
+        )}
+        {((isCommissioner && a.status === 'voting') || (isMine && a.status === 'pending_approval' && !declining)) && (
+          <button type="button" className="text-xs text-white/60 underline" disabled={busy} onClick={() => void onAction({ action: 'withdraw' }, t('Withdrawn.', 'Retirada.'))}>
+            {t('Withdraw', 'Retirar')}
+          </button>
+        )}
+      </div>
+      {declining && (
+        <form
+          className="mt-2 space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void onAction({ action: 'decline', reason }, t('Declined. The member was told why.', 'Rechazada. Se le explicó el motivo al miembro.'))
+          }}
+        >
+          <input
+            className="w-full rounded-lg bg-black/30 p-2"
+            maxLength={DECLINE_REASON_MAX}
+            placeholder={t('Why (the member sees this)', 'Por qué (el miembro lo verá)')}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button type="submit" className="af-btn" disabled={busy}>{t('Decline', 'Rechazar')}</button>
+            <button type="button" className="af-btn" onClick={() => setDeclining(false)}>{t('Cancel', 'Cancelar')}</button>
+          </div>
+        </form>
+      )}
+    </li>
+  )
+}
+
+function ProposeForm({ t, busy, isCommissioner, onSubmit }: { t: Copy; busy: boolean; isCommissioner: boolean; onSubmit: (p: Record<string, unknown>) => Promise<boolean> }) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [text, setText] = useState('')
   const [key, setKey] = useState('')
   const [value, setValue] = useState('')
   const [effective, setEffective] = useState<'next_season' | 'now'>('next_season')
-  if (!open) return <button type="button" className="af-btn mt-3" onClick={() => setOpen(true)}>{t('Propose an amendment', 'Proponer una enmienda')}</button>
+  if (!open) return <button type="button" className="af-btn mt-3" onClick={() => setOpen(true)}>{isCommissioner ? t('Propose an amendment', 'Proponer una enmienda') : t('Propose a rule change', 'Proponer un cambio de reglas')}</button>
   const spec = key ? AMENDABLE[key] : null
   const change = spec ? { key, value: spec.kind === 'bool' ? value === 'true' : Number(value) } : null
   return (
@@ -344,7 +449,7 @@ function ProposeForm({ t, busy, onSubmit }: { t: Copy; busy: boolean; onSubmit: 
         </select>
       </div>
       <div className="flex gap-2">
-        <button type="submit" className="af-btn" disabled={busy || !title.trim()}>{t('Open the vote', 'Abrir la votación')}</button>
+        <button type="submit" className="af-btn" disabled={busy || !title.trim()}>{isCommissioner ? t('Open the vote', 'Abrir la votación') : t('Send to the commissioner', 'Enviar al comisionado')}</button>
         <button type="button" className="af-btn" onClick={() => setOpen(false)}>{t('Cancel', 'Cancelar')}</button>
       </div>
     </form>

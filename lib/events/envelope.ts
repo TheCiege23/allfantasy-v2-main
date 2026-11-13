@@ -50,7 +50,7 @@ export const domainEventEnvelopeSchema = z.object({
   actor: eventActorSchema,
   period: eventPeriodSchema,
   subjects: z.array(eventSubjectSchema),
-  payload: z.record(z.unknown()),
+  payload: z.record(z.string(), z.unknown()),
   metadata: eventMetadataSchema,
   idempotencyKey: z.string().min(1),
 })

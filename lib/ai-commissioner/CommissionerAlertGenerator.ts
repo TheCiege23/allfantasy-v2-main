@@ -13,13 +13,16 @@ export function generateCommissionerAlerts(
   const alerts: GovernanceSignal[] = []
 
   if (config.remindersEnabled) {
-    alerts.push({
-      alertType: 'LINEUP_REMINDER',
-      severity: 'medium',
-      headline: 'Lineup lock reminders are active',
-      summary: `Send lineup reminders roughly ${analysis.scheduleContext.lockReminderHours} hours before lock for ${analysis.sport}.`,
-      relatedManagerIds: [],
-    })
+    // A best ball league sets every lineup itself: there is nothing to remind a manager to set.
+    if (!analysis.bestBall) {
+      alerts.push({
+        alertType: 'LINEUP_REMINDER',
+        severity: 'medium',
+        headline: 'Lineup lock reminders are active',
+        summary: `Send lineup reminders roughly ${analysis.scheduleContext.lockReminderHours} hours before lock for ${analysis.sport}.`,
+        relatedManagerIds: [],
+      })
+    }
     if (
       analysis.scheduleContext.periodsUntilPlayoffs != null &&
       analysis.scheduleContext.periodsUntilPlayoffs <= 2

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 const schema = z.object({ leagueId: z.string().min(1).max(64), action: z.enum(['preview', 'approve', 'configure', 'propose', 'second', 'vote', 'finalize', 'contact', 'respond', 'replace', 'acceptance']),
   reviewId: z.string().max(180).optional(), hash: z.string().regex(/^[a-f0-9]{64}$/).optional(), reason: z.string().max(2000).optional(),
   funding: z.object({ externalWeeklyIncludedInLedger: z.boolean().optional(), ultimateOpeningCents: z.number().int().min(0).max(100_000_000).optional(), ultimateContributionsConfirmed: z.boolean().optional(), ultimateReference: z.string().max(160).optional(), previousAllocationReference: z.string().max(160).optional() }).strict().optional(),
-  input: z.record(z.unknown()).optional() }).strict()
+  input: z.record(z.string(), z.unknown()).optional() }).strict()
 async function actor() { return ((await getServerSession(authOptions as never)) as { user?: { id?: string } } | null)?.user?.id }
 export async function GET(req: Request) {
   const userId = await actor(); if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

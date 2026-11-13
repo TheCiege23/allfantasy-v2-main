@@ -361,10 +361,11 @@ caught them.
     dead: nothing imported it, its own header declared its path as
     `weather/route.js`, and that path now holds a `route.ts` using
     `lib/weather/weatherService`. Next.js does not route a `X.route.js` sitting
-    beside the directory. Five identical strays remain in `app/api/start-sit/`
-    (`chimmy`, `injuries`, `leagues`, `matchups`, `roster`), each superseded by
-    a live directory route; they trip no guard and were left for a deliberate
-    dead-code pass.
+    beside the directory. The five identical strays beside it (`chimmy`,
+    `injuries`, `leagues`, `matchups`, `roster`) went the same day, and on
+    2026-09-30 the directory routes they shadowed went too, with their only
+    caller, `StartSitPopup`. `app/api/start-sit/` no longer exists — checked
+    against `origin/main` 2026-11-13, so there is nothing left to sweep.
   - `lib/weather/weatherService.ts` (geocode) — **resolved.** A geocode is
     immutable, so it is now a durable `sportsDataCache` entry with the vendor
     call isolated in `lib/weather/openWeatherGeocode.ts` (allowlisted).

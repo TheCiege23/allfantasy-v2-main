@@ -4,6 +4,7 @@ import { buildEspnMemberDirectory, resolveEspnOwners, resolveEspnCommissionerTea
   resolveEspnViewerTeamId, parseEspnSettings, parseEspnScheduleForTest,
   EspnImportConnectionError, EspnImportLeagueNotFoundError, type EspnFetchOptions } from './EspnLeagueFetchService'
 import { parseEspnMlbSource } from './EspnMlbSource'
+import { EspnApiResponseError, assertEspnLeagueObject, buildEspnCookieHeader, fetchEspnLeagueJson } from './espnFantasyClient'
 
 // Evidence: contracts/espn/ENDPOINTS.yaml and fantasy-league.MLB.2026 fixture.
 export const ESPN_MLB_SLOTS: Record<number, string> = {
@@ -66,16 +67,24 @@ export function parseEspnMlbPayload(raw: any, sourceInput: string, swid: string 
 export async function fetchEspnMlbLeagueForImport(userId: string, input: string, _options: EspnFetchOptions = {}): Promise<EspnImportPayload> {
   const { leagueId, season } = parseEspnMlbSource(input)
   const auth = await getDecryptedAuth(userId, 'espn')
-  const headers: Record<string, string> = { Accept:'application/json' }
-  if (auth?.espnSwid && auth.espnS2) headers.Cookie = `SWID=${auth.espnSwid}; espn_s2=${auth.espnS2}`
+  const cookieHeader = buildEspnCookieHeader({ swid: auth?.espnSwid ?? null, espnS2: auth?.espnS2 ?? null })
   // Exactly the captured view combination; no unverified activity/history fan-out.
-  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/${season}/segments/0/leagues/${leagueId}?view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mDraftDetail` // db-first-exception: authorized league import ingestion; persists source data before runtime reads
-  const response = await fetch(url, { headers, cache:'no-store', signal:AbortSignal.timeout(12000) })
-  if (response.status === 401 || response.status === 403)
-    throw new EspnImportConnectionError('Connect or reconnect ESPN in Settings > Connected Accounts using a desktop browser to import this private baseball league.')
-  if (response.status === 404) throw new EspnImportLeagueNotFoundError(`ESPN MLB league was not found for ${season}.`)
-  if (!response.ok) throw new Error(`ESPN MLB request failed (${response.status}).`)
-  const payload=parseEspnMlbPayload(await response.json(), input, auth?.espnSwid ?? null)
+  let raw: unknown
+  try {
+    raw = await fetchEspnLeagueJson(
+      { game: 'flb', season, leagueId, views: ['mTeam', 'mRoster', 'mSettings', 'mMatchup', 'mDraftDetail'] },
+      { cookieHeader, userAgent: null },
+    )
+    assertEspnLeagueObject(raw)
+  } catch (error) {
+    if (error instanceof EspnApiResponseError) {
+      if (error.status === 401 || error.status === 403)
+        throw new EspnImportConnectionError('Connect or reconnect ESPN in Settings > Connected Accounts using a desktop browser to import this private baseball league.')
+      if (error.status === 404) throw new EspnImportLeagueNotFoundError(`ESPN MLB league was not found for ${season}.`)
+    }
+    throw error
+  }
+  const payload=parseEspnMlbPayload(raw, input, auth?.espnSwid ?? null)
   payload.previousSeasons = _options.includePreviousSeasons === false ? [] : payload.previousSeasons.filter(p=>Number(p.season)>=(_options.minSeason ?? 2010)).sort((a,b)=>Number(b.season)-Number(a.season)).slice(0,_options.maxPreviousSeasons ?? 6)
   return payload
 }

@@ -16,6 +16,12 @@ const h = vi.hoisted(() => ({
   shares: new Map<string, Map<string, number>>(),
   /** Live starter sums by `${shareKey}|${rosterId}`; absent means the matchup row's points stand. */
   livePoints: new Map<string, number>(),
+  /** Roster ids `getLeagueEliminations` reports as out; null for a league that eliminates nobody. */
+  eliminated: null as string[] | null,
+}))
+
+vi.mock('@/lib/core-app/scout', () => ({
+  getLeagueEliminations: vi.fn(async () => (h.eliminated ? { eliminated: h.eliminated } : null)),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -115,6 +121,7 @@ beforeEach(() => {
   h.finishedWeeks.clear()
   h.shares = new Map()
   h.livePoints = new Map()
+  h.eliminated = null
   h.upsert.mockImplementation(async (args: { create: { cacheKey: string; data: unknown } }) => {
     h.cache.set(args.create.cacheKey, args.create.data)
     return {}
@@ -338,10 +345,78 @@ describe('getSeasonOutlook', () => {
     expect(out.leagues[0].you).toMatchObject({ wins: 1, losses: 0, ties: 1 })
   })
 
-  it('withholds a league with too few modelled teams, and says why', async () => {
+  it('shows a league with no scored week yet at equal ratings, and says so — never withholds it', async () => {
     h.matchups = h.matchups.filter((r) => (r.week as number) > 3)
     const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.withheld).toEqual([])
+    expect(out.leagues).toHaveLength(1)
+    const league = out.leagues[0]!
+    // Rated from a prior, so no team is "modelled" and no milestone or clinch claim is made.
+    expect(league.teams.every((t) => !t.modelled && t.status == null)).toBe(true)
+    expect(league.milestones).toBeNull()
+    expect(league.assumptions.missing.join(' ')).toMatch(/every team is rated equally/)
+    // 4 of 8 make it; equal teams sit near half.
+    expect(league.you!.playoffPct).toBeGreaterThan(25)
+    expect(league.you!.playoffPct).toBeLessThan(75)
+  })
+
+  it('rates an early-season team from the league average blended with its own weeks', async () => {
+    h.matchups = h.matchups.filter((r) => (r.week as number) !== 2 && (r.week as number) !== 3)
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.leagues).toHaveLength(1)
+    expect(out.leagues[0]!.assumptions.missing.join(' ')).toMatch(/rated at the league average/)
+    expect(out.leagues[0]!.assumptions.modelledTeams).toBe(0)
+  })
+
+  it('reports a league that has not drafted as a not-started row, in its own terms', async () => {
+    h.matchups = []
+    h.leagueMetadata = { status: 'pre_draft' }
+    const out = await getSeasonOutlook('me', [LEAGUE])
     expect(out.leagues).toEqual([])
-    expect(out.withheld[0].reason).toMatch(/three or more completed weeks/)
+    expect(out.withheld).toEqual([
+      expect.objectContaining({ leagueId: 'L1', kind: 'not-started', reason: expect.stringMatching(/^Pre-draft/) }),
+    ])
+  })
+
+  it('reports a guillotine league as an elimination row with your survival status', async () => {
+    h.leagueMetadata = { leagueType: 'guillotine', status: 'in_season' }
+    h.eliminated = ['5']
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.leagues).toEqual([])
+    expect(out.withheld).toEqual([
+      expect.objectContaining({
+        leagueId: 'L1',
+        kind: 'elimination',
+        format: 'guillotine',
+        survival: { status: 'eliminated', remaining: 7, field: 8 },
+        reason: 'Guillotine — you have been eliminated (7 of 8 teams left).',
+      }),
+    ])
+  })
+
+  it('treats every copy of one provider league as the guillotine league one copy says it is', async () => {
+    h.leagueMetadata = { leagueType: 'guillotine', status: 'in_season' }
+    h.eliminated = ['5']
+    // A second importer's copy of the same Sleeper league, typed `redraft` — Scout answers nothing for it.
+    const copy = { ...LEAGUE, id: 'L2', leagueType: 'redraft' }
+    const { getLeagueEliminations } = await import('@/lib/core-app/scout')
+    vi.mocked(getLeagueEliminations).mockImplementation(async (id: string) => (id === 'L1' ? { eliminated: ['5'] } : null))
+    const out = await getSeasonOutlook('me', [copy, LEAGUE]).finally(() =>
+      vi.mocked(getLeagueEliminations).mockImplementation(async () => (h.eliminated ? { eliminated: h.eliminated } : null)),
+    )
+    expect(out.leagues).toEqual([])
+    expect(out.withheld.map((w) => [w.leagueId, w.kind, w.survival?.status])).toEqual([
+      ['L2', 'elimination', 'eliminated'],
+      ['L1', 'elimination', 'eliminated'],
+    ])
+  })
+
+  it('says you are alive in a guillotine league you have not been chopped from', async () => {
+    h.leagueMetadata = { leagueType: 'guillotine', status: 'in_season' }
+    h.eliminated = ['1', '2']
+    const out = await getSeasonOutlook('me', [LEAGUE])
+    expect(out.withheld[0]).toEqual(
+      expect.objectContaining({ survival: { status: 'alive', remaining: 6, field: 8 }, reason: 'Guillotine — you are still alive, 6 of 8 teams left.' }),
+    )
   })
 })

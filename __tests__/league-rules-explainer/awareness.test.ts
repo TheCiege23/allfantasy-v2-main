@@ -127,6 +127,20 @@ describe('the reads', () => {
     const text = await buildRuleChangesContextForChimmy('L1', 'b', NOW)
     expect(text).toContain('(this manager has not seen this change yet): Trade deadline')
   })
+
+  it('a tiebreak-order change in a two-week Guilly league reads "last period", in a one-week one "last week"', async () => {
+    const tiebreak = ev('e3', '2026-10-19T12:00:00.000Z', [
+      { key: 'tiebreakers', before: ['random', 'previous_period'], after: ['previous_period', 'random'] },
+    ])
+    m.events = [row(tiebreak)]
+    const guilly = { userId: 'boss', platform: 'allfantasy', sport: 'MLB', leagueType: 'redraft', leagueVariant: 'guillotine', guillotineMode: true }
+    m.league = { ...guilly, settings: { guillotine_period_weeks: 2 } }
+    const twoWeek = await buildRuleChangesContextForChimmy('L1', 'b', NOW)
+    expect(twoWeek).toContain('lower score last period is chopped')
+    expect(twoWeek).not.toContain('last week')
+    m.league = { ...guilly, settings: {} }
+    expect(await buildRuleChangesContextForChimmy('L1', 'b', NOW)).toContain('lower score last week is chopped')
+  })
 })
 
 describe('the taxi deadline’s change card', () => {

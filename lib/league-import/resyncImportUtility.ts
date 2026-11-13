@@ -8,6 +8,7 @@ import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/Impo
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { OUTSIDER_RESYNC_ERROR, resolveLeagueCopyTarget } from '@/lib/league-import/existingLeagueCopy'
 
 /**
  * Honest, sanitized outcome of the durable read-model refresh — no provider payload,
@@ -34,7 +35,7 @@ export async function resyncImportedLeague(input: {
       /** Honest, sanitized outcome of the durable read-model refresh; null when unavailable. */
       refresh: SleeperResyncRefresh
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; httpStatus?: 403 }
 > {
   const result = await runImportedLeagueNormalizationPipeline({
     provider: input.provider,
@@ -49,8 +50,23 @@ export async function resyncImportedLeague(input: {
 
   const canonical = buildCanonicalImportBundle(result.normalized)
   try {
-    const { persisted, runId } = await persistImportWithCanonicalAudit({
+    /*
+     * Whose row this writes (lib/league-import/existingLeagueCopy.ts). The caller's own, or — for a
+     * member of a league someone else imported, including a system-owned public ESPN league — THAT
+     * league's row. Never a fresh copy owned by the member, and nothing at all for an outsider:
+     * checked BEFORE the persist, because the persist writes whichever owner it is handed.
+     */
+    const season = result.normalized.league?.season
+    const target = await resolveLeagueCopyTarget({
       userId: input.userId,
+      platform: input.provider,
+      platformLeagueId: String(result.normalized.source.source_league_id),
+      season: typeof season === 'number' ? season : null,
+    })
+    if (target.kind === 'outsider') return { ok: false, error: OUTSIDER_RESYNC_ERROR, httpStatus: 403 }
+    const ownerUserId = target.kind === 'member' ? target.ownerUserId : input.userId
+    const { persisted, runId } = await persistImportWithCanonicalAudit({
+      userId: ownerUserId,
       provider: input.provider,
       normalized: result.normalized,
       canonical,

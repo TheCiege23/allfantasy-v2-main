@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
-import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight, Landmark, CarTaxiFront, Ticket, CalendarDays, Skull, Radio, BookOpen } from 'lucide-react'
+import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight, Landmark, CarTaxiFront, Ticket, CalendarDays, Skull, Radio, BookOpen, Eye, Crown, ShieldCheck, Vote, Scale, Shuffle, History, Wallet, Gauge, FileText, Hammer, Gavel, ScrollText, GraduationCap } from 'lucide-react'
 import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -75,7 +75,7 @@ type Props = AppShellProps & {
    */
   seasonClock?: DynastySeasonClock | null
 }
-const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, dynasty: Landmark, taxi: CarTaxiFront, picks: Ticket, more: CircleHelp, zombie: Skull, schedule: CalendarDays, intel: Radio, legacy: BookOpen }
+const icons = { career: Star, rankings: Award, home: Home, team: List, matchup: Swords, players: Users, trades: ArrowLeftRight, draft: LayoutDashboard, standings: Trophy, chat: MessageSquare, settings: Settings, survivor: Shield, guillotine: Axe, war: Swords, scores: Zap, insight: Bot, dynasty: Landmark, taxi: CarTaxiFront, picks: Ticket, more: CircleHelp, zombie: Skull, schedule: CalendarDays, intel: Radio, legacy: BookOpen, bbHouse: Eye, bbHoh: Crown, bbVeto: ShieldCheck, bbVoting: Vote, bbJury: Scale, bbTwists: Shuffle, bbHistory: History, capHome: Wallet, capSpace: Gauge, capContracts: FileText, capBuilder: Hammer, capAuction: Gavel, capRules: ScrollText, devy: GraduationCap }
 const memoryKey = (id: string) => `af:league-section:${id}`
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase() || 'AF'
 /** Phase values stay English (they are compared below); only the text a reader sees is translated. */

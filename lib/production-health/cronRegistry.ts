@@ -53,6 +53,10 @@ export type CronRegistryEntry = CronMetadata & {
   schedule: string
   routeExists: boolean
   duplicateOf: string | null
+  /** A job that runs INSIDE another cron route (`SUB_JOBS`): the parent's path. Null for a cron itself. */
+  subJobOf: string | null
+  /** What the page calls a sub-job; null for a cron, which is named by its path. */
+  label: string | null
 }
 
 export type CronRegistry = {
@@ -61,6 +65,8 @@ export type CronRegistry = {
   duplicates: Array<{ path: string; schedules: string[] }>
   instrumentedCount: number
   totalDeclared: number
+  /** Rows appended for jobs inside a cron route (`SUB_JOBS`); not counted in `totalDeclared`. */
+  subJobCount: number
 }
 
 /**
@@ -84,7 +90,9 @@ const CRON_METADATA: Record<string, CronMetadata> = {
   "/api/cron/waivers": { jobName: "cron-waivers", category: "waivers", staleAfterH: 2, instrumented: false },
   // Known instrumented importers that run via library calls (not cron routes).
   "/api/redraft/score-sync": { jobName: "cron-redraft-score-sync", category: "scores", staleAfterH: 2, instrumented: true },
-  "/api/redraft/waiver-process": { jobName: "redraft-waiver-process", category: "waivers", staleAfterH: 4, instrumented: false },
+  // The route writes `cron-redraft-waiver-process` (route.ts `JOB`); this said `redraft-waiver-process`
+  // and `instrumented: false`, so the row could never join its own telemetry and always read "never executed".
+  "/api/redraft/waiver-process": { jobName: "cron-redraft-waiver-process", category: "waivers", staleAfterH: 4, instrumented: true },
   "/api/cron/import-nfl-team-defense": { jobName: "cron-nfl-team-defense-import", category: "scores", staleAfterH: 4, instrumented: true },
   // Notification/recap fleet — wrapped in withSyncJobRun (Aug 2026) after all three
   // shipped scheduled-but-404ing for weeks with zero telemetry to catch it.
@@ -130,6 +138,21 @@ function deriveMetadata(pathname: string): CronMetadata {
 }
 
 /**
+ * Jobs that run INSIDE a declared cron route, each under its own `withSyncJobRun` job name. The registry
+ * is otherwise one row per declared cron, so a sub-job that stalls while its parent route keeps firing
+ * was invisible here: the parent's heartbeat stays green. Listed by hand, like `CRON_METADATA`, and only
+ * where a stall needs to be seen on its own. A sub-job whose parent is not declared is not listed.
+ *
+ * The three Lineup Integrity snapshot writers run in the hourly waiver cron; a snapshot that stops being
+ * written leaves weeks unscorable, and the only other place that shows is one league's card.
+ */
+export const SUB_JOBS: ReadonlyArray<{ parentPathname: string; jobName: string; label: string; category: CronCategory; staleAfterH: number }> = [
+  { parentPathname: "/api/redraft/waiver-process", jobName: "cron-lineup-lock-snapshots", label: "Lineup Integrity snapshots: AllFantasy leagues", category: "integrity", staleAfterH: 3 },
+  { parentPathname: "/api/redraft/waiver-process", jobName: "cron-sleeper-lineup-snapshots", label: "Lineup Integrity snapshots: Sleeper leagues", category: "integrity", staleAfterH: 3 },
+  { parentPathname: "/api/redraft/waiver-process", jobName: "cron-espn-lineup-snapshots", label: "Lineup Integrity snapshots: ESPN leagues", category: "integrity", staleAfterH: 3 },
+]
+
+/**
  * Pure builder. `routeExists` is injected so this is testable without fs.
  */
 export function buildCronRegistry(crons: RawCron[], routeExists: (pathname: string) => boolean): CronRegistry {
@@ -156,19 +179,42 @@ export function buildCronRegistry(crons: RawCron[], routeExists: (pathname: stri
       schedule: c.schedule,
       routeExists: routeExists(pathname),
       duplicateOf: isDuplicate ? c.path : null,
+      subJobOf: null,
+      label: null,
     }
+  })
+
+  // One row per sub-job, under the first declaration of its parent. A distinct `path` keeps row keys unique.
+  const subJobs: CronRegistryEntry[] = SUB_JOBS.flatMap((sub) => {
+    const parent = entries.find((e) => e.pathname === sub.parentPathname && e.duplicateOf === null)
+    if (!parent) return []
+    return [{
+      jobName: sub.jobName,
+      category: sub.category,
+      staleAfterH: sub.staleAfterH,
+      instrumented: true,
+      path: `${parent.path}#${sub.jobName}`,
+      pathname: parent.pathname,
+      schedule: parent.schedule,
+      routeExists: parent.routeExists,
+      duplicateOf: null,
+      subJobOf: parent.path,
+      label: sub.label,
+    }]
   })
 
   const duplicates = [...fullPathCounts.entries()]
     .filter(([, schedules]) => schedules.length > 1)
     .map(([path, schedules]) => ({ path, schedules }))
 
+  // Coverage counts DECLARED crons only: a sub-job is not a schedule, and counting it would inflate both.
   return {
-    entries,
+    entries: [...entries, ...subJobs],
     missingRoutes: entries.filter((e) => !e.routeExists),
     duplicates,
     instrumentedCount: entries.filter((e) => e.instrumented && e.routeExists).length,
     totalDeclared: entries.length,
+    subJobCount: subJobs.length,
   }
 }
 

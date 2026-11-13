@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -69,6 +70,8 @@ function emptySnapshot(overrides: Record<string, unknown> = {}) {
   }
 }
 
+const commandCenterRequest = () => new NextRequest('http://localhost/api/decision-os/manager-command-center')
+
 describe('GET /api/decision-os/manager-command-center', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -80,7 +83,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
   it('denies an unauthenticated caller with 401, never resolving any league data', async () => {
     mocks.getServerSession.mockResolvedValueOnce(null)
     const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
-    const res = await GET()
+    const res = await GET(commandCenterRequest())
     expect(res.status).toBe(401)
     expect(mocks.getDashboardLeagueListForUser).not.toHaveBeenCalled()
     expect(mocks.resolveManagerCommandCenterSnapshot).not.toHaveBeenCalled()
@@ -99,7 +102,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     mocks.resolveManagerCommandCenterSnapshot.mockResolvedValueOnce(emptySnapshot({ totalLeagues: 3 }))
 
     const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
-    const res = await GET()
+    const res = await GET(commandCenterRequest())
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -132,7 +135,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     mocks.leagueSettingsCount.mockResolvedValueOnce(1)
 
     const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
-    const res = await GET()
+    const res = await GET(commandCenterRequest())
     const body = await res.json()
 
     expect(body.draftsApproachingCount).toBe(1)
@@ -151,7 +154,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     mocks.leagueSettingsCount.mockRejectedValueOnce(new Error('boom'))
 
     const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
-    const res = await GET()
+    const res = await GET(commandCenterRequest())
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -164,7 +167,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     mocks.resolveManagerCommandCenterSnapshot.mockResolvedValueOnce(emptySnapshot({ warnings: ['no_leagues_specified'] }))
 
     const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
-    const res = await GET()
+    const res = await GET(commandCenterRequest())
     const body = await res.json()
 
     expect(res.status).toBe(200)
@@ -190,7 +193,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     mocks.loadSurvivorChallengeSignals.mockResolvedValueOnce([challenge, governance])
 
     const { GET } = await import('@/app/api/decision-os/manager-command-center/route')
-    await GET()
+    await GET(commandCenterRequest())
 
     const call = mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)!
     expect(call).toHaveLength(5)
@@ -207,7 +210,7 @@ describe('GET /api/decision-os/manager-command-center', () => {
     mocks.loadSurvivorSideGameSignals.mockRejectedValueOnce(new Error('side games down'))
     mocks.loadSurvivorFinaleSignals.mockImplementationOnce(() => { throw new Error('finale threw synchronously') })
     mocks.loadSurvivorChallengeSignals.mockResolvedValueOnce([challenge])
-    await GET()
+    await GET(commandCenterRequest())
     await expect(mocks.resolveManagerCommandCenterSnapshot.mock.calls.at(-1)![4]).resolves.toEqual([governance, challenge])
   })
 })

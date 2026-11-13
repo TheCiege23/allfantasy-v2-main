@@ -61,6 +61,12 @@ export type TradeReviewDeps = {
   managerDivisions: (userIds: string[]) => Promise<Map<string, number>>
   /** A league played on AllFantasy: each team's standing, keyed by its redraft AND its league roster id. */
   nativeStandings: (league: League) => Promise<Known<Map<string, ReviewStanding>>>
+  /**
+   * A completed trade's gap as priced when it happened (lib/integrity/tradeValueAudit.ts), oriented to
+   * side A; null when it has no audit row. Before this the review re-priced a finished trade on TODAY's
+   * values, so a fair deal could read as lopsided weeks later because one player broke out.
+   */
+  auditedGap: (args: { leagueId: string; ref: TradeRef; sideATeamId: string }) => Promise<{ gapPct: number; basis: string } | null>
   now: () => Date
 }
 
@@ -102,7 +108,7 @@ async function defaultPairHistory(args: PairHistoryArgs): Promise<Known<Array<nu
       ? await prisma.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((r) => r.id) } }, select: PUBLIC_RECEIPT_SELECT })
       : []
     const byTrade = new Map(stored.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
-    const nameFor = rows.length ? await loadNativePlayerNames(rows.flatMap((r) => r.items)) : () => null
+    const nameFor = rows.length ? await loadNativePlayerNames(rows.flatMap((r) => r.items), league.id) : () => null
     return {
       ok: true,
       value: await Promise.all(
@@ -331,6 +337,8 @@ export const defaultTradeReviewDeps: TradeReviewDeps = {
       .catch(() => null),
   deadlineKickoff: async (args) => (await buildWeekKickoffMap(prisma, args).catch(() => null))?.firstKickoff ?? null,
   nativeStandings: (league) => defaultNativeStandings(league).catch(() => ({ ok: false as const, reason: 'The standings could not be read.' })),
+  auditedGap: async ({ leagueId, ref, sideATeamId }) =>
+    (await import('@/lib/integrity/tradeValueAudit')).auditedGapFor(leagueId, ref, sideATeamId).catch(() => null),
   now: () => new Date(),
 }
 
@@ -444,6 +452,8 @@ export type StoredTradeReview =
       sides: [TradeSide, TradeSide]
       /** The facts the review was built from, for a caller that files them as evidence. */
       facts: TradeReviewFacts
+      /** How the gap was priced: the trade's audit `basis`, or `today` when it has none. */
+      gapBasis?: string
     }
   | Extract<EvaluateStoredTradeResult, { ok: false }>
 
@@ -465,7 +475,12 @@ export async function reviewStoredTrade(
 
   // Gap — the one grade.
   const g = receipt.grade
-  const gapPct: Known<number> = g.graded ? { ok: true, value: g.percentDiff } : { ok: false, reason: g.reason }
+  // A finished trade is judged on what it was worth when it happened, where that is on record.
+  const audited =
+    trade.status === 'completed' || trade.status === 'accepted'
+      ? await d.auditedGap({ leagueId: args.leagueId, ref: args.ref, sideATeamId: sideA.rosterId ?? sideA.teamId }).catch(() => null)
+      : null
+  const gapPct: Known<number> = audited ? { ok: true, value: audited.gapPct } : g.graded ? { ok: true, value: g.market?.percentDiff ?? g.percentDiff } : { ok: false, reason: g.reason }
 
   // Lineup — this week, while the trade is still pending.
   const lineup: TradeReviewFacts['lineup'] =
@@ -588,5 +603,5 @@ export async function reviewStoredTrade(
     managerDivisions,
   }
   const sideManagers: [string | null, string | null] = [teamA?.ownerName?.trim() || null, teamB?.ownerName?.trim() || null]
-  return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sideManagers, sides: [sideA, sideB], facts }
+  return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sideManagers, sides: [sideA, sideB], facts, gapBasis: audited?.basis ?? 'today' }
 }

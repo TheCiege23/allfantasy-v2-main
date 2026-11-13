@@ -35,6 +35,7 @@ import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
+import { answerSeasonAssistant, loadSeasonAssistantContext, seasonAssistantTopics } from '@/lib/tournament/seasonAssistantContext'
 import { resolveChimmyCommissionerGrounding } from '@/lib/intelligence/chimmy/resolveChimmyGrounding'
 import { resolveLeagueIntelligenceGrounding } from '@/lib/intelligence/chimmy/leagueIntelligenceGrounding'
 import { resolvePortfolioGrounding } from '@/lib/intelligence/chimmy/portfolioGrounding'
@@ -116,6 +117,11 @@ const ChimmyJsonRequestSchema = z.object({
     sportScope: z.enum(['all']).optional(),
     leagueName: z.string().trim().min(1).max(120).optional(),
     leagueId: z.string().trim().min(1).max(120).optional(),
+    tournament: z.object({
+      id: z.string().trim().min(1).max(200),
+      topic: z.enum(seasonAssistantTopics),
+      leagueId: z.string().trim().min(1).max(200).optional(),
+    }).optional(),
     sleeperUsername: z.string().trim().min(1).max(80).optional(),
     insightType: z.enum(['matchup', 'playoff', 'dynasty', 'trade', 'waiver', 'draft']).optional(),
     teamId: z.string().trim().min(1).max(120).optional(),
@@ -137,7 +143,7 @@ const ChimmyJsonRequestSchema = z.object({
     }).optional(),
   }).default({}),
 }).superRefine((value, ctx) => {
-  if (!value.message.trim() && !value.image) {
+  if (!value.message.trim() && !value.image && !value.userContext.tournament) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['message'],
@@ -548,6 +554,35 @@ async function paidToolPost(req: NextRequest) {
   // Versioned clients share the canonical preview, authorization and durable receipt path.
   if (parseResult.data.analysisPreviewVersion === '1') {
     return toCompatibilityResponse(await postChatChimmy(buildForwardedRequest(req, parseResult.data) as any))
+  }
+
+  const tournament = parseResult.data.userContext.tournament
+  if (tournament) {
+    const headers = { 'Cache-Control': 'private, no-store' }
+    const session = await getServerSession(authOptions)
+    const userId = session?.user?.id
+    if (!userId) return NextResponse.json({ error: 'Sign in required.' }, { status: 401, headers })
+    const limitRes = await runAiProtection(req, { action: 'chimmy', getUserId: async () => userId })
+    if (limitRes) return toCompatibilityResponse(limitRes)
+
+
+    const context = await loadSeasonAssistantContext(tournament.id, userId, tournament.leagueId)
+    if (!context) return NextResponse.json({ error: 'Tournament context not found.' }, { status: 404, headers })
+
+    const response = answerSeasonAssistant(context, tournament.topic)
+    const body = buildCompatibilityPayload({
+      response,
+      source: 'published_tournament',
+      publication: context.publication,
+      draftManifestHash: context.draft.room?.manifestHash ?? null,
+      report: tournament.topic === 'standings' ? context.standings : null,
+      draftHref: tournament.topic === 'draft' ? context.draft.assignment?.href ?? null : null,
+    }, 200)
+    if (!parseResult.data.stream) return NextResponse.json(body, { headers })
+    return new Response(
+      encodeSseEvent('chunk', { delta: response, response }) + encodeSseEvent('done', body),
+      { headers: { ...SSE_HEADERS, ...headers } },
+    )
   }
 
   let cookieStore: Awaited<ReturnType<typeof cookies>> | null = null

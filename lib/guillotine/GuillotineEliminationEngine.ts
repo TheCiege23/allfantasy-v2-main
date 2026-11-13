@@ -23,6 +23,7 @@ import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 import { applyImmunity, immuneRosterIds, readAdvanced, scheduledChops } from './chopSchedule'
+import { previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
 import { readFaabOnChop } from './faabOnChop'
 import { redistributeChoppedFaab } from './faabOnChopApply'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
@@ -167,6 +168,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     season: input.season,
     periodScores: input.periodScores,
     periodEndedAt: input.periodEndedAt,
+    periodWeeks: readPeriodWeeks(endgameLeague?.settings),
   })
   const evalResult = evaluated && recoveryScores ? { ...evaluated, scores: recoveryScores, activeRosterIds: recoveryScores.map(row => row.rosterId) } : evaluated
   if (!evalResult) return null
@@ -227,7 +229,8 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   const previousWeek = advanced.immunity === 'off' || recoveryScores || input.commissionerChoppedRosterIds?.length
     ? []
     : await prisma.guillotinePeriodScore.findMany({
-        where: { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod - 1, ...(input.season != null ? { season: input.season } : {}) },
+        // The previous PERIOD: a week ago, or two for an MLB two-week league (./eliminationPeriods.ts).
+        where: { leagueId: input.leagueId, weekOrPeriod: previousPeriodEnd(input.weekOrPeriod, readPeriodWeeks(endgameLeague?.settings)), ...(input.season != null ? { season: input.season } : {}) },
         select: { rosterId: true, periodPoints: true },
       })
   const immunity = applyImmunity(evalResult.scores, immuneRosterIds(advanced, previousWeek, evalResult.activeRosterIds), chopCount)
@@ -244,6 +247,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     commissionerChoppedRosterIds: input.commissionerChoppedRosterIds?.length
       ? input.commissionerChoppedRosterIds
       : undefined,
+    tiebreakSeed: `${input.leagueId}:${input.season ?? ''}`,
   })
 
   if (choppedRosterIds.length === 0) {
@@ -555,6 +559,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       aliveRosterIds: evalResult.scores.map((s) => s.rosterId),
       displayNames: await getDisplayNamesForRosters(input.leagueId, choppedRosterIds),
       rosterReleaseTiming: config.rosterReleaseTiming,
+      periodWeeks: readPeriodWeeks(endgameLeague?.settings),
     })
   } catch (e) {
     console.warn('[guillotine] chop alerts not sent; the chop stands', e instanceof Error ? e.message : 'unknown error')

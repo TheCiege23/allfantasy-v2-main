@@ -34,9 +34,35 @@ export const NAV_SECTION_ORDER: ReadonlyArray<{ id: NavSectionId; heading: strin
   {
     id: 'all',
     heading: 'All leagues',
-    keys: ['week', 'my-leagues', 'portfolio', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
+    // No 'portfolio' (2026-11-12): it is the second view behind My Leagues — see AfCoreShell `navItems`.
+    keys: ['week', 'my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
   },
-  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'tools', 'admin'] },
+  // No 'tools' (2026-11-12): its links moved to their screens — see AfCoreShell `navItems`.
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
+]
+
+/**
+ * The rail's sections with NO league held (2026-11-12).
+ *
+ * My team, Waivers, Matchup, Standings and War Room are league-only now, so "This week" and
+ * "League" would otherwise be headings over cross-league leftovers — Live alone under one, Trades
+ * alone under the other — while Your week, which took over the cross-league week, sat down under
+ * "All leagues". Same ids, so the shell treats them like the league-held groups.
+ *
+ * ⚠ KEEP THE TWO LISTS' KEYS IN STEP. A key in one but not the other still renders (the shell
+ * appends unplaced keys in a trailing group), but in the wrong place.
+ */
+export const NAV_SECTION_ORDER_NO_LEAGUE: ReadonlyArray<{ id: NavSectionId; heading: string | null; keys: readonly string[] }> = [
+  { id: 'top', heading: null, keys: ['home'] },
+  { id: 'now', heading: 'This week', keys: ['week', 'live', 'trades'] },
+  { id: 'plan', heading: 'Plan ahead', keys: ['season-outlook', 'players', 'draft-hq'] },
+  { id: 'commish', heading: 'Commish', keys: ['commissioner'] },
+  {
+    id: 'all',
+    heading: 'All leagues',
+    keys: ['my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
+  },
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
 ]
 
 /** The section the rail names the selected league above — the first league-scoped one. */

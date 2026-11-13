@@ -9,6 +9,7 @@ import { selectSeasonAutodraft } from '@/lib/tournament/seasonDraftPolicy'
 import { prisma } from '@/lib/prisma'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { computeDraftRecommendation } from '@/lib/draft-helper/RecommendationEngine'
 import { getRosterSlotLabelsForLeagueDraft } from '@/lib/draft-room'
 import { getLiveADP } from '@/lib/adp-data'
@@ -27,8 +28,8 @@ import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
-import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
-import { fitsOpenStarterSlot, mustFillStarter, openStarterSlots, starterSlotsFromTemplate } from '@/lib/live-draft-engine/autopickStarterNeeds'
+import { guardCandidates, loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
+import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 
 export type AutopickFallbackPoolEntry = {
   playerName: string
@@ -269,6 +270,15 @@ export async function loadAutopickDraftContextForOnClock(
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
   const draftedNames = new Set(draftSession.picks.map((p) => p.playerName.trim().toLowerCase()))
+  /*
+   * Players already on a league roster are refused by pick validation (rosteredPlayerGuard.ts); a refused
+   * autopick retries the same player and stalls the clock. So they leave the candidate pool here, by name
+   * (which the warm and rebuilt pools both honor) and by id below — the id catches a roster row whose
+   * stored name differs from the pool's ("Jr.", a nickname). Keepers and dispersal drafts are not
+   * autopicked from this pool, so the guard's exemptions do not apply here.
+   */
+  const rosteredPlayers = await loadLeagueRosteredPlayers(leagueId).catch(() => null)
+  if (rosteredPlayers) for (const name of rosteredPlayers.byName.keys()) draftedNames.add(name)
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -292,6 +302,7 @@ export async function loadAutopickDraftContextForOnClock(
     fallbackPoolRaw.filter((entry) => {
       if (!entry.playerName || !entry.position) return false
       if (draftedNames.has(normalizeName(entry.playerName))) return false
+      if (rosteredPlayers && rosteredHolder(rosteredPlayers, entry)) return false
       if (draftEligiblePositions && !draftPoolRowMatchesEligiblePositions(entry.position, draftEligiblePositions, sport)) {
         return false
       }
@@ -394,6 +405,15 @@ export async function resolveBestAvailableAutopickCandidate(
 
   let selected: BestAvailableAutopickResolved | null = null
 
+  /*
+   * One starter guard for every branch below (lib/live-draft-engine/autopickStarterGuard.ts). It bites
+   * only once this team's remaining picks just cover its open starting spots; until then `board` is the
+   * whole pool and every branch behaves exactly as before.
+   */
+  const ownPositions = draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position)
+  const guard = await loadStarterGuard(leagueId, ownPositions, draftSession.rounds)
+  const board = guardCandidates(guard, fallbackPool, (entry) => entry.position)
+
   // Draft as me (AF Commissioner league-wide, or the manager's own AF Pro "Draft like me"): a live
   // draft's missed pick is made the way this manager drafts.
   // Any miss — no plan, no history, no board — falls through to the ordinary autopick below.
@@ -404,13 +424,13 @@ export async function resolveBestAvailableAutopickCandidate(
       draftSessionId: draftSession.id,
       rosterId: rid,
       overall: ctx.overallPick,
-      board: fallbackPool,
-      ownPositions: draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position),
+      board,
+      ownPositions,
       eligible: draftEligiblePositions,
       aiAdpByKey,
       sport,
     }).catch(() => null)
-    if (mine) {
+    if (mine && guard.allows(mine.position)) {
       return { playerName: mine.playerName, position: mine.position, team: mine.team, playerId: mine.playerId, byeWeek: mine.byeWeek, reason: mine.reason, strategy: 'draft-as-me' }
     }
   }
@@ -419,16 +439,14 @@ export async function resolveBestAvailableAutopickCandidate(
 
   if (autopickBehavior === 'need-based') {
     const rec = computeDraftRecommendation({
-      available: fallbackPool.map((entry) => ({
+      available: board.map((entry) => ({
         name: entry.playerName,
         position: entry.position,
         team: entry.team,
         adp: entry.adp,
         byeWeek: entry.byeWeek,
       })),
-      teamRoster: draftSession.picks
-        .filter((pick) => pick.rosterId === rid)
-        .map((pick) => ({ position: pick.position })),
+      teamRoster: ownPositions.map((position) => ({ position })),
       rosterSlots,
       round: current.round,
       pick: current.slot,
@@ -443,11 +461,11 @@ export async function resolveBestAvailableAutopickCandidate(
     const candidate = rec.recommendation?.player
     if (candidate) {
       const fromPool =
-        fallbackPool.find(
+        board.find(
           (entry) =>
             normalizeName(entry.playerName) === normalizeName(candidate.name) &&
             String(entry.position).toUpperCase() === String(candidate.position).toUpperCase()
-        ) ?? fallbackPool[0]
+        ) ?? board[0]
       if (fromPool) {
         selected = {
           playerName: fromPool.playerName,
@@ -463,19 +481,9 @@ export async function resolveBestAvailableAutopickCandidate(
   }
 
   if (!selected) {
-    // Last chance to fill the starting lineup: when this team's remaining picks only just cover its
-    // open starting spots, take only players who can start in one of them.
-    let pool = fallbackPool
-    const template = (await getLeagueDraftTemplatePayload(leagueId).catch(() => null))?.template
-    if (template) {
-      const ownPositions = draftSession.picks.filter((pick) => pick.rosterId === rid).map((pick) => pick.position)
-      const open = openStarterSlots(starterSlotsFromTemplate(template.slots), ownPositions)
-      if (mustFillStarter(open, draftSession.rounds - ownPositions.length)) {
-        const starters = fallbackPool.filter((entry) => fitsOpenStarterSlot(entry.position, open))
-        if (starters.length > 0) pool = starters
-      }
-    }
-    const sorted = [...pool].sort((a, b) => {
+    // Last chance to fill the starting lineup: `board` is already limited to players who can start in an
+    // open spot when this team's remaining picks only just cover them.
+    const sorted = [...board].sort((a, b) => {
       const keyA = `${normalizeName(a.playerName)}|${(a.position || '').toLowerCase()}|${(a.team || '').toLowerCase()}`
       const keyB = `${normalizeName(b.playerName)}|${(b.position || '').toLowerCase()}|${(b.team || '').toLowerCase()}`
       const adpA = aiAdpByKey?.[keyA] ?? a.adp ?? 999
@@ -518,7 +526,9 @@ export async function submitBestAvailableAutopickForExpiredTimer(
   leagueId: string,
   onClockRosterId: string,
   expectedOverall?: number
-): Promise<{ ok: true; pick: BestAvailableAutopickResolved } | { ok: false; error: 'no_pool' | 'submit_failed' }> {
+): Promise<{ ok: true; pick: BestAvailableAutopickResolved } | { ok: false; error: 'no_pool' | 'submit_failed' | 'offline_draft' }> {
+  // The commissioner enters every pick of an offline draft — and the AI try below would spend a model call.
+  if (await isOfflineDraft(leagueId)) return { ok: false, error: 'offline_draft' }
   if (!(await loadSeasonDraftContext(leagueId))) {
     const { tryAiOpponentAutopickForExpiredTimer } = await import('@/lib/ai/opponents/liveDraftAiAutopick')
     const aiTry = await tryAiOpponentAutopickForExpiredTimer(leagueId, onClockRosterId)

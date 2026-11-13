@@ -26,11 +26,15 @@ import '@/components/core-app/af-import.css'
 import {
   IMPORT_PROVIDER_UI_OPTIONS,
   getImportProviderLabel,
+  importComingSoonMessage,
   isImportProviderAvailable,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
+import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-app/import/EspnLeagueCheck'
+import { ImportGuide } from '@/components/core-app/import/ImportGuide'
+import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -50,7 +54,11 @@ import {
   type PreviewCoverage,
 } from '@/lib/league-import/previewCoverageView'
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
+import { detectProviderFromLink } from '@/lib/league-import/detectProviderFromLink'
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
+import { ImportReviewPanel, type ImportReviewState } from '@/components/import/ImportReviewPanel'
+import { readImportReview } from '@/lib/league-import/review/readImportReview'
+import type { ImportReview, ImportReviewOverrides } from '@/lib/league-import/review/types'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 
 /**
@@ -220,6 +228,12 @@ type Phase =
        */
       teams: PreviewTeam[] | null
       claimTeamId: string | null
+      /*
+       * A PUBLIC ESPN league previewed without proof (`importBlockedReason` set): the answer to
+       * "Who's the commissioner?". `espn` / `member` unlock the team picker and a no-cookie import;
+       * `me` points at Connect ESPN. Null until answered, and always null for other providers.
+       */
+      espnRunBy: EspnRunBy | null
       /* `dataQuality.coverageSummary` — every bucket, for the compact "what comes across" list. */
       coverageRows: PreviewCoverageRow[]
       /*
@@ -227,6 +241,11 @@ type Phase =
        * Secret ID). Ticking "I'm the commissioner" sets `attested`, and the commit then records it.
        */
       canConfirmCommissioner: boolean
+      /*
+       * "Review your import", built server-side. Null when the server is older or the review could
+       * not be built — the panel below then shows exactly what it showed before this existed.
+       */
+      review: ImportReview | null
     }
   | { k: 'committing'; sourceId: string }
   | {
@@ -263,7 +282,30 @@ interface PreviewTeam {
   teamId: string
   teamName: string
   ownerName: string
+  /** The provider flags it as a commissioner's team: claimable only with a connected account. */
+  commissionerTeam?: boolean
 }
+
+/** "Who's the commissioner of this league on ESPN?" — see `espnPublicMemberImport.ts`. */
+type EspnRunBy = 'espn' | 'member' | 'me'
+
+const ESPN_RUN_BY_OPTIONS: ReadonlyArray<{ value: EspnRunBy; label: string; help: string }> = [
+  {
+    value: 'espn',
+    label: 'ESPN runs it',
+    help: 'A public league you joined on ESPN. Pick your team — no ESPN sign-in needed.',
+  },
+  {
+    value: 'member',
+    label: 'Someone else in the league',
+    help: 'Pick your team — no ESPN sign-in needed. Your commissioner can connect later.',
+  },
+  {
+    value: 'me',
+    label: "I'm the commissioner",
+    help: 'Connect ESPN once so we can confirm it. That unlocks invites and assigning teams.',
+  },
+]
 
 /**
  * Providers whose preview must ask "which team is yours?" before importing.
@@ -273,6 +315,44 @@ interface PreviewTeam {
  * account at all, so nothing else can ever say which team is the importer's.
  */
 const PICKS_TEAM_ON_PREVIEW: readonly ImportProvider[] = ['fleaflicker']
+
+/**
+ * What the preview card shows for the team choice and the Import button. One function, so the
+ * picker, the blocked message and the button cannot disagree about which state they are in.
+ *
+ *   espnAsk     a PUBLIC ESPN league previewed without proof — ask "Who's the commissioner?"
+ *   espnMember  …answered "ESPN runs it" / "someone else": pick a team, import with no cookies
+ *   showPicker  the team list is on screen
+ *   blocked     Import stays off for a reason other than "pick a team"
+ */
+function previewImportState(
+  provider: ImportProvider,
+  phase: {
+    importBlockedReason: string | null
+    teams: PreviewTeam[] | null
+    espnRunBy: EspnRunBy | null
+    claimTeamId: string | null
+  },
+) {
+  const espnAsk = provider === 'espn' && phase.importBlockedReason !== null && phase.teams !== null
+  const espnMember = espnAsk && (phase.espnRunBy === 'espn' || phase.espnRunBy === 'member')
+  const showPicker = phase.teams !== null && (phase.importBlockedReason === null || espnMember)
+  const blocked = phase.importBlockedReason !== null && !espnMember
+  const needsPick = showPicker && !phase.claimTeamId
+  return { espnAsk, espnMember, showPicker, blocked, needsPick }
+}
+
+/** The Import button names what is still missing, so a disabled button never just sits there. */
+function importButtonLabel(
+  provider: ImportProvider,
+  phase: Parameters<typeof previewImportState>[1],
+): string {
+  const st = previewImportState(provider, phase)
+  if (st.espnAsk && phase.espnRunBy === null) return 'Answer the question first'
+  if (st.espnAsk && phase.espnRunBy === 'me') return 'Connect ESPN first'
+  if (st.needsPick) return 'Pick your team first'
+  return 'Import this league'
+}
 
 /** Read `managers` off a preview defensively — it crossed a network. */
 function readPreviewTeams(raw: unknown): PreviewTeam[] {
@@ -288,7 +368,7 @@ function readPreviewTeams(raw: unknown): PreviewTeam[] {
       typeof r.displayName === 'string' && r.displayName.trim() && r.displayName.trim() !== teamName
         ? r.displayName.trim()
         : ''
-    out.push({ teamId, teamName, ownerName })
+    out.push({ teamId, teamName, ownerName, ...(r.isCommissionerTeam === true ? { commissionerTeam: true } : {}) })
   }
   return out
 }
@@ -358,7 +438,7 @@ const FIELD_BY_PROVIDER: Partial<
      * the ESPN URL — parseEspnSourceInput already accepts the full league URL
      * (extracts `leagueId=`), the help text just never told anyone that.
      */
-    help: 'Connect ESPN above, then paste a league ID here — it’s the leagueId= number in your league URL, fantasy.espn.com/football/league?leagueId=123456. Paste either. We never ask for your ESPN password.',
+    help: 'Step 1 · Paste your league ID or the whole league URL — it’s the leagueId= number in fantasy.espn.com/football/league?leagueId=123456 — then press Test connection. We never ask for your ESPN password.',
   },
   /*
    * ⚠ THIS IS A LEAGUE ID, NOT A SNAPSHOT ID — the provider changed shape under
@@ -435,16 +515,12 @@ const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   mfl: 'League ID · API key required',
 }
 
-/** Why an unavailable provider cannot be used, in the user's terms. */
-const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
-  /*
-   * Yahoo. The 2026-08-29 copy ("sign-in is not working yet — connecting returns you here still
-   * disconnected") described a bug that is no longer the reason: import is off while Yahoo reviews
-   * the app's Fantasy Sports API access (see the note on the yahoo entry in provider-ui-config).
-   * Says that, and says it is temporary, without naming plumbing the reader cannot act on.
-   */
-  yahoo: "Yahoo import is paused while Yahoo reviews our API access. We'll turn it back on as soon as it's approved.",
-}
+/*
+ * Why an unavailable provider cannot be used is `importComingSoonMessage` in provider-ui-config —
+ * the same sentence the landing strip, /commissioners and the import API's refusal use. This screen
+ * used to carry its own Yahoo line ("paused while Yahoo reviews our API access"), a third wording of
+ * one status; it now reads the shared one, which also names where the user CAN import from today.
+ */
 
 /**
  * Some gate failures name a prerequisite without saying where to satisfy it —
@@ -710,6 +786,28 @@ const PROVIDER_PILL_TAG: Partial<Record<ImportProvider, string>> = {
   fleaflicker: 'league ID',
 }
 
+/*
+ * The hero's numbers. Derived from provider-ui-config so they move when a platform is switched on
+ * or off, the same rule the row itself follows — a literal "5 platforms" would be wrong the day
+ * Yahoo comes back.
+ */
+const LIVE_PLATFORM_COUNT = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).length
+const LIVE_SPORT_COUNT = new Set(
+  IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).flatMap((o) => [...o.supportedSports]),
+).size
+
+/*
+ * How much work each platform is, on its tile — the thing people want to know before they press
+ * one. ESPN is the honest outlier: a one-time cookie copy on a computer.
+ */
+const PROVIDER_EFFORT: Partial<Record<ImportProvider, string>> = {
+  sleeper: '30 sec',
+  espn: '3 min · once',
+  fantrax: '1 min',
+  mfl: '2 min · once',
+  fleaflicker: '20 sec',
+}
+
 /**
  * 6a build rule 2: the read / never-do split IS the trust contract for the whole import flow, and
  * it has to appear on this first screen rather than being discovered later. It replaces the older
@@ -854,7 +952,14 @@ export type ImportV4Props = {
 type VerifyResume =
   | { k: 'discover'; identifier: string }
   | { k: 'preview'; sourceId: string; attest: boolean }
-  | { k: 'commit'; sourceId: string; attested: boolean; force: boolean; claimTeamId: string | null }
+  | {
+      k: 'commit'
+      sourceId: string
+      attested: boolean
+      force: boolean
+      claimTeamId: string | null
+      espnRunBy?: EspnRunBy | null
+    }
   | { k: 'bulk' }
   | { k: 'row'; sourceId: string }
 
@@ -898,11 +1003,14 @@ export function ImportV4({
    * connect.
    */
   const [espnConnected, setEspnConnected] = useState<boolean | null>(null)
+  /* The guided ESPN flow's last "Test connection" answer; it labels the cookie step below. */
+  const [espnCheck, setEspnCheck] = useState<EspnLeagueCheckStatus>({ k: 'idle' })
 
   const selectable = isImportProviderAvailable(provider)
   // Provider display name comes from the shared config, never a local literal — the same
   // reason availability does (see the header note).
   const providerLabel = getImportProviderLabel(provider)
+  const pastedProvider = detectProviderFromLink(account)
   const field = FIELD_BY_PROVIDER[provider]
   const canDiscover = supportsImportProviderDiscovery(provider)
   /*
@@ -1030,6 +1138,8 @@ export function ImportV4({
         warning?: string
       }
       const found = payload?.leagues ?? []
+      // Explicit lookup that found something: bring the list (rendered ABOVE the form) into view.
+      if (found.length > 0) scrollToLeagues.current = true
       setLeagues(found)
       setHandleLinkedElsewhere(provider === 'sleeper' && payload?.handleLinkedElsewhere === true)
       setExcluded(defaultExclusionsFor(found))
@@ -1145,11 +1255,39 @@ export function ImportV4({
     errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [error])
 
+  /*
+   * ⚠ THE LIST RENDERS ABOVE THE FORM, SO A LOOKUP CAN SUCCEED OUT OF SIGHT. The person pressed
+   * "Find my leagues" at the field; the leagues appear higher up the page, and scroll anchoring
+   * keeps the viewport on the button — the press looks like it did nothing. Only an EXPLICIT lookup
+   * sets the flag: the silent lookup on load already puts the list at the top of the page.
+   */
+  const leaguesRef = useRef<HTMLElement | null>(null)
+  const scrollToLeagues = useRef(false)
+  useEffect(() => {
+    if (!scrollToLeagues.current || leagues.length === 0) return
+    scrollToLeagues.current = false
+    leaguesRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [leagues])
+
   const deepLinked = useRef(false)
+
+  /*
+   * Edits from the review panel. A ref as well as state: the commit can be re-entered from the
+   * verification and attestation gates, long after the panel has unmounted, and the edits must
+   * still travel with it.
+   */
+  const reviewOverridesRef = useRef<ImportReviewOverrides | null>(null)
+  const [reviewState, setReviewState] = useState<ImportReviewState | null>(null)
+  const onReviewStateChange = useCallback((next: ImportReviewState) => {
+    reviewOverridesRef.current = next.overrides
+    setReviewState(next)
+  }, [])
 
   const runPreview = useCallback(
     async (sourceId: string, attest = false) => {
       setError(null)
+      reviewOverridesRef.current = null
+      setReviewState(null)
       setPhase({ k: 'previewing', sourceId })
       const res = await fetchImportPreview(
         provider,
@@ -1192,6 +1330,7 @@ export function ImportV4({
         importBlockedReason?: unknown
         managers?: unknown
         commissionerConfirmable?: unknown
+        review?: unknown
       }
       trackImportGateResult({
         provider,
@@ -1200,7 +1339,11 @@ export function ImportV4({
         reasonCode: payload?.importable === false ? 'PREVIEW_ONLY' : null,
         espnConnected,
       })
-      const teams = PICKS_TEAM_ON_PREVIEW.includes(provider) ? readPreviewTeams(payload?.managers) : []
+      /* A public ESPN league with no proof of membership can still be joined by picking a team —
+         after the user says they are not its commissioner. See `ESPN_RUN_BY_OPTIONS`. */
+      const espnPickable = provider === 'espn' && payload?.importable === false
+      const teams =
+        PICKS_TEAM_ON_PREVIEW.includes(provider) || espnPickable ? readPreviewTeams(payload?.managers) : []
       setPhase({
         k: 'preview',
         sourceId,
@@ -1208,6 +1351,7 @@ export function ImportV4({
         attested: attest,
         teams: teams.length > 0 ? teams : null,
         claimTeamId: null,
+        espnRunBy: null,
         coverageRows: readPreviewCoverageRows(payload?.dataQuality?.coverageSummary),
         canConfirmCommissioner: payload?.commissionerConfirmable === true,
         // Only an explicit `false` blocks. A missing field is an ordinary, importable preview.
@@ -1223,6 +1367,7 @@ export function ImportV4({
          * strength of a missing field.
          */
         coverage: readPreviewCoverage(payload?.dataQuality?.coverageNarrative),
+        review: readImportReview(payload?.review),
       })
     },
     [provider, espnConnected]
@@ -1236,7 +1381,13 @@ export function ImportV4({
   }, [initialLeagueSourceId, provider, runPreview])
 
   const runCommit = useCallback(
-    async (sourceId: string, attested: boolean, force = false, claimTeamId: string | null = null) => {
+    async (
+      sourceId: string,
+      attested: boolean,
+      force = false,
+      claimTeamId: string | null = null,
+      espnRunBy: EspnRunBy | null = null,
+    ) => {
       setError(null)
       setPhase({ k: 'committing', sourceId })
       /* Same reasoning as `importOneLeague`: a previously-deleted row is only
@@ -1250,16 +1401,18 @@ export function ImportV4({
         sourceId,
         '',
         attested ? { accepted: true } : undefined,
-        force || confirmReimportOfDeleted || claimTeamId
+        force || confirmReimportOfDeleted || claimTeamId || espnRunBy || reviewOverridesRef.current
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
               ...(claimTeamId ? { claimSourceTeamId: claimTeamId } : {}),
+              ...(espnRunBy ? { espnLeagueRunBy: espnRunBy } : {}),
+              ...(reviewOverridesRef.current ? { reviewOverrides: reviewOverridesRef.current } : {}),
             }
           : undefined
       )
       if (!res.ok && res.verificationRequired) {
-        setVerifyGate({ k: 'commit', sourceId, attested, force, claimTeamId })
+        setVerifyGate({ k: 'commit', sourceId, attested, force, claimTeamId, espnRunBy })
         setPhase({ k: 'idle' })
         return
       }
@@ -1669,7 +1822,7 @@ export function ImportV4({
     try {
       if (gate.k === 'discover') await runDiscover(gate.identifier)
       else if (gate.k === 'preview') await runPreview(gate.sourceId, gate.attest)
-      else if (gate.k === 'commit') await runCommit(gate.sourceId, gate.attested, gate.force, gate.claimTeamId)
+      else if (gate.k === 'commit') await runCommit(gate.sourceId, gate.attested, gate.force, gate.claimTeamId, gate.espnRunBy ?? null)
       else if (gate.k === 'bulk') await runBulkImport()
       else await retryLeague(gate.sourceId)
     } finally {
@@ -2015,7 +2168,13 @@ export function ImportV4({
   )
 
   return (
-    <div className="af-core af-im">
+    /*
+     * `data-phase` lets the stylesheet put the moment in focus: while a preview or a confirmation
+     * is open, the connect form steps aside so the card sits directly under the league list.
+     * CSS only — the form stays mounted, so nothing it holds (a typed id, the ESPN panel's
+     * state) is lost when the person presses Back.
+     */
+    <div className="af-core af-im" data-phase={phase.k}>
       {/*
         ── Top bar, per handoffs 4c/4d ──────────────────────────────────
         Brand left; on the right the READ-ONLY chip that every signed-in screen
@@ -2066,24 +2225,60 @@ export function ImportV4({
       */}
       <StepBar current={stepsFilled} total={3} />
 
+      {/*
+        ── The hero, on the /core page language ─────────────────────────────
+        A lit card with the kicker, one sentence, and three numbers that are derived rather than
+        written: platforms and sports come from provider-ui-config, so the strip cannot claim a
+        platform the row below greys out. "0 passwords" is the trust contract stated as a number.
+        The two side doors (native copy, new league) moved under it as quiet links — they were two
+        full paragraphs between the title and the platform row, which is the one thing every
+        visitor came to press.
+      */}
       <header className="af-im-head">
-        <span className="af-label">Set up your league</span>
-        <h1 className="af-im-title">Connect an existing league.</h1>
-        <p className="af-im-sub">
-          Pick your platform and drop in your Sleeper username or league ID. We build a read-only
-          copy of your real teams, matchups and scoring &mdash; AllFantasy analyzes your league but
-          never changes anything on the external platform.
-        </p>
-        <p className="af-im-create-option">
-          Commissioners can then make a native copy to play here with supported rules. Already imported?{' '}
-          <Link href="/create-league#imported-leagues">Make an imported league native <span aria-hidden>&rarr;</span></Link>
-        </p>
-        <p className="af-im-create-option">
-          Starting fresh?{' '}
-          <Link href="/create-league" data-testid="import-create-league">
-            Create a new league <span aria-hidden>&rarr;</span>
-          </Link>
-        </p>
+        <div className="af-im-hero">
+          <div className="af-im-hero-copy">
+            <span className="af-label">Set up your league</span>
+            <h1 className="af-im-title">Bring your league to AllFantasy.</h1>
+            <p className="af-im-sub">
+              Pick where you play and follow the steps. We build a read-only copy of your teams,
+              matchups and scoring &mdash; nothing on your platform ever changes.
+            </p>
+          </div>
+          <dl className="af-im-hero-stats">
+            <div className="af-im-hero-stat">
+              <dt>Platforms</dt>
+              <dd className="af-num">{LIVE_PLATFORM_COUNT}</dd>
+            </div>
+            <div className="af-im-hero-stat">
+              <dt>Sports</dt>
+              <dd className="af-num">{LIVE_SPORT_COUNT}</dd>
+            </div>
+            <div className="af-im-hero-stat">
+              <dt>Passwords asked</dt>
+              <dd className="af-num">0</dd>
+            </div>
+          </dl>
+        </div>
+        <nav className="af-im-create-row" aria-label="Other ways to start">
+          <p className="af-im-create-option">
+            Already imported?{' '}
+            <Link href="/create-league#imported-leagues">
+              Make it native <span aria-hidden>&rarr;</span>
+            </Link>
+          </p>
+          <p className="af-im-create-option">
+            Starting fresh?{' '}
+            <Link href="/create-league" data-testid="import-create-league">
+              Create a new league <span aria-hidden>&rarr;</span>
+            </Link>
+          </p>
+          <p className="af-im-create-option">
+            Just looking?{' '}
+            <Link href="/demo" data-testid="import-try-demo">
+              Try the demo league <span aria-hidden>&rarr;</span>
+            </Link>
+          </p>
+        </nav>
       </header>
 
       {/*
@@ -2091,7 +2286,13 @@ export function ImportV4({
         the query string and read by nothing, so a failed connect looked identical
         to never having tried.
       */}
-      {yahooError ? (
+      {yahooError === 'coming_soon' ? (
+        /* Not an error: the entry point refused because Yahoo is not live. No retry link — it
+           would only send them round the same refusal. */
+        <div className="af-im-note" role="status">
+          <p>{importComingSoonMessage('yahoo')}</p>
+        </div>
+      ) : yahooError ? (
         <div className="af-im-error" role="alert">
           <p className="af-im-error-text">{describeYahooError(yahooError, yahooErrorDesc)}</p>
           <a className="af-im-error-link" href={YAHOO_CONNECT_HREF}>
@@ -2120,546 +2321,19 @@ export function ImportV4({
         </div>
       ) : null}
 
-      {/* ── Step 1: provider picker ─────────────────────────────────── */}
-      {importTakeover ? null : (
-      <section className="af-im-card">
-        {/*
-          The section heading used to repeat the h1 verbatim ("Where do you already play?"),
-          so the page asked the same question twice in a row. 6a asks it once, in the h1.
-        */}
-        {/*
-          ── 6a: A PILL ROW, NOT A GRID OF CARDS ───────────────────────────────
-          This was six stacked tiles, each carrying a mark, a name, a tagline and
-          a sports line — 24 lines of text to read before picking the platform
-          you already knew you were on. The handoff draws one scannable row, and
-          it is right: choosing your platform is recognition, not comparison.
-
-          ⚠ NOTHING WAS DELETED TO GET THERE. The tagline and the supported
-          sports both still render — in the context line directly below, for the
-          provider actually chosen. That is where they matter (they describe what
-          the field beneath is about to ask for), and it is the only place they
-          are not competing with five other providers' copy for attention.
-
-          ⚠ AND AVAILABILITY IS STILL provider-ui-config's ANSWER. The handoff
-          tags MFL, Fantrax and Fleaflicker "Coming soon"; that was true when it
-          was drawn and is not true now. Reading `opt.available` rather than the
-          picture keeps the row honest in both directions — it will say "soon"
-          again the day a provider is switched off, without an edit here.
-        */}
-        <div className="af-im-providers" role="group" aria-label="Fantasy platform">
-          {IMPORT_PROVIDER_UI_OPTIONS.map((opt) => {
-            const available = opt.available
-            const active = provider === opt.provider
-            const tag = available ? PROVIDER_PILL_TAG[opt.provider] : 'Coming soon'
-            return (
-              <button
-                key={opt.provider}
-                type="button"
-                className="af-im-provider"
-                data-active={active}
-                data-available={available}
-                /* An unavailable platform's "Coming soon" tile is a placeholder — not in the iOS app (2.1). */
-                data-hide-in-ios-app={available ? undefined : ''}
-                data-testid={`import-tab-${opt.provider}`}
-                /*
-                  ⚠ A PAUSED TILE STILL TAKES THE CLICK — to explain itself, and nothing else.
-                  `selectable` below is false for it, so no field, no discovery and no preview
-                  can start; the "selected?" strip says why. A disabled tile had nowhere to put
-                  that sentence except under every other tab.
-                */
-                aria-pressed={active}
-                onClick={() => {
-                  setProvider(opt.provider)
-                  setAccount('')
-                  reset()
-                }}
-              >
-                <span className="af-platform af-platform-mark af-im-mark" data-platform={opt.provider} aria-hidden>
-                  {PROVIDER_INITIAL[opt.provider] ?? opt.label.charAt(0)}
-                </span>
-                {/*
-                  The name over its tag. A wrapper rather than a CSS grid on the
-                  button, because the stack is now the layout at EVERY width — the
-                  grid-row trick that did this below 560px only worked while the
-                  desktop case was a single line, and keeping two mechanisms for
-                  one arrangement is how they drift apart.
-                */}
-                <span className="af-im-provider-text">
-                  <span className="af-im-provider-label">{providerPillLabel(opt.label)}</span>
-                  {tag ? <span className="af-im-soon af-num">&middot; {tag}</span> : null}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/*
-          What the chosen pill costs you, in one line: what it asks for, and which
-          sports it can carry. Both used to sit on every tile at once; here they
-          describe the field immediately below them.
-        */}
-        {/*
-          ⚠ IT DESCRIBED THE SELECTED PILL WITHOUT NAMING IT. Two quiet lines of grey
-          under a six-pill row is ambiguous by construction — "Finds your leagues
-          automatically" is true of Sleeper AND Yahoo, and nothing in the sentence
-          said which one it was about. Repeating the platform's own mark and name
-          anchors it, and it is the same mark that is lit in the row directly above,
-          so the eye connects the two without reading either.
-        */}
-        <p className="af-im-context">
-          <span className="af-platform af-platform-mark af-im-context-mark" data-platform={provider} aria-hidden>
-            {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
-          </span>
-          <span className="af-im-context-meta">
-            {selectable
-              ? PROVIDER_TAGLINE[provider] ??
-                (canDiscover ? 'Finds your leagues automatically' : 'League ID · read-only')
-              : 'Paused — see below'}
-          </span>
-          {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
-            .map((sport) => (
-              <span key={sport} className="af-im-context-sport af-num" data-sport={sport}>
-                {sport}
-              </span>
-            ))}
-        </p>
-
-        {/*
-          ── 6a: why a provider is unavailable ─────────────────────────────────
-          ⚠ THIS COMMENT USED TO SAY THE STRIP WAS "DORMANT TODAY AND BUILT ANYWAY
-          — every provider in the config is available, so this renders for
-          nobody." That was true when it was written and stopped being true on
-          2026-08-29, when yahoo was flipped to `available: false`. The strip was
-          not dormant after that; it was BROKEN, and the stale comment is a good
-          part of why nobody looked — it told every reader the empty result was
-          expected.
-
-          Both forms below are live now. Keep this note pointed at the config
-          rather than at a count of providers, so it cannot go stale the same way.
-        */}
-        {/*
-          🛑 THE ROW-WIDE STRIP IS GONE. It printed every paused provider's reason under the row
-          on EVERY tab, so someone on the Sleeper tab read a Yahoo notice — with copy that had
-          stopped being true. A paused tile is now selectable purely to explain itself, and its
-          reason renders once, in the "selected?" strip below, only while it is the selected tile.
-        */}
-
-        {/*
-          ⚠ KEPT, AND I WAS WRONG TO CALL IT UNREACHABLE. The comment above the row
-          list says this branch cannot fire, which is true of both production
-          callers — /import falls an unavailable `?provider=` back to sleeper, and
-          /core passes no provider at all. It is NOT true of the component's own
-          API, which takes `defaultProvider` from anyone who renders it, and the 6a
-          suite exercises exactly that. A third caller added without the fallback
-          would land someone on a blocked provider with no field and, without this,
-          no explanation either.
-
-          It says more than the row line does — the provider is the one you are
-          looking at, so it gets the "selected?" framing and a full sentence rather
-          than a footnote.
-        */}
-        {!selectable ? (
-          <p className="af-im-blocked af-im-blocked--selected" role="status">
-            <span className="af-im-blocked-line">
-              <span className="af-label">{providerLabel} selected?</span>
-              <span>
-                {BLOCKED_REASON[provider] ??
-                  `${providerLabel} isn't available yet — coming soon.`}
-              </span>
-            </span>
-          </p>
-        ) : null}
-
-        {/* ── Step 2: the provider's own field ──────────────────────── */}
-        {/* `phase.k !== 'done'` used to guard this; `done` is now a takeover phase,
-            so this whole block is already unmounted then and the test was dead. */}
-        {selectable ? (
-          <div className="af-im-field-block">
-            {/*
-              ── 6b: ESPN connects HERE, not on another page ─────────────────
-              ⚠ THE OLD ANSWER WAS A LINK OUT, AND A LINK OUT ENDS THE IMPORT.
-              ESPN is the one provider on this screen that cannot be read without a
-              connection — commissionerGate resolves your team from the SWID cookie,
-              so a PUBLIC ESPN league needs one too. The screen knew that and handled
-              it by pointing at /settings, which means: leave with no league id in
-              hand, connect, find your way back, start over. 6a build rule 6 calls
-              ESPN's case one click; this is where that click has to be.
-
-              ⚠ AND IT IS SHOWN BEFORE THE FIELD, NOT AFTER A FAILURE. Rendering it
-              only once an import had already failed would still be teaching the
-              prerequisite by punishment. It leads for as long as ESPN is
-              unconnected, and collapses to a one-line confirmation once it is.
-            */}
-            {provider === 'espn' ? (
-              <div className="af-im-espn" data-connected={espnConnected === true ? 'true' : 'false'}>
-                {espnConnected === true ? null : (
-                  <p className="af-im-espn-lead">
-                    <span className="af-label">Connect ESPN first</span>
-                    {/*
-                      ⚠ SAYS "PRIVATE OR PUBLIC" ON PURPOSE. The previous copy on this
-                      screen implied public ESPN leagues imported directly. They do not,
-                      and that sentence cost a real user a long detour — it sent them to
-                      type an id that could never work.
-                    */}
-                    <span>
-                      ESPN has no sign-in for us to use, so we read your leagues as you.
-                      This is needed for every ESPN league, public ones included.
-                    </span>
-                  </p>
-                )}
-                <EspnConnectPanel onConnectedChange={handleEspnConnectedChange} />
-              </div>
-            ) : null}
-
-            {/*
-              ── Fantrax: connect once, then there is nothing to type.
-              A league id is public and says nothing about who is asking, which is why
-              that path has to follow up with "which team is yours". A Secret ID is the
-              one thing Fantrax offers that identifies a PERSON, so `getLeagues` returns
-              the caller's leagues AND the teams they own in them — no league id, no
-              season, no sport, no team picker.
-              It posts to the SAME /api/league/auth every other provider's credentials
-              use (platform `fantrax`, encrypted `apiKey`), so nothing new stores it and
-              it never rides in an import request body.
-            */}
-            {provider === 'fantrax' ? (
-              <div className="af-im-field">
-                <span className="af-label">Fantrax Secret ID</span>
-                <input
-                  type="password"
-                  placeholder="paste your Secret ID"
-                  value={fxSecret}
-                  autoComplete="off"
-                  onChange={(e) => setFxSecret(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="af-btn af-btn--ghost"
-                  disabled={fxSaving || phase.k === 'discovering'}
-                  onClick={() => {
-                    const secret = fxSecret.trim()
-                    if (!secret) {
-                      setError('Paste your Fantrax Secret ID first.')
-                      return
-                    }
-                    setError(null)
-                    setFxSaving(true)
-                    void (async () => {
-                      try {
-                        const res = await fetch('/api/league/auth', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ platform: 'fantrax', apiKey: secret }),
-                        })
-                        if (!res.ok) {
-                          const body = (await res.json().catch(() => null)) as { error?: string } | null
-                          setError(body?.error || 'That Secret ID could not be saved.')
-                          return
-                        }
-                        // Cleared on success: it is a credential, and it is stored now.
-                        setFxSecret('')
-                        await runDiscover('')
-                      } catch {
-                        setError('Could not reach the server to save that Secret ID.')
-                      } finally {
-                        setFxSaving(false)
-                      }
-                    })()
-                  }}
-                >
-                  {fxSaving ? 'Connecting…' : 'Connect Fantrax and list my leagues'}
-                </button>
-                <span className="af-im-field-help">
-                  Fantrax → Settings → API Access. Read-only, and it is stored encrypted. With it
-                  connected we can name your leagues and your team without you typing either. Prefer
-                  not to? Paste a league ID below instead.
-                </span>
-              </div>
-            ) : null}
-
-            {field ? (
-              <label className="af-im-field">
-                <span className="af-label">
-                  {field.label}
-                  {/*
-                    6a build rule 1: this label and placeholder change with the
-                    platform, and the `?` is where that rule is explained rather
-                    than merely obeyed. Someone who picked ESPN after typing a
-                    Sleeper username needs to know the box now wants something
-                    else — the swap alone does not say so.
-                  */}
-                  <Hint label="Why this field changes">
-                    Sleeper connects by username. ESPN, Yahoo, MFL, Fantrax and Fleaflicker connect
-                    by league ID — the field swaps when you pick a platform.
-                  </Hint>
-                </span>
-                {/*
-                  ⚠ THE ACTION SITS ON THE FIELD'S ROW, NOT UNDER IT. The submit
-                  used to be a separate block below the help text, so the thing you
-                  press after typing was two paragraphs away from the thing you
-                  typed into — and on the one screen whose entire job is "type this,
-                  press that". 6a puts them on one row; the button drops beneath the
-                  input on narrow screens, where a row would squeeze both.
-                */}
-                <span className="af-im-field-row">
-                  <input
-                    type="text"
-                    placeholder={field.placeholder}
-                    value={account}
-                    data-testid="import-discovery-account"
-                    onChange={(e) => {
-                      setAccount(e.target.value)
-                      setError((prev) => (prev === EMPTY_LEAGUE_ID_ERROR ? null : prev))
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return
-                      e.preventDefault()
-                      if (lookupBusy) return
-                      if (canDiscover) void runDiscover(account.trim())
-                      else if (account.trim()) void runPreview(account.trim())
-                    }}
-                  />
-                  {submitButton}
-                </span>
-                <span className="af-im-field-help">
-                  {/*
-                    ⚠ "CONNECT ESPN ABOVE" IS WRONG ONCE ESPN IS CONNECTED — it tells
-                    someone to do a thing the green badge two rows up says they have
-                    already done, which reads as the badge being wrong. The static
-                    map cannot know, so the one provider whose help depends on live
-                    state gets it swapped here.
-                  */}
-                  {provider === 'espn' && espnConnected === true
-                    ? 'ESPN is connected, so paste a league ID — the leagueId= number in your league URL — and we will read it as you. Paste either. We never ask for your ESPN password.'
-                    : field.help}
-                  {provider === 'mfl' ? (
-                    <>
-                      {' '}
-                      <Link href={MFL_KEY_HREF} className="af-im-error-link" data-testid="import-mfl-key-link">
-                        Save your MFL API key →
-                      </Link>
-                    </>
-                  ) : null}
-                </span>
-              </label>
-            ) : (
-              <div className="af-im-field">
-                <span className="af-label">Yahoo account</span>
-                <p className="af-im-field-help">
-                  Yahoo lists leagues from the account you connect — there is no username to enter.
-                  You will be sent to Yahoo to approve read-only access.
-                </p>
-                {/*
-                  ⚠ A SECOND WAY IN, BECAUSE THE FIRST ONE CAN FAIL AND USED TO BE
-                  THE ONLY ONE OFFERED. Yahoo was the single provider on this screen
-                  with no way to name a league directly, so when the account-wide
-                  list came back refused there was nothing else to try — the tile
-                  was a dead end with a working path sitting unused behind it.
-
-                  Deliberately secondary. Connecting is still the good path: it
-                  names every league at once and asks nothing of the user. This is
-                  for when that path is the broken one.
-                */}
-                <span className="af-label af-im-yahoo-alt">Or paste one league ID</span>
-                <input
-                  type="text"
-                  placeholder="123456, or paste the league URL"
-                  value={account}
-                  onChange={(e) => setAccount(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return
-                    e.preventDefault()
-                    if (lookupBusy) return
-                    const typed = account.trim()
-                    if (typed) void runPreview(toYahooLeagueKey(typed))
-                    else void runDiscover('')
-                  }}
-                />
-                <span className="af-im-field-help">
-                  The number in your league&rsquo;s address —
-                  football.fantasysports.yahoo.com/f1/<strong>123456</strong>/2. Paste the number or
-                  the whole link. This asks Yahoo for that one league instead of for all of them, so
-                  it still works when the list above does not. Read as an NFL league.
-                </span>
-              </div>
-            )}
-
-            {/*
-              Yahoo's block renders its own input above and has no `field`, so the
-              action stays a standalone row there — it is the only branch where
-              pressing the button with nothing typed is the NORMAL path.
-            */}
-            {field ? null : submitButton}
-
-            {/*
-              6a: the account line that sits directly under the connect action. The promise it
-              makes ("read-only, no password, ever") is the same one the trust card below spells
-              out, and it belongs here because this is the moment someone decides to type.
-            */}
-            {/*
-              ⚠ IT TOLD A SIGNED-IN USER TO CREATE AN ACCOUNT. The handoff's sentence
-              — "Create a free account to connect your Sleeper league" — was written
-              for the unauthenticated landing variant of this screen. /import is not
-              that screen: app/import/page.tsx redirects to /login before rendering a
-              pixel, so LITERALLY EVERY person who reads this line already has the
-              account it asks them to make. Under a filled-in step bar that says
-              "Account" is done, it reads as the page having lost track of who you are.
-
-              The half that was worth keeping is the promise, not the call to action:
-              this is the moment someone decides to type an identifier, and it is where
-              "read-only, no password" has to be in view.
-            */}
-            <p className="af-im-account-note">
-              <LockGlyph /> We connect your {providerLabel} league read-only &mdash; no password,
-              ever, and nothing on {providerLabel} changes.
-            </p>
-
-            {phase.k === 'discovering' ? <Working label="Looking up your leagues…" /> : null}
-
-            {verifyGate ? (
-              <ImportVerifyGate
-                email={viewerEmail ?? null}
-                returnTo={verifyReturnTo(provider, verifyGate)}
-                step={verifyGate.k === 'row' ? 'bulk' : verifyGate.k}
-                autoResume={verifyGate.k === 'discover' || verifyGate.k === 'preview'}
-                resuming={verifyResuming}
-                onResume={() => void resumeAfterVerify()}
-              />
-            ) : null}
-
-            {error ? (
-              <div className="af-im-error" role="alert" ref={errorRef}>
-                <p className="af-im-error-text">{error}</p>
-                {provider === 'mfl' && /MFL API key/i.test(error) ? (
-                  <Link href={MFL_KEY_HREF} className="af-im-error-link" data-testid="import-mfl-key-error-link">
-                    Save your MFL API key in Settings → Connected Accounts →
-                  </Link>
-                ) : needsConnectionSetup(error) ? (
-                  provider === 'yahoo' ? (
-                    /*
-                      Yahoo used to send the user to /leagues to "connect in League Sync",
-                      which meant: leave this screen, find the sync dashboard, authorise,
-                      then come back here and start over. Six pages to import one league.
-                      This starts the OAuth directly and returns to this screen, already
-                      on the Yahoo tab. Plain <a>, not <Link> -- the target is an API
-                      route that answers with a redirect, so client-side nav must not
-                      intercept it.
-                    */
-                    <a
-                      href={YAHOO_CONNECT_HREF}
-                      className="af-im-error-link"
-                    >
-                      Connect Yahoo →
-                    </a>
-                  ) : provider === 'espn' ? (
-                    /*
-                      ⚠ NO LINK, DELIBERATELY. This used to read "Connect ESPN in
-                      Settings →" and navigate away mid-import; the connect panel is
-                      now a few rows up this same card, so a link would send someone
-                      to a second copy of a control already on screen. The sentence
-                      points at it instead.
-
-                      (It pointed at /leagues before that, which was worse again —
-                      League Sync has no ESPN control on it at all, so a solvable
-                      setup step read as "import is broken".)
-
-                      ⚠ NAME A LABEL THE PANEL ACTUALLY SHOWS. It said "Use 'Connect
-                      ESPN' above", and EspnConnectPanel has no control with that
-                      label. While the extension is unpublished the only way in is
-                      "Save ESPN cookies" inside the collapsed "Manual fallback";
-                      once connected, the panel shows "Update cookies" instead.
-                    */
-                    <span className="af-im-error-link af-im-error-here">
-                      {espnConnected === true ? (
-                        <>Use &ldquo;Update cookies&rdquo; above, on a desktop browser.</>
-                      ) : (
-                        <>
-                          Open &ldquo;Manual fallback&rdquo; above and press &ldquo;Save ESPN
-                          cookies&rdquo;, on a desktop browser.
-                        </>
-                      )}
-                    </span>
-                  ) : provider === 'sleeper' ? (
-                    /* The gate's sentence already says where: the username box on this screen.
-                       A League Sync link beside it would be a second, contradictory instruction. */
-                    null
-                  ) : (
-                    <Link href="/leagues" className="af-im-error-link">
-                      Connect your accounts in League Sync →
-                    </Link>
-                  )
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <ReadOnlyPromise />
-
-        {/*
-          ⚠ THIS LINK WAS CONDITIONED ON FANTRAX BEING UNAVAILABLE, so making
-          Fantrax work removed the only pointer to the CSV uploader. The upload
-          is still the second way in — an export carries seasons the live API
-          does not expose, and a league the fxea API will not serve has nowhere
-          else to go — so the door stays. It is hidden only when the uploader is
-          already on screen, which is what it was really guarding.
-
-          ⚠ AND IT MOVED TO THE FOOT OF THE CARD. It used to sit between the pill
-          row and the input — underlined, and the only link in that stretch, so it
-          was the loudest thing on the path between "pick your platform" and "type
-          your username". A one-provider fallback cannot stand in the middle of the
-          road every provider walks down. Below the trust panel it is still one
-          scroll from the top and still findable by anyone looking for it.
-        */}
-        {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
-          <p className="af-im-fx-link af-im-fx-link--foot">
-            <a href="/import?provider=fantrax">
-              Have a Fantrax CSV export? Bank it now →
-            </a>
-          </p>
-        ) : null}
-
-        {/*
-          ⚠ THE C2C / DEVY PAIRING HAD NO ENTRY POINT ANYWHERE IN THE APP.
-          `FranchiseLink` has modelled a two-league franchise all along and
-          `/api/legacy/franchise` has served it, with zero callers. This flow is
-          about leagues that are ALREADY imported, which is why it sits at the
-          foot of the import screen rather than inside a provider step: you
-          reach it after importing both halves, not while importing one.
-        */}
-        <p className="af-im-fx-link af-im-fx-link--foot">
-          <a href="/core/connect-leagues">
-            Run a college league alongside a pro one? Connect them →
-          </a>
-        </p>
-      </section>
-      )}
-
       {/*
-        The CSV upload stays, as the second way in rather than the only one.
-        Importing now runs from a league id, but an export still carries seasons
-        the live API does not expose, and a league whose id will not read (a
-        format the fxea API does not serve) has nowhere else to go.
+        ⚠ THE LIST COMES FIRST ONCE THERE IS ONE. It used to render after the connect card, so a
+        linked Sleeper account — discovered automatically on load — opened on "Step 3 of 3 · Choose
+        leagues" with the leagues a full form, guide and trust panel further down the page. The
+        step you are on is the thing on top; the form to look somewhere else stays right below it.
       */}
-      {/*
-        ⚠ COLLAPSED, NOT DELETED. As a always-open panel this was the first thing a
-        Fantrax importer met — a username field, a season, a sport, a file picker — and
-        its own heading told them the league-id path did not exist. On a phone, "export
-        CSVs from Fantrax and upload them" is where the import ends.
-        The capability is still worth keeping for exactly the reason above: an export
-        carries past seasons the live API does not expose, and a league whose id will not
-        read has nowhere else to go. So it stays one click away instead of in the way.
-      */}
-      {(provider === 'fantrax' || defaultProvider === 'fantrax') && !importTakeover ? (
-        <details className="af-im-fx-disclosure">
-          <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
-          <FantraxUpload />
-        </details>
-      ) : null}
-
       {/* ── Discovered leagues ──────────────────────────────────────── */}
       {leagues.length > 0 && phase.k !== 'done' && !importTakeover ? (
-        <section className="af-im-card">
+        <section
+          className="af-im-card af-im-card--leagues"
+          data-many={leagues.length > 4 ? 'true' : undefined}
+          ref={leaguesRef}
+        >
           <header className="af-im-result-head">
             <h2 className="af-label">
               {rowsAreTeams
@@ -2671,6 +2345,36 @@ export function ImportV4({
                   : 'Leagues we found'}
             </h2>
             <span className="af-chip af-num">{leagues.length}</span>
+            {/*
+              Select all / clear. A 55-league Sleeper account was the case that asked for it: the
+              only way to import three of them was to untick fifty-two boxes. "Select all" goes
+              back to the DEFAULT ticks, so a previously-deleted league stays unticked — its tick
+              is still the confirmation and a bulk control must not sweep it back in.
+            */}
+            {leagues.length > 1 && !rowsAreTeams ? (
+              <span className="af-im-select-tools">
+                <button
+                  type="button"
+                  className="af-im-select-btn"
+                  disabled={bulkRunning}
+                  onClick={() => setExcluded(defaultExclusionsFor(leagues))}
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  className="af-im-select-btn"
+                  disabled={bulkRunning}
+                  onClick={() => {
+                    const next: Record<string, true> = {}
+                    for (const l of leagues) next[l.sourceId] = true
+                    setExcluded(next)
+                  }}
+                >
+                  Clear
+                </button>
+              </span>
+            ) : null}
           </header>
 
           {handleLinkedElsewhere ? (
@@ -2678,52 +2382,6 @@ export function ImportV4({
               This Sleeper account is already linked to a different AllFantasy login. Sign in with that
               account to import these leagues.
             </p>
-          ) : null}
-
-          {/*
-            Import all. Only worth offering when there is more than one, and hidden
-            once a single import has taken over the screen.
-          */}
-          {leagues.length > 1 && !rowsAreTeams ? (
-            <div className="af-im-bulk">
-              {/*
-                ⚠ THE LABEL COUNTS WHAT IS TICKED, NOT WHAT WAS FOUND (4d build
-                rule 3). A button reading "Import 4 leagues" beside three ticked
-                boxes is the kind of small lie that costs trust at the last step
-                of a funnel — and this IS the last step.
-
-                While running, the count names the league IN PROGRESS, not the
-                ones finished. The loop is sequential and one commit can take a
-                minute, so a finished count sits on "1 of 5" while league 2 works
-                and reads as frozen.
-              */}
-              <button
-                type="button"
-                className="af-btn af-im-bulk-btn"
-                disabled={bulkRunning || selectedLeagues.length === 0}
-                onClick={() => void runBulkImport()}
-              >
-                {bulkRunning
-                  ? `Importing league ${Math.min(bulkCounts.processed + 1, selectedLeagues.length)} of ${selectedLeagues.length}…`
-                  : selectedLeagues.length === 0
-                    ? 'Pick at least one league'
-                    : `Import ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}`}
-              </button>
-              {bulkDone ? (
-                <p className="af-im-bulk-summary" role="status">
-                  {[
-                    bulkCounts.done ? `${bulkCounts.done} imported` : null,
-                    bulkCounts.exists ? `${bulkCounts.exists} already imported` : null,
-                    bulkCounts.needsAttestation
-                      ? `${bulkCounts.needsAttestation} need you to confirm you can import them — do those individually`
-                      : null,
-                    bulkCounts.failed ? `${bulkCounts.failed} failed` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              ) : null}
-            </div>
           ) : null}
 
           <ul className="af-im-league-list">
@@ -2881,14 +2539,684 @@ export function ImportV4({
               )
             })}
           </ul>
+
+          {/*
+            Import all. Only worth offering when there is more than one, and hidden
+            once a single import has taken over the screen.
+          */}
+          {leagues.length > 1 && !rowsAreTeams ? (
+            <div className="af-im-bulk" role="region" aria-label="Import selected leagues">
+              <span className="af-im-bulk-count af-num">
+                {selectedLeagues.length} of {leagues.length} selected
+              </span>
+              {/*
+                ⚠ THE LABEL COUNTS WHAT IS TICKED, NOT WHAT WAS FOUND (4d build
+                rule 3). A button reading "Import 4 leagues" beside three ticked
+                boxes is the kind of small lie that costs trust at the last step
+                of a funnel — and this IS the last step.
+
+                While running, the count names the league IN PROGRESS, not the
+                ones finished. The loop is sequential and one commit can take a
+                minute, so a finished count sits on "1 of 5" while league 2 works
+                and reads as frozen.
+              */}
+              <button
+                type="button"
+                className="af-btn af-im-bulk-btn"
+                disabled={bulkRunning || selectedLeagues.length === 0}
+                onClick={() => void runBulkImport()}
+              >
+                {bulkRunning
+                  ? `Importing league ${Math.min(bulkCounts.processed + 1, selectedLeagues.length)} of ${selectedLeagues.length}…`
+                  : selectedLeagues.length === 0
+                    ? 'Pick at least one league'
+                    : `Import ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}`}
+              </button>
+              {bulkDone ? (
+                <p className="af-im-bulk-summary" role="status">
+                  {[
+                    bulkCounts.done ? `${bulkCounts.done} imported` : null,
+                    bulkCounts.exists ? `${bulkCounts.exists} already imported` : null,
+                    bulkCounts.needsAttestation
+                      ? `${bulkCounts.needsAttestation} need you to confirm you can import them — do those individually`
+                      : null,
+                    bulkCounts.failed ? `${bulkCounts.failed} failed` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <ReadOnlyPromise />
         </section>
       ) : null}
 
+      {/* ── Step 1: provider picker ─────────────────────────────────── */}
+      {importTakeover ? null : (
+      <section className="af-im-card af-im-card--connect">
+        {/*
+          The section heading used to repeat the h1 verbatim ("Where do you already play?"),
+          so the page asked the same question twice in a row. 6a asks it once, in the h1.
+        */}
+        {/*
+          ── 6a: A PILL ROW, NOT A GRID OF CARDS ───────────────────────────────
+          This was six stacked tiles, each carrying a mark, a name, a tagline and
+          a sports line — 24 lines of text to read before picking the platform
+          you already knew you were on. The handoff draws one scannable row, and
+          it is right: choosing your platform is recognition, not comparison.
+
+          ⚠ NOTHING WAS DELETED TO GET THERE. The tagline and the supported
+          sports both still render — in the context line directly below, for the
+          provider actually chosen. That is where they matter (they describe what
+          the field beneath is about to ask for), and it is the only place they
+          are not competing with five other providers' copy for attention.
+
+          ⚠ AND AVAILABILITY IS STILL provider-ui-config's ANSWER. The handoff
+          tags MFL, Fantrax and Fleaflicker "Coming soon"; that was true when it
+          was drawn and is not true now. Reading `opt.available` rather than the
+          picture keeps the row honest in both directions — it will say "soon"
+          again the day a provider is switched off, without an edit here.
+        */}
+        <div className="af-im-providers" role="group" aria-label="Fantasy platform">
+          {IMPORT_PROVIDER_UI_OPTIONS.map((opt) => {
+            const available = opt.available
+            const active = provider === opt.provider
+            const tag = available ? PROVIDER_PILL_TAG[opt.provider] : 'Coming soon'
+            return (
+              <button
+                key={opt.provider}
+                type="button"
+                className="af-im-provider"
+                data-active={active}
+                data-available={available}
+                /* An unavailable platform's "Coming soon" tile is a placeholder — not in the iOS app (2.1). */
+                data-hide-in-ios-app={available ? undefined : ''}
+                data-testid={`import-tab-${opt.provider}`}
+                /*
+                  ⚠ A PAUSED TILE STILL TAKES THE CLICK — to explain itself, and nothing else.
+                  `selectable` below is false for it, so no field, no discovery and no preview
+                  can start; the "selected?" strip says why. A disabled tile had nowhere to put
+                  that sentence except under every other tab.
+                */
+                aria-pressed={active}
+                onClick={() => {
+                  setProvider(opt.provider)
+                  setAccount('')
+                  reset()
+                }}
+              >
+                <span className="af-platform af-platform-mark af-im-mark" data-platform={opt.provider} aria-hidden>
+                  {PROVIDER_INITIAL[opt.provider] ?? opt.label.charAt(0)}
+                </span>
+                {/*
+                  The name over its tag. A wrapper rather than a CSS grid on the
+                  button, because the stack is now the layout at EVERY width — the
+                  grid-row trick that did this below 560px only worked while the
+                  desktop case was a single line, and keeping two mechanisms for
+                  one arrangement is how they drift apart.
+                */}
+                <span className="af-im-provider-text">
+                  <span className="af-im-provider-label">{providerPillLabel(opt.label)}</span>
+                  {tag ? <span className="af-im-soon af-num">&middot; {tag}</span> : null}
+                </span>
+                {available && PROVIDER_EFFORT[opt.provider] ? (
+                  <span className="af-im-effort af-num">{PROVIDER_EFFORT[opt.provider]}</span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+
+        {/*
+          What the chosen pill costs you, in one line: what it asks for, and which
+          sports it can carry. Both used to sit on every tile at once; here they
+          describe the field immediately below them.
+        */}
+        {/*
+          ⚠ IT DESCRIBED THE SELECTED PILL WITHOUT NAMING IT. Two quiet lines of grey
+          under a six-pill row is ambiguous by construction — "Finds your leagues
+          automatically" is true of Sleeper AND Yahoo, and nothing in the sentence
+          said which one it was about. Repeating the platform's own mark and name
+          anchors it, and it is the same mark that is lit in the row directly above,
+          so the eye connects the two without reading either.
+        */}
+        <p className="af-im-context">
+          <span className="af-platform af-platform-mark af-im-context-mark" data-platform={provider} aria-hidden>
+            {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
+          </span>
+          <span className="af-im-context-meta">
+            {selectable
+              ? PROVIDER_TAGLINE[provider] ??
+                (canDiscover ? 'Finds your leagues automatically' : 'League ID · read-only')
+              : 'Paused — see below'}
+          </span>
+          {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
+            .map((sport) => (
+              <span key={sport} className="af-im-context-sport af-num" data-sport={sport}>
+                {sport}
+              </span>
+            ))}
+        </p>
+
+        {/*
+          ── The guide ────────────────────────────────────────────────────────
+          One render. On a wide screen af-import.css places it in the card's right-hand column
+          (it is a direct child of this grid on purpose); on a phone it stays here, between the
+          platform you picked and the box it asks you to fill. See ImportGuide's header for why
+          each step and snag exists.
+        */}
+        <ImportGuide
+          provider={provider}
+          providerLabel={providerLabel}
+          available={selectable}
+          espnConnected={espnConnected}
+          mark={
+            <span className="af-platform af-platform-mark" data-platform={provider} aria-hidden>
+              {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
+            </span>
+          }
+        />
+
+        {/*
+          ── 6a: why a provider is unavailable ─────────────────────────────────
+          ⚠ THIS COMMENT USED TO SAY THE STRIP WAS "DORMANT TODAY AND BUILT ANYWAY
+          — every provider in the config is available, so this renders for
+          nobody." That was true when it was written and stopped being true on
+          2026-08-29, when yahoo was flipped to `available: false`. The strip was
+          not dormant after that; it was BROKEN, and the stale comment is a good
+          part of why nobody looked — it told every reader the empty result was
+          expected.
+
+          Both forms below are live now. Keep this note pointed at the config
+          rather than at a count of providers, so it cannot go stale the same way.
+        */}
+        {/*
+          🛑 THE ROW-WIDE STRIP IS GONE. It printed every paused provider's reason under the row
+          on EVERY tab, so someone on the Sleeper tab read a Yahoo notice — with copy that had
+          stopped being true. A paused tile is now selectable purely to explain itself, and its
+          reason renders once, in the "selected?" strip below, only while it is the selected tile.
+        */}
+
+        {/*
+          ⚠ KEPT, AND I WAS WRONG TO CALL IT UNREACHABLE. The comment above the row
+          list says this branch cannot fire, which is true of both production
+          callers — /import falls an unavailable `?provider=` back to sleeper, and
+          /core passes no provider at all. It is NOT true of the component's own
+          API, which takes `defaultProvider` from anyone who renders it, and the 6a
+          suite exercises exactly that. A third caller added without the fallback
+          would land someone on a blocked provider with no field and, without this,
+          no explanation either.
+
+          It says more than the row line does — the provider is the one you are
+          looking at, so it gets the "selected?" framing and a full sentence rather
+          than a footnote.
+        */}
+        {!selectable ? (
+          <p className="af-im-blocked af-im-blocked--selected" role="status">
+            <span className="af-im-blocked-line">
+              <span className="af-label">{providerLabel} selected?</span>
+              <span>
+                {importComingSoonMessage(provider)}
+              </span>
+            </span>
+          </p>
+        ) : null}
+
+        {/* ── Step 2: the provider's own field ──────────────────────── */}
+        {/* `phase.k !== 'done'` used to guard this; `done` is now a takeover phase,
+            so this whole block is already unmounted then and the test was dead. */}
+        {selectable ? (
+          <div className="af-im-field-block">
+            {/*
+              ── Fantrax: connect once, then there is nothing to type.
+              A league id is public and says nothing about who is asking, which is why
+              that path has to follow up with "which team is yours". A Secret ID is the
+              one thing Fantrax offers that identifies a PERSON, so `getLeagues` returns
+              the caller's leagues AND the teams they own in them — no league id, no
+              season, no sport, no team picker.
+              It posts to the SAME /api/league/auth every other provider's credentials
+              use (platform `fantrax`, encrypted `apiKey`), so nothing new stores it and
+              it never rides in an import request body.
+            */}
+            {provider === 'fantrax' ? (
+              <div className="af-im-field">
+                <span className="af-label">Fantrax Secret ID</span>
+                <input
+                  type="password"
+                  placeholder="paste your Secret ID"
+                  value={fxSecret}
+                  autoComplete="off"
+                  onChange={(e) => setFxSecret(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="af-btn af-btn--ghost"
+                  disabled={fxSaving || phase.k === 'discovering'}
+                  onClick={() => {
+                    const secret = fxSecret.trim()
+                    if (!secret) {
+                      setError('Paste your Fantrax Secret ID first.')
+                      return
+                    }
+                    setError(null)
+                    setFxSaving(true)
+                    void (async () => {
+                      try {
+                        const res = await fetch('/api/league/auth', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ platform: 'fantrax', apiKey: secret }),
+                        })
+                        if (!res.ok) {
+                          const body = (await res.json().catch(() => null)) as { error?: string } | null
+                          setError(body?.error || 'That Secret ID could not be saved.')
+                          return
+                        }
+                        // Cleared on success: it is a credential, and it is stored now.
+                        setFxSecret('')
+                        await runDiscover('')
+                      } catch {
+                        setError('Could not reach the server to save that Secret ID.')
+                      } finally {
+                        setFxSaving(false)
+                      }
+                    })()
+                  }}
+                >
+                  {fxSaving ? 'Connecting…' : 'Connect Fantrax and list my leagues'}
+                </button>
+                <span className="af-im-field-help">
+                  It is on your Fantrax profile page (fantrax.com/user/profile). We only read with it, and it is stored encrypted. With it
+                  connected we can name your leagues and your team without you typing either. Prefer
+                  not to? Paste a league ID below instead.
+                </span>
+              </div>
+            ) : null}
+
+            {field ? (
+              <label className="af-im-field">
+                <span className="af-label">
+                  {field.label}
+                  {/*
+                    6a build rule 1: this label and placeholder change with the
+                    platform, and the `?` is where that rule is explained rather
+                    than merely obeyed. Someone who picked ESPN after typing a
+                    Sleeper username needs to know the box now wants something
+                    else — the swap alone does not say so.
+                  */}
+                  <Hint label="Why this field changes">
+                    Sleeper connects by username. ESPN, MFL, Fantrax and Fleaflicker connect
+                    by league ID — the field swaps when you pick a platform.
+                  </Hint>
+                </span>
+                {/*
+                  ⚠ THE ACTION SITS ON THE FIELD'S ROW, NOT UNDER IT. The submit
+                  used to be a separate block below the help text, so the thing you
+                  press after typing was two paragraphs away from the thing you
+                  typed into — and on the one screen whose entire job is "type this,
+                  press that". 6a puts them on one row; the button drops beneath the
+                  input on narrow screens, where a row would squeeze both.
+                */}
+                <span className="af-im-field-row">
+                  <input
+                    type="text"
+                    placeholder={field.placeholder}
+                    value={account}
+                    data-testid="import-discovery-account"
+                    onChange={(e) => {
+                      setAccount(e.target.value)
+                      setError((prev) => (prev === EMPTY_LEAGUE_ID_ERROR ? null : prev))
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return
+                      e.preventDefault()
+                      if (lookupBusy) return
+                      if (canDiscover) void runDiscover(account.trim())
+                      else if (account.trim()) void runPreview(account.trim())
+                    }}
+                  />
+                  {submitButton}
+                </span>
+                {/*
+                  ⚠ THE WRONG-BOX PASTE. An ESPN link in the Sleeper box, a Fantrax link in the ESPN
+                  box — the import then fails with a sentence about the WRONG platform, which is the
+                  most confusing failure on the screen. A pasted LINK names its platform by host, so
+                  say so and offer the switch; bare ids are never guessed at (see the helper).
+                */}
+                {pastedProvider && pastedProvider !== provider ? (
+                  <span className="af-im-wrongbox" role="status">
+                    <span>
+                      That looks like a{/^[aeiou]/i.test(getImportProviderLabel(pastedProvider)) ? 'n' : ''}{' '}
+                      <strong>{getImportProviderLabel(pastedProvider)}</strong> link
+                      {isImportProviderAvailable(pastedProvider)
+                        ? pastedProvider === 'sleeper'
+                          ? ' — Sleeper connects by username, not a link.'
+                          : '.'
+                        : ` — ${getImportProviderLabel(pastedProvider)} import is coming soon.`}
+                    </span>
+                    {isImportProviderAvailable(pastedProvider) ? (
+                      <button
+                        type="button"
+                        className="af-im-wrongbox-btn"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          const typed = account
+                          setProvider(pastedProvider)
+                          reset()
+                          // A Sleeper league link is not a username; every other box takes the link.
+                          setAccount(pastedProvider === 'sleeper' ? '' : typed)
+                        }}
+                      >
+                        Switch to {providerPillLabel(getImportProviderLabel(pastedProvider))} &rarr;
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
+                <span className="af-im-field-help">
+                  {/*
+                    ⚠ "CONNECT ESPN ABOVE" IS WRONG ONCE ESPN IS CONNECTED — it tells
+                    someone to do a thing the green badge two rows up says they have
+                    already done, which reads as the badge being wrong. The static
+                    map cannot know, so the one provider whose help depends on live
+                    state gets it swapped here.
+                  */}
+                  {provider === 'espn' && espnConnected === true
+                    ? 'ESPN is connected, so paste a league ID — the leagueId= number in your league URL — and we will read it as you. Paste either. We never ask for your ESPN password.'
+                    : field.help}
+                  {provider === 'mfl' ? (
+                    <>
+                      {' '}
+                      <Link href={MFL_KEY_HREF} className="af-im-error-link" data-testid="import-mfl-key-link">
+                        Save your MFL API key →
+                      </Link>
+                    </>
+                  ) : null}
+                </span>
+              </label>
+            ) : (
+              <div className="af-im-field">
+                <span className="af-label">Yahoo account</span>
+                <p className="af-im-field-help">
+                  Yahoo lists leagues from the account you connect — there is no username to enter.
+                  You will be sent to Yahoo to approve read-only access.
+                </p>
+                {/*
+                  ⚠ A SECOND WAY IN, BECAUSE THE FIRST ONE CAN FAIL AND USED TO BE
+                  THE ONLY ONE OFFERED. Yahoo was the single provider on this screen
+                  with no way to name a league directly, so when the account-wide
+                  list came back refused there was nothing else to try — the tile
+                  was a dead end with a working path sitting unused behind it.
+
+                  Deliberately secondary. Connecting is still the good path: it
+                  names every league at once and asks nothing of the user. This is
+                  for when that path is the broken one.
+                */}
+                <span className="af-label af-im-yahoo-alt">Or paste one league ID</span>
+                <input
+                  type="text"
+                  placeholder="123456, or paste the league URL"
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return
+                    e.preventDefault()
+                    if (lookupBusy) return
+                    const typed = account.trim()
+                    if (typed) void runPreview(toYahooLeagueKey(typed))
+                    else void runDiscover('')
+                  }}
+                />
+                <span className="af-im-field-help">
+                  The number in your league&rsquo;s address —
+                  football.fantasysports.yahoo.com/f1/<strong>123456</strong>/2. Paste the number or
+                  the whole link. This asks Yahoo for that one league instead of for all of them, so
+                  it still works when the list above does not. Read as an NFL league.
+                </span>
+              </div>
+            )}
+
+            {/*
+              ── 6b: ESPN connects HERE, not on another page ─────────────────
+              ⚠ THE OLD ANSWER WAS A LINK OUT, AND A LINK OUT ENDS THE IMPORT.
+              ESPN is the one provider on this screen that cannot be read without a
+              connection — commissionerGate resolves your team from the SWID cookie,
+              so a PUBLIC ESPN league needs one too. Pointing at /settings meant:
+              leave with no league id in hand, connect, find your way back, start over.
+
+              ⚠ GUIDED ORDER (2026-11-08): league box → Test connection → this step. The
+              panel is still on screen from the start — it is a prerequisite for every
+              ESPN import and must not be taught by failure — but it now sits AFTER the
+              league box, and its heading follows the test: "private league", "confirm
+              your team", "reconnect". The test is what moves someone here, not an error.
+            */}
+            {provider === 'espn' ? (
+              <EspnLeagueCheck leagueInput={account} espnConnected={espnConnected} onStatus={setEspnCheck} />
+            ) : null}
+            {provider === 'espn' ? (
+              <div
+                className="af-im-espn"
+                data-connected={espnConnected === true ? 'true' : 'false'}
+                data-check={espnCheck.k}
+              >
+                {espnConnected === true ? null : (
+                  <p className="af-im-espn-lead">
+                    <span className="af-label">
+                      {espnCheck.k === 'needs_cookies'
+                        ? 'Step 2 · Private league — add your ESPN cookies'
+                        : espnCheck.k === 'cookies_rejected'
+                          ? 'Step 2 · Reconnect ESPN'
+                          : espnCheck.k === 'ok'
+                            ? 'Optional · Commissioners, connect ESPN'
+                            : 'Step 2 · Connect ESPN (private leagues and commissioners)'}
+                    </span>
+                    {/*
+                      Owner decision 2026-11-08: a PUBLIC league imports without cookies — the member
+                      picks their team (`espnPublicMemberImport.ts`). This used to say every league
+                      needs cookies "public ones included", which was true until that change and is
+                      now the thing most likely to send someone on a detour they do not need.
+                    */}
+                    <span>
+                      Public league and you are not the commissioner? Skip this &mdash; press Connect
+                      above and pick your team. Private leagues, and commissioners who want invites
+                      and team assignments, connect ESPN with two browser cookies: ESPN has no sign-in
+                      for other apps, so we read the league as you. They are stored encrypted, only
+                      used to read, and you can disconnect ESPN at any time.
+                    </span>
+                  </p>
+                )}
+                <EspnConnectPanel onConnectedChange={handleEspnConnectedChange} leagueInputForTest={account} />
+              </div>
+            ) : null}
+
+            {/*
+              Yahoo's block renders its own input above and has no `field`, so the
+              action stays a standalone row there — it is the only branch where
+              pressing the button with nothing typed is the NORMAL path.
+            */}
+            {field ? null : submitButton}
+
+            {/*
+              6a: the account line that sits directly under the connect action. The promise it
+              makes ("read-only, no password, ever") is the same one the trust card below spells
+              out, and it belongs here because this is the moment someone decides to type.
+            */}
+            {/*
+              ⚠ IT TOLD A SIGNED-IN USER TO CREATE AN ACCOUNT. The handoff's sentence
+              — "Create a free account to connect your Sleeper league" — was written
+              for the unauthenticated landing variant of this screen. /import is not
+              that screen: app/import/page.tsx redirects to /login before rendering a
+              pixel, so LITERALLY EVERY person who reads this line already has the
+              account it asks them to make. Under a filled-in step bar that says
+              "Account" is done, it reads as the page having lost track of who you are.
+
+              The half that was worth keeping is the promise, not the call to action:
+              this is the moment someone decides to type an identifier, and it is where
+              "read-only, no password" has to be in view.
+            */}
+            <p className="af-im-account-note">
+              <LockGlyph /> We connect your {providerLabel} league read-only &mdash; no password,
+              ever, and nothing on {providerLabel} changes.
+            </p>
+
+            {phase.k === 'discovering' ? <Working label="Looking up your leagues…" /> : null}
+
+            {verifyGate ? (
+              <ImportVerifyGate
+                email={viewerEmail ?? null}
+                returnTo={verifyReturnTo(provider, verifyGate)}
+                step={verifyGate.k === 'row' ? 'bulk' : verifyGate.k}
+                autoResume={verifyGate.k === 'discover' || verifyGate.k === 'preview'}
+                resuming={verifyResuming}
+                onResume={() => void resumeAfterVerify()}
+              />
+            ) : null}
+
+            {error ? (
+              <div className="af-im-error" role="alert" ref={errorRef}>
+                <p className="af-im-error-text">{error}</p>
+                {provider === 'mfl' && /MFL API key/i.test(error) ? (
+                  <Link href={MFL_KEY_HREF} className="af-im-error-link" data-testid="import-mfl-key-error-link">
+                    Save your MFL API key in Settings → Connected Accounts →
+                  </Link>
+                ) : needsConnectionSetup(error) ? (
+                  provider === 'yahoo' ? (
+                    /*
+                      Yahoo used to send the user to /leagues to "connect in League Sync",
+                      which meant: leave this screen, find the sync dashboard, authorise,
+                      then come back here and start over. Six pages to import one league.
+                      This starts the OAuth directly and returns to this screen, already
+                      on the Yahoo tab. Plain <a>, not <Link> -- the target is an API
+                      route that answers with a redirect, so client-side nav must not
+                      intercept it.
+                    */
+                    <a
+                      href={YAHOO_CONNECT_HREF}
+                      className="af-im-error-link"
+                    >
+                      Connect Yahoo →
+                    </a>
+                  ) : provider === 'espn' ? (
+                    /*
+                      ⚠ NO LINK, DELIBERATELY. This used to read "Connect ESPN in
+                      Settings →" and navigate away mid-import; the connect panel is
+                      now a few rows up this same card, so a link would send someone
+                      to a second copy of a control already on screen. The sentence
+                      points at it instead.
+
+                      (It pointed at /leagues before that, which was worse again —
+                      League Sync has no ESPN control on it at all, so a solvable
+                      setup step read as "import is broken".)
+
+                      ⚠ NAME A LABEL THE PANEL ACTUALLY SHOWS. It said "Use 'Connect
+                      ESPN' above", and EspnConnectPanel has no control with that
+                      label. While the extension is unpublished the only way in is
+                      "Save ESPN cookies" inside the collapsed "Manual fallback";
+                      once connected, the panel shows "Update cookies" instead.
+                    */
+                    <span className="af-im-error-link af-im-error-here">
+                      {espnConnected === true ? (
+                        <>Use &ldquo;Update cookies&rdquo; above, on a desktop browser.</>
+                      ) : (
+                        <>
+                          Open &ldquo;Manual fallback&rdquo; above and press &ldquo;Save ESPN
+                          cookies&rdquo;, on a desktop browser.
+                        </>
+                      )}
+                    </span>
+                  ) : provider === 'sleeper' ? (
+                    /* The gate's sentence already says where: the username box on this screen.
+                       A League Sync link beside it would be a second, contradictory instruction. */
+                    null
+                  ) : (
+                    <Link href="/leagues" className="af-im-error-link">
+                      Connect your accounts in League Sync →
+                    </Link>
+                  )
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <ReadOnlyPromise />
+
+        {/*
+          ⚠ THIS LINK WAS CONDITIONED ON FANTRAX BEING UNAVAILABLE, so making
+          Fantrax work removed the only pointer to the CSV uploader. The upload
+          is still the second way in — an export carries seasons the live API
+          does not expose, and a league the fxea API will not serve has nowhere
+          else to go — so the door stays. It is hidden only when the uploader is
+          already on screen, which is what it was really guarding.
+
+          ⚠ AND IT MOVED TO THE FOOT OF THE CARD. It used to sit between the pill
+          row and the input — underlined, and the only link in that stretch, so it
+          was the loudest thing on the path between "pick your platform" and "type
+          your username". A one-provider fallback cannot stand in the middle of the
+          road every provider walks down. Below the trust panel it is still one
+          scroll from the top and still findable by anyone looking for it.
+        */}
+        {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
+          <p className="af-im-fx-link af-im-fx-link--foot">
+            {/*
+              A FULL RELOAD ON PURPOSE, so not <Link>. This is the page linking to itself: the
+              provider is `useState(defaultProvider)`, which a client-side navigation would keep,
+              leaving the old tile selected under a `?provider=fantrax` URL.
+            */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- see the note above */}
+            <a href="/import?provider=fantrax">
+              Have a Fantrax CSV export? Bank it now →
+            </a>
+          </p>
+        ) : null}
+
+        {/*
+          ⚠ THE C2C / DEVY PAIRING HAD NO ENTRY POINT ANYWHERE IN THE APP.
+          `FranchiseLink` has modelled a two-league franchise all along and
+          `/api/legacy/franchise` has served it, with zero callers. This flow is
+          about leagues that are ALREADY imported, which is why it sits at the
+          foot of the import screen rather than inside a provider step: you
+          reach it after importing both halves, not while importing one.
+        */}
+        <p className="af-im-fx-link af-im-fx-link--foot">
+          <Link href="/core/connect-leagues">
+            Run a college league alongside a pro one? Connect them →
+          </Link>
+        </p>
+      </section>
+      )}
+
+      {/*
+        The CSV upload stays, as the second way in rather than the only one.
+        Importing now runs from a league id, but an export still carries seasons
+        the live API does not expose, and a league whose id will not read (a
+        format the fxea API does not serve) has nowhere else to go.
+      */}
+      {/*
+        ⚠ COLLAPSED, NOT DELETED. As a always-open panel this was the first thing a
+        Fantrax importer met — a username field, a season, a sport, a file picker — and
+        its own heading told them the league-id path did not exist. On a phone, "export
+        CSVs from Fantrax and upload them" is where the import ends.
+        The capability is still worth keeping for exactly the reason above: an export
+        carries past seasons the live API does not expose, and a league whose id will not
+        read has nowhere else to go. So it stays one click away instead of in the way.
+      */}
+      {(provider === 'fantrax' || defaultProvider === 'fantrax') && !importTakeover ? (
+        <details className="af-im-fx-disclosure">
+          <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
+          <FantraxUpload />
+        </details>
+      ) : null}
+
       {/* ── Attestation gate ────────────────────────────────────────── */}
       {phase.k === 'attest' ? (
-        <section className="af-im-card" ref={outcomeRef}>
-          <h2 className="af-label">One confirmation first</h2>
+        <section className="af-im-card af-im-card--attest" ref={outcomeRef}>
+          <header className="af-im-preview-head">
+            <span className="af-im-attest-mark" aria-hidden>
+              !
+            </span>
+            <h2 className="af-label">One confirmation first</h2>
+          </header>
           <p className="af-im-attest">{phase.message}</p>
           <div className="af-im-actions">
             <button
@@ -2922,10 +3250,17 @@ export function ImportV4({
 
       {/* ── Preview, then commit ────────────────────────────────────── */}
       {phase.k === 'preview' ? (
-        <section className="af-im-card" ref={outcomeRef}>
-          <header className="af-im-result-head">
+        <section
+          className="af-im-card af-im-card--preview"
+          data-blocked={phase.importBlockedReason ? 'true' : undefined}
+          ref={outcomeRef}
+        >
+          <header className="af-im-preview-head">
+            <span className="af-platform af-platform-mark" data-platform={provider} aria-hidden>
+              {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
+            </span>
             <h2 className="af-label">
-              {phase.importBlockedReason ? 'Preview only' : 'Ready to import'}
+              {previewImportState(provider, phase).blocked ? 'Preview only' : 'Ready to import'}
             </h2>
           </header>
           <p className="af-im-league-name af-im-preview-name">{phase.leagueName}</p>
@@ -2933,6 +3268,16 @@ export function ImportV4({
             We read this league from {providerLabel}. Importing builds a read-only copy — nothing
             changes on {providerLabel}.
           </p>
+          {phase.review ? (
+            <ImportReviewPanel
+              embedded
+              review={phase.review}
+              provider={provider}
+              blockedReason={phase.importBlockedReason}
+              onRerun={() => void runPreview(phase.sourceId, phase.attested)}
+              onReviewStateChange={onReviewStateChange}
+            />
+          ) : null}
           {/*
             ── What you are about to get ──────────────────────────────────────────
             Rendered ONLY when the preview actually said something. `phase.coverage` is null both
@@ -2971,6 +3316,21 @@ export function ImportV4({
             A LIST, and the state is WORDS ("Partial", "Not included"), never colour alone.
           */}
           {phase.coverageRows.length > 0 ? (
+            <p className="af-im-coverage-tally af-num" aria-hidden>
+              {[
+                `${phase.coverageRows.filter((r) => r.state === 'full').length} included`,
+                phase.coverageRows.some((r) => r.state === 'partial')
+                  ? `${phase.coverageRows.filter((r) => r.state === 'partial').length} partial`
+                  : null,
+                phase.coverageRows.some((r) => r.state === 'missing')
+                  ? `${phase.coverageRows.filter((r) => r.state === 'missing').length} not available`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
+          {phase.coverageRows.length > 0 ? (
             <ul
               className="af-im-coverage-list"
               aria-label="What this import brings across"
@@ -2990,16 +3350,61 @@ export function ImportV4({
             choice is sent with the commit, validated server-side against this league's rosters,
             and used ONLY to claim that one team in the league this import creates.
           */}
-          {phase.teams && !phase.importBlockedReason ? (
+          {/*
+            ── ESPN: who runs this league? ─────────────────────────────────────────
+            Only for a public league we could read but not prove membership in. "ESPN runs it" and
+            "someone else" import with no cookies as a member; "I'm the commissioner" needs proof.
+          */}
+          {previewImportState(provider, phase).espnAsk ? (
+            <fieldset className="af-im-runby" data-testid="import-espn-run-by">
+              <legend className="af-label">Who&rsquo;s the commissioner of this league on ESPN?</legend>
+              {ESPN_RUN_BY_OPTIONS.map((o) => (
+                <label
+                  key={o.value}
+                  className="af-im-runby-option"
+                  data-selected={phase.espnRunBy === o.value ? 'true' : undefined}
+                >
+                  <input
+                    type="radio"
+                    name="espn-run-by"
+                    value={o.value}
+                    checked={phase.espnRunBy === o.value}
+                    data-testid={`import-espn-run-by-${o.value}`}
+                    onChange={() =>
+                      setPhase((prev) =>
+                        prev.k === 'preview' ? { ...prev, espnRunBy: o.value, claimTeamId: null } : prev,
+                      )
+                    }
+                  />
+                  <span className="af-im-runby-text">
+                    <strong>{o.label}</strong>
+                    <span className="af-im-field-help">{o.help}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+          {phase.teams && previewImportState(provider, phase).showPicker ? (
             <div data-testid="import-preview-team-pick">
               <h3 className="af-label">Which team is yours?</h3>
               <p className="af-im-field-help">
-                {providerLabel} doesn&rsquo;t tell us which team you manage. Pick yours so this league
-                shows up as yours on AllFantasy.
+                {previewImportState(provider, phase).espnMember ? (
+                  <>
+                    Pick yours and it shows up as yours on AllFantasy. If someone already claimed it,
+                    connecting ESPN proves it&rsquo;s yours and moves it to you.
+                  </>
+                ) : (
+                  <>
+                    {providerLabel} doesn&rsquo;t tell us which team you manage. Pick yours so this
+                    league shows up as yours on AllFantasy.
+                  </>
+                )}
               </p>
               <ul className="af-im-league-list">
                 {phase.teams.map((t) => {
                   const picked = phase.claimTeamId === t.teamId
+                  /* A commissioner's team is claimable only with proof — the server refuses it too. */
+                  const locked = previewImportState(provider, phase).espnMember && t.commissionerTeam === true
                   return (
                     <li key={t.teamId} className="af-im-league" data-picked={picked ? 'true' : undefined}>
                       <span className="af-im-league-main">
@@ -3010,6 +3415,8 @@ export function ImportV4({
                         type="button"
                         className="af-btn af-btn--ghost af-im-league-btn"
                         aria-pressed={picked}
+                        disabled={locked}
+                        title={locked ? 'Commissioner team: connect ESPN to claim it' : undefined}
                         data-testid={`import-preview-team-${t.teamId}`}
                         onClick={() =>
                           setPhase((prev) =>
@@ -3017,7 +3424,7 @@ export function ImportV4({
                           )
                         }
                       >
-                        {picked ? 'Your team' : 'This is my team'}
+                        {locked ? 'Commissioner — connect ESPN' : picked ? 'Your team' : 'This is my team'}
                       </button>
                     </li>
                   )
@@ -3025,9 +3432,16 @@ export function ImportV4({
               </ul>
             </div>
           ) : null}
-          {phase.importBlockedReason ? (
+          {phase.importBlockedReason && !previewImportState(provider, phase).espnAsk ? (
             <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
               {phase.importBlockedReason}
+            </p>
+          ) : null}
+          {previewImportState(provider, phase).espnAsk && phase.espnRunBy === 'me' ? (
+            <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
+              Connect ESPN above so we can confirm you run this league &mdash; it takes about two
+              minutes on a computer. Then press Import: you&rsquo;ll get invites, team assignments and
+              the commissioner tools.
             </p>
           ) : null}
           {/*
@@ -3053,13 +3467,27 @@ export function ImportV4({
             <button
               type="button"
               className="af-btn af-im-submit"
-              disabled={phase.importBlockedReason !== null || (phase.teams !== null && !phase.claimTeamId)}
+              disabled={
+                previewImportState(provider, phase).blocked ||
+                previewImportState(provider, phase).needsPick ||
+                // The review's own gate: nothing blocking left, open warnings acknowledged.
+                Boolean(phase.review && reviewState && !reviewState.ready)
+              }
               // The second half of the contract described on the row button above:
               // `import-commit` is the step the canonical import spec proves.
               data-testid="import-commit"
-              onClick={() => void runCommit(phase.sourceId, phase.attested, false, phase.claimTeamId)}
+              onClick={() => {
+                reviewState?.markConfirmed()
+                void runCommit(
+                  phase.sourceId,
+                  phase.attested,
+                  false,
+                  phase.claimTeamId,
+                  previewImportState(provider, phase).espnMember ? phase.espnRunBy : null,
+                )
+              }}
             >
-              {phase.teams !== null && !phase.claimTeamId ? 'Pick your team first' : 'Import this league'}
+              {importButtonLabel(provider, phase)}
             </button>
             <button
               type="button"
@@ -3187,6 +3615,22 @@ export function ImportV4({
           />
           <ReadOnlyPromise />
         </section>
+      ) : null}
+
+      {/*
+        ── Bring your leaguemates ──────────────────────────────────────────────
+        The link is this league's deep link into /import; a leaguemate who imports it is attached
+        to their own team by claimExistingLeagueForMember. Not offered to someone who just JOINED
+        another account's copy (they are the leaguemate), and not for Fantrax, whose picked row is
+        a TEAM — its sourceId would send leaguemates to the importer's own team.
+      */}
+      {phase.k === 'done' && phase.leagueId && !phase.joinedExisting && provider !== 'fantrax' ? (
+        <ImportInviteCard
+          provider={provider}
+          providerLabel={providerLabel}
+          sourceId={phase.sourceId}
+          leagueName={phase.leagueName}
+        />
       ) : null}
 
       {/* ── Static result frame, design preview only ────────────────── */}

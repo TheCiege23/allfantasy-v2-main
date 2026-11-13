@@ -3,8 +3,8 @@ const db = vi.hoisted(() => ({
   playoffBracketChallenge: { findUnique: vi.fn(), create: vi.fn() },
   playoffBracketEntry: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   playoffBracketSeries: { findUnique: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), update: vi.fn() },
-  playoffBracketPick: { findMany: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
-  sportsDataCache: { findUnique: vi.fn() }, $transaction: vi.fn(),
+  playoffBracketPick: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
+  sportsDataCache: { findUnique: vi.fn() }, $transaction: vi.fn(), $queryRaw: vi.fn(),
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: db }))
 vi.mock("@/lib/auth/admin", () => ({ hasPoolAdminAccess: () => false }))
@@ -15,12 +15,12 @@ vi.mock("@/lib/playoffs/playoffSeeding", () => ({ resolvePlayoffSeedField: vi.fn
 vi.mock("@/lib/playoffs/teamIntelligence", () => ({ loadBracketTeamProfiles: async () => ({}) }))
 vi.mock("@/lib/sport-teams/storedTeamLogos", () => ({ getStoredTeamLogoResolver: async () => () => null }))
 
-import { createPlayoffBracketChallenge, createPlayoffBracketEntry, savePlayoffBracketPick, submitPlayoffBracketEntry } from "@/lib/playoffs/playoffService"
+import { createPlayoffBracketChallenge, createPlayoffBracketEntry, savePlayoffBracketPick, submitPlayoffBracketEntry, finalizeNbaCupDay } from "@/lib/playoffs/playoffService"
 import { buildPlayoffTemplate } from "@/lib/playoffs/playoffTemplate"
 
 const challenge = { id: "cup", sport: "nba_cup", seasonYear: 2026, isTestMode: false, ownerUserId: "user", config: { lockRule: "none", maxEntriesPerParticipant: 5 } }
 const game = { ...buildPlayoffTemplate({ sport: "nba_cup", seasonYear: 2026 })[0], id: "future", challengeId: "cup", homeTeamName: "Boston Celtics", awayTeamName: "Charlotte Hornets", startsAt: new Date("2026-11-07T00:00:00Z"), challenge }
-const input = { challengeId: "cup", entryId: "entry", userId: "user", seriesId: "future", pickTeamName: "Boston Celtics" }
+const input = { challengeId: "cup", entryId: "entry", userId: "user", seriesId: "future", pickTeamName: "Boston Celtics", confirmationMode: "per_day" as const }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -49,6 +49,46 @@ describe("NBA Cup server rules", () => {
     await expect(savePlayoffBracketPick(input)).resolves.toMatchObject({ id: "pick" })
     expect(db.playoffBracketPick.deleteMany).not.toHaveBeenCalled()
     expect(db.playoffBracketEntry.update).not.toHaveBeenCalled()
+  })
+  it("keeps a previously confirmed pick while saving a different draft", async () => {
+    db.playoffBracketPick.findUnique.mockResolvedValue({ pickTeamName: "Charlotte Hornets", confirmedAt: new Date("2026-10-29T00:00:00Z") })
+    await savePlayoffBracketPick(input)
+    expect(db.playoffBracketPick.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: { draftTeamName: "Boston Celtics" },
+    }))
+  })
+  it("asks older clients to refresh instead of silently changing their save semantics", async () => {
+    await expect(savePlayoffBracketPick({ ...input, confirmationMode: undefined })).rejects.toThrow(/refresh/i)
+    expect(db.playoffBracketPick.upsert).not.toHaveBeenCalled()
+  })
+  it("finalizes only the requested day after every open game has a pick", async () => {
+    db.playoffBracketEntry.findUnique.mockResolvedValue({ id: "entry", userId: "user", challengeId: "cup", challenge })
+    db.playoffBracketSeries.findMany.mockResolvedValue([game, { ...game, id: "other", startsAt: new Date("2026-11-08T00:00:00Z") }])
+    db.playoffBracketPick.findMany.mockResolvedValue([{ id: "pick", seriesId: "future", pickTeamName: "Charlotte Hornets", draftTeamName: "Boston Celtics", confirmedAt: new Date("2026-10-29T00:00:00Z") }])
+    await expect(finalizeNbaCupDay({ ...input, day: "2026-11-07", timeZone: "UTC" })).resolves.toMatchObject({ confirmed: 1 })
+    expect(db.playoffBracketPick.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "pick" }, data: expect.objectContaining({ pickTeamName: "Boston Celtics", draftTeamName: null }),
+    }))
+  })
+  it("rejects a day with any missing open pick", async () => {
+    db.playoffBracketEntry.findUnique.mockResolvedValue({ id: "entry", userId: "user", challengeId: "cup", challenge })
+    db.playoffBracketSeries.findMany.mockResolvedValue([game, { ...game, id: "second" }])
+    db.playoffBracketPick.findMany.mockResolvedValue([{ id: "pick", seriesId: "future", pickTeamName: "Boston Celtics" }])
+    await expect(finalizeNbaCupDay({ ...input, day: "2026-11-07", timeZone: "UTC" })).rejects.toThrow(/every open game/)
+    expect(db.playoffBracketPick.update).not.toHaveBeenCalled()
+  })
+  it("uses the viewer's local date and does not change a locked confirmed pick", async () => {
+    db.playoffBracketEntry.findUnique.mockResolvedValue({ id: "entry", userId: "user", challengeId: "cup", challenge })
+    db.playoffBracketSeries.findMany.mockResolvedValue([game, { ...game, id: "locked", startsAt: new Date("2026-10-30T23:00:00Z"), status: "final" }])
+    db.playoffBracketPick.findMany.mockResolvedValue([{ id: "pick", seriesId: "future", pickTeamName: "Boston Celtics", confirmedAt: null }])
+    await expect(finalizeNbaCupDay({ ...input, day: "2026-11-06", timeZone: "America/New_York" })).resolves.toMatchObject({ confirmed: 1 })
+    expect(db.playoffBracketPick.update).toHaveBeenCalledTimes(1)
+    expect(db.playoffBracketPick.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "pick" } }))
+  })
+  it("cannot finalize another user's day", async () => {
+    db.playoffBracketEntry.findUnique.mockResolvedValue({ id: "entry", userId: "other", challengeId: "cup", challenge })
+    await expect(finalizeNbaCupDay({ ...input, day: "2026-11-07", timeZone: "UTC" })).rejects.toThrow(/Entry not found/)
+    expect(db.playoffBracketPick.update).not.toHaveBeenCalled()
   })
   it("rejects past picks even for the pool owner and an override config", async () => {
     db.playoffBracketSeries.findUnique.mockResolvedValue({ ...game, startsAt: new Date("2026-10-30T23:00:00Z") })

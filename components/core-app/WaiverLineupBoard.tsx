@@ -17,6 +17,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { waiverLineupBoardMessages } from '@/lib/core-app/messages/waiverLineupBoard'
 import { crowdLine } from '@/lib/waivers/waiverCrowdLine'
+import { FilterChips } from '@/components/core-app/primitives/FilterChips'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -65,6 +66,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
   /* The filter bar: a name search and one position chip at a time, over the ranked adds only. */
   const [query, setQuery] = useState('')
   const [pos, setPos] = useState<string | null>(null)
+  /* Phone only: the coverage notes fold behind one button (the stylesheet decides; see af-waivers.css). */
+  const [notesOpen, setNotesOpen] = useState(false)
   const { data: intelResponse } = useWaiverIntel(leagueId, faab != null)
   const bidQuotes = intelResponse && intelResponse.supported ? (intelResponse.intel?.bidQuotes ?? null) : null
   /*
@@ -327,11 +330,24 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         Coverage rides with the ranking. A board built from a third of the wire is a different
         claim from one built off all of it, and nothing else on screen would say which.
       */}
-      {board.notes.map((n) => (
-        <p key={n} className="af-wlb-note">
-          {copy(n)}
-        </p>
-      ))}
+      {board.notes.length > 0 ? (
+        <button
+          type="button"
+          className="af-wlb-notes-toggle"
+          aria-expanded={notesOpen}
+          aria-controls="af-wlb-notes"
+          onClick={() => setNotesOpen((open) => !open)}
+        >
+          {notesOpen ? m.hideListNotes : m.howThisListWasBuilt}
+        </button>
+      ) : null}
+      <div className="af-wlb-notes" id="af-wlb-notes" data-open={notesOpen || undefined}>
+        {board.notes.map((n) => (
+          <p key={n} className="af-wlb-note">
+            {copy(n)}
+          </p>
+        ))}
+      </div>
     </section>
   )
 }
@@ -379,6 +395,8 @@ export function WaiverFilteredList({
     (c) => (pos == null || c.position === pos) && (q === '' || c.name.toLowerCase().includes(q)),
   )
   const showBar = candidates.length >= 3
+  /* The "All" chip's id: no position is spelled like this. */
+  const ALL_POSITIONS = '__all__'
   return (
     <>
       {showBar ? (
@@ -392,23 +410,20 @@ export function WaiverFilteredList({
             aria-label={m.searchLabel}
           />
           {positions.length > 1 ? (
-            <div className="af-wlb-chips">
-              <button type="button" className="af-wlb-chip-btn" aria-pressed={pos == null} onClick={() => onPos(null)}>
-                {m.allPositions}
-              </button>
-              {positions.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="af-wlb-chip-btn"
-                  data-pos={posKey(p)}
-                  aria-pressed={pos === p}
-                  onClick={() => onPos(pos === p ? null : p)}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            /*
+              The shared FilterChips (components/core-app/primitives): one pressed pill is the position.
+              Tapping the pressed one again clears it, as before. `data-pos` keeps the position colour.
+            */
+            <FilterChips
+              className="af-wlb-chips"
+              ariaLabel={m.positionFilterLabel}
+              value={pos ?? ALL_POSITIONS}
+              onChange={(next) => onPos(next === ALL_POSITIONS || next === pos ? null : next)}
+              options={[
+                { id: ALL_POSITIONS, label: m.allPositions },
+                ...positions.map((p) => ({ id: p, label: p, data: { pos: posKey(p) } })),
+              ]}
+            />
           ) : null}
           {shown.length !== candidates.length ? (
             <span className="af-wlb-count af-num" aria-live="polite">

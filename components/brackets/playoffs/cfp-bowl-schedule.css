@@ -1,0 +1,21 @@
+/*
+ * CFP bowl schedule cards (CfpBowlSchedule.tsx). The component imports this file
+ * itself, because it renders on pages that never load af-playoff-bracket.css: the
+ * public /brackets/cfp/preview page rendered these cards unstyled ("QuarterfinalFiesta
+ * Bowl", no border) when the rules lived only in the bracket stylesheet.
+ *
+ * Colors read the bracket's --pb-* tokens where a page defines them; the fallbacks are
+ * translucent so the cards sit on any dark surface, and cfp-preview.css maps the tokens
+ * to its own green palette.
+ */
+.af-pb-crest { display: block; flex: none; }
+.af-pb-bowl-card { border: 1px solid var(--pb-line2, rgba(255, 255, 255, 0.14)); border-radius: 14px; background: var(--pb-surface2, rgba(255, 255, 255, 0.04)); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.af-pb-bowl-card[data-bowl="title"] { border-color: #f5c76b; }
+.af-pb-bowl-head { display: flex; align-items: center; gap: 12px; }
+.af-pb-bowl-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.af-pb-bowl-title strong { font-size: 15px; font-weight: 800; color: var(--pb-text, #eef0fa); }
+.af-pb-bowl-when { font-size: 12px; font-weight: 700; color: var(--pb-text2, #c3c9e6); }
+.af-pb-bowl-round { display: block; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pb-muted, #8f97bd); }
+.af-pb-bowl-card[data-bowl="title"] .af-pb-bowl-round { color: #f5c76b; }
+.af-pb-bowl-place { font-size: 12px; color: var(--pb-muted, #8f97bd); }
+.af-pb-bowl-teams { font-size: 13px; font-weight: 700; color: var(--pb-text, #eef0fa); background: var(--pb-surface, rgba(0, 0, 0, 0.22)); border-radius: 8px; padding: 8px 10px; }

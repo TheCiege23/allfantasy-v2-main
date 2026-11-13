@@ -33,6 +33,7 @@ type InvitePayload = {
   leagueName: string | null
   sport: string
   teamCount: number | null
+  careerBlocked?: ClassGateBlocked | null
   teams: TeamOption[]
   /** Present for a Zombie league: the page wears its hero and how-it-works around the team picker. */
   zombie?: ZombieJoinPreview | null
@@ -97,6 +98,7 @@ export default function JoinLeagueInvitePage() {
       }
 
       setInvite(payload as InvitePayload)
+      setClassBlocked(null)
     } catch {
       setInvite(null)
       setLoadError('Unable to load invite details right now.')
@@ -134,6 +136,8 @@ export default function JoinLeagueInvitePage() {
       setSelectedTeamId(availableTeams[0].id)
     }
   }, [availableTeams, selectedTeamId])
+
+  const rankBlocked = classBlocked ?? (selectedTeam?.claimEligibility === 'matched' ? null : invite?.careerBlocked)
 
   const handleClaim = useCallback(async () => {
     if (!selectedTeam || !token) return
@@ -340,19 +344,19 @@ export default function JoinLeagueInvitePage() {
                     <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Selected team</p>
                     <p className="mt-1 text-lg font-bold text-white">{selectedTeam?.teamName ?? 'Choose a team to continue'}</p>
                   </div>
-                  <button
+                  {!rankBlocked ? <button
                     type="button"
                     onClick={() => void handleClaim()}
                     disabled={!selectedTeam || claiming}
                     className="inline-flex min-w-[240px] items-center justify-center rounded-2xl border border-cyan-400/40 bg-cyan-400/15 px-5 py-3 text-sm font-semibold text-cyan-50 transition hover:border-cyan-300/60 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-slate-500"
                   >
                     {claiming ? 'Claiming your team...' : `That's me - Join as ${selectedTeam?.teamName ?? 'this team'} ->`}
-                  </button>
+                  </button> : null}
                 </div>
                 {claimError ? <p className="mt-3 text-sm text-red-300">{claimError}</p> : null}
-                {classBlocked ? (
+                {rankBlocked ? (
                   <div className="mt-3">
-                    <ClassGateNotice blocked={classBlocked} token={token} />
+                    <ClassGateNotice blocked={rankBlocked} token={token} />
                   </div>
                 ) : null}
               </div>

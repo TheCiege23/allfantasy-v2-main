@@ -13,19 +13,21 @@
  * about which URLs were called — a test that only checked the written rows would pass unchanged
  * with the whole checkpoint deleted.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   leagueFindMany: vi.fn(),
   factFindFirst: vi.fn(),
   factUpsert: vi.fn(),
   getNflState: vi.fn(),
+  queryRaw: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findMany: h.leagueFindMany },
     transactionFact: { findFirst: h.factFindFirst, upsert: h.factUpsert },
+    $queryRaw: h.queryRaw,
   },
 }))
 vi.mock('@/lib/sleeper-client', () => ({ getNflState: h.getNflState }))
@@ -93,6 +95,8 @@ beforeEach(() => {
   h.factUpsert.mockResolvedValue({})
   h.factFindFirst.mockResolvedValue(null)
   h.getNflState.mockResolvedValue({ week: 12 })
+  // Default: every stored trade already carries FAAB, so the completion skip behaves as it always did.
+  h.queryRaw.mockResolvedValue([])
 })
 
 describe('the completion gate — a finished season is not re-read', () => {
@@ -277,5 +281,65 @@ describe('what a narrowed window must not corrupt', () => {
     const result = await ingestSleeperTradeFacts({ leagueIds: ['af-league'] })
 
     expect(result.feedUnavailable).toBe(1)
+  })
+})
+
+/*
+ * The one exception to the completion gate: a finished season whose stored trades predate FAAB capture
+ * is re-read ONCE, in full, so FAAB gets recorded — bounded per sweep and only for recent seasons.
+ */
+describe('the FAAB refill — a finished season stored without FAAB is re-read once', () => {
+  const chain: Chain = {
+    'S-2026': { season: '2026', status: 'in_season', previous_league_id: 'S-2025' },
+    'S-2025': { season: '2025', status: 'complete', previous_league_id: 'S-2022' },
+    'S-2022': { season: '2022', status: 'complete', previous_league_id: null },
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-11T12:00:00Z'))
+    h.factFindFirst.mockResolvedValue({ transactionId: 'tx-old:1' })
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('re-reads every week of a recent finished season that lacks FAAB, and writes FAAB keys', async () => {
+    h.queryRaw.mockResolvedValue([{ one: 1 }])
+    const { calls } = installFetch(chain, { 'S-2025': [3] })
+
+    const result = await ingestSleeperTradeFacts({ leagueIds: ['af-league'] })
+
+    expect(weeksFetchedFor(calls, 'S-2025')).toHaveLength(18)
+    expect(result.faabSeasonsRefilled).toBe(1)
+    // 2022 is outside the three seasons the trade market reads: skipped, never refilled.
+    expect(weeksFetchedFor(calls, 'S-2022')).toEqual([])
+    expect(result.seasonsSkippedComplete).toBe(1)
+    const written = h.factUpsert.mock.calls.map((c) => (c[0] as { create: { payload: Record<string, unknown> } }).create.payload)
+    expect(written.length).toBeGreaterThan(0)
+    expect(written.every((p) => 'faabIn' in p && 'faabOut' in p)).toBe(true)
+  })
+
+  it('keeps the skip when the season already has FAAB', async () => {
+    h.queryRaw.mockResolvedValue([])
+    const { calls } = installFetch(chain)
+    const result = await ingestSleeperTradeFacts({ leagueIds: ['af-league'] })
+    expect(weeksFetchedFor(calls, 'S-2025')).toEqual([])
+    expect(result.faabSeasonsRefilled).toBe(0)
+    expect(result.seasonsSkippedComplete).toBe(2)
+  })
+
+  it('respects the per-sweep budget (0 disables it)', async () => {
+    h.queryRaw.mockResolvedValue([{ one: 1 }])
+    const { calls } = installFetch(chain)
+    const result = await ingestSleeperTradeFacts({ leagueIds: ['af-league'], maxFaabRefills: 0 })
+    expect(weeksFetchedFor(calls, 'S-2025')).toEqual([])
+    expect(result.faabSeasonsRefilled).toBe(0)
+  })
+
+  it('an error checking for FAAB keeps the skip — unknown is not "lacks"', async () => {
+    h.queryRaw.mockRejectedValue(new Error('db down'))
+    const { calls } = installFetch(chain)
+    const result = await ingestSleeperTradeFacts({ leagueIds: ['af-league'] })
+    expect(weeksFetchedFor(calls, 'S-2025')).toEqual([])
+    expect(result.faabSeasonsRefilled).toBe(0)
   })
 })

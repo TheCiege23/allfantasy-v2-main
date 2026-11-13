@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { assertLeagueAccess } from '@/lib/ai/league-settings-ai/access'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
 
@@ -12,6 +13,11 @@ export async function POST(req: Request) {
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Plan gate before the model call: `commissioner_ai_tools` — the key the League Settings panel already shows
+  // its upgrade prompt for (LEAGUE_SETTINGS_AI_PANEL_FEATURE).
+  const gate = await requireFeatureEntitlement({ userId: userId, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'commissioner_ai_tools' })
+  if (!gate.ok) return gate.response
 
   let body: { leagueId?: string }
   try {

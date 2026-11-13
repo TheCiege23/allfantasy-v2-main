@@ -143,12 +143,105 @@ type Config = {
   scoringCategory?: { code?: string; name?: string; shortName?: string } | null
 }
 
-function readConfigs(info: FantraxLeagueInfo): Config[] {
+function readConfigs(info: Pick<FantraxLeagueInfo, 'scoringSystem'>): Config[] {
   const system = info.scoringSystem as
     | { scoringCategorySettings?: Array<{ configs?: Config[]; group?: { code?: string } | null }> }
     | null
     | undefined
   return system?.scoringCategorySettings?.flatMap((s) => (s.configs ?? []).map((c) => ({ ...c, group: s.group?.code }))) ?? []
+}
+
+export function isFantraxSoccerScoring(scoringSystem: FantraxLeagueInfo['scoringSystem']): boolean {
+  const groups = scoringSystem?.scoringCategorySettings as Array<{ group?: { code?: string } }> | undefined
+  return Array.isArray(groups) && groups.length > 0 && groups.every((entry) =>
+    entry?.group?.code === 'SOCCER_GOALIE' || entry?.group?.code === 'SOCCER_NON_GOALIE')
+}
+
+const SOCCER_STAT_KEYS: Readonly<Record<string, string>> = {
+  INDIVIDUAL_GOALS: 'goals',
+  INDIVIDUAL_ASSISTS_TOTAL: 'assists',
+  INDIVIDUAL_YELLOW_CARDS: 'yellow_card',
+  INDIVIDUAL_RED_CARDS: 'red_card',
+  INDIVIDUAL_FOULS_COMMITTED: 'fouls_committed',
+  INDIVIDUAL_FOULS_SUFFERED: 'fouls_drawn',
+  INDIVIDUAL_SAVES: 'saves',
+  INDIVIDUAL_GOALS_AGAINST: 'gk_goals_against',
+  INDIVIDUAL_PENALTY_KICK_SAVES: 'pen_save',
+  INDIVIDUAL_SHOTS_ON_GOAL: 'shots_on_target',
+  INDIVIDUAL_PENALTY_KICKS_MISSED: 'pen_miss',
+}
+
+type SoccerScoringPosition = 'GK' | 'DEF' | 'MID' | 'FWD'
+const SOCCER_POSITIONS_BY_ROLE = { keeper: ['GK'], outfield: ['DEF', 'MID', 'FWD'] } as const
+const SOCCER_POSITION_ALIASES: Readonly<Record<string, SoccerScoringPosition>> = {
+  G: 'GK', GK: 'GK', GKP: 'GK', GOALKEEPER: 'GK',
+  D: 'DEF', DEF: 'DEF', DEFENDER: 'DEF',
+  M: 'MID', MID: 'MID', MIDFIELDER: 'MID',
+  F: 'FWD', FWD: 'FWD', FORWARD: 'FWD',
+}
+
+export function fantraxSoccerScoringPosition(position: string | null | undefined): SoccerScoringPosition | undefined {
+  return SOCCER_POSITION_ALIASES[String(position ?? '').trim().toUpperCase()]
+}
+
+export type FantraxSoccerScoring = {
+  positionWeights: Record<SoccerScoringPosition, Record<string, number>>
+  gaps: string[]
+}
+
+/** Translate only the rules the stored Soccer match stat normalizer can supply. */
+export function parseFantraxSoccerScoring(
+  scoringSystem: FantraxLeagueInfo['scoringSystem'],
+  verifiedOwnGoals = false,
+): FantraxSoccerScoring | null {
+  const systemType = scoringSystem?.type
+  if (!isFantraxSoccerScoring(scoringSystem) ||
+      (typeof systemType === 'string' && !systemType.includes('POINTS_BASED'))) return null
+
+  type Weights = { base?: number | null; override?: number | null }
+  const rules: Record<SoccerScoringPosition, Record<string, Weights>> = { GK: {}, DEF: {}, MID: {}, FWD: {} }
+  const gaps: string[] = []
+  for (const config of readConfigs({ scoringSystem })) {
+    const role = config.group === 'SOCCER_GOALIE' ? 'keeper'
+      : config.group === 'SOCCER_NON_GOALIE' ? 'outfield'
+      : null
+    const code = config.scoringCategory?.code
+    if (!role || !code) continue
+    const key = verifiedOwnGoals && code === 'INDIVIDUAL_GOALS_ON_OWN_NET' ? 'own_goal' : SOCCER_STAT_KEYS[code]
+    const label = config.scoringCategory?.name ?? code
+    if (!key) {
+      gaps.push(`${label} (${role}) has no verified equivalent in stored Soccer stats`)
+      continue
+    }
+
+    const rawPosition = config.position?.shortName ?? config.position?.code
+    const defaultRule = isDefaultPosition(rawPosition)
+    const position = fantraxSoccerScoringPosition(rawPosition)
+    const rolePositions: readonly SoccerScoringPosition[] = SOCCER_POSITIONS_BY_ROLE[role]
+    const specific = position && rolePositions.includes(position)
+    const targets = specific ? [position] : rolePositions
+    const scope = defaultRule ? 'base' : 'override'
+    const points = (defaultRule || specific) && typeof config.points === 'number' && Number.isFinite(config.points)
+      ? round(config.points)
+      : null
+    let omitted = false
+    for (const target of targets) {
+      const rule = (rules[target][key] ??= {})
+      const previous = rule[scope]
+      rule[scope] = previous !== undefined && previous !== points ? null : points
+      omitted ||= rule[scope] === null
+    }
+    if (omitted) gaps.push(`${label} (${rawPosition ?? role}) has an unsupported or conflicting position rule`)
+  }
+
+  const positionWeights: FantraxSoccerScoring['positionWeights'] = { GK: {}, DEF: {}, MID: {}, FWD: {} }
+  for (const position of Object.keys(rules) as SoccerScoringPosition[]) {
+    for (const [key, rule] of Object.entries(rules[position])) {
+      const points = rule.override === undefined ? rule.base : rule.override
+      if (points != null) positionWeights[position][key] = points
+    }
+  }
+  return Object.values(positionWeights).some((weights) => Object.keys(weights).length) ? { positionWeights, gaps } : null
 }
 
 /**
@@ -168,6 +261,11 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
   if (systemType && !systemType.includes('POINTS_BASED')) {
     return { rules: [], gaps: [`${systemType} is a category scoring format; native points scoring cannot reproduce it`] }
   }
+
+  const soccer = parseFantraxSoccerScoring(info.scoringSystem)
+  // Role weights are resolved from the persisted raw settings by the shared scorer.
+  // The flat import rules cannot represent two values for the same stat.
+  if (soccer) return { rules: [], gaps: soccer.gaps }
 
   const defaultReception = configs.find(
     (c) =>
@@ -228,7 +326,7 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
 
 function isDefaultPosition(position: string | null | undefined): boolean {
   if (!position) return true
-  const normalized = position.trim().toUpperCase()
+  const normalized = String(position).trim().toUpperCase()
   return normalized === 'DEFAULT' || normalized === '-1'
 }
 

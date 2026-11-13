@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
+import { resolveKeeperSourceRoster } from '@/lib/keeper/keeperSourceRoster'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,11 +65,19 @@ export async function GET(req: NextRequest) {
 
   const suggestedIncomingSeasonId = seasons[0]?.id ?? null
 
+  // The roster the viewer keeps FROM: their team in the season just played. `viewerRoster` is next
+  // season's empty shell, which is where keepers land (lib/keeper/keeperSourceRoster.ts).
+  const source = viewerRoster
+    ? await resolveKeeperSourceRoster({ leagueId, seasonId: viewerRoster.seasonId, rosterId: viewerRoster.id })
+    : null
+  const sourceRoster = source?.rosterId ? { id: source.rosterId, seasonId: source.seasonId } : null
+
   return NextResponse.json({
     league,
     seasons,
     suggestedIncomingSeasonId,
     session: activeSession,
     viewerRoster,
+    sourceRoster,
   })
 }

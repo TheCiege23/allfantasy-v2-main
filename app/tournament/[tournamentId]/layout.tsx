@@ -31,7 +31,8 @@ export default async function TournamentLayout({
 
   return (
     <TournamentUiProvider value={{ ...data, viewerUserId: session?.user?.id ?? null }}>
-      <div className="tournament-theme af-tournament-immersive relative min-h-dvh">
+      {/* `af-draft-dark`: the tournament screens are dark in every mode — the app's opt-out from the light clamp. */}
+      <div className="af-draft-dark tournament-theme af-tournament-immersive relative min-h-dvh">
         <TournamentChrome>{children}</TournamentChrome>
       </div>
     </TournamentUiProvider>

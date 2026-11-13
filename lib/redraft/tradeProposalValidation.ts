@@ -79,10 +79,35 @@ async function pirateTradeRefusal(input: RedraftProposalValidationInput, source:
   }
 }
 
+/**
+ * 🛑 THE AF TRADE ENGINE REFUSED TRADES IN A NATIVE BEST BALL OR GUILLY LEAGUE; THIS PATH DID NOT.
+ * `resolveLeagueTradeSettings().tradesAllowed` is false for native Classic Best Ball and for a
+ * guillotine league unless its settings enable trades, and `tradeValidationService` refuses with
+ * `TRADES_DISABLED` — but `/api/redraft/trade-proposals` and `/api/redraft/trade-runtime` create
+ * proposals through here and never asked. Scoped to those two formats on purpose: every other
+ * league's trade rules are already this validator's, and widening the check would move them.
+ */
+async function formatTradesDisabledRefusal(leagueId: string, db: ValidationDb): Promise<RedraftProposalValidation | null> {
+  const league = await db.league.findUnique({ where: { id: leagueId } })
+  if (!league || (!league.bestBallMode && !league.guillotineMode)) return null
+  // The commissioner's move lock has its own refusal further down; let it speak for itself.
+  if (league.lockAllMoves) return null
+  const { resolveLeagueTradeSettings } = await import('@/lib/league-trade-engine/tradeSettingsResolver')
+  if (resolveLeagueTradeSettings(league).tradesAllowed) return null
+  return {
+    ok: false,
+    code: 'TRADES_DISABLED',
+    message: league.guillotineMode ? 'Trades are turned off in this Guillotine league.' : 'Trades are turned off in this Best Ball league.',
+    source: 'league_lock',
+  }
+}
+
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
   db: ValidationDb = prisma,
 ): Promise<RedraftProposalValidation> {
+  const formatRefusal = await formatTradesDisabledRefusal(input.leagueId, db)
+  if (formatRefusal) return formatRefusal
   const base = await validateRedraftTradeProposalCore(input, db)
   if (!base.ok) return base
   // Survivor leagues add their own trade rules (tribe windows, played players, the weekly freeze).

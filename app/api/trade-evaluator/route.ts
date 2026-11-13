@@ -26,7 +26,7 @@ import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
 import type { Asset } from '@/lib/trade-engine/types'
 import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'
-import { parsePickLabel } from '@/lib/parsePickLabel'
+import { parsePickLabel, type C2CDraftSide } from '@/lib/parsePickLabel'
 import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
 import { checkBehaviorRules, logRuleViolations } from '@/lib/ai/behavior-rules'
@@ -54,7 +54,11 @@ import { priceEvaluatorDevy } from '@/lib/decision-os/trade/leagueAssetPolicy'
 import { loadTradeKeeperCosts, type TradeKeeperCosts } from '@/lib/keeper/tradeKeeperCosts'
 import { receiptGradeFields, structuredEvaluationFromExplanation } from '@/lib/decision-os/trade/receiptViews'
 import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
-import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { gradeInputsFromNativeItems, type GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { loadNativePlayerNames } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { providerNameInChartOrder, rosteredIdsOf } from '@/lib/decision-os/trade/tradePlayers'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
 import {
   buildNormalizedTradeContext,
@@ -94,6 +98,8 @@ const PickInputSchema = z.object({
   year: z.number().int().min(2000).max(2099),
   round: z.number().int().min(1).max(25),
   projected_range: z.enum(['early', 'mid', 'late', 'unknown']).optional(),
+  draftSide: z.enum(['campus', 'canton', 'combined']).optional(),
+  overall: z.number().int().positive().optional(),
 })
 
 const TeamInputSchema = z.object({
@@ -325,7 +331,7 @@ function unreadablePickLabels(picks: readonly unknown[]): string[] {
   return picks.filter((p): p is string => typeof p === 'string' && parsePickLabel(p) === null)
 }
 
-function resolvePickData(p: string | { year: number; round: number; projected_range?: string }) {
+function resolvePickData(p: string | { year: number; round: number; projected_range?: string; draftSide?: C2CDraftSide; overall?: number }) {
   if (typeof p === 'string') {
     const parsed = parsePickLabel(p)
     /*
@@ -347,14 +353,148 @@ function resolvePickData(p: string | { year: number; round: number; projected_ra
       year: parsed.year,
       round: parsed.round,
       tier: parsed.bucket,
+      draftSide: parsed.draftSide,
+      overall: undefined,
       label: p,
     }
   }
   return {
     year: p.year,
     round: p.round,
+    draftSide: p.draftSide,
+    overall: p.overall,
     tier: (p.projected_range === 'unknown' ? undefined : p.projected_range) as 'early' | 'mid' | 'late' | undefined,
     label: `${p.year} Round ${p.round}${p.projected_range ? ` (${p.projected_range})` : ''}`,
+  }
+}
+
+async function evaluateLeagueOffer(
+  data: z.output<typeof TradeRequestSchema>,
+  leagueId: string,
+  userId: string,
+) {
+  const viewer = await resolveViewerLeagueRoster(leagueId, userId).catch(() => null)
+  const rosterIds = viewer?.ok ? rosteredIdsOf(viewer.roster.playerData) : []
+  const itemsOf = (side: typeof data.sender) => side.gives_players.map((player) => {
+    const info = typeof player === 'string' ? { name: player } : player
+    const reference = typeof player === 'string' ? null
+      : player.providerPlayerId ?? player.provider_player_id ?? player.externalSourceId ?? player.external_source_id ??
+        player.playerId ?? player.player_id ?? player.sportsPlayerId ?? player.sports_player_id ?? player.internalPlayerId ?? null
+    const sleeperId = typeof player === 'string' || reference ? null : player.sleeperPlayerId ?? player.sleeper_id ?? null
+    return { itemType: 'player', itemReference: reference, metadata: info, sleeperId }
+  })
+  const giveItems = itemsOf(data.sender)
+  const getItems = itemsOf(data.receiver)
+  const nameForId = await loadNativePlayerNames([
+    ...giveItems, ...getItems,
+    ...rosterIds.map((id) => ({ itemType: 'player', itemReference: id })),
+  ], leagueId)
+  const rosterIdsByName = new Map<string, string[]>()
+  for (const id of rosterIds) {
+    const name = nameForId(id)
+    if (!name) continue
+    const key = normalizePlayerName(name)
+    rosterIdsByName.set(key, [...(rosterIdsByName.get(key) ?? []), id])
+  }
+  const linkedGive = giveItems.map((item) => {
+    if (item.itemReference) return item
+    if (item.sleeperId) {
+      const ids = rosterIds.filter((id) => nameForId.sleeperIdFor?.(id) === item.sleeperId)
+      return ids.length === 1 ? { ...item, itemReference: ids[0]! } : item
+    }
+    const platform = typeof nameForId.space === 'object' ? nameForId.space.provider : ''
+    const ids = rosterIdsByName.get(normalizePlayerName(providerNameInChartOrder(platform, item.metadata.name)))
+    return ids?.length === 1 ? { ...item, itemReference: ids[0]! } : item
+  })
+  const senderId = data.sender.team_id?.trim()
+  const senderIsViewer = viewer?.ok && (!senderId || senderId === viewer.roster.id || senderId === viewer.team.externalId)
+    && linkedGive.length > 0 && linkedGive.every((item) => item.itemReference != null && rosterIds.includes(item.itemReference))
+  const gradeSide = (side: typeof data.sender, items: typeof giveItems): GradeInputs => {
+    const platform = typeof nameForId.space === 'object' ? nameForId.space.provider : ''
+    const inputs: GradeInputs = { assets: [], unpriceable: [] }
+    for (const item of items) {
+      const name = providerNameInChartOrder(platform, item.metadata.name)
+      if (!item.itemReference && item.sleeperId) {
+        if (nameForId.sport === 'NFL') {
+          inputs.assets.push({ kind: 'player', name, providerIdentity: { provider: 'sleeper', id: item.sleeperId } })
+        } else {
+          inputs.unpriceable.push(`${name} has a Sleeper ID but no ID for this league`)
+          inputs.valuationGap = 'unresolved_player'
+        }
+        continue
+      }
+      const player = gradeInputsFromNativeItems([{ ...item, metadata: { ...item.metadata, name } }], nameForId)
+      inputs.assets.push(...player.assets)
+      inputs.unpriceable.push(...player.unpriceable)
+      inputs.valuationGap ??= player.valuationGap
+    }
+    for (const raw of side.gives_picks) {
+      const p = resolvePickData(raw)
+      const tier = p.tier === 'early' || p.tier === 'mid' || p.tier === 'late' ? p.tier : undefined
+      inputs.assets.push({ kind: 'pick', year: p.year, round: p.round, ...(tier ? { tier } : {}), ...(p.draftSide ? { draftSide: p.draftSide } : {}), ...(p.overall != null ? { overall: p.overall } : {}) })
+    }
+    if (side.gives_faab > 0) inputs.assets.push({ kind: 'faab', amount: side.gives_faab })
+    return inputs
+  }
+  const receipt = await evaluateTrade({
+    surface: 'trade-evaluator',
+    leagueId,
+    userId,
+    give: gradeSide(data.sender, senderIsViewer ? linkedGive : giveItems),
+    get: gradeSide(data.receiver, getItems),
+    viewerSide: Boolean(senderIsViewer),
+  })
+  return { receipt, sport: nameForId.sport }
+}
+
+async function renderLeagueOffer(
+  data: z.output<typeof TradeRequestSchema>,
+  leagueId: string,
+  offer: Awaited<ReturnType<typeof evaluateLeagueOffer>>,
+) {
+  const { receipt } = offer
+  const players = receipt.assets.filter((asset) => asset.kind === 'player')
+  const keeperCostsPromise = (async () => {
+    const candidates = offer.sport === 'NFL' && receipt.grade.leagueType?.type === 'keeper' && players.length
+      ? await prisma.sportsPlayer.findMany({
+          where: { sport: 'NFL', name: { in: players.map((player) => player.name), mode: 'insensitive' }, sleeperId: { not: null } },
+          select: { name: true, sleeperId: true },
+        }).catch(() => [])
+      : []
+    return loadTradeKeeperCosts({
+      leagueId,
+      players: players.map((asset) => ({
+        name: asset.name,
+        value: asset.marketValue,
+        candidateIds: candidates.flatMap((candidate) => candidate.sleeperId && normalizePlayerName(candidate.name) === normalizePlayerName(asset.name)
+          ? [candidate.sleeperId] : []),
+      })),
+    })
+  })()
+  const [explanation, keeperCosts] = await Promise.all([
+    explainTrade({ receipt, teamNames: { teamA: data.sender.manager_name, teamB: data.receiver.manager_name } }),
+    keeperCostsPromise.catch((): TradeKeeperCosts => ({ applies: false })),
+  ])
+  if (explanation.source !== 'ai') paidToolNotDelivered()
+  else await logAiOutput({
+    provider: explanation.provider ?? 'unknown', role: 'narrative', taskType: 'trade_eval',
+    targetType: 'league', targetId: leagueId, contentJson: explanation.verdict,
+  }).catch(() => undefined)
+  return {
+    success: true,
+    schemaValid: true,
+    evaluation: structuredEvaluationFromExplanation(explanation, receipt.grade, receipt.canonical?.participants[0]?.confidenceScore ?? 0),
+    tradeGrade: receiptGradeFields(receipt),
+    evaluationReceipt: receipt,
+    keeperCosts,
+    tradeExplanation: {
+      verdict: explanation.verdict,
+      source: explanation.source,
+      templateReason: explanation.templateReason,
+      provider: explanation.provider,
+      receiptId: explanation.receiptId,
+    },
+    aiProviders: explanation.provider ? { [explanation.provider]: explanation.source === 'ai' ? 'ok' : 'error' } : {},
   }
 }
 
@@ -467,6 +607,17 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     })
     if (!gate.ok) return gate.response
     if (gate.tokenSpend) tokenFallbackLedgerId = gate.tokenSpend.id
+
+    const evaluationLeagueId = await resolveEvaluationLeagueId({ suppliedLeagueId: data.league_id, userId })
+    const scopedOffer = evaluationLeagueId ? await evaluateLeagueOffer(data, evaluationLeagueId, userId) : null
+    const leagueResponse = async (leagueId: string, offer: NonNullable<typeof scopedOffer>) => {
+      const payload = await renderLeagueOffer(data, leagueId, offer)
+      return NextResponse.json({ ...payload, rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec } })
+    }
+    // Only the NFL as-of comparison needs legacy prices. Every league grade comes from the receipt.
+    if (evaluationLeagueId && scopedOffer && (!data.asOfDate || scopedOffer.sport !== 'NFL' || !scopedOffer.receipt.grade.graded)) {
+      return leagueResponse(evaluationLeagueId, scopedOffer)
+    }
 
     /*
      * What the CALLER said, which is not yet an answer. `isSF` is resolved after the league is
@@ -687,8 +838,6 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
      * The league this trade is graded in — membership-checked (owner or claimed team) — resolved ONCE
      * and shared by the devy pass below and the one grade further down, so both read the same league.
      */
-    const evaluationLeagueIdPromise = resolveEvaluationLeagueId({ suppliedLeagueId: data.league_id, userId })
-    evaluationLeagueIdPromise.catch(() => undefined)
 
     const [rawSenderPlayerPrices, rawReceiverPlayerPrices, senderPickPrices, receiverPickPrices] = await Promise.all([
       Promise.all(senderPlayerNames.map(name => pricePlayer(name, labelCtx))),
@@ -710,7 +859,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
      */
     const devyLeagueId =
       data.league_id && [...rawSenderPlayerPrices, ...rawReceiverPlayerPrices].some((p) => p.unpriced)
-        ? await evaluationLeagueIdPromise.catch(() => null)
+        ? evaluationLeagueId
         : null
     const [senderDevyPass, receiverDevyPass] = devyLeagueId
       ? await Promise.all([
@@ -740,6 +889,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     const allPlayerPrices = [...senderPlayerPrices, ...receiverPlayerPrices]
     const unpricedAssets = allPlayerPrices.filter((p) => p.unpriced)
     if (unpricedAssets.length > 0) {
+      if (evaluationLeagueId && scopedOffer) return leagueResponse(evaluationLeagueId, scopedOffer)
       const names = Array.from(new Set(unpricedAssets.map((p) => p.name)))
       /*
        * ⚠ "THIS PLAYER IS NOT ON THE BOARD" AND "THE BOARD DID NOT LOAD" ARE DIFFERENT
@@ -908,8 +1058,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       ],
       unpriceable: names.filter((n) => !n.trim()).map(() => 'a player with no name'),
     })
-    const evaluationReceiptPromise: Promise<TradeEvaluationReceipt> = (async () => {
-      const evaluationLeagueId = await evaluationLeagueIdPromise
+    const evaluationReceiptPromise: Promise<TradeEvaluationReceipt> = scopedOffer ? Promise.resolve(scopedOffer.receipt) : (async () => {
       const notYourLeague: Partial<EvaluateTradeDeps> =
         data.league_id && !evaluationLeagueId
           ? { grade: async () => ({ graded: false, reason: NOT_YOUR_LEAGUE_REASON, basis: null }) }
@@ -957,7 +1106,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       else candidateIdsByNameLower.set(n, [pid])
     }
     const keeperCostsPromise: Promise<TradeKeeperCosts> = (async () => {
-      const leagueId = data.league_id ? await evaluationLeagueIdPromise.catch(() => null) : null
+      const leagueId = evaluationLeagueId
       if (!leagueId) return { applies: false }
       const receipt = await evaluationReceiptPromise.catch(() => null)
       const gradeValueByName = new Map(
@@ -2133,7 +2282,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     }
     logAiFailure(error, { tool: 'TradeEvaluator', endpoint: '/api/trade-evaluator' })
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request format', details: error.errors }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request format', details: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to evaluate trade' }, { status: 500 })
   }

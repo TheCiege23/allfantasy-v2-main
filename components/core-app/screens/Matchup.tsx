@@ -1,11 +1,16 @@
 'use client'
 
 import { EmptyState } from '@/components/core-app/primitives/EmptyState'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-matchup.css'
 // The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
 import '@/components/core-app/af-matchup-pulse.css'
 // Redraft batch B3: the broadcast score bug, scoped to the /core shell's data-format="redraft".
 import '@/components/core-app/af-core-redraft-matchup.css'
+// The head-to-head board look (wide boards only); last, so it sizes over the base and redraft rules.
+import '@/components/core-app/af-matchup-h2h.css'
+// The final-game result and box-score lines under each starter.
+import '@/components/core-app/af-matchup-gamelines.css'
 import '@/components/core-app/af-empty-state.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
@@ -485,6 +490,20 @@ function PlayerHalf({
             : `id ${cell.playerId}`}
         </div>
         {/*
+          Once his game is FINAL: his club's result, then his box score (lib/core-app/matchupGameLine.ts).
+          Final only — a live score in the schedule table can trail the game, so a starter still playing
+          keeps the LIVE chip below instead. Either line is absent when its data is.
+        */}
+        {cell.result ? (
+          <div className="af-mu-half-result">
+            <span className="af-num" data-outcome={cell.result.outcome}>
+              {cell.result.outcome} {cell.result.clubScore}–{cell.result.opponentScore}
+            </span>
+            {cell.opponentClub ? <span> {cell.home ? 'vs' : '@'} {cell.opponentClub}</span> : null}
+          </div>
+        ) : null}
+        {cell.statLine ? <div className="af-mu-half-statline">{cell.statLine}</div> : null}
+        {/*
           His game's state as a chip — live boards only. A starter ruled out or on bye is `final` in
           the game-state read, but he never played; the BYE / OUT flag beside his number says so, and a
           FINAL chip over it would say the opposite. A kickoff is the game line below, styled the same.
@@ -733,7 +752,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
         </p>
       ) : null}
 
-      <div className="af-mu-board" role="table" aria-label={copy('Head to head, slot by slot')}>
+      <div className="af-mu-board" data-look="h2h" role="table" aria-label={copy('Head to head, slot by slot')}>
         <div className="af-mu-board-head" role="row">
           <span className="af-label af-mu-board-side" role="columnheader">
             {copy('You')}
@@ -967,6 +986,17 @@ export function Matchup({ data }: MatchupProps) {
           leader={leader}
         />
       ) : null}
+      {/*
+        The page title, through the shared header like every other /core screen: "Matchup", with the
+        week as its eyebrow. The week banner and the head-to-head card follow directly, unchanged.
+      */}
+      <PageHeader
+        className="af-mu-head"
+        title={copy('Matchup')}
+        eyebrow={data.week.available ? `${copy('Week')} ${data.week.data.week}` : null}
+        eyebrowTestId="matchup-week-eyebrow"
+      />
+
       {/* ── Week banner ─────────────────────────────────────────────── */}
       <header className="af-mu-week">
         {/*
@@ -990,15 +1020,11 @@ export function Matchup({ data }: MatchupProps) {
           </span>
         )}
         {/*
-          ⚠ THE PAGE HAD NO h1 AT ALL. Its outline began at "HEAD TO HEAD, SLOT
-          BY SLOT", so a screen reader jumping by heading landed halfway down and
-          nothing named the document — while the two sibling screens both have
-          one (`/core/matchup` renders "Matchup", `/core/my-team?league=` renders
-          the team name). The league is what this page is about and it is already
-          the first thing in the banner, so it is the heading rather than a new
-          one being invented above it.
+          The league's name, in the banner. It was the page's h1 until 2026-11; the h1 is now the
+          shared PageHeader's "Matchup" above (the screen had no h1 at all before that, so a screen
+          reader jumping by heading landed halfway down). The name stays here as text.
         */}
-        <h1 className="af-mu-league-name">{data.league.name}</h1>
+        <p className="af-mu-league-name">{data.league.name}</p>
 
         {data.week.available ? (
           <>

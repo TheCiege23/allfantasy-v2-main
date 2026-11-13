@@ -53,7 +53,7 @@ const sourceSchema = z.object({
 
 /** Extensions: a bounded map — capped key count + serialized size — so it can't silently become the real contract. */
 const extensionsSchema = z
-  .record(z.unknown())
+  .record(z.string(), z.unknown())
   .nullable()
   .refine((v) => v == null || Object.keys(v).length <= MAX_EXTENSION_KEYS, {
     message: `extensions may have at most ${MAX_EXTENSION_KEYS} keys`,

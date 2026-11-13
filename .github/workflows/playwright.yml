@@ -113,9 +113,7 @@ jobs:
     # Core e2e exceeded GitHub's 6h single-job cap; shard into 3 parallel jobs (each << 6h).
     # Bracket key matches matrix include (required for this workflow file).
     timeout-minutes: ${{ matrix['job-timeout'] }}
-    # Pinned: ubuntu-latest moved to 26.04 (Nov 2026) and this Playwright cannot install Chromium
-    # there ("Playwright does not support chromium on ubuntu26.04-x64"). Unpin when Playwright is upgraded.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -179,13 +177,15 @@ jobs:
         key: playwright-${{ runner.os }}-${{ startsWith(matrix.lane, 'core-shard-') && 'all' || startsWith(matrix.lane, 'mobile-') && 'mobile' || 'chromium' }}-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Browsers
       if: startsWith(matrix.lane, 'core-shard-')
-      run: npx playwright install --with-deps
+      # scripts/ci/install-playwright.sh: browsers are required, apt packages are retried and
+      # tolerated, then each browser must launch. See the script header (2026-11-11 apt outage).
+      run: bash scripts/ci/install-playwright.sh
     - name: Install Playwright Chromium
       if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'retention-engagement' || matrix.lane == 'zombie-rehearsal'
-      run: npx playwright install --with-deps chromium
+      run: bash scripts/ci/install-playwright.sh chromium
     - name: Install Playwright Chromium + WebKit
       if: startsWith(matrix.lane, 'mobile-')
-      run: npx playwright install --with-deps chromium webkit
+      run: bash scripts/ci/install-playwright.sh chromium webkit
     # Schema bootstrap — applied to both `referral-growth-db` (always
     # needed) and `core` (added in fix/ci-playwright-core-schema-bootstrap).
     # Without these steps, the `core` lane hits 60-min `timeout-minutes`
@@ -454,9 +454,7 @@ jobs:
   draft-room-regression:
     name: Draft Room Regression
     timeout-minutes: 35
-    # Pinned: ubuntu-latest moved to 26.04 (Nov 2026) and this Playwright cannot install Chromium
-    # there ("Playwright does not support chromium on ubuntu26.04-x64"). Unpin when Playwright is upgraded.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
@@ -497,7 +495,7 @@ jobs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Chromium
-      run: npx playwright install --with-deps chromium
+      run: bash scripts/ci/install-playwright.sh chromium
     - name: Prepare DB schema for draft-room regression
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci

@@ -4,6 +4,7 @@ import { runWarRoomDraftIntelligence } from '@/lib/war-room/draft-intelligence-e
 import { buildWarRoomNarrativeLayer } from '@/lib/war-room/war-room-narrative'
 import { requireUserId, requireLeagueWarRoom } from '@/lib/war-room/war-room-api'
 import { logAiRecommendation } from '@/lib/war-room/war-room-persist'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,16 @@ export async function POST(req: NextRequest) {
       strategyMode: strategyMode ?? null,
     })
 
-    const narrative = includeNarrative
+    /*
+     * The narrative is an OpenAI call (lib/war-room/war-room-narrative). Only the draft helper asks for
+     * it, and the draft helper's War Room is locked to `draft_strategy_build` in the browser alone — so a
+     * direct request ran the model for anyone. A user without the plan still gets the deterministic
+     * picks; the narrative is simply left out and `narrativeLocked` says why.
+     */
+    const narrativeAllowed = includeNarrative
+      ? (await requireFeatureEntitlement({ userId: auth.userId, userEmail: null, featureId: 'draft_strategy_build' })).ok
+      : false
+    const narrative = narrativeAllowed
       ? await buildWarRoomNarrativeLayer({
           intelligence: intel,
           leagueName: null,
@@ -58,6 +68,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       intelligence: intel,
       narrative: narrative ?? null,
+      narrativeLocked: includeNarrative && !narrativeAllowed,
       leagueContext: gate.ctx,
       logId: log.id,
     })

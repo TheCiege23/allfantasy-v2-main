@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { projectionSportScope } from '@/lib/core-app/playerProjections'
 
 /**
  * Where a manager STANDS in a live league-week: platform points, head-to-head pairing,
@@ -159,6 +160,12 @@ export async function loadLeagueWeekState(input: {
   season: number
   week: number
   settings: unknown
+  /**
+   * The league's sport. Its only caller today reads NFL leagues alone (slateDigest.ts `loadLeagues`),
+   * but a Sleeper NBA league's ids collide with NFL ones, so a known non-NFL sport reads only its own
+   * projection rows (`projectionSportScope`). Absent or NFL sends the read it always did.
+   */
+  sport?: string | null
 }): Promise<LeagueWeekState | null> {
   const { platformLeagueId, season, week } = input
   const [rows, pairing] = await Promise.all([
@@ -176,7 +183,7 @@ export async function loadLeagueWeekState(input: {
   if (scoring && starterIds.length > 0) {
     const projections = await prisma.fantasyProjection.findMany({
       // AF mirror rows carry no component stat line to rescore — same filter as the Matchup screen.
-      where: { playerId: { in: starterIds }, season: String(season), week, source: { not: 'allfantasy' } },
+      where: { playerId: { in: starterIds }, season: String(season), week, source: { not: 'allfantasy' }, ...projectionSportScope(input.sport) },
       select: { playerId: true, stats: true },
     })
     for (const p of projections) {

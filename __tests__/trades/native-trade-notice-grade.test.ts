@@ -125,6 +125,13 @@ describe('gradeNoticeLine — THE grade in a notice’s words', () => {
       .toBe('You sent it graded B for you on this league’s values — you get 2,000 for 1,500.')
   })
 
+  it('carries separate standings values without adding a letter to the title', () => {
+    const divisionImpactSummary = 'Campus sends 65 and receives 0. Canton sends 0 and receives 68.'
+    expect(gradeNoticeLine({ grade: null, valueGiven: null, valueReceived: null, divisionImpactSummary }, 'offer')).toEqual({
+      titleSuffix: '', bodyLine: divisionImpactSummary,
+    })
+  })
+
   it('no letter, no line — a withheld grade is never replaced by a neutral one', () => {
     expect(gradeNoticeLine({ grade: null, valueGiven: null, valueReceived: null }, 'offer')).toBeNull()
     expect(gradeNoticeLine(null, 'offer')).toBeNull()

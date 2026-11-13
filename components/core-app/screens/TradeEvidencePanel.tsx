@@ -28,18 +28,18 @@ export function TradeEvidencePanel({ grade, evaluatedAt, gaps = [], generic = fa
     <aside className={styles.panel} aria-label={copy("Trade evidence quality")} data-testid="trade-evidence-panel">
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className={styles.heading}><strong>{copy(evidence.label)} <TopicTip topic="tradeEvidence" /></strong><span>{copy(evidence.priced)}{copy("/")}{copy(evidence.total)}{copy(" assets priced · ")}{copy(evidence.dated)}{copy("/")}{copy(evidence.total)}{copy(" dated")}</span></div>
-      <p>{copy("This describes the recorded evidence. It is not a probability of winning the trade.")}</p>
-      {evidence.oldest && evidence.newest ? <p>{copy("Source dates: ")}{copy(formatDate(evidence.oldest))}{copy(evidence.oldest !== evidence.newest ? ` – ${formatDate(evidence.newest)}` : '')}{copy(". Sources older than 7 days are flagged.")}</p> : null}
-      {evidence.issues.length ? <details><summary>{copy("What limits this evaluation? (")}{copy(evidence.issues.length)}{copy(")")}</summary><ul>{evidence.issues.map(issue => <li key={issue}>{copy(issue)}</li>)}</ul></details> : null}
-      {packageReview ? <div className={styles.package}><strong>{copy("Package needs a roster review")}</strong><p>{copy(generic ? packageReview.note.replace('You send', 'Team A sends').replace('and receive', 'and receives') : packageReview.note)}</p></div> : null}
+      <p>{copy("This shows how complete and recent the values are. It is not your chance of winning the trade.")}</p>
+      {evidence.oldest && evidence.newest ? <p>{copy("Values from: ")}{copy(formatDate(evidence.oldest))}{copy(evidence.oldest !== evidence.newest ? ` – ${formatDate(evidence.newest)}` : '')}{copy(". Values older than 7 days are flagged.")}</p> : null}
+      {evidence.issues.length ? <details><summary>{copy("What’s missing or uncertain? (")}{copy(evidence.issues.length)}{copy(")")}</summary><ul>{evidence.issues.map(issue => <li key={issue}>{copy(issue)}</li>)}</ul></details> : null}
+      {packageReview ? <div className={styles.package}><strong>{copy("Check your roster")}</strong><p>{copy(generic ? packageReview.note.replace('You send', 'Team A sends').replace('and receive', 'and receives') : packageReview.note)}</p></div> : null}
       {range ? <details>
         <summary>{copy("What could change the grade?")}</summary>
-        <label className={styles.control}>{copy("Value stress scenario ")}<select aria-label={copy("Value stress scenario")} value={swing} onChange={event => setSwing(Number(event.target.value))}>
+        <label className={styles.control}>{copy("If values shift by ")}<select aria-label={copy("If values shift by")} value={swing} onChange={event => setSwing(Number(event.target.value))}>
             <option value={5}>{copy("±5%")}</option><option value={10}>{copy("±10%")}</option><option value={20}>{copy("±20%")}</option>
           </select>
         </label>
-        <p>{copy("If all outgoing prices rose ")}{copy(swing)}{copy("% and incoming prices fell ")}{copy(swing)}{copy("%, ")}{copy(generic ? 'Team A’s grade would be' : 'your grade would be')} {copy(low)}{copy(". Reversing that scenario gives ")}{copy(high)}{copy(". Signed value gap: ")}{copy(range.low)}{copy("% to ")}{copy(range.high)}{copy("%.")}</p>
-        <p>{copy(low === high ? 'The letter holds across this scenario.' : 'The letter changes in this scenario; small valuation differences can affect the verdict.')}{copy(" This is a sensitivity check, not a forecast, confidence interval, or comparison between independent sources.")}</p>
+        <p>{copy("If what you send went up ")}{copy(swing)}{copy("% in value and what you get went down ")}{copy(swing)}{copy("%, ")}{copy(generic ? 'Team A’s grade would be' : 'your grade would be')} {copy(low)}{copy(". The other way around, it would be ")}{copy(high)}{copy(". Value gap: ")}{copy(range.low)}{copy("% to ")}{copy(range.high)}{copy("%.")}</p>
+        <p>{copy(low === high ? 'The grade stays the same either way.' : 'The grade changes, so small value differences matter in this trade.')}{copy(" This is a what-if check, not a prediction.")}</p>
       </details> : null}
     </aside>
   )

@@ -72,7 +72,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
   }, [sport, season, retry, copy.loadError])
 
   useEffect(() => {
-    if (!view) return
+    if (!view?.challenge.inviteCode) return
     let active = true
     const id = view.challenge.id, entryId = view.activeEntry?.id
     const timer = setInterval(() => {
@@ -112,6 +112,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
   const title = titleOf(sport)
   const entry = view?.activeEntry
   const ranked = (view?.entries ?? []).filter((row) => row.finalizedAt).sort((a, b) => (a.rank ?? 999999) - (b.rank ?? 999999))
+  const savedUnfinalized = (view?.entries ?? []).filter((row) => !row.finalizedAt && row.pickCount > 0).length
   const rows = buildPlayoffTemplate({ sport, seasonYear: season })
   const points = roundPointsTable(sport)
   const roundTitle = (round: PlayoffRoundKey) => round === "nfl_wild_card" ? copy.wildCard : round === "nfl_divisional" ? copy.divisional : round === "nfl_conference" ? copy.conferenceRound : round === "nfl_super_bowl" ? copy.superBowl : round === "cup_group_play" ? copy.group : round === "cfp_first_round" ? copy.firstRound : /quarterfinals/.test(round) ? copy.quarters : /semifinals/.test(round) ? copy.semis : copy.championship
@@ -131,6 +132,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
       <span className="af-bx-rank">{row.rank ?? "—"}</span><strong>{row.name}<small>{row.potentialTotal ?? 0} {copy.potential}</small></strong><span className="af-bx-points">{row.totalScore ?? 0}<small>{copy.earned}</small></span>
     </div>)}
     {!ranked.length ? <p className="af-bx-muted af-bx-empty">{copy.emptyBoard}</p> : null}
+    {sport === "nba_cup" && savedUnfinalized > 0 ? <p className="af-bx-muted" role="note">{savedUnfinalized} {copy.savedUnfinalized}</p> : null}
   </>
 
   return <div className="af-bx-shell">
@@ -174,6 +176,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
         <div className="af-bx-tabs" role="group" aria-label={title}>
           {(["bracket", "standings", "rules"] as const).map((item) => <button type="button" key={item} aria-pressed={tab === item} onClick={() => setTab(item)}>{copy[item]}</button>)}
         </div>
+        {entry && sport === "nba_cup" ? <div className="af-bx-detail" role="status" data-testid="bracket-finalization-status"><strong>{entry.finalizedAt ? copy.finalizedStatus : copy.draftStatus}</strong><p>{entry.finalizedAt ? copy.finalizedStatusDetail : copy.draftStatusDetail}</p>{!entry.finalizedAt && entryHref ? <Link className="af-bx-btn" href={entryHref}>{copy.finalize} <ArrowRight size={14} /></Link> : null}</div> : null}
         {tab === "bracket" ? view && entry ? <MlbBracketBoard view={view} onViewChange={setView} actions={<Link className="af-pb-btn af-pb-btn--accent" href={entryHref!}>{copy.finalize} <ArrowRight size={14} /></Link>} /> : <>
           {view && !entry ? <div className="af-bx-detail"><button type="button" className="af-bx-btn af-bx-primary" disabled={creating} onClick={() => void createEntry()}>{creating ? copy.creating : copy.createEntry}</button></div> : null}
           {sport === "nba_cup" ? <div className="af-bx-group-note"><strong>{copy.group}</strong><p>{copy.groupNote}</p></div> : null}
@@ -189,7 +192,7 @@ export default function BracketExperienceHub({ language, season: seasonOverride,
         <section className="af-bx-panel"><div className="af-bx-sidebody"><p className="af-bx-eyebrow">{copy.leagues}</p><h2>{view?.challenge.name || copy.crew}</h2>
           <p className="af-bx-muted">{view ? `${view.participants?.length ?? 0} ${copy.members} · ${view.entries.length} ${copy.brackets}` : copy.crewBody}</p>
           {leagues.length > 1 ? <label className="af-bx-select">{copy.selectLeague}<select value={view?.challenge.id ?? leagues[0].challengeId} onChange={(event) => void selectLeague(event.target.value)}>{leagues.map((league) => <option key={league.challengeId} value={league.challengeId}>{league.name}</option>)}</select></label> : null}
-          {view ? <><div className="af-bx-invite"><code>{view.challenge.inviteCode}</code><button type="button" className="af-bx-icon-btn" onClick={() => void share()} aria-label={copy.invite}><Copy size={17} /></button></div><button type="button" className="af-bx-btn af-bx-primary af-bx-wide" onClick={() => void share()}>{copy.invite}</button><Link className="af-bx-text-link" href={`/brackets/leagues/${view.challenge.id}`}>{copy.leagueHome} <ArrowRight size={14} /></Link></> : <><Link className="af-bx-btn af-bx-primary af-bx-wide" href={createHref(sport)}><Users size={16} />{copy.create}</Link><Link className="af-bx-text-link" href="/brackets/join">{copy.join} <ArrowRight size={14} /></Link></>}
+          {view ? <>{view.challenge.inviteCode ? <><div className="af-bx-invite"><code>{view.challenge.inviteCode}</code><button type="button" className="af-bx-icon-btn" onClick={() => void share()} aria-label={copy.invite}><Copy size={17} /></button></div><button type="button" className="af-bx-btn af-bx-primary af-bx-wide" onClick={() => void share()}>{copy.invite}</button></> : null}<Link className="af-bx-text-link" href={`/brackets/leagues/${view.challenge.id}`}>{copy.leagueHome} <ArrowRight size={14} /></Link></> : <><Link className="af-bx-btn af-bx-primary af-bx-wide" href={createHref(sport)}><Users size={16} />{copy.create}</Link><Link className="af-bx-text-link" href="/brackets/join">{copy.join} <ArrowRight size={14} /></Link></>}
         </div></section>
         <section className="af-bx-panel"><header className="af-bx-panelhead"><h2><Trophy size={17} />{copy.leaderboard}</h2></header><div className="af-bx-sidebody">{standings(3)}<Link className="af-bx-btn af-bx-wide" href={boardHref}>{copy.fullBoard} <ArrowRight size={14} /></Link></div></section>
         <section className="af-bx-panel"><header className="af-bx-panelhead"><h2>{copy.leagueRules}</h2></header><div className="af-bx-sidebody"><div className="af-bx-rule"><span>{copy.limit}</span><strong>{copy.capacity}</strong></div><div className="af-bx-rule"><span>{copy.visibility}</span><strong>{copy.hidden}</strong></div><div className="af-bx-rule"><span>{copy.tiebreak}</span><strong>{copy.total}</strong></div></div></section>

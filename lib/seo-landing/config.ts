@@ -3,6 +3,8 @@
  * Single source for sport slugs, tool slugs, metadata, and internal links.
  */
 
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
+
 const BASE = 'https://allfantasy.ai'
 
 export type SportSlug =
@@ -250,7 +252,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'AI Trade Finder',
     benefitSummary:
       'Scan your full league for realistic trade paths, partner fits, and analyzer-ready packages without manually checking every roster.',
-    openToolHref: '/trade-finder',
+    openToolHref: '/core/trades#trade-finder',
     examples: [
       'Scan the full league for win-now, rebuild, or balanced trade paths',
       'Surface partner matches before sending a package into the analyzer',
@@ -483,7 +485,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     slug: 'league-transfer',
     title: 'League Transfer – Move Your League to AllFantasy | AllFantasy',
     description:
-      'Move your league from Sleeper, Yahoo, MFL, ESPN, Fleaflicker, or Fantrax to AllFantasy with manager names, settings and rosters copied over, plus draft history, playoffs and trades where the platform provides them.',
+      `Move your league from ${availableImportPlatformsPhrase()} to AllFantasy with manager names, settings and rosters copied over, plus draft history, playoffs and trades where the platform provides them.`,
     headline: 'League Transfer',
     benefitSummary:
       'Commissioners can move a league into AllFantasy with an exact transfer flow for league settings, managers, rosters, and historical context.',

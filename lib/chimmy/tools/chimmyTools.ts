@@ -1040,7 +1040,8 @@ export async function executeChimmyTool(
           : null
         const actionEvidence = lineupActionEvidence({
           platform: rules?.ok ? rules.context.platform : null,
-          bestBallMode: rules?.ok ? rules.context.lineupBehavior.bestBallMode : false,
+          // Classic Best Ball or best ball Guilly: either way there is no start/sit move to recommend.
+          bestBallMode: rules?.ok ? (rules.context.lineupBehavior.lineupSetsItself ?? rules.context.lineupBehavior.bestBallMode) : false,
           lastSyncedAt: rules?.ok ? rules.context.importHealth.lastSyncedAt : null,
         })
         return [roster, `VERIFIED LEAGUE RULES: ${settings}`, bestBallRuleGap, actionEvidence, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].filter(Boolean).join('\n\n')

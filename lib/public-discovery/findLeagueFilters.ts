@@ -243,6 +243,7 @@ const STYLE_WORDS: Array<[RegExp, DiscoveryLeagueStyle]> = [
   [/\bredraft\b/, "redraft"],
   [/\bkeepers?\b/, "keeper"],
   [/\bsurvivor\b/, "survivor"],
+  [/\bguillotine\b|\bguilly\b/, "guillotine"],
   [/\bbrackets?\b/, "bracket"],
 ]
 

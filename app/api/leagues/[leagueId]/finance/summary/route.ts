@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isLeagueEntryFeeProcessingEnabled } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -92,6 +93,8 @@ export async function GET(
     : null
 
   return NextResponse.json({
+    // False: AllFantasy holds no league money; the Finance tab shows the dues tracker instead of payment actions.
+    moneyHoldingEnabled: isLeagueEntryFeeProcessingEnabled(),
     finance,
     season,
     myDues,

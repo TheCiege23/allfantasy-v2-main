@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire/settings-service"
 import { getLeagueWaiverState } from "@/lib/waiver-wire/waiver-state-service"
 import { guillotineClaimsCutoff, isBlindAuctionLeague } from "@/lib/guillotine/blindWaiverCutoff"
+import { nativeGuillotineState } from "@/lib/league/nativeFormatPatch"
 
 export type DiscoverDueWaiverLeaguesOptions = {
   limit?: number
@@ -82,7 +83,7 @@ export async function discoverDueWaiverLeagues(
     // idempotency key and push the real auction to tomorrow. And an FCFS Guilly league is not skipped,
     // because the claims it held at claim time have no other way to settle once the window closes.
     const league = await prisma.league
-      .findUnique({ where: { id: leagueId }, select: { sport: true, guillotineMode: true, leagueVariant: true } })
+      .findUnique({ where: { id: leagueId }, select: { sport: true, guillotineMode: true, leagueVariant: true, leagueType: true, platform: true } })
       .catch(() => null)
     const blindLeague = league != null && isBlindAuctionLeague(league)
     if (blindLeague) {
@@ -92,7 +93,11 @@ export async function discoverDueWaiverLeagues(
         if (dueCount === 0) continue
       }
     }
-    if (waiverType === "fcfs" && !blindLeague) {
+    // A native Guilly FCFS league's claims are settled at claim time — except while a week's chop is due
+    // and not yet applied, when the run defers them (lib/guillotine/chopBeforeWaivers.ts). Nothing else
+    // would ever settle those, so the cron must still pick the league up.
+    const nativeGuilly = league != null && nativeGuillotineState(league) === true
+    if (waiverType === "fcfs" && !blindLeague && !nativeGuilly) {
       continue
     }
 

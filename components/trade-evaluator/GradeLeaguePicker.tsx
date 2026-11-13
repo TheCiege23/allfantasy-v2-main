@@ -1,5 +1,7 @@
 "use client"
 
+import { isSupportedSport } from "@/lib/sport-scope"
+
 /**
  * Which league the trade analyzer grades in (2026-09-27).
  *
@@ -9,8 +11,7 @@
  * every trade came back "Not graded: no league is selected". This is that choice.
  *
  * Only a league with a unified `League` row is offered: that id is the one the route's membership
- * check and the grader both accept, and a Sleeper-space id would 403 the whole evaluation. NFL
- * only, because the analyzer prices nothing else (the page's sport select says the same).
+ * check and the grader both accept, and a Sleeper-space id would 403 the whole evaluation.
  */
 
 export type GradeLeagueListRow = {
@@ -24,7 +25,7 @@ export type GradeLeagueListRow = {
 
 export type GradeLeagueOption = { id: string; label: string }
 
-/** One option per unified NFL league, newest season kept, sorted by name. Pure, for the test. */
+/** One option per unified league in a supported sport, newest season kept, sorted by name. Pure, for the test. */
 export function gradeLeagueOptions(rows: ReadonlyArray<GradeLeagueListRow>): GradeLeagueOption[] {
   const best = new Map<string, { name: string; season: number | null }>()
   for (const row of rows) {
@@ -32,7 +33,7 @@ export function gradeLeagueOptions(rows: ReadonlyArray<GradeLeagueListRow>): Gra
     const id = String(row.unifiedLeagueId ?? row.id ?? "").trim()
     if (!id) continue
     const sport = String(row.sport ?? "NFL").trim().toUpperCase()
-    if (sport !== "NFL") continue
+    if (!isSupportedSport(sport)) continue
     const season = Number(row.season)
     const seasonNum = Number.isFinite(season) && season > 0 ? season : null
     const prev = best.get(id)

@@ -148,6 +148,52 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Rule-change votes (lib/constitution/constitutionService.ts): once, when a league vote has less than a
+   * day left, remind the league in chat. Guarded and on its own job identity; recorded in sync_job_runs.
+   */
+  try {
+    const { runAmendmentVoteReminders } = await import('@/lib/constitution/constitutionService')
+    await withSyncJobRun(
+      { jobName: 'cron-amendment-vote-reminders', trigger: 'cron' },
+      () => runAmendmentVoteReminders(),
+      (r) => ({ rowsRead: r.leagues, rowsWritten: r.reminded, errors: r.failures, metadata: {} }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] amendment vote reminders failed', e)
+  }
+
+  /*
+   * League dues reminders (lib/dues/duesReminders.ts): a week before the due date, the day before, and
+   * once when overdue, to managers who have not paid or said they paid. TRACKING ONLY — the reminder
+   * points at the league's own payment links. Guarded and on its own job identity.
+   */
+  try {
+    const { runDuesReminders } = await import('@/lib/dues/duesReminders')
+    await withSyncJobRun(
+      { jobName: 'cron-dues-reminders', trigger: 'cron' },
+      () => runDuesReminders(),
+      (r) => ({ rowsRead: r.leagues, rowsWritten: r.reminded, errors: r.failures, metadata: {} }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] dues reminders failed', e)
+  }
+
+  /*
+   * Draft reminders (lib/draft-schedule/draftStartReminders.ts): the day before and the hour before a
+   * scheduled draft, in each member's own time zone, once each. Guarded and on its own job identity.
+   */
+  try {
+    const { runDraftStartReminders } = await import('@/lib/draft-schedule/draftStartReminders')
+    await withSyncJobRun(
+      { jobName: 'cron-draft-start-reminders', trigger: 'cron' },
+      () => runDraftStartReminders(),
+      (r) => ({ rowsRead: r.leagues, rowsWritten: r.reminded, errors: r.failures, metadata: {} }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] draft start reminders failed', e)
+  }
+
+  /*
    * Accepted trades whose review window ended with no veto go through here (lib/redraft/tradeReviewWindow.ts),
    * guarded and on their own job identity for the same reasons as the expiry sweep above.
    */
@@ -301,6 +347,67 @@ export async function GET(request: Request) {
   } catch (e) {
     console.error('[redraft/waiver-process] fill empty starters failed', e)
     fillEmptyStarters = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * Lineup lock snapshots (lib/integrity/lineupLockSnapshots.ts): in leagues with the tanking monitor
+   * on, record each player's projection, injury status and bye as the manager sees them, freezing each
+   * one at his game's kickoff. The week-close Lineup Integrity score reads these instead of today's
+   * numbers. Does nothing until its migration is applied. Guarded and on its own job identity.
+   */
+  let lineupSnapshots: unknown = null
+  try {
+    const { runLineupLockSnapshots } = await import('@/lib/integrity/lineupLockSnapshots')
+    lineupSnapshots = await withSyncJobRun(
+      { jobName: 'cron-lineup-lock-snapshots', trigger: 'cron' },
+      () => runLineupLockSnapshots(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.written,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] lineup lock snapshots failed', e)
+    lineupSnapshots = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * The same snapshot for IMPORTED SLEEPER leagues (lib/integrity/sleeperLineupSnapshots.ts), keyed by
+   * Sleeper roster_id and scored on AllFantasy projections under the league's own scoring. DB-first: it
+   * reads synced rosters and stored projections and never calls Sleeper. Guarded and on its own job identity.
+   */
+  let sleeperLineupSnapshots: unknown = null
+  try {
+    const { runSleeperLineupSnapshots } = await import('@/lib/integrity/sleeperLineupSnapshots')
+    sleeperLineupSnapshots = await withSyncJobRun(
+      { jobName: 'cron-sleeper-lineup-snapshots', trigger: 'cron' },
+      () => runSleeperLineupSnapshots(),
+      (r) => ({ rowsRead: r.teams, rowsWritten: r.written, errors: r.failures, metadata: { leagues: r.leagues, skipped: r.skipped } }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] sleeper lineup snapshots failed', e)
+    sleeperLineupSnapshots = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
+   * The same snapshot for IMPORTED ESPN leagues (lib/integrity/espnLineupSnapshots.ts), which also
+   * records who each team STARTED — read only from a roster the ESPN sync fetched after that player's
+   * kickoff, when ESPN had locked his slot (lib/integrity/espnStartersCapture.ts). DB-first: it reads
+   * synced rosters and never calls ESPN. Guarded and on its own job identity.
+   */
+  let espnLineupSnapshots: unknown = null
+  try {
+    const { runEspnLineupSnapshots } = await import('@/lib/integrity/espnLineupSnapshots')
+    espnLineupSnapshots = await withSyncJobRun(
+      { jobName: 'cron-espn-lineup-snapshots', trigger: 'cron' },
+      () => runEspnLineupSnapshots(),
+      (r) => ({ rowsRead: r.teams, rowsWritten: r.written, errors: r.failures, metadata: { leagues: r.leagues, skipped: r.skipped, unmappedPlayers: r.unmapped } }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] espn lineup snapshots failed', e)
+    espnLineupSnapshots = { error: e instanceof Error ? e.message : String(e) }
   }
 
   /*
@@ -513,5 +620,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

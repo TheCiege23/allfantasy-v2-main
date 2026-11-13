@@ -12,6 +12,8 @@ import { DynastyAgeKey, DynastyMarkersScope, DynastyRowMarkers } from './Dynasty
 import '@/components/core-app/af-my-team.css'
 /* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
+// The head-to-head row look (wide pages only); after the base and redraft sheets so it sizes over them.
+import '@/components/core-app/af-my-team-h2h.css'
 import { statusShorthand } from '@/lib/core-app/myTeamStatusShorthand'
 import { lineupPeriodLabel, noGameBadge, redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { lineupDecision } from '@/lib/core-app/lineupDecision'
@@ -30,6 +32,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import {
   defaultProjectionKind,
@@ -1173,6 +1176,11 @@ function checkLine(item: LineupCheckItem, m: MyTeamScreenMessages): string {
  * The roster's verdict, above the roster. Every line links to its row; the rows keep their own
  * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
  */
+/** Whether LineupCheckCard draws its own "Fix in <platform>" button — the same rule it renders by. */
+export function checkDrawsFix(check: LineupCheck | null | undefined, fixHref: string | null | undefined): boolean {
+  return Boolean(check && fixHref && check.items.length > 0 && check.items.some((i) => i.kind !== 'questionable'))
+}
+
 function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean }) {
   const m = useMessages(myTeamScreenMessages)
   const certain = check.items.some((i) => i.kind !== 'questionable')
@@ -1430,7 +1438,9 @@ function SlotRow({
         player rather than under the slot gutter is what makes it read as
         attached to THIS row in a table layout.
       */}
-      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
+      {/* ⚠ NOT ON AN AUTOMATIC LINEUP. Best ball scores the strongest eligible lineup by itself, so
+          "the stronger play" and "ask about this swap" advise a move nobody can make. */}
+      {slot.benchCheck && !automatic ? <BenchCheckStrip check={slot.benchCheck} leagueId={leagueId} /> : null}
     </li>
   )
 }
@@ -1943,7 +1953,10 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {bestBall ? <div className="af-mt-lock" data-urgent={false}>
         <span className="af-label af-mt-lock-label">{copy('Best Ball · automatic lineup')}</span>
-        <span className="af-mt-lock-note">{copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
+        {/* A league AllFantasy hosts is scored by AllFantasy, not by "your provider". */}
+        <span className="af-mt-lock-note">{isNativePlatform(data.league.platform)
+          ? copy('AllFantasy counts your highest-scoring legal lineup each week automatically. Review injuries and roster depth; no lineup changes are needed.')
+          : copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
       </div> : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
@@ -2027,7 +2040,12 @@ export function MyTeam({ data }: MyTeamProps) {
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
-            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+            {/*
+              One platform link per card (2026-11-06 phone pass). The embedded check already draws
+              "Fix in <platform>" whenever it names a certain problem, and the same href here made two
+              identical buttons a few lines apart. Kept only when the check does not draw its own.
+            */}
+            {data.league.sourceLink && !checkDrawsFix(lineupCheck, data.league.sourceLink.href) ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
           </div>
         </section>
       ) : null}
@@ -2205,7 +2223,7 @@ export function MyTeam({ data }: MyTeamProps) {
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
         {data.starters.available ? (
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.starters.data.map((slot, i) => (
               <SlotRow
                 key={`${slot.slotLabel}-${i}`}
@@ -2239,14 +2257,14 @@ export function MyTeam({ data }: MyTeamProps) {
       </section>
 
       {/* ── Bench ───────────────────────────────────────────────────── */}
-      <section className="af-frame af-mt-section" {...offColumns(data.bench?.available ? data.bench.data : [])}>
+      <section className="af-frame af-mt-section af-mt-bench" {...offColumns(data.bench?.available ? data.bench.data : [])}>
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Bench')}</h2>
           <ProjHeader />
         </header>
         {data.bench.available ? (
           <>
-            <ul className="af-mt-list">
+            <ul className="af-mt-list" data-look="h2h">
               {data.bench.data.map((p) => (
                 <BenchRow key={p.sleeperId} player={p} slotLabel="BN" />
               ))}
@@ -2260,11 +2278,11 @@ export function MyTeam({ data }: MyTeamProps) {
 
       {/* ── Injured reserve ─────────────────────────────────────────── */}
       {data.ir.available ? (
-        <section className="af-frame af-mt-section" {...offColumns(data.ir.data)}>
+        <section className="af-frame af-mt-section af-mt-ir" {...offColumns(data.ir.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Injured reserve')}</h2>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.ir.data.map((p) => (
               <BenchRow key={p.sleeperId} player={p} slotLabel="IR" />
             ))}
@@ -2279,14 +2297,14 @@ export function MyTeam({ data }: MyTeamProps) {
         was labelled "IR", which says a healthy taxi rookie is injured.
       */}
       {data.taxi.available ? (
-        <section className="af-frame af-mt-section" {...offColumns(data.taxi.data)}>
+        <section className="af-frame af-mt-section af-mt-taxi" {...offColumns(data.taxi.data)}>
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Taxi squad')}</h2>
             <span className="af-mt-section-note">
               {copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')}
             </span>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.taxi.data.map((p) => (
               <BenchRow
                 key={p.sleeperId}

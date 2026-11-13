@@ -3,6 +3,7 @@ import 'server-only'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
+import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 
 /**
  * 25a — the Tools hub, grouped by job rather than alphabetically.
@@ -19,16 +20,16 @@ import { isTokenPurchasableRule } from '@/lib/tokens/tokenPurchasable'
  * code is not in it shows no price rather than a guessed one. A made-up number
  * on a paywall is worse than no number.
  *
- * ⚠ OPEN PRODUCT DECISION, DELIBERATELY NOT RESOLVED IN CODE. The repo has FOUR
- * trade tools (`/trade-analyzer`, `/trade-evaluator`, `/trade-finder`,
- * `/dynasty-trade-analyzer`) and THREE player-comparison routes
- * (`/player-compare`, `/player-comparison`, `/player-comparison-lab`), all of
- * which exist and all of which work. The handoff recommends merging each family
- * into one tool with modes, and explicitly flags the choice as needing a product
- * call first. So this file does NOT merge them and does NOT hide them: one is
- * promoted as the primary card, the rest are listed as alternates under a note
- * that says the consolidation is undecided. Picking silently would be the one
- * thing the handoff rules out.
+ * ⚠ THE TRADE TOOLS ARE ONE TOOL NOW (owner's call, 2026-11-12). `/trade-evaluator` is the Trade
+ * Analyzer: "Any trade" (no login) and "My league". `/trade-analyzer` is its search landing page,
+ * `/dynasty-trade-analyzer` redirects into the league tab, and the trade finder is the one on the
+ * Trades screen (`/trade-finder` redirects there). So the card links the tool itself, not the
+ * landing page a click away from it.
+ *
+ * The player-comparison pages are one tool too (owner's call, 2026-11-12): the Player Comparison
+ * Lab, `/player-comparison-lab`. `/player-compare` redirects into it (the Lab now carries that page's
+ * league start/sit read), and `/player-comparison` is its search landing page. So `openDecision` is
+ * null — nothing is undecided here any more.
  */
 
 export type ToolTier = 'free' | 'pro' | 'commissioner' | 'unknown'
@@ -170,16 +171,13 @@ export function buildToolsHub(input: {
           id: 'trade',
           title: 'Trade Analyzer',
           desc: 'Fairness and value on a proposal, graded in that league’s own scoring.',
-          href: '/trade-analyzer',
+          href: '/trade-evaluator',
           leavesShell: true,
           live: liveFrom(tradeIssue, 'No trade offer is waiting on you.'),
           tokenCost: costOf('ai_trade_analyzer_full_review'),
           tier: tierOf('ai_trade_analyzer_full_review'),
-          alternates: [
-            { label: 'Trade Evaluator', href: '/trade-evaluator' },
-            { label: 'Trade Finder (Sleeper only)', href: '/trade-finder' },
-            { label: 'Dynasty Trade Analyzer', href: '/dynasty-trade-analyzer' },
-          ],
+          /* The one trade finder — inside the Trades screen, scoped to a league (Sleeper leagues). */
+          alternates: [{ label: 'Trade Finder (Sleeper leagues)', href: `${withLeague('/core/trades')}#trade-finder` }],
         },
         {
           id: 'draft',
@@ -256,11 +254,7 @@ export function buildToolsHub(input: {
           },
           tokenCost: null,
           tier: 'pro',
-          alternates: [
-            { label: 'Player Compare', href: '/player-compare' },
-            { label: 'Player Comparison', href: '/player-comparison' },
-            { label: 'Player Comparison Lab', href: '/player-comparison-lab' },
-          ],
+          alternates: [{ label: 'Player Comparison Lab', href: '/player-comparison-lab' }],
         },
         {
           id: 'power-rankings',
@@ -340,7 +334,7 @@ export function buildToolsHub(input: {
         {
           id: 'import',
           title: 'Import a league',
-          desc: 'Bring in a league from Sleeper, ESPN, Yahoo or Fantrax.',
+          desc: `Bring in a league from ${availableImportPlatformsPhrase()}.`,
           href: '/import?returnTo=%2Fcore%2Ftools',
           live: null,
           tokenCost: null,
@@ -365,15 +359,6 @@ export function buildToolsHub(input: {
       'Trade finder and projections are scoped to one league, so they live inside that ' +
       'league’s own nav rather than here — open a league from the rail and they are on its screens. ' +
       'They are not missing; they are somewhere a league is already selected.',
-    openDecision: {
-      title: 'Undecided: four trade tools and three player-comparison pages',
-      body:
-        'The codebase carries /trade-analyzer, /trade-evaluator, /trade-finder and ' +
-        '/dynasty-trade-analyzer, plus /player-compare, /player-comparison and ' +
-        '/player-comparison-lab. All of them work. The design recommendation is to merge each ' +
-        'family into one tool with modes, and that is a product call nobody has made — so this ' +
-        'page promotes one of each and lists the rest as alternates rather than quietly retiring ' +
-        'six live routes.',
-    },
+    openDecision: null,
   }
 }

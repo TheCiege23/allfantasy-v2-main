@@ -1,0 +1,406 @@
+/**
+ * Which canonical NFL `Player` rows are second copies of a player we already hold, and where
+ * each one should fold.
+ *
+ * ⚠ PURE ON PURPOSE: NO PRISMA. The canonical backfill (`backfillCanonical.ts`) and the
+ * one-off merge script (`scripts/merge-duplicate-nfl-players.ts`) must agree on which row
+ * survives. If they disagreed, a later backfill would rebuild the copy the merge removed, and
+ * would point its provider identities back at it (`writeIdentityBatches` re-points on
+ * conflict). One rule, in one place, read by both.
+ *
+ * ── How the copies came about, measured on production 2026-11-09 ──
+ *
+ * The backfill keys an NFL row by its Sleeper id when it has one, and otherwise by
+ * (name, position, team). TheSportsDB rows carry no Sleeper id. They also use their own
+ * position labels (`OT`, `G`, `CB`, where Sleeper says `OL`, `DB`) and sometimes a stale team.
+ * So the same athlete got a second canonical row. All 13,010 NFL rows come from one run on
+ * 2026-07-21:
+ *
+ *   rows with no Sleeper id                                   1,048
+ *     of those, with a birthday                                 528
+ *     exactly one Sleeper-backed row with that name + birthday  479
+ *     two such rows (ambiguous, left alone)                       2
+ *
+ * The copies hold real data the Sleeper row lacks: 260 Rolling Insights identities, 36 ESPN
+ * identities and 17 images. That is why the ESPN linker dead-ends: it linked Travis Etienne
+ * and Kyle Pitts to the copy, which has no Sleeper identity.
+ *
+ * ── The rule ──
+ *
+ * A row folds into a twin only when all of these hold:
+ *   - it carries no Sleeper id, and the twin does;
+ *   - the twin has the same normalized name AND the same birthday, and is the ONLY such row;
+ *   - no provider would end up with two different ids on the merged player, whether from the
+ *     survivor or from a second copy folding into the same survivor. The one exception is
+ *     TheSportsDB; see `PROVIDERS_ALLOWED_TWICE`.
+ *
+ * ── Why TheSportsDB may hold two ids, and no other provider may ──
+ *
+ * The first apply (2026-11-09, 455 merged) refused 25 rows for a clash, and every one but one
+ * was TheSportsDB. TheSportsDB itself holds two records for those athletes, and they are the
+ * stars: James Cook, Kyle Pitts, Marvin Harrison Jr., Travis Etienne, Kenneth Walker, Chris
+ * Godwin, Michael Pittman, Anthony Richardson. Their copies carry their ESPN identity and,
+ * for some, their ONLY Rolling Insights identity. Refusing left them split.
+ *
+ * Two TheSportsDB ids on one player is true: both records are that person. Every reader was
+ * checked before allowing it:
+ *   - `getCanonicalPlayer` folds identities into a provider -> id map and keeps one, but nothing
+ *     reads its `thesportsdb` entry;
+ *   - the tournament draft bridge (`seasonScoreLedger`) binds only Sleeper and Rolling
+ *     Insights ids;
+ *   - `Player.provider_ids` holds one value per provider, and the survivor's wins.
+ * Every other provider keeps the strict rule. Two Rolling Insights or Sleeper ids on one player
+ * would feed scoring and the live crosswalk two answers. That is why Albert Okwuegbunam, the one
+ * non-TheSportsDB clash, stays refused.
+ *
+ * A name alone is never enough (see `matchProviderAthlete`). Two Sleeper-backed rows that share
+ * a name and a birthday are NOT handled here either: that is Sleeper's own duplicate (17 such
+ * groups, e.g. Chris Campbell 5350/5105), and choosing between Sleeper ids is a separate
+ * question.
+ */
+import { birthDay } from '@/lib/player-identity/matchProviderAthlete'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+
+/** Providers that may end up with two ids on one merged player. See the header for why. */
+export const PROVIDERS_ALLOWED_TWICE: ReadonlySet<string> = new Set(['thesportsdb'])
+
+export type CanonicalPlayerRow = {
+  id: string
+  name: string
+  birthDate: string | Date | null
+  /** `Player.provider_ids`: provider -> that provider's id for this player. */
+  providerIds: Record<string, unknown> | null
+}
+
+export type ProviderIdentityRow = { playerId: string; provider: string; providerPlayerId: string }
+
+export type DuplicateMerge = { dupId: string; keepId: string }
+
+export type SkippedDuplicate = {
+  dupId: string
+  reason: 'ambiguous_twin' | 'provider_clash' | 'two_crosswalk_ids' | 'birthday_contradicts'
+  /** For a clash: the providers that would carry two different ids. */
+  providers?: string[]
+  keepIds: string[]
+}
+
+export type DuplicateMergePlan = {
+  merges: DuplicateMerge[]
+  skipped: SkippedDuplicate[]
+  /** Rows with no Sleeper id that could not even be considered: no birthday or no name. */
+  noEvidence: number
+  /** Rows with no Sleeper id and a birthday, but no Sleeper-backed twin. */
+  noTwin: number
+}
+
+/**
+ * Name + birthday, or null when either is missing. Shared with the backfill's guard.
+ *
+ * A trailing generational suffix is dropped: TheSportsDB writes "Aaron Jones Sr." where Sleeper
+ * writes "Aaron Jones", and `normalizePlayerName` keeps the suffix. That is safe only because the
+ * birthday must match too. A father and son who share a name do not share a birthday.
+ */
+export function twinKey(name: string | null | undefined, birth: string | Date | null | undefined): string | null {
+  const n = normalizePlayerName(name).replace(/\s+(jr|sr|ii|iii|iv|v)\.?$/, '').trim()
+  const d = birthDay(birth ?? null)
+  return n && d ? `${n}|${d}` : null
+}
+
+export function hasSleeperId(providerIds: Record<string, unknown> | null | undefined): boolean {
+  const v = providerIds?.sleeper
+  return v != null && String(v).trim() !== ''
+}
+
+export function planDuplicatePlayerMerges(
+  players: readonly CanonicalPlayerRow[],
+  identities: readonly ProviderIdentityRow[],
+): DuplicateMergePlan {
+  const plan: DuplicateMergePlan = { merges: [], skipped: [], noEvidence: 0, noTwin: 0 }
+
+  const keepersByKey = new Map<string, string[]>()
+  for (const p of players) {
+    if (!hasSleeperId(p.providerIds)) continue
+    const key = twinKey(p.name, p.birthDate)
+    if (!key) continue
+    const list = keepersByKey.get(key)
+    if (list) list.push(p.id)
+    else keepersByKey.set(key, [p.id])
+  }
+
+  const idsByPlayer = new Map<string, Map<string, Set<string>>>()
+  for (const i of identities) {
+    let byProvider = idsByPlayer.get(i.playerId)
+    if (!byProvider) idsByPlayer.set(i.playerId, (byProvider = new Map()))
+    let ids = byProvider.get(i.provider)
+    if (!ids) byProvider.set(i.provider, (ids = new Set()))
+    ids.add(i.providerPlayerId)
+  }
+
+  for (const p of players) {
+    if (hasSleeperId(p.providerIds)) continue
+    const key = twinKey(p.name, p.birthDate)
+    if (!key) {
+      plan.noEvidence++
+      continue
+    }
+    const keepIds = keepersByKey.get(key) ?? []
+    if (keepIds.length === 0) {
+      plan.noTwin++
+      continue
+    }
+    if (keepIds.length > 1) {
+      plan.skipped.push({ dupId: p.id, reason: 'ambiguous_twin', keepIds })
+      continue
+    }
+    const keepId = keepIds[0]!
+
+    const dupIds = idsByPlayer.get(p.id) ?? new Map<string, Set<string>>()
+    const keepIdsByProvider = idsByPlayer.get(keepId) ?? new Map<string, Set<string>>()
+    const clashes: string[] = []
+    for (const [provider, ids] of dupIds) {
+      if (PROVIDERS_ALLOWED_TWICE.has(provider)) continue
+      const theirs = keepIdsByProvider.get(provider)
+      if (!theirs) continue
+      if ([...ids].some((id) => !theirs.has(id))) clashes.push(provider)
+    }
+    if (clashes.length) {
+      plan.skipped.push({ dupId: p.id, reason: 'provider_clash', providers: clashes.sort(), keepIds: [keepId] })
+      continue
+    }
+    plan.merges.push({ dupId: p.id, keepId })
+  }
+
+  /* Two copies folding into ONE survivor must not contradict each other either, or the merge
+     would give the survivor two ids from one provider by the back door. */
+  const byKeep = new Map<string, DuplicateMerge[]>()
+  for (const m of plan.merges) {
+    const list = byKeep.get(m.keepId)
+    if (list) list.push(m)
+    else byKeep.set(m.keepId, [m])
+  }
+  const refused = new Set<string>()
+  for (const [keepId, group] of byKeep) {
+    if (group.length < 2) continue
+    const seen = new Map<string, Set<string>>()
+    for (const m of group) {
+      for (const [provider, ids] of idsByPlayer.get(m.dupId) ?? []) {
+        const all = seen.get(provider) ?? new Set<string>()
+        ids.forEach((id) => all.add(id))
+        seen.set(provider, all)
+      }
+    }
+    const clashing = [...seen]
+      .filter(([provider, ids]) => ids.size > 1 && !PROVIDERS_ALLOWED_TWICE.has(provider))
+      .map(([provider]) => provider)
+      .sort()
+    if (!clashing.length) continue
+    for (const m of group) {
+      refused.add(m.dupId)
+      plan.skipped.push({ dupId: m.dupId, reason: 'provider_clash', providers: clashing, keepIds: [keepId] })
+    }
+  }
+  if (refused.size) plan.merges = plan.merges.filter((m) => !refused.has(m.dupId))
+  return plan
+}
+
+/**
+ * The backfill's side of the same rule. Pure.
+ *
+ * `unkeyed` are canonical groups built from NFL source rows with no Sleeper id, each with the
+ * twin keys of its rows and the providers it would write identities for. `keyed` are the
+ * Sleeper-backed players a group could fold into, from this run and from the database, with
+ * the provider ids each already holds. A group folds only into the ONE candidate sharing its
+ * key, and only when no provider would end up with two ids. These are the same refusals
+ * `planDuplicatePlayerMerges` applies, so a re-run lands where the merge left things.
+ */
+export function foldTargetsForUnkeyedGroups(
+  unkeyed: ReadonlyArray<{ groupId: string; keys: ReadonlyArray<string | null>; providerIds: ReadonlyArray<[provider: string, id: string]> }>,
+  keyed: ReadonlyArray<{ id: string; key: string | null; providerIds: ReadonlyArray<[provider: string, id: string]> }>,
+): Map<string, string> {
+  const candidatesByKey = new Map<string, Set<string>>()
+  const idsByCandidate = new Map<string, Map<string, Set<string>>>()
+  for (const k of keyed) {
+    if (k.key) {
+      const set = candidatesByKey.get(k.key) ?? new Set<string>()
+      set.add(k.id)
+      candidatesByKey.set(k.key, set)
+    }
+    const byProvider = idsByCandidate.get(k.id) ?? new Map<string, Set<string>>()
+    for (const [provider, id] of k.providerIds) {
+      const ids = byProvider.get(provider) ?? new Set<string>()
+      ids.add(id)
+      byProvider.set(provider, ids)
+    }
+    idsByCandidate.set(k.id, byProvider)
+  }
+
+  const out = new Map<string, string>()
+  for (const g of unkeyed) {
+    const keys = new Set(g.keys.filter((k): k is string => Boolean(k)))
+    if (keys.size !== 1) continue // no birthday, or rows that disagree about who this is
+    const candidates = candidatesByKey.get([...keys][0]!)
+    if (!candidates || candidates.size !== 1) continue
+    const target = [...candidates][0]!
+    const theirs = idsByCandidate.get(target)
+    const clash = g.providerIds.some(([provider, id]) => {
+      if (PROVIDERS_ALLOWED_TWICE.has(provider)) return false
+      const ids = theirs?.get(provider)
+      return Boolean(ids && !ids.has(id))
+    })
+    if (clash) continue
+    out.set(g.groupId, target)
+  }
+  return out
+}
+
+/*
+ * ── Second rule: Rolling Insights copies, linked by id ──────────────────────────────────────
+ *
+ * The birthday rule leaves a second kind of copy: rows holding ONLY a Rolling Insights id.
+ * The backfill made them from Rolling Insights source rows, which carry no Sleeper id and,
+ * mostly, no birthday. Measured on production 2026-11-09, after both birthday applies:
+ *
+ *   NFL rows whose only identity is Rolling Insights          402
+ *     identity map links that id to a Sleeper id, and that
+ *     Sleeper id to exactly one player                        372
+ *     no identity-map link (left alone)                        30
+ *     the target's birthday contradicts the copy's               0
+ *     the target already holds a different RI id (refused)       4
+ *     the copy holds two RI ids (refused)                        1
+ *
+ * They include Travis Etienne (RI 6211 -> Sleeper 7543) and Kenneth Walker III (RI 6943 ->
+ * Sleeper 8151). Their Rolling Insights data sat on a row the real player never reached.
+ *
+ * The evidence here is an ID CHAIN, not a name: `PlayerIdentityMap` pairs the Rolling Insights
+ * id with a Sleeper id, and the Sleeper identity names one player. Every hop must be one-to-one.
+ * Names are not compared: 4 of the 372 differ only by nickname (Camryn / Cam Bynum). A stated
+ * birthday on both sides must agree. Rolling Insights stays strict, so a target holding a
+ * different RI id is refused: scoring and the live crosswalk read one RI id per player.
+ */
+
+/** Providers a Rolling Insights copy may carry. `backfill` is the backfill's own bookkeeping. */
+const CROSSWALK_COPY_PROVIDERS: ReadonlySet<string> = new Set(['rolling_insights', 'backfill'])
+
+export type CrosswalkLink = { rollingInsightsId: string; sleeperId: string }
+
+export type CrosswalkDecision =
+  | { target: string; rollingInsightsId: string }
+  | { skip: 'not_a_copy' | 'no_link' }
+  | { skip: SkippedDuplicate['reason']; keepIds: string[] }
+
+/**
+ * Decide one Rolling Insights copy. Pure; shared by the dedupe planner and the backfill.
+ *
+ * `riIds` and `providers` describe what the copy holds. The lookups describe the world: the
+ * identity map (RI -> Sleeper ids), the Sleeper identities (Sleeper id -> players), and each
+ * candidate's birthday and existing RI ids.
+ */
+export function crosswalkDecision(copy: {
+  riIds: readonly string[]
+  providers: readonly string[]
+  birth: string | Date | null
+  sleeperIdsForRi: (ri: string) => readonly string[]
+  playersForSleeper: (sleeperId: string) => readonly string[]
+  birthOf: (playerId: string) => string | Date | null
+  riIdsOf: (playerId: string) => readonly string[]
+}): CrosswalkDecision {
+  if (copy.providers.some((p) => !CROSSWALK_COPY_PROVIDERS.has(p))) return { skip: 'not_a_copy' }
+  const riIds = [...new Set(copy.riIds)]
+  if (riIds.length === 0) return { skip: 'not_a_copy' }
+  if (riIds.length > 1) return { skip: 'two_crosswalk_ids', keepIds: [] }
+  const ri = riIds[0]!
+
+  const sleeperIds = [...new Set(copy.sleeperIdsForRi(ri))]
+  if (sleeperIds.length === 0) return { skip: 'no_link' }
+  if (sleeperIds.length > 1) return { skip: 'ambiguous_twin', keepIds: [] }
+  const players = [...new Set(copy.playersForSleeper(sleeperIds[0]!))]
+  if (players.length === 0) return { skip: 'no_link' }
+  if (players.length > 1) return { skip: 'ambiguous_twin', keepIds: players }
+  const target = players[0]!
+
+  const mine = birthDay(copy.birth ?? null)
+  const theirs = birthDay(copy.birthOf(target) ?? null)
+  if (mine && theirs && mine !== theirs) return { skip: 'birthday_contradicts', keepIds: [target] }
+  if (copy.riIdsOf(target).some((id) => id !== ri)) return { skip: 'provider_clash', keepIds: [target] }
+  return { target, rollingInsightsId: ri }
+}
+
+export type CrosswalkMergePlan = {
+  merges: DuplicateMerge[]
+  skipped: SkippedDuplicate[]
+  /** Rolling Insights copies whose id the identity map does not link to any Sleeper player. */
+  noLink: number
+}
+
+/** Plan every Rolling Insights copy in `players`. */
+export function planCrosswalkMerges(
+  players: readonly CanonicalPlayerRow[],
+  identities: readonly ProviderIdentityRow[],
+  links: readonly CrosswalkLink[],
+): CrosswalkMergePlan {
+  const plan: CrosswalkMergePlan = { merges: [], skipped: [], noLink: 0 }
+
+  const byPlayer = new Map<string, ProviderIdentityRow[]>()
+  const playersBySleeper = new Map<string, Set<string>>()
+  for (const i of identities) {
+    const list = byPlayer.get(i.playerId) ?? []
+    list.push(i)
+    byPlayer.set(i.playerId, list)
+    if (i.provider === 'sleeper') {
+      const set = playersBySleeper.get(i.providerPlayerId) ?? new Set<string>()
+      set.add(i.playerId)
+      playersBySleeper.set(i.providerPlayerId, set)
+    }
+  }
+  const sleepersByRi = new Map<string, Set<string>>()
+  for (const l of links) {
+    const set = sleepersByRi.get(l.rollingInsightsId) ?? new Set<string>()
+    set.add(l.sleeperId)
+    sleepersByRi.set(l.rollingInsightsId, set)
+  }
+  const birthById = new Map(players.map((p) => [p.id, p.birthDate]))
+  const riIdsOf = (id: string) => (byPlayer.get(id) ?? []).filter((i) => i.provider === 'rolling_insights').map((i) => i.providerPlayerId)
+
+  const riByMerge = new Map<string, string>()
+  for (const p of players) {
+    if (hasSleeperId(p.providerIds)) continue
+    const own = byPlayer.get(p.id) ?? []
+    const decision = crosswalkDecision({
+      riIds: own.filter((i) => i.provider === 'rolling_insights').map((i) => i.providerPlayerId),
+      providers: own.map((i) => i.provider),
+      birth: p.birthDate,
+      sleeperIdsForRi: (ri) => [...(sleepersByRi.get(ri) ?? [])],
+      playersForSleeper: (sid) => [...(playersBySleeper.get(sid) ?? [])].filter((id) => id !== p.id),
+      birthOf: (id) => birthById.get(id) ?? null,
+      riIdsOf,
+    })
+    if ('target' in decision) {
+      plan.merges.push({ dupId: p.id, keepId: decision.target })
+      riByMerge.set(p.id, decision.rollingInsightsId)
+    } else if (decision.skip === 'no_link') plan.noLink++
+    else if ('keepIds' in decision) plan.skipped.push({ dupId: p.id, reason: decision.skip, keepIds: decision.keepIds })
+  }
+
+  /* Two copies landing on one player with different RI ids would give it two by the back door. */
+  const riByKeep = new Map<string, Set<string>>()
+  for (const m of plan.merges) {
+    const set = riByKeep.get(m.keepId) ?? new Set<string>()
+    set.add(riByMerge.get(m.dupId)!)
+    riByKeep.set(m.keepId, set)
+  }
+  const refused = plan.merges.filter((m) => riByKeep.get(m.keepId)!.size > 1)
+  for (const m of refused) plan.skipped.push({ dupId: m.dupId, reason: 'provider_clash', providers: ['rolling_insights'], keepIds: [m.keepId] })
+  if (refused.length) plan.merges = plan.merges.filter((m) => riByKeep.get(m.keepId)!.size === 1)
+  return plan
+}
+
+/**
+ * The survivor's `provider_ids` after a merge: the copy's entries are added, and the
+ * survivor's own value wins wherever both name a provider.
+ */
+export function mergedProviderIds(
+  keep: Record<string, unknown> | null | undefined,
+  dup: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  return { ...(dup ?? {}), ...(keep ?? {}) }
+}

@@ -148,7 +148,8 @@ describe('LeagueCreationImportSubmissionService', () => {
 
     const result = await fetchImportPreview('sleeper', '12345')
     expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/not yet available/i)
+    expect(result.error).toMatch(/coming soon/i)
+    expect(result.error).not.toMatch(/You can import from[^.]*Sleeper/)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -157,7 +158,8 @@ describe('LeagueCreationImportSubmissionService', () => {
 
     const result = await submitImportCreation('sleeper', '12345', 'user-1')
     expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/not yet available/i)
+    expect(result.error).toMatch(/coming soon/i)
+    expect(result.error).not.toMatch(/You can import from[^.]*Sleeper/)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GET as legacyGet } from '@/server/api-route-modules/legacy/community-insights/route'
 
 // Mock dependencies
+// The route checks ORIGIN for the plain public read, and a real NextAuth session only for
+// `summarize=true` (a paid model call). `requireAuthOrOrigin` is no longer used: it reads as
+// authentication while passing any anonymous caller with a matching Origin.
 vi.mock('@/lib/api-auth', () => ({
-  requireAuthOrOrigin: vi.fn(() => ({
-    authenticated: true,
-  })),
+  validateRequestOrigin: vi.fn(() => true),
   forbiddenResponse: vi.fn((msg) => new NextResponse(JSON.stringify({ error: msg }), { status: 403 })),
 }))
 
@@ -70,6 +71,11 @@ const listInjuryFactsMock = vi.hoisted(() =>
   })),
 )
 
+const requireAuthMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/auth-guard', () => ({ requireAuth: () => requireAuthMock() }))
+
+const openaiCreateMock = vi.hoisted(() => vi.fn())
+
 vi.mock('@/lib/injuries/injuryReadPort', () => ({
   listInjuryFacts: listInjuryFactsMock,
 }))
@@ -78,7 +84,13 @@ vi.mock('@/lib/ai/openai-route-client', () => ({
   getOpenAIRouteClient: vi.fn(() => ({
     chat: {
       completions: {
-        create: vi.fn(async () => ({
+        create: (...args: unknown[]) => openaiCreateMock(...args),
+      },
+    },
+  })),
+}))
+
+const OPENAI_REPLY = {
           choices: [
             {
               message: {
@@ -86,11 +98,7 @@ vi.mock('@/lib/ai/openai-route-client', () => ({
               },
             },
           ],
-        })),
-      },
-    },
-  })),
-}))
+}
 
 vi.mock('@/lib/telemetry/usage', () => ({
   withApiUsage: vi.fn((config) => {
@@ -101,6 +109,9 @@ vi.mock('@/lib/telemetry/usage', () => ({
 describe('community-insights API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Signed in by default, so the summarize happy paths run as an authenticated caller.
+    requireAuthMock.mockResolvedValue({ ok: true, userId: 'appuser-1', session: null })
+    openaiCreateMock.mockResolvedValue(OPENAI_REPLY)
   })
 
   describe('GET /api/legacy/community-insights', () => {
@@ -266,13 +277,9 @@ describe('community-insights API', () => {
   })
 
   describe('Error handling and edge cases', () => {
-    it('returns 403 when unauthorized', async () => {
-      // Mock unauthorized response
-      const { requireAuthOrOrigin } = await import('@/lib/api-auth')
-      vi.mocked(requireAuthOrOrigin).mockReturnValueOnce({
-        authenticated: false,
-        error: 'Unauthorized',
-      } as any)
+    it('returns 403 when the request origin is not allowed', async () => {
+      const { validateRequestOrigin } = await import('@/lib/api-auth')
+      vi.mocked(validateRequestOrigin).mockReturnValueOnce(false)
 
       const url = new URL('http://localhost:3000/api/legacy/community-insights')
       const request = new NextRequest(url, {
@@ -287,6 +294,34 @@ describe('community-insights API', () => {
       // Assert
       expect(response.status).toBe(403)
       expect(data.error).toBeDefined()
+    })
+
+    it('refuses summarize=true without a signed-in session, and never calls the model', async () => {
+      requireAuthMock.mockResolvedValueOnce({
+        ok: false,
+        response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      })
+      const url = new URL('http://localhost:3000/api/legacy/community-insights')
+      url.searchParams.set('summarize', 'true')
+
+      const response = await legacyGet(new NextRequest(url, { method: 'GET' }))
+
+      expect(response.status).toBe(401)
+      expect(openaiCreateMock).not.toHaveBeenCalled()
+    })
+
+    it('serves the public (non-summarized) read without a session', async () => {
+      requireAuthMock.mockResolvedValue({
+        ok: false,
+        response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      })
+      const response = await legacyGet(
+        new NextRequest(new URL('http://localhost:3000/api/legacy/community-insights'), { method: 'GET' }),
+      )
+
+      expect(response.status).toBe(200)
+      expect(requireAuthMock).not.toHaveBeenCalled()
+      expect(openaiCreateMock).not.toHaveBeenCalled()
     })
 
     it('gracefully handles missing data sources', async () => {

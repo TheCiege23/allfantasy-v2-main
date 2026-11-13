@@ -25,7 +25,7 @@ const blueprintActionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('blueprint_add_staff'), tournamentId: id,
     username: z.string().trim().min(1).max(80),
-    role: z.enum(['viewer', 'co_commissioner']).default('viewer'),
+    role: z.enum(['viewer', 'co_commissioner', 'live_co_commissioner']).default('viewer'),
   }),
   z.object({ action: z.literal('blueprint_remove_staff'), tournamentId: id, assigneeId: id }),
 ])

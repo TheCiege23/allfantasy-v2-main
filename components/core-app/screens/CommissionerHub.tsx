@@ -4,6 +4,13 @@ import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubs
 import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'
 import Link from 'next/link'
 import { Suspense, type CSSProperties, type ReactNode } from 'react'
+/*
+ * The action queue, weekly plan and automation panels below are `.af-tw` panels. Their styles were
+ * reaching this screen only because /core's page also imports LeagueMoves, which imports this
+ * file — so anywhere the hub renders on its own, every one of those panels came out unstyled.
+ * Imported first so the hub's own sheets still win where they overlap, as they do on /core.
+ */
+import '@/components/core-app/af-team-workspace.css'
 import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
 import '@/components/core-app/af-core-redraft-standings.css'
@@ -48,6 +55,7 @@ import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
 import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
 import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
 import { ExternalListingCard } from '@/components/core-app/commissioner/ExternalListingCard'
+import { JoinRequestsCard } from '@/components/core-app/commissioner/JoinRequestsCard'
 import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
 import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
 import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
@@ -270,6 +278,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
       {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
       {league.native && data.role === 'commissioner' ? <FindLeagueListingCard leagueId={league.id} /> : null}
+      {/* A private league's "Ask to join" requests from Find a League; renders nothing when there are none to show. */}
+      {league.native && data.role === 'commissioner' ? <JoinRequestsCard leagueId={league.id} /> : null}
       {!league.native && data.role === 'commissioner' ? <ExternalListingCard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
@@ -591,8 +601,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         </HubSection>
       </HubDepthGate>
 
-      {/* Lineup integrity — free for the latest week; the card names what the plan adds. */}
-      {league.native || league.platform === 'sleeper' ? (
+      {/* Lineup integrity — free for the latest week; the card names what the plan adds. ESPN reads the kickoff capture. */}
+      {league.native || league.platform === 'sleeper' || league.platform === 'espn' ? (
         <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
           <LineupIntegrity leagueId={league.id} />
         </HubSection>

@@ -300,7 +300,12 @@ export function describeChange(c: SettingChange): string {
   return `${spec?.label ?? c.key} → ${value}`
 }
 
-export type AmendmentStatus = 'voting' | 'passed' | 'failed' | 'applied' | 'apply_failed' | 'withdrawn'
+/**
+ * `pending_approval` / `declined` (2026-11-07): a MEMBER may propose a rule change. It waits for the
+ * commissioner, who approves it (the league vote opens) or declines it with a reason. A commissioner's
+ * own proposal goes straight to the vote, as before.
+ */
+export type AmendmentStatus = 'pending_approval' | 'declined' | 'voting' | 'passed' | 'failed' | 'applied' | 'apply_failed' | 'withdrawn'
 
 export type Amendment = {
   id: string
@@ -319,6 +324,91 @@ export type Amendment = {
   resolvedAt: string | null
   appliedAt: string | null
   applyError: string | null
+  /**
+   * The season a `next_season` change takes effect in, fixed when it is proposed — "next season" read
+   * in March and read in October is two different years. Absent on amendments proposed before this.
+   */
+  effectiveSeason?: number | null
+  /** The setting's value when proposed, so the vote shows "11 → 13" rather than just "13". */
+  previousValue?: number | boolean | string | null
+  /** Who proposed it. Absent on older rows, which only commissioners could create. */
+  proposedByRole?: 'commissioner' | 'member'
+  /** Why the commissioner declined a member's proposal. */
+  declineReason?: string | null
+  /** When the "vote closes soon" reminder went to league chat. */
+  reminderSentAt?: string | null
+}
+
+/** Open proposals one member may have waiting for the commissioner at once. */
+export const PENDING_PER_MEMBER_MAX = 2
+export const DECLINE_REASON_MAX = 500
+/** The vote reminder goes out once, when less than this is left. */
+export const VOTE_REMINDER_MS = 24 * 60 * 60 * 1000
+
+function valueText(v: number | boolean | string | null | undefined): string {
+  if (v == null) return '—'
+  return typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v)
+}
+
+/** "Trade deadline week: 11 → 13" — the change against what the league has now. */
+export function describeChangePreview(c: SettingChange, previous: number | boolean | string | null | undefined): string {
+  const spec = AMENDABLE[c.key]
+  const label = spec?.label ?? c.key
+  if (previous === undefined) return describeChange(c)
+  return `${label}: ${valueText(previous)} → ${valueText(c.value)}`
+}
+
+/** When it takes effect, in words that do not drift: "Takes effect in the 2027 season". */
+export function effectiveLabel(a: Pick<Amendment, 'effective' | 'effectiveSeason'>): string {
+  if (a.effective === 'now') return 'Takes effect when it passes'
+  return typeof a.effectiveSeason === 'number' ? `Takes effect in the ${a.effectiveSeason} season` : 'Takes effect next season'
+}
+
+/** The vote is open, has not been reminded, and closes within a day. */
+export function voteReminderDue(a: Amendment, now: Date): boolean {
+  if (a.status !== 'voting' || a.reminderSentAt) return false
+  const left = Date.parse(a.closesAt) - now.getTime()
+  return left > 0 && left <= VOTE_REMINDER_MS
+}
+
+export function voteReminderText(a: Pick<Amendment, 'title' | 'closesAt'>, now: Date): string {
+  const hours = Math.max(1, Math.round((Date.parse(a.closesAt) - now.getTime()) / 3_600_000))
+  return `⏰ The vote on "${a.title}" closes in ${hours} ${hours === 1 ? 'hour' : 'hours'}. Vote on its poll in league chat if you have not.`.slice(0, 280)
+}
+
+/** One line of the permanent rule-change log, from a constitution audit row. */
+export type RuleLogEntry = { at: string; action: string; text: string }
+
+const LOG_VERB: Record<string, string> = {
+  constitution_published: 'Constitution published',
+  amendment_submitted: 'Proposed by a member, waiting for the commissioner',
+  amendment_proposed: 'Vote opened',
+  amendment_approved: 'Approved by the commissioner — vote opened',
+  amendment_declined: 'Declined by the commissioner',
+  amendment_passed: 'Passed',
+  amendment_failed: 'Failed',
+  amendment_applied: 'Applied to league settings',
+  amendment_apply_failed: 'Passed, but could not be applied',
+  amendment_withdrawn: 'Withdrawn',
+}
+
+/** PURE. A log line for an audit row; null for an action this log does not show. */
+export function ruleLogEntry(
+  row: { actionType: string; createdAt: string; afterState: unknown },
+  titleById: ReadonlyMap<string, string>,
+): RuleLogEntry | null {
+  const verb = LOG_VERB[row.actionType]
+  if (!verb) return null
+  const st = row.afterState && typeof row.afterState === 'object' ? (row.afterState as Record<string, unknown>) : {}
+  if (row.actionType === 'constitution_published') {
+    return { at: row.createdAt, action: row.actionType, text: `${verb}${typeof st.version === 'number' ? ` — version ${st.version}` : ''}.` }
+  }
+  const title = typeof st.title === 'string' ? st.title : typeof st.id === 'string' ? titleById.get(st.id) : undefined
+  const parts = [`${verb}: ${title ? `"${title}"` : 'an amendment'}`]
+  if (typeof st.change === 'string') parts.push(`(${st.change})`)
+  if (typeof st.yes === 'number' && typeof st.no === 'number') parts.push(`— ${st.yes} yes, ${st.no} no`)
+  if (typeof st.reason === 'string' && st.reason) parts.push(`— ${st.reason}`)
+  return { at: row.createdAt, action: row.actionType, text: `${parts.join(' ').replace(/[.!?]+$/, '')}.` }
 }
 
 export const AMENDMENT_TITLE_MAX = 120
@@ -361,14 +451,14 @@ export function readyToApply(amendments: Amendment[], moment: 'now' | 'season_ro
 
 export function pruneAmendments(list: Amendment[]): Amendment[] {
   if (list.length <= STORED_AMENDMENTS_MAX) return list
-  const live = list.filter((a) => a.status === 'voting' || a.status === 'passed')
+  const live = list.filter((a) => a.status === 'voting' || a.status === 'passed' || a.status === 'pending_approval')
   const done = list.filter((a) => !live.includes(a)).sort((x, y) => (y.resolvedAt ?? y.proposedAt).localeCompare(x.resolvedAt ?? x.proposedAt))
   return [...live, ...done.slice(0, Math.max(0, STORED_AMENDMENTS_MAX - live.length))]
 }
 
 /** League-chat poll text for an amendment vote. */
-export function amendmentPollQuestion(a: Pick<Amendment, 'title' | 'change' | 'effective' | 'threshold'>): string {
-  const what = a.change ? ` (${describeChange(a.change)})` : ''
-  const when = a.effective === 'now' ? 'takes effect now' : 'takes effect next season'
+export function amendmentPollQuestion(a: Pick<Amendment, 'title' | 'change' | 'effective' | 'threshold'> & Partial<Pick<Amendment, 'effectiveSeason' | 'previousValue'>>): string {
+  const what = a.change ? ` (${a.previousValue !== undefined ? describeChangePreview(a.change, a.previousValue) : describeChange(a.change)})` : ''
+  const when = a.effective === 'now' ? 'takes effect now' : typeof a.effectiveSeason === 'number' ? `takes effect in the ${a.effectiveSeason} season` : 'takes effect next season'
   return `📜 Amendment: ${a.title}${what} — ${when}. Passes with ${a.threshold}% yes.`.slice(0, 280)
 }

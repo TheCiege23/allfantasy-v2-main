@@ -91,6 +91,19 @@ describe('a league with no confirmation reads exactly as before', () => {
     expect(readFormatRules(league).concept).toBe(concept)
   })
 
+  it('a Survivor Guilly league made in the create wizard reads as a confirmed one would', () => {
+    // Created as a redraft shell carrying the `survivor_guillotine` alias tag, with no confirmation.
+    const rules = readFormatRules({ leagueType: 'redraft', aliasTags: ['survivor_guillotine'] })
+    expect(rules.concept).toBe('guillotine')
+    expect(rules.variant).toBe('survivor_guillotine')
+    // A confirmed bare base still yields to the alias; any other confirmed concept wins.
+    expect(readFormatRules({ leagueType: 'redraft', aliasTags: ['survivor_guillotine'], settings: confirmed('redraft') }).variant)
+      .toBe('survivor_guillotine')
+    const overridden = readFormatRules({ leagueType: 'redraft', aliasTags: ['survivor_guillotine'], settings: confirmed('zombie') })
+    expect(overridden.concept).toBe('zombie')
+    expect(overridden.variant).toBeNull()
+  })
+
   it('a plain Guilly league never carries the survivor-guillotine marker', () => {
     expect(readFormatRules({ leagueType: 'guillotine', settings: {} }).variant).toBeNull()
     expect(readFormatRules({ leagueType: 'guillotine', settings: confirmed('guillotine') }).variant).toBeNull()

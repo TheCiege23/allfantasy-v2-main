@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { describeBigBrotherAuditEvent } from './bigBrotherCopy'
 
 type AuditRow = { eventType: string; metadata: unknown; createdAt: string }
 
-export function BigBrotherHistoryPanel({ leagueId }: { leagueId: string }) {
+/** `names`: roster id → display name, from the summary the home already loaded. */
+export function BigBrotherHistoryPanel({ leagueId, names = {} }: { leagueId: string; names?: Record<string, string> }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [log, setLog] = useState<AuditRow[]>([])
@@ -59,24 +61,24 @@ export function BigBrotherHistoryPanel({ leagueId }: { leagueId: string }) {
         {log.length === 0 ? (
           <li className="text-white/45">No events yet.</li>
         ) : (
-          log.map((row, i) => (
-            <li
-              key={`${row.createdAt}-${i}`}
-              className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-white/80"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium text-cyan-100/90">{row.eventType}</span>
-                <time className="text-[11px] text-white/40" dateTime={row.createdAt}>
-                  {new Date(row.createdAt).toLocaleString()}
-                </time>
-              </div>
-              {row.metadata != null && typeof row.metadata === 'object' ? (
-                <pre className="mt-1 max-h-24 overflow-auto text-[11px] text-white/45">
-                  {JSON.stringify(row.metadata, null, 0)}
-                </pre>
-              ) : null}
-            </li>
-          ))
+          log.map((row, i) => {
+            // Each row as a sentence. It printed the event code over a JSON dump of its metadata (2026-11-09 audit).
+            const { title, detail } = describeBigBrotherAuditEvent(row, names)
+            return (
+              <li
+                key={`${row.createdAt}-${i}`}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-white/80"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-medium text-cyan-100/90">{title}</span>
+                  <time className="text-[11px] text-white/40" dateTime={row.createdAt}>
+                    {new Date(row.createdAt).toLocaleString()}
+                  </time>
+                </div>
+                {detail ? <p className="mt-1 text-[12px] text-white/60">{detail}</p> : null}
+              </li>
+            )
+          })
         )}
       </ul>
     </div>

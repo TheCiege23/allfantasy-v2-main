@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { lockTokenWallet } from '@/lib/tokens/TokenWalletLock'
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { provenPrivilegedEmail } from "@/lib/auth/provenPrivilegedEmail"
 import {
   buildDevAdminRefundLedgerEntry,
   buildDevAdminSpendLedgerEntry,
@@ -313,7 +314,7 @@ export class TokenSpendService {
   }
 
   async getBalance(userId: string, userEmail?: string | null): Promise<TokenBalanceSnapshot> {
-    if (isSubscriptionEntitlementBypassUserId(userId, userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(userId, await provenPrivilegedEmail(userId, userEmail))) {
       return buildDevAdminTokenBalanceSnapshot()
     }
 
@@ -412,7 +413,7 @@ export class TokenSpendService {
     ruleCode: TokenSpendRuleCode | string,
     userEmail?: string | null
   ): Promise<TokenSpendPreview> {
-    if (isSubscriptionEntitlementBypassUserId(userId, userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(userId, await provenPrivilegedEmail(userId, userEmail))) {
       return buildDevAdminTokenSpendPreview(String(ruleCode))
     }
 
@@ -436,7 +437,7 @@ export class TokenSpendService {
     currentBalance?: number
     userEmail?: string | null
   }): Promise<TokenSpendPreview> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return buildDevAdminTokenSpendPreview(String(input.ruleCode))
     }
 
@@ -767,7 +768,7 @@ export class TokenSpendService {
     /** Server-verified quote. A changed price requires fresh consent before any wallet write. */
     expectedTokenCost?: number
   }): Promise<TokenLedgerEntryView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return buildDevAdminSpendLedgerEntry({
         ruleCode: String(input.ruleCode),
         sourceType: input.sourceType,
@@ -917,7 +918,7 @@ export class TokenSpendService {
     /** Server-only proof for crash recovery after the ordinary refund window. */
     recoveryReceiptId?: string
   }): Promise<TokenLedgerEntryView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return buildDevAdminRefundLedgerEntry({
         refundRuleCode: String(input.refundRuleCode),
         sourceType: input.sourceType ?? "refund_for_spend",

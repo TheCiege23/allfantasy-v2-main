@@ -185,4 +185,48 @@ describe('POST /renew guards', () => {
     expect(res.status).toBe(200)
     expect(lastLeagueUpdate().data.season).toBe(2028)
   })
+
+  /*
+   * A keeper (or dynasty) league is already on next season when Renew is pressed: closing 2026 built the
+   * 2027 season shell and moved League.season to 2027. `season + 1` renewed it into 2028 and wrote 2027
+   * history for a season nobody played (keeper simulation, 2026-11-10: 27 of 27 leagues).
+   */
+  describe('a league whose season already moved onto the next season shell', () => {
+    const keeperLeague = () => baseLeague({ season: 2027, leagueVariant: 'keeper' })
+    const seasons = (shellStatus: string) => async (args: { where?: { season?: number; status?: string } }) => {
+      if (args?.where?.season === 2027 && args.where.status === 'setup') return shellStatus === 'setup' ? { id: 's2027', season: 2027, status: 'setup' } : null
+      if (args?.where?.season === 2026) return { id: 's2026', season: 2026 }
+      return null
+    }
+
+    it('renews into the season already current, and files history under the season played', async () => {
+      leagueFindUniqueMock.mockResolvedValue(keeperLeague())
+      redraftSeasonFindFirstMock.mockImplementation(seasons('setup'))
+      const res = await post()
+      expect(res.status).toBe(200)
+      expect(lastLeagueUpdate().data.season).toBe(2027)
+      expect(lastLeagueUpdate().data.settings.renewal_completed_for_season).toBe(2027)
+      expect(leagueSeasonUpsertMock.mock.calls[0][0].where.leagueId_season.season).toBe(2026)
+    })
+
+    it('a second Renew is still refused', async () => {
+      leagueFindUniqueMock.mockResolvedValue(keeperLeague())
+      redraftSeasonFindFirstMock.mockImplementation(seasons('setup'))
+      await post()
+      const written = lastLeagueUpdate().data
+      leagueFindUniqueMock.mockResolvedValue(baseLeague({ season: written.season, status: written.status, settings: written.settings, leagueVariant: 'keeper' }))
+      leagueUpdateMock.mockClear()
+      const again = await post()
+      expect(again.status).toBe(409)
+      expect(leagueUpdateMock).not.toHaveBeenCalled()
+    })
+
+    it('a season already being played is not mistaken for the shell: renews one ahead as before', async () => {
+      leagueFindUniqueMock.mockResolvedValue(keeperLeague())
+      redraftSeasonFindFirstMock.mockImplementation(seasons('active'))
+      const res = await post()
+      expect(res.status).toBe(200)
+      expect(lastLeagueUpdate().data.season).toBe(2028)
+    })
+  })
 })

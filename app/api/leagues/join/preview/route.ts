@@ -5,6 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { prisma } from '@/lib/prisma'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/normalizeSurvivorSettings'
@@ -18,7 +21,16 @@ export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams?.get('code')?.trim()
   if (!code) return NextResponse.json({ error: 'Missing code' }, { status: 400 })
 
+  const session = await getServerSession(authOptions)
+  const userId = session?.user?.id
   const result = await validateFantasyInviteCode(code)
+  const eligiblePreview = result.valid || result.error === 'PASSWORD_REQUIRED'
+  const leagueId = eligiblePreview ? result.preview?.leagueId : null
+  const gate = userId && leagueId ? await evaluateCareerJoinGate(userId, leagueId) : null
+  const existing = leagueId && userId && gate && !gate.canJoin
+    ? await prisma.roster.findUnique({ where: { leagueId_platformUserId: { leagueId, platformUserId: userId } }, select: { id: true } })
+    : null
+  const careerBlocked = leagueId && gate && !gate.canJoin && !existing ? careerJoinRefusal(gate, leagueId) : null
   async function survivorPreview(leagueId: string) {
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
@@ -63,6 +75,7 @@ export async function GET(req: NextRequest) {
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
       zombie: await getZombieJoinPreview(result.preview.leagueId),
+      careerBlocked,
       guillotineSeats: await resolveGuillotineSeatSummary(result.preview.leagueId).catch(() => null),
     })
   }
@@ -96,6 +109,7 @@ export async function GET(req: NextRequest) {
       inviteCode: result.preview.inviteCode,
       survivor: await survivorPreview(result.preview.leagueId),
       zombie: await getZombieJoinPreview(result.preview.leagueId),
+      careerBlocked,
       guillotineSeats: await resolveGuillotineSeatSummary(result.preview.leagueId).catch(() => null),
     })
   }

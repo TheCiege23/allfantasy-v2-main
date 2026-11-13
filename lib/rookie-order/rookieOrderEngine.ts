@@ -16,9 +16,10 @@
  *
  * A playoff team eliminated in round r picks before every team eliminated in a later round, and
  * the champion picks last. Teams eliminated in the SAME round are ordered by `withinRound` — the
- * worse seed first by default — unless a decided placement game (a 3rd-place game) settled them,
- * in which case the worse finish picks first. Byes need no special case: a bye team simply has no
- * game in round 1.
+ * worse seed first by default. A placement game (a 3rd-place game) does NOT reorder them: the
+ * product rule is that seed decides between the semifinal losers whether or not they played for
+ * 3rd, so the place is shown as the slot's finish and nothing else. Byes need no special case: a
+ * bye team simply has no game in round 1.
  *
  * ## A lower bracket that plays for the pick
  *
@@ -310,14 +311,10 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
   const championId = titleGame?.winner ?? null
   const roundDecided = (r: number) => bracketGames.filter((g) => g.round === r).every((g) => g.winner != null)
 
+  // A decided placement game names the place each team finished — shown on the slot, never used to order it.
   const finishByTeam = new Map<string, number>()
-  const undecidedPlacement = new Set<string>()
   for (const g of placementGames) {
-    const pair = [g.teamA, g.teamB].filter((t): t is string => t != null)
-    if (!g.winner || g.place == null) {
-      if (!g.winner) pair.forEach((t) => undecidedPlacement.add(t))
-      continue
-    }
+    if (!g.winner || g.place == null) continue
     finishByTeam.set(g.winner, g.place)
     const loser = g.winner === g.teamA ? g.teamB : g.teamA
     if (loser) finishByTeam.set(loser, g.place + 1)
@@ -351,18 +348,15 @@ export function computeRookieOrder(input: RookieOrderInput): RookieOrderResult {
 
   for (const r of [...tiers.keys()].sort((a, b) => a - b)) {
     const group = tiers.get(r)!
-    const allPlaced = group.length > 1 && group.every((t) => finishByTeam.has(t.teamId))
-    group.sort(allPlaced ? (a, b) => finishByTeam.get(b.teamId)! - finishByTeam.get(a.teamId)! : within)
-    const locked = roundDecided(r) && group.every((t) => !undecidedPlacement.has(t.teamId))
+    group.sort(within)
+    const locked = roundDecided(r)
     const isTitleRound = titleGame != null && r === finalRound
     for (const t of group) {
       const place = finishByTeam.get(t.teamId)
       const finish = isTitleRound ? 'Runner-up' : place != null ? `${ordinal(place)} place` : `Lost in ${roundName(r, finalRound)}`
       const why = isTitleRound
         ? 'Lost the title game — picks second to last'
-        : allPlaced
-          ? `${finish} — decided by the placement game`
-          : group.length > 1
+        : group.length > 1
             ? `Lost in ${roundName(r, finalRound)} (seed ${t.playoffSeed}) — ${withinLabel}`
             : `Lost in ${roundName(r, finalRound)} (seed ${t.playoffSeed})`
       push(t, locked ? 'locked' : 'provisional', finish, locked ? why : `${why}; waiting on other ${roundName(r, finalRound)} results`)

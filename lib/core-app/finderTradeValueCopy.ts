@@ -122,6 +122,7 @@ export type TradeValueCopy = {
   sharesTitleIn: (leagueName: string) => string
   sharesSub: (players: number, rosters: number) => string
   sharesUnsupported: (n: number) => string
+  sharesUnidentified: (n: number) => string
   sharesNone: string
   sharesOf: string
   sharesStarting: (n: number) => string
@@ -242,7 +243,7 @@ export function gradeLabelText(label: string, language: string): string {
 
 /**
  * The grade's recommendation (`tradeGradeRecommendation` in lib/decision-os/trade/tradeGrade.ts), one
- * sentence per letter. The two with a figure keep it as the grader formatted it. The "Quoted values:"
+ * sentence per letter. The two with a figure keep it as the grader formatted it. The "<Label>. You send …"
  * form is the package-review sentence, translated whole or not at all.
  */
 const RECOMMENDATION_ES: Record<string, string> = {
@@ -262,12 +263,13 @@ export function gradeRecommendationText(text: string, language: string): string 
   if (counter) return `Favorece al otro lado según el valor de liga. Una contraoferta necesita recibir unos ${counter[1]} más para quedar equilibrada.`
   const overpay = text.match(/^An overpay on league value — about ([\d,.]+) short\. Decline, or ask for substantially more\.$/)
   if (overpay) return `Pagas de más según el valor de liga: te faltan unos ${overpay[1]}. Recházalo o pide bastante más.`
-  const quoted = text.match(/^Quoted values: (.+?)\. (.+)$/)
+  // "<Label>. You send …" since 2026-11-11; "Quoted values: <label>. You send …" on older stored grades.
+  const quoted = text.match(/^(?:Quoted values: )?(.+?)\. (You send .+)$/)
   if (quoted) {
     const label = quoted[1]!.charAt(0).toUpperCase() + quoted[1]!.slice(1)
     const labelEs = coreUiCopy(label, 'es')
     const note = tradeVisualCopy(quoted[2]!, 'es')
-    if (labelEs !== label && note !== quoted[2]) return `Valores cotizados: ${labelEs.toLowerCase()}. ${note}`
+    if (labelEs !== label && note !== quoted[2]) return `${labelEs}. ${note}`
   }
   return text
 }

@@ -52,13 +52,15 @@ export async function loadPortfolioTeam(l: NamedLeague, userId: string, horizon:
   const reserveIds = new Set([...team.injuredReserve, ...team.taxi].map(p => p.playerId))
   const metrics = rosterStructure(!unresolved && Array.isArray(c.roster.starters) ? c.roster.starters.map(String) : null,
     resolved.map(p => ({ id: p.playerId, position: p.position, reserve: reserveIds.has(p.playerId) })))
+  // Classic Best Ball or best ball Guilly: no lineup to review (lib/bestball/bestBallLeagueState.ts).
+  const autoLineup = c.lineupBehavior?.lineupSetsItself ?? c.flags.bestBallMode
   const canDynasty = c.flags.isDynasty || c.flags.isKeeper || c.flags.isDevy || c.flags.isC2C
   const [grade, weekly, lineup, injuries] = await Promise.all([
     horizon !== 'week' && (horizon !== 'dynasty' || canDynasty) ? getRosterGrade({ leagueId: l.id,
       myPlatformUserIds: [team.platformUserId, c.team?.platformUserId, c.team?.externalId, userId].filter((id): id is string => Boolean(id)),
       isDynasty: horizon === 'dynasty', starters: c.roster.starters, scoringSettings: c.scoring.pointsByStat }).catch(() => null) : Promise.resolve(null),
     horizon === 'week' ? weeklyLeagueStrength(l.id, userId).catch(() => null) : Promise.resolve(null),
-    l.sport === 'NFL' && !c.flags.bestBallMode ? buildLineupOptimization({ leagueId: l.id, userId }).catch(() => null) : Promise.resolve(null),
+    l.sport === 'NFL' && !autoLineup ? buildLineupOptimization({ leagueId: l.id, userId }).catch(() => null) : Promise.resolve(null),
     resolveInjuryFacts({ sport: l.sport, players: resolved.filter(p => p.name).map(p => ({ name: p.name!, position: p.position, team: p.team })) }).catch(() => null),
   ])
   if (horizon === 'dynasty' && !canDynasty) gaps.push('Dynasty outlook is not applicable to this redraft team.')
@@ -92,7 +94,7 @@ export async function loadPortfolioTeam(l: NamedLeague, userId: string, horizon:
   if (injuryPlayers.some(p => p.stale)) gaps.push('Some injury reports are stale.')
   if (lineup?.status === 'ready') metrics.push({ key: 'lineup_gain', label: 'Available lineup gain', value: lineup.gain,
     detail: lineup.gain == null ? 'The current lineup could not be fully priced.' : 'Week ' + lineup.week.week + ': ' + lineup.gain.toFixed(1) + ' projected points from the shared lineup optimizer. Recheck locks before confirming changes.' })
-  else if (c.flags.bestBallMode) metrics.push({ key: 'lineup_gain', label: 'Lineup management', value: null, detail: 'Best ball selects scoring starters automatically; manual start/sit changes do not apply.' })
+  else if (autoLineup) metrics.push({ key: 'lineup_gain', label: 'Lineup management', value: null, detail: 'Best ball selects scoring starters automatically; manual start/sit changes do not apply.' })
   if (native) metrics.push({ key: 'source', label: 'Roster source', value: null, detail: 'Native AllFantasy roster read directly; no external sync is required.' })
   if (horizon === 'dynasty') gaps.push('This compares roster assets only. Draft picks, contracts and future-season outcomes are not included in the construction index.')
   const href = '/core/my-team?league=' + encodeURIComponent(l.id)
@@ -100,7 +102,7 @@ export async function loadPortfolioTeam(l: NamedLeague, userId: string, horizon:
   const position = weakest?.position
   if (l.sport === 'NFL') actions.push({ label: 'Find an upgrade', prompt: 'Find me a trade' + (position ? ' for ' + position : '') + ' in ' + l.name })
   if (l.sport === 'NFL') actions.push({ label: 'Check waivers', prompt: 'Who is the best pickup' + (position ? ' at ' + position : '') + ' in ' + l.name + '?' })
-  if (l.sport === 'NFL' && !c.flags.bestBallMode) actions.push({ label: 'Review lineup', prompt: 'Check my lineup in ' + l.name })
+  if (l.sport === 'NFL' && !autoLineup) actions.push({ label: 'Review lineup', prompt: 'Check my lineup in ' + l.name })
   const importantGaps = unresolved > 0 || stale || percentile == null || !native && !c.importHealth.mappingOk || Boolean(grade && (grade.pricedPlayers < grade.totalPlayers || !grade.basis.leagueScored))
   return { leagueId: l.id, leagueName: l.name, teamName: team.teamName, sport: l.sport, season: l.season,
     status: importantGaps ? 'partial' : 'ready', lastSyncedAt, stale, rank, outOf, percentile, metrics,

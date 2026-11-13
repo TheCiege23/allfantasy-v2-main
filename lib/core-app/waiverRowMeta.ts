@@ -67,8 +67,8 @@ export function runsAtLabel(
  * for a Sleeper league — the one OBSERVED from when its claims actually processed, else Sleeper's
  * own daily hour setting (lib/waivers/sleeperWaiverSchedule.ts). Never a Sleeper bootstrap default.
  *
- * ⚠ STRUCTURED, NOT AN INSTANT. The board is served from a clock-free cache (see
- * `waiversBoardSummary.ts`); "the next run" depends on now, so the component derives it.
+ * ⚠ STRUCTURED, NOT AN INSTANT. "The next run" depends on now, so the component derives it from
+ * this rather than the loader freezing one instant into its result.
  */
 export function rowWaiverSchedule(
   w: { processingDayOfWeek: number | null; processingTimeUtc: string | null } | null | undefined,

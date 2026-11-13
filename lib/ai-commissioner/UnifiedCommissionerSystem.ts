@@ -10,6 +10,8 @@ import {
   toConfigView,
 } from './AICommissionerService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
+import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 type SpecialtyModeKey =
   | 'guillotine'
@@ -170,6 +172,8 @@ export async function getUnifiedCommissionerAssessment(input: {
           bestBallMode: true,
           isDynasty: true,
           leagueType: true,
+          leagueVariant: true,
+          settings: true,
           integritySettings: {
             select: {
               collusionMonitoringEnabled: true,
@@ -226,8 +230,10 @@ export async function getUnifiedCommissionerAssessment(input: {
   if (!league) throw new Error('League not found')
 
   const entitlementResolver = new EntitlementResolver()
+  // The owner's plan — or, for a system-owned league, its PROVEN commissioner's (see the helper).
+  const commissionerAccount = (await leagueCommissionerAccountId(input.leagueId, league.userId)) ?? league.userId
   const commissionerEntitlement = await entitlementResolver.resolveForUser(
-    league.userId,
+    commissionerAccount,
     'commissioner_automation'
   )
   const afCommissionerSub = commissionerEntitlement.hasAccess
@@ -515,7 +521,8 @@ export async function getUnifiedCommissionerAssessment(input: {
       },
       {
         key: 'best_ball',
-        enabled: Boolean(league.bestBallMode),
+        // Classic Best Ball or best ball Guilly: both are scored by the optimizer (lib/bestball/bestBallLeagueState.ts).
+        enabled: bestBallLineupSetsItself(league),
         note: 'Prioritize scoring integrity and optimizer transparency.',
       },
       {
@@ -585,8 +592,9 @@ export async function applyUnifiedCommissionerAction(input: {
   if (!league) throw new Error('League not found')
 
   const entitlementResolver = new EntitlementResolver()
+  const commissionerAccount = (await leagueCommissionerAccountId(input.leagueId, league.userId)) ?? league.userId
   const commissionerEntitlement = await entitlementResolver.resolveForUser(
-    league.userId,
+    commissionerAccount,
     'commissioner_automation'
   )
 
@@ -688,7 +696,8 @@ export async function applyUnifiedCommissionerAction(input: {
     .catch(() => null)
 
   await createPlatformNotification({
-    userId: league.userId,
+    // Not the system account that owns a joined-by-pick league: nobody reads it.
+    userId: commissionerAccount,
     productType: 'app',
     type: 'commissioner_action_applied',
     title: 'Commissioner action applied',

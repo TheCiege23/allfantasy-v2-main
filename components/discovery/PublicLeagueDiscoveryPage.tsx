@@ -140,8 +140,8 @@ export function PublicLeagueDiscoveryPage({
             </h2>
             <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
               {viewerTierName
-                ? `You are currently Tier ${viewerTier} - ${viewerTierName}. You can browse and join leagues within one tier of your ranking. Commissioner invites can still unlock leagues outside that range.`
-                : "Your AllFantasy ranking controls which public leagues appear here. Commissioner invites can still unlock leagues outside your normal range."}
+                ? `You are currently Tier ${viewerTier} - ${viewerTierName}. Fantasy leagues allow direct joins within three Career Levels. Request commissioner approval for a bigger gap.`
+                : "Sign in to see which fantasy leagues you can join at your Career Level."}
             </p>
           </div>
 

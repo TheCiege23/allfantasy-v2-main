@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { getAFProjection, getAFProjectionBatch } from '@/lib/weather/afProjectionService'
+
+/**
+ * ⚠ THIS ROUTE WAS OPEN TO ANYONE: no sign-in, no plan check, no batch limit — while the catalog sells
+ * weather-adjusted projections on two plans (`pro_af_projections` on Pro, `commissioner_weather_projections`
+ * on Commissioner; Supreme inherits both). It now needs a signed-in user holding EITHER, and a batch is
+ * capped so one request cannot fan out over a whole player pool.
+ */
+const MAX_BATCH = 60
 
 export const dynamic = 'force-dynamic'
 
@@ -21,11 +32,25 @@ type SingleBody = {
 }
 
 export async function POST(request: NextRequest) {
+  const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string; email?: string | null } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userEmail = session?.user?.email ?? null
+  // Either plan that sells it opens it; the first refusal is the one returned.
+  const pro = await requireFeatureEntitlement({ userId, userEmail, featureId: 'pro_af_projections' })
+  if (!pro.ok) {
+    const commish = await requireFeatureEntitlement({ userId, userEmail, featureId: 'commissioner_weather_projections' })
+    if (!commish.ok) return pro.response
+  }
+
   try {
     const body = (await request.json()) as SingleBody | { players: SingleBody[] }
 
     if (body && Array.isArray((body as { players?: unknown }).players)) {
       const players = (body as { players: SingleBody[] }).players
+      if (players.length > MAX_BATCH) {
+        return NextResponse.json({ error: `At most ${MAX_BATCH} players per request` }, { status: 400 })
+      }
       const mapped = players.map((p) => ({
         playerId: p.playerId,
         playerName: p.playerName,

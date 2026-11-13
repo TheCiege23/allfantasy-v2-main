@@ -48,21 +48,25 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-espn.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { requestEspnLeagueTest } from '@/components/core-app/import/EspnLeagueCheck'
 
 type EspnAuthStatus = {
   connected: boolean
   updatedAt: string | null
+  /** ESPN refused the saved cookies on a recent read (`league_auths.connectionStatus`). */
+  needsReconnect: boolean
 }
 
 async function fetchEspnAuthStatus(): Promise<EspnAuthStatus> {
   const res = await fetch('/api/league/auth', { cache: 'no-store' })
-  if (!res.ok) return { connected: false, updatedAt: null }
+  if (!res.ok) return { connected: false, updatedAt: null, needsReconnect: false }
   const data = await res.json().catch(() => null)
   const auths = Array.isArray(data?.auths) ? data.auths : []
   const espn = auths.find((a: { platform?: string }) => a.platform === 'espn')
   return {
     connected: Boolean(espn?.hasEspnCookies),
     updatedAt: espn?.updatedAt ?? null,
+    needsReconnect: Boolean(espn?.needsReconnect),
   }
 }
 
@@ -150,12 +154,20 @@ export type EspnConnectPanelProps = {
    * press something to find out.
    */
   onConnectedChange?: (connected: boolean) => void
+  /**
+   * The league the user is importing, when there is one (the import screen passes its league box).
+   * Manually pasted cookies are then TESTED against that league before they are saved, so a
+   * mis-copied or wrong-account pair is refused with a reason instead of replacing a working
+   * connection. Settings mounts the panel without it and saves as before.
+   */
+  leagueInputForTest?: string | null
 }
 
-export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
+export function EspnConnectPanel({ onConnectedChange, leagueInputForTest }: EspnConnectPanelProps) {
   const { t, tInterpolate } = useOptionalLanguage()
   const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading')
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+  const [needsReconnect, setNeedsReconnect] = useState(false)
   const [editing, setEditing] = useState(false)
   const [swid, setSwid] = useState('')
   const [espnS2, setEspnS2] = useState('')
@@ -201,6 +213,7 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
     const s = await fetchEspnAuthStatus()
     setStatus(s.connected ? 'connected' : 'disconnected')
     setUpdatedAt(s.updatedAt)
+    setNeedsReconnect(s.connected && s.needsReconnect)
     onConnectedChange?.(s.connected)
   }, [onConnectedChange])
 
@@ -319,6 +332,22 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
     setSaving(true)
     setMessage(null)
     try {
+      const league = leagueInputForTest?.trim()
+      if (league) {
+        const check = await requestEspnLeagueTest(league, { swid: trimmedSwid, espnS2: trimmedS2 })
+        const refused =
+          (!check.ok && (check.reason === 'cookies_rejected' || check.reason === 'error')) ||
+          (check.ok && check.viewerTeamFound === false)
+        if (refused) {
+          setMessage({
+            tone: 'error',
+            text: check.ok
+              ? 'Those cookies are from an ESPN account with no team in this league. Sign in to ESPN with the account that has a team here and copy them again.'
+              : check.message,
+          })
+          return
+        }
+      }
       const res = await fetch('/api/league/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -505,6 +534,18 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
 
   return (
     <div className="af-espn" data-connected={status === 'connected' ? 'true' : 'false'}>
+      {status === 'connected' && needsReconnect && !editing ? (
+        <p className="af-espn-warn" role="alert" data-testid="espn-needs-reconnect">
+          <span className="af-espn-warn-mark" aria-hidden>
+            !
+          </span>
+          <span>
+            <strong>ESPN stopped accepting your saved connection.</strong> This happens when you sign
+            out of ESPN in that browser. Your leagues are safe but won&rsquo;t update until you paste
+            fresh cookies with &ldquo;Update cookies&rdquo;.
+          </span>
+        </p>
+      ) : null}
       {status === 'connected' && !editing ? (
         <div className="af-espn-connected">
           <span className="af-espn-badge af-num">{t('import.espn.badge')}</span>

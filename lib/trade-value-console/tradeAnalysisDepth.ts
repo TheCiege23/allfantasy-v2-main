@@ -65,6 +65,11 @@ export const TRADE_VERDICT_FIELDS = [
    */
   'valueBasis',
   'valuationBasis',
+  /*
+   * The AllFantasy trade market's per-asset moves — free for the same reason as `valueBasis`: they are
+   * already inside the letter, so hiding them would make the free grade move for an unseen reason.
+   */
+  'tradeMarket',
   /* The letter itself, and the same free verdict on every surface — see `lib/decision-os/trade/tradeGrade.ts`. */
   'grade',
   'evaluationReceipt',

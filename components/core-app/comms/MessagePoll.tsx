@@ -1,5 +1,6 @@
 'use client'
 
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { isPollClosed, pollShare, type ViewerPoll } from '@/lib/chat-core/messagePolls'
 import { formatChatMessageTimestamp } from '@/lib/chat-core/chat-timestamps'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -44,6 +45,8 @@ export function MessagePoll({
 
       {poll.options.map((o) => {
         const share = pollShare(o, poll.totalVotes)
+        // A time option (the draft scheduler) reads in the viewer's own clock, zone named.
+        const label = o.startsAt ? localTimeLabel(o.startsAt) ?? o.text : o.text
         const won = Boolean(prediction?.resolved && prediction.winningOptionId === o.id)
         return (
           <button
@@ -57,8 +60,8 @@ export function MessagePoll({
             aria-pressed={o.mine}
             aria-label={
               hidden
-                ? `${o.text}${o.mine ? ', your vote' : ''}`
-                : `${o.text}, ${o.count} vote${o.count === 1 ? '' : 's'}${o.mine ? ', your vote' : ''}${won ? ', correct pick' : ''}`
+                ? `${label}${o.mine ? ', your vote' : ''}`
+                : `${label}, ${o.count} vote${o.count === 1 ? '' : 's'}${o.mine ? ', your vote' : ''}${won ? ', correct pick' : ''}`
             }
           >
             {!hidden && poll.totalVotes > 0 ? (
@@ -66,7 +69,7 @@ export function MessagePoll({
             ) : null}
             <span className="af-cm-poll-t">
               {won ? '✓ ' : ''}
-              {o.text}
+              {label}
             </span>
             {hidden ? (
               o.mine ? <span className="af-cm-poll-n">✓</span> : null
@@ -113,3 +116,10 @@ export function MessagePoll({
 }
 
 export default MessagePoll
+
+/** "Sat, Aug 29, 5:00 PM PDT" in the browser's own zone and the app's language; null when unreadable. */
+function localTimeLabel(iso: string): string | null {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleString(getAppIntlLocale(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+}

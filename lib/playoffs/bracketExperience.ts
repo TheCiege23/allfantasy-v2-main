@@ -18,13 +18,16 @@ export function readBracketAlerts(raw: unknown, challengeId: string): BracketAle
     leadMinutes: [15, 30, 60].includes(stored.leadMinutes) ? stored.leadMinutes : 30, locale: stored.locale === "es" ? "es" : "en" }
 }
 export function scoreLedger(view: PlayoffChallengeView): LedgerRow[] {
-  const picks = new Map(view.picks.map(p => [p.seriesId, p.pickTeamName]))
+  const picks = new Map(view.picks.map(p => [p.seriesId, p]))
   return view.series.map(game => {
-    const pick = picks.get(game.id) ?? null
-    const eligible = Boolean(view.activeEntry?.finalizedAt) && eligibleCoachPick(view, game, view.activeEntry?.finalizedAt)
+    const saved = picks.get(game.id)
+    const pick = view.challenge.sport === "nba_cup" && gameHasLocked(game, Date.now()) && saved?.confirmedAt
+      ? saved.confirmedTeamName ?? saved.pickTeamName : saved?.pickTeamName ?? null
+    const confirmation = view.challenge.sport === "nba_cup" && saved?.confirmedAt !== undefined ? saved.confirmedAt : view.activeEntry?.finalizedAt
+    const eligible = Boolean(confirmation) && eligibleCoachPick(view, game, confirmation)
     const knownTeam = pick && (game.bestOf !== 1 || [game.homeTeamName, game.awayTeamName].includes(pick))
     const winner = game.status === "final" ? game.winnerTeamName : null
-    const reason: LedgerReason = !pick ? "no_pick" : !knownTeam ? "invalid_pick" : !view.activeEntry?.finalizedAt ? "draft"
+    const reason: LedgerReason = !pick ? "no_pick" : !knownTeam ? "invalid_pick" : !confirmation ? "draft"
       : !eligible ? "late" : !winner ? "pending" : winner === pick ? "correct" : "wrong"
     return { id: game.id, round: game.round, home: game.homeTeamName, away: game.awayTeamName, pick, winner,
       points: reason === "correct" ? pointsForSeries(game, view.challenge.sport) : 0, available: pointsForSeries(game, view.challenge.sport), reason,
@@ -38,22 +41,28 @@ export function entryChecklist(view: PlayoffChallengeView, now = Date.now()) {
   const missing = available.filter(g => !picks.has(g.id) || (g.bestOf === 1 && ![g.homeTeamName, g.awayTeamName].includes(picks.get(g.id)!)))
   const next = [...available].sort((a,b) => Date.parse(a.startsAt!) - Date.parse(b.startsAt!))[0]
   const owned = Boolean(view.activeEntry && view.activeEntry.userId === view.viewerUserId)
+  const pendingConfirmation = view.challenge.sport === "nba_cup"
+    ? available.filter((game) => {
+      const pick = view.picks.find((row) => row.seriesId === game.id)
+      return pick && (pick.confirmedAt === null || Boolean(pick.draftTeamName))
+    }).length : 0
   return { hasEntry: owned, finalizedAt: owned ? view.activeEntry!.finalizedAt ?? null : null,
     available: available.length, saved: available.length - missing.length, missing: missing.length,
     firstMissingId: missing[0]?.id ?? null, nextDeadline: next?.startsAt ?? null,
     readyToFinalize: owned && Boolean(view.completion?.isSubmittable) && !view.activeEntry!.finalizedAt,
+    pendingConfirmation: owned ? pendingConfirmation : 0,
     pendingMatchups: view.series.filter(g => !g.startsAt || /^(Winner|TBD|East Champion|West Champion)/i.test(g.homeTeamName + " " + g.awayTeamName)).length }
 }
 export type ProjectionEntry = { id: string; name: string; totalScore: number; correctPicks: number; finalizedAt: string | null; rank: number | null; tiebreakerTotalScore: number | null }
-export type ProjectionPick = { entryId: string; seriesId: string; pickTeamName: string }
+export type ProjectionPick = { entryId: string; seriesId: string; pickTeamName: string; confirmedAt?: Date | string | null }
 /** Hypothetical only: currently leading, fresh, single-game matchups. No final-score writes. */
 export function provisionalStandings(view: PlayoffChallengeView, entries: ProjectionEntry[], picks: ProjectionPick[], now = Date.now()) {
   const live = view.series.filter(g => g.bestOf === 1 && g.status === "in_progress" && !g.winnerTeamName)
   const fresh = (g: PlayoffSeriesView) => Boolean(g.lastSyncedAt && Date.parse(g.lastSyncedAt) <= now + 30_000 && now - Date.parse(g.lastSyncedAt) <= 120_000)
   const ranked = entries.filter(e => e.finalizedAt).map(entry => {
-    const mine = new Map(picks.filter(p => p.entryId === entry.id).map(p => [p.seriesId, p.pickTeamName]))
-    const projected = live.filter(g => fresh(g) && Number.isFinite(g.liveHomeScore) && Number.isFinite(g.liveAwayScore) && g.liveHomeScore !== g.liveAwayScore && gameHasLocked(g, now) && eligibleCoachPick(view, g, entry.finalizedAt))
-      .filter(g => mine.get(g.id) === (g.liveHomeScore! > g.liveAwayScore! ? g.homeTeamName : g.awayTeamName))
+    const mine = new Map(picks.filter(p => p.entryId === entry.id).map(p => [p.seriesId, p]))
+    const projected = live.filter(g => fresh(g) && Number.isFinite(g.liveHomeScore) && Number.isFinite(g.liveAwayScore) && g.liveHomeScore !== g.liveAwayScore && gameHasLocked(g, now) && eligibleCoachPick(view, g, view.challenge.sport === "nba_cup" && mine.get(g.id)?.confirmedAt !== undefined ? mine.get(g.id)?.confirmedAt?.toString() : entry.finalizedAt))
+      .filter(g => mine.get(g.id)?.pickTeamName === (g.liveHomeScore! > g.liveAwayScore! ? g.homeTeamName : g.awayTeamName))
     const livePoints = projected.reduce((sum,g) => sum + pointsForSeries(g, view.challenge.sport), 0)
     return { ...entry, officialScore: entry.totalScore, officialRank: entry.rank, livePoints, totalScore: entry.totalScore + livePoints, potentialTotal: 0, correctPicks: entry.correctPicks + projected.length }
   })
@@ -77,13 +86,15 @@ export function advanceScoreSnapshot(prior: ScoreSnapshot | null, rows: LedgerRo
 export type BracketAlert = { key: string; kind: "missing" | "lock" | "result" | "rank"; seriesId?: string; deadline: string; count: number; delta?: number; rank?: number }
 export function pendingBracketAlerts(view: PlayoffChallengeView, prefs: BracketAlertPreferences, prior: ScoreSnapshot | null, next: ScoreSnapshot, now = Date.now()): BracketAlert[] {
   if (!prefs.enabled || !view.activeEntry) return []
-  const picks = new Map(view.picks.map(p => [p.seriesId,p.pickTeamName]))
+  const picks = new Map(view.picks.map(p => [p.seriesId,p]))
   const alerts: BracketAlert[] = []
   for (const g of view.series) {
     const time = Date.parse(g.startsAt ?? "")
     if (!Number.isFinite(time) || time <= now || time - now > prefs.leadMinutes * 60_000 || gameHasLocked(g, now) || (view.challenge.sport === "nba_cup" && nbaCupLockedReason(g, now))) continue
-    const selected = picks.get(g.id)
-    const missing = !selected || (g.bestOf === 1 && ![g.homeTeamName,g.awayTeamName].includes(selected)) || !view.activeEntry.finalizedAt
+    const saved = picks.get(g.id)
+    const selected = saved?.pickTeamName
+    const missing = !selected || (g.bestOf === 1 && ![g.homeTeamName,g.awayTeamName].includes(selected)) ||
+      (view.challenge.sport === "nba_cup" && saved?.confirmedAt !== undefined ? !saved.confirmedAt || Boolean(saved.draftTeamName) : !view.activeEntry.finalizedAt)
     if ((missing && prefs.missingPicks) || (!missing && prefs.locks)) alerts.push({ key: `${g.id}:${g.startsAt}:lock`, kind: missing ? "missing" : "lock", seriesId: g.id, deadline: g.startsAt!, count: 1 })
   }
   const changes = next.events.filter(e => e.observedAt === next.observedAt)

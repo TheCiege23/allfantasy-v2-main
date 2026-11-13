@@ -9,6 +9,7 @@ import { getLeagueNcaabScoringConfig, saveLeagueNcaabScoringConfig, getNcaabScor
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 const featureGate = new FeatureGateService()
 export const dynamic = 'force-dynamic'
@@ -23,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const config = await getLeagueNcaabScoringConfig(leagueId)
   let isPremium = false
   try { isPremium = (await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring')).allowed } catch {}
-  return NextResponse.json({ config, presets: getNcaabScoringPresets(), isCommissioner: league.userId === session.user.id, isPremium })
+  return NextResponse.json({ config, presets: getNcaabScoringPresets(), isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id), isPremium })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
@@ -32,7 +33,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   const locked = await settingsLockedResponse(leagueId, 'scoring')
   if (locked) return locked
   if (league.sport !== 'NCAAB') return NextResponse.json({ error: 'NCAAB leagues only' }, { status: 400 })

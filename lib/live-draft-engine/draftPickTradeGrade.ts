@@ -12,6 +12,8 @@
  * Those swaps say why they are not graded and keep the draft-position read, which is a fact.
  */
 
+import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
+
 export type DraftPickTradeGrade =
   | {
       graded: true
@@ -65,13 +67,14 @@ export function draftPickGradeAsset(input: {
   overall: number | null
   slot: number
   teamCount: number
-}): { kind: 'pick'; year: number; round: number; tier: 'early' | 'mid' | 'late'; label: string } {
+}): { kind: 'pick'; year: number; round: number; tier: 'early' | 'mid' | 'late'; label: string; overall?: number } {
   const tier = pickTierInRound(input)
   return {
     kind: 'pick',
     year: input.season,
     round: input.round,
     tier,
+    ...(input.teamCount > LARGE_LEAGUE_PICK_THRESHOLD && input.overall != null ? { overall: input.overall } : {}),
     label: `${input.season} ${tier} round ${input.round}${input.overall != null ? ` (#${input.overall})` : ''}`,
   }
 }

@@ -712,7 +712,7 @@ async function resolvePlayers(
      IS the AF engine's season figure (ncaafProjections.ts). A failed read costs the AF column only. */
   const afEngine = String(sport).toUpperCase() === 'NCAAF'
     ? new Map<string, { projectedPoints: number }>()
-    : await lookupAfEngineProjections(lookupIds, projectionWeek).catch(() => new Map<string, { projectedPoints: number }>())
+    : await lookupAfEngineProjections(lookupIds, projectionWeek, sport).catch(() => new Map<string, { projectedPoints: number }>())
 
   /*
    * ⚠ ONE PASS PER PLAYER, NOT ONE PER ROW. This iterated `rows` and wrote
@@ -1795,6 +1795,7 @@ async function loadMyTeamData(
             : null,
         priceLineups,
         bestBall: base.league.bestBall === true,
+        sport,
       }).catch(() => null))
     : null
 

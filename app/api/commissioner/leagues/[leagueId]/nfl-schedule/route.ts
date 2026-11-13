@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { getScheduleConfigForLeague, updateScheduleConfigForLeague } from '@/lib/fantasy-schedule'
 import { resolveNflFantasyWeek } from '@/lib/nfl-schedule'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, leagueVariant: true, leagueType: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (league.sport !== 'NFL') return NextResponse.json({ error: 'NFL leagues only' }, { status: 400 })
 
   const config = await getScheduleConfigForLeague(leagueId)
@@ -34,7 +35,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (league.sport !== 'NFL') return NextResponse.json({ error: 'NFL leagues only' }, { status: 400 })
 
   const body = await req.json().catch(() => ({}))

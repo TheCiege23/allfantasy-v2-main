@@ -40,17 +40,17 @@ export function getLeagueFilterOptions(): LeagueFilterOptions {
       { value: "streak_survival", label: "Streak & Survival" },
     ],
     entryFees: [
-      { value: "all", label: "Any" },
+      { value: "all", label: "Any entry fee" },
       { value: "free", label: "Free" },
       { value: "paid", label: "Paid" },
     ],
     visibilities: [
-      { value: "all", label: "Any" },
+      { value: "all", label: "Any visibility" },
       { value: "public", label: "Public" },
       { value: "private", label: "Private" },
     ],
     difficulties: [
-      { value: "all", label: "Any" },
+      { value: "all", label: "Any difficulty" },
       { value: "casual", label: "Casual" },
       { value: "competitive", label: "Competitive" },
     ],

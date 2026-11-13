@@ -13,7 +13,15 @@ export type GuillySummaryPayload = {
   dangerTiers?: { rosterId: string; displayName?: string; tier: string; pointsFromChopZone: number }[]
   recentChopEvents: { weekOrPeriod: number; choppedRosterIds: string[] }[]
   myRosterId?: string | null
-  config?: { eliminationStartWeek: number; eliminationEndWeek: number | null; teamsPerChop: number; tiebreakerOrder: string[]; rosterReleaseTiming: string } | null
+  config?: {
+    eliminationStartWeek: number
+    eliminationEndWeek: number | null
+    teamsPerChop: number
+    tiebreakerOrder: string[]
+    rosterReleaseTiming: string
+    /** Weeks per elimination period: 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts). */
+    periodWeeks?: number
+  } | null
 }
 
 export type GuillyHead = 'calm' | 'nervous' | 'ko' | 'crown'
@@ -60,9 +68,10 @@ export function buildGuillyHub(p: GuillySummaryPayload) {
 }
 
 /** Plain-language tiebreak line from the league's actual configured order. */
-export function describeTiebreak(order: string[] | undefined | null): string {
+export function describeTiebreak(order: string[] | undefined | null, periodWeeks?: number): string {
   const label: Record<string, string> = {
-    bench_points: 'bench points', season_points: 'season points', previous_period: 'last week',
+    // An MLB two-week league compares the last PERIOD (lib/guillotine/eliminationPeriods.ts).
+    bench_points: 'bench points', season_points: 'season points', previous_period: (periodWeeks ?? 1) > 1 ? 'last period' : 'last week',
     draft_slot: 'draft slot', commissioner: 'the commissioner', random: 'a random draw',
   }
   const steps = (order ?? []).map((s) => label[s]).filter(Boolean)

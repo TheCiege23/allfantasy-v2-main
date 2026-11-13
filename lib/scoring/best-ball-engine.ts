@@ -1,18 +1,22 @@
 import type { LeagueSport } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
-import { optimizeLineupDeterministic } from '@/lib/lineup-optimizer-engine/LineupOptimizerEngine'
-import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
-import { weekKeyedStatsUnavailableReason } from '@/lib/multi-sport/MultiSportMatchupScoringService'
+import { computeBestBallLineup, resolveBestBallSlots } from '@/lib/bestball/productionLineup'
+import { computeRosterScoreForWeek, weekKeyedStatsUnavailableReason } from '@/lib/multi-sport/MultiSportMatchupScoringService'
 import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
-export type BestBallDataStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE'
+export type BestBallDataStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'UNRESOLVED'
 
 export type BestBallLineupResult = {
   /**
    * AVAILABLE — every roster player has a real stat row for this week.
    * PARTIAL — some players are missing stats; the lineup was optimized over the rest.
-   * UNAVAILABLE — no player has stats. starterIds is EMPTY so callers fall back to the
-   *   roster's actual starters instead of an arbitrary all-zero "optimized" lineup.
+   * UNAVAILABLE — no player has stats. starterIds is EMPTY and there is no best ball score.
+   * UNRESOLVED — the league's lineup slots could not be resolved, so no lineup exists to score.
+   *   starterIds is EMPTY.
+   *
+   * 🛑 EMPTY starterIds MEANS "NO BEST BALL SCORE", NEVER "SCORE SOMETHING ELSE". The scoring worker used
+   * to fall back to the stale draft starters, or to the WHOLE ROSTER when there were none — a best ball
+   * total that was the sum of every rostered player (audit 2026-11-06, finding #17). `scoreLeagueWeek`
+   * now reports such a team unavailable and writes nothing for the week.
    */
   status: BestBallDataStatus
   starterIds: string[]
@@ -20,6 +24,8 @@ export type BestBallLineupResult = {
   totalProjectedPoints: number | null
   missingPlayerIds: string[]
   notes: string[]
+  /** playerId -> the position each optimized player was seated at in THIS selection. Empty when no lineup. */
+  positionsUsed?: Record<string, string>
 }
 
 export async function selectBestBallLineupForRoster(input: {
@@ -33,7 +39,23 @@ export async function selectBestBallLineupForRoster(input: {
    * cannot be answered without it (see `findSportsPlayersForLeague`); `null` names nobody.
    */
   platform: string | null
+  /**
+   * The format the week is SCORED with — the same value `scoreLeagueWeek` passes to
+   * `computeRosterScoreForWeek`, so each player is valued here exactly as the score will count him.
+   */
   formatType?: string | null
+  /**
+   * `League.settings`. The lineup is seated over `buildBestBallSlots(sport, leagueSettings)` — exactly the
+   * seats matchup scoring uses. Omitted, the sport's `best_ball` roster template is used.
+   */
+  leagueSettings?: unknown
+  /**
+   * A LOCKED week's positions, recorded by the write that locked it (`TeamPerformance.data.sealedPositions`,
+   * see `scoreLeagueWeek`). A player listed here is seated at that position, never at today's: there is no
+   * position history in the schema, so a TE re-listed as a WR would otherwise re-seat every locked week on
+   * rescore. Players not listed (and every open week) use the current position.
+   */
+  sealedPositions?: Readonly<Record<string, string | null>> | null
 }): Promise<BestBallLineupResult> {
   if (input.rosterPlayerIds.length === 0) {
     return { status: 'UNAVAILABLE', starterIds: [], totalProjectedPoints: null, missingPlayerIds: [], notes: ['Roster is empty.'] }
@@ -52,19 +74,39 @@ export async function selectBestBallLineupForRoster(input: {
     }
   }
 
-  const [template, stats, players] = await Promise.all([
-    getRosterTemplateForLeague(input.leagueSport, input.formatType ?? undefined, input.leagueId),
-    prisma.playerGameStat.findMany({
-      where: {
-        sportType: input.leagueSport,
-        season: input.season,
-        weekOrRound: input.weekOrRound,
-        playerId: { in: input.rosterPlayerIds },
-      },
-      select: {
-        playerId: true,
-        fantasyPoints: true,
-      },
+  // The seats production scoring seats for this league (`lib/bestball/productionLineup.ts`), never a
+  // second template: the old `getRosterTemplateForLeague` source could disagree with the matchup.
+  const slots = resolveBestBallSlots(String(input.leagueSport), input.leagueSettings)
+  if (!slots) {
+    return {
+      status: 'UNRESOLVED',
+      starterIds: [],
+      totalProjectedPoints: null,
+      missingPlayerIds: [],
+      notes: [`Best Ball lineup slots could not be resolved for ${input.leagueSport}; no lineup was scored.`],
+    }
+  }
+
+  /*
+   * 🛑 EACH PLAYER IS VALUED BY THE PIPELINE THAT SCORES THE WEEK, NOT BY `playerGameStat.fantasyPoints`.
+   *
+   * This read `fantasyPoints` — the stat row's own number — while `scoreLeagueWeek` then scored the
+   * seated lineup with `computeRosterScoreForWeek`, which recomputes every row from `normalizedStatMap`
+   * under the LEAGUE's scoring rules. Two numbers for one player: the lineup that was best by the first
+   * was scored by the second, so a league whose rules rank two players the other way round was handed
+   * the worse lineup (a PPR-heavy row outranking a league that pays nothing per catch). The whole roster
+   * is now valued by that same call, with the same arguments the score uses, and seated on its
+   * `byPlayerId` — the selection and the score cannot disagree about who is better.
+   */
+  const [scored, players] = await Promise.all([
+    computeRosterScoreForWeek({
+      leagueId: input.leagueId,
+      leagueSport: input.leagueSport,
+      season: input.season,
+      weekOrRound: input.weekOrRound,
+      rosterPlayerIds: input.rosterPlayerIds,
+      starterPlayerIds: input.rosterPlayerIds,
+      formatType: input.formatType ?? undefined,
     }),
     /*
      * 🛑 NOT `externalId IN ids OR sleeperId IN ids`. A roster's ids are in ONE space, fixed by the
@@ -75,14 +117,13 @@ export async function selectBestBallLineupForRoster(input: {
     findSportsPlayersForLeague(input.leagueSport, input.platform, input.rosterPlayerIds),
   ])
 
-  // Presence of a stat row is the availability signal: a row with fantasyPoints 0 is a REAL
-  // zero-point performance; the absence of any row is missing data. The old `?? 0` fallback
-  // conflated the two, so an empty PlayerGameStat table produced an arbitrary "optimized"
-  // lineup with every player valued 0.0 and success-shaped notes.
-  const pointsByPlayerId = new Map<string, number>()
-  for (const row of stats) {
-    pointsByPlayerId.set(row.playerId, (pointsByPlayerId.get(row.playerId) ?? 0) + Number(row.fantasyPoints ?? 0))
-  }
+  // Presence of a stat row is the availability signal: a row worth 0 is a REAL zero-point
+  // performance; the absence of any row is missing data. The old `?? 0` fallback conflated the two,
+  // so an empty PlayerGameStat table produced an arbitrary "optimized" lineup with every player
+  // valued 0.0 and success-shaped notes. `byPlayerId` holds exactly the players with a row.
+  const pointsByPlayerId = new Map<string, number>(
+    scored.status === 'UNAVAILABLE' ? [] : Object.entries(scored.byPlayerId),
+  )
 
   const playersWithStats = input.rosterPlayerIds.filter((id) => pointsByPlayerId.has(id))
   const missingPlayerIds = input.rosterPlayerIds.filter((id) => !pointsByPlayerId.has(id))
@@ -103,33 +144,23 @@ export async function selectBestBallLineupForRoster(input: {
   const playerIndex = players
 
   // Optimize only over players with real statistics — a missing player must never enter the
-  // lineup ranked as a legitimate 0.0.
-  const optimizerResult = optimizeLineupDeterministic({
-    sport: input.leagueSport,
+  // lineup ranked as a legitimate 0.0. Seated exactly as production seats it (`computeOptimalLineup`).
+  const lineup = computeBestBallLineup({
+    slots,
     players: playersWithStats.map((playerId) => {
       const player = playerIndex.get(playerId)
       return {
-        id: playerId,
-        name: player?.name ?? `Player ${playerId}`,
-        positions: [player?.position ?? 'UTIL'],
-        projectedPoints: pointsByPlayerId.get(playerId) ?? 0,
-        team: player?.team ?? undefined,
+        playerId,
+        playerName: player?.name ?? `Player ${playerId}`,
+        position: input.sealedPositions?.[playerId] ?? player?.position ?? 'UTIL',
+        points: pointsByPlayerId.get(playerId) ?? 0,
       }
     }),
-    slots: template.slots
-      .flatMap((slot) =>
-        Array.from({ length: slot.starterCount }, (_, index) => ({
-          id: `${slot.slotName}-${index + 1}`,
-          code: slot.slotName,
-          label: slot.slotName,
-          allowedPositions: slot.allowedPositions,
-        }))
-      ),
   })
 
   // A partial player pool can leave required slots genuinely unfillable — that is an
   // UNAVAILABLE result, not a "successful" short lineup.
-  if (optimizerResult.unfilledSlots.length > 0 && missingPlayerIds.length > 0) {
+  if (lineup.unfilledSlots.length > 0 && missingPlayerIds.length > 0) {
     return {
       status: 'UNAVAILABLE',
       starterIds: [],
@@ -142,18 +173,27 @@ export async function selectBestBallLineupForRoster(input: {
   }
 
   const status: BestBallDataStatus = missingPlayerIds.length > 0 ? 'PARTIAL' : 'AVAILABLE'
-  const notes = [...optimizerResult.deterministicNotes]
+  const notes = [
+    `Best Ball lineup seated exactly (${lineup.provenance.algorithm}): ${lineup.total.toFixed(1)} points from ${lineup.assignments.length} of ${lineup.provenance.seatCount} seats.`,
+    ...lineup.unfilledSlots.map((u) => `${u.slot} #${u.seat} unfilled — no eligible player.`),
+  ]
   if (status === 'PARTIAL') {
     notes.unshift(
       `Best Ball results are partial: statistics are missing for ${missingPlayerIds.length} of ${input.rosterPlayerIds.length} rostered players; they were excluded rather than counted as 0.0.`,
     )
   }
 
+  const positionsUsed: Record<string, string> = {}
+  for (const playerId of playersWithStats) {
+    positionsUsed[playerId] = input.sealedPositions?.[playerId] ?? playerIndex.get(playerId)?.position ?? 'UTIL'
+  }
+
   return {
     status,
-    starterIds: optimizerResult.starters.map((starter) => starter.playerId),
-    totalProjectedPoints: optimizerResult.totalProjectedPoints,
+    starterIds: lineup.assignments.map((a) => a.playerId),
+    totalProjectedPoints: lineup.total,
     missingPlayerIds,
     notes,
+    positionsUsed,
   }
 }

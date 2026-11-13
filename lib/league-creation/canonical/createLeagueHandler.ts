@@ -35,6 +35,7 @@ import {
 } from '@/lib/league-creation/canonical/premiumCreateSettingsGate'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
 import { oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
+import { fillTestLeagueWithPlaceholders } from '@/lib/demo-league/testLeagueFill'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -71,7 +72,18 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     return NextResponse.json({ success: false, error: 'Invalid imported league ID', errors: [] }, { status: 400 })
   }
 
-  const { body: sanitizedBody, strippedKeys } = stripForbiddenCreateLeagueFields(raw)
+  // "Create a test league" (demo flow): every open seat is filled with a placeholder AI
+  // manager after creation, and the league is kept out of real-league analytics. A test
+  // league is always a fresh league — it never carries over an import.
+  const testLeague = rawObject.testLeague === true
+  if (testLeague && sourceLeagueId !== undefined) {
+    return NextResponse.json({ success: false, error: 'A test league cannot carry over an imported league', errors: [] }, { status: 400 })
+  }
+
+  const { body: strippedBody, strippedKeys } = stripForbiddenCreateLeagueFields(raw)
+  const sanitizedBody = strippedBody && typeof strippedBody === 'object'
+    ? (({ testLeague: _testLeague, ...rest }) => rest)(strippedBody as Record<string, unknown>)
+    : strippedBody
   if (strippedKeys.length > 0) {
     log('client_user_id_fields_stripped', { strippedKeys })
   }
@@ -134,9 +146,13 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     )
   }
 
+  // An alias with its own catalog entry is validated against that entry, not its shell's: a Survivor
+  // Guilly league is a redraft shell but offers only the sports and sizes its schedule can fit.
   const catalogConcept = normalizedConcept?.aliasTags.includes('idp')
     ? 'idp'
-    : normalizedConcept?.formatId ?? validated.data.concept
+    : normalizedConcept?.aliasTags.includes('survivor_guillotine')
+      ? 'survivor_guillotine'
+      : normalizedConcept?.formatId ?? validated.data.concept
 
   const allowedSports = getAllowedSportsFromCatalog(catalog, catalogConcept)
   if (allowedSports.length > 0 && !allowedSports.includes(validated.data.sport)) {
@@ -258,6 +274,21 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
 
   if (!exec.ok) {
     return NextResponse.json(exec.response, { status: exec.status })
+  }
+
+  if (testLeague) {
+    // 🛑 NO META LEAD FOR A TEST LEAGUE. A conversion event teaches the ad optimiser who to buy,
+    // and it cannot be taken back; a tester's throwaway league is not a lead.
+    let filled = 0
+    try {
+      filled = (await fillTestLeagueWithPlaceholders(exec.response.league.id)).filled
+    } catch (fillError) {
+      console.warn(`${LOG_PREFIX} test league placeholder fill failed`, {
+        leagueId: exec.response.league.id,
+        error: fillError instanceof Error ? fillError.message : String(fillError),
+      })
+    }
+    return NextResponse.json({ ...exec.response, testLeague: { placeholdersFilled: filled } })
   }
 
   const metaEvent = buildFantasyLeagueLeadMetaEvent({

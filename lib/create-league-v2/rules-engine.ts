@@ -11,6 +11,7 @@ import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/typ
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
 import {
+  NFL_DYNASTY_TEAM_COUNTS,
   SURVIVOR_CREATE_CAST_SIZES,
   getTeamCountOptionsForSport,
 } from '@/lib/league-creation-wizard/sport-team-limits'
@@ -37,6 +38,7 @@ import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
+import { SG_CREATE_DEFAULT_TEAMS } from '@/lib/survivor-guillotine/createFit'
 
 // ── Sport filtering ─────────────────────────────────────────────────
 
@@ -154,6 +156,8 @@ export function getTeamCountOptions(
     return leagueType === 'survivor' ? survivorCastSizesThatFitNow(sport, seeded) : [...seeded]
   }
 
+  if (leagueType === 'dynasty' && sport === 'NFL') return [...NFL_DYNASTY_TEAM_COUNTS]
+
   if (leagueType === 'tournament') {
     return [...TOURNAMENT_POOL_SIZES]
   }
@@ -184,6 +188,8 @@ export function getDefaultTeamCount(
   if (opts.length === 0) return 12
   // Survivor starts at 16 managers (four tribes of four) when offered, else its smallest cast.
   if (leagueType === 'survivor') return opts.includes(16) ? 16 : opts[0]!
+  // Survivor Guilly's default rules are a 22-team season (lib/survivor-guillotine/createFit.ts).
+  if (leagueType === 'survivor_guillotine' && opts.includes(SG_CREATE_DEFAULT_TEAMS)) return SG_CREATE_DEFAULT_TEAMS
   // Prefer 12 if available, otherwise middle of the list
   if (opts.includes(12)) return 12
   return opts[Math.floor(opts.length / 2)] ?? opts[0]!
@@ -194,7 +200,8 @@ export function getDefaultTeamCount(
 /**
  * Execution modes shown on the create-league wizard.
  * Best Ball exposes `offline` + `auto` because those modes are part of the
- * core Best Ball product surface. Other formats keep `offline` settings-tab-only.
+ * core Best Ball product surface. Redraft, keeper, devy, survivor and dynasty offer
+ * `offline` at creation too; other formats keep it settings-tab-only.
  */
 const EXECUTION_DRAFT_IDS = ['auto', 'offline'] as const
 const KEEPER_EXECUTION_DRAFT_IDS = ['auto', 'offline', 'team'] as const
@@ -216,7 +223,7 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
 
   // The canonical create endpoint validates against the format's full draft matrix.
   // Keep the wizard in sync so supported Linear and Auction drafts can be chosen at creation.
-  const sportAllowed = getAllowedDraftTypesForFormat(sport, leagueType)
+  const sportAllowed = getAllowedDraftTypesForFormat(sport, formatShellFor(leagueType))
   const seededNormalized = Array.isArray(seeded)
     ? seeded
         .map((dt) => resolveEffectiveDraftTypeForConcept(leagueType, dt))
@@ -238,7 +245,7 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
 
   // Best Ball keeps execution modes visible on the create surface so the
   // underlying order algorithm and execution mode can both be selected up front.
-  if (leagueType === 'best_ball' || leagueType === 'redraft' || leagueType === 'keeper') {
+  if (leagueType === 'best_ball' || leagueType === 'redraft' || leagueType === 'keeper' || leagueType === 'survivor_guillotine') {
     const existing = new Set(result.map((option) => option.id))
     const executionModes =
       leagueType === 'best_ball'
@@ -288,6 +295,10 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
       label: 'Auto',
       hint: 'CPU drafts for everyone',
     })
+    // A dynasty startup is often drafted in person; the commissioner enters the picks afterwards.
+    if (leagueType === 'dynasty' && !result.some((option) => option.id === 'offline')) {
+      result.push({ id: 'offline', label: 'Offline', hint: 'Commissioner records picks manually' })
+    }
   }
 
   return result
@@ -363,6 +374,11 @@ type ScoringSelection = {
   leagueType: LeagueTypeId
   sport: SupportedSport
   idpSelected: boolean
+}
+
+/** Survivor Guilly is a redraft shell: its draft matrix is redraft's, narrowed by its catalog entry. */
+function formatShellFor(leagueType: LeagueTypeId): LeagueTypeId {
+  return leagueType === 'survivor_guillotine' ? 'redraft' : leagueType
 }
 
 export function getScoringPresetOptionsForSelection(input: ScoringSelection): ScoringPresetOption[] {

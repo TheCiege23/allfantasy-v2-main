@@ -21,6 +21,7 @@ import { isRedraftWeekSealed } from '@/lib/redraft/weekSealed'
 import { checkStatCorrectionsForSeason } from '@/lib/stat-corrections/statCorrectionDetector'
 import { rotatingBatch, SCORE_SYNC_BATCH } from '@/lib/redraft/scoreSyncBatch'
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
+import { checkGuillotineStatCorrectionsForSeason } from '@/lib/guillotine/statCorrectionHandler'
 import { maintainPirateClaims, queuePirateProtectionReminders, seedPirateClaims } from '@/lib/pirate/service'
 import { capturePirateLineupEvidence } from '@/lib/pirate/lineupEvidence'
 import { isPirateLeague } from '@/lib/pirate/rules'
@@ -201,7 +202,8 @@ async function runRedraftReconciliation() {
   const eligible = await prisma.redraftSeason.findMany({
     // Playoff seasons included — see SCORING_SEASON_STATUSES. They take their own branch below.
     where: {
-      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }), {
+      AND: [engineSeasonScope({ statuses: [...SCORING_SEASON_STATUSES, 'complete'] }),
+        { OR: [{ league: { leagueVariant: null } }, { league: { leagueVariant: { not: 'season_tournament' } } }] }, {
         OR: [
           { status: { in: [...SCORING_SEASON_STATUSES] } },
           { status: 'complete', league: { bestBallMode: true, bbContestId: { not: null }, lifecycleState: { in: ['post_draft', 'in_season', 'playoffs', 'completed'] }, settings: { path: ['best_ball_settings', 'contestStructure'], equals: 'tournament' } } },
@@ -242,6 +244,27 @@ async function runRedraftReconciliation() {
   let statCorrectionFailed = 0
   const statCorrectionOutcomes: Record<string, number> = {}
 
+  /*
+   * A Guilly week's stat corrections after its chop (lib/guillotine/statCorrectionHandler.ts): the
+   * week's scores, running totals and survival history take the corrected numbers; the chop and any
+   * crowned champion stand, and a chop the corrected scores would have changed is logged for the
+   * commissioner. Hourly per week and only inside the correction window, so most ticks are one read.
+   * Counted beside the head-to-head corrections, prefixed `guilly_`.
+   */
+  const checkGuillotineCorrections = async (seasonId: string) => {
+    try {
+      const correction = await checkGuillotineStatCorrectionsForSeason(seasonId, {
+        syncWeekStats: async ({ seasonId: id, week }) => {
+          await syncPlayerWeeklyScoresForRedraftSeason({ seasonId: id, week, actorId: 'system:guillotine-correction' })
+        },
+      })
+      const key = `guilly_${correction.outcome}`
+      statCorrectionOutcomes[key] = (statCorrectionOutcomes[key] ?? 0) + 1
+    } catch {
+      statCorrectionFailed += 1
+    }
+  }
+
   for (const season of seasons) {
     // A finished contest needs no provider fetch or live-season calendar to repair its archive.
     if (season.status === 'complete' && isNativeTournamentLeague(season.league)) {
@@ -256,6 +279,8 @@ async function runRedraftReconciliation() {
       try {
         const guillotine = await runNativeGuillotineWeek({ seasonId: season.id, currentFantasyWeek: 0 })
         guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
+        // A correction to the final weeks still lands after the crown; the champion stands.
+        if (guillotine.outcome !== 'not_guillotine') await checkGuillotineCorrections(season.id)
       } catch { guillotineFailed += 1 }
       continue
     }
@@ -400,7 +425,7 @@ async function runRedraftReconciliation() {
 
     /*
      * Stat corrections for the latest SEALED week: compared and shown to the commissioner, never
-     * applied. Read-only against scoring (see statCorrectionDetector.ts), throttled to an hourly
+     * applied (head-to-head weeks; a Guilly week's corrections are applied after its chop, below). Read-only against scoring (see statCorrectionDetector.ts), throttled to an hourly
      * provider pull per week, and only for a few days after the seal.
      */
     try {
@@ -434,6 +459,7 @@ async function runRedraftReconciliation() {
         guillotineOutcomes[guillotine.outcome] = (guillotineOutcomes[guillotine.outcome] ?? 0) + 1
       }
       if (guillotine.outcome === 'chopped') guillotineChops += 1
+      if (guillotine.outcome !== 'not_guillotine') await checkGuillotineCorrections(season.id)
       /*
        * The chop-zone warning (lib/guillotine/chopAlerts.ts): the week being played is the next one to
        * chop, so about a day before its last game the teams at the bottom are told. Once a week, claimed

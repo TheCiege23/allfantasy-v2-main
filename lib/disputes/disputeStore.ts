@@ -12,7 +12,13 @@
  * commissioner does turns a ruling into a feud. Commissioners see everything.
  */
 
-export const DISPUTE_CATEGORIES = ['stat_correction', 'lineup', 'trade', 'waiver', 'rules', 'other'] as const
+/**
+ * `collusion` and `leaving` (2026-11-07) are the two a commissioner most needs counted: repeated
+ * collusion complaints and a manager saying they might quit are the earliest churn signals a league
+ * gives, and League Health counts them (`disputeHealthSignals`). They are things a member CHOSE to file
+ * — League Health never reads chat to find them.
+ */
+export const DISPUTE_CATEGORIES = ['stat_correction', 'lineup', 'trade', 'collusion', 'waiver', 'rules', 'leaving', 'other'] as const
 export type DisputeCategory = (typeof DISPUTE_CATEGORIES)[number]
 
 export const RULING_OUTCOMES = ['upheld', 'denied', 'partial'] as const
@@ -239,4 +245,35 @@ export const DISPUTE_ERROR_STATUS: Record<DisputeError, number> = {
   not_found: 404,
   not_open: 409,
   not_filer: 403,
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+/** How far back a filed dispute still weighs on League Health. */
+export const HEALTH_DISPUTE_WINDOW_DAYS = 120
+/** How long "I might leave" counts after it is filed, unless it is still open. */
+export const HEALTH_LEAVING_WINDOW_DAYS = 60
+
+export type DisputeHealthSignals = {
+  /** Disputes filed in the window, any status — not counting `leaving`, which is not a dispute about play. */
+  disputeCount: number
+  /** Open disputes, not counting `leaving`. */
+  unresolvedDisputes: number
+  /** Collusion complaints filed in the window. */
+  collusionComplaints: number
+  /** Distinct managers who said they might leave: open, or filed in the last 60 days. */
+  departureSignals: number
+}
+
+/** PURE. What League Health counts from the dispute desk. */
+export function disputeHealthSignals(disputes: readonly LeagueDispute[], now: Date = new Date()): DisputeHealthSignals {
+  const age = (d: LeagueDispute) => (now.getTime() - Date.parse(d.createdAt)) / DAY_MS
+  const inWindow = disputes.filter((d) => d.status !== 'withdrawn' && age(d) <= HEALTH_DISPUTE_WINDOW_DAYS)
+  const play = inWindow.filter((d) => d.category !== 'leaving')
+  const leaving = disputes.filter((d) => d.category === 'leaving' && d.status !== 'withdrawn' && (d.status === 'open' || age(d) <= HEALTH_LEAVING_WINDOW_DAYS))
+  return {
+    disputeCount: play.length,
+    unresolvedDisputes: play.filter((d) => d.status === 'open').length,
+    collusionComplaints: play.filter((d) => d.category === 'collusion').length,
+    departureSignals: new Set(leaving.map((d) => d.filedByUserId)).size,
+  }
 }

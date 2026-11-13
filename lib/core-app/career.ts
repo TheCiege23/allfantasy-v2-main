@@ -1,9 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadCareerLedger } from '@/lib/rank/careerLedger'
 import {
   buildCareerData,
-  classifyStatus,
   normalizeCareerSport,
   NO_CAREER_FILTER,
   settingsLabel,
@@ -19,32 +19,6 @@ import {
   type DynastyTitleRow,
   type FinalsIndex,
 } from '@/lib/core-app/careerFinalsResolve'
-
-/**
- * Career — the trophy room's READ, derived from imported league history.
- *
- * Everything here comes from what the user actually imported. Three sources:
- *
- *   `leagues.import_*`               — the multi-platform import columns
- *     (Sleeper, ESPN, Yahoo, …). Thin — wins/losses/ties/playoffs/champion —
- *     but it is the only source that knows which platform a season came from.
- *   `SeasonStandingFact`             — per (league, season, team) history every
- *     provider's backfill writes, joined through the CLAIMED team.
- *   `legacy_leagues` + `legacy_rosters` — Sleeper career history. The rich
- *     per-season detail (scoring type, team count, points, seed, champion flag),
- *     but Sleeper-only: the table is keyed on `sleeperLeagueId`.
- *
- * A fourth, `league_dynasty_seasons`, answers one question only — who played each
- * Sleeper title game — for the Finals tile (`careerFinalsResolve.ts`).
- *
- * ⚠ THE PLATFORM FILTER IS WHY ALL ARE READ. Legacy rows can only ever answer
- * "Sleeper", so a filter built on them alone would silently drop every ESPN and
- * Yahoo season the moment someone picked one.
- *
- * ⚠ THIS FILE NOW ONLY READS. The arithmetic moved to `careerModel.ts` so that
- * one read answers every filter, and so `careerProfile.ts` can store the rows
- * after an import and build any view without touching these tables again.
- */
 
 export * from '@/lib/core-app/careerModel'
 
@@ -81,378 +55,81 @@ export async function loadCareerIdentity(userId: string): Promise<CareerIdentity
   }
 }
 
-/**
- * Every league-season of this account, deduplicated across sources.
- *
- * ⚠ DEDUPE ACROSS THE SOURCES. A Sleeper league imported through the modern path
- * can appear in more than one table for the same season, and counting it twice
- * would inflate leagues played, games and — worst of all — championships. Keyed on
- * platform+season+name, the most specific thing the rows share; first source wins,
- * in the order import → standing → legacy.
- */
+/** Your Career uses the same league-season history as Rankings and Career XP. */
 export async function loadCareerRows(
   userId: string,
   legacyUserId: string | null,
 ): Promise<Omit<CareerSource, 'identity'>> {
-  /* ── source 1: multi-platform import columns on `leagues` ──────────────── */
-  type ImportRow = {
-    id: string
-    season: number
-    platform: string
-    platformLeagueId: string | null
-    sport: string | null
-    name: string | null
-    import_wins: number | null
-    import_losses: number | null
-    import_ties: number | null
-    import_made_playoffs: boolean | null
-    import_won_championship: boolean | null
-    import_points_for: number | null
-    import_points_against: number | null
-    leagueSize: number | null
-    scoring: string | null
-    status: string | null
-  }
-
-  let importRows: ImportRow[] = []
-  try {
-    importRows = await prisma.$queryRaw<ImportRow[]>`
-      SELECT id, season, platform, "platformLeagueId", sport::text AS sport, name,
-             import_wins, import_losses, import_ties,
-             import_made_playoffs, import_won_championship,
-             import_points_for, import_points_against,
-             "leagueSize", scoring, status
-      FROM leagues
-      WHERE "userId" = ${userId}
-        AND import_wins IS NOT NULL
-    `
-  } catch (err) {
-    // The import_* columns are additive and have been missing on some
-    // deployments; a career page is not the place to 500 over it.
-    console.error('[core-app/career] leagues import_* read failed:', err)
-    importRows = []
-  }
-
-  /* ── source 2: imported season history (every provider, per season) ───────
-   *
-   * ⚠ SOURCE 1 CANNOT ANSWER "LAST SEASON". The `import_*` columns are ONE row
-   * per league and written by one route only. `SeasonStandingFact` is per
-   * (league, season, team) and every provider's historical backfill writes it.
-   *
-   * Joined through the CLAIMED team rather than league ownership: source 1
-   * filters `leagues."userId"`, the league's owner, so a league you play in but
-   * do not run contributes nothing. A claim is what says which team is yours.
-   */
-  let standingRows: Array<{
-    leagueId: string
-    platformLeagueId: string | null
-    season: number
-    name: string
-    platform: string
-    sport: string | null
-    wins: number
-    losses: number
-    ties: number
-    pointsFor: number
-    pointsAgainst: number
-    leagueSize: number | null
-  }> = []
-  /** `League.id` → the external id of the team this account claimed there. */
+  const [ledger, rosterless] = await Promise.all([
+    loadCareerLedger([userId]),
+    legacyUserId ? Promise.resolve().then(() => prisma.legacyLeague.count({
+      where: { userId: legacyUserId, rosters: { none: { isOwner: true } } },
+    })).catch(() => 0) : 0,
+  ])
+  const legacyRosterBySleeperLeague = new Map<string, number>()
   const claimedTeamByLeagueId = new Map<string, string>()
-  try {
-    const claimed = await prisma.leagueTeam.findMany({
-      where: { claimedByUserId: userId },
-      select: {
-        externalId: true,
-        league: {
-          select: { id: true, name: true, platform: true, platformLeagueId: true, sport: true, leagueSize: true },
-        },
-      },
-    })
-    const byLeagueId = new Map(
-      claimed
-        .filter((t) => t.league?.id && t.externalId)
-        .map((t) => [t.league!.id, { teamId: t.externalId as string, league: t.league! }]),
-    )
-    for (const [leagueId, { teamId }] of byLeagueId) claimedTeamByLeagueId.set(leagueId, teamId)
-    if (byLeagueId.size > 0) {
-      const facts = await prisma.seasonStandingFact.findMany({
-        where: { leagueId: { in: [...byLeagueId.keys()] } },
-        select: {
-          leagueId: true,
-          season: true,
-          teamId: true,
-          wins: true,
-          losses: true,
-          ties: true,
-          pointsFor: true,
-          pointsAgainst: true,
-        },
-      })
-      standingRows = facts
-        .filter((f) => byLeagueId.get(f.leagueId)?.teamId === f.teamId)
-        /* An unplayed season is not a season. The ESPN backfill writes a fact row
-           per team whether or not the season ran, so a league that has not kicked
-           off yields a full set of 0-0 rows. */
-        .filter((f) => f.wins > 0 || f.losses > 0 || f.ties > 0 || f.pointsFor > 0)
-        .map((f) => {
-          const league = byLeagueId.get(f.leagueId)!.league
-          return {
-            leagueId: f.leagueId,
-            platformLeagueId: league.platformLeagueId ?? null,
-            season: f.season,
-            name: league.name ?? 'League',
-            platform: String(league.platform ?? 'unknown').toLowerCase(),
-            sport: league.sport ? String(league.sport) : null,
-            wins: f.wins,
-            losses: f.losses,
-            ties: f.ties,
-            pointsFor: f.pointsFor,
-            pointsAgainst: f.pointsAgainst,
-            leagueSize: league.leagueSize ?? null,
-          }
-        })
+  const names = new Map<string, Map<number, Set<string>>>()
+  for (const row of ledger) {
+    const name = row.leagueName?.trim().toLowerCase() || 'unnamed league'
+    const years = names.get(name) ?? new Map<number, Set<string>>()
+    const ids = years.get(row.season) ?? new Set<string>()
+    ids.add(row.key)
+    years.set(row.season, ids)
+    names.set(name, years)
+  }
+  const ambiguous = new Set([...names].filter(([, years]) => [...years.values()].some((ids) => ids.size > 1)).map(([name]) => name))
+  const rows: CareerRow[] = ledger.map((row) => {
+    const name = row.leagueName?.trim() || 'Unnamed league'
+    const providerId = row.providerLeagueId ?? null
+    if (row.platform === 'sleeper' && row.teamExternalId) {
+      if (row.source === 'legacy' && providerId) legacyRosterBySleeperLeague.set(providerId, Number(row.teamExternalId))
+      else claimedTeamByLeagueId.set(row.refId, row.teamExternalId)
     }
-  } catch (err) {
-    console.error('[core-app/career] imported season history read failed:', err)
-    standingRows = []
-  }
-
-  /* ── source 3: Sleeper legacy history (richer, single-platform) ────────── */
-  let legacyLeagues: Array<{
-    id: string
-    sleeperLeagueId: string
-    name: string
-    season: number
-    sport: string
-    leagueType: string | null
-    scoringType: string | null
-    teamCount: number | null
-    playoffTeams: number | null
-    status: string | null
-    rosters: Array<{
-      rosterId: number
-      wins: number
-      losses: number
-      ties: number
-      pointsFor: number
-      pointsAgainst: number
-      isChampion: boolean
-      finalStanding: number | null
-      playoffSeed: number | null
-    }>
-  }> = []
-
-  try {
-    if (legacyUserId) {
-      legacyLeagues = await prisma.legacyLeague.findMany({
-        where: { userId: legacyUserId },
-        orderBy: [{ season: 'desc' }],
-        select: {
-          id: true,
-          sleeperLeagueId: true,
-          name: true,
-          season: true,
-          sport: true,
-          leagueType: true,
-          scoringType: true,
-          teamCount: true,
-          playoffTeams: true,
-          status: true,
-          rosters: {
-            where: { isOwner: true },
-            take: 1,
-            select: {
-              rosterId: true,
-              wins: true,
-              losses: true,
-              ties: true,
-              pointsFor: true,
-              pointsAgainst: true,
-              isChampion: true,
-              finalStanding: true,
-              playoffSeed: true,
-            },
-          },
-        },
-      })
-    }
-  } catch (err) {
-    console.error('[core-app/career] legacy league read failed:', err)
-    legacyLeagues = []
-  }
-
-  const finals = await loadFinalsIndex({
-    legacyLeagues,
-    claimedTeamByLeagueId,
-    platformLeagueIds: [
-      ...importRows.map((r) => r.platformLeagueId),
-      ...standingRows.map((r) => r.platformLeagueId),
-    ],
-    leagueIds: [...importRows.map((r) => r.id), ...standingRows.map((r) => r.leagueId)],
-  })
-
-  const seen = new Set<string>()
-  const keyOf = (platform: string, season: number, name: string | null) =>
-    `${platform}|${season}|${(name ?? '').trim().toLowerCase()}`
-  const platforms = new Set<string>()
-  const rows: CareerRow[] = []
-  let rosterless = 0
-
-  for (const row of importRows) {
-    const platform = (row.platform || 'unknown').toLowerCase()
-    platforms.add(platform)
-    const k = keyOf(platform, row.season, row.name)
-    if (seen.has(k)) continue
-    seen.add(k)
-    const name = row.name?.trim() || 'Unnamed league'
-    const w = row.import_wins ?? 0
-    const l = row.import_losses ?? 0
-    const t = row.import_ties ?? 0
-    const games = w + l + t
-    rows.push({
-      source: 'import',
-      key: k,
-      leagueKey: name.toLowerCase(),
-      leagueName: name,
-      platform,
-      sport: normalizeCareerSport(row.sport),
-      season: row.season,
-      status: row.status,
-      wins: w,
-      losses: l,
-      ties: t,
-      pointsFor: games > 0 && (row.import_points_for ?? 0) > 0 ? Number(row.import_points_for) : null,
-      pointsAgainst: games > 0 && (row.import_points_against ?? 0) > 0 ? Number(row.import_points_against) : null,
-      madePlayoffs: row.import_made_playoffs === true,
-      playoffKnown: row.import_made_playoffs != null || row.import_won_championship === true,
-      isChampion: row.import_won_championship === true,
-      teamCount: row.leagueSize ?? null,
-      /*
-       * ⚠ NOT `leagues."playoffTeams"`. That column DEFAULTS to 4, so on an
-       * imported row it says nothing about the league's real cut — reading it
-       * would judge berths against a number nobody configured.
-       */
-      playoffTeams: null,
-      leagueType: null,
-      scoringType: row.scoring,
-      settingsLabel: settingsLabel({ scoringType: row.scoring, sport: row.sport }),
-      refId: row.id,
-      providerLeagueId: row.platformLeagueId,
-      counted: classifyStatus(row.status) === 'completed',
-      inRollup: true,
-    })
-  }
-
-  for (const row of standingRows) {
-    platforms.add(row.platform)
-    const k = keyOf(row.platform, row.season, row.name)
-    if (seen.has(k)) continue
-    seen.add(k)
-    const name = row.name.trim() || 'League'
-    rows.push({
-      source: 'standing',
-      key: k,
-      leagueKey: name.toLowerCase(),
+    const teamCount = row.leagueSizeKnown ? row.leagueSize : null
+    const leagueType = row.leagueType === 'unknown' ? null : row.leagueType
+    const scoringType = row.scoring === 'unknown' ? null : row.scoring
+    return {
+      source: row.source === 'legacy' ? 'legacy' : row.source === 'standing' ? 'standing' : 'import',
+      key: row.key,
+      leagueKey: ambiguous.has(name.toLowerCase())
+        ? `${row.platform}:${providerId ?? row.refId}`.toLowerCase()
+        : name.toLowerCase(),
       leagueName: name,
       platform: row.platform,
       sport: normalizeCareerSport(row.sport),
       season: row.season,
-      status: null,
+      status: row.completed ? 'complete' : row.status ?? null,
       wins: row.wins,
       losses: row.losses,
       ties: row.ties,
-      pointsFor: row.pointsFor > 0 ? row.pointsFor : null,
-      pointsAgainst: row.pointsAgainst > 0 ? row.pointsAgainst : null,
-      /*
-       * ⚠ NO CHAMPIONSHIP AND NO PLAYOFF BERTH IS CLAIMED HERE. `SeasonStandingFact`
-       * records a finishing RANK, and rank 1 is the regular-season leader — not
-       * the title. Crediting it would manufacture championships nobody won.
-       */
-      madePlayoffs: false,
-      playoffKnown: false,
-      isChampion: false,
-      teamCount: row.leagueSize,
-      playoffTeams: null,
-      leagueType: null,
-      scoringType: null,
-      settingsLabel: null,
-      refId: row.leagueId,
-      providerLeagueId: row.platformLeagueId,
-      counted: true,
-      inRollup: false,
-    })
-  }
-
-  for (const league of legacyLeagues) {
-    const platform = 'sleeper'
-    platforms.add(platform)
-    const k = keyOf(platform, league.season, league.name)
-    if (seen.has(k)) continue
-    seen.add(k)
-
-    const roster = league.rosters[0]
-    if (!roster) {
-      rosterless += 1
-      continue
+      pointsFor: row.pointsFor,
+      pointsAgainst: row.pointsAgainst ?? null,
+      madePlayoffs: row.madePlayoffs,
+      playoffKnown: row.playoffKnown ?? row.wonChampionship,
+      isChampion: row.wonChampionship,
+      teamCount,
+      playoffTeams: row.playoffTeams,
+      leagueType,
+      scoringType,
+      settingsLabel: settingsLabel({ leagueType, scoringType, sport: row.sport, teamCount }),
+      refId: row.refId,
+      providerLeagueId: providerId,
+      counted: row.completed,
+      inRollup: row.source !== 'standing',
+      survival: row.survival,
+      survivalFormat: row.specialty === 'guillotine' || row.specialty === 'survivor' ? row.specialty : undefined,
     }
+  })
+  const sleeper = rows.filter((r) => r.platform === 'sleeper')
+  const finals = await loadFinalsIndex({
+    legacyRosterBySleeperLeague,
+    claimedTeamByLeagueId,
+    platformLeagueIds: sleeper.map((r) => r.providerLeagueId),
+    leagueIds: sleeper.map((r) => r.refId),
+  })
+  for (const row of sleeper) row.finalResult = finalResultFor(row, finals)
 
-    /*
-     * ⚠ A PLAYOFF BERTH REQUIRES GAMES. Measured on production: the 2026 season
-     * came back as 0-0-0 with 25 playoff appearances across 54 leagues, because
-     * `finalStanding` and `playoffSeed` are already populated on leagues that
-     * have not played a snap — seeding, not a result.
-     */
-    const games = roster.wins + roster.losses + roster.ties
-    const madePlayoffs =
-      games > 0 &&
-      (roster.isChampion ||
-        (league.playoffTeams != null &&
-          ((roster.playoffSeed != null && roster.playoffSeed <= league.playoffTeams) ||
-            (roster.finalStanding != null && roster.finalStanding <= league.playoffTeams))))
-
-    rows.push({
-      source: 'legacy',
-      key: k,
-      leagueKey: league.name.trim().toLowerCase(),
-      leagueName: league.name,
-      platform,
-      sport: normalizeCareerSport(league.sport),
-      season: league.season,
-      status: league.status,
-      wins: roster.wins,
-      losses: roster.losses,
-      ties: roster.ties,
-      pointsFor: games > 0 && roster.pointsFor > 0 ? roster.pointsFor : null,
-      pointsAgainst: games > 0 && roster.pointsAgainst > 0 ? roster.pointsAgainst : null,
-      madePlayoffs,
-      // A berth is only judgeable when the league recorded its cut, or you won it.
-      playoffKnown: league.playoffTeams != null || roster.isChampion,
-      isChampion: roster.isChampion,
-      teamCount: league.teamCount,
-      playoffTeams: league.playoffTeams,
-      leagueType: league.leagueType,
-      scoringType: league.scoringType,
-      settingsLabel: settingsLabel({
-        leagueType: league.leagueType,
-        scoringType: league.scoringType,
-        teamCount: league.teamCount,
-        sport: league.sport,
-      }),
-      refId: league.id,
-      providerLeagueId: league.sleeperLeagueId,
-      counted: classifyStatus(league.status) === 'completed',
-      inRollup: true,
-    })
-  }
-
-  /*
-   * One pass for every source: a row names its Sleeper league (legacy, import) or its
-   * `League.id` + season (imported season history), and the index matches either.
-   */
-  for (const row of rows) row.finalResult = finalResultFor(row, finals)
-
-  return { rows, platforms: [...platforms].sort(), rosterless }
+  return { rows, platforms: [...new Set(rows.map((r) => r.platform))].sort(), rosterless }
 }
 
 /**
@@ -465,20 +142,13 @@ export async function loadCareerRows(
  * taking the career page down.
  */
 async function loadFinalsIndex(args: {
-  legacyLeagues: ReadonlyArray<{ sleeperLeagueId: string; rosters: ReadonlyArray<{ rosterId: number }> }>
+  legacyRosterBySleeperLeague: ReadonlyMap<string, number>
   claimedTeamByLeagueId: ReadonlyMap<string, string>
   platformLeagueIds: ReadonlyArray<string | null>
   leagueIds: readonly string[]
 }): Promise<FinalsIndex> {
-  const legacyRosterBySleeperLeague = new Map<string, number>()
-  for (const league of args.legacyLeagues) {
-    const rosterId = league.rosters[0]?.rosterId
-    // `rosterId` defaults to 0 on the model; 0 is "not recorded", never a roster.
-    if (league.sleeperLeagueId && rosterId != null && rosterId > 0) {
-      legacyRosterBySleeperLeague.set(league.sleeperLeagueId, rosterId)
-    }
-  }
-  const ownership = { legacyRosterBySleeperLeague, claimedTeamByLeagueId: args.claimedTeamByLeagueId }
+  const { legacyRosterBySleeperLeague, claimedTeamByLeagueId } = args
+  const ownership = { legacyRosterBySleeperLeague, claimedTeamByLeagueId }
 
   const platformIds = [
     ...new Set([...legacyRosterBySleeperLeague.keys(), ...args.platformLeagueIds.filter((id): id is string => !!id)]),

@@ -101,17 +101,17 @@ type Priced = { name: string; value: number }
 function priceSide(
   assets: readonly TradeAssetInput[],
   ctx: NcaafRedraftContext,
-): { priced: Priced[] } | { withheld: string } {
+): { priced: Priced[] } | { withheld: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const priced: Priced[] = []
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: NCAAF_REDRAFT_PICKS_REASON }
     if (asset.kind === 'faab') return { withheld: NCAAF_FAAB_REASON }
     const found = resolveNcaafRosteredPlayer(asset, ctx.rostered)
-    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
+    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: 'unresolved_player' }
     const { player } = found
     const line = ctx.perGameByRosterId.get(player.rosterPlayerId)
     if (!line) {
-      return { withheld: `${player.name} has no college projection scored under this league’s rules, so this deal is not graded.` }
+      return { withheld: `${player.name} has no college projection scored under this league’s rules, so this deal is not graded.`, valuationGap: 'missing_projections' }
     }
     const position = String(line.position ?? player.position ?? '').trim().toUpperCase()
     const replacement = position ? ctx.replacementByPosition.get(position) : undefined
@@ -144,15 +144,16 @@ export function gradeNcaafRedraftDeal(args: {
     return { graded: false, reason: `The ${ctx.window.season} college regular season has no weeks left to play, so there is nothing to grade this deal on.`, basis }
   }
   const give = priceSide(args.give, ctx)
-  if ('withheld' in give) return { graded: false, reason: give.withheld, basis }
+  if ('withheld' in give) return { graded: false, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
   const get = priceSide(args.get, ctx)
-  if ('withheld' in get) return { graded: false, reason: get.withheld, basis }
+  if ('withheld' in get) return { graded: false, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
 
   const giveTotal = give.priced.reduce((s, p) => s + p.value, 0)
   const getTotal = get.priced.reduce((s, p) => s + p.value, 0)
   if (giveTotal <= 0 && getTotal <= 0) {
     return {
       graded: false,
+      valuationGap: 'at_replacement',
       reason: 'Nobody in this deal is projected above the best free agent at his position — every player in it could be replaced from the wire.',
       basis,
     }

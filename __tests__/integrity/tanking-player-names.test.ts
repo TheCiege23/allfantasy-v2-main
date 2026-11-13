@@ -42,8 +42,9 @@ vi.mock('@/lib/prisma', () => ({
           lineupSnapshots: [
             {
               rosterId: 'r1',
-              starters: [{ playerId: '9228', injuryStatus: 'OUT', projection: 0 }],
-              bench: [{ playerId: 'b1', projection: 14 }],
+              starters: [{ playerId: '9228', injuryStatus: 'OUT', projection: 0, position: 'QB', slot: 'QB' }],
+              // A healthy QB behind him: the only kind of bench player whose presence makes an OUT starter a choice.
+              bench: [{ playerId: 'b1', projection: 14, position: 'QB' }],
             },
           ],
         },
