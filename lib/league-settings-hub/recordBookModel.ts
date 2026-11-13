@@ -39,6 +39,31 @@ export function topPlayerScores(
     }))
 }
 
+export type TeamHighScoreRow = {
+  rank: number
+  teamName: string
+  season: number
+  week: number
+  points: number
+}
+
+/**
+ * The biggest single-week TEAM scores from final head-to-head results — both sides of every final
+ * fixture. A scheduled or live game (`final: false`) is not a result and never counts.
+ */
+export function topTeamScores(data: Pick<StoryData, 'fixtures' | 'teams'>, limit = 10): TeamHighScoreRow[] {
+  const sides: Array<{ team: string; season: number; week: number; points: number }> = []
+  for (const f of data.fixtures) {
+    if (!f.final) continue
+    sides.push({ team: f.a, season: f.season, week: f.week, points: f.scoreA }, { team: f.b, season: f.season, week: f.week, points: f.scoreB })
+  }
+  return sides
+    .filter((s) => s.points > 0 && data.teams.has(s.team))
+    .sort((a, b) => b.points - a.points || b.season - a.season || a.week - b.week)
+    .slice(0, Math.max(0, limit))
+    .map((s, i) => ({ rank: i + 1, teamName: data.teams.get(s.team)!.name, season: s.season, week: s.week, points: Math.round(s.points * 100) / 100 }))
+}
+
 export type CorrectionWeek = {
   week: number
   /** Every stored score for the week is finalized — past the stat-correction window. */

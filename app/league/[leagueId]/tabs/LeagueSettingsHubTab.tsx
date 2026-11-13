@@ -17,6 +17,7 @@ export function LeagueSettingsHubTab({
   isHeadCommissioner,
   onOpenEditor,
   onLeaveLeague,
+  onAdvanced,
 }: {
   league: UserLeague
   viewerUserId: string
@@ -24,6 +25,11 @@ export function LeagueSettingsHubTab({
   isHeadCommissioner: boolean
   onOpenEditor: (panelId: string) => void
   onLeaveLeague?: () => void
+  /**
+   * Native leagues: "Advanced settings" opens the shell's full settings list (the container with
+   * every editor) instead of the imported-league legacy tab below.
+   */
+  onAdvanced?: () => void
 }) {
   const [advanced, setAdvanced] = useState(false)
 
@@ -68,7 +74,7 @@ export function LeagueSettingsHubTab({
         isHeadCommissioner={isHeadCommissioner}
         onOpenEditor={onOpenEditor}
         onLeaveLeague={onLeaveLeague}
-        advanced={isCommissioner ? { label: 'Advanced settings', onOpen: () => setAdvanced(true) } : undefined}
+        advanced={isCommissioner ? { label: 'Advanced settings', onOpen: onAdvanced ?? (() => setAdvanced(true)) } : undefined}
       />
     </div>
   )

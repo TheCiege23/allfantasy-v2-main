@@ -20,7 +20,15 @@ const KINDS: HubKind[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'guilloti
 const MANAGERS = ['BlitzKing22', 'LateRoundQB', 'WaiverWizard', 'GridironGhost', 'DynastyDon', 'TacoTuesdayFF', 'RedZoneRita', 'NightOwlGM', 'FourthAndLong', 'CommishCarl', 'HailMaryHank', 'BenchMob']
 const TEAMS = ['Blitz Brigade', 'Late Round Legends', 'Wizards of Waivers', 'Ghost Protocol', "Don's Dynasty", 'Taco Tuesday', 'Red Zone Royalty', 'Night Owls', 'Fourth & Long', "Carl's Kingdom", 'Hail Mary Heroes', 'Bench Mob']
 
-function fixturePayload(kind: HubKind): HubSettingsPayload {
+/** The keys an AF-created league's scoring config stores (lib/nfl-scoring/NflScoringPresets.ts). */
+const NATIVE_RULES = [
+  ['passing_yards', 0.04], ['passing_td', 4], ['interception_thrown', -1], ['passing_2pt', 2],
+  ['rushing_yards', 0.1], ['rushing_td', 6], ['rushing_2pt', 2],
+  ['reception', 1], ['receiving_yards', 0.1], ['receiving_td', 6],
+  ['fumble_lost', -2],
+].map(([statKey, pointsValue]) => ({ statKey: String(statKey), pointsValue: Number(pointsValue), enabled: true }))
+
+function fixturePayload(kind: HubKind, native = false): HubSettingsPayload {
   const carry = HUB_KIND_META[kind].carriesOver
   return {
     canEdit: true,
@@ -46,7 +54,7 @@ function fixturePayload(kind: HubKind): HubSettingsPayload {
     settings: { draftType: kind === 'salary_cap' ? 'auction' : kind === 'dynasty' ? 'linear' : 'snake', rounds: kind === 'dynasty' ? 4 : 15, pickTimerPreset: '60s', draftDateUtc: '2026-11-19T01:00:00Z', autostart: true, cpuAutoPick: true, alphabeticalSort: false, playerPool: kind === 'dynasty' ? 'rookies_only' : 'all' },
     scoringConfig: {
       formatType: 'ppr',
-      rules: [
+      rules: native ? NATIVE_RULES : [
         { statKey: 'pass_yd', pointsValue: 0.04, enabled: true }, { statKey: 'pass_td', pointsValue: 4, enabled: true }, { statKey: 'pass_int', pointsValue: -1, enabled: true }, { statKey: 'pass_2pt', pointsValue: 2, enabled: true }, { statKey: 'pass_cmp', pointsValue: 0.1, enabled: true },
         { statKey: 'rush_yd', pointsValue: 0.1, enabled: true }, { statKey: 'rush_td', pointsValue: 6, enabled: true }, { statKey: 'rush_2pt', pointsValue: 2, enabled: true },
         { statKey: 'rec', pointsValue: kind === 'best_ball' ? 0.5 : 1, enabled: true }, { statKey: 'rec_yd', pointsValue: 0.1, enabled: true }, { statKey: 'rec_td', pointsValue: 6, enabled: true },
@@ -71,7 +79,7 @@ function fixtureRoster(kind: HubKind) {
   return { rosterConfig: { sections } }
 }
 
-export function HubPreviewClient({ type, role, tab }: { type: string; role: 'commish' | 'manager'; tab: string }) {
+export function HubPreviewClient({ type, role, tab, native = false }: { type: string; role: 'commish' | 'manager'; tab: string; native?: boolean }) {
   const [kind, setKind] = useState<HubKind>((KINDS as string[]).includes(type) ? (type as HubKind) : 'redraft')
   const [commish, setCommish] = useState(role === 'commish')
   const [muted, setMuted] = useState<string[]>([])
@@ -80,7 +88,7 @@ export function HubPreviewClient({ type, role, tab }: { type: string; role: 'com
   const [note, setNote] = useState<string | null>(null)
 
   const data: HubViewData = useMemo(() => {
-    const p = fixturePayload(kind)
+    const p = fixturePayload(kind, native)
     p.canEdit = commish
     const groups = buildNotificationGroups(kind, commish)
     const on: Record<string, boolean> = {}
@@ -102,7 +110,11 @@ export function HubPreviewClient({ type, role, tab }: { type: string; role: 'com
       draftHistory: { title: kind === 'dynasty' ? '2026 Rookie Draft' : '2026 Season Draft', status: 'pre draft · snake · 15 rounds' },
       seasons: [2025, 2024, 2023, 2022].map((y, i) => ({ year: y, champion: MANAGERS[i * 2], runnerUp: MANAGERS[i * 2 + 1] })),
       standings: buildAllTimeStandings(MANAGERS.map((m, i) => ({ managerName: m, managerAvatar: null, totalWins: 46 - i * 2, totalLosses: 24 + i * 2, totalTies: 0, winPct: (46 - i * 2) / 70, totalPoints: 6412.3 - i * 61.4, seasonsPlayed: 5, championships: i < 4 ? 1 : 0 }))),
-      highScores: MANAGERS.slice(0, 8).map((m, i) => ({ rank: i + 1, holder: m, season: 2025 - (i % 4), value: (212.68 - i * 3.4).toFixed(2) })),
+      // Native leagues whose record-book engine has not run: team highs come from final results.
+      highScores: native
+        ? TEAMS.slice(0, 8).map((t, i) => ({ rank: i + 1, holder: t, season: 2026 - (i % 2), week: [7, 3, 11, 5, 14, 2, 9, 6][i], value: (171.42 - i * 4.1).toFixed(2) }))
+        : MANAGERS.slice(0, 8).map((m, i) => ({ rank: i + 1, holder: m, season: 2025 - (i % 4), value: (212.68 - i * 3.4).toFixed(2) })),
+      highScoresSeasons: native ? [2026, 2025] : null,
       playerHighScores: {
         seasons: [2026, 2025],
         rows: [['J. Allen', 'Late Round Legends', 2025, 14, 56.58], ['J. Gibbs', 'Blitz Brigade', 2026, 6, 54.9], ['J. Chase', 'Ghost Protocol', 2025, 10, 51.2], ['L. Jackson', 'Wizards of Waivers', 2026, 3, 50.36], ['C. McCaffrey', "Don's Dynasty", 2025, 16, 49.1], ['A. St. Brown', 'Night Owls', 2026, 9, 46.2], ['J. Hurts', 'Red Zone Royalty', 2025, 7, 45.8], ['B. Robinson', 'Taco Tuesday', 2026, 2, 44.7]]
@@ -110,7 +122,7 @@ export function HubPreviewClient({ type, role, tab }: { type: string; role: 'com
       },
       correctionWeeks: { season: 2026, weeks: Array.from({ length: 10 }, (_, i) => ({ week: i + 1, final: i < 9, rescoredAt: i === 4 ? '2026-10-08T14:00:00Z' : null })) },
     }
-  }, [kind, commish, muted, leagueOn, co, note])
+  }, [kind, commish, muted, leagueOn, co, note, native])
 
   return (
     <div style={{ minHeight: '100vh', background: '#050814', fontFamily: 'Inter, "Segoe UI", system-ui, sans-serif' }}>
