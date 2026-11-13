@@ -49,7 +49,7 @@ const ES: Record<string, string> = {
   Notifications: 'Notificaciones',
   'Leave League': 'Salir de la liga',
   General: 'General',
-  Waivers: 'Waivers',
+  Waivers: 'Agentes libres',
   'Commish Notes': 'Notas del comisionado',
   Roster: 'Plantilla',
   Scoring: 'Puntuación',
@@ -84,7 +84,7 @@ const ES: Record<string, string> = {
   'League ID:': 'ID de la liga:',
   'Copy league ID': 'Copiar ID de la liga',
   'Free Agency': 'Agencia libre',
-  'Waiver Settings': 'Ajustes de waivers',
+  'Waiver Settings': 'Ajustes de reclamos',
   'Roster Settings': 'Ajustes de plantilla',
   'Starting positions and roster spots': 'Posiciones titulares y plazas de plantilla',
   'Roster positions aren’t available for this league yet.': 'Las posiciones de la plantilla aún no están disponibles para esta liga.',
@@ -239,7 +239,7 @@ const ES: Record<string, string> = {
   'Rosters carry over. Rookie drafts, taxi squad and tradable future picks.': 'Las plantillas se conservan. Drafts de novatos, escuadra taxi y selecciones futuras canjeables.',
   'Keep a few players each season, paid for with draft capital.': 'Conserva algunos jugadores cada temporada, pagados con selecciones del draft.',
   'No lineups to set. Your best starters score automatically each week.': 'Sin alineaciones que fijar. Tus mejores titulares puntúan solos cada semana.',
-  'Lowest score each period gets chopped. Their roster hits waivers.': 'El peor puntaje de cada periodo queda eliminado. Su plantilla pasa a waivers.',
+  'Lowest score each period gets chopped. Their roster hits waivers.': 'El peor puntaje de cada periodo queda eliminado. Su plantilla pasa a agentes libres.',
   'Dynasty plus college prospects you hold rights to until they turn pro.': 'Dinastía más prospectos universitarios cuyos derechos tienes hasta que llegan a profesionales.',
   'Campus to Canton: one franchise with a pro roster and a college roster.': 'Del campus a Canton: una franquicia con plantilla profesional y plantilla universitaria.',
   'A hard cap, auction startup and multi-year contracts.': 'Tope salarial estricto, draft inicial por subasta y contratos de varios años.',
@@ -314,24 +314,24 @@ const ES: Record<string, string> = {
   None: 'Ninguno',
   Yes: 'Sí',
   No: 'No',
-  'Waiver Type': 'Tipo de waiver',
+  'Waiver Type': 'Tipo de reclamos',
   'FAAB Bidding': 'Pujas FAAB',
   'Rolling Priority': 'Prioridad rotativa',
   'Reverse Standings': 'Clasificación inversa',
   'None · free agency': 'Ninguno · agencia libre',
-  'Waiver Budget': 'Presupuesto de waivers',
+  'Waiver Budget': 'Presupuesto de reclamos',
   'Min Bid': 'Puja mínima',
-  'Waivers Clear After Games': 'Los waivers se liberan después de los partidos',
-  'Time on Waivers After Drop': 'Tiempo en waivers tras soltarlo',
+  'Waivers Clear After Games': 'Los reclamos se resuelven después de los partidos',
+  'Time on Waivers After Drop': 'Período de reclamos tras soltarlo',
   'Chopped Rosters': 'Plantillas eliminadas',
   'Evicted Rosters': 'Plantillas expulsadas',
-  'Released at the next waiver run': 'Liberadas en el siguiente proceso de waivers',
-  'Allow Custom Daily Waivers': 'Permitir waivers diarios personalizados',
-  'Players lock on waivers when their game starts': 'Los jugadores quedan bloqueados en waivers cuando empieza su partido',
+  'Released at the next waiver run': 'Liberadas en el siguiente procesamiento de reclamos',
+  'Allow Custom Daily Waivers': 'Permitir reclamos diarios personalizados',
+  'Players lock on waivers when their game starts': 'Los jugadores pasan a reclamos cuando empieza su partido',
   'Processing Time': 'Hora de procesamiento',
-  'Daily Waiver Schedule': 'Calendario diario de waivers',
+  'Daily Waiver Schedule': 'Calendario diario de reclamos',
   'Not set': 'Sin fijar',
-  'Waivers to FA': 'Waivers a agencia libre',
+  'Waivers to FA': 'Reclamos y luego agentes libres',
   'Free agency': 'Agencia libre',
   'No processing': 'Sin procesamiento',
   Monday: 'Lunes',
@@ -354,7 +354,7 @@ const ES: Record<string, string> = {
   'Max Years Kept': 'Máximo de años conservado',
   'Cost System': 'Sistema de coste',
   'Round Penalty': 'Penalización de ronda',
-  'Waiver Pickups Keepable': 'Fichajes de waivers conservables',
+  'Waiver Pickups Keepable': 'Fichajes de agentes libres conservables',
   Conflicts: 'Conflictos',
   'Missed Deadline': 'Plazo incumplido',
   'Selection Deadline': 'Fecha límite de selección',
@@ -438,7 +438,7 @@ const ES: Record<string, string> = {
   'Regular Season Weeks': 'Semanas de temporada regular',
   'Playoff Team Count': 'Equipos en playoffs',
   'Playoff Bye Count': 'Descansos en playoffs',
-  'Waiver Type Recommended': 'Tipo de waiver recomendado',
+  'Waiver Type Recommended': 'Tipo de reclamos recomendado',
   'Faab Budget': 'Presupuesto FAAB',
   'Division Count': 'Número de divisiones',
   'Commissioner Ai': 'IA del comisionado',
@@ -449,7 +449,7 @@ const ES: Record<string, string> = {
   'Keeper Max Keepers': 'Máximo de keepers',
   'Keeper max years': 'Máximo de años conservado',
   'Keeper round penalty': 'Penalización de ronda',
-  'Keeper waiver allowed': 'Fichajes de waivers conservables',
+  'Keeper waiver allowed': 'Fichajes de agentes libres conservables',
   'Keeper eligibility rule': 'Regla de elegibilidad de keeper',
   'Tribe Count': 'Número de tribus',
   'Players Per Tribe': 'Jugadores por tribu',
@@ -482,9 +482,9 @@ const ES: Record<string, string> = {
   'Offers sent to you': 'Ofertas que te envían',
   'Trade Accepted / Rejected': 'Traspaso aceptado / rechazado',
   'Responses to offers you sent': 'Respuestas a las ofertas que enviaste',
-  'Waiver Results': 'Resultados de waivers',
+  'Waiver Results': 'Resultados de reclamos',
   'Free-agent adds and drops': 'Altas y bajas de agentes libres',
-  'Claims won and lost': 'Reclamaciones ganadas y perdidas',
+  'Claims won and lost': 'Reclamos ganados y perdidos',
   'Scoring Notifications': 'Notificaciones de puntuación',
   'Play alerts from players that you own': 'Alertas de jugadas de tus jugadores',
   'Matchup Results': 'Resultados de enfrentamientos',
@@ -499,7 +499,7 @@ const ES: Record<string, string> = {
   'Alerts when injury status changes': 'Alertas cuando cambia el estado de una lesión',
   'AI & Draft': 'IA y draft',
   'Chimmy Insights': 'Consejos de Chimmy',
-  'Lineup, waiver and trade nudges from Chimmy': 'Sugerencias de alineación, waivers y traspasos de Chimmy',
+  'Lineup, waiver and trade nudges from Chimmy': 'Sugerencias de alineación, agentes libres y traspasos de Chimmy',
   'Draft Alerts': 'Alertas del draft',
   'On the clock, picks made, draft starting': 'Tu turno, selecciones hechas, inicio del draft',
   'Followed Players': 'Jugadores seguidos',
@@ -1009,6 +1009,16 @@ export function hubText(lang: string | null | undefined, text: string, sport?: s
     if (m) return fn(m, tr)
   }
   return text
+}
+
+/**
+ * A day in the daily waiver schedule. "Waivers" there is a RUN — «Reclamos» — while the same English
+ * word as a section or tab is the free-agent screen, «Agentes libres» (the owner's wording rulings,
+ * __tests__/spanish-wording-rulings.test.tsx). So the schedule cell has its own lookup.
+ */
+export function hubScheduleMode(lang: string | null | undefined, mode: string, sport?: string | null): string {
+  if (isSpanish(lang) && mode === 'Waivers') return 'Reclamos'
+  return hubText(lang, mode, sport)
 }
 
 /** "2026 & 2025" → "2026 y 2025" in Spanish; a range is unchanged. */
