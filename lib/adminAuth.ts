@@ -2,10 +2,27 @@ import crypto from "crypto";
 import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { verifyAdminSessionCookie } from "@/lib/adminSession";
+import { verifyAdminSessionCookie, type AdminSessionPayload } from "@/lib/adminSession";
 import { authOptions } from "@/lib/auth";
 import { isAllFantasyTestEmail, isAllFantasyTestUsername } from "@/lib/auth/admin";
 import { prisma } from "@/lib/prisma";
+import { adminTotpRequired } from "@/lib/security/adminTotp";
+
+/**
+ * Whether a VERIFIED admin_session cookie may still be used. Two ways a genuine,
+ * correctly signed cookie is no longer enough:
+ *
+ *  - It came from the retired shared-password login. That login is refused in production
+ *    (app/api/auth/login/route.ts), and a cookie it minted before the change would
+ *    otherwise keep working for the rest of its 7-day life.
+ *  - Admin codes are required (ADMIN_TOTP_SECRETS is set) and this session was not minted
+ *    by the code check. That covers magic-link and bootstrap sessions as well as old ones.
+ */
+export function isAdminSessionPayloadUsable(payload: AdminSessionPayload): boolean {
+  if (payload.authMethod === "password" && process.env.NODE_ENV === "production") return false;
+  if (adminTotpRequired() && payload.mfa !== true) return false;
+  return true;
+}
 
 export type AdminUser = {
   id?: string;
@@ -83,6 +100,7 @@ async function getCookieAdminAccessState(): Promise<AdminAccessState | null> {
 
   const payload = verifyAdminSessionCookie(adminSession.value);
   if (!payload?.authenticated) return { status: "unauthenticated", source: "none" };
+  if (!isAdminSessionPayloadUsable(payload)) return { status: "unauthenticated", source: "none" };
 
   const email = payload.email?.toLowerCase();
   const role = payload.role?.toLowerCase();
@@ -130,7 +148,13 @@ async function isEmailProvenForUser(userId: string, email: string | null | undef
   }
 }
 
-async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
+/**
+ * The signed-in app account, and whether the allowlist makes it an administrator —
+ * WITHOUT the second-factor requirement. Exported for the code route, which needs to know
+ * whose code it is checking; everything that grants access goes through
+ * getAppSessionAdminAccessState below instead.
+ */
+export async function getAppSessionAdminCandidate(): Promise<AdminAccessState> {
   const session = (await getServerSession(authOptions as any).catch(() => null)) as {
     user?: {
       id?: string | null;
@@ -170,6 +194,17 @@ async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
   }
 
   return { status: "forbidden", source: "app_session", user };
+}
+
+async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
+  const candidate = await getAppSessionAdminCandidate();
+  // 🛑 While admin codes are required, an allowlisted account is a CANDIDATE, not an admin:
+  // a stolen Google or email login must not reach /admin by itself. "unauthenticated"
+  // sends every admin page to /admin-login, which asks this account for its code.
+  if (candidate.status === "admin" && adminTotpRequired()) {
+    return { status: "unauthenticated", source: "none" };
+  }
+  return candidate;
 }
 
 export async function getAdminAccessState(): Promise<AdminAccessState> {
@@ -234,6 +269,7 @@ export function isAuthorizedRequest(request: Request): boolean {
     if (!adminSessionValue) return false;
     const payload = verifyAdminSessionCookie(adminSessionValue);
     if (!payload?.authenticated) return false;
+    if (!isAdminSessionPayloadUsable(payload)) return false;
     const role = payload.role?.toLowerCase();
     return role === "admin" || !!isAdminEmailAllowed(payload.email);
   } catch {

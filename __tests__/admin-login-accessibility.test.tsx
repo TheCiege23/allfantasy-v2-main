@@ -79,7 +79,9 @@ describe("/admin-login — validation & server errors", () => {
 
     const alert = await screen.findByRole("alert")
     expect(alert).toHaveTextContent(/enter a valid email/i)
-    expect(fetchMock).not.toHaveBeenCalled()
+    // The page reads /api/auth/admin-totp on load (does this browser owe a code?); what must
+    // never happen on an invalid address is the magic-link REQUEST.
+    expect(fetchMock.mock.calls.map(([url]) => url)).not.toContain("/api/auth/admin-magic/request")
   })
 
   it("shows a server-error alert when the request fails", async () => {

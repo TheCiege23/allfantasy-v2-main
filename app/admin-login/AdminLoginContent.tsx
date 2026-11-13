@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { CheckCircle2, Loader2, Shield, TriangleAlert } from 'lucide-react'
 
@@ -37,6 +37,61 @@ export default function AdminLoginContent() {
     }
     return null
   }, [errCode])
+
+  // Second factor (app/api/auth/admin-totp): once this browser has proved who it is — a used
+  // magic link, or an allowlisted account already signed in — the server asks for an
+  // authenticator code instead of another email.
+  const [needsCode, setNeedsCode] = useState(false)
+  const [code, setCode] = useState('')
+  const [codeState, setCodeState] = useState<'idle' | 'submitting' | 'error'>('idle')
+  const [codeError, setCodeError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch('/api/auth/admin-totp', { cache: 'no-store' })
+        if (!r?.ok) return
+        const d = await r.json()
+        if (!cancelled && d?.required && d?.awaitingCode) setNeedsCode(true)
+      } catch {
+        // No answer means no code step: the email form stays, which is always safe.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function handleCodeSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const digits = code.replace(/\s/g, '')
+    if (!/^\d{6}$/.test(digits)) {
+      setCodeError('Enter the 6-digit code from your authenticator app.')
+      setCodeState('error')
+      return
+    }
+    setCodeError(null)
+    setCodeState('submitting')
+    try {
+      const res = await fetch('/api/auth/admin-totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: digits, next }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        setCodeError(data?.error || 'That code did not work. Try again.')
+        setCodeState('error')
+        setCode('')
+        return
+      }
+      window.location.href = sanitizeNext(data.next)
+    } catch {
+      setCodeError('Network error. Try again.')
+      setCodeState('error')
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -94,8 +149,10 @@ export default function AdminLoginContent() {
         <div className="rounded-2xl border border-[color:var(--border)] bg-[#ffffff] p-6 shadow-xl shadow-slate-900/5">
           <h1 className="text-[20px] font-bold text-[color:var(--text)]">Admin sign in</h1>
           <p className="mt-1 text-[13px] leading-snug text-[color:var(--muted)]">
-            Enter your admin email. If you&rsquo;re on the allowlist, we&rsquo;ll send a one-time magic link
-            that expires in 10 minutes.
+            {needsCode
+              ? 'Enter the 6-digit code from your authenticator app to finish signing in.'
+              : <>Enter your admin email. If you&rsquo;re on the allowlist, we&rsquo;ll send a one-time magic link
+            that expires in 10 minutes.</>}
           </p>
 
           {banner ? (
@@ -108,7 +165,53 @@ export default function AdminLoginContent() {
             </div>
           ) : null}
 
-          {state === 'sent' ? (
+          {needsCode ? (
+            <form onSubmit={handleCodeSubmit} className="mt-5 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-[color:var(--text)]">
+                  Authenticator code
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9 ]*"
+                  maxLength={7}
+                  autoFocus
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ''))}
+                  disabled={codeState === 'submitting'}
+                  placeholder="123456"
+                  className="af-admin-email af-admin-focus min-h-[44px] w-full rounded-lg border border-[#64748b] bg-[#ffffff] px-3 py-2.5 text-center font-mono text-[20px] tracking-[0.3em] text-[color:var(--text)] focus:border-[color:var(--accent)] disabled:opacity-60"
+                />
+              </label>
+
+              {codeState === 'error' && codeError ? (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-[12px] text-rose-800"
+                >
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-700" />
+                  <span>{codeError}</span>
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={codeState === 'submitting'}
+                className="af-admin-focus inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#4338ca] to-[#6d28d9] px-4 py-2.5 text-[13px] font-semibold text-[#ffffff] shadow-sm transition hover:from-[#3730a3] hover:to-[#5b21b6] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {codeState === 'submitting' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Checking…
+                  </>
+                ) : (
+                  'Verify and sign in'
+                )}
+              </button>
+            </form>
+          ) : state === 'sent' ? (
             <div
               role="status"
               className="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-3 text-[13px] text-emerald-900"
