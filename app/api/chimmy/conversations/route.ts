@@ -5,8 +5,10 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 const ConversationQuerySchema = z.object({
-  limit: z.string().pipe(z.coerce.number().int().positive().default(20)),
-  offset: z.string().pipe(z.coerce.number().int().nonnegative().default(0)),
+  // The caller always passes strings (searchParams with a string fallback), so coercing
+  // directly is the same contract; zod 4 rejects piping a string into z.coerce's `unknown` input.
+  limit: z.coerce.number().int().positive().default(20),
+  offset: z.coerce.number().int().nonnegative().default(0),
 })
 
 const SaveConversationSchema = z.object({

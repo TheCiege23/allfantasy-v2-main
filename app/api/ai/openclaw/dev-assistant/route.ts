@@ -19,7 +19,7 @@ const RequestSchema = z.object({
     )
     .optional()
     .default([]),
-  context: z.record(z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
   leagueId: z.string().optional(),
   upstreamPath: z.string().optional(),
 })
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   const parsed = RequestSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'Invalid request format', details: parsed.error.errors },
+      { error: 'Invalid request format', details: parsed.error.issues },
       { status: 400 }
     )
   }

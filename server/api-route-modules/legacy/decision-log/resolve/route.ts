@@ -29,9 +29,9 @@ async function callerOwnsDecisionLog(decisionLogId: string, sleeperUsername: str
 }
 
 const ResolveSchema = z.object({
-  decisionLogId: z.string().uuid(),
+  decisionLogId: z.guid(),
   userFollowed: z.boolean(),
-  userAction: z.record(z.unknown()).optional(),
+  userAction: z.record(z.string(), z.unknown()).optional(),
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/decision-log/resolve", tool: "LegacyDecisionLogResolve" })(async (req: NextRequest) => {

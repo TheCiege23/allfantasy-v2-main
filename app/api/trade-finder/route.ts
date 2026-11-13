@@ -825,7 +825,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
   } catch (error) {
     console.error('Trade Finder error:', error)
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request format', details: error.errors }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request format', details: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to find trades' }, { status: 500 })
   }

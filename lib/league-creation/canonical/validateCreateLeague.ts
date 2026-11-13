@@ -101,7 +101,7 @@ export const createLeagueBodySchema = z.object({
   teamCount: z.number().int().min(2).max(256),
   draftType: z.string().min(1).max(32),
   leagueName: z.string().min(1).max(100).trim(),
-  conceptSetup: z.record(z.unknown()).optional().nullable(),
+  conceptSetup: z.record(z.string(), z.unknown()).optional().nullable(),
   soccerPipeline: z.enum(['mls', 'euro']).optional().nullable(),
   timezone: z.string().trim().min(1).max(64).refine(isValidIanaTimeZone, 'Choose a valid IANA timezone').optional(),
   language: z.enum(['en', 'es']).optional(),

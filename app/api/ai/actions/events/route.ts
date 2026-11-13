@@ -16,7 +16,7 @@ const BodySchema = z.object({
   event: z.enum(['shown', 'clicked', 'confirmed', 'staged', 'completed', 'dismissed', 'saved', 'failed']),
   timestamp: z.number().int(),
   durationMs: z.number().int().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
 export async function POST(req: NextRequest) {

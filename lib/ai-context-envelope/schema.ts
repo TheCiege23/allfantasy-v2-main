@@ -133,7 +133,7 @@ export const DeterministicContextEnvelopeSchema = z.object({
   /** Missing data; must be passed to AI and surfaced when confidence is capped. */
   missingData: MissingDataBlockSchema.optional(),
   /** Raw payload for backward compatibility (e.g. trade context object). */
-  deterministicPayload: z.record(z.unknown()).nullable().optional(),
+  deterministicPayload: z.record(z.string(), z.unknown()).nullable().optional(),
   /** Hard constraints for AI (e.g. "Do not override fairnessScore"). */
   hardConstraints: z.array(z.string()).optional(),
   /** Optional envelope id for tracing. */
