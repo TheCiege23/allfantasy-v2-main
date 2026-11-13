@@ -14,9 +14,9 @@ export const DEFAULT_RISK_PROFILE: RiskProfile = {
   goal: "mincash",
 }
 
-type BracketStyle = "safe" | "balanced" | "upset_heavy" | "chaos"
+export type BracketStyle = "safe" | "balanced" | "upset_heavy" | "chaos"
 
-type StrategyRecommendation = {
+export type StrategyRecommendation = {
   recommendedPick: string
   confidence: number
   reasoning: string
@@ -24,7 +24,7 @@ type StrategyRecommendation = {
   style: BracketStyle
 }
 
-type MultiBracketPlan = {
+export type MultiBracketPlan = {
   count: number
   brackets: Array<{
     style: BracketStyle
@@ -34,7 +34,7 @@ type MultiBracketPlan = {
   }>
 }
 
-function getStrategyBias(profile: RiskProfile): {
+export function getStrategyBias(profile: RiskProfile): {
   upsetWeight: number
   chalkWeight: number
   leverageWeight: number

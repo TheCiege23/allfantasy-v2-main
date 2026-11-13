@@ -96,7 +96,7 @@ function buildRisk(reachWarning: string | null, valueWarning: string | null): Dr
   return { level: flags.length > 1 ? 'high' : 'medium', flags }
 }
 
-interface EvaluateDraftShadowInput extends BuildDraftDecisionContextInput {
+export interface EvaluateDraftShadowInput extends BuildDraftDecisionContextInput {
   /** Injectable for tests; defaults to the process-wide shadow log. */
   resultStore?: DraftShadowResultStore
 }
@@ -111,7 +111,7 @@ interface EvaluateDraftShadowInput extends BuildDraftDecisionContextInput {
  * ordered, so "all picks before overall N" is a faithful historical
  * snapshot, not an approximation).
  */
-async function evaluateDraftShadowFromContext(
+export async function evaluateDraftShadowFromContext(
   ctx: DraftDecisionContext,
   resultStore: DraftShadowResultStore = defaultDraftShadowResultStore
 ): Promise<DraftEvaluation> {
