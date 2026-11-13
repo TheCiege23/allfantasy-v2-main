@@ -5,7 +5,7 @@
  * An inline <script>, not a client effect: it has to run before the app's own fetch wrappers
  * capture `window.fetch`, or they keep calling the real one. Never shipped outside /e2e.
  */
-import { headers } from 'next/headers'
+import { getRequestNonce } from '@/lib/security/requestNonce'
 
 const NAMES = [
   'KBI Smoke Black', 'KBFL', 'Parbur', 'Its gonna be Maye 26', 'The Deep!', 'Sunday Night Redraft',
@@ -15,7 +15,7 @@ const NAMES = [
 
 export async function MockFetch({ mode }: { mode: string }) {
   // Under the nonce CSP an inline script without this request's nonce is refused.
-  const nonce = (await headers()).get('x-nonce') ?? undefined
+  const nonce = await getRequestNonce()
   const leagues = NAMES.map((name, i) => ({
     sourceId: `11800000000000000${String(i).padStart(2, '0')}`,
     name,
