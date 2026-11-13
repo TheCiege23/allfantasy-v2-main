@@ -5,7 +5,7 @@
 
 import type { MatchupSimulationResult } from '@/components/simulation/MatchupSimulationCard'
 
-export type ComparisonSummary = {
+type ComparisonSummary = {
   favoredName: string
   underdogName: string
   favoredProb: number

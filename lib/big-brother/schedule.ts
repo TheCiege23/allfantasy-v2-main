@@ -9,9 +9,9 @@ export const BB_DEADLINES = [
   { key: 'voting_open', label: 'Voting opens', phase: 'VOTING_OPEN', prefix: 'evictionVoteOpen', action: null },
   { key: 'eviction', label: 'Voting closes / eviction', phase: 'VOTING_OPEN', prefix: 'evictionVoteClose', action: 'close_eviction' },
 ] as const
-export type DeadlineKey = typeof BB_DEADLINES[number]['key']
+type DeadlineKey = typeof BB_DEADLINES[number]['key']
 export type DeadlineConfig = Partial<Record<`${typeof BB_DEADLINES[number]['prefix']}DayOfWeek`, number | null> & Record<`${typeof BB_DEADLINES[number]['prefix']}TimeUtc`, string | null>>
-export type ScheduleCycle = { createdAt: Date | string; voteDeadlineAt?: Date | string | null; voteOpenedAt?: Date | string | null }
+type ScheduleCycle = { createdAt: Date | string; voteDeadlineAt?: Date | string | null; voteOpenedAt?: Date | string | null }
 
 /** Resolve an occurrence from the cycle's fixed anchor, never from the sweep time.
  * Later milestones wrap forward across Sunday. Missing fields stay unscheduled.

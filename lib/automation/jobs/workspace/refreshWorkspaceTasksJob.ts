@@ -24,7 +24,7 @@ import { reconcileLeagueTasks } from '@/lib/commissioner-workspace/taskStore'
 // `platform_config` toggle, and sharing it is what keeps the flag's key defined in one place.
 import { isLiveReady } from '@/lib/commissioner-ui/liveReadiness'
 
-export interface RefreshWorkspaceTasksInput {
+interface RefreshWorkspaceTasksInput {
   leagueId: string
   scheduledFor?: Date
   trigger?: 'scheduled' | 'manual' | 'admin'
@@ -39,7 +39,7 @@ export interface RefreshWorkspaceTasksInput {
  * runs that all say `completed` and nothing else is the automation equivalent of a green check
  * that has never gone red.
  */
-export async function refreshWorkspaceTasksForLeague(
+async function refreshWorkspaceTasksForLeague(
   input: RefreshWorkspaceTasksInput,
 ): Promise<AutomationResult & { jobId: string; runId: string }> {
   const scheduledFor = input.scheduledFor ?? new Date()
@@ -106,7 +106,7 @@ export async function refreshWorkspaceTasksForLeague(
   )
 }
 
-export interface RefreshWorkspaceTasksBatchResult {
+interface RefreshWorkspaceTasksBatchResult {
   /** False when the module is not live-ready — nothing was discovered and nothing was written. */
   enabled: boolean
   discovered: number

@@ -19,7 +19,7 @@ const DANGER_LABEL: Record<string, string> = {
   doomed: 'Doomed',
 }
 
-export function normalizeZombieStatus(raw: string): string {
+function normalizeZombieStatus(raw: string): string {
   const s = raw.toLowerCase()
   if (s.includes('whisperer')) return 'whisperer'
   if (s.includes('zombie')) return 'zombie'

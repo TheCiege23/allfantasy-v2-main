@@ -10,7 +10,7 @@ import { positionsForSport, matchesPositionFilter } from '@/lib/trending-players
 import type { TrendPlayerCard, TrendingDashboardOutput, TrendingSourceFlags } from '@/lib/trending-players/types'
 import { parseTrendPlayerId } from '@/lib/trending-players/parseTrendPlayerId'
 
-export type TrendTabProps = {
+type TrendTabProps = {
   league: UserLeague
   onPlayerClick: (playerId: string) => void
   sport?: string

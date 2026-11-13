@@ -23,7 +23,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  * row produces.
  */
 
-export type LeagueSyncProps = {
+type LeagueSyncProps = {
   data: LeagueSyncResult
   /** The account-wide connect/re-sync surface, which this does not replace. */
   manageHref: string

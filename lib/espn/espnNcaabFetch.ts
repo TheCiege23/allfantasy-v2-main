@@ -30,7 +30,7 @@ export class EspnBlockedError extends Error {
   }
 }
 
-export type EspnNcaabTeam = {
+type EspnNcaabTeam = {
   /** ESPN team id — the same id space as CFBD team ids (contracts/espn GAPS R-02). */
   id: string
   abbreviation: string | null

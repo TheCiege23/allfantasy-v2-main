@@ -32,7 +32,7 @@ import { trackCouponApplied } from "@/lib/promotions/couponAnalytics";
 import { useLaunchOffer } from "@/components/launch/LaunchOfferContext";
 import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
 
-export type PlanFamily =
+type PlanFamily =
   | "af_pro"
   | "af_commissioner"
   | "af_war_room"

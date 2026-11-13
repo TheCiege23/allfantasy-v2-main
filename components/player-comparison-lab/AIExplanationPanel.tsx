@@ -8,7 +8,7 @@ import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimm
 import type { ComparisonAIInsight } from '@/lib/player-comparison-lab/types';
 import { FeatureGate } from '@/components/subscription/FeatureGate';
 
-export interface AIExplanationPanelProps {
+interface AIExplanationPanelProps {
   playerNames: string[];
   summaryLines: string[];
   /** Callback to trigger AI analysis (e.g. POST /api/player-comparison/insight). */

@@ -4,7 +4,7 @@
  */
 export const POST_PURCHASE_SYNC_EVENT = 'af:post-purchase-sync'
 
-export type PostPurchaseSyncEventDetail = {
+type PostPurchaseSyncEventDetail = {
   phase: 'success' | 'pending' | 'failed' | 'cancelled'
   sessionId: string | null
 }

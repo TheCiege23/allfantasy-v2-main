@@ -5,7 +5,7 @@ import { getPrimaryChimmyEntry } from '@/lib/ai-product-layer'
  * Used for documentation and consistent ordering (notifications, messages, AI chat, search, language, admin, profile).
  */
 
-export type TopBarUtilityId =
+type TopBarUtilityId =
   | "search"
   | "wallet"
   | "messages"

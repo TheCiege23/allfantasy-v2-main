@@ -1,6 +1,6 @@
 'use client';
 
-export interface WinProbabilityMeterProps {
+interface WinProbabilityMeterProps {
   winProbabilityA: number;
   winProbabilityB: number;
   teamAName: string;

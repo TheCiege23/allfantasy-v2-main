@@ -12,7 +12,7 @@
 
 import type { RivalryBoardRow } from '@/lib/rivalry-engine/rivalryBoard'
 
-export function RivalryCard({ row, featured = false }: { row: RivalryBoardRow; featured?: boolean }) {
+function RivalryCard({ row, featured = false }: { row: RivalryBoardRow; featured?: boolean }) {
   return (
     <article className="af-cm-rivalry" data-featured={featured ? 'true' : 'false'} data-testid={`rivalry-${row.id}`}>
       <div className="af-cm-rivalry-top">

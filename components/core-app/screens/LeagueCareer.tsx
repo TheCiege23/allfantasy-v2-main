@@ -33,7 +33,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  * came from, or shows the reason there isn't one.
  */
 
-export type LeagueCareerProps = {
+type LeagueCareerProps = {
   data: LeagueCareerResult
   /** The cross-league trophy room, which this does not replace. */
   allLeaguesHref: string

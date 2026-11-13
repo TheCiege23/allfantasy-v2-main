@@ -3,8 +3,8 @@
  * Delegates to trade-engine quality-gate where applicable; provides shared helpers.
  */
 
-export const MAX_CONFIDENCE_FOR_STALE_INJURY = 70;
-export const MAX_CONFIDENCE_FOR_STALE_VALUATION = 65;
+const MAX_CONFIDENCE_FOR_STALE_INJURY = 70;
+const MAX_CONFIDENCE_FOR_STALE_VALUATION = 65;
 
 export interface FactGuardInput {
   confidence: number;

@@ -78,7 +78,7 @@ type VerdictContext = {
 }
 type TradesPanelPayload = { activeTrades?: PanelTrade[]; verdictContext?: VerdictContext | null }
 
-export type DecideHomeProps = {
+type DecideHomeProps = {
   league: UserLeague
   teams: LeagueTeamSlot[]
   /** The viewer's claimed team slot id (from the server page), if any. */

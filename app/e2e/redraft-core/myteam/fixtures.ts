@@ -45,10 +45,10 @@ const SPORTS: Record<HarnessSport, Cfg> = {
 const FIRST = ['Avery', 'Jordan', 'Riley', 'Casey', 'Morgan', 'Quinn', 'Rowan', 'Emerson', 'Dakota', 'Sawyer', 'Hayden', 'Reese', 'Parker', 'Logan', 'Kendall', 'Skyler', 'Blake', 'Drew']
 const LAST = ['Calloway', 'Brightwater', 'Okafor', 'Lindqvist', 'Marchetti', 'Holloway', 'Sutherland', 'Vance', 'Amari', 'Kowalski', 'Delacroix', 'Whitfield', 'Nakamura', 'Ferreira', 'Ashby', 'Montoya', 'Rourke']
 const name = (i: number) => `${FIRST[i % FIRST.length]} ${LAST[(i * 7 + 3) % LAST.length]}`
-export const MANAGERS = ['Fourth & Forever', 'Gridiron Ghosts', 'Waiver Wire Wizards', 'Bench Mob', 'Late Round Legends', 'Sunday Scaries', 'The Comeback Kids', 'Bye Week Blues', 'Draft Day Darlings', 'Trade Deadline Thieves']
+const MANAGERS = ['Fourth & Forever', 'Gridiron Ghosts', 'Waiver Wire Wizards', 'Bench Mob', 'Late Round Legends', 'Sunday Scaries', 'The Comeback Kids', 'Bye Week Blues', 'Draft Day Darlings', 'Trade Deadline Thieves']
 
 /** 2026-10-30 (a Friday): the day the daily-sport fixtures were "priced" for. */
-export const HARNESS_DAY = '2026-10-30'
+const HARNESS_DAY = '2026-10-30'
 
 function player(sport: HarnessSport, i: number, position: string, opts: Partial<LineupPlayer> = {}): LineupPlayer {
   const cfg = SPORTS[sport]

@@ -25,7 +25,7 @@ export interface TeamProjection {
   seed?: number
 }
 
-export interface MatchupResult {
+interface MatchupResult {
   winProbability: number
   marginMean: number
   marginStdDev: number
@@ -62,7 +62,7 @@ export function simulateMatchup(
   }
 }
 
-export interface SeasonSimResult {
+interface SeasonSimResult {
   expectedWins: number
   playoffProbability: number
   byeWeekProbability: number
@@ -104,7 +104,7 @@ export function simulateSeason(
   }
 }
 
-export interface PlayoffSimResult {
+interface PlayoffSimResult {
   championshipProbability: number
   finalistProbability: number
 }
@@ -156,7 +156,7 @@ export function simulatePlayoffs(
   }
 }
 
-export interface ChampionshipDelta {
+interface ChampionshipDelta {
   oddsBefore: number
   oddsAfter: number
   delta: number

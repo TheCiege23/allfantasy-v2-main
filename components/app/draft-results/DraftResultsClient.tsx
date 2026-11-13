@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import type { DraftResultsPayload, ManagerRankingEntry, PickScoreEntry } from '@/lib/post-draft-manager-ranking'
 
-export interface DraftResultsClientProps {
+interface DraftResultsClientProps {
   leagueId: string
   leagueName: string
   sport: string

@@ -29,9 +29,9 @@
  * consumer already expects.
  */
 
-export type ValueSource = 'fantasycalc' | 'dynastyprocess'
+type ValueSource = 'fantasycalc' | 'dynastyprocess'
 
-export type SourceReading = {
+type SourceReading = {
   source: ValueSource
   /** 1 = most valuable player in that source's ordering. */
   rank: number
@@ -39,7 +39,7 @@ export type SourceReading = {
   raw: number
 }
 
-export type AfValueConfidence = 'high' | 'moderate' | 'low'
+type AfValueConfidence = 'high' | 'moderate' | 'low'
 
 export type AfValue = {
   /** Value on the reference scale, read off the reference curve at blendedRank. */
@@ -75,8 +75,8 @@ export type AfValue = {
  * is 50. So a gap inside 20 is ordinary agreement, and beyond 60 the two
  * sources are genuinely telling different stories about the player.
  */
-export const RANK_GAP_HIGH_CONFIDENCE = 20
-export const RANK_GAP_LOW_CONFIDENCE = 60
+const RANK_GAP_HIGH_CONFIDENCE = 20
+const RANK_GAP_LOW_CONFIDENCE = 60
 
 /**
  * Blend readings in rank space and price the result off a reference curve.

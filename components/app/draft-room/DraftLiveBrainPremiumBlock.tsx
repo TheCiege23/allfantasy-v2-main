@@ -15,7 +15,7 @@ const BADGE = {
   2: { label: 'Upside', className: 'border-violet-400/40 bg-violet-500/15 text-violet-100' },
 } as const
 
-export type DraftLiveBrainPremiumBlockProps = {
+type DraftLiveBrainPremiumBlockProps = {
   liveBrain: LiveDraftBrainEnvelope
   onPlayerClick?: (player: { name: string; position: string; team?: string | null }) => void
 }

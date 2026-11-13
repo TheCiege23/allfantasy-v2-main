@@ -18,7 +18,7 @@ import type { GuillotineDroppedPlayerResult } from './guillotineDroppedPlayerEng
 import type { GuillotineTradeAnalysis } from './guillotineTradeEngine'
 import type { GuillotineWeeklyPlanResult } from './guillotineWeeklyPlanEngine'
 
-export interface GuillotineWarRoomPromptInputs {
+interface GuillotineWarRoomPromptInputs {
   context: GuillotineWarRoomContext
   survival?: GuillotineSurvivalRiskResult | null
   rosterRisk?: GuillotineRosterRiskResult | null

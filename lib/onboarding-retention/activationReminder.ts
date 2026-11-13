@@ -57,7 +57,7 @@ function esc(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export type ActivationReminderEmail = { subject: string; html: string }
+type ActivationReminderEmail = { subject: string; html: string }
 
 export function renderActivationReminder(
   n: 1 | 2,

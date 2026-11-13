@@ -16,8 +16,8 @@ import '@/components/core-app/home/af-home-guide.css'
  * Only the props it draws cross the client boundary — never the whole overview.
  */
 
-export type CommishStat = { value: string; label: string; tone: 'accent' | 'good' | 'bad' | 'plain' }
-export type CommishRisk = {
+type CommishStat = { value: string; label: string; tone: 'accent' | 'good' | 'bad' | 'plain' }
+type CommishRisk = {
   id: string
   severity: 'bad' | 'warn' | 'info'
   title: string

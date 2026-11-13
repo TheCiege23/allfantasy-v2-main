@@ -35,7 +35,7 @@ export type LeagueHolder =
   | { kind: 'free' }
   | { kind: 'unknown' }
 
-export type LeagueShareCell = {
+type LeagueShareCell = {
   holder: LeagueHolder
   /** Null when not computed (a viewer without AF Pro) or not priced (kickers, defenders). */
   value: LeagueValue | null

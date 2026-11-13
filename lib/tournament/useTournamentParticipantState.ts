@@ -8,7 +8,7 @@ import {
   type StandingsLeagueRow,
 } from '@/lib/tournament/tournamentStandingsFetch'
 
-export type AdvancementRoundEntry = {
+type AdvancementRoundEntry = {
   round?: number
   toRound?: number
   advanced?: boolean

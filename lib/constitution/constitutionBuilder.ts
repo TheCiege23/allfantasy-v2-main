@@ -234,7 +234,7 @@ export function constitutionText(sections: ConstitutionSection[]): string {
 /** Validate a commissioner-edited section list. Titles and bodies trimmed; empty sections dropped. */
 export const SECTION_TITLE_MAX = 120
 export const SECTION_BODY_MAX = 6000
-export const SECTIONS_MAX = 30
+const SECTIONS_MAX = 30
 export function parseSections(v: unknown): ConstitutionSection[] | null {
   if (!Array.isArray(v) || v.length === 0 || v.length > SECTIONS_MAX) return null
   const out: ConstitutionSection[] = []
@@ -279,7 +279,7 @@ export const AMENDABLE: Record<string, Amendable> = {
   keeperMaxYears: { label: 'Years a player can be kept', kind: 'int', min: 1, max: 10 },
 }
 
-export type SettingChange = { key: string; value: number | boolean | string }
+type SettingChange = { key: string; value: number | boolean | string }
 
 export function parseSettingChange(v: unknown): SettingChange | null | 'invalid' {
   if (v == null) return null
@@ -305,7 +305,7 @@ export function describeChange(c: SettingChange): string {
  * commissioner, who approves it (the league vote opens) or declines it with a reason. A commissioner's
  * own proposal goes straight to the vote, as before.
  */
-export type AmendmentStatus = 'pending_approval' | 'declined' | 'voting' | 'passed' | 'failed' | 'applied' | 'apply_failed' | 'withdrawn'
+type AmendmentStatus = 'pending_approval' | 'declined' | 'voting' | 'passed' | 'failed' | 'applied' | 'apply_failed' | 'withdrawn'
 
 export type Amendment = {
   id: string
@@ -343,7 +343,7 @@ export type Amendment = {
 export const PENDING_PER_MEMBER_MAX = 2
 export const DECLINE_REASON_MAX = 500
 /** The vote reminder goes out once, when less than this is left. */
-export const VOTE_REMINDER_MS = 24 * 60 * 60 * 1000
+const VOTE_REMINDER_MS = 24 * 60 * 60 * 1000
 
 function valueText(v: number | boolean | string | null | undefined): string {
   if (v == null) return '—'
@@ -414,7 +414,7 @@ export function ruleLogEntry(
 export const AMENDMENT_TITLE_MAX = 120
 export const AMENDMENT_TEXT_MAX = 2000
 export const OPEN_AMENDMENTS_MAX = 5
-export const STORED_AMENDMENTS_MAX = 100
+const STORED_AMENDMENTS_MAX = 100
 export const YES = 'yes'
 export const NO = 'no'
 

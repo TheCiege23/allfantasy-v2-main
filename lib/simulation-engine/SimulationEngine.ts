@@ -7,7 +7,6 @@ import { runSeasonSimulation } from './SeasonSimulator'
 import type { SeasonSimulationInput, SeasonSimulationOutput } from './types'
 
 export { calculatePlayoffOdds } from '@/lib/season-forecast/PlayoffOddsCalculator'
-export type { TeamPlayoffOdds } from '@/lib/season-forecast/PlayoffOddsCalculator'
 
 /**
  * Run full season simulation (playoff/championship odds, expected wins/rank).

@@ -1,6 +1,6 @@
 import type { PickWeight, PlayerWeight } from '@/lib/upstream-apis'
 
-export type SportCode = 'NFL' | 'NBA' | 'MLB' | string
+type SportCode = 'NFL' | 'NBA' | 'MLB' | string
 
 export interface DynastyLeagueContext {
   sport: SportCode

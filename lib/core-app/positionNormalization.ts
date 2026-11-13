@@ -19,7 +19,7 @@
  * Dalton Kincaid twice in the same result set, which reads as two players rather
  * than one player from two feeds.
  */
-export const POSITION_ALIASES: Record<string, string> = {
+const POSITION_ALIASES: Record<string, string> = {
   quarterback: 'QB',
   'running back': 'RB',
   'wide receiver': 'WR',

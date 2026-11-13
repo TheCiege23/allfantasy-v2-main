@@ -66,7 +66,7 @@ export const PLATFORM_READ_CATEGORIES = [
   'SECURITY_REVIEW',
 ] as const
 
-export type PlatformReadCategory = (typeof PLATFORM_READ_CATEGORIES)[number]
+type PlatformReadCategory = (typeof PLATFORM_READ_CATEGORIES)[number]
 
 // ─── The scope ───────────────────────────────────────────────────────────────
 
@@ -126,14 +126,14 @@ function getPlatformClient(): PrismaClient {
 
 // ─── The audited action ──────────────────────────────────────────────────────
 
-export type PlatformReadDeps = {
+type PlatformReadDeps = {
   readonly authorize?: Authorize
   readonly writeAudit?: WriteAudit
   /** Injectable for tests; production omits it and gets the platform pool. */
   readonly client?: Pick<PrismaClient, '$transaction'>
 }
 
-export type PlatformReadRequest = {
+type PlatformReadRequest = {
   readonly targetTenantId: string
   readonly category: PlatformReadCategory
   readonly resourceType?: string
@@ -209,7 +209,7 @@ export async function withPlatformRead<T>(
 
 // ─── The operator-facing view ────────────────────────────────────────────────
 
-export type OperatorVisibleAuditRow = {
+type OperatorVisibleAuditRow = {
   readonly at: Date
   readonly action: string
   readonly resourceType: string

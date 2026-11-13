@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { scoreLeagueWeek } from '@/lib/scoring/scoring-engine'
 import { createEngineTimer, logLeagueEngineEvent } from '@/lib/league-engine-performance/observability'
 
-export function resolveSeasonWeek(input?: {
+function resolveSeasonWeek(input?: {
   season?: number | null
   weekOrRound?: number | null
 }): { season: number; weekOrRound: number } {

@@ -7,7 +7,7 @@ import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
  * engines' own accept/reject/neutral verdict. See lib/decision-os/trade/warRoomTradeGrade.ts.
  */
 /** Said when the route sent no grade at all (an older server, a failed request) — see below. */
-export const WAR_ROOM_NO_GRADE_REASON = 'This trade could not be graded just now.'
+const WAR_ROOM_NO_GRADE_REASON = 'This trade could not be graded just now.'
 
 export function WarRoomTradeGradeLine({ grade, testId }: { grade: SuggestionGrade | null | undefined; testId: string }) {
   /*

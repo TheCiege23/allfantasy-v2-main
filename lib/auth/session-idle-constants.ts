@@ -1,7 +1,7 @@
 /** Allowed values for UserProfile.sessionIdleTimeoutMinutes (null/0 = disabled). */
-export const SESSION_IDLE_TIMEOUT_MINUTES = [30, 60, 240, 720, 1440] as const
+const SESSION_IDLE_TIMEOUT_MINUTES = [30, 60, 240, 720, 1440] as const
 
-export type SessionIdleTimeoutMinutes = (typeof SESSION_IDLE_TIMEOUT_MINUTES)[number]
+type SessionIdleTimeoutMinutes = (typeof SESSION_IDLE_TIMEOUT_MINUTES)[number]
 
 export function isAllowedSessionIdleMinutes(value: unknown): value is SessionIdleTimeoutMinutes {
   return (

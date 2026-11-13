@@ -3,7 +3,7 @@
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import type { ScenarioScore } from '@/lib/simulation-engine/types';
 
-export interface UpsideDownsideCardsProps {
+interface UpsideDownsideCardsProps {
   upsideScenario: ScenarioScore | null | undefined;
   downsideScenario: ScenarioScore | null | undefined;
   teamAName: string;

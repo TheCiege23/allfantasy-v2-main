@@ -19,7 +19,7 @@ export type AFProjectionDisplay = {
   error: string | null
 }
 
-export function conditionEmoji(label: string): string {
+function conditionEmoji(label: string): string {
   const l = label.toLowerCase()
   if (l.includes('rain') || l.includes('drizzle')) return '🌧'
   if (l.includes('snow')) return '🌨'

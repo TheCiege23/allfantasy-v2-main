@@ -137,7 +137,7 @@ import {
 } from '@/lib/draft-room/draft-chat-player-context'
 import type { DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 
-export type DraftRoomPageClientProps = {
+type DraftRoomPageClientProps = {
   /** Draft session id from URL (`/draft/[draftId]/snake`) — used for telemetry / deep links only. */
   draftId?: string
   leagueId: string

@@ -80,7 +80,7 @@ export function normalizeQuickLeagueType(leagueType: string | undefined, isDynas
   return raw
 }
 
-export function reconcileLegacyIsDynasty(leagueTypeNormalized: string, isDynastyInput: boolean): boolean {
+function reconcileLegacyIsDynasty(leagueTypeNormalized: string, isDynastyInput: boolean): boolean {
   const lt = normalizeToken(leagueTypeNormalized)
   if (lt === 'dynasty' || lt === 'devy' || lt === 'c2c') return true
   if (NON_DYNASTY_EXPLICIT_TYPES.has(lt)) return false
@@ -95,7 +95,7 @@ export function clampLegacyLeagueSize(n: unknown): number {
 
 const DEFAULT_TIMEZONE = 'America/New_York'
 
-export type LegacyManualCreateNormalized = {
+type LegacyManualCreateNormalized = {
   name: string
   sport: string
   leagueType: string

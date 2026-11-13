@@ -32,7 +32,7 @@ import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerT
 import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 
-export type CalendarKind = 'draft' | 'waivers' | 'trade_deadline' | 'playoffs' | 'dues' | 'vote' | 'renewal'
+type CalendarKind = 'draft' | 'waivers' | 'trade_deadline' | 'playoffs' | 'dues' | 'vote' | 'renewal'
 
 export type CalendarEvent = {
   id: string
@@ -110,7 +110,7 @@ function weekStatus(week: number, currentWeek: number | null): CalendarEvent['st
   return week - currentWeek <= 1 ? 'soon' : 'upcoming'
 }
 
-export function formatWhen(at: Date, allDay: boolean, language = 'en'): string {
+function formatWhen(at: Date, allDay: boolean, language = 'en'): string {
   const locale = coreLocale(language).usLocale
   const date = at.toLocaleDateString(locale, {
     weekday: 'short',

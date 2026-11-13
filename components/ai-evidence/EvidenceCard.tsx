@@ -4,7 +4,7 @@ import React from 'react'
 import type { EvidenceItem } from '@/lib/ai-context-envelope'
 import EvidenceBlock from './EvidenceBlock'
 
-export interface EvidenceCardProps {
+interface EvidenceCardProps {
   /** Evidence items from deterministic layer only. Renders before AI explanation. */
   items: EvidenceItem[]
   /** Optional title (default: "What the data says"). */

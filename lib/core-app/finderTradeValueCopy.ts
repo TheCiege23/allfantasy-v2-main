@@ -344,7 +344,7 @@ const DAYPART_ES: Record<ActivityWindow['daypart'], string> = {
  * When a manager usually moves: "Sun 10a–12p ET" → "los dom 10a–12p ET", "Tue evenings ET" → "los mar
  * por la noche ET". The clock and the zone read the same in Spanish (as `kickoffText` keeps them).
  */
-export function windowLabelText(w: ActivityWindow, language: string, withZone = true): string {
+function windowLabelText(w: ActivityWindow, language: string, withZone = true): string {
   if (!es(language)) {
     const label = windowLabel(w)
     return withZone ? label : label.replace(/ [A-Z]{2,4}$/, '')

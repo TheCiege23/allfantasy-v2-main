@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 const STORAGE_KEY_PREFIX = 'guillotine_post_draft_intro_seen_'
 const INTRO_VIDEO_SRC = '/guillotine/Guillotine%20League%20Intro.mp4'
 
-export interface GuillotinePostDraftIntroProps {
+interface GuillotinePostDraftIntroProps {
   leagueId: string
   /** Call when user dismisses (Continue). */
   onContinue: () => void

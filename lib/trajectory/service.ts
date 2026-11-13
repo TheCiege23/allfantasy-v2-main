@@ -15,7 +15,7 @@ import { deriveTrajectoryCore, type DeltaOptions } from './delta'
 import { resolveWhyChanged } from './explain'
 import type { Trajectory, TrajectoryAdapter } from './types'
 
-export type GetTrajectoryOptions = DeltaOptions
+type GetTrajectoryOptions = DeltaOptions
 
 export async function getTrajectory<Params>(
   adapter: TrajectoryAdapter<Params>,

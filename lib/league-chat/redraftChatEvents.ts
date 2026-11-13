@@ -31,9 +31,9 @@
 import { isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 
-export type RedraftChatEventKind = 'trade' | 'claim' | 'score' | 'recap'
+type RedraftChatEventKind = 'trade' | 'claim' | 'score' | 'recap'
 
-export type RedraftChatScoreLine = {
+type RedraftChatScoreLine = {
   homeName: string | null
   homeScore: number
   awayName: string | null
@@ -52,7 +52,7 @@ export type RedraftChatEvent = {
   body: string
 }
 
-export type RedraftChatEventInput = {
+type RedraftChatEventInput = {
   messageType?: string | null
   metadata?: Record<string, unknown> | null
   body?: string | null
@@ -190,7 +190,7 @@ export type PinnedMatchupInput = {
   source?: 'live_cache' | 'history_fallback'
 }
 
-export type PinnedScore = {
+type PinnedScore = {
   /** Scores moved within the last 15 minutes (the rail's own "live" window). */
   live: boolean
   week: number | null

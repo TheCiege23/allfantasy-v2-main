@@ -48,7 +48,7 @@ export async function getWeeklyStory(args: {
   })
 }
 
-export type StoryHeadline = { text: string; source: 'chimmy' | 'template' }
+type StoryHeadline = { text: string; source: 'chimmy' | 'template' }
 
 /**
  * The cover line. Never throws: every failure — spend switched off, no provider, a refused line —

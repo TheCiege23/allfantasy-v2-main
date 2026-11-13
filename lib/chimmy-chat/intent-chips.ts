@@ -1,9 +1,9 @@
 import type { ChimmySuggestedChip } from '@/lib/chimmy-interface/types'
 import type { ChimmyAIAnalyticsIngressEvent } from '@/lib/chimmy-chat/analytics-events'
 
-export type ChimmyIntentChipTopic = NonNullable<ChimmyAIAnalyticsIngressEvent['topic']>
+type ChimmyIntentChipTopic = NonNullable<ChimmyAIAnalyticsIngressEvent['topic']>
 
-export type ChimmyIntentChipDefinition = {
+type ChimmyIntentChipDefinition = {
   id: string
   label: string
   topic: ChimmyIntentChipTopic

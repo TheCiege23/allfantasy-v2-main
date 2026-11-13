@@ -5,9 +5,9 @@
 
 import { SURVIVOR_LEAGUE_INTRO_VIDEO } from '@/lib/survivor/constants'
 
-export type SurvivorClipKind = 'video' | 'image'
+type SurvivorClipKind = 'video' | 'image'
 
-export type SurvivorClip = { url: string; type: SurvivorClipKind; label?: string }
+type SurvivorClip = { url: string; type: SurvivorClipKind; label?: string }
 
 /** New universal audit rows (`SurvivorAuditEntry`). */
 export function survivorClipFromAuditEntry(row: { category: string; action: string }): SurvivorClip | null {

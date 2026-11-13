@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma'
  * because the data was missing.
  */
 
-export type TribeRelationState = {
+type TribeRelationState = {
   relation: 'tribemate' | 'rival' | 'post-merge' | 'unknown'
   yourTribe: string | null
   theirTribe: string | null
@@ -86,7 +86,7 @@ export async function resolveTribeRelation(args: {
  * and alarming claim about a manager who simply has not used the feature.
  */
 
-export type ProtectionState = {
+type ProtectionState = {
   /** Sleeper ids the manager has shielded. Null means never declared. */
   protectedIds: string[] | null
   basis: string | null

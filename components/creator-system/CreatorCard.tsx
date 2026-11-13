@@ -5,7 +5,7 @@ import { ArrowUpRight, Share2, Trophy, Users } from 'lucide-react'
 import { VerifiedCreatorBadge } from '@/components/creator/VerifiedCreatorBadge'
 import type { CreatorProfileDto } from '@/lib/creator-system/types'
 
-export interface CreatorCardProps {
+interface CreatorCardProps {
   creator: CreatorProfileDto
   onFollow?: (creator: CreatorProfileDto) => void
   onUnfollow?: (creator: CreatorProfileDto) => void

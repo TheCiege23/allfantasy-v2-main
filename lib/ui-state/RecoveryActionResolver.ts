@@ -4,7 +4,7 @@ import {
   type FallbackRouteSpec,
 } from "./FallbackRouteResolver"
 
-export type RecoveryContext =
+type RecoveryContext =
   | "dashboard"
   | "search"
   | "notifications"
@@ -14,7 +14,7 @@ export type RecoveryContext =
   | "provider_pending"
   | "tool_page"
 
-export interface RecoveryActionSpec {
+interface RecoveryActionSpec {
   id: string
   label: string
   href?: string

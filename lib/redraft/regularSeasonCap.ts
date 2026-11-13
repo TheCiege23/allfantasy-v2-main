@@ -44,11 +44,11 @@ export function maxPlayoffStartWeekForSport(sport?: unknown): number {
   return maxRegularSeasonWeeksForSport(sport) + 1
 }
 
-export function regularSeasonCapMessage(sport?: unknown): string {
+function regularSeasonCapMessage(sport?: unknown): string {
   return `The regular season can be at most ${maxRegularSeasonWeeksForSport(sport)} weeks.`
 }
 
-export function playoffStartCapMessage(sport?: unknown): string {
+function playoffStartCapMessage(sport?: unknown): string {
   return `Playoffs can start no later than week ${maxPlayoffStartWeekForSport(sport)} — the regular season can be at most ${maxRegularSeasonWeeksForSport(sport)} weeks.`
 }
 

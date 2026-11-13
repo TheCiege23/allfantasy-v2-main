@@ -1,6 +1,6 @@
 // lib/trade-engine/tradeBlock.ts
 
-export type TradeBlockEntry = {
+type TradeBlockEntry = {
   rosterId: number
   assetId: string
   source: 'sleeper' | 'legacy'

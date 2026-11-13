@@ -16,7 +16,7 @@ export type SurvivorStatusCard = {
   actions: Array<{ label: string; href: string }>
 }
 
-export type SurvivorStatusInput = {
+type SurvivorStatusInput = {
   season: SurvivorSeasonPayload | null
   canVote: boolean
   canSubmitChallenge: boolean

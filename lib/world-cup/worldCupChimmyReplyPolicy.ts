@@ -184,7 +184,7 @@ export function serializeChimmyContext(ctx: WorldCupChimmyContext): string {
   return lines.join("\n")
 }
 
-export function isLiveScoreQuestion(prompt: string): boolean {
+function isLiveScoreQuestion(prompt: string): boolean {
   const p = prompt.toLowerCase()
   return (
     /\b(live\s+score|score\s+now|current\s+score|what'?s\s+the\s+score|marcador|t[ií]so|比分)\b/i.test(p) ||
@@ -978,7 +978,7 @@ function buildSoccerKnowledgeReply(ctx: WorldCupChimmyContext | null | undefined
   ].join(" ")
 }
 
-export function collectKnownScoreTokens(ctx: WorldCupChimmyContext | null | undefined): Set<string> {
+function collectKnownScoreTokens(ctx: WorldCupChimmyContext | null | undefined): Set<string> {
   const tokens = new Set<string>()
   if (!ctx) return tokens
   for (const m of [...ctx.liveMatches, ...ctx.recentMatches]) {
@@ -989,7 +989,7 @@ export function collectKnownScoreTokens(ctx: WorldCupChimmyContext | null | unde
   return tokens
 }
 
-export function collectKnownMinuteTokens(ctx: WorldCupChimmyContext | null | undefined): Set<string> {
+function collectKnownMinuteTokens(ctx: WorldCupChimmyContext | null | undefined): Set<string> {
   const tokens = new Set<string>()
   if (!ctx) return tokens
   for (const m of ctx.liveMatches) {
@@ -998,7 +998,7 @@ export function collectKnownMinuteTokens(ctx: WorldCupChimmyContext | null | und
   return tokens
 }
 
-export function extractScoreTokens(text: string): string[] {
+function extractScoreTokens(text: string): string[] {
   const found: string[] = []
   for (const match of text.matchAll(SCORE_PATTERN)) {
     found.push(`${match[1]}-${match[2]}`)
@@ -1006,7 +1006,7 @@ export function extractScoreTokens(text: string): string[] {
   return found
 }
 
-export function extractMinuteTokens(text: string): string[] {
+function extractMinuteTokens(text: string): string[] {
   const found: string[] = []
   for (const match of text.matchAll(MINUTE_PATTERN)) {
     found.push(String(match[1]))
@@ -1014,11 +1014,11 @@ export function extractMinuteTokens(text: string): string[] {
   return found
 }
 
-export function liveFeedUnavailableMessage(locale: string | null | undefined): string {
+function liveFeedUnavailableMessage(locale: string | null | undefined): string {
   return LIVE_FEED_UNAVAILABLE[getWorldCupLocale(locale)] ?? LIVE_FEED_UNAVAILABLE.en
 }
 
-export function inventedScoreBlockedMessage(locale: string | null | undefined): string {
+function inventedScoreBlockedMessage(locale: string | null | undefined): string {
   return INVENTED_SCORE_BLOCKED[getWorldCupLocale(locale)] ?? INVENTED_SCORE_BLOCKED.en
 }
 

@@ -36,7 +36,7 @@ export function bbPhaseStep(phase: string | null | undefined): number {
   return phase && phase in STEP_BY_PHASE ? STEP_BY_PHASE[phase] : -1
 }
 
-export interface BigBrotherNextDecision {
+interface BigBrotherNextDecision {
   label: string
   at: string
 }
@@ -63,7 +63,7 @@ export function nextBigBrotherDecision(
   return null
 }
 
-export interface BigBrotherPublicEviction {
+interface BigBrotherPublicEviction {
   week: number
   evictedRosterId: string
   /** The final nominees, evicted first. */
@@ -118,7 +118,7 @@ export function publicEvictionResult(
   }
 }
 
-export type BigBrotherFeedEvent = { id: string; kind: 'hoh' | 'veto' | 'evict'; week: number; rosterId: string }
+type BigBrotherFeedEvent = { id: string; kind: 'hoh' | 'veto' | 'evict'; week: number; rosterId: string }
 
 /** Feed from cycle rows, newest first: evicted (closed weeks), veto winner, HOH. */
 export function bigBrotherFeed(

@@ -18,7 +18,7 @@ import {
 } from '@/lib/player-data/nflRedraftGameContext'
 import { AF_FORM_PROJECTION_LABEL, AF_FORM_PROJECTION_SOURCE } from '@/lib/projections/dailySportFormLabels'
 
-export type WaiverPlayerAdapted = UnifiedPlayerWireDto & {
+type WaiverPlayerAdapted = UnifiedPlayerWireDto & {
   /** Convenience for rows/cards */
   displayHeadshotUrl: string | null
   displayTeamLogoUrl: string | null

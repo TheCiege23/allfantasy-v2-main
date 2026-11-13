@@ -16,10 +16,10 @@ import type { BracketPickInput, SavedBracketPick } from './bracketPicks'
  * say "not saved", not pretend the feature is off.
  */
 
-export type Unavailable = 'unavailable'
+type Unavailable = 'unavailable'
 
 /** The CODE only, never the message — a Prisma "invalid invocation" message can mention anything. */
-export function isMissingSchemaError(error: unknown): boolean {
+function isMissingSchemaError(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code
   return code === 'P2021' || code === 'P2022'
 }

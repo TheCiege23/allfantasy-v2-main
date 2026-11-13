@@ -18,7 +18,7 @@
  * already expects to be busy.
  */
 
-export type LauncherSide = 'left' | 'right'
+type LauncherSide = 'left' | 'right'
 
 /** `bottom` is the gap, in CSS px, between the viewport's bottom and the bubble's bottom edge. */
 export type LauncherPosition = { side: LauncherSide; bottom: number }
@@ -41,7 +41,7 @@ export function exceedsDragThreshold(dx: number, dy: number): boolean {
   return Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX
 }
 
-export type LauncherDevice = 'phone' | 'tablet' | 'desktop'
+type LauncherDevice = 'phone' | 'tablet' | 'desktop'
 
 /**
  * A position is remembered PER DEVICE CLASS, not once: a spot that suits a

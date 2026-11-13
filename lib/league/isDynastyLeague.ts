@@ -22,8 +22,8 @@ export type DynastyLeagueFields = {
   format?: string | null
 }
 
-export const DYNASTY_LEAGUE_TYPES: readonly string[] = ['dynasty', 'devy', 'c2c']
-export const DYNASTY_LEAGUE_VARIANTS: readonly string[] = ['dynasty', 'devy', 'c2c', 'devy_dynasty', 'merged_devy_c2c', 'dynasty_idp']
+const DYNASTY_LEAGUE_TYPES: readonly string[] = ['dynasty', 'devy', 'c2c']
+const DYNASTY_LEAGUE_VARIANTS: readonly string[] = ['dynasty', 'devy', 'c2c', 'devy_dynasty', 'merged_devy_c2c', 'dynasty_idp']
 
 const lower = (value: string | null | undefined) => String(value ?? '').trim().toLowerCase()
 

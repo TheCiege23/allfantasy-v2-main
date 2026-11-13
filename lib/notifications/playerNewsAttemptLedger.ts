@@ -221,7 +221,7 @@ export async function readAttemptRecord(newsId: string): Promise<AttemptRecord |
  * can be corrected or upgraded in place, and a corrected story is a NEW decision — it must not
  * inherit the exhausted attempt budget of the version it replaced.
  */
-export type RecordedAttempt = {
+type RecordedAttempt = {
   /** The count INCLUDING this attempt. */
   attempts: number
   /**

@@ -1,4 +1,4 @@
-export type UsernameAvailabilityResult =
+type UsernameAvailabilityResult =
   | {
       ok: true
       available: true

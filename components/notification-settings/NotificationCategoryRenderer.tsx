@@ -11,7 +11,7 @@ import { isPushCategory } from "@/lib/push-notifications/categories"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { tOr } from "@/lib/i18n/tInterpolate"
 
-export interface NotificationCategoryRendererProps {
+interface NotificationCategoryRendererProps {
   categoryId: NotificationCategoryId
   prefs: NotificationChannelPrefs
   deliveryAvailability: DeliveryMethodAvailability

@@ -4,7 +4,7 @@
 
 export type DispersalScenario = 'orphan_teams' | 'league_downsizing'
 
-export type DispersalAssetType = 'player' | 'draft_pick' | 'faab'
+type DispersalAssetType = 'player' | 'draft_pick' | 'faab'
 
 export type DispersalAsset = {
   id: string

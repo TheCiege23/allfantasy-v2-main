@@ -13,7 +13,7 @@ export const SOCIAL_PULSE_SIGNAL_VALUES = [
   "idp_scarcity",
 ] as const
 
-export const SocialPulseSignalSchema = z.enum(SOCIAL_PULSE_SIGNAL_VALUES)
+const SocialPulseSignalSchema = z.enum(SOCIAL_PULSE_SIGNAL_VALUES)
 
 export const SocialPulseRequestSchema = z.object({
   sport: z.enum(["NFL", "NBA"]),

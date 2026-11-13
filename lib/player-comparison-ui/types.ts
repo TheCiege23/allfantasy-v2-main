@@ -9,7 +9,7 @@ export type PlayerComparisonTabId =
   | 'waiver'
   | 'trade_fit'
 
-export type PlayerComparisonLaunchSource =
+type PlayerComparisonLaunchSource =
   | 'draft'
   | 'waiver'
   | 'trade'
@@ -28,7 +28,7 @@ export type OpenPlayerComparisonPayload = {
   source?: PlayerComparisonLaunchSource
 }
 
-export type PlayerComparisonApiBase = {
+type PlayerComparisonApiBase = {
   playerA: import('@/lib/player-comparison-lab/types').ResolvedPlayerStats
   playerB: import('@/lib/player-comparison-lab/types').ResolvedPlayerStats
   sport: string

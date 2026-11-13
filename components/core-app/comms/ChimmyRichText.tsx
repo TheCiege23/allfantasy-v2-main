@@ -75,7 +75,7 @@ export function parseChimmyBlocks(text: string): Block[] {
  */
 const INLINE_RE = /(\*\*[^*\n]+?\*\*|`[^`\n]+?`|\*[^*\s][^*\n]*?\*|\[[^\]\n]+?\]\([^)\n]*?\))/g
 
-export function renderChimmyInline(text: string): ReactNode[] {
+function renderChimmyInline(text: string): ReactNode[] {
   const out: ReactNode[] = []
   let last = 0
   let i = 0

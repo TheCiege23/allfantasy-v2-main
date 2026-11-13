@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { shouldAttemptVideo } from '@/lib/league-media/resolveOptionMedia'
 
-export type OptionCardMediaProps = {
+type OptionCardMediaProps = {
   /** Relative or absolute URL to MP4/WebM; if missing or unloadable, poster/fallback image is used. */
   videoSrc?: string | null
   posterSrc: string
@@ -111,7 +111,7 @@ export function OptionCardMedia({
   )
 }
 
-export type LeagueStepPreviewVideoProps = {
+type LeagueStepPreviewVideoProps = {
   videoSrc?: string | null
   posterSrc: string
   fallbackSrc: string

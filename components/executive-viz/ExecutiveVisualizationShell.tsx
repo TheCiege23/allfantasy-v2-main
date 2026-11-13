@@ -62,7 +62,7 @@ export function ExecutiveVisualizationShell({
   )
 }
 
-export function ExecutiveChartHeader({
+function ExecutiveChartHeader({
   title,
   description,
   icon: Icon = BarChart3,

@@ -28,7 +28,7 @@ function mergeDraftChatWire(
   )
 }
 
-export type UseLiveDraftSyncProps = {
+type UseLiveDraftSyncProps = {
   leagueId: string
   sessionRef: MutableRefObject<DraftSessionSnapshot | null>
   controlActionInflightRef: MutableRefObject<number>

@@ -131,7 +131,7 @@ export function gradeInputsFromRosterAssets(
 }
 
 /** A grader for one league (see `createLegacyPackageGrader`), injected so this module stays pure. */
-export type LegacyPackageGradeFn = (give: GradeInputs, get: GradeInputs) => Promise<LegacyPackageGrade>
+type LegacyPackageGradeFn = (give: GradeInputs, get: GradeInputs) => Promise<LegacyPackageGrade>
 
 /** A counter candidate as the second trade engine names it (`lib/engine/trade.ts` counters' options). */
 export type CounterCandidate = { id?: string | null; name?: string | null; pos?: string | null; team?: string | null }

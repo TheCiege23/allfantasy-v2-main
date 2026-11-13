@@ -11,7 +11,7 @@ export type PaidTier = 'pro' | 'commissioner' | 'war_room' | 'supreme'
  */
 export type AccessTier = 'guest' | 'free' | 'paid'
 
-export interface AccessTierResult {
+interface AccessTierResult {
   tier: AccessTier
   /** Which paid tiers are active, if tier === 'paid'. Empty otherwise. */
   paidTiers: PaidTier[]
@@ -19,7 +19,7 @@ export interface AccessTierResult {
   isGuest: boolean
 }
 
-export interface AccessTierPaidFlags {
+interface AccessTierPaidFlags {
   hasPro: boolean
   hasCommissioner: boolean
   hasWarRoom: boolean

@@ -27,8 +27,8 @@ import { lineupCheckHref, type LeagueLineupCheck, type LineupIssue, type Schedul
  * Pure: no prisma, no clock. `runSlateLockCheck.ts` reads and sends.
  */
 
-export const SLATE_LOCK_OPENS_BEFORE_MS = 90 * 60 * 1000
-export const SLATE_LOCK_CLOSES_BEFORE_MS = 20 * 60 * 1000
+const SLATE_LOCK_OPENS_BEFORE_MS = 90 * 60 * 1000
+const SLATE_LOCK_CLOSES_BEFORE_MS = 20 * 60 * 1000
 
 /** Every distinct kickoff time in the week, ascending. */
 export function slateKickoffs(games: readonly ScheduledGame[]): Date[] {
@@ -78,11 +78,11 @@ export function slateIssues(
 }
 
 /** "7:15 PM ET" — the slate as a manager names it. */
-export function slateClock(slate: Date): string {
+function slateClock(slate: Date): string {
   return `${new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(slate)} ET`
 }
 
-export type SlateLockMessage = { title: string; body: string; actionHref: string }
+type SlateLockMessage = { title: string; body: string; actionHref: string }
 
 const BODY_MAX = 280
 
@@ -116,7 +116,7 @@ function names(ps: readonly OptimizerPlayer[]): string {
  * `partial` marks a swap with moves left for later games. The line itself does not say so: the
  * message says it ONCE (see `slateLockBody`), because per line it cost ~60 of 280 characters.
  */
-export type SlateIssueLine = { text: string; partial: boolean }
+type SlateIssueLine = { text: string; partial: boolean }
 
 export function slateIssueLine(issue: LineupIssue, inSlate: (p: OptimizerPlayer) => boolean): SlateIssueLine | null {
   if (issue.kind === 'empty_slots') {

@@ -60,7 +60,7 @@ export type PlayerMove = {
 /** The three screens a move lands on, as `movePath` names them. */
 export type MoveScreen = 'Roster' | 'Lineup' | 'Waivers'
 
-export type PlayerMoveParts = {
+type PlayerMoveParts = {
   /** `movePath`'s pieces: the platform label, the league's name (null → "League"), the screen. */
   path: { platform: string; league: string | null; screen: MoveScreen }
 } & (

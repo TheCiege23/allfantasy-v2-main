@@ -18,7 +18,7 @@ import type { SportType, ScoringRuleDefinition, ScoringTemplateDefinition } from
 /** Bumped whenever a template definition or stat key changes. */
 export const SCORING_DEFAULTS_REGISTRY_VERSION = '2026-04-20.1'
 
-export interface LeagueSettingsForScoringDefaults {
+interface LeagueSettingsForScoringDefaults {
   scoring_format?: string | null
   leagueVariant?: string | null
   idpScoringPreset?: string | null

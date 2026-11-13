@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { findSportsPlayersByLeagueIds } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
-export type AutoCoachRosterPlayer = {
+type AutoCoachRosterPlayer = {
   /** The roster id — what `excludedPlayerIds` stores and what the engine compares against. */
   id: string
   name: string

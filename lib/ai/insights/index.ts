@@ -20,22 +20,10 @@ export { computeCommissionerRecap } from "./commissionerRecap"
 export { computePoolParity } from "./poolParity"
 export { computeUpsetImpact } from "./upsetImpact"
 
-// ── Result types ───────────────────────────────────────────────────────────────
-export type { RankChange, LeaderboardScenario, LeaderboardShift } from "./leaderboardMovement"
-export type { MaxPossibleResult, MaxPossibleSummary } from "./maxPossiblePoints"
-export type { ChampionLeverage, ChampionPickLeverageResult } from "./championPickLeverage"
 export type {
-  GroupTeamStanding,
-  GroupAdvancementStatus,
   GroupAdvancementResult,
 } from "./groupAdvancement"
-export type { MatchSwingScore, MatchupSwingSummary } from "./matchupSwingScore"
-export type { RootingNeed, RootingGuideResult } from "./rootingGuide"
-export type { IncompleteEntry, IncompletePicksResult } from "./incompletePicks"
-export type { CommissionerRecapResult } from "./commissionerRecap"
-export type { PoolParityResult } from "./poolParity"
-export type { UpsetImpactResult, UpsetImpactSummary } from "./upsetImpact"
-export type { BracketPathNode, BracketPathResult } from "./bracketPath"
+export type { BracketPathResult } from "./bracketPath"
 
 // ── Shared input types ─────────────────────────────────────────────────────────
-export type { InsightEntry, InsightPick, InsightMatch, InsightPool } from "./types"
+export type { InsightEntry, InsightMatch, InsightPool } from "./types"

@@ -13,7 +13,7 @@
 import { dynastyValue } from './dynastyPlayerValue'
 import type { DynastyPlayerFact, DynastyWarRoomContext } from './types'
 
-export interface DynastyLineupAssignment {
+interface DynastyLineupAssignment {
   position: string
   playerId: string | null
   playerName: string | null

@@ -14,7 +14,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type MarchMadnessContext = {
+type MarchMadnessContext = {
   poolId: string
   poolName: string
   totalEntries: number
@@ -30,7 +30,7 @@ export type MarchMadnessContext = {
   }>
 }
 
-export type MarchMadnessProviderData = {
+type MarchMadnessProviderData = {
   liveGames: Array<{
     gameId: string
     homeTeam: string; homeSeed: number; homeScore: number | null
@@ -40,7 +40,7 @@ export type MarchMadnessProviderData = {
   }>
 }
 
-export type MarchMadnessInsights = {
+type MarchMadnessInsights = {
   upsetAlerts: Array<{
     game: string
     seedDifferential: number

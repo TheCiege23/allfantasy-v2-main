@@ -60,14 +60,14 @@ export function parseAutoCoachUserPreferences(raw: unknown): AutoCoachUserPrefer
 /**
  * Check if player is excluded from swaps
  */
-export function isPlayerExcluded(playerId: string, prefs: AutoCoachUserPreferences): boolean {
+function isPlayerExcluded(playerId: string, prefs: AutoCoachUserPreferences): boolean {
   return (prefs.excludedPlayerIds ?? []).includes(playerId)
 }
 
 /**
  * Check if position has swap disabled
  */
-export function isPositionDisabled(position: string, prefs: AutoCoachUserPreferences): boolean {
+function isPositionDisabled(position: string, prefs: AutoCoachUserPreferences): boolean {
   const override = (prefs.positionOverrides ?? {})[position.toUpperCase()]
   return override?.disabled === true
 }

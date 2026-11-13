@@ -8,7 +8,7 @@ import type { LeagueSport } from '@prisma/client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type BestBallEligibleSport = 'NFL' | 'NCAAF'
+type BestBallEligibleSport = 'NFL' | 'NCAAF'
 
 export const BEST_BALL_CANONICAL_DRAFT_TYPE_IDS = [
   'snake',
@@ -18,12 +18,12 @@ export const BEST_BALL_CANONICAL_DRAFT_TYPE_IDS = [
   'auto',
 ] as const
 
-export type BestBallCanonicalDraftType = (typeof BEST_BALL_CANONICAL_DRAFT_TYPE_IDS)[number]
+type BestBallCanonicalDraftType = (typeof BEST_BALL_CANONICAL_DRAFT_TYPE_IDS)[number]
 
 type EngineDraftType = 'snake' | 'linear' | 'auction'
 type DraftExecutionMode = 'live' | 'offline' | 'auto'
 
-export interface BestBallRosterTemplate {
+interface BestBallRosterTemplate {
   rosterMode: 'best_ball'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -38,7 +38,7 @@ export interface BestBallRosterTemplate {
   draftablePlayerPositions: string[]
 }
 
-export interface BestBallDraftSettings {
+interface BestBallDraftSettings {
   draftType: EngineDraftType
   requestedDraftType: BestBallCanonicalDraftType
   draftExecutionMode: DraftExecutionMode
@@ -58,7 +58,7 @@ export interface BestBallDraftSettings {
   offlineEntryTracking: boolean
 }
 
-export interface BestBallDefaultContract {
+interface BestBallDefaultContract {
   sport: BestBallEligibleSport
   league_type: 'best_ball'
   leagueType: 'best_ball'

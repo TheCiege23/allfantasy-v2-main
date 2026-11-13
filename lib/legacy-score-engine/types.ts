@@ -7,11 +7,11 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export const LEGACY_SPORTS = [...SUPPORTED_SPORTS] as const
 
-export const LEGACY_ENTITY_TYPES = ['MANAGER', 'TEAM', 'FRANCHISE'] as const
+const LEGACY_ENTITY_TYPES = ['MANAGER', 'TEAM', 'FRANCHISE'] as const
 export type LegacyEntityType = (typeof LEGACY_ENTITY_TYPES)[number]
 
 /** Evidence types that feed legacy dimensions. */
-export const LEGACY_EVIDENCE_TYPES = [
+const LEGACY_EVIDENCE_TYPES = [
   'championships',
   'playoff_appearances',
   'finals_appearances',

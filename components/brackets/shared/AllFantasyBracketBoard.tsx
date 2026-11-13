@@ -5,14 +5,14 @@ import { Trophy } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /** Public marketing assets under `public/` */
-export const ALLFANTASY_BRACKET_PREVIEW_IMAGE = "/images/brackets/allfantasy-bracket-preview.png"
-export const ALLFANTASY_BRACKET_PREVIEW_VIDEO = "/videos/brackets/allfantasy-bracket-preview.mp4"
+const ALLFANTASY_BRACKET_PREVIEW_IMAGE = "/images/brackets/allfantasy-bracket-preview.png"
+const ALLFANTASY_BRACKET_PREVIEW_VIDEO = "/videos/brackets/allfantasy-bracket-preview.mp4"
 
-export type AllFantasyBracketBoardMode = "preview" | "pick" | "ai"
+type AllFantasyBracketBoardMode = "preview" | "pick" | "ai"
 
-export type AllFantasyBracketPickPayload = { matchId: string; side: "home" | "away" }
+type AllFantasyBracketPickPayload = { matchId: string; side: "home" | "away" }
 
-export type AllFantasyBracketBoardProps = {
+type AllFantasyBracketBoardProps = {
   title?: string
   subtitle?: string
   mode: AllFantasyBracketBoardMode

@@ -9,9 +9,9 @@ import { computeWeeklyWinnings, type InfectionPair } from '@/lib/zombie/weeklyWi
 import type { Beta2025WinningsContext } from './beta2025Winnings'
 import type { NativeWeekResult } from '@/lib/zombie/ZombieInfectionEngine'
 
-export type ZombieOutcomeKind = 'infection' | 'mauling' | 'bashing'
+type ZombieOutcomeKind = 'infection' | 'mauling' | 'bashing'
 
-export type ZombieMatchupSide = { rosterId: string; name: string; status: string; score: number }
+type ZombieMatchupSide = { rosterId: string; name: string; status: string; score: number }
 
 export type ZombieMatchupView = {
   id: string

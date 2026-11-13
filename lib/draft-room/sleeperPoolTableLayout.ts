@@ -50,7 +50,7 @@ function statColumnWidth(def: DraftStatColumnDef, sport: ReturnType<typeof norma
   return Math.min(78, Math.max(44, 36 + def.label.length * 5))
 }
 
-export type SleeperPoolTableLayoutExtras = {
+type SleeperPoolTableLayoutExtras = {
   /**
    * Pick label (e.g. "4.16") for the viewer's next pick. When set, a LEFT @ column follows
    * AF ADP with each player's estimated chance of still being on the board there.

@@ -179,7 +179,7 @@ async function findLatestCreatedAt<TWhere>(
   return latest?.createdAt.toISOString() ?? null
 }
 
-export interface QueryPlayerStatsOptions {
+interface QueryPlayerStatsOptions {
   playerId: string
   sport: string
   season?: number
@@ -188,7 +188,7 @@ export interface QueryPlayerStatsOptions {
   limit?: number
 }
 
-export async function queryPlayerStats(options: QueryPlayerStatsOptions) {
+async function queryPlayerStats(options: QueryPlayerStatsOptions) {
   const sport = normalizeSportForWarehouse(options.sport)
   return getPlayerGameFactsForPlayer(options.playerId, sport, {
     season: options.season,
@@ -198,7 +198,7 @@ export async function queryPlayerStats(options: QueryPlayerStatsOptions) {
   })
 }
 
-export async function queryPlayerFantasyPointsByPeriod(
+async function queryPlayerFantasyPointsByPeriod(
   playerId: string,
   sport: string,
   season: number,
@@ -212,13 +212,13 @@ export async function queryPlayerFantasyPointsByPeriod(
   )
 }
 
-export interface QueryLeagueResultsOptions {
+interface QueryLeagueResultsOptions {
   leagueId: string
   season?: number
   weekOrPeriod?: number
 }
 
-export async function queryLeagueResults(options: QueryLeagueResultsOptions) {
+async function queryLeagueResults(options: QueryLeagueResultsOptions) {
   const { leagueId, season, weekOrPeriod } = options
   if (season == null) {
     const summary = await getLeagueHistorySummary(leagueId)
@@ -237,11 +237,11 @@ export async function queryLeagueResults(options: QueryLeagueResultsOptions) {
   return { matchups, standings, season }
 }
 
-export async function queryStandingsBySeason(leagueId: string, seasons: number[]) {
+async function queryStandingsBySeason(leagueId: string, seasons: number[]) {
   return getStandingsBySeasonForLeague(leagueId, seasons)
 }
 
-export async function queryTeamPointsByPeriod(
+async function queryTeamPointsByPeriod(
   leagueId: string,
   season: number,
   weekOrPeriod?: number
@@ -249,22 +249,22 @@ export async function queryTeamPointsByPeriod(
   return getTeamPointsByPeriodForLeague(leagueId, season, weekOrPeriod)
 }
 
-export interface QueryDraftLogsOptions {
+interface QueryDraftLogsOptions {
   leagueId: string
   season?: number
 }
 
-export async function queryDraftLogs(options: QueryDraftLogsOptions) {
+async function queryDraftLogs(options: QueryDraftLogsOptions) {
   return getDraftHistoryForLeague(options.leagueId, options.season)
 }
 
-export interface QueryTradeLogsOptions {
+interface QueryTradeLogsOptions {
   leagueId: string
   since?: Date
   limit?: number
 }
 
-export async function queryTradeLogs(options: QueryTradeLogsOptions) {
+async function queryTradeLogs(options: QueryTradeLogsOptions) {
   return getTransactionHistoryForLeague(
     options.leagueId,
     options.since,
@@ -272,11 +272,11 @@ export async function queryTradeLogs(options: QueryTradeLogsOptions) {
   )
 }
 
-export async function queryTransactionVolume(leagueIds: string[], since: Date) {
+async function queryTransactionVolume(leagueIds: string[], since: Date) {
   return getTransactionVolumeByLeague(leagueIds, since)
 }
 
-export interface QuerySimulationOutputsOptions {
+interface QuerySimulationOutputsOptions {
   leagueId: string
   sport: string
   season?: number
@@ -285,7 +285,7 @@ export interface QuerySimulationOutputsOptions {
   teamBId?: string
 }
 
-export async function querySimulationOutputs(options: QuerySimulationOutputsOptions) {
+async function querySimulationOutputs(options: QuerySimulationOutputsOptions) {
   const { leagueId, season, weekOrPeriod, teamAId, teamBId } = options
   const matchupWhere: { leagueId: string; weekOrPeriod?: number; teamAId?: string; teamBId?: string } = {
     leagueId,
@@ -311,7 +311,7 @@ export async function querySimulationOutputs(options: QuerySimulationOutputsOpti
   return { matchupSimulations: matchupSims, seasonSimulations: seasonSims }
 }
 
-export async function queryRosterSnapshots(
+async function queryRosterSnapshots(
   leagueId: string,
   teamId: string,
   season?: number,
@@ -321,21 +321,21 @@ export async function queryRosterSnapshots(
   return getRosterSnapshotsForTeam(leagueId, teamId, season, fromWeek, toWeek)
 }
 
-export async function getLeagueSummary(leagueId: string, season?: number) {
+async function getLeagueSummary(leagueId: string, season?: number) {
   return getLeagueHistorySummary(leagueId, season ? { season } : undefined)
 }
 
-export async function getLeagueSummaryForAI(leagueId: string, season?: number) {
+async function getLeagueSummaryForAI(leagueId: string, season?: number) {
   return getLeagueWarehouseSummaryForAI(leagueId, season)
 }
 
-export interface QueryWarehouseOverviewOptions {
+interface QueryWarehouseOverviewOptions {
   leagueId?: string
   sport?: string
   season?: number
 }
 
-export async function queryWarehouseOverview(
+async function queryWarehouseOverview(
   options: QueryWarehouseOverviewOptions
 ): Promise<WarehouseOverview> {
   const sport = await resolveSportForOverview(options.leagueId, options.sport)
@@ -432,14 +432,14 @@ export async function queryWarehouseOverview(
   })
 }
 
-export interface QueryWarehouseActivityFeedOptions {
+interface QueryWarehouseActivityFeedOptions {
   leagueId?: string
   sport?: string
   season?: number
   limit?: number
 }
 
-export async function queryWarehouseActivityFeed(
+async function queryWarehouseActivityFeed(
   options: QueryWarehouseActivityFeedOptions
 ): Promise<WarehouseActivityEntry[]> {
   const sport = await resolveSportForOverview(options.leagueId, options.sport)
@@ -706,7 +706,7 @@ export async function queryWarehouseActivityFeed(
   )
 }
 
-export interface QuerySimulationAnalyticsOptions {
+interface QuerySimulationAnalyticsOptions {
   leagueId: string
   sport: string
   season?: number
@@ -715,14 +715,14 @@ export interface QuerySimulationAnalyticsOptions {
   teamBId?: string
 }
 
-export async function querySimulationAnalytics(
+async function querySimulationAnalytics(
   options: QuerySimulationAnalyticsOptions
 ): Promise<WarehouseSimulationAnalytics> {
   const result = await querySimulationOutputs(options)
   return buildWarehouseSimulationAnalytics(result)
 }
 
-export interface QueryCentralAnalyticsSnapshotOptions {
+interface QueryCentralAnalyticsSnapshotOptions {
   leagueId?: string
   sport?: string
   season?: number
@@ -730,7 +730,7 @@ export interface QueryCentralAnalyticsSnapshotOptions {
   weekOrPeriod?: number
 }
 
-export async function queryCentralAnalyticsSnapshot(options: QueryCentralAnalyticsSnapshotOptions) {
+async function queryCentralAnalyticsSnapshot(options: QueryCentralAnalyticsSnapshotOptions) {
   const overview = await queryWarehouseOverview({
     leagueId: options.leagueId,
     sport: options.sport,

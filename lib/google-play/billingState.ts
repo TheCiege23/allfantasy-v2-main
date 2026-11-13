@@ -1,7 +1,7 @@
 import { playProduct, PLAY_BASE_PLAN } from "./billingCatalog"
 import { PlayBillingError } from "./billingConfig"
 
-export type VerifiedPlayPurchase = {
+type VerifiedPlayPurchase = {
   product: NonNullable<ReturnType<typeof playProduct>>
   state: string; status: "active" | "canceled" | "grace" | "expired" | "pending"
   start: Date | null; end: Date | null; accountId: string | null; linkedToken: string | null

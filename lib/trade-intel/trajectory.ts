@@ -132,7 +132,7 @@ export async function loadFutureLeans(args: {
   return out
 }
 
-export type UsageSignal = {
+type UsageSignal = {
   games: number
   /** Share of team offensive snaps, when the stat is present. */
   snapShare: number | null
@@ -271,7 +271,7 @@ export async function loadUsage(args: {
  * wrong answer about the class of asset dynasty managers pay the biggest
  * premium for.
  */
-export type ExperienceSignal = {
+type ExperienceSignal = {
   yearsExp: number
   rookie: boolean
 }

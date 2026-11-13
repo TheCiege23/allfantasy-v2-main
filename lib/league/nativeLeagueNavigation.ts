@@ -2,7 +2,7 @@ import type { UserLeague } from '@/app/dashboard/types'
 import { resolveLeagueHomeHrefFromListRow } from '@/lib/dashboard/league-list-destination'
 
 export type WorkspaceTab = { id: string; label: string }
-export type WorkspaceNavItem = WorkspaceTab & { icon: string }
+type WorkspaceNavItem = WorkspaceTab & { icon: string }
 
 export function nativeLeaguePhase(league: Pick<UserLeague, 'lifecycleState' | 'status'>) {
   const phase = String(league.lifecycleState || league.status || 'setup').toLowerCase()
@@ -14,7 +14,7 @@ export function nativeLeaguePhase(league: Pick<UserLeague, 'lifecycleState' | 's
 }
 
 /** A `t` from useLanguage/useOptionalLanguage: returns the key itself when it has no entry. */
-export type NavTranslate = (key: string) => string
+type NavTranslate = (key: string) => string
 
 /** English fallback when no `t` is passed or the key is missing, so a server render or a test never shows a raw key. */
 function translator(t?: NavTranslate) {
@@ -95,7 +95,7 @@ const SALARY_CAP_NAV: Record<string, [string, string, string]> = {
 }
 
 /** Group ids are stable across languages; `title` is what the reader sees. */
-export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'bigbrother' | 'salarycap' | 'week' | 'more'
+type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'bigbrother' | 'salarycap' | 'week' | 'more'
 
 export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false, t?: NavTranslate) {
   const tr = translator(t)

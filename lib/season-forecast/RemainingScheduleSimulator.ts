@@ -7,7 +7,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export interface RemainingScheduleInput {
+interface RemainingScheduleInput {
   leagueId: string
   season: number
   currentWeek: number

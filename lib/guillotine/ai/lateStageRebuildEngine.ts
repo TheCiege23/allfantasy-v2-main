@@ -1,4 +1,4 @@
-export type LateStageStrategy = {
+type LateStageStrategy = {
   headline: string
   priorities: string[]
   faabNote: string

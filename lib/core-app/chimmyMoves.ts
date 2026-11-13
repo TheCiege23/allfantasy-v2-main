@@ -36,7 +36,7 @@ export type ChimmyMove = {
   parts?: ChimmyMoveParts
 }
 
-export type ChimmyMoveParts =
+type ChimmyMoveParts =
   | {
       verb: 'bench' | 'check'
       name: string

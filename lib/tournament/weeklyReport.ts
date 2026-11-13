@@ -1,7 +1,7 @@
 import type { StandingsBoard } from './standingsBoard'
 
-export type WeeklyResult = { leagueId: string; rosterId: string; pointsFor: number; updatedAt: Date | string }
-export type ReportSheet = { name: string; rows: Array<Array<string | number>> }
+type WeeklyResult = { leagueId: string; rosterId: string; pointsFor: number; updatedAt: Date | string }
+type ReportSheet = { name: string; rows: Array<Array<string | number>> }
 export type WeeklyReport = { season: number; week: number; sheets: ReportSheet[] }
 
 /** Flatten every conference; missing scores stay blank, never zero. */

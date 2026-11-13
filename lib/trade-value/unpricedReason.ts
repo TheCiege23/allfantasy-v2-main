@@ -26,7 +26,7 @@
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { isKickerPosition } from '@/lib/af-projections/kickerScoring'
 
-export type UnpricedReasonCode =
+type UnpricedReasonCode =
   | 'unidentified'
   | 'no_feed_for_sport'
   | 'defender'

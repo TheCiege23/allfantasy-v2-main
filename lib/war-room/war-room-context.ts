@@ -2,7 +2,7 @@ import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scop
 import { prisma } from '@/lib/prisma'
 import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 
-export type WarRoomAiContext = {
+type WarRoomAiContext = {
   leagueId: string
   sport: SupportedSport
   /** True when user has AF War Room subscription (bypasses league-only gate for personal tools). */

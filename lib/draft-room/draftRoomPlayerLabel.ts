@@ -8,7 +8,7 @@
  *
  * Pure and client-safe: the card and the board/queue chip both read it, so they cannot disagree.
  */
-export type DraftRoomPlayerLabel = 'rookie' | 'prospect'
+type DraftRoomPlayerLabel = 'rookie' | 'prospect'
 
 export type DraftRoomPlayerLabelInput = {
   isRookie?: boolean | null

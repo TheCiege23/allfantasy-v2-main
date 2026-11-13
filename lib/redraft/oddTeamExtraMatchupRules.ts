@@ -44,8 +44,8 @@ import { coinFlipDraw } from '@/lib/standings/tiebreakerOrder'
 
 export const EXTRA_MATCHUP_SETTINGS_KEY = 'odd_team_extra_matchup'
 
-export type ExtraMatchupOpponentRule = 'top_scorer' | 'median'
-export type ExtraMatchupScoring = 'leftover_only' | 'both'
+type ExtraMatchupOpponentRule = 'top_scorer' | 'median'
+type ExtraMatchupScoring = 'leftover_only' | 'both'
 
 export type ExtraMatchupSettings = {
   enabled: boolean
@@ -53,14 +53,14 @@ export type ExtraMatchupSettings = {
   scoring: ExtraMatchupScoring
 }
 
-export const DEFAULT_EXTRA_MATCHUP_SETTINGS: ExtraMatchupSettings = {
+const DEFAULT_EXTRA_MATCHUP_SETTINGS: ExtraMatchupSettings = {
   enabled: false,
   opponent: 'top_scorer',
   scoring: 'leftover_only',
 }
 
 /** Why this opponent: the rule that applied, or the week-1 fallback that stood in for it. */
-export type ExtraMatchupReason = 'top_scorer' | 'median' | 'projected' | 'seeded_draw'
+type ExtraMatchupReason = 'top_scorer' | 'median' | 'projected' | 'seeded_draw'
 
 /** What is stored on the leftover team's bye row. */
 export type ExtraMatchupRecord = {
@@ -165,7 +165,7 @@ export function pickExtraMatchupOpponent(input: {
   return { opponentRosterId: pick, reason: 'seeded_draw' }
 }
 
-export type ExtraMatchupRow = {
+type ExtraMatchupRow = {
   id?: string | null
   week: number
   homeRosterId: string
@@ -180,7 +180,7 @@ function complete(row: Pick<ExtraMatchupRow, 'status'>): boolean {
   return row.status === 'final' || row.status === 'completed'
 }
 
-export type ExtraMatchupResult = {
+type ExtraMatchupResult = {
   week: number
   leftoverRosterId: string
   opponentRosterId: string
@@ -275,14 +275,14 @@ function scored(row: Pick<ExtraMatchupRow, 'status' | 'homeScore' | 'awayScore'>
   return complete(row) || row.status === 'active' || Number(row.homeScore ?? 0) !== 0 || Number(row.awayScore ?? 0) !== 0
 }
 
-export function extraMatchupLabel(role: 'leftover' | 'opponent', teamName: string, reason: ExtraMatchupReason, countsForYou: boolean): string {
+function extraMatchupLabel(role: 'leftover' | 'opponent', teamName: string, reason: ExtraMatchupReason, countsForYou: boolean): string {
   const why = describeExtraMatchupReason(reason)
   return role === 'leftover'
     ? `Extra matchup vs ${teamName} (${why})`
     : `Extra matchup: ${teamName} plays you this week (you were ${why})${countsForYou ? ' — it counts for you too' : ' — only your own game counts for you'}`
 }
 
-export function extraMatchupLine(label: string, yourScore: number | null, theirScore: number | null): string {
+function extraMatchupLine(label: string, yourScore: number | null, theirScore: number | null): string {
   return yourScore == null || theirScore == null ? label : `${label} · ${yourScore.toFixed(1)}–${theirScore.toFixed(1)}`
 }
 

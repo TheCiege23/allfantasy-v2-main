@@ -10,7 +10,7 @@
  */
 import type { InsightPool } from "./types"
 
-export type MaxPossibleResult = {
+type MaxPossibleResult = {
   entryId: string
   displayName: string
   rank: number
@@ -25,7 +25,7 @@ export type MaxPossibleResult = {
   isCurrentUser: boolean
 }
 
-export type MaxPossibleSummary = {
+type MaxPossibleSummary = {
   entries: MaxPossibleResult[]
   eliminatedCount: number
   stillAliveCount: number

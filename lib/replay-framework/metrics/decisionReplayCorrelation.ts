@@ -77,9 +77,9 @@ interface LineupRow {
  *   "wasted acquisition" case.
  * - `active`: appeared and was started at least once.
  */
-export type AcquiredPlayerStatus = 'active' | 'retained_but_unused' | 'churned_away' | 'insufficient_week_coverage' | 'draft_pick'
+type AcquiredPlayerStatus = 'active' | 'retained_but_unused' | 'churned_away' | 'insufficient_week_coverage' | 'draft_pick'
 
-export interface AcquiredPlayerImpact {
+interface AcquiredPlayerImpact {
   providerAssetId: string
   name: string
   status: AcquiredPlayerStatus
@@ -91,7 +91,7 @@ export interface AcquiredPlayerImpact {
   totalPointsWhileStarted: number
 }
 
-export interface MatchedWindowResult {
+interface MatchedWindowResult {
   weeksPerSide: number
   weeksAvailableBefore: number
   weeksAvailableAfter: number
@@ -105,7 +105,7 @@ export interface MatchedWindowResult {
   deltaPointsLeftOnBench: number | null
 }
 
-export interface TradeReplayLineupImpact {
+interface TradeReplayLineupImpact {
   tradeReplayId: string
   providerLeagueId: string
   season: number

@@ -14,7 +14,7 @@ import {
 } from '@/lib/playoff-runtime/playoffSeries'
 
 /** One length per round for a bracket of `rounds`, from the stored list (a missing round repeats the last). */
-export function seriesLengthsForRounds(stored: readonly number[] | null, rounds: number): number[] {
+function seriesLengthsForRounds(stored: readonly number[] | null, rounds: number): number[] {
   return Array.from({ length: Math.max(0, rounds) }, (_, i) => seriesLengthForRound(stored, i + 1))
 }
 

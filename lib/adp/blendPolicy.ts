@@ -62,15 +62,15 @@ export interface BlendWeights {
  * drafts out of every existing league's number. Same order of magnitude as `app`: both are
  * observed human drafts, and shrinkage already discounts whichever is thinner.
  */
-export const DEFAULT_IMPORTED_WEIGHT = 30
+const DEFAULT_IMPORTED_WEIGHT = 30
 
-export interface BlendSource {
+interface BlendSource {
   adp: number
   /** Drafts behind this value, for our own sources. Ignored for `api` and `custom`. */
   sampleSize?: number | null
 }
 
-export interface BlendInput {
+interface BlendInput {
   api?: BlendSource | null
   app?: BlendSource | null
   ai?: BlendSource | null
@@ -78,7 +78,7 @@ export interface BlendInput {
   custom?: (BlendSource & { locked?: boolean }) | null
 }
 
-export interface BlendResult {
+interface BlendResult {
   adp: number
   /**
    * The weight each source ACTUALLY contributed, after confidence scaling and presence

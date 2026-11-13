@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react'
 
 /** `draft_as_me` (AF Pro): as soon as the manager is on the clock, the queue goes first, then Chimmy picks the way they draft. */
-export type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
+type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
 
 export type ViewerAutopickData = {
   enabled: boolean
@@ -12,7 +12,7 @@ export type ViewerAutopickData = {
   updatedAt: string | null
 }
 
-export type AutopickMeToggleProps = {
+type AutopickMeToggleProps = {
   viewerAutopick: ViewerAutopickData | null | undefined
   leagueId: string
   onUpdate: (updated: ViewerAutopickData) => void

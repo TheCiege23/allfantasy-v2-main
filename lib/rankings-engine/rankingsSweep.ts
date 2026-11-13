@@ -40,7 +40,7 @@ import { saveRankingsSnapshot } from './snapshots'
 /** Off unless explicitly enabled. Landing this changes nothing until an operator flips it. */
 export const RANKINGS_SWEEP_FLAG = 'DECISION_OS_RANKINGS_SWEEP_ENABLED'
 
-export function rankingsSweepEnabled(): boolean {
+function rankingsSweepEnabled(): boolean {
   return process.env[RANKINGS_SWEEP_FLAG] === 'true'
 }
 
@@ -131,7 +131,7 @@ export function emptyRankingsSweepCounts(): RankingsSweepCounts {
   return { considered: 0, due: 0, written: 0, skipped: 0, emptyRoster: 0, failed: 0, skippedForTime: 0, errors: [] }
 }
 
-export interface RankingsSweepDeps {
+interface RankingsSweepDeps {
   prisma?: typeof defaultPrisma
   budget: RunBudget
   leagueCap?: number

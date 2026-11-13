@@ -63,16 +63,16 @@ export type NflRedraftEvidenceSurface =
   | 'audit'
   | 'debug'
 
-export type NflRedraftEvidenceConfidence = 'high' | 'medium' | 'low' | 'unknown'
+type NflRedraftEvidenceConfidence = 'high' | 'medium' | 'low' | 'unknown'
 
-export type NflRedraftEvidenceErrorMetadata = {
+type NflRedraftEvidenceErrorMetadata = {
   code: NflRedraftProviderError['code'] | string
   retryable: boolean
   message: string
   retryAfterMs: number | null
 }
 
-export type NflRedraftEvidenceRateLimitMetadata = {
+type NflRedraftEvidenceRateLimitMetadata = {
   maxRequestsPerMinute: number
   burst: number
   retryBackoffMs: number
@@ -140,7 +140,7 @@ type BuildSpecificPacketOptions = {
   internalDebugReference?: { providerArchiveKey?: string | null } | null
 }
 
-export type BuildSurfaceEvidencePacketOptions = BuildSpecificPacketOptions & {
+type BuildSurfaceEvidencePacketOptions = BuildSpecificPacketOptions & {
   evidenceType: Extract<
     NflRedraftEvidenceType,
     'roster_context' | 'matchup_context' | 'waiver_context' | 'trade_context' | 'draft_context'

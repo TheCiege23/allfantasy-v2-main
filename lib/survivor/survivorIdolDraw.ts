@@ -32,11 +32,11 @@ export type SurvivorRandomInt = (maxExclusive: number) => number
 
 export type SurvivorIdolDrawMode = 'random' | 'pick'
 
-export const SURVIVOR_IDOL_DRAW_RULES = { maxTier3: 1, maxPerCategory: 2 } as const
+const SURVIVOR_IDOL_DRAW_RULES = { maxTier3: 1, maxPerCategory: 2 } as const
 
 type DrawType = Pick<SurvivorIdolTypeDef, 'id' | 'category' | 'tier' | 'alwaysIn' | 'sortOrder' | 'enginePowerType'>
 
-export type SurvivorIdolDrawResult =
+type SurvivorIdolDrawResult =
   | { ok: true; typeIds: string[] }
   | { ok: false; code: 'invalid_count' | 'invalid_pick' | 'infeasible'; error: string }
 

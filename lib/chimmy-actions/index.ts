@@ -15,8 +15,6 @@ export type {
   AIActionEvent,
   SavedAIRecommendation,
   UnifiedSavedRecommendation,
-  SavedRecommendationStatus,
-  RecommendationCategory,
   BindingInput,
   AIWorkflowType,
   AIWorkflowPrefill,
@@ -27,26 +25,16 @@ export {
   AI_ACTION_REGISTRY,
   getActionMeta,
 } from './AIActionRegistry'
-export type { ActionMeta } from './AIActionRegistry'
 
 // ── Permission Guard ───────────────────────────────────────────────────────────
 export {
-  validateAIActionPermissions,
-  checkLeagueStateConstraints,
   evaluateAIActionDecision,
   getAIActionClass,
   applyAvailabilityToAction,
 } from './AIActionPermissionGuard'
-export type {
-  PermissionCheckResult,
-  AIActionClass,
-  AIActionDecisionStatus,
-  AIActionDecision,
-} from './AIActionPermissionGuard'
 
 // ── Sport Adapter ──────────────────────────────────────────────────────────────
 export {
-  getActionsForSport,
   isActionValidForSport,
   getSportSpecificPayload,
 } from './AIActionSportAdapter'
@@ -78,8 +66,6 @@ export {
 } from './AIActionAnalytics'
 export type {
   ChimmyLearningSnapshot,
-  MeasurableOutcomeAdapter,
-  MeasurableOutcomeEvent,
 } from './AIActionAnalytics'
 
 // ── Workflow Prefiller ─────────────────────────────────────────────────────────
@@ -101,9 +87,6 @@ export type {
 // ── Server Validation ────────────────────────────────────────────────────────
 export { validateActionExecutionServerSide } from './AIActionServerValidation'
 export type { ServerValidationResult } from './AIActionServerValidation'
-
-// ── Context Bridge ─────────────────────────────────────────────────────────────
-export { buildActionContext } from './buildActionContext'
 
 // ── Feed Model ─────────────────────────────────────────────────────────────────
 export type { ChimmyFeedRecommendation } from './AIActionModel'

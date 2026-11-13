@@ -12,7 +12,7 @@ import type { ComponentType } from 'react'
 import { MessageSquare, Settings, ShieldCheck, Users, Wand2 } from 'lucide-react'
 import type { AccentTone } from '@/lib/create-league-v2/theme'
 
-export interface LeagueHomeQuickCardsProps {
+interface LeagueHomeQuickCardsProps {
   leagueId: string
   accent: AccentTone
   /** Optional override — if provided, the Team card links directly to a team page. */

@@ -44,7 +44,7 @@ export interface ResultsRosterPanelPick {
   isDevy?: boolean
 }
 
-export interface ResultsRosterPanelProps {
+interface ResultsRosterPanelProps {
   teams: readonly ResultsRosterPanelTeam[]
   /** Picks across ALL teams; the panel filters by focused rosterId. */
   picks: readonly ResultsRosterPanelPick[]

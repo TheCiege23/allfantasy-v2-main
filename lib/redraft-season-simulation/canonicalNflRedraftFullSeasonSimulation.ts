@@ -58,7 +58,7 @@ import {
   type NflRedraftCommunicationPlan,
 } from '@/lib/league-notifications/nflRedraftCommunicationRuntime'
 
-export const G43_FULL_SEASON_SIMULATION_VERSION = 'g43-nfl-redraft-full-season-v1' as const
+const G43_FULL_SEASON_SIMULATION_VERSION = 'g43-nfl-redraft-full-season-v1' as const
 
 type SimTeam = {
   rosterId: string
@@ -72,7 +72,7 @@ type SimTeam = {
   sections: RosterRuntimeSections
 }
 
-export type G43SimulationRosterSummary = {
+type G43SimulationRosterSummary = {
   rosterId: string
   displayName: string
   valid: boolean
@@ -80,7 +80,7 @@ export type G43SimulationRosterSummary = {
   bench: string[]
 }
 
-export type G43SimulationWeekSummary = {
+type G43SimulationWeekSummary = {
   week: number
   matchupScores: Array<{
     matchupId: string
@@ -100,7 +100,7 @@ export type G43SimulationWeekSummary = {
   }>
 }
 
-export type G43FullSeasonSimulationResult = {
+type G43FullSeasonSimulationResult = {
   version: typeof G43_FULL_SEASON_SIMULATION_VERSION
   rules: CanonicalLeagueRules
   draft: {
@@ -744,7 +744,7 @@ function duplicatePlayerIds(teams: SimTeam[]): string[] {
  * divisions run widens the field to every team, turns on the commissioner's division rule
  * (lib/league/divisions/leagueDivisions.ts) and NFL-style reseeding, and plays every round out.
  */
-export type G43SimulationOptions = {
+type G43SimulationOptions = {
   playoffTeams?: number
   divisionPlayoffRule?: 'top_seeds' | 'guaranteed' | 'none'
   reseed?: boolean

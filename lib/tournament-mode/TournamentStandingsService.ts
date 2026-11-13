@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { compareByTiebreakers, getBubbleSlotsPerConference } from './advancement-rules'
 import { getQualificationCutSlotsPerConference } from './tournament-sport-cutoffs'
 
-export interface UniversalStandingsRow {
+interface UniversalStandingsRow {
   leagueId: string
   leagueName: string | null
   conferenceId: string

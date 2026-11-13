@@ -108,7 +108,7 @@ const RESERVE_SWAP_TITLE: Record<'bench' | 'ir' | 'taxi' | 'devy', string> = {
   devy: 'Devy',
 }
 
-export type TeamTabProps = {
+type TeamTabProps = {
   league: UserLeague
   userTeam: LeagueTeam | null
   onPlayerClick: (playerId: string) => void

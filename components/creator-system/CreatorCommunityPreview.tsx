@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { MessageSquareMore, Trophy, Users } from 'lucide-react'
 import type { CreatorLeagueDto } from '@/lib/creator-system/types'
 
-export interface CreatorCommunityPreviewProps {
+interface CreatorCommunityPreviewProps {
   leagues: CreatorLeagueDto[]
   creatorSlug: string
   emptyMessage?: string

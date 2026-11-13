@@ -51,7 +51,7 @@ import '@/components/core-app/af-dash-v2.css'
  * ends up looking broken rather than honest. Where a number cannot be shown, the
  * reason is the copy.
  */
-export function DashboardV2({
+function DashboardV2({
   data,
   weekLabel = null,
   career = null,

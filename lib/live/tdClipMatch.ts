@@ -30,7 +30,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
  * so a team whose handle is wrong reads as a team with zero hits across a whole
  * slate — visible, not silent. Correct a handle here, not in a prompt.
  */
-export const NFL_X_HANDLES: Record<string, string> = {
+const NFL_X_HANDLES: Record<string, string> = {
   ARI: 'AZCardinals',
   ATL: 'AtlantaFalcons',
   BAL: 'Ravens',
@@ -65,7 +65,7 @@ export const NFL_X_HANDLES: Record<string, string> = {
   WAS: 'Commanders',
 }
 
-export const NFL_LEAGUE_HANDLE = 'NFL'
+const NFL_LEAGUE_HANDLE = 'NFL'
 
 /** The accounts to search for one play. Unknown teams simply contribute nothing. */
 export function clipHandlesFor(team: string | null, opponent: string | null): string[] {
@@ -81,7 +81,7 @@ export function clipHandlesFor(team: string | null, opponent: string | null): st
 /** X's epoch for status ids (Twitter snowflakes), in ms. */
 const X_SNOWFLAKE_EPOCH_MS = 1288834974657n
 
-export type XPostRef = {
+type XPostRef = {
   /** Null for the `x.com/i/status/<id>` form, which names no account. */
   handle: string | null
   statusId: string
@@ -137,11 +137,11 @@ export function parseXPostUrl(raw: unknown): XPostRef | null {
  * feed detects a play up to a couple of minutes after it happens (35s polling,
  * plus the vendor's own lag), so a clip can legitimately predate detection.
  */
-export const CLIP_EARLIEST_BEFORE_DETECTION_MS = 10 * 60_000
+const CLIP_EARLIEST_BEFORE_DETECTION_MS = 10 * 60_000
 /* A clip posted hours later is a recap package, not this play's clip. */
-export const CLIP_LATEST_AFTER_DETECTION_MS = 3 * 60 * 60_000
+const CLIP_LATEST_AFTER_DETECTION_MS = 3 * 60 * 60_000
 
-export type ClipRejection =
+type ClipRejection =
   | 'not-an-x-post'
   | 'handle-not-allowed'
   | 'posted-before-play'
@@ -173,10 +173,10 @@ export function validateClipCandidate(
  * first found nothing, and nothing past 4 hours — measuring how often the retry
  * rescues a miss is itself one of the pilot's answers.
  */
-export const CLIP_ATTEMPT_AGES_MS = [5 * 60_000, 30 * 60_000] as const
-export const CLIP_GIVE_UP_AGE_MS = 4 * 60 * 60_000
+const CLIP_ATTEMPT_AGES_MS = [5 * 60_000, 30 * 60_000] as const
+const CLIP_GIVE_UP_AGE_MS = 4 * 60 * 60_000
 /** A search claimed this recently is in flight in another invocation. */
-export const CLIP_CLAIM_TTL_MS = 3 * 60_000
+const CLIP_CLAIM_TTL_MS = 3 * 60_000
 
 export type ClipAttempt = {
   at: string
@@ -245,7 +245,7 @@ export function pickFromCitations(
   return { accepted, rejected }
 }
 
-export type ClipPilotSummary = {
+type ClipPilotSummary = {
   touchdowns: number
   searches: number
   found: number

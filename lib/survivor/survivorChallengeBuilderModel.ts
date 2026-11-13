@@ -59,9 +59,9 @@ export const CHALLENGE_BUILDER_KINDS = [
 ] as const
 export type ChallengeBuilderKind = (typeof CHALLENGE_BUILDER_KINDS)[number]
 
-export type ChallengeBuilderScope = 'individual' | 'tribe'
+type ChallengeBuilderScope = 'individual' | 'tribe'
 export type ChallengeBuilderStatus = 'scheduled' | 'open' | 'locked' | 'settling' | 'complete' | 'cancelled'
-export type ChallengeInputKind = 'number' | 'choice' | 'text' | 'sweep'
+type ChallengeInputKind = 'number' | 'choice' | 'text' | 'sweep'
 
 /**
  * Number kinds rank answers by distance; choice kinds have right and wrong answers; a puzzle takes a
@@ -94,7 +94,7 @@ export function challengeSettlementSource(config: Pick<ChallengeBuilderConfig, '
 }
 
 /** Kinds that need a stored game (closest without going over may instead take a typed target). */
-export function challengeNeedsGame(kind: ChallengeBuilderKind): boolean {
+function challengeNeedsGame(kind: ChallengeBuilderKind): boolean {
   return kind === 'game_total_closest' || kind === 'pick_winner' || kind === 'game_total_over_under'
 }
 
@@ -105,7 +105,7 @@ export function challengeNeedsGame(kind: ChallengeBuilderKind): boolean {
  */
 export const CHALLENGE_PLAYER_STATS = ['fantasy_points', 'pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td'] as const
 /** A stat key: one of `CHALLENGE_PLAYER_STATS`, or one of the sport's own (`CHALLENGE_SPORT_STATS`). */
-export type ChallengePlayerStat = string
+type ChallengePlayerStat = string
 
 /**
  * The per-player stats each sport STORES in `PlayerWeeklyScore.stats`, read from the ingestion code
@@ -117,7 +117,7 @@ export type ChallengePlayerStat = string
  * A stat listed here settles itself; any other stat on that sport is settled by the commissioner.
  * `fantasy_points` (the row's `fantasyPts`) settles for every sport.
  */
-export const CHALLENGE_SPORT_STATS: Readonly<Record<string, readonly string[]>> = {
+const CHALLENGE_SPORT_STATS: Readonly<Record<string, readonly string[]>> = {
   NFL: ['pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td'],
   NCAAF: ['pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td'],
   NBA: ['pts', 'reb', 'ast', 'threes', 'stl', 'blk'],
@@ -158,27 +158,27 @@ export function playerStatSupported(sport: string | null | undefined, stat: stri
   return stat === 'fantasy_points' || (CHALLENGE_SPORT_STATS[challengeSportKey(sport)] ?? []).includes(stat)
 }
 
-export function anytimeStatSupported(sport: string | null | undefined): boolean {
+function anytimeStatSupported(sport: string | null | undefined): boolean {
   return Boolean(CHALLENGE_ANYTIME_KEYS[challengeSportKey(sport)])
 }
 
 /** Every stat a player prop may name: the legacy list plus every sport's own. */
 const ALL_PLAYER_STATS: ReadonlySet<string> = new Set([...CHALLENGE_PLAYER_STATS, ...Object.values(CHALLENGE_SPORT_STATS).flat()])
 
-export type ChallengeOption = { id: string; label: string; /** Position leaders: the player this option is. */ playerId?: string }
+type ChallengeOption = { id: string; label: string; /** Position leaders: the player this option is. */ playerId?: string }
 
 /** One prop of a sweep: its own question and options. */
-export type ChallengeSweepProp = { id: string; question: string; options: ChallengeOption[] }
+type ChallengeSweepProp = { id: string; question: string; options: ChallengeOption[] }
 
 /** A puzzle: the commissioner's answer (never shown to managers before the result). */
-export type ChallengePuzzle = { answer: string; mode: 'first_correct' | 'fastest'; settle: 'exact' | 'manual' }
+type ChallengePuzzle = { answer: string; mode: 'first_correct' | 'fastest'; settle: 'exact' | 'manual' }
 
 /** Position leaders: who scores the most fantasy points at `position` in that sport week. */
-export type ChallengePositionRef = { sport: string; season: number; statWeek: number; position: string }
+type ChallengePositionRef = { sport: string; season: number; statWeek: number; position: string }
 
-export const LAST_SCORE_TYPES = ['touchdown', 'field_goal', 'safety'] as const
+const LAST_SCORE_TYPES = ['touchdown', 'field_goal', 'safety'] as const
 
-export type ChallengeGameRef = {
+type ChallengeGameRef = {
   sport: string
   homeAbbr: string
   awayAbbr: string
@@ -188,7 +188,7 @@ export type ChallengeGameRef = {
   kickoff: string
 }
 
-export type ChallengePlayerRef = {
+type ChallengePlayerRef = {
   playerId: string
   playerName: string
   sport: string
@@ -211,14 +211,14 @@ export type ChallengePrizeReward =
   /** Individual immunity for the week (the finale's "closest without going over"). */
   | { type: 'immunity' }
 
-export type ChallengePenalty = { type: 'score_penalty'; points: number } | { type: 'faab_penalty'; amount: number }
+type ChallengePenalty = { type: 'score_penalty'; points: number } | { type: 'faab_penalty'; amount: number }
 
 export const CHALLENGE_PRIZE_TYPES = ['score_bonus', 'faab_grant', 'faab_transfer', 'tribemate_points', 'free_trade_token', 'steal_blocker', 'steal', 'advantage', 'immunity'] as const
 export type ChallengePrizeType = (typeof CHALLENGE_PRIZE_TYPES)[number]
 
-export type ChallengePrizePlace = { place: number; rewards: ChallengePrizeReward[] }
+type ChallengePrizePlace = { place: number; rewards: ChallengePrizeReward[] }
 
-export type ChallengeWager = {
+type ChallengeWager = {
   currency: 'points' | 'faab'
   min: number
   max: number
@@ -256,7 +256,7 @@ export type ChallengeBuilderConfig = {
   position?: ChallengePositionRef | null
 }
 
-export const CHALLENGE_BUILDER_LIMITS = {
+const CHALLENGE_BUILDER_LIMITS = {
   title: 120,
   question: 1000,
   options: 8,
@@ -325,7 +325,7 @@ const ERRORS = {
   answered: ['Answers are in: only the title, question, prizes and a later lock time can change now.', 'Ya hay respuestas: ahora solo se pueden cambiar el título, la pregunta, los premios y retrasar el cierre.'],
 } as const
 
-export type ChallengeErrorCode = keyof typeof ERRORS
+type ChallengeErrorCode = keyof typeof ERRORS
 export type ChallengeError = { code: ChallengeErrorCode; message: string }
 
 export function challengeError(code: ChallengeErrorCode, lang: ChallengeLang, arg?: number): ChallengeError {
@@ -507,7 +507,7 @@ export type ChallengeDraftContext = {
   prizePhaseRules?: SurvivorPrizePhaseRules
 }
 
-export type ValidChallengeDraft = { title: string; week: number; config: ChallengeBuilderConfig; faabPerWinner: number }
+type ValidChallengeDraft = { title: string; week: number; config: ChallengeBuilderConfig; faabPerWinner: number }
 
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -642,7 +642,7 @@ export function normalizeAnswerText(text: string): string {
   return String(text ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 }
 
-export function lastScoreLabel(id: string, lang: ChallengeLang): string {
+function lastScoreLabel(id: string, lang: ChallengeLang): string {
   const es = lang === 'es'
   if (id === 'touchdown') return es ? 'Touchdown' : 'Touchdown'
   if (id === 'field_goal') return es ? 'Gol de campo' : 'Field goal'
@@ -840,7 +840,7 @@ export function editAfterAnswersError(prev: ChallengeBuilderConfig, next: Challe
 
 // ── Answers ───────────────────────────────────────────────────────────────────────────────────────
 
-export type ChallengeAnswer = { optionId: string } | { value: number } | { text: string } | { picks: Record<string, string> }
+type ChallengeAnswer = { optionId: string } | { value: number } | { text: string } | { picks: Record<string, string> }
 export type ChallengeSubmission = { answer: ChallengeAnswer; wager: number | null }
 
 /** Validate a manager's answer (and stake). */
@@ -913,7 +913,7 @@ export function readSubmission(value: unknown): ChallengeSubmission | null {
 export type ChallengeTruth = { optionId: string; tiedOptionIds?: string[] } | { value: number } | { text: string } | { picks: Record<string, string> }
 export type ChallengeEntry = { entrantId: string; submission: ChallengeSubmission; submittedAt: Date | string }
 
-export type ChallengeScore = {
+type ChallengeScore = {
   /** Dense places: place 1 is every entrant tied for the best answer. */
   places: { place: number; entrantIds: string[] }[]
   correctIds: string[]
@@ -1037,7 +1037,7 @@ export type PlannedPayout =
   | { key: string; kind: 'reward'; entrantId: string; place: number | null; reason: 'prize' | 'wager_win' | 'wager_loss' | 'miss'; spec: SurvivorRewardSpec; deferToWeek: number | null }
   | { key: string; kind: 'immunity'; entrantId: string; place: number; reason: 'prize'; rosterId: string }
 
-export type PayoutContext = {
+type PayoutContext = {
   challengeId: string
   week: number
   /** Bumped on every reversal, so a re-settle pays under fresh keys. */
@@ -1130,7 +1130,7 @@ export function planChallengePayouts(config: ChallengeBuilderConfig, score: Chal
 
 const pts = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
 
-export function describePrizeReward(r: ChallengePrizeReward, lang: ChallengeLang, scope: ChallengeBuilderScope): string {
+function describePrizeReward(r: ChallengePrizeReward, lang: ChallengeLang, scope: ChallengeBuilderScope): string {
   const es = lang === 'es'
   const each = scope === 'tribe' ? (es ? ' por jugador' : ' per player') : ''
   switch (r.type) {
@@ -1164,7 +1164,7 @@ export function describeChallengePrizes(config: Pick<ChallengeBuilderConfig, 'pr
 }
 
 /** "Mon, Nov 3, 8:15 PM ET" — the host's lines always speak Eastern, the league's clock. */
-export function easternLabel(iso: string, lang: ChallengeLang): string {
+function easternLabel(iso: string, lang: ChallengeLang): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   return `${d.toLocaleString(lang === 'es' ? 'es-US' : 'en-US', { timeZone: EASTERN, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET`

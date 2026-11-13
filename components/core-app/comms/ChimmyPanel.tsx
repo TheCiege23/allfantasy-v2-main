@@ -528,7 +528,7 @@ function newAnswerId(): string {
  * children "may be duplicated and/or omitted", and the report was exactly that: the question
  * appeared twice (owner, 2026-09-25).
  */
-export function newTurnId(role: 'you' | 'chimmy'): string {
+function newTurnId(role: 'you' | 'chimmy'): string {
   return `${role}-${newAnswerId()}`
 }
 

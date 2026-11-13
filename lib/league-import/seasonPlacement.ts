@@ -77,11 +77,11 @@ export function seasonPlacementTeamIds(normalized: {
 const COMPLETE_LEAGUE_STATUSES = new Set(['complete', 'completed'])
 
 /** True only when the source platform says this season has actually finished. */
-export function seasonIsComplete(leagueStatus: string | null | undefined): boolean {
+function seasonIsComplete(leagueStatus: string | null | undefined): boolean {
   return COMPLETE_LEAGUE_STATUSES.has(String(leagueStatus ?? '').trim().toLowerCase())
 }
 
-export interface SeasonPlacementInput {
+interface SeasonPlacementInput {
   /** The league's status as reported by the source platform. */
   leagueStatus: string | null | undefined
   /** Rank-1 team's display name, as the caller derived it from current standings. */
@@ -90,7 +90,7 @@ export interface SeasonPlacementInput {
   runnerUpName: string | null
 }
 
-export interface SeasonPlacement {
+interface SeasonPlacement {
   championName: string | null
   runnerUpName: string | null
 }

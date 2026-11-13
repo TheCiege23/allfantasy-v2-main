@@ -16,7 +16,7 @@ import {
   type SupportedSport,
 } from '@/lib/sport-scope'
 
-export type DraftStatColumnCategory =
+type DraftStatColumnCategory =
   | 'offense'
   | 'defense'
   | 'pitcher'
@@ -30,7 +30,7 @@ export type DraftStatColumnCategory =
   | 'wrestler'
   | 'cricket'
 
-export type DraftStatColumnType = 'number' | 'percent' | 'text'
+type DraftStatColumnType = 'number' | 'percent' | 'text'
 
 export type DraftStatColumnDef = {
   key: string
@@ -96,12 +96,12 @@ export function isLikelyGoaliePosition(position: string | undefined): boolean {
   return normPos(position) === 'G'
 }
 
-export function isLikelyKickerPosition(position: string | undefined): boolean {
+function isLikelyKickerPosition(position: string | undefined): boolean {
   const p = normPos(position)
   return p === 'PK' || p === 'K' || p === 'K/P' || p === 'KICKER'
 }
 
-export function isLikelyPunterPosition(position: string | undefined): boolean {
+function isLikelyPunterPosition(position: string | undefined): boolean {
   return normPos(position) === 'P'
 }
 

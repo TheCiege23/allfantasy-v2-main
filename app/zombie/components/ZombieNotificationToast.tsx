@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import clsx from 'clsx'
 
-export type ZombieToast = {
+type ZombieToast = {
   id: string
   kind: string
   title: string

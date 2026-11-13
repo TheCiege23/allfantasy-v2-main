@@ -1,7 +1,7 @@
 import { buildLeagueGraph } from '@/lib/league-intelligence-graph'
 import { rebuildHallOfFame } from '@/lib/rankings-engine/hall-of-fame'
 
-export interface HistoricalDerivedRefreshSummary {
+interface HistoricalDerivedRefreshSummary {
   graph: {
     refreshed: boolean
     nodeCount?: number

@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma"
 
 export type AiFeedbackRating = "helpful" | "not_helpful"
 
-export type SaveAiFeedbackInput = {
+type SaveAiFeedbackInput = {
   userId: string
   /** Which AI feature generated the answer. */
   feature: string
@@ -40,7 +40,7 @@ export type SaveAiFeedbackInput = {
   reason?: string | null
 }
 
-export type AiFeedbackRow = {
+type AiFeedbackRow = {
   id: string
   userId: string
   feature: string

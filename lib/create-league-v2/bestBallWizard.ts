@@ -18,10 +18,10 @@ import type { CreateLeagueV2State, BestBallSetupState } from '@/lib/create-leagu
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 
 export type BestBallCompetition = 'season_total' | 'h2h' | 'tournament'
-export type BestBallScoringPeriodChoice = 'weekly' | 'daily'
+type BestBallScoringPeriodChoice = 'weekly' | 'daily'
 
 /** Every fantasy week a sport's season has (lib/sportConfig/configs/*.ts `defaultSeasonWeeks`). */
-export const BEST_BALL_FULL_SEASON_WEEKS: Record<CreateLeagueV2State['sport'], number> = {
+const BEST_BALL_FULL_SEASON_WEEKS: Record<CreateLeagueV2State['sport'], number> = {
   NFL: 17,
   NCAAF: 13,
   NBA: 25,
@@ -159,14 +159,14 @@ export function withBestBallWaivers(bb: BestBallSetupState, enabled: boolean): B
   return { ...bb, waiversEnabled: enabled }
 }
 
-export type BestBallRulesLine = { id: 'lineups' | 'transactions' | 'season' | 'champion'; label: string; text: string }
+type BestBallRulesLine = { id: 'lineups' | 'transactions' | 'season' | 'champion'; label: string; text: string }
 
 function weeksLabel(from: number, to: number): string {
   return from === to ? `week ${from}` : `weeks ${from}–${to}`
 }
 
 /** The season as the server will save it (NCAAF brackets end on week 13 — ncaafPlayoffWindow.ts). */
-export function bestBallSeasonShape(bb: BestBallSetupState, sport: CreateLeagueV2State['sport'], teamCount: number) {
+function bestBallSeasonShape(bb: BestBallSetupState, sport: CreateLeagueV2State['sport'], teamCount: number) {
   if (bestBallCompetitionOf(bb) === 'tournament') {
     const shape = tournamentShape(teamCount)
     const rounds = shape.tournamentAdvancementRounds

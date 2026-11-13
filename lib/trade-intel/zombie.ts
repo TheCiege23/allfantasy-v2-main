@@ -47,7 +47,7 @@ export const WEAPONS_COUNTED = 2
 /** A serum is +10, single use, and only against a Zombie. */
 export const SERUM_POINTS = 10
 
-export type WeaponTier = keyof typeof WEAPON_POINTS
+type WeaponTier = keyof typeof WEAPON_POINTS
 
 /**
  * What acquiring a weapon is actually worth, given what you already hold.

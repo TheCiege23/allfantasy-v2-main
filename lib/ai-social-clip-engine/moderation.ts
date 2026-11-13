@@ -15,7 +15,7 @@ const BLOCKLIST: readonly string[] = [
   "FIXME:",
 ];
 
-export interface ModerationResult {
+interface ModerationResult {
   passed: boolean;
   reason?: string;
 }
@@ -23,7 +23,7 @@ export interface ModerationResult {
 /**
  * Check clip text for blocklist and basic safety. Returns passed: false if blocklist hit or empty.
  */
-export function moderateClipOutput(text: string): ModerationResult {
+function moderateClipOutput(text: string): ModerationResult {
   if (!text || typeof text !== "string") {
     return { passed: false, reason: "Empty or invalid text" };
   }

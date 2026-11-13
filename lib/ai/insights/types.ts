@@ -23,7 +23,7 @@ export type InsightEntry = {
 }
 
 /** One pick an entry has made for a specific match. */
-export type InsightPick = {
+type InsightPick = {
   matchId: string
   pickedTeam: string
   round: string

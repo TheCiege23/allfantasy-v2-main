@@ -1,7 +1,7 @@
 // lib/trade-engine/guardrailCopy.ts
 import type { GuardrailReasonCode } from "./guardrails";
 
-export type GuardrailCopy = {
+type GuardrailCopy = {
   short: string;
   long: string;
 };
@@ -20,7 +20,7 @@ function num(n: any): string | undefined {
   return `${Math.round(v)}`;
 }
 
-export function guardrailReasonToCopy(
+function guardrailReasonToCopy(
   code: GuardrailReasonCode,
   details?: DetailBag
 ): GuardrailCopy {

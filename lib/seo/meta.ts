@@ -9,7 +9,7 @@ import { getOgImageUrl } from './SocialShareMetadataService'
 const SITE_NAME = 'AllFantasy'
 const INSTALL_PATH = '/install'
 
-export interface BuildSeoMetaInput {
+interface BuildSeoMetaInput {
   /** Page title (document and default for OG/Twitter). */
   title: string
   /** Meta description. */

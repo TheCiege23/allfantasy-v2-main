@@ -23,7 +23,7 @@ export type PlayoffStartWeekLeague = {
   leagueVariant?: string | null
 }
 
-export type PlayoffStartWeekSource = 'column' | 'settings' | 'sport_default'
+type PlayoffStartWeekSource = 'column' | 'settings' | 'sport_default'
 
 function positiveWeek(value: unknown): number | null {
   const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
@@ -47,7 +47,7 @@ export function readChosenPlayoffStartWeek(league: PlayoffStartWeekLeague): numb
 }
 
 /** The sport/variant default start week — only for a league with no chosen week. */
-export function sportDefaultPlayoffStartWeek(sport: string | null | undefined, variant?: string | null): number {
+function sportDefaultPlayoffStartWeek(sport: string | null | undefined, variant?: string | null): number {
   const defaults = resolveDefaultPlayoffConfig(String(sport || 'NFL').toUpperCase() as SportType, variant)
   return defaults.playoff_start_week ?? 15
 }

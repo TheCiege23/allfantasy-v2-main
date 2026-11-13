@@ -9,7 +9,7 @@
 import { classifyKeeper, playerSeasonValue, rankKeepers } from './keeperValueEngine'
 import type { KeeperPlayerFact, KeeperWarRoomContext } from './types'
 
-export interface KeeperCutCandidate {
+interface KeeperCutCandidate {
   playerId: string
   playerName: string
   position: string

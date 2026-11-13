@@ -75,7 +75,7 @@ export type AdvantageSimulationLoader = (
   context: AdvantageDashboardContext
 ) => Promise<AdvantageSimulationPreview>
 
-export interface AdvantageDashboardPageProps {
+interface AdvantageDashboardPageProps {
   initialSport?: string
   initialTeamName?: string
   initialWeek?: number

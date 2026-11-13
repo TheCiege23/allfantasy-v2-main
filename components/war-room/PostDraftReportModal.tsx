@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-export type PostDraftReportModalProps = {
+type PostDraftReportModalProps = {
   open: boolean
   onClose: () => void
   leagueId: string

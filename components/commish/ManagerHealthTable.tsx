@@ -55,7 +55,7 @@ function initials(row: ManagerHealthRow): string {
   return trimmed ? trimmed.slice(0, 1).toUpperCase() : '·'
 }
 
-export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
+function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
   if (rows.length === 0) {
     return <p className="af-cm-empty">No rosters found for this league yet.</p>
   }

@@ -20,7 +20,7 @@ import { normalizePlayerName } from '@/lib/player-assets/headshotCandidateMatch'
 /** Words that distinguish nothing between two schools' names. */
 const SCHOOL_FILLER = new Set(['university', 'of', 'the', 'college', 'at'])
 
-export function schoolTokens(name: string | null | undefined): string[] {
+function schoolTokens(name: string | null | undefined): string[] {
   return String(name ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -31,10 +31,10 @@ export function schoolTokens(name: string | null | undefined): string[] {
     .filter((t) => t && !SCHOOL_FILLER.has(t))
 }
 
-export const schoolKey = (name: string | null | undefined): string => schoolTokens(name).join(' ')
+const schoolKey = (name: string | null | undefined): string => schoolTokens(name).join(' ')
 
 export type RiSchool = { externalId: string; name: string; shortName: string | null }
-export type EspnSchool = { id: string; location: string; abbreviation: string | null }
+type EspnSchool = { id: string; location: string; abbreviation: string | null }
 
 export type SchoolMatch = {
   espnId: string
@@ -53,7 +53,7 @@ export type SchoolMatch = {
  * ESPN's Holy Cross (that is RI's "College of the Holy Cross", already an exact match);
  * Hartford, Savannah State, Queens, Lindenwood and Southern Indiana have no ESPN entry.
  */
-export const SCHOOL_ALIASES: Readonly<Record<string, string>> = {
+const SCHOOL_ALIASES: Readonly<Record<string, string>> = {
   '1': '399', //     University at Albany                               -> UAlbany
   '43': '152', //    North Carolina State University                    -> NC State
   '116': '2239', //  California State University, Fullerton             -> Cal State Fullerton
@@ -178,9 +178,9 @@ export function matchSchools(
 // Players
 // ---------------------------------------------------------------------------
 
-export type RiPlayer = { externalId: string; name: string; number: number | null }
-export type EspnAthleteLite = { id: string; fullName: string; jersey: string | null }
-export type PlayerMatch = { athleteId: string; riExternalId: string }
+type RiPlayer = { externalId: string; name: string; number: number | null }
+type EspnAthleteLite = { id: string; fullName: string; jersey: string | null }
+type PlayerMatch = { athleteId: string; riExternalId: string }
 
 /**
  * Match ONE school's ESPN roster to that SAME school's RI rows. Name AND jersey must both

@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
 import type { UncertaintyItem } from '@/lib/ai-context-envelope'
 
-export interface UncertaintyBlockProps {
+interface UncertaintyBlockProps {
   /** Uncertainty items (when confidence is limited or data incomplete). */
   items: UncertaintyItem[]
   /** Optional title. */

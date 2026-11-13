@@ -4,9 +4,9 @@
  * Use BigBrotherChallengeEngine to resolve the winner.
  */
 
-export type BbMinigameKind = 'hoh' | 'veto'
+type BbMinigameKind = 'hoh' | 'veto'
 
-export interface BbMinigameTemplate {
+interface BbMinigameTemplate {
   id: string
   kind: BbMinigameKind
   title: string

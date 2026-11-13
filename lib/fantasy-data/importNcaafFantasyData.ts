@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma"
 import type { FantasyImportSummary } from "./importNflFantasyData"
 import { importProviderDomainData } from "./importProviderDomainData"
 
-export type NcaafImportMode = "redraft" | "devy" | "c2c" | "all"
+type NcaafImportMode = "redraft" | "devy" | "c2c" | "all"
 
 function currentSeason(): number {
   return new Date().getFullYear()

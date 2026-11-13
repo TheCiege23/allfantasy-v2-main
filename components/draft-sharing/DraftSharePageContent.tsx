@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { DraftShareCard } from './DraftShareCard'
 import type { DraftShareCardPayload } from '@/lib/draft-sharing/types'
 
-export interface DraftSharePageContentProps {
+interface DraftSharePageContentProps {
   payload: DraftShareCardPayload
   shareUrl: string
 }

@@ -20,14 +20,14 @@ import type { CommissionerGateResult } from './commissionerGate'
  * passes through as itself. Everything else (not-linked, not-a-member, attestation-required)
  * stays 403.
  */
-export function mapGateFailureStatus(gate: Pick<CommissionerGateResult, 'notFound' | 'status'>): number {
+function mapGateFailureStatus(gate: Pick<CommissionerGateResult, 'notFound' | 'status'>): number {
   if (gate.notFound) return 404
   if (gate.status === 429) return 429
   if (gate.status != null && gate.status >= 500) return 503
   return 403
 }
 
-export function commissionerGateFailureCode(gate: CommissionerGateResult): string {
+function commissionerGateFailureCode(gate: CommissionerGateResult): string {
   if (gate.requiresAttestation) return 'ATTESTATION_REQUIRED'
   if (gate.notFound) return 'LEAGUE_NOT_FOUND'
   if (gate.status === 429 || (gate.status != null && gate.status >= 500)) return 'PROVIDER_UNAVAILABLE'
@@ -39,7 +39,7 @@ export function commissionerGateFailureCode(gate: CommissionerGateResult): strin
  * (EspnImportForm, LegacyImportForm) have no attestation UI and only render `data.error`, so a
  * bare "confirm you are the commissioner" would ask for something the screen cannot collect.
  */
-export const ATTESTATION_UI_HINT = 'Import this league from /import, where you can confirm that.'
+const ATTESTATION_UI_HINT = 'Import this league from /import, where you can confirm that.'
 
 export function commissionerGateFailureResponse(
   gate: CommissionerGateResult,

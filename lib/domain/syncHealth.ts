@@ -33,7 +33,7 @@ import { type Result, err, ok } from './result'
 import type { ProviderError } from './providers'
 import type { ActionKey } from './authorize'
 
-export type SyncStatus = 'IDLE' | 'RUNNING' | 'OK' | 'DEGRADED' | 'FAILED'
+type SyncStatus = 'IDLE' | 'RUNNING' | 'OK' | 'DEGRADED' | 'FAILED'
 
 // ─── Thresholds: config, not prose ───────────────────────────────────────────
 
@@ -61,7 +61,7 @@ export const FRESHNESS_WINDOW_MS = readNumber('COMMISH_SYNC_FRESHNESS_HOURS', 6)
 
 // ─── Job outcome → stored status ─────────────────────────────────────────────
 
-export type SyncOutcome =
+type SyncOutcome =
   | { readonly kind: 'success'; readonly at: Date; readonly cursor?: string | null }
   | { readonly kind: 'failure'; readonly at: Date; readonly error: ProviderError }
 
@@ -205,7 +205,7 @@ export function guardExternalWrite(
 
 // ─── The API projection ──────────────────────────────────────────────────────
 
-export type SyncHealthView = {
+type SyncHealthView = {
   readonly bindingId: string
   readonly provider: string
   /** The DERIVED status. Never the stored column. */

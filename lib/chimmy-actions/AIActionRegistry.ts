@@ -12,7 +12,7 @@ import type {
   AIActionSurface,
 } from './AIActionModel'
 
-export interface ActionMeta {
+interface ActionMeta {
   label: string
   description: string
   safetyClass: AIActionSafetyClass

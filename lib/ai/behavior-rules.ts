@@ -1,20 +1,20 @@
 import { prisma } from '@/lib/prisma'
 
-export type RuleSeverity = 'hard' | 'soft'
+type RuleSeverity = 'hard' | 'soft'
 
-export type BehaviorRuleViolation = {
+type BehaviorRuleViolation = {
   ruleId: string
   severity: RuleSeverity
   reason: string
 }
 
-export type BehaviorCheckContext = {
+type BehaviorCheckContext = {
   input?: string
   featureName?: string
   contextBlock?: string | null
 }
 
-export type CustomBehaviorRule = {
+type CustomBehaviorRule = {
   id: string
   description: string
   prompt: string

@@ -45,7 +45,7 @@
  * and Node code through ./privateRelayStore; the writer is ./privateRelayIngest.
  */
 
-export const PRIVATE_RELAY_RANGE_SET_VERSION = 1
+const PRIVATE_RELAY_RANGE_SET_VERSION = 1
 
 /** A compact, JSON-serialisable set of US egress ranges. */
 export interface RelayRangeSet {
@@ -60,7 +60,7 @@ export interface RelayRangeSet {
   v6: Array<[string, string, number]>
 }
 
-export type RelayZone = "pacific" | "mountain" | "other"
+type RelayZone = "pacific" | "mountain" | "other"
 
 /**
  * Pacific-time states, plus Idaho (see the file header). A relay user placed in
@@ -86,7 +86,7 @@ export function relayZoneForState(state: string): RelayZone {
  *              paid features off (Mountain time).
  *   blocked  — the old behaviour: the "turn off Private Relay" page.
  */
-export type RelayDecision =
+type RelayDecision =
   | { kind: "placed"; state: string; paidBlocked: boolean }
   | { kind: "blocked"; state: string | null }
 
@@ -219,7 +219,7 @@ function compact<T extends number | bigint>(ranges: RawRange<T>[], succ: (x: T) 
   return out.filter((r) => r.state !== "")
 }
 
-export interface ParseResult {
+interface ParseResult {
   set: RelayRangeSet
   /** Lines read, US lines kept, lines that could not be parsed. */
   stats: { lines: number; usLines: number; invalid: number }

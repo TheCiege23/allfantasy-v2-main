@@ -26,13 +26,13 @@ import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRost
  * override: Chimmy only ever moves the asker's own team.
  */
 
-export type ActionLeague = League
+type ActionLeague = League
 
-export type ActionScope =
+type ActionScope =
   | { ok: true; league: ActionLeague; week: number; season: number }
   | { ok: false; message: string }
 
-export function importedLeagueRefusal(args: {
+function importedLeagueRefusal(args: {
   leagueName: string | null
   platform: string | null
   action: 'lineup' | 'trade'
@@ -73,7 +73,7 @@ export async function loadActionScope(leagueId: string, userId: string, action: 
   }
 }
 
-export type ActionRosterRow = {
+type ActionRosterRow = {
   id: string
   platformUserId: string
   playerData: unknown

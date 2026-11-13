@@ -26,9 +26,9 @@
 import type { DynastySetupState } from '@/lib/create-league-v2/state'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 
-export type DynastySportPresetSport = 'NBA' | 'NHL' | 'MLB'
+type DynastySportPresetSport = 'NBA' | 'NHL' | 'MLB'
 
-export type DynastySportPreset = {
+type DynastySportPreset = {
   id: string
   sport: DynastySportPresetSport
   scoringPresetId: string

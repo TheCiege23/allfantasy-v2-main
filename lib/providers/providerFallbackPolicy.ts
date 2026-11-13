@@ -104,7 +104,7 @@ export function isFantasyInternalDomain(domain: DataDomain): boolean {
   )
 }
 
-export type GapFillMetadata = {
+type GapFillMetadata = {
   staleCurrent?: boolean
   lowConfidenceCurrent?: boolean
 }
@@ -136,7 +136,7 @@ export function shouldProviderFillGap(
 
 export type MergeFieldPolicy = 'prefer_higher_tier' | 'never_overwrite_nonempty'
 
-export function providerTierIndex(provider: ProviderName, domain: DataDomain, sport: string): number {
+function providerTierIndex(provider: ProviderName, domain: DataDomain, sport: string): number {
   const c = getFallbackProvidersForDomain(domain, sport)
   const i = c.indexOf(provider)
   return i < 0 ? 999 : i

@@ -8,9 +8,9 @@
  * an unknown/new tab id simply lands in the League group instead of vanishing.
  */
 
-export type LeagueTabGroupId = 'decide' | 'draft' | 'roster' | 'league' | 'legacy' | 'commish'
+type LeagueTabGroupId = 'decide' | 'draft' | 'roster' | 'league' | 'legacy' | 'commish'
 
-export const LEAGUE_TAB_GROUP_ORDER: { id: LeagueTabGroupId; label: string }[] = [
+const LEAGUE_TAB_GROUP_ORDER: { id: LeagueTabGroupId; label: string }[] = [
   { id: 'decide', label: 'Decide' },
   { id: 'draft', label: 'Draft' },
   { id: 'roster', label: 'Roster' },
@@ -57,9 +57,9 @@ export function groupForLeagueTab(tabId: string): LeagueTabGroupId {
   return GROUP_BY_TAB[tabId] ?? 'league'
 }
 
-export type LeagueTabLike = { id: string; label: string }
+type LeagueTabLike = { id: string; label: string }
 
-export type LeagueTabGroup<T extends LeagueTabLike> = {
+type LeagueTabGroup<T extends LeagueTabLike> = {
   id: LeagueTabGroupId
   label: string
   tabs: T[]

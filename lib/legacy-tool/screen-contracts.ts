@@ -6,9 +6,9 @@ export type LegacyScreenName =
   | 'draft_war_room'
   | 'trade_command_center'
 
-export type LegacyEnvelopeStatus = 'ok' | 'insufficient_data'
+type LegacyEnvelopeStatus = 'ok' | 'insufficient_data'
 
-export interface LegacyScreenMeta {
+interface LegacyScreenMeta {
   ai_stack: {
     orchestrator: 'openai'
     structured_evaluator: 'deepseek'

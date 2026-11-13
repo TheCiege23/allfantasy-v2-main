@@ -3,7 +3,7 @@
 import clsx from 'clsx'
 import { type ReactNode } from 'react'
 
-export type ZombieGlassPanelVariant = 'default' | 'danger' | 'reward' | 'tactical'
+type ZombieGlassPanelVariant = 'default' | 'danger' | 'reward' | 'tactical'
 
 const variantClass: Record<ZombieGlassPanelVariant, string> = {
   default: 'border-white/[0.09]',

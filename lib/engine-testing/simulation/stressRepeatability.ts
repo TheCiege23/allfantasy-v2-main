@@ -6,7 +6,7 @@ import type { LeagueLifecycleState } from '@prisma/client'
 import type { LeagueEngineScenarioFixture } from '@/lib/engine-testing/fixtures/leagueScenarioFixtures'
 import { runLeagueSimulationScenario, type LeagueSimulationReport } from '@/lib/engine-testing/simulation/leagueSimulationHarness'
 
-export type RepeatabilityResult = {
+type RepeatabilityResult = {
   runs: number
   uniqueFingerprints: number
   stable: boolean

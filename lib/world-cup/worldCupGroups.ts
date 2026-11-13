@@ -1,4 +1,4 @@
-export const WORLD_CUP_GROUP_KEYS = [
+const WORLD_CUP_GROUP_KEYS = [
   "A",
   "B",
   "C",
@@ -15,13 +15,13 @@ export const WORLD_CUP_GROUP_KEYS = [
 
 export type WorldCupGroupKey = (typeof WORLD_CUP_GROUP_KEYS)[number]
 
-export type WorldCupGroupDefinition = {
+type WorldCupGroupDefinition = {
   groupKey: WorldCupGroupKey
   displayName: string
   sortOrder: number
 }
 
-export type WorldCupValidationResult =
+type WorldCupValidationResult =
   | { ok: true }
   | { ok: false; error: string }
 

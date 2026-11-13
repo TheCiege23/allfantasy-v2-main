@@ -1,7 +1,7 @@
 import { coreUiCopy } from './coreUiCopy'
 
 /** Bundled display translations. Stored evaluations and player identities remain unchanged. */
-export const tradeVisualSpanish: Record<string,string> = {
+const tradeVisualSpanish: Record<string,string> = {
   "We couldn’t check your roster limit.":"No pudimos comprobar el límite de tu plantilla.",
   // Plain-language trade copy (2026-11-11).
   "sent,":"enviado,",

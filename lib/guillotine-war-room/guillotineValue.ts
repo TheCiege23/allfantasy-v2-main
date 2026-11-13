@@ -10,7 +10,7 @@ import type { GuillotinePlayerFact } from './types'
 
 export type ValueSource = 'projection' | 'adp' | 'none'
 
-export function adpToValue(adp: number): number {
+function adpToValue(adp: number): number {
   return Math.round((Math.max(0, 260 - adp) / 10) * 100) / 100
 }
 

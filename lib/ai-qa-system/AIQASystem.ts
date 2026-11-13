@@ -1,19 +1,19 @@
 import type { AIContextEnvelope, ModelOutput } from '@/lib/unified-ai/types'
 
-export interface AIQASystemInput {
+interface AIQASystemInput {
   primaryAnswer: string
   modelOutputs: ModelOutput[]
   envelope?: AIContextEnvelope
   factGuardWarnings?: string[]
 }
 
-export interface AIQAVerification {
+interface AIQAVerification {
   noHallucinations: boolean
   correctDataUsage: boolean
   consistentResponses: boolean
 }
 
-export interface AIQASystemReport {
+interface AIQASystemReport {
   passed: boolean
   score: number
   verification: AIQAVerification

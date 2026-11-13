@@ -50,7 +50,7 @@ function isSportInSeason(sport: string): boolean {
 /**
  * Return nudges: e.g. "You haven't checked your lineup this week."
  */
-export async function getReturnNudges(userId: string): Promise<RetentionNudge[]> {
+async function getReturnNudges(userId: string): Promise<RetentionNudge[]> {
   const lastEngagement = await prisma.engagementEvent
     .findFirst({
       where: { userId },
@@ -92,7 +92,7 @@ export async function getReturnNudges(userId: string): Promise<RetentionNudge[]>
 /**
  * Unfinished action reminders: e.g. incomplete profile, no league joined.
  */
-export async function getUnfinishedReminders(userId: string): Promise<RetentionNudge[]> {
+async function getUnfinishedReminders(userId: string): Promise<RetentionNudge[]> {
   const [profile, leagueCount, funnelComplete] = await Promise.all([
     getSettingsProfile(userId),
     (prisma as any).league.count({ where: { userId } }).catch(() => 0),
@@ -132,7 +132,7 @@ export async function getUnfinishedReminders(userId: string): Promise<RetentionN
 /**
  * Recap cards: e.g. "Your week in review."
  */
-export async function getRecapCards(userId: string): Promise<RetentionNudge[]> {
+async function getRecapCards(userId: string): Promise<RetentionNudge[]> {
   const nudges: RetentionNudge[] = []
   nudges.push({
     id: "recap_weekly",
@@ -148,7 +148,7 @@ export async function getRecapCards(userId: string): Promise<RetentionNudge[]> {
 /**
  * Weekly AI summary CTA.
  */
-export async function getWeeklySummaryNudges(userId: string): Promise<RetentionNudge[]> {
+async function getWeeklySummaryNudges(userId: string): Promise<RetentionNudge[]> {
   return [
     {
       id: "nudge_weekly_ai_summary",
@@ -164,7 +164,7 @@ export async function getWeeklySummaryNudges(userId: string): Promise<RetentionN
 /**
  * AI check-in: friendly prompt to chat with Chimmy for a tip or league check-in.
  */
-export async function getAICheckInNudges(userId: string): Promise<RetentionNudge[]> {
+async function getAICheckInNudges(userId: string): Promise<RetentionNudge[]> {
   return [
     {
       id: "ai_check_in",
@@ -180,7 +180,7 @@ export async function getAICheckInNudges(userId: string): Promise<RetentionNudge
 /**
  * Creator league recommendations (public creator leagues by user's preferred sports).
  */
-export async function getCreatorLeagueRecommendations(userId: string): Promise<RetentionNudge[]> {
+async function getCreatorLeagueRecommendations(userId: string): Promise<RetentionNudge[]> {
   const profile = await getSettingsProfile(userId)
   const sports = ((profile?.preferredSports as string[] | null) ?? [])
     .map((sport) => normalizeToSupportedSport(sport))
@@ -219,7 +219,7 @@ export async function getCreatorLeagueRecommendations(userId: string): Promise<R
 /**
  * Sport-season based prompts (e.g. "NFL season is here — set your lineup").
  */
-export async function getSportSeasonPrompts(userId: string): Promise<RetentionNudge[]> {
+async function getSportSeasonPrompts(userId: string): Promise<RetentionNudge[]> {
   const profile = await getSettingsProfile(userId)
   const profileSports = ((profile?.preferredSports as string[] | null) ?? [])
     .map((sport) => normalizeToSupportedSport(sport))

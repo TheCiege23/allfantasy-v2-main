@@ -5,7 +5,7 @@
 
 import type { DraftType, SlotOrderEntry } from './types'
 
-export interface DraftOrderParams {
+interface DraftOrderParams {
   overall: number
   teamCount: number
   draftType: DraftType

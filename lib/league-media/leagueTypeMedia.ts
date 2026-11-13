@@ -1,6 +1,6 @@
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
 
-export type LeagueTypeMedia = {
+type LeagueTypeMedia = {
   key: string
   label: string
   thumbnail: string

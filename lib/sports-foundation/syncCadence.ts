@@ -1,18 +1,18 @@
-export type FoundationCadenceSport = 'NFL' | 'NCAAF'
+type FoundationCadenceSport = 'NFL' | 'NCAAF'
 
-export type FoundationCadencePhase =
+type FoundationCadencePhase =
   | 'offseason'
   | 'preseason_ramp'
   | 'season_live'
   | 'postseason'
 
-export type FoundationCadenceTask = {
+type FoundationCadenceTask = {
   task: string
   frequencyHours: number
   priority: 'low' | 'medium' | 'high'
 }
 
-export type FoundationCadencePlan = {
+type FoundationCadencePlan = {
   sport: FoundationCadenceSport
   season: number
   phase: FoundationCadencePhase

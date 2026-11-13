@@ -51,9 +51,9 @@ export type OrphanAuctionAsset = {
   originalOwnerRosterId?: string
 }
 
-export type OrphanAuctionAward = { assetId: string; rosterId: string; amount: number }
+type OrphanAuctionAward = { assetId: string; rosterId: string; amount: number }
 
-export type OrphanAuctionResult = {
+type OrphanAuctionResult = {
   awards: OrphanAuctionAward[]
   /** Assets nobody won. */
   unsold: string[]
@@ -77,7 +77,7 @@ export type OrphanAuction = {
 }
 
 /** A team's sealed bids: asset id → whole dollars. */
-export type OrphanAuctionBids = { auctionId: string; bids: Record<string, number>; updatedAt: string }
+type OrphanAuctionBids = { auctionId: string; bids: Record<string, number>; updatedAt: string }
 
 const asObject = (v: unknown): Record<string, unknown> | null =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null

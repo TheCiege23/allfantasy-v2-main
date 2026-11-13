@@ -32,12 +32,12 @@ export const HOME_CARD_GROUPS = {
   stack: ['exposure', 'following', 'receipts'],
 } as const
 
-export type HomeCardGroup = keyof typeof HOME_CARD_GROUPS
+type HomeCardGroup = keyof typeof HOME_CARD_GROUPS
 export type HomeCardOrder = { [G in HomeCardGroup]: Array<(typeof HOME_CARD_GROUPS)[G][number]> }
 
 const KNOWN = new Set<string>(Object.values(HOME_CARD_GROUPS).flat())
 
-export type CardUsage = Record<string, number>
+type CardUsage = Record<string, number>
 
 export function parseCardUsage(raw: string | null | undefined): CardUsage {
   const usage: CardUsage = {}

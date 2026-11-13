@@ -92,7 +92,7 @@ export function OddsTile({
 
 const clamp = (n: number) => Math.max(0, Math.min(100, n))
 
-export type OddsIcon = 'playoffs' | 'bye' | 'title' | 'miss'
+type OddsIcon = 'playoffs' | 'bye' | 'title' | 'miss'
 
 const ODDS_ICON_PATH: Record<OddsIcon, string> = {
   playoffs: 'M9 12l2 2 4-4M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7l7-4z',

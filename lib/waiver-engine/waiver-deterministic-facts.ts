@@ -17,13 +17,13 @@ import type { TeamNeedsMap } from './team-needs'
 // Types
 // ---------------------------------------------------------------------------
 
-export interface FactualEvidence {
+interface FactualEvidence {
   source: 'league' | 'roster' | 'news' | 'model' | 'waiver_pool' | 'schedule'
   metric: string
   value: string
 }
 
-export interface TeamStructureFacts {
+interface TeamStructureFacts {
   startersByPosition: Record<string, number>
   benchByPosition: Record<string, number>
   irByPosition: Record<string, number>
@@ -41,7 +41,7 @@ export interface TeamStructureFacts {
   irCount: number
 }
 
-export interface PerformanceFacts {
+interface PerformanceFacts {
   pointsFor: number
   pointsAgainst: number
   wins: number
@@ -54,7 +54,7 @@ export interface PerformanceFacts {
   pointsDelta: number
 }
 
-export interface LeagueFacts {
+interface LeagueFacts {
   numTeams: number
   scoringFormat: string
   waiverFormat: string
@@ -70,7 +70,7 @@ export interface LeagueFacts {
   sport: string
 }
 
-export interface WaiverPoolFacts {
+interface WaiverPoolFacts {
   availableByPosition: Record<string, number>
   scarcityByPosition: Record<string, number>
   bestShortTermByPosition: Record<string, { name: string; value: number } | null>
@@ -79,7 +79,7 @@ export interface WaiverPoolFacts {
   totalAvailable: number
 }
 
-export interface DecisionFacts {
+interface DecisionFacts {
   biggestNeedPositions: string[]
   benchCutCandidates: { name: string; position: string; value: number; reason: string }[]
   contenderWindowScore: number
@@ -89,7 +89,7 @@ export interface DecisionFacts {
   urgencyLevel: 'critical' | 'high' | 'medium' | 'low' | 'none'
 }
 
-export interface DeterministicFactsResult {
+interface DeterministicFactsResult {
   facts: string[]
   evidence: FactualEvidence[]
   teamSummary: TeamStructureFacts
@@ -201,7 +201,7 @@ function computeTeamStructure(
 // Performance Facts
 // ---------------------------------------------------------------------------
 
-export function computePerformanceFacts(input: {
+function computePerformanceFacts(input: {
   pointsFor?: number
   pointsAgainst?: number
   wins?: number
@@ -261,7 +261,7 @@ export function computePerformanceFacts(input: {
 // League Facts
 // ---------------------------------------------------------------------------
 
-export function computeLeagueFacts(ctx: WaiverScoringContext & {
+function computeLeagueFacts(ctx: WaiverScoringContext & {
   waiverFormat?: string
   sport?: string
   avgBenchSize?: number
@@ -311,7 +311,7 @@ export function computeLeagueFacts(ctx: WaiverScoringContext & {
 // Waiver Pool Facts
 // ---------------------------------------------------------------------------
 
-export function computeWaiverPoolFacts(
+function computeWaiverPoolFacts(
   candidates: WaiverCandidate[],
   rosterPlayers: WaiverRosterPlayer[],
 ): WaiverPoolFacts {
@@ -368,7 +368,7 @@ export function computeWaiverPoolFacts(
 // Decision Facts
 // ---------------------------------------------------------------------------
 
-export function computeDecisionFacts(
+function computeDecisionFacts(
   teamNeeds: TeamNeedsMap,
   teamStructure: TeamStructureFacts,
   performance: PerformanceFacts,

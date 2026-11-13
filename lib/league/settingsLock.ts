@@ -34,11 +34,11 @@ export const LOCK_GROUP_LABELS: Record<LockGroup, { label: string; help: string 
 export const UNLOCK_WINDOW_MS = 72 * 60 * 60 * 1000
 export const VOTE_DAY_OPTIONS = [1, 2, 3, 5, 7] as const
 export const DEFAULT_VOTE_DAYS = 2
-export const VOTES_KEPT = 30
+const VOTES_KEPT = 30
 export const YES = 'yes'
 export const NO = 'no'
 
-export type UnlockVoteStatus = 'voting' | 'passed' | 'failed'
+type UnlockVoteStatus = 'voting' | 'passed' | 'failed'
 
 export type UnlockVote = {
   id: string

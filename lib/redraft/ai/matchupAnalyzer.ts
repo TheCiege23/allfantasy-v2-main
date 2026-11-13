@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { formatLeagueAIContextPromptByLeagueId } from '@/lib/sportConfig/aiContextService'
 
-export type MatchupInsight = { insight: string }
+type MatchupInsight = { insight: string }
 
 export async function generateMatchupInsight(matchupId: string): Promise<MatchupInsight> {
   const m = await prisma.redraftMatchup.findFirst({

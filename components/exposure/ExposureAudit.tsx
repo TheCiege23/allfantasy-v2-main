@@ -35,7 +35,7 @@ const FILTERS: { id: ExposureFilter; label: string }[] = [
   { id: 'threshold', label: `${Math.round(OVEREXPOSED_THRESHOLD * 100)}%+` },
 ]
 
-export function ExposureAudit({
+function ExposureAudit({
   rows,
   connectedLeagueCount,
 }: {

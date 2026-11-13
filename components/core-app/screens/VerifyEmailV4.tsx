@@ -59,7 +59,7 @@ type SendOutcome = 'sent' | 'already' | 'rate_limited' | 'send_failed' | 'login_
 /** The send route's own spacing rule is 60s; the button mirrors it. */
 const RESEND_COOLDOWN_SECONDS = 60
 
-export type VerifyEmailV4Props = {
+type VerifyEmailV4Props = {
   /** From the server session — the handoff prints it in the pending card. */
   email: string | null
   /** True when the account is already verified before this page loads. */

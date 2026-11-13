@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { AlertCircle } from 'lucide-react';
 import { newsPlayerHref } from '@/lib/fantasy-news-aggregator/playerLinkResolver';
 
-export interface BreakingNewsBannerProps {
+interface BreakingNewsBannerProps {
   /** Top 1–3 items to highlight as breaking (e.g. by importanceScore or recency). */
   items: EnrichedNewsItem[];
   /** The feed's sport — player links resolve the name in it when an item carries none. */

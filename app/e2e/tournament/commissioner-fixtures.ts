@@ -54,7 +54,7 @@ export const summary: TournamentCommissionerSummary = {
 }
 
 /** GET /api/tournament/[id]/access as the creator. */
-export const access = { authenticated: true, isCreator: true, canUseControlConsole: true, canEditHubSettings: true }
+const access = { authenticated: true, isCreator: true, canUseControlConsole: true, canEditHubSettings: true }
 
 export const announcements: AnnouncementFeedItem[] = [
   { id: 'ca-1', title: 'Week 6 is final', body: 'Two weeks left in the Opening Round. The top 2 in each league advance; 2 wildcards come from the bubble.', type: 'round_update', pinned: true, createdAt: '2026-10-14T13:00:00.000Z' },
@@ -67,7 +67,7 @@ export const waitlist = {
   })),
 }
 
-export const staff = {
+const staff = {
   staff: [
     { userId: 'cku0000staff00001', displayName: 'Riley Castellanos-Whitmore', permissions: { dashboard: true, manageLeagues: true, manageDrafts: true } },
     { userId: 'cku0000staff00002', displayName: 'Avery', permissions: { dashboard: true, manageChat: true } },

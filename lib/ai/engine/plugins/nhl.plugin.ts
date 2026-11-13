@@ -13,7 +13,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type NhlContext = {
+type NhlContext = {
   leagueId: string
   leagueName: string
   scoringType: "roto" | "h2h_categories" | "h2h_points"
@@ -29,12 +29,12 @@ export type NhlContext = {
   }>
 }
 
-export type NhlProviderData = {
+type NhlProviderData = {
   goalieStartProbabilities: Array<{ playerId: string; startProbability: number; isBackToBack: boolean }>
   ppDeployment: Array<{ playerId: string; ppToi: number; ppUnit: 1 | 2 }>
 }
 
-export type NhlInsights = {
+type NhlInsights = {
   goalieRecommendations: Array<{
     playerName: string
     startScore: number // startProbability × (1 - backToBackPenalty) × winPctMultiplier

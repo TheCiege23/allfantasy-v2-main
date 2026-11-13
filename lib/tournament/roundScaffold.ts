@@ -18,7 +18,7 @@
  * directly, and the importer just writes what it returns.
  */
 
-export type ScaffoldInput = {
+type ScaffoldInput = {
   /** First and last week of the regular season. */
   openingWeekStart: number
   openingWeekEnd: number
@@ -34,7 +34,7 @@ export type ScaffoldInput = {
   finalWeek?: number
 }
 
-export type ScaffoldedRound = {
+type ScaffoldedRound = {
   roundNumber: number
   roundType: 'opening' | 'bubble' | 'tournament' | 'elite' | 'final'
   roundLabel: string
@@ -42,7 +42,7 @@ export type ScaffoldedRound = {
   weekEnd: number
 }
 
-export type ScaffoldResult =
+type ScaffoldResult =
   | { ok: true; rounds: ScaffoldedRound[] }
   | { ok: false; error: string }
 

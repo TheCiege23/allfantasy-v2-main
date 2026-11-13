@@ -18,7 +18,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 
-export type RoundReadiness = {
+type RoundReadiness = {
   currentRoundNumber: number
   /** The round the tournament would move into. Null when there is none. */
   nextRoundNumber: number | null
@@ -31,7 +31,7 @@ export type RoundReadiness = {
   reason: string | null
 }
 
-export type AdvanceOutcome =
+type AdvanceOutcome =
   | { ok: true; movedTo: number; label: string }
   | { ok: false; error: string; status: 400 | 404 }
 

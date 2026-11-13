@@ -24,7 +24,7 @@ import raw from '@/data/nfl-draft-capital.json'
  * ship the path — the same reasoning as `teamTendencies.ts`.
  */
 
-export interface DraftCapital {
+interface DraftCapital {
   /** 1–7. Undrafted players are absent from the table entirely, not stored as round 8. */
   draftRound: number
   /** Overall pick number, when the release carries it. */
@@ -46,7 +46,7 @@ const ROWS = raw as Row[]
  * The same normalisation the derive script applied — the two MUST agree or every lookup misses.
  * Exported so a test can assert that, rather than trusting two copies to stay in step.
  */
-export function normalizeName(s: string): string {
+function normalizeName(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
@@ -57,7 +57,7 @@ export function normalizeName(s: string): string {
     .trim()
 }
 
-export function positionGroup(pos: string): string {
+function positionGroup(pos: string): string {
   const p = pos.toUpperCase().trim()
   if (['CB', 'S', 'SS', 'FS', 'SAF', 'DB'].includes(p)) return 'DB'
   if (['DE', 'DT', 'NT', 'DL', 'EDGE'].includes(p)) return 'DL'
@@ -93,7 +93,7 @@ for (const r of ROWS) {
   byName.set(r.name, arr)
 }
 
-export interface LookupInput {
+interface LookupInput {
   name: string
   /** `SportsPlayer.dob`. Populated on 0 of 583 rostered defenders TODAY — see the note below. */
   dob?: string | null

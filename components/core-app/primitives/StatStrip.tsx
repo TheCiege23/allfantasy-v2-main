@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import './af-primitives.css'
 
-export type StatTone = 'warn' | 'accent' | 'good' | 'bad'
+type StatTone = 'warn' | 'accent' | 'good' | 'bad'
 
 /**
  * Which way a tile's figure moved since the last reading. The arrow is drawn, and coloured by

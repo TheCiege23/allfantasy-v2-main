@@ -9,7 +9,7 @@ import type { LiveLeagueGames as LiveLeagueGamesData } from '@/lib/core-app/live
 import type { ScoreboardGame, ScoreboardTeam } from '@/lib/core-app/leagueScoreboard'
 import { rosterLabel } from '@/lib/core-app/managerName'
 
-export type LiveGameState = 'live' | 'final' | 'upcoming'
+type LiveGameState = 'live' | 'final' | 'upcoming'
 
 /**
  * A game's chip. ScoreboardGame carries no state of its own: unscored is upcoming (its numbers are

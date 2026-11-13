@@ -15,7 +15,7 @@ import type { WeeklyCalendar, WeeklyCalendarEvent } from './weeklyCalendar'
 
 /* ── Headline counts ─────────────────────────────────────────────────────────────────────────── */
 
-export type WeekSummary = {
+type WeekSummary = {
   /** Head-to-head games you lead, on the scoreboard once points are in, else on projection. */
   winning: number
   losing: number
@@ -76,7 +76,7 @@ export function summarizeWeek(board: WeekBoard): WeekSummary {
  *
  * `EliminationWeek.margin` is your score minus the current lowest score, so it is never negative.
  */
-export type SurvivalStatus =
+type SurvivalStatus =
   | { kind: 'lowest' }
   | { kind: 'above'; points: number }
   | { kind: 'not-started' }
@@ -100,7 +100,7 @@ export function rankSurvival(weeks: readonly EliminationWeek[]): EliminationWeek
 
 /* ── Kickoffs grouped by time ────────────────────────────────────────────────────────────────── */
 
-export type KickoffGroup = {
+type KickoffGroup = {
   /** ISO instant — formatted in the reader's own time zone by the client. */
   at: string
   leagues: Array<{ leagueId: string; leagueName: string; href: string }>

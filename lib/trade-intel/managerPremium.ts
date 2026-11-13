@@ -45,7 +45,7 @@ export type PricedSide = {
   receivedByPosition: Record<string, number>
 }
 
-export type PositionPremium = {
+type PositionPremium = {
   position: string
   /** Geometric mean of given ÷ received. Above 1 means they pay over market. */
   factor: number

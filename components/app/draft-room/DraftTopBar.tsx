@@ -30,7 +30,7 @@ import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import './af-draft-room.css'
 import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
 
-export type DraftTopBarProps = {
+type DraftTopBarProps = {
   leagueName: string
   /** League avatar / logo URL. Rendered next to the name when provided. */
   leagueLogoUrl?: string | null

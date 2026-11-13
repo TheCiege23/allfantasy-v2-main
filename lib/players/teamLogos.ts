@@ -10,7 +10,7 @@ import { isKnownDeadLogoGuess, liveLogoOrNull } from '@/lib/sport-teams/knownDea
 import type { SportType } from '@/lib/sport-teams/types'
 
 /** NBA Stats API / cdn.nba.com numeric team ids */
-export const NBA_TEAM_IDS: Record<string, number> = {
+const NBA_TEAM_IDS: Record<string, number> = {
   ATL: 1610612737,
   BOS: 1610612738,
   BKN: 1610612751,
@@ -65,7 +65,7 @@ export function nbaCupLogoCode(teamName: string): string | null {
   return null
 }
 
-export const MLB_TEAM_IDS: Record<string, number> = {
+const MLB_TEAM_IDS: Record<string, number> = {
   ARI: 109,
   ATL: 144,
   BAL: 110,
@@ -99,7 +99,7 @@ export const MLB_TEAM_IDS: Record<string, number> = {
 }
 
 /** ESPN `teamlogos/{segment}/500/{id}.png` path segment */
-export const SPORT_TO_ESPN_TEAMLOGO: Record<string, string> = {
+const SPORT_TO_ESPN_TEAMLOGO: Record<string, string> = {
   NFL: 'nfl',
   NBA: 'nba',
   MLB: 'mlb',

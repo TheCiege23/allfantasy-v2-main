@@ -7,7 +7,7 @@ import type {
 } from '@/lib/player-comparison-lab/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-export interface PlayerStatCardsProps {
+interface PlayerStatCardsProps {
   players: ResolvedPlayerStats[];
   scores: PlayerComparisonScores[];
 }

@@ -54,7 +54,7 @@ const FEATURE_WEIGHT_KEYS: Array<[keyof AcceptanceFeatures, keyof typeof DEFAULT
   ['volatilityDelta', 'volatility'],
 ]
 
-export interface AcceptanceResult {
+interface AcceptanceResult {
   probability: number
   /** Fraction of the model's features that had real values (0–1). */
   featureCoverage: number

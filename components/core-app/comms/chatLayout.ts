@@ -18,14 +18,14 @@
 import { CHAT_THREAD_GROUP_MS } from '@/lib/chat-core/chat-timestamps'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
-export type ChatLayoutMessage = {
+type ChatLayoutMessage = {
   id: string
   /** Null for system rows and for senders the server could not name. */
   authorId: string | null
   createdAt: string
 }
 
-export type ChatLayoutItem<M extends ChatLayoutMessage> =
+type ChatLayoutItem<M extends ChatLayoutMessage> =
   | { kind: 'day'; key: string; label: string }
   | {
       kind: 'message'
@@ -130,7 +130,7 @@ export function layoutMessages<M extends ChatLayoutMessage>(
  * from the name, so one person is the same colour in every list and every conversation — without it
  * every manager without a photo was the same grey circle and a DM list read as a column of clones.
  */
-export const AVATAR_TONES = 8
+const AVATAR_TONES = 8
 export function avatarToneFor(name: string | null | undefined): number {
   const s = String(name ?? '').trim().toLowerCase()
   let h = 0
@@ -174,7 +174,7 @@ export function safeAvatarUrl(url: string | null | undefined): string | null {
  */
 const FALLBACK_LABELS = new Set(['🎬 GIF', '📎 Media', 'GIF', '[GIF]'])
 
-export type MessageBodyInput = {
+type MessageBodyInput = {
   body: string
   metadata?: Record<string, unknown> | null
   messageType?: string | null

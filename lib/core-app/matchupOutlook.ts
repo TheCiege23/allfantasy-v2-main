@@ -25,7 +25,7 @@ export const SETTLED_GAMES = 5
 
 export type DefenseCell = { defense: string; position: string; games: number; allowedPerGame: number }
 
-export type MatchupTier = 'soft' | 'neutral' | 'tough'
+type MatchupTier = 'soft' | 'neutral' | 'tough'
 
 export type MatchupRead = {
   week: number

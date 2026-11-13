@@ -9,7 +9,7 @@
  * An unknown or missing screen keeps the generic cards: promising a table that then arrives as cards
  * is worse than promising nothing in particular.
  */
-export type ScreenSkeletonKind = 'table' | 'scoreboard' | 'roster' | 'cards'
+type ScreenSkeletonKind = 'table' | 'scoreboard' | 'roster' | 'cards'
 
 const KIND: Readonly<Record<string, ScreenSkeletonKind>> = {
   standings: 'table',

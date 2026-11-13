@@ -30,7 +30,7 @@ const STATUS_LABELS: Record<CommissionerRecommendationStatus, string> = {
   resolved: 'Resolved',
 }
 
-export interface RecommendationCardProps {
+interface RecommendationCardProps {
   /** What happened. */
   title: string
   /** Why it matters. */

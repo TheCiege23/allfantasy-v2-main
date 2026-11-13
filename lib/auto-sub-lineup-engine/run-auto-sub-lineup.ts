@@ -37,7 +37,7 @@ export interface AutoSubLineupEngineInput {
   bench: PremiumPlayerInput[]
 }
 
-export interface AutoSubLineupEngineResult {
+interface AutoSubLineupEngineResult {
   autoSubsExecuted: Array<{
     starterName: string
     starterStatus: string

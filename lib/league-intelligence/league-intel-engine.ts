@@ -13,13 +13,13 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type TeamGrade = 'S' | 'A+' | 'A' | 'B+' | 'B' | 'C+' | 'C' | 'D' | 'F'
+type TeamGrade = 'S' | 'A+' | 'A' | 'B+' | 'B' | 'C+' | 'C' | 'D' | 'F'
 
-export type TeamTrend = 'rising' | 'stable' | 'falling' | 'volatile'
+type TeamTrend = 'rising' | 'stable' | 'falling' | 'volatile'
 
-export type TeamCategory = 'elite_contender' | 'contender' | 'playoff_bubble' | 'middle_pack' | 'retooling' | 'rebuilding' | 'tanking'
+type TeamCategory = 'elite_contender' | 'contender' | 'playoff_bubble' | 'middle_pack' | 'retooling' | 'rebuilding' | 'tanking'
 
-export type RecommendedAction =
+type RecommendedAction =
   | 'push_for_title'
   | 'buy_depth'
   | 'sell_aging_assets'
@@ -30,7 +30,7 @@ export type RecommendedAction =
   | 'trade_for_youth'
   | 'address_weakness'
 
-export interface TeamIntelCard {
+interface TeamIntelCard {
   rosterId: number
   teamName: string
   managerId: string | null
@@ -72,7 +72,7 @@ export interface TeamIntelCard {
   riskFlags: string[]
 }
 
-export interface LeagueWideInsights {
+interface LeagueWideInsights {
   strongestTeam: { teamName: string; reason: string }
   mostOverratedTeam: { teamName: string; reason: string } | null
   mostDangerousUnderdog: { teamName: string; reason: string } | null

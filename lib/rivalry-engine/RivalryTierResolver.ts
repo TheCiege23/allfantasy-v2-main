@@ -6,7 +6,7 @@
 import type { RivalryTier } from './types'
 import { RIVALRY_TIERS, DEFAULT_TIER_THRESHOLDS } from './types'
 
-export interface TierThresholds {
+interface TierThresholds {
   Emerging: { min: number; max?: number }
   Heated: { min: number; max?: number }
   'Blood Feud': { min: number; max?: number }

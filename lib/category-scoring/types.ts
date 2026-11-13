@@ -46,10 +46,10 @@ export function isCategoryPresetId(value: unknown): value is CategoryPresetId {
  * - `higher`: team with the larger value wins (PTS, REB, AST…)
  * - `lower`:  team with the smaller value wins (TO, GAA, ERA, WHIP…)
  */
-export type CategoryDirection = 'higher' | 'lower'
+type CategoryDirection = 'higher' | 'lower'
 
 /** How a category's value is derived from the raw per-player stat map. */
-export type CategoryComputation =
+type CategoryComputation =
   | { kind: 'sum'; statKey: string }
   | {
       /**

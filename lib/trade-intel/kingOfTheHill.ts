@@ -27,7 +27,7 @@ export const CROWN_BONUS = 10
 /** Players forfeited to waivers when the King loses. */
 export const CROWN_PENALTY_PLAYERS = 3
 
-export type CrownValue = {
+type CrownValue = {
   weeksRemaining: number
   /** Points the crown is worth if held to the playoffs. */
   maxPoints: number
@@ -77,7 +77,7 @@ export function crownValue(args: {
   }
 }
 
-export type CrownRisk = {
+type CrownRisk = {
   /** What the three forfeited players are worth, in expectation. */
   exposedValue: number | null
   basis: string

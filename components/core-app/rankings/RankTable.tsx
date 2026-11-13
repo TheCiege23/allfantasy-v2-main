@@ -40,7 +40,7 @@ export type RankColumn = {
   hideOnPhone?: boolean
 }
 
-export type RankCell = {
+type RankCell = {
   text: string
   href?: string
   title?: string

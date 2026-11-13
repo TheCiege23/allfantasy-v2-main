@@ -21,7 +21,7 @@ import { bestSlot, formatSlot, parseSlots, safeTimeZone, type SlotError, type Sl
 
 const KEY = 'draft_schedule_poll'
 
-export type DraftSchedulePoll = {
+type DraftSchedulePoll = {
   id: string
   pollMessageId: string | null
   slots: Array<{ id: string; startsAt: string }>
@@ -57,7 +57,7 @@ async function leagueZone(leagueId: string): Promise<string> {
   return safeTimeZone(s?.timezone)
 }
 
-export type CreateError = SlotError | 'not_found' | 'poll_open' | 'poll_failed'
+type CreateError = SlotError | 'not_found' | 'poll_open' | 'poll_failed'
 
 /** Offer start times to the league. One open poll at a time. */
 export async function createDraftSchedulePoll(leagueId: string, userId: string, rawSlots: unknown, now = new Date()): Promise<{ ok: true; poll: DraftSchedulePoll } | { ok: false; error: CreateError }> {
@@ -126,7 +126,7 @@ export async function readDraftSchedule(leagueId: string): Promise<DraftSchedule
   return { poll, tallies, best: bestSlot(tallies), answered: voters.size, teamCount: league.leagueSize ?? 0 }
 }
 
-export type LockError = 'not_found' | 'not_open' | 'unknown_slot' | 'refused'
+type LockError = 'not_found' | 'not_open' | 'unknown_slot' | 'refused'
 
 /** Lock one offered time as the draft date, through the settings choke point. */
 export async function lockDraftSlot(leagueId: string, userId: string, slotId: unknown): Promise<{ ok: true; draftDateUtc: string } | { ok: false; error: LockError; reason?: string }> {

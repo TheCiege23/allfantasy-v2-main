@@ -116,7 +116,7 @@ import {
  *      that must pass it cannot forget to show it.
  */
 
-export type PlatformId = 'sleeper' | 'espn' | 'yahoo'
+type PlatformId = 'sleeper' | 'espn' | 'yahoo'
 
 /** Sport sections folded in the league list on this device (AfCoreShell `foldedSports`). */
 const RAIL_FOLDED_KEY = 'af-rail-folded-sports'
@@ -346,7 +346,7 @@ function urgencyBadge(count: number | null | undefined): NavItem['badge'] {
  */
 type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
-export type AfCoreShellProps = {
+type AfCoreShellProps = {
   nativeLeague?: boolean
   /**
    * The redraft identity's sport theme for a native redraft `?league=` (lib/core-app/coreShellRedraftIdentity.ts).

@@ -26,9 +26,9 @@ export interface WeekResultInput {
   winLoss?: string | null
 }
 
-export type Outcome = 'W' | 'L' | 'T'
+type Outcome = 'W' | 'L' | 'T'
 
-export interface AllPlayRecord {
+interface AllPlayRecord {
   wins: number
   losses: number
   ties: number

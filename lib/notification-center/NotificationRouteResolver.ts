@@ -7,7 +7,7 @@ import type { PlatformNotification } from "@/types/platform-shared"
 import { getDeepLinkRedirect } from "@/lib/routing"
 import { isSupportedSport } from "@/lib/sport-scope"
 
-export interface NotificationDestination {
+interface NotificationDestination {
   href: string
   label: string
 }

@@ -16,7 +16,7 @@ import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 
-export type DraftPlayerCardProps = {
+type DraftPlayerCardProps = {
   /** Normalized display model (preferred) */
   display?: PlayerDisplayModel | null
   /** Unified product layer — fallback headshot / injury when display assets omit data */

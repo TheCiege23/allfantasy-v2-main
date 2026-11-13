@@ -2,11 +2,11 @@ import { ESPN_NCAAB_ROSTER_KEY_PREFIX, currentNcaabSeasonYear, type EspnNcaabRos
 
 const FRESH_MS = 14 * 24 * 60 * 60 * 1000
 export const ESPN_NCAAB_DEVY_ID_PREFIX = 'espn:ncaab:'
-export type RosterEvidenceRow = { cacheKey: string; data: unknown; expiresAt: Date }
+type RosterEvidenceRow = { cacheKey: string; data: unknown; expiresAt: Date }
 export type CurrentCollegeAthlete = { id: string; espnId: string; teamId: string; name: string; school: string; position: string; jersey: string | null; observedAt: Date }
 
 /** Provider ID is namespaced, stable across transfers, and distinguishable from RI and NFL IDs. */
-export function espnNcaabDevyId(espnId: string): string { return `${ESPN_NCAAB_DEVY_ID_PREFIX}${espnId}` }
+function espnNcaabDevyId(espnId: string): string { return `${ESPN_NCAAB_DEVY_ID_PREFIX}${espnId}` }
 
 /** Only fresh, current-season school snapshots can supply draft candidates. Refuse a player
  * observed on multiple schools until a refresh resolves the transfer; never guess which team won. */

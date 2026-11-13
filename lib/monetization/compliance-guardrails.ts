@@ -1,4 +1,4 @@
-export type MonetizationComplianceCode =
+type MonetizationComplianceCode =
   | "in_app_dues_not_allowed"
   | "in_app_payout_not_allowed"
   | "in_app_prize_pool_not_allowed"

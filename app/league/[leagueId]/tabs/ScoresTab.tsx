@@ -44,7 +44,7 @@ type LiveScoresPayload = {
   fetchedAt: string | null
 }
 
-export type ScoresTabProps = {
+type ScoresTabProps = {
   league: UserLeague
   sport?: string
   idpLeagueUi?: boolean

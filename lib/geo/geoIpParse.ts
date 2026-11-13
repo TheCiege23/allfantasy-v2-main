@@ -48,14 +48,14 @@ export const UNREADABLE_IP_GEO: ParsedIpGeo = {
  */
 const REGION_CODE = /^[A-Z0-9]{1,3}$/
 
-export function asRegionCode(value: unknown): string | null {
+function asRegionCode(value: unknown): string | null {
   if (typeof value !== "string") return null
   const normalised = normaliseRegion(value.trim() === "" ? null : value)
   if (!normalised) return null
   return REGION_CODE.test(normalised) ? normalised : null
 }
 
-export function asCountryCode(value: unknown): string | null {
+function asCountryCode(value: unknown): string | null {
   if (typeof value !== "string") return null
   const normalised = normaliseCountry(value.trim() === "" ? null : value)
   if (!normalised) return null
@@ -155,7 +155,7 @@ export function parseIpApiPayload(data: Record<string, unknown> | null): ParsedI
 const PRIVACY_RELAY_ASNS = new Set(["13335", "36183", "54113"])
 const PRIVACY_RELAY_ORGS = ["cloudflare", "akamai", "fastly"]
 
-export function isPrivacyRelayNetwork(asn: unknown, org: unknown): boolean {
+function isPrivacyRelayNetwork(asn: unknown, org: unknown): boolean {
   const asnDigits = String(asn ?? "").trim().toUpperCase().replace(/^AS/, "")
   if (PRIVACY_RELAY_ASNS.has(asnDigits)) return true
   const name = String(org ?? "").toLowerCase()
@@ -264,7 +264,7 @@ export function combineAnonymizerSignals(s: AnonymizerSignals): boolean | null {
   return combineAnonymizerDetail(s).anonymized
 }
 
-export interface AnonymizerSignals {
+interface AnonymizerSignals {
   tor: boolean
   proxycheck: ProxycheckVerdict | null
   ipapi: ParsedIpGeo | null
@@ -280,7 +280,7 @@ export interface AnonymizerDetail {
 }
 
 /** The three things that can call a connection anonymized. */
-export type AnonymizerSource = "tor" | "proxycheck" | "ipapi"
+type AnonymizerSource = "tor" | "proxycheck" | "ipapi"
 
 /** `combineAnonymizerSignals`, plus which signal decided it. One rule, two shapes. */
 export function combineAnonymizerDetail(s: AnonymizerSignals): AnonymizerDetail {

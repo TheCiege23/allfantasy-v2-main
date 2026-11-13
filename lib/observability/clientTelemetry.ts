@@ -15,7 +15,7 @@
 
 import { classifyDevice, classifyRequest, type DeviceClass } from './requestContext'
 
-export type NavigatorLike = {
+type NavigatorLike = {
   userAgent?: string
   webdriver?: boolean
   maxTouchPoints?: number

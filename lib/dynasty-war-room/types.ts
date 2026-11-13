@@ -37,7 +37,7 @@ export interface DynastyDataAvailability {
   freeAgentPool: DataState
 }
 
-export interface DynastyFreshness {
+interface DynastyFreshness {
   generatedAt: string
   valuesAsOf: string | null
   injuriesAsOf: string | null

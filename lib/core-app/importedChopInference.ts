@@ -34,7 +34,7 @@ export type ChopCandidate = {
   rosterId: string
 }
 
-export type ChopRow = {
+type ChopRow = {
   leagueId: string
   seasonYear: number
   week: number

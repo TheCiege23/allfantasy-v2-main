@@ -42,7 +42,7 @@ export type DraftStyle = {
   youthLean: number | null
 }
 
-export type BoardPlayer = {
+type BoardPlayer = {
   playerName: string
   position: string
   adp: number | null
@@ -52,20 +52,20 @@ export type BoardPlayer = {
 /** Past picks needed before a style is trusted. */
 export const MIN_STYLE_SAMPLE = 10
 /** Picks deep in a draft drift from ADP for reasons that are not style (the board runs thin). */
-export const STYLE_ADP_HORIZON = 150
+const STYLE_ADP_HORIZON = 150
 /** Only the top of the board is considered. */
-export const WINDOW = 15
+const WINDOW = 15
 /** A reach is capped at this many picks, so one wild past draft cannot send a pick off the board. */
-export const MAX_REACH = 18
+const MAX_REACH = 18
 /** A youth lean is capped at this many years, for the same reason. */
-export const MAX_YOUTH_LEAN = 3
+const MAX_YOUTH_LEAN = 3
 /** A lean smaller than this is noise, not a habit, and tilts nothing. */
-export const MIN_YOUTH_LEAN = 0.5
+const MIN_YOUTH_LEAN = 0.5
 /** Score per (year of lean × year younger than the window's average). A 2-year lean and a player 3 years
  *  younger than the window add 0.3 — about a position habit's weight, never more than ADP closeness. */
-export const YOUTH_WEIGHT = 0.05
+const YOUTH_WEIGHT = 0.05
 /** A player's age gap from the window counts up to this many years, so youth alone can never outweigh a long reach. */
-export const MAX_AGE_GAP = 3
+const MAX_AGE_GAP = 3
 
 const pos = (p: string) => String(p ?? '').trim().toUpperCase()
 

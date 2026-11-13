@@ -12,7 +12,7 @@
 import type { ImportProvider } from '@/lib/league-import/types'
 
 /** Canonical FantasyUser identifier. Equal to `AppUser.id` today — see FantasyUserResolver. */
-export type FantasyUserId = string
+type FantasyUserId = string
 
 export interface FantasyUser {
   fantasyUserId: FantasyUserId
@@ -26,12 +26,12 @@ export interface FantasyUser {
  * stores a credential (not a durable provider-user-id) reports
  * `transient_credential_only`, not a fake `stored` identity.
  */
-export type IdentityResolutionMethod =
+type IdentityResolutionMethod =
   | 'stored'
   | 'transient_credential_only'
   | 'not_available'
 
-export interface SourceAttribution {
+interface SourceAttribution {
   sourceTable: 'UserProfile' | 'LeagueAuth' | 'FantraxUser' | 'PlayerIdentityMap' | 'derived'
   resolvedAt: Date
 }
@@ -56,7 +56,7 @@ export interface PlatformIdentity {
  * caller that treats them the same is still correct, but one that reports them
  * separately can tell a coverage gap from a discriminator gap.
  */
-export type PlayerIdentityConfidence = 'direct' | 'name_match' | 'ambiguous' | 'miss'
+type PlayerIdentityConfidence = 'direct' | 'name_match' | 'ambiguous' | 'miss'
 
 export interface PlayerIdentityResult {
   canonicalPlayerId: string | null

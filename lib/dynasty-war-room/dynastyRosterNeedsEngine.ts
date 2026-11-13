@@ -11,7 +11,7 @@
 import { dynastyValue, ageTrajectory } from './dynastyPlayerValue'
 import type { DynastyPlayerFact, DynastyWarRoomContext } from './types'
 
-export interface DynastyTeamNeed {
+interface DynastyTeamNeed {
   position: string
   severity: 'critical' | 'high' | 'moderate'
   reason: string

@@ -298,7 +298,7 @@ export interface NormalizedTradedPick {
 }
 
 /** Title-game result for one season, in the adapter's own team id space. */
-export interface NormalizedSeasonPlacement {
+interface NormalizedSeasonPlacement {
   champion_source_team_id: string | null
   runner_up_source_team_id: string | null
   /** How the title game was identified — see `sleeper/bracketPlacements.ts`. */
@@ -416,7 +416,7 @@ export interface ExternalIdentityMapping {
   external_ids?: { sportradar?: string }
 }
 
-export type ImportWarningSeverity = 'info' | 'warn' | 'error'
+type ImportWarningSeverity = 'info' | 'warn' | 'error'
 
 export interface ImportWarningRecord {
   code: string

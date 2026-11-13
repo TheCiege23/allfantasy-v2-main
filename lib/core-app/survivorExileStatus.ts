@@ -7,7 +7,7 @@ export type ExileRailStatus =
   | { kind: 'island'; tokens: number; tokensToReturn: number | null; returnWeek: number | null }
   | { kind: 'watching'; onIsland: number }
 
-export type ExileStatusInputs = {
+type ExileStatusInputs = {
   /** The viewer's player row in the Survivor league, if they have one. */
   viewer: { playerState: string; tokenBalance: number } | null
   /** Managers on the island now (`playerState: 'exile'`). */

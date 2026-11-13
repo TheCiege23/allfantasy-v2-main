@@ -27,11 +27,11 @@ import { gamesCountTablesExist } from './gamesCountStore'
  * is applied. Going BACK to "All games" never needs the tables.
  */
 
-export type GamesCountRefusal = { status: number; code: string; message: string }
+type GamesCountRefusal = { status: number; code: string; message: string }
 
-export type SeasonForGamesCountSwitch = { sport: string; season: number; status: string | null }
+type SeasonForGamesCountSwitch = { sport: string; season: number; status: string | null }
 
-export function sameGamesCountSetting(a: GamesCountSetting, b: GamesCountSetting): boolean {
+function sameGamesCountSetting(a: GamesCountSetting, b: GamesCountSetting): boolean {
   if (a.mode !== b.mode) return false
   return a.mode !== 'best_n' || a.n === (b as { n: number }).n
 }

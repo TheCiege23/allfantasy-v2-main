@@ -31,7 +31,7 @@ export const TRENDING_MIN_LEAGUES = 2
 export const TRENDING_LIMIT = 8
 const TTL_MS = 15 * 60_000
 
-export type TrendingAdd = SleeperPlayer & { leagues: number }
+type TrendingAdd = SleeperPlayer & { leagues: number }
 export type TrendingAdds = {
   rows: TrendingAdd[]
   /** Distinct leagues with any add in the window — the denominator for "added in N". */

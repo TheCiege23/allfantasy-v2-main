@@ -42,7 +42,7 @@ type ActionGroup = {
   actions: WorkspaceAction[]
 }
 
-export type CommissionerOperationsWorkspaceProps = {
+type CommissionerOperationsWorkspaceProps = {
   league: UserLeague
   leagueId: string
   isCommissioner: boolean

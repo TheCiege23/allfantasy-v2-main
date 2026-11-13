@@ -18,7 +18,7 @@ export type TradeIntentKind =
   | 'teach'
   | 'general_trade'
 
-export interface TradeToolLimitation {
+interface TradeToolLimitation {
   code:
     | 'INSUFFICIENT_SAMPLE'
     | 'NO_SNAPSHOT'

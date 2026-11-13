@@ -27,7 +27,7 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
-export interface GetPlayerOutlookParams {
+interface GetPlayerOutlookParams {
   playerName?: string
   playerId?: string
   sport?: string

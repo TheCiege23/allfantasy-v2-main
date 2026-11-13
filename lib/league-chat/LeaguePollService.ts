@@ -4,9 +4,9 @@
  * Platform threads: poll can be a messageType with body/metadata; full UI is future.
  */
 
-export const LEAGUE_POLL_MAX_OPTIONS = 6
-export const LEAGUE_POLL_QUESTION_MAX_LENGTH = 200
-export const LEAGUE_POLL_OPTION_MAX_LENGTH = 100
+const LEAGUE_POLL_MAX_OPTIONS = 6
+const LEAGUE_POLL_QUESTION_MAX_LENGTH = 200
+const LEAGUE_POLL_OPTION_MAX_LENGTH = 100
 
 export type LeaguePollPayload = {
   question: string

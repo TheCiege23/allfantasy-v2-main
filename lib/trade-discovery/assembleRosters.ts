@@ -16,7 +16,7 @@ import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
 
 const RECENT_DAYS = 30
 
-export interface AssembledLeague {
+interface AssembledLeague {
   sport: string
   draftPickTrading: boolean
   rosters: DiscoveryRoster[]

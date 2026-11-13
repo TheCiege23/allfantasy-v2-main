@@ -9,7 +9,7 @@
  * Pure: imported by the renderers (server), the page (server) and tests.
  */
 
-export const PROACTIVE_FROM = [
+const PROACTIVE_FROM = [
   /** In the bell or on the phone. */
   'lineup_check',
   /** In the email. */
@@ -56,7 +56,7 @@ export function chimmyChatHref(args: {
  * Where the weekly emails send someone to turn on phone alerts: the one screen with the full opt-in
  * card, which handles iPhone's Home Screen step and a blocked permission properly.
  */
-export const PUSH_SETUP_HREF = '/core/notifications'
+const PUSH_SETUP_HREF = '/core/notifications'
 
 /** The line under both weekly emails. Escaping is the caller's — `base` is a trusted origin. */
 export function pushSetupEmailLine(base: string): string {

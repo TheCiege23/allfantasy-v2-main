@@ -1,6 +1,6 @@
 import type { TradeReplayPayload } from './types'
 
-export type PointInTimeEvidenceCheck = { eligible: true; newestEvidenceAt: string } | { eligible: false; reason: string }
+type PointInTimeEvidenceCheck = { eligible: true; newestEvidenceAt: string } | { eligible: false; reason: string }
 
 export function checkTradeReplayPointInTimeEvidence(
   payload: TradeReplayPayload,

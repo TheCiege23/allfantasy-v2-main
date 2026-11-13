@@ -1,4 +1,4 @@
-export type NewsSentiment = 'bullish' | 'bearish' | 'neutral' | 'injury_concern'
+type NewsSentiment = 'bullish' | 'bearish' | 'neutral' | 'injury_concern'
 
 export interface PlayerNewsData {
   playerName: string

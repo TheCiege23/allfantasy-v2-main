@@ -1,4 +1,4 @@
-export const WORLD_CUP_CHAT_ALLOWED_COLORS = [
+const WORLD_CUP_CHAT_ALLOWED_COLORS = [
   "default",
   "af-blue",
   "red",
@@ -7,7 +7,7 @@ export const WORLD_CUP_CHAT_ALLOWED_COLORS = [
   "purple",
 ] as const
 
-export const WORLD_CUP_CHAT_ALLOWED_FONTS = [
+const WORLD_CUP_CHAT_ALLOWED_FONTS = [
   "default",
   "clean",
   "sport",
@@ -17,7 +17,7 @@ export const WORLD_CUP_CHAT_ALLOWED_FONTS = [
 export type WorldCupChatColor = typeof WORLD_CUP_CHAT_ALLOWED_COLORS[number]
 export type WorldCupChatFont = typeof WORLD_CUP_CHAT_ALLOWED_FONTS[number]
 
-export type WorldCupChatRichTextMarks = {
+type WorldCupChatRichTextMarks = {
   bold?: boolean
   italic?: boolean
   underline?: boolean

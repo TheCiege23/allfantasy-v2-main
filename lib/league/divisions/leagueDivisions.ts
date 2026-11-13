@@ -54,7 +54,7 @@ export type LeagueDivisionConfig = {
 
 export type LeagueDivision = { key: string; index: number; name: string }
 
-export type ActiveLeagueDivisions = {
+type ActiveLeagueDivisions = {
   divisions: LeagueDivision[]
   /** `LeagueTeam.id` → division key. */
   teamDivision: Map<string, string>
@@ -66,17 +66,17 @@ function record(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 }
 
-export function divisionKey(index: number): string {
+function divisionKey(index: number): string {
   return `div-${index + 1}`
 }
 
-export function readDivisionPlayoffRule(v: unknown): DivisionPlayoffRule {
+function readDivisionPlayoffRule(v: unknown): DivisionPlayoffRule {
   return typeof v === 'string' && (DIVISION_PLAYOFF_RULES as readonly string[]).includes(v)
     ? (v as DivisionPlayoffRule)
     : DEFAULT_DIVISION_PLAYOFF_RULE
 }
 
-export function defaultDivisionConfig(): LeagueDivisionConfig {
+function defaultDivisionConfig(): LeagueDivisionConfig {
   return {
     count: 0,
     names: [],
@@ -141,7 +141,7 @@ export type LeagueTeamIdentity = {
  * The league team a roster belongs to, from any ids the caller has for it (a generic `Roster.id`, its
  * `platformUserId`, a season roster's `ownerId`). Exact id matches only — never names, which repeat.
  */
-export function matchLeagueTeam(
+function matchLeagueTeam(
   rosterIds: ReadonlyArray<string | null | undefined>,
   teams: ReadonlyArray<LeagueTeamIdentity>,
 ): LeagueTeamIdentity | null {
@@ -190,7 +190,7 @@ export function scheduleDivisionsForRosters(
 
 /* ── Validation ─────────────────────────────────────────────────────── */
 
-export type DivisionSetupInput = {
+type DivisionSetupInput = {
   count: number
   names: string[]
   teamAssignments: Record<string, number>
@@ -198,7 +198,7 @@ export type DivisionSetupInput = {
   rivalsTwice?: unknown
 }
 
-export type DivisionSetupCheck =
+type DivisionSetupCheck =
   | { ok: true }
   | { ok: false; code: 'COUNT_NOT_ALLOWED' | 'TOO_FEW_TEAMS' | 'NAME_REQUIRED' | 'NAME_DUPLICATE' | 'NAME_TOO_LONG' | 'UNKNOWN_TEAM' | 'BAD_DIVISION' | 'UNEVEN' | 'BAD_PLAYOFF_RULE' | 'BAD_RIVALS_TWICE'; error: string }
 
@@ -278,7 +278,7 @@ export function validateDivisionSetup(input: DivisionSetupInput, teamIds: Readon
 
 /* ── Records and standings ──────────────────────────────────────────── */
 
-export type DivisionRecord = { wins: number; losses: number; ties: number }
+type DivisionRecord = { wins: number; losses: number; ties: number }
 
 /**
  * Each roster's record in games against its own division. Pass the same final, regular-season,
@@ -319,7 +319,7 @@ export function divisionRecords(
   return out
 }
 
-export type DivisionStandingsGroup<T> = {
+type DivisionStandingsGroup<T> = {
   key: string
   name: string
   rows: Array<T & { divisionRank: number }>

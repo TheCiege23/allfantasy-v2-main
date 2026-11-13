@@ -14,19 +14,19 @@ import { getAgeCurve, computeAgeMultiplier } from '@/lib/trade-engine/sport-tuni
 // Types
 // ---------------------------------------------------------------------------
 
-export const MarketModeEnum = z.enum([
+const MarketModeEnum = z.enum([
   'all_players', 'watchlist', 'my_roster', 'league_targets', 'trending',
   'buy_low', 'sell_high', 'crash_risk', 'breakout_watch',
 ])
 
-export const TimeHorizonEnum = z.enum([
+const TimeHorizonEnum = z.enum([
   'this_week', 'short_term', 'rest_of_season', 'dynasty', 'devy', 'c2c_long_range',
 ])
 
-export type MarketLabel = 'strong_buy' | 'buy' | 'hold' | 'sell' | 'strong_sell' | 'watch'
-export type TrendDirection = 'rising' | 'stable' | 'falling' | 'volatile'
+type MarketLabel = 'strong_buy' | 'buy' | 'hold' | 'sell' | 'strong_sell' | 'watch'
+type TrendDirection = 'rising' | 'stable' | 'falling' | 'volatile'
 
-export interface MarketPlayerInput {
+interface MarketPlayerInput {
   playerId: string
   playerName: string
   team: string | null
@@ -54,9 +54,9 @@ export const MarketValueInputSchema = z.object({
     roleStability: z.number().nullable(), newsImpact: z.number().nullable(),
   })),
 })
-export type MarketValueInput = z.infer<typeof MarketValueInputSchema>
+type MarketValueInput = z.infer<typeof MarketValueInputSchema>
 
-export interface MarketPlayerResult {
+interface MarketPlayerResult {
   playerId: string
   playerName: string
   team: string | null
@@ -81,7 +81,7 @@ export interface MarketPlayerResult {
   priceTagNote: string
 }
 
-export interface MarketValueResult {
+interface MarketValueResult {
   marketMode: string
   timeHorizon: string
   generatedAt: string

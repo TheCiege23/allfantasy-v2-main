@@ -28,7 +28,7 @@ export async function recordEngagementEvent(
   }
 }
 
-export interface ActivitySummary {
+interface ActivitySummary {
   leagueViews: number
   bracketViews: number
   aiUses: number
@@ -78,7 +78,7 @@ export async function getActivitySummary(
   return { leagueViews, bracketViews, aiUses, lastActiveAt }
 }
 
-export interface EngagementStreakData {
+interface EngagementStreakData {
   currentStreak: number
   longestStreak: number
   activeDaysCount: number

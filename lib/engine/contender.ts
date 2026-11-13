@@ -7,7 +7,7 @@ export interface ContenderClassification {
   signals: string[]
 }
 
-export function classifyTeamPhase(
+function classifyTeamPhase(
   manager: EngineManagerProfile,
   league: EngineLeagueContext,
   leagueAvgPointsFor?: number

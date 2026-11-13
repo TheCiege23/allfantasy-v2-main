@@ -8,7 +8,7 @@ import { ZombieSceneBackground } from './ZombieSceneBackground'
 const ZOMBIE_INTRO_VIDEO = '/league-type-zombie-intro.mp4'
 const STORAGE_PREFIX = 'af_zombie_intro_seen_'
 
-export interface ZombieIntroModalProps {
+interface ZombieIntroModalProps {
   leagueId: string
   userId: string
   leagueName: string

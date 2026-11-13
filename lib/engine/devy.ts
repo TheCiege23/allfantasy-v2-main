@@ -9,7 +9,7 @@ import type { TradePlayerAsset } from './trade-types'
  * projected round and no ADP used to score 33-50 out of nothing, and that number
  * then priced a real trade. It now returns null and the caller excludes him.
  */
-export function breakoutAgeScore(age?: number | null) {
+function breakoutAgeScore(age?: number | null) {
   if (age == null) return 50
   if (age <= 19.5) return 95
   if (age <= 20) return 90
@@ -18,7 +18,7 @@ export function breakoutAgeScore(age?: number | null) {
   return 50
 }
 
-export function draftCapitalScore(round?: number | null) {
+function draftCapitalScore(round?: number | null) {
   if (!round) return 50
   if (round === 1) return 95
   if (round === 2) return 85
@@ -27,7 +27,7 @@ export function draftCapitalScore(round?: number | null) {
   return 45
 }
 
-export function adpScore(adp?: number | null) {
+function adpScore(adp?: number | null) {
   if (!adp) return 50
   if (adp <= 3) return 95
   if (adp <= 6) return 85

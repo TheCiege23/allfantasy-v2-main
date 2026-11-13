@@ -31,7 +31,7 @@ export interface PoolSortPlayer {
 /** Sort state key — includes legacy (`projected`, `name`) and sport stat keys (`pts`, `hr`, …). */
 export type PoolSortKey = string
 
-export type PoolSortDirection = 'asc' | 'desc'
+type PoolSortDirection = 'asc' | 'desc'
 
 export interface PoolSortState {
   key: PoolSortKey

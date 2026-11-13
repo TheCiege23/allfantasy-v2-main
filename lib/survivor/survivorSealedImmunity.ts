@@ -21,7 +21,7 @@
  * (survivorCouncilService.closeVoteWindow → postDeferredImmunityLines).
  */
 
-export interface SealCouncilInput {
+interface SealCouncilInput {
   status: string | null | undefined
   closedAt?: Date | string | null
   isRevealed?: boolean | null
@@ -42,7 +42,7 @@ export function shouldDeferImmunityAnnouncement(sealedImmunity: boolean, council
   return isImmunitySealed(sealedImmunity, council)
 }
 
-export interface SealedCouncilImmunity {
+interface SealedCouncilImmunity {
   /** Ids removed from eligibility (made safe). Empty while sealed. */
   safeImmuneUserIds: string[]
   /** What the public council context lists as immune. Empty while sealed. */

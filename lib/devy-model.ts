@@ -15,7 +15,7 @@
 
 export type DraftProjectionConfidence = 'high' | 'moderate' | 'low'
 
-export type DraftProjection = {
+type DraftProjection = {
   /** 0-100, or null when not one signal was available. */
   score: number | null
   /** How much of the model's weight was actually backed by data. */

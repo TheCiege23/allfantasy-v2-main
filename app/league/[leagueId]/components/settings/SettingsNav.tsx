@@ -132,7 +132,7 @@ export type SettingsNavTabId =
 type NavEntry = { id: SettingsNavTabId; label: string; icon: LucideIcon; labelKey?: string }
 
 /** One row in the nav. `key` is unique even where two rows open the same tab (Format & roster / Taxi squad). */
-export type SettingsNavItem = {
+type SettingsNavItem = {
   key: string
   id: SettingsNavTabId
   /** Fixed English label, as these tabs have always had. */
@@ -144,7 +144,7 @@ export type SettingsNavItem = {
   anchor?: string
 }
 
-export type SettingsNavGroup = {
+type SettingsNavGroup = {
   key: string
   /** Dictionary key for the group heading; the flat (non-dynasty) list has none. */
   headingKey?: string
@@ -250,7 +250,7 @@ const SURVIVOR_NAV: NavEntry[] = [
   { id: 'survivor_advanced', label: 'Advanced Rules', icon: SlidersHorizontal },
 ]
 
-export type SettingsNavOptions = {
+type SettingsNavOptions = {
   showSurvivorTabs?: boolean
   showZombieTabs?: boolean
   showIdpTabs?: boolean

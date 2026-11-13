@@ -14,7 +14,7 @@ import type { AiProviderProbeResult } from "@/lib/admin-dashboard/aiProviderEnti
 
 export type SportsOsStatus = "ready" | "partial" | "missing"
 
-export type SportsOsReadinessItem = {
+type SportsOsReadinessItem = {
   id: string
   label: string
   status: SportsOsStatus
@@ -23,7 +23,7 @@ export type SportsOsReadinessItem = {
   recommendation: string
 }
 
-export type SportsOsSportRow = {
+type SportsOsSportRow = {
   id: string
   label: string
   identityStatus: SportsOsStatus
@@ -35,7 +35,7 @@ export type SportsOsSportRow = {
   lastSyncedAt: string | null
 }
 
-export type SportsOsIntentRoute = {
+type SportsOsIntentRoute = {
   intent: string
   targetEngine: string
   status: SportsOsStatus
@@ -44,7 +44,7 @@ export type SportsOsIntentRoute = {
   note: string
 }
 
-export type SportsOsLeagueFormatRow = {
+type SportsOsLeagueFormatRow = {
   id: string
   label: string
   supportedSports: string[]

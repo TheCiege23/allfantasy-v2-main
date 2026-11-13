@@ -29,7 +29,7 @@
  * Only 429, 5xx and transport failures count.
  */
 
-export interface ProviderCircuitOptions {
+interface ProviderCircuitOptions {
   /** Consecutive hard failures before the circuit opens. */
   threshold?: number
   /** How long the circuit stays open before a probe is allowed through. */

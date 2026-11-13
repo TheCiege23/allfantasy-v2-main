@@ -17,7 +17,7 @@ export function hasMentions(text: string): boolean {
   return MENTION_REGEX_SINGLE.test(text)
 }
 
-export type MentionRange = { start: number; end: number; username: string }
+type MentionRange = { start: number; end: number; username: string }
 
 export function getMentionRanges(text: string): MentionRange[] {
   const ranges: MentionRange[] = []

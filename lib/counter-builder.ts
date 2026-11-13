@@ -6,7 +6,7 @@ export interface TradeShape {
   sideBValue: number
 }
 
-export interface Sweetener {
+interface Sweetener {
   type: 'PICK' | 'PLAYER' | 'FAAB'
   name: string
   value: number
@@ -15,7 +15,7 @@ export interface Sweetener {
   position?: string
 }
 
-export interface CounterOption {
+interface CounterOption {
   sweetener: Sweetener
   acceptProb: number
   champDelta: number
@@ -51,7 +51,7 @@ function addSweetenerToFeatures(
   }
 }
 
-export interface CounterContext {
+interface CounterContext {
   tradeTotal: number
   riskWeight?: number
   champDeltaEstimator?: (sweetenerValue: number) => number

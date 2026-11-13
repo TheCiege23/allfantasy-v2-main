@@ -26,7 +26,7 @@
 
 import * as Sentry from '@sentry/nextjs'
 
-export type DbOperation = { model?: string | null; operation: string }
+type DbOperation = { model?: string | null; operation: string }
 
 type AttributeValue = string | number | boolean
 
@@ -50,7 +50,7 @@ export type SpanApi = {
   }): SpanLike
 }
 
-export type DbObserverConfig = {
+type DbObserverConfig = {
   /** Operations at or above this duration get their own span. */
   slowQueryMs: number
   /** Most slow-query spans one request may create; totals keep counting past it. */
@@ -91,7 +91,7 @@ const DEFAULT_MAX_ERROR_SPANS = 10
 
 const round1 = (value: number) => Math.round(value * 10) / 10
 
-export function operationName(operation: DbOperation): string {
+function operationName(operation: DbOperation): string {
   return operation.model ? `${operation.model}.${operation.operation}` : operation.operation
 }
 

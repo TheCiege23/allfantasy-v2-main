@@ -17,7 +17,7 @@ export interface SportSeoPageConfig {
 const BASE = 'https://allfantasy.ai'
 
 /** Map flat route slug to existing SPORT_CONFIG or custom config for NCAA combined page. */
-export const SPORT_PAGE_SLUGS = [
+const SPORT_PAGE_SLUGS = [
   'fantasy-football',
   'fantasy-basketball',
   'fantasy-baseball',
@@ -26,7 +26,7 @@ export const SPORT_PAGE_SLUGS = [
   'fantasy-ncaa',
 ] as const
 
-export type SportPageSlug = (typeof SPORT_PAGE_SLUGS)[number]
+type SportPageSlug = (typeof SPORT_PAGE_SLUGS)[number]
 
 /** NCAA combined page: NCAA Basketball + NCAA Football. */
 const FANTASY_NCAA_CONFIG: SportSeoPageConfig = {

@@ -1,7 +1,7 @@
-export type DraftedPlayer = { playerId: string; name: string; pos: string; team?: string }
-export type DraftPlayer = { playerId: string; name: string; pos: string }
+type DraftedPlayer = { playerId: string; name: string; pos: string; team?: string }
+type DraftPlayer = { playerId: string; name: string; pos: string }
 
-export type GuillotineDraftRec = {
+type GuillotineDraftRec = {
   survivalPick: { playerId: string; name: string; reasoning: string }
   depthPick: { playerId: string; name: string; reasoning: string }
   ceilingPick: { playerId: string; name: string; reasoning: string }

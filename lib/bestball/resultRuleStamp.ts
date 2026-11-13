@@ -41,7 +41,7 @@ import { createHash } from 'node:crypto'
 import { OPTIMAL_LINEUP_ALGORITHM, type LineupSlotSpec } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
 
-export const BEST_BALL_RULE_STAMP_VERSION = 1
+const BEST_BALL_RULE_STAMP_VERSION = 1
 
 /**
  * `min` / `max` / `required` are kept when the slot list states them: a SOCCER contest template is a
@@ -49,7 +49,7 @@ export const BEST_BALL_RULE_STAMP_VERSION = 1
  * one that was seated. League slot lists never carry them, so their stamps are unchanged.
  */
 export type StoredSlot = { slot: string; eligible: string[]; count: number; slotOrder?: number; min?: number; max?: number; required?: boolean }
-export type StoredSlotSpec = LineupSlotSpec & { min?: number; max?: number; required?: boolean }
+type StoredSlotSpec = LineupSlotSpec & { min?: number; max?: number; required?: boolean }
 
 function slotBounds(s: { min?: unknown; max?: unknown; required?: unknown }) {
   return {
@@ -197,7 +197,7 @@ export function nextBestBallRuleStamp(args: {
  * A record of this write, not a lock: a contest week rescored later is stamped with what that rescore
  * used. No `sealedAt` is written, because nothing freezes a contest's slots.
  */
-export type ContestBestBallRuleStamp = {
+type ContestBestBallRuleStamp = {
   v: 1
   algorithm: string
   slots: StoredSlot[]
@@ -205,7 +205,7 @@ export type ContestBestBallRuleStamp = {
   scoringSource: typeof CONTEST_SCORING_SOURCE
 }
 
-export const CONTEST_SCORING_SOURCE = 'PlayerWeeklyScore.fantasyPts' as const
+const CONTEST_SCORING_SOURCE = 'PlayerWeeklyScore.fantasyPts' as const
 
 export function contestBestBallRuleStamp(args: {
   algorithm: unknown

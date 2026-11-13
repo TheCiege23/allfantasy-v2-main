@@ -5,7 +5,7 @@
 
 import { isValidTimezone, DEFAULT_TIMEZONE } from "./TimezonePreferenceService"
 
-export type TimezoneIana = string
+type TimezoneIana = string
 
 type FormattingLocale = "en-US" | "es-MX"
 

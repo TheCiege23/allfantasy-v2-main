@@ -67,7 +67,7 @@ function isImportProvider(
   return list.includes(provider as ImportProvider)
 }
 
-export interface DeriveCapabilitiesInput {
+interface DeriveCapabilitiesInput {
   provider: LeagueHubProvider
   /** Real, viewer-resolved commissioner flag already computed by the dashboard aggregator. */
   isCommissioner: boolean
@@ -97,7 +97,7 @@ function readCommissionerAttestation(settings: Record<string, unknown> | null): 
   return (raw as Record<string, unknown>)['accepted'] === true
 }
 
-export interface DeriveImportTypeInput {
+interface DeriveImportTypeInput {
   provider: LeagueHubProvider
   /**
    * Per-league: can THIS league be re-read from a live provider source?

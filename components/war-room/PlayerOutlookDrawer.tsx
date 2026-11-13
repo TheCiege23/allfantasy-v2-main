@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-export type PlayerOutlookDrawerProps = {
+type PlayerOutlookDrawerProps = {
   open: boolean
   onClose: () => void
   leagueId: string

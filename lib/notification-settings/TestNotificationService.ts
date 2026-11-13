@@ -1,6 +1,6 @@
 import type { NotificationCategoryId } from "./types"
 
-export interface SendTestNotificationResult {
+interface SendTestNotificationResult {
   ok: boolean
   sent?: {
     inApp: boolean

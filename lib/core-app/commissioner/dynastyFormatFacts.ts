@@ -4,7 +4,7 @@ import type { DynastyFormatFacts } from './formatCards'
 
 type SeasonRow = Parameters<typeof resolveDynastyRolloverSeasons>[0][number]
 
-export type DynastyFormatRows = {
+type DynastyFormatRows = {
   league: { rosterSize?: number | null; taxiSlots?: number | null }
   /** The saved DynastyLeagueConfig row, or null when the league never saved one. */
   config: { taxiSlots: number; rookieDraftRounds: number; rookieDraftType: string; futurePicksYearsOut: number } | null

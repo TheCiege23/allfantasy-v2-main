@@ -20,7 +20,7 @@ const PHASE_LABELS: Record<string, string> = {
 }
 
 /** `snake_case` / `camelCase` → "Sentence case". */
-export function humanizeCode(code: string): string {
+function humanizeCode(code: string): string {
   const words = code
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ')

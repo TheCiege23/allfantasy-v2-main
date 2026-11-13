@@ -4,9 +4,9 @@ import React, { useState } from 'react'
 import { Info } from 'lucide-react'
 import type { Confidence } from '@/lib/ai-context-envelope'
 
-export type ConfidenceLabel = 'low' | 'medium' | 'high'
+type ConfidenceLabel = 'low' | 'medium' | 'high'
 
-export interface ConfidenceMeterProps {
+interface ConfidenceMeterProps {
   /** 0–100. Always displayed when provided. */
   scorePct?: number
   label?: ConfidenceLabel

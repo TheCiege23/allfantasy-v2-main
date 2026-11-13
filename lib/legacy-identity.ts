@@ -1,14 +1,14 @@
 import { prisma } from '@/lib/prisma'
 import { resolveOrCreateLegacyUser } from '@/lib/legacy-user-resolver'
 
-export type LegacyIdentityResolutionSource =
+type LegacyIdentityResolutionSource =
   | 'app_user_legacy_link'
   | 'app_user_profile_sleeper_id'
   | 'app_user_profile_sleeper_username'
   | 'legacy_cookie_session'
   | 'none'
 
-export interface ResolvedLegacyIdentity {
+interface ResolvedLegacyIdentity {
   appUserId: string
   legacyUserId: string | null
   sleeperUsername: string | null

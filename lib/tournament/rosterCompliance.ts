@@ -18,7 +18,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveRoundRosterSize } from '@/lib/tournament/rosterRules'
 
-export type ViolationKind = 'roster_too_large' | 'ir_used' | 'no_roster'
+type ViolationKind = 'roster_too_large' | 'ir_used' | 'no_roster'
 
 export type Violation = {
   kind: ViolationKind

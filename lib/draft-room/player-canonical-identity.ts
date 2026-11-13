@@ -126,7 +126,7 @@ export function strictIdentityKeyWithTeam(
  *   getCanonicalPlayerKey({ name: 'Deebo Samuel', position: 'WR', team: 'SF' })
  *   // → 'name:deebo samuel|WR|SF'
  */
-export type CanonicalPlayerKeyInput = {
+type CanonicalPlayerKeyInput = {
   sleeperId?: string | null
   sportsDataId?: string | null
   apiSportsId?: string | null

@@ -23,9 +23,9 @@
  * request; it must never make a network call.
  */
 
-export type GeoHeaderSource = "cloudflare" | "vercel" | "unknown";
+type GeoHeaderSource = "cloudflare" | "vercel" | "unknown";
 
-export interface EdgeGeo {
+interface EdgeGeo {
   /** ISO 3166-1 alpha-2, uppercased. `null` when no edge told us. */
   country: string | null;
   /** Subdivision code, uppercased — "WA", never "Washington". */
@@ -34,7 +34,7 @@ export interface EdgeGeo {
   source: GeoHeaderSource;
 }
 
-export const UNKNOWN_GEO: EdgeGeo = { country: null, regionCode: null, source: "unknown" };
+const UNKNOWN_GEO: EdgeGeo = { country: null, regionCode: null, source: "unknown" };
 
 /**
  * Cloudflare uses these in `cf-ipcountry` for "we could not place this client":

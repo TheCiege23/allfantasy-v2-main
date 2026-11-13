@@ -22,7 +22,7 @@ export function getAllowedSportsFromCatalog(catalog: LeagueCreateOptionsCatalog,
   return catalog.allowedSportsByConcept[concept] ?? []
 }
 
-export function getAllowedDraftTypesFromCatalog(catalog: LeagueCreateOptionsCatalog, concept: string): string[] {
+function getAllowedDraftTypesFromCatalog(catalog: LeagueCreateOptionsCatalog, concept: string): string[] {
   return catalog.allowedDraftTypesByConcept[concept] ?? []
 }
 

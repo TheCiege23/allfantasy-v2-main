@@ -10,9 +10,9 @@ export const TOKEN_ENTRY_TYPES = {
 
 export type TokenSpendRuleCode = (typeof TOKEN_SPEND_RULE_MATRIX)[number]["code"]
 
-export type TokenSpendRuleTier = "low" | "mid" | "high"
+type TokenSpendRuleTier = "low" | "mid" | "high"
 
-export type TokenSpendRuleSeed = {
+type TokenSpendRuleSeed = {
   code: TokenSpendRuleCode
   category: "ai_feature" | "commissioner_function"
   featureLabel: string
@@ -27,7 +27,7 @@ export type TokenSpendRuleSeed = {
 
 export type TokenRefundRuleCode = "feature_execution_failed"
 
-export type TokenRefundRuleSeed = {
+type TokenRefundRuleSeed = {
   code: TokenRefundRuleCode
   description: string
   maxAgeMinutes: number | null

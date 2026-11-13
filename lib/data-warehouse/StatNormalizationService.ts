@@ -6,7 +6,7 @@
 import type { WarehouseSport } from './types'
 import { normalizeSportForWarehouse } from './types'
 
-export interface NormalizedStatMap {
+interface NormalizedStatMap {
   [key: string]: number
 }
 

@@ -1,9 +1,9 @@
 import type { z } from 'zod'
 import { PostDraftGradeSchema } from './schemas'
 
-export type PostDraftGrade = z.infer<typeof PostDraftGradeSchema>
+type PostDraftGrade = z.infer<typeof PostDraftGradeSchema>
 
-export interface TeamDraftGradeInput {
+interface TeamDraftGradeInput {
   teamName: string
   picks: Array<{ playerName: string; position: string; overallPick: number; adpAtPick?: number | null }>
 }

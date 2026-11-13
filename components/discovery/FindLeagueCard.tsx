@@ -19,7 +19,7 @@ import {
   timeZoneRegionFor,
 } from "@/lib/public-discovery/findLeagueFilters"
 
-export interface FindLeagueCardProps {
+interface FindLeagueCardProps {
   league: DiscoveryCard
 }
 

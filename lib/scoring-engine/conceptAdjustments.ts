@@ -4,7 +4,7 @@
  */
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 
-export type ConceptAdjustmentContext = {
+type ConceptAdjustmentContext = {
   leagueId: string
   leagueVariant: string | null
   week: number

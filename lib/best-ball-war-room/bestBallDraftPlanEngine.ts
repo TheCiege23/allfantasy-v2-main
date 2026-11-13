@@ -10,7 +10,7 @@
 import { evaluateRosterConstruction } from './bestBallRosterConstructionEngine'
 import type { BestBallWarRoomContext } from './types'
 
-export interface BestBallDraftTarget {
+interface BestBallDraftTarget {
   position: string
   priority: 'high' | 'medium' | 'low'
   have: number

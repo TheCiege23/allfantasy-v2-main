@@ -36,12 +36,12 @@ import { SURVIVOR_SIDE_GAME_DEFAULTS, validateSurvivorSideGamePatch, type Surviv
  * with the rest; the full set is in league settings → Exile). Both screens save through ONE validator,
  * `validateSurvivorSideGamePatch`, and the side games' own season locks, so they cannot disagree.
  */
-export const SIDE_GAME_SCREEN_KEYS = [
+const SIDE_GAME_SCREEN_KEYS = [
   'tokenPoolEnabled', 'tokenPoolMode', 'tokenPoolWrongPick', 'tokenShopEnabled',
   'survivorPoolEnabled', 'survivorPoolTieRule', 'survivorPoolMissedPick', 'survivorPoolNoReuse',
   'exileClaimMode', 'exileBidBudget', 'exileTokenFaabRate', 'hideExileMembership',
 ] as const satisfies readonly SurvivorSideGameKey[]
-export type SideGameScreenKey = (typeof SIDE_GAME_SCREEN_KEYS)[number]
+type SideGameScreenKey = (typeof SIDE_GAME_SCREEN_KEYS)[number]
 export type SurvivorScreenSideGames = Pick<SurvivorSideGameSettings, SideGameScreenKey>
 
 /** The screen's side-game values from the league's full side-game settings. */
@@ -102,10 +102,10 @@ export function sideGamePatchError(
   return { code: 'sideGameRule', message: t.sideGameRule(result.error) }
 }
 
-export type SurvivorTribeFormation = 'random' | 'commissioner_manual' | 'draft_pattern'
+type SurvivorTribeFormation = 'random' | 'commissioner_manual' | 'draft_pattern'
 /** The council tie rule: the owner's rocks rules, plus the two season-points rules older leagues carry. */
-export type SurvivorTieRuleChoice = SurvivorTieRule
-export type SurvivorMergeTriggerChoice = 'week' | 'active_player_count'
+type SurvivorTieRuleChoice = SurvivorTieRule
+type SurvivorMergeTriggerChoice = 'week' | 'active_player_count'
 
 export interface SurvivorSettingsForm {
   tribeCount: number
@@ -303,7 +303,7 @@ export function lockedChanges(changed: SurvivorSettingsKey[], locks: SurvivorSet
 }
 
 /** The week the tribes merge, estimated at one manager out per week when the trigger is a head count. */
-export function effectiveMergeWeek(form: SurvivorSettingsForm, ctx: SurvivorSettingsContext): number {
+function effectiveMergeWeek(form: SurvivorSettingsForm, ctx: SurvivorSettingsContext): number {
   if (form.mergeTrigger === 'week') return form.mergeWeek
   return ctx.firstWeek + Math.max(0, ctx.managers - form.mergeActivePlayerCount)
 }
@@ -348,7 +348,7 @@ export function settingsFormErrors(form: SurvivorSettingsForm, ctx: SurvivorSett
   return errors
 }
 
-export function challengeSettingsErrors(form: Partial<SurvivorSettingsForm>, t: SettingsErrorCopy = settingsErrorMessages.en): SettingsError[] {
+function challengeSettingsErrors(form: Partial<SurvivorSettingsForm>, t: SettingsErrorCopy = settingsErrorMessages.en): SettingsError[] {
   const d = SURVIVOR_CHALLENGE_SETTING_DEFAULTS
   const errors: SettingsError[] = []
   const type = form.realGamePrizeType ?? d.realGamePrizeType
@@ -389,9 +389,9 @@ export function weeklyPrizesFromForm(form: SurvivorSettingsForm) {
   }
 }
 
-export type SeasonWeekKind = 'tribal' | 'swap' | 'merge' | 'jury' | 'finale'
+type SeasonWeekKind = 'tribal' | 'swap' | 'merge' | 'jury' | 'finale'
 
-export interface SeasonPreview {
+interface SeasonPreview {
   weeks: { week: number; kind: SeasonWeekKind }[]
   summary: string[]
   note: string

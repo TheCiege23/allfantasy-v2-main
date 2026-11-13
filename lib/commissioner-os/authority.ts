@@ -70,7 +70,7 @@ export type ActionAuthority = {
   blockedReason: string | null
 }
 
-export type ResolveActionAuthorityInput = {
+type ResolveActionAuthorityInput = {
   /** Raw `League.platform`. Untrusted text — no DB enum backs it. */
   platform: string | null | undefined
   scope: EffectScope

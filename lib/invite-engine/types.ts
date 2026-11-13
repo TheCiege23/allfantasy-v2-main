@@ -2,7 +2,7 @@
  * Viral Invite Engine (PROMPT 142) types.
  */
 
-export const INVITE_TYPES = [
+const INVITE_TYPES = [
   'league',
   'bracket',
   'creator_league',
@@ -12,10 +12,10 @@ export const INVITE_TYPES = [
 ] as const
 export type InviteType = (typeof INVITE_TYPES)[number]
 
-export const INVITE_STATUSES = ['active', 'expired', 'revoked', 'max_used'] as const
+const INVITE_STATUSES = ['active', 'expired', 'revoked', 'max_used'] as const
 export type InviteStatus = (typeof INVITE_STATUSES)[number]
 
-export const INVITE_SHARE_CHANNELS = [
+const INVITE_SHARE_CHANNELS = [
   'copy_link',
   'sms',
   'email',
@@ -26,7 +26,7 @@ export const INVITE_SHARE_CHANNELS = [
 ] as const
 export type InviteShareChannel = (typeof INVITE_SHARE_CHANNELS)[number]
 
-export const INVITE_EVENT_TYPES = [
+const INVITE_EVENT_TYPES = [
   'viewed',
   'shared',
   'accepted',
@@ -102,14 +102,14 @@ export interface InvitePreviewDto {
   shareTargets: InviteShareTargetDto[]
 }
 
-export interface InviteStatsEventDto {
+interface InviteStatsEventDto {
   eventType: string
   channel: string | null
   type: string
   createdAt: string
 }
 
-export interface InviteTopPerformerDto {
+interface InviteTopPerformerDto {
   inviteLinkId: string
   token: string
   type: string

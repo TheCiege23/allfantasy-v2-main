@@ -19,16 +19,16 @@
 
 import { classifyRequest, type RequestClassification } from './requestContext'
 
-export type SamplingCategory = 'core' | 'page' | 'api' | 'job' | 'bot' | 'prefetch' | 'none'
+type SamplingCategory = 'core' | 'page' | 'api' | 'job' | 'bot' | 'prefetch' | 'none'
 
-export type CategoryBudget = {
+type CategoryBudget = {
   /** Traces per hour for one route key. */
   perRoutePerHour: number
   /** Traces per hour for the whole category — a ceiling, not a target. */
   perCategoryPerHour: number
 }
 
-export type SamplingBudgets = Record<Exclude<SamplingCategory, 'none'>, CategoryBudget>
+type SamplingBudgets = Record<Exclude<SamplingCategory, 'none'>, CategoryBudget>
 
 /**
  * Production budgets, sized against the traffic measured on 2026-09-15: ~320 /core renders a day
@@ -64,7 +64,7 @@ export type TracesSamplerInput = {
 
 type Bucket = { tokens: number; updatedAt: number }
 
-export type TracesSamplerOptions = {
+type TracesSamplerOptions = {
   /** `NODE_ENV === 'production'`. Anything else samples every request that is worth tracing. */
   production: boolean
   /** Incident switch: trace everything except health checks, assets and prefetches. */

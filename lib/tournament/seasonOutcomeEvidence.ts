@@ -1,6 +1,6 @@
 import { seasonContractHash } from './seasonCalendarVerification'
 
-export type SeasonOutcomeSubject =
+type SeasonOutcomeSubject =
   | { kind: 'player_game'; providerGameId: string; providerPlayerId: string }
   | { kind: 'player_period'; playerId: string }
   | { kind: 'game_period'; providerGameId: string }
@@ -15,7 +15,7 @@ export type SeasonOutcomeScope = {
   tournamentId: string; freezeId: string; leagueId: string; period: number; manifestHash: string; rulesHash: string
 }
 
-export type SeasonOutcomeReceipt = SeasonOutcomeScope & SeasonOutcomeClaim & {
+type SeasonOutcomeReceipt = SeasonOutcomeScope & SeasonOutcomeClaim & {
   version: 1; revision: number; previousDigest: string | null; requestId: string; recordedAt: string; artifact: Record<string, unknown>; digest: string
 }
 

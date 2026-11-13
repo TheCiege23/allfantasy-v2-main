@@ -3,14 +3,14 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
-export interface ModelOutputItem {
+interface ModelOutputItem {
   model: string
   raw: string
   error?: string
   skipped?: boolean
 }
 
-export interface CompareProvidersViewProps {
+interface CompareProvidersViewProps {
   modelOutputs: ModelOutputItem[]
   /** Only show when more than one successful output */
   className?: string

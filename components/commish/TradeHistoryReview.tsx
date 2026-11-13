@@ -18,7 +18,7 @@ import {
  * inside the fair range — postable to the league so the league sees the same numbers.
  */
 
-export type TradeAuditView = {
+type TradeAuditView = {
   ready: boolean
   rows: AuditRow[]
   teams: { teamId: string; name: string; trades: number }[]
@@ -29,7 +29,7 @@ const BAND_LABEL: Record<FairnessBand, string> = { fair: 'Fair', watch: 'Worth a
 const BAND_SEV: Record<FairnessBand, string> = { fair: 'low', watch: 'medium', outside: 'high' }
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 
-export function TradeHistoryReview({ leagueId, view: initial, canPost = true }: { leagueId: string; view?: TradeAuditView; canPost?: boolean }) {
+function TradeHistoryReview({ leagueId, view: initial, canPost = true }: { leagueId: string; view?: TradeAuditView; canPost?: boolean }) {
   const [view, setView] = useState<TradeAuditView | null>(initial ?? null)
   const [error, setError] = useState<string | null>(null)
   const [teamId, setTeamId] = useState<string | null>(initial?.teams[0]?.teamId ?? null)

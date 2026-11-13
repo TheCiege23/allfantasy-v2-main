@@ -12,7 +12,7 @@ export type PreparationContext = {
   playerPool: string;
   purpose: string;
 };
-export type PreparationEntry = {
+type PreparationEntry = {
   playerId: string;
   playerKey: string;
   playerName: string;
@@ -294,7 +294,7 @@ export function preparationPlayers(
     };
   });
 }
-export type OutlookInput = {
+type OutlookInput = {
   id: string;
   name: string;
   capital: number;

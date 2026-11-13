@@ -11,7 +11,7 @@ import { addStateRefreshListener } from '@/lib/state-consistency/state-events'
 import { fetchWithRetry, getErrorMessage, logError } from '@/lib/error-handling'
 import type { LeagueForGrouping } from '@/lib/dashboard'
 
-export interface UseLeagueListResult {
+interface UseLeagueListResult {
   leagues: LeagueForGrouping[]
   loading: boolean
   error: string | null

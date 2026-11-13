@@ -10,7 +10,7 @@
 import { ceilingValue, type ValueSource } from './bestBallValue'
 import type { BestBallPlayerFact, BestBallWarRoomContext } from './types'
 
-export interface UpsidePlayer {
+interface UpsidePlayer {
   playerId: string
   playerName: string
   position: string

@@ -64,9 +64,9 @@ export const MLB_FANTRAX_PROSPECT_LIMIT = 900
 
 /** Same stored shape as NHL: `[fantraxId, name ("Last, First"), team, position]`. */
 export type MlbFantraxUniverseRow = NhlFantraxUniverseRow
-export type MlbFantraxUniverseSnapshot = NhlFantraxUniverseSnapshot
+type MlbFantraxUniverseSnapshot = NhlFantraxUniverseSnapshot
 
-export type MlbProspectPosition = 'C' | '1B' | '2B' | '3B' | 'SS' | 'OF' | 'LF' | 'CF' | 'RF' | 'DH' | 'UT' | 'P' | 'SP' | 'RP' | 'TWP'
+type MlbProspectPosition = 'C' | '1B' | '2B' | '3B' | 'SS' | 'OF' | 'LF' | 'CF' | 'RF' | 'DH' | 'UT' | 'P' | 'SP' | 'RP' | 'TWP'
 
 export type MlbFantraxProspect = {
   /** `fantrax:<fantraxId>`. */
@@ -79,7 +79,7 @@ export type MlbFantraxProspect = {
   orgTeam: string | null
 }
 
-export type MlbFantraxProspectCounts = {
+type MlbFantraxProspectCounts = {
   universe: number
   prospects: number
   linked: number
@@ -96,7 +96,7 @@ export function compactMlbFantraxUniverse(refs: Iterable<FantraxPlayerRef>): Mlb
   return compactNhlFantraxUniverse(refs)
 }
 
-export function parseMlbFantraxUniverse(data: unknown): MlbFantraxUniverseSnapshot | null {
+function parseMlbFantraxUniverse(data: unknown): MlbFantraxUniverseSnapshot | null {
   return parseNhlFantraxUniverse(data)
 }
 

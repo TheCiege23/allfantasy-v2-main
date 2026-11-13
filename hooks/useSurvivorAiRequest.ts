@@ -4,7 +4,7 @@ import { paidToolFetch, approvePaidToolQuote } from '@/lib/tokens/paidToolClient
 import { useRef } from 'react'
 import { useCallback, useState } from 'react'
 
-export type SurvivorAiResponseBody = {
+type SurvivorAiResponseBody = {
   error?: string
   code?: string
   message?: string

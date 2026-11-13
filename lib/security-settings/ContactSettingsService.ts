@@ -21,7 +21,7 @@ export function getContactSummary(profile: UserProfileForSettings | null): Conta
   }
 }
 
-export interface UpdateContactEmailResult {
+interface UpdateContactEmailResult {
   ok: boolean
   error?: string
   wrongPassword?: boolean

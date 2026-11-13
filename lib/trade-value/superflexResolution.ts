@@ -20,7 +20,7 @@
  * — `parseSleeperRosterPositions` runs a few lines away for the VORP config.
  */
 
-export type QbFormatBasis =
+type QbFormatBasis =
   /** Decided by the league's own roster slots. Evidence. */
   | 'league_roster'
   /** The caller asserted it and we had no league to check against. Testimony. */
@@ -28,12 +28,12 @@ export type QbFormatBasis =
   /** Nobody knew. NOT evidence — see the asymmetry note below. */
   | 'assumed_1qb'
 
-export interface SuperflexResolution {
+interface SuperflexResolution {
   isSuperflex: boolean
   basis: QbFormatBasis
 }
 
-export interface SuperflexInput {
+interface SuperflexInput {
   /**
    * The league's parsed starting slots, when a league was resolved. Null/undefined means no
    * league to ask — NOT "no superflex".

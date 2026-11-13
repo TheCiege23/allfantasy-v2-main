@@ -35,7 +35,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { ageText } from '@/lib/core-app/shellCopy'
 import './af-freshness.css'
 
-export type FreshnessChipProps = {
+type FreshnessChipProps = {
   meta: FreshnessMeta
   /**
    * The label as the SERVER computed it. Rendered on first paint so SSR and hydration agree; see

@@ -20,7 +20,7 @@
  * Pure. No prisma.
  */
 
-export type KeeperCostSystem = 'round_based' | 'inflation' | 'auction_value' | 'free'
+type KeeperCostSystem = 'round_based' | 'inflation' | 'auction_value' | 'free'
 export type KeeperSameRoundRule = 'lose_round_before' | 'lose_round_after' | 'player_chooses' | 'reject_both'
 
 export type KeeperRules = {
@@ -70,7 +70,7 @@ export function resolveKeeperRules(league: {
   }
 }
 
-export type KeeperCostInput = {
+type KeeperCostInput = {
   /** The round this player last cost: his keeper round if kept, else where he was drafted. Null = never drafted. */
   lastRound: number | null
   /** Seasons this player has already been kept. */
@@ -79,7 +79,7 @@ export type KeeperCostInput = {
   totalRounds: number
 }
 
-export type KeeperCost =
+type KeeperCost =
   | { ok: true; costRound: number; label: string; basis: 'drafted' | 'waiver' }
   | { ok: false; reason: 'above_round_floor'; costRound: number; label: string }
 
@@ -111,15 +111,15 @@ function floorCheck(rules: KeeperRules, round: number, basis: 'drafted' | 'waive
   return { ok: true, costRound: round, label: roundLabel(round), basis }
 }
 
-export type KeeperToPlace = { playerId: string; costRound: number }
+type KeeperToPlace = { playerId: string; costRound: number }
 
-export type PlacedKeeper = KeeperToPlace & {
+type PlacedKeeper = KeeperToPlace & {
   /** The pick this keeper uses. Differs from `costRound` when a same-round rule moved it. */
   round: number
   movedBecause: 'same_round' | 'pick_traded' | null
 }
 
-export type KeeperPlacement = {
+type KeeperPlacement = {
   placed: PlacedKeeper[]
   /** Keepers that could not be given a pick, with why. */
   refused: { playerId: string; costRound: number; reason: 'same_round' | 'no_pick_available' }[]

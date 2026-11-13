@@ -23,8 +23,8 @@ export type DivisionsRules = { scoringId: ScoringLabelId; rosterId: RosterLabelI
  * A label can be chosen for a tournament when it belongs to the sport and a live preset backs it.
  * Custom has no preset of its own: it is written from its starting preset plus the commissioner's values.
  */
-export const isChoosableScoring = (l: ScoringLabel, sport: LabelSport) => l.sports.includes(sport) && (l.backing !== null || l.type === 'custom')
-export const isChoosableRoster = (l: RosterLabel, sport: LabelSport) => l.sport === sport && l.backing !== null
+const isChoosableScoring = (l: ScoringLabel, sport: LabelSport) => l.sports.includes(sport) && (l.backing !== null || l.type === 'custom')
+const isChoosableRoster = (l: RosterLabel, sport: LabelSport) => l.sport === sport && l.backing !== null
 
 export function scoringChoices(sport: LabelSport) {
   return scoringLabelsForSport(sport).map(l => ({ id: l.id, disabled: !isChoosableScoring(l, sport) }))

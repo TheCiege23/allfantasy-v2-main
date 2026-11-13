@@ -3,7 +3,7 @@ import type { LeagueSport } from "@prisma/client"
 import type { TournamentField } from "./providers/types"
 import { normalizeTeamAbbrev } from "@/lib/team-abbrev"
 
-export type SeededTeamRow = {
+type SeededTeamRow = {
   seed: number
   abbrev: string
   wins?: number

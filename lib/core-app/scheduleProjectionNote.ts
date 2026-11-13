@@ -19,7 +19,7 @@ import { scheduleProjectionNoteMessages } from './messages/scheduleProjectionNot
  */
 
 /** "Sep 29" ("29 sep" in Spanish), in UTC so a server render and a client render agree. */
-export function shortAsOf(iso: string | null | undefined, language: string = 'en'): string | null {
+function shortAsOf(iso: string | null | undefined, language: string = 'en'): string | null {
   if (!iso) return null
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return null
@@ -28,7 +28,7 @@ export function shortAsOf(iso: string | null | undefined, language: string = 'en
 }
 
 /** "Week 5", "Weeks 5–6", "Weeks 5, 7" ("Semana 5", "Semanas 5–6" …). */
-export function weekList(weeks: readonly number[], language: string = 'en'): string {
+function weekList(weeks: readonly number[], language: string = 'en'): string {
   const m = messagesFor(scheduleProjectionNoteMessages, language)
   const [one, many] = [m.week, m.weeks]
   const sorted = [...weeks].sort((a, b) => a - b)

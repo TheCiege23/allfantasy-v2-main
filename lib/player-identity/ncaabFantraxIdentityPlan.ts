@@ -1,6 +1,6 @@
 import { normalizePlayerName } from '@/lib/team-abbrev'
 
-export type NcaabFantraxRef = { fantraxId: string; name: string; team: string; position: string }
+type NcaabFantraxRef = { fantraxId: string; name: string; team: string; position: string }
 export type NcaabIdentity = {
   id: string
   normalizedName: string | null
@@ -9,8 +9,8 @@ export type NcaabIdentity = {
   rollingInsightsId: string | null
   fantraxId: string | null
 }
-export type NcaabSourcePlayer = { externalId: string; name: string; position: string | null; team: string | null }
-export type NcaabTeam = { name: string; shortName: string | null }
+type NcaabSourcePlayer = { externalId: string; name: string; position: string | null; team: string | null }
+type NcaabTeam = { name: string; shortName: string | null }
 
 const teamKey = (value: string | null | undefined) => String(value ?? '').trim().toUpperCase()
 const nameKey = (value: string) => {

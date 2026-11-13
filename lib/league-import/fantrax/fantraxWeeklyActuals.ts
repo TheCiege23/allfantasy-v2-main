@@ -1,9 +1,9 @@
 import { parse } from 'csv-parse/sync'
 import type { FantraxTeamRoster } from './fantraxApi'
 
-export type FantraxActual = { playerId: string; name: string; points: number; isStarter: boolean }
+type FantraxActual = { playerId: string; name: string; points: number; isStarter: boolean }
 export type FantraxZeroEvidence = { playerId: string; opponent: string; kind: 'bye' | 'zero_exported_stats' }
-export type VerifiedFantraxActuals = { sourceTeamId: string; players: FantraxActual[]; starterTotal: number; zeroEvidence: FantraxZeroEvidence[] }
+type VerifiedFantraxActuals = { sourceTeamId: string; players: FantraxActual[]; starterTotal: number; zeroEvidence: FantraxZeroEvidence[] }
 
 /** CSV exports carry neither season nor period. Bind them to an independently fetched
  * period roster and source team total before treating their points as source actuals. */

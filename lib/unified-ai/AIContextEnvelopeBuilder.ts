@@ -6,7 +6,7 @@
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
 import type { AIContextEnvelope, ToolAIEntryKey } from "./types"
 
-export type EnvelopeInput = {
+type EnvelopeInput = {
   featureType: string
   sport?: string | null
   leagueId?: string | null

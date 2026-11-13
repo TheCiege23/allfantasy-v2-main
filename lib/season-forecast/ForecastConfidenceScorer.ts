@@ -7,7 +7,7 @@
  * - variance in projected outcomes
  */
 
-export interface ConfidenceInput {
+interface ConfidenceInput {
   simulationCount: number
   /** Number of weeks of actual data used for projections (e.g. weekly points length) */
   dataWeeksUsed: number

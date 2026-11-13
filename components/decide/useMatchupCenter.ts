@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { MatchupCenterPayload } from '@/lib/matchup-intel/matchupCenterService'
 
-export type MatchupCenterResponse =
+type MatchupCenterResponse =
   | { supported: false; platform: string }
   | { supported: true; viewerSleeperUserId: string | null; center: MatchupCenterPayload | null; error?: string }
 
@@ -17,7 +17,7 @@ export type MatchupCenterResponse =
 const SHARE_MS = 60_000
 const inflight = new Map<string, { at: number; p: Promise<MatchupCenterResponse> }>()
 
-export function fetchMatchupCenter(leagueId: string): Promise<MatchupCenterResponse> {
+function fetchMatchupCenter(leagueId: string): Promise<MatchupCenterResponse> {
   const hit = inflight.get(leagueId)
   if (hit && Date.now() - hit.at < SHARE_MS) return hit.p
   const p = fetch(`/api/league/matchup-center?leagueId=${encodeURIComponent(leagueId)}`, {

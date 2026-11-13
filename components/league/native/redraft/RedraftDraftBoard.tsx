@@ -3,7 +3,7 @@
 import { LayoutGrid, Settings } from 'lucide-react'
 import '@/components/league/native/redraft-home.css'
 
-export type RedraftDraftPhase = 'pre' | 'live' | 'done'
+type RedraftDraftPhase = 'pre' | 'live' | 'done'
 type TimerParts = { days: number; hours: number; mins: number; secs: number } | 'dash'
 
 /**

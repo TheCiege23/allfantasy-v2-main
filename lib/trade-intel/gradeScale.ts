@@ -47,7 +47,7 @@ export function letterFor(avgNetPerSeason: number): GradeLetter {
 
 /** Shown in place of a letter when nothing has been credited to either side. */
 export const NO_SIGNAL_MARK = '–'
-export const NO_SIGNAL_CAPTION = 'too early to grade'
+const NO_SIGNAL_CAPTION = 'too early to grade'
 
 /**
  * The mark and caption for one side of a completed trade.

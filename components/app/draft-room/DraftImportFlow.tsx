@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef, type ChangeEvent } from 'react'
 import { Upload, AlertCircle, CheckCircle, RotateCcw } from 'lucide-react'
 
-export type DraftImportFlowProps = {
+type DraftImportFlowProps = {
   leagueId: string
   onSuccess?: () => void
   onClose?: () => void

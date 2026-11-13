@@ -71,7 +71,7 @@ export const DEVY_FIRST_PICK_VALUE = 1000
 
 /** The scale tag, distinct from every market scale in the repo. */
 export const DEVY_POINTS = 'devy-points' as const
-export type DevyPointsScale = typeof DEVY_POINTS
+type DevyPointsScale = typeof DEVY_POINTS
 
 /**
  * How many devy assets a "round" of the board holds.
@@ -81,7 +81,7 @@ export type DevyPointsScale = typeof DEVY_POINTS
  * (BASELINE_LEAGUE_SIZE in valueLedger.ts), and a devy round in a 12-team league
  * is twelve players.
  */
-export const DEVY_ROUND_SIZE = 12
+const DEVY_ROUND_SIZE = 12
 
 /**
  * Where a given devy rank sits on the curve, as a share of the top asset.
@@ -188,7 +188,7 @@ export function devyAssetValue(args: {
   }
 }
 
-export const DEVY_CURVE_GAP =
+const DEVY_CURVE_GAP =
   'the value curve shape is borrowed from the NFL rookie-pick curve, which was fitted to pro trades — no devy trade has ever tested it'
 
 export type DevyTradeSide = {
@@ -196,7 +196,7 @@ export type DevyTradeSide = {
   value: DevyAssetValue
 }
 
-export type DevyTradeVerdict = {
+type DevyTradeVerdict = {
   scale: DevyPointsScale
   giveTotal: number
   getTotal: number

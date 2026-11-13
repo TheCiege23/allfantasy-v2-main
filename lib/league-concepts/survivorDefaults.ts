@@ -46,15 +46,15 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type SurvivorEligibleSport = 'NFL' | 'NCAAF' | 'NBA' | 'NHL' | 'MLB'
+type SurvivorEligibleSport = 'NFL' | 'NCAAF' | 'NBA' | 'NHL' | 'MLB'
 
 export const SURVIVOR_DRAFT_TYPE_IDS = SURVIVOR_CANONICAL_DRAFT_TYPE_IDS
-export type SurvivorDraftType = (typeof SURVIVOR_DRAFT_TYPE_IDS)[number]
+type SurvivorDraftType = (typeof SURVIVOR_DRAFT_TYPE_IDS)[number]
 
 /** What the draft engine runs. An execution mode (offline, auto) runs as a snake draft underneath. */
 type EngineDraftType = 'snake' | 'linear' | 'auction'
 
-export type SurvivorPhase =
+type SurvivorPhase =
   | 'setup'
   | 'registration'
   | 'drafting'
@@ -63,20 +63,20 @@ export type SurvivorPhase =
   | 'finale'
   | 'complete'
 
-export type AutomationStatus = 'not_started' | 'pending' | 'active' | 'finalized'
-export type TribeAssignmentMode = 'random' | 'snake_draft' | 'commissioner' | 'draft_pattern' | 'commissioner_manual'
-export type ChallengeType = 'tribe_score' | 'individual_score' | 'commissioner_assigned'
-export type ChallengeSource = 'fantasy_points_for' | 'commissioner_assigned'
-export type VotingMode = 'tribe_vote' | 'individual_vote'
-export type VoteVisibility = 'hidden_until_reveal' | 'public'
-export type TieResolution = 'revote' | 'rocks' | 'rocks_after_revote' | 'commissioner'
-export type ExileSelectionMode = 'voted_out' | 'challenge_loser_chooses' | 'random_non_immune' | 'commissioner'
-export type IdolPlayWindow = 'before_vote_reveal' | 'after_votes_cast'
-export type LedgerStatus = 'not_started' | 'pending' | 'active'
+type AutomationStatus = 'not_started' | 'pending' | 'active' | 'finalized'
+type TribeAssignmentMode = 'random' | 'snake_draft' | 'commissioner' | 'draft_pattern' | 'commissioner_manual'
+type ChallengeType = 'tribe_score' | 'individual_score' | 'commissioner_assigned'
+type ChallengeSource = 'fantasy_points_for' | 'commissioner_assigned'
+type VotingMode = 'tribe_vote' | 'individual_vote'
+type VoteVisibility = 'hidden_until_reveal' | 'public'
+type TieResolution = 'revote' | 'rocks' | 'rocks_after_revote' | 'commissioner'
+type ExileSelectionMode = 'voted_out' | 'challenge_loser_chooses' | 'random_non_immune' | 'commissioner'
+type IdolPlayWindow = 'before_vote_reveal' | 'after_votes_cast'
+type LedgerStatus = 'not_started' | 'pending' | 'active'
 
 // ── Survivor-specific structures ──────────────────────────────────────────────
 
-export interface SurvivorTribeSettings {
+interface SurvivorTribeSettings {
   tribeCount: number
   tribeAssignmentMode: TribeAssignmentMode
   mergeAtCount: number
@@ -85,7 +85,7 @@ export interface SurvivorTribeSettings {
   rocksEnabled: boolean
 }
 
-export interface SurvivorChallengeSettings {
+interface SurvivorChallengeSettings {
   weeklyChallengeSEnabled: boolean
   challengeAutomationStatus: AutomationStatus
   preMergeChallengeType: ChallengeType
@@ -95,7 +95,7 @@ export interface SurvivorChallengeSettings {
   immunityWinnerNote: string
 }
 
-export interface SurvivorVotingSettings {
+interface SurvivorVotingSettings {
   tribalCouncilEnabled: boolean
   votingAutomationStatus: AutomationStatus
   preMergeVotingMode: VotingMode
@@ -106,7 +106,7 @@ export interface SurvivorVotingSettings {
   commissionerOverrideStatus: AutomationStatus
 }
 
-export interface SurvivorExileSettings {
+interface SurvivorExileSettings {
   exileEnabled: boolean
   exileAutomationStatus: AutomationStatus
   exileSelectionMode: ExileSelectionMode
@@ -118,7 +118,7 @@ export interface SurvivorExileSettings {
   }
 }
 
-export interface SurvivorIdolSettings {
+interface SurvivorIdolSettings {
   idolsEnabled: boolean
   idolCount: number
   idolPlayWindow: IdolPlayWindow
@@ -127,7 +127,7 @@ export interface SurvivorIdolSettings {
   idolInventoryStatus: LedgerStatus
 }
 
-export interface SurvivorTokenSettings {
+interface SurvivorTokenSettings {
   tokensEnabled: boolean
   startingTokenBalance: number
   tokenEarningRules: {
@@ -145,7 +145,7 @@ export interface SurvivorTokenSettings {
   tokenLedgerStatus: LedgerStatus
 }
 
-export interface SurvivorStructure {
+interface SurvivorStructure {
   castSize: number
   tribeSettings: SurvivorTribeSettings
   challengeSettings: SurvivorChallengeSettings
@@ -155,7 +155,7 @@ export interface SurvivorStructure {
   tokenSettings: SurvivorTokenSettings
 }
 
-export interface SurvivorRosterTemplate {
+interface SurvivorRosterTemplate {
   rosterMode: 'survivor'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -169,7 +169,7 @@ export interface SurvivorRosterTemplate {
   defensePosition: 'DST' | 'DEF' | null
 }
 
-export interface SurvivorDraftSettings {
+interface SurvivorDraftSettings {
   draftType: EngineDraftType
   requestedDraftType: SurvivorDraftType
   rounds: number
@@ -184,7 +184,7 @@ export interface SurvivorDraftSettings {
   auctionBudgetPerTeam: number | null
 }
 
-export interface SurvivorDefaultContract {
+interface SurvivorDefaultContract {
   sport: SurvivorEligibleSport
   league_type: 'survivor'
   leagueType: 'survivor'
@@ -1030,7 +1030,7 @@ export function normalizeSurvivorSettingsSnapshot(input: {
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
-export interface SurvivorValidationResult {
+interface SurvivorValidationResult {
   valid: boolean
   errors: string[]
   warnings: string[]

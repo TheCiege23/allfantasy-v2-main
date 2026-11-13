@@ -14,7 +14,7 @@
  * bypassing league-shell query flags and feeder `leagueId` routing.
  */
 
-export type PostCreateLeagueHomeArgs = {
+type PostCreateLeagueHomeArgs = {
   /** Canonical `League.id` — required for all routes except missing-id fallback. */
   leagueId?: string
   /** Wizard / format id (e.g. `tournament`, `survivor`, `redraft`). */

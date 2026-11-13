@@ -11,7 +11,7 @@ import { checkIn, dayKey, parseStreakRecord, summarizeStreak, type StreakRecord,
  * deletes only the prefixes it names; `core-streak:` is not one, and must not become one — a purge
  * would silently reset every streak to day 1. `expiresAt` is set a year out for the record only.
  */
-export const STREAK_KEY_PREFIX = 'core-streak:v1:'
+const STREAK_KEY_PREFIX = 'core-streak:v1:'
 const ROW_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000
 
 async function readRecord(userId: string): Promise<StreakRecord | null> {

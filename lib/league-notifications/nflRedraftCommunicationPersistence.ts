@@ -11,7 +11,7 @@ import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { buildNflRedraftCommunicationPlan, type NflRedraftCommunicationCategory, type NflRedraftCommunicationPlan } from '@/lib/league-notifications/nflRedraftCommunicationRuntime'
 import { syncNflRedraftCommunicationToDiscord } from '@/lib/league-notifications/nflRedraftDiscordBridge'
 
-export type PersistNflRedraftCommunicationResult =
+type PersistNflRedraftCommunicationResult =
   | {
       ok: true
       plan: NflRedraftCommunicationPlan

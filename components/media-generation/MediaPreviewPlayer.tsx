@@ -3,7 +3,7 @@
 import React from 'react'
 import type { MediaType } from '@/lib/media-generation/types'
 
-export interface MediaPreviewPlayerProps {
+interface MediaPreviewPlayerProps {
   type: MediaType
   provider?: string
   /** Video or audio URL for playback. */

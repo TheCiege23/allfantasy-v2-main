@@ -7,7 +7,7 @@ import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 const BASE = getPublicSiteOrigin()
 
-export type PageKey =
+type PageKey =
   | "home"
   | "tools-hub"
   | "trade-analyzer"

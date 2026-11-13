@@ -36,9 +36,9 @@ const PRICED_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE'])
 const NON_PLAYING = new Set(['BN', 'IR', 'TAXI', 'RES', 'BENCH'])
 
 /** The league size every stored price and pick chart is denominated in. */
-export const BASELINE_TEAM_COUNT = 12
+const BASELINE_TEAM_COUNT = 12
 
-export type Scrutiny = 'shallow' | 'standard' | 'deep' | 'very-deep'
+type Scrutiny = 'shallow' | 'standard' | 'deep' | 'very-deep'
 
 /**
  * At or below this many teams, the league is shallow enough that replacement
@@ -55,7 +55,7 @@ export type Scrutiny = 'shallow' | 'standard' | 'deep' | 'very-deep'
  * is shallower than twelve teams on twenty-five.
  */
 
-export type LeagueScale = {
+type LeagueScale = {
   teamCount: number
   startingSlots: number
   /** Startable slots across the whole league, so demand is visible. */
@@ -169,7 +169,7 @@ export function assessLeagueScale(args: {
   }
 }
 
-export type PickEquivalent = {
+type PickEquivalent = {
   /** Absolute selection number in this league's draft. */
   overall: number
   /** The round it would fall in a 12-team draft. */

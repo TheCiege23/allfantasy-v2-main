@@ -110,7 +110,7 @@ export function extractNameCandidates(message: string): string[] {
   return out
 }
 
-export type PortfolioPlayerResolution =
+type PortfolioPlayerResolution =
   | { kind: 'none' }
   | { kind: 'ambiguous'; name: string; options: PlayerMatch[] }
   | { kind: 'resolved'; match: PlayerMatch }
@@ -208,7 +208,7 @@ export function serializePortfolioPlayerGrounding(detail: PlayerDetail): string 
   return lines.join('\n')
 }
 
-export type PortfolioPlayerGroundingResult = {
+type PortfolioPlayerGroundingResult = {
   serialized: string
   /** Resolved players, for observability — never for the answer, which reads `serialized`. */
   resolvedNames: string[]

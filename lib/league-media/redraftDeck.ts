@@ -29,7 +29,7 @@ import type { ChecklistItem, ChecklistStatus } from '@/lib/commissioner/weeklyCh
 export const HEALTH_RING_RADIUS = 62
 export const HEALTH_RING_CIRCUMFERENCE = 2 * Math.PI * HEALTH_RING_RADIUS
 
-export type HealthTone = 'good' | 'warn' | 'bad'
+type HealthTone = 'good' | 'warn' | 'bad'
 
 /** The same bands /core's hub tile uses (70 / 45), so the two never colour one score differently. */
 export function healthTone(score: number): HealthTone {
@@ -45,7 +45,7 @@ export function healthRingDash(score: number): string {
   return `${filled.toFixed(1)} ${HEALTH_RING_CIRCUMFERENCE.toFixed(1)}`
 }
 
-export const HEALTH_STATUS_LABEL: Record<string, string> = {
+const HEALTH_STATUS_LABEL: Record<string, string> = {
   excellent: 'Excellent',
   healthy: 'Healthy',
   watch: 'Worth watching',
@@ -84,7 +84,7 @@ export function healthTrendLine(
 
 /* ── Sub-scores ──────────────────────────────────────────────────────────────────────────────────── */
 
-export type HealthSubScores = {
+type HealthSubScores = {
   /** `engagementScore` — throughput. Labelled "Activity" everywhere it is shown (6.1). */
   activity: number | null
   /** `participation.score` — people still playing. Null when the engine could not count them. */
@@ -93,7 +93,7 @@ export type HealthSubScores = {
   sustainability: number | null
 }
 
-export type HealthSubScoreBar = { key: keyof HealthSubScores; label: string; value: number }
+type HealthSubScoreBar = { key: keyof HealthSubScores; label: string; value: number }
 
 const SUB_SCORE_LABEL: Record<keyof HealthSubScores, string> = {
   activity: 'Activity',
@@ -113,7 +113,7 @@ export function healthSubScoreBars(sub: Partial<HealthSubScores> | null | undefi
 
 /* ── The route's payload ─────────────────────────────────────────────────────────────────────────── */
 
-export type CommishHealthScore =
+type CommishHealthScore =
   | {
       available: true
       score: number
@@ -151,7 +151,7 @@ export type CommishHealthSummary = {
 
 /* ── Managers to check on ────────────────────────────────────────────────────────────────────────── */
 
-export type CommishManagerCard = {
+type CommishManagerCard = {
   rosterId: string
   name: string
   initials: string
@@ -207,7 +207,7 @@ export type WeeklyChecklistResponse =
   | { applies: false; reason: 'not_redraft' | 'no_season' | 'not_in_season' }
   | { applies: true; week: number; items: ChecklistItem[] }
 
-export type CommishCheck = {
+type CommishCheck = {
   id: string
   status: ChecklistStatus
   title: string

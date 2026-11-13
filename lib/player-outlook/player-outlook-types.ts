@@ -15,16 +15,16 @@ import type { PlayerValueAdjustment } from '@/lib/trade-engine/news-impact-engin
 // Core Enums
 // ---------------------------------------------------------------------------
 
-export const TrendDirectionEnum = z.enum(['buy', 'sell', 'hold'])
+const TrendDirectionEnum = z.enum(['buy', 'sell', 'hold'])
 export type TrendDirection = z.infer<typeof TrendDirectionEnum>
 
-export const RiskLevelEnum = z.enum(['low', 'moderate', 'high', 'extreme'])
+const RiskLevelEnum = z.enum(['low', 'moderate', 'high', 'extreme'])
 export type RiskLevel = z.infer<typeof RiskLevelEnum>
 
-export const TimeHorizonEnum = z.enum(['short_term', 'medium_term', 'long_term'])
+const TimeHorizonEnum = z.enum(['short_term', 'medium_term', 'long_term'])
 export type TimeHorizon = z.infer<typeof TimeHorizonEnum>
 
-export const FormatFitEnum = z.enum(['redraft', 'dynasty', 'keeper', 'all'])
+const FormatFitEnum = z.enum(['redraft', 'dynasty', 'keeper', 'all'])
 export type FormatFit = z.infer<typeof FormatFitEnum>
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ export const TIER_LABELS: Record<number, string> = {
 // PlayerOutlook — the final output
 // ---------------------------------------------------------------------------
 
-export const PlayerOutlookSchema = z.object({
+const PlayerOutlookSchema = z.object({
   // Identity
   playerName: z.string(),
   playerId: z.string().nullable(),

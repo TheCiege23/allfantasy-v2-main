@@ -66,7 +66,7 @@ function utcDay(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function buildRecipesIdempotencyKey(leagueId: string, now: Date): string {
+function buildRecipesIdempotencyKey(leagueId: string, now: Date): string {
   return hashIdempotencyKey(buildIdempotencyKey([RECIPES_JOB_TYPE, leagueId, utcDay(now)]))
 }
 
@@ -249,7 +249,7 @@ async function markSent(key: string, message: DueMessage): Promise<void> {
   })
 }
 
-export async function runCommissionerRecipesForLeague(input: {
+async function runCommissionerRecipesForLeague(input: {
   leagueId: string
   now?: Date
 }): Promise<AutomationResult & { jobId: string; runId: string }> {
@@ -316,7 +316,7 @@ export async function runCommissionerRecipesForLeague(input: {
   )
 }
 
-export type CommissionerRecipesBatchResult = {
+type CommissionerRecipesBatchResult = {
   enabled: boolean
   discovered: number
   completed: number

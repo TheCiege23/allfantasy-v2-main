@@ -93,7 +93,7 @@ export function buildLeagueRulesGrounding(league: LeagueRuleInput): string | nul
  * this repo has recorded happening — inside a prompt and then inside a logged
  * response.
  */
-export type RuleGroundingFailure = 'resolve_threw' | 'not_grounded'
+type RuleGroundingFailure = 'resolve_threw' | 'not_grounded'
 
 export function buildRuleGroundingGap(reason: RuleGroundingFailure): string {
   const detail =
@@ -111,7 +111,7 @@ export function buildRuleGroundingGap(reason: RuleGroundingFailure): string {
 }
 
 /** Same, for a caller that already resolved (avoids resolving twice). */
-export function renderLeagueRulesGrounding(resolved: ResolvedLeagueRules, categoryScoring?: NativeCategoryScoringContext): string | null {
+function renderLeagueRulesGrounding(resolved: ResolvedLeagueRules, categoryScoring?: NativeCategoryScoringContext): string | null {
   const { concept, modifiers, formatRules } = resolved
   const lines: string[] = []
 

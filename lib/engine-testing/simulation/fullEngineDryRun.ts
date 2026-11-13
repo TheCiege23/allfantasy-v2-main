@@ -15,7 +15,7 @@ import {
 } from '@/lib/engine-testing/hardening/consistencyChecks'
 import type { InvariantResult } from '@/lib/engine-testing/hardening/engineInvariants'
 
-export type FullEngineDryRunReport = ExtendedLeagueSimulationReport & {
+type FullEngineDryRunReport = ExtendedLeagueSimulationReport & {
   /** Synthetic snapshot exercising the full consistency matrix (happy path). */
   consistencyProbe: {
     snapshot: LeagueEngineConsistencySnapshot

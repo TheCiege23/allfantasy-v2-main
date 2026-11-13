@@ -33,7 +33,7 @@ import type {
   StatusSource,
 } from './portfolioInsightsTypes'
 
-export type ClassifiableLeague = {
+type ClassifiableLeague = {
   leagueType?: string | null
   isDynasty?: boolean | null
   keeperCount?: number | null
@@ -47,7 +47,7 @@ export type ClassifiableLeague = {
   lifecycleState?: string | null
 }
 
-export type LeagueFormatFacts = {
+type LeagueFormatFacts = {
   concept: string
   family: FormatFamily
   bestBall: boolean

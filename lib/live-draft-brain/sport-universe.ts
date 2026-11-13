@@ -6,9 +6,9 @@
 import { type SupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 /** Additional draft-room verticals (best ball, tournament, specialty). */
-export const DRAFT_BRAIN_EXTENDED_SPORTS = ['GOLF', 'NASCAR'] as const
+const DRAFT_BRAIN_EXTENDED_SPORTS = ['GOLF', 'NASCAR'] as const
 
-export type DraftBrainExtendedSport = (typeof DRAFT_BRAIN_EXTENDED_SPORTS)[number]
+type DraftBrainExtendedSport = (typeof DRAFT_BRAIN_EXTENDED_SPORTS)[number]
 
 export type DraftBrainSportId = SupportedSport | DraftBrainExtendedSport | (string & {})
 

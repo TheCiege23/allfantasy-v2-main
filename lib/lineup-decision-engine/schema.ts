@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const LineupDecisionModeSchema = z.enum([
+const LineupDecisionModeSchema = z.enum([
   'Best Lineup',
   'Safe Lineup',
   'Upside Lineup',

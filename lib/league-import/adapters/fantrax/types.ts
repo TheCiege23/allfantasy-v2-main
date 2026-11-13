@@ -1,4 +1,4 @@
-export interface FantraxImportLeague {
+interface FantraxImportLeague {
   leagueId: string
   name: string
   sport: string
@@ -10,7 +10,7 @@ export interface FantraxImportLeague {
   isDevy: boolean
 }
 
-export interface FantraxImportSettings {
+interface FantraxImportSettings {
   scoringType: string | null
   rosterPositions: Array<{ position: string; count: number }>
   /** Real per-team roster size, measured from the rosters. Null when unknown. */
@@ -41,7 +41,7 @@ export interface FantraxImportTeam {
   playerMap: Record<string, { name: string; position: string; team: string }>
 }
 
-export interface FantraxImportScheduleWeek {
+interface FantraxImportScheduleWeek {
   week: number
   season: number
   matchups: Array<{

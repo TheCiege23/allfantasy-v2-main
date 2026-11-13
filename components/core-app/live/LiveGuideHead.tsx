@@ -17,7 +17,7 @@ import '@/components/core-app/live/af-live-guide.css'
  */
 
 /** Weekday and clock time in the reader's own zone — only after hydration, as the rest of /core does. */
-export function useLocalWhen(iso: string | null): string | null {
+function useLocalWhen(iso: string | null): string | null {
   const [text, setText] = useState<string | null>(null)
   useEffect(() => {
     if (!iso) {

@@ -2,7 +2,7 @@
 
 import WaiverWirePage from '@/components/waiver-wire/WaiverWirePage'
 
-export interface SportAwareWaiverWireProps {
+interface SportAwareWaiverWireProps {
   leagueId: string
 }
 

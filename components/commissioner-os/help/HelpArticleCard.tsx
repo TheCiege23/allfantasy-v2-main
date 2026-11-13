@@ -10,7 +10,7 @@ import type { CommissionerHelpArticleContract } from '@/lib/commissioner-ui/cont
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { helpText, relatedLinkText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
-export interface HelpArticleCardProps {
+interface HelpArticleCardProps {
   article: CommissionerHelpArticleContract
 }
 

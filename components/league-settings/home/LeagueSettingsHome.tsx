@@ -90,7 +90,7 @@ function Row({ row, onOpen }: { row: SettingsHomeRow; onOpen: (target: SettingsS
   )
 }
 
-export type LeagueSettingsHomeProps = {
+type LeagueSettingsHomeProps = {
   leagueName?: string | null
   sections: SettingsHomeSection[]
   canEdit: boolean

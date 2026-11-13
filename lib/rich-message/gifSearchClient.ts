@@ -16,7 +16,7 @@ import { gifProviderForUrl, type GifSearchResult } from './GIFIntegrationResolve
 
 export type GifProvider = 'klipy' | 'giphy' | 'tenor'
 
-export type GifSearchResponse = {
+type GifSearchResponse = {
   gifs: GifSearchResult[]
   /** The service the GIFs on screen came from — whose credit they carry. */
   provider: GifProvider | null

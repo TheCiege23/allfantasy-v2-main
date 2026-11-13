@@ -5,7 +5,7 @@ import type { PlatformNotification } from "@/types/platform-shared"
  * Use when the real API returns no notifications so the UI can be exercised.
  * Replace or disable in production if you only want real data.
  */
-export const PLACEHOLDER_NOTIFICATIONS: PlatformNotification[] = [
+const PLACEHOLDER_NOTIFICATIONS: PlatformNotification[] = [
   {
     id: "placeholder-mention",
     type: "mention",
@@ -63,7 +63,7 @@ export const PLACEHOLDER_NOTIFICATIONS: PlatformNotification[] = [
   },
 ]
 
-export function getPlaceholderNotifications(): PlatformNotification[] {
+function getPlaceholderNotifications(): PlatformNotification[] {
   return [...PLACEHOLDER_NOTIFICATIONS]
 }
 

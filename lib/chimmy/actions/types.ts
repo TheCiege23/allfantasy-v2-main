@@ -9,7 +9,7 @@
  * Client-safe: no server imports, so the card component can import the display types.
  */
 
-export type ChimmyActionKind = 'lineup' | 'trade' | 'automation'
+type ChimmyActionKind = 'lineup' | 'trade' | 'automation'
 
 /** A league automation change a commissioner asked Chimmy for (phase 12, 2026-10-29). */
 export type AutomationChangeSpec =

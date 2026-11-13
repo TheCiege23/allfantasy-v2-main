@@ -5,7 +5,7 @@ import type {
 } from '@/lib/player-data/nflRedraftProviderEvidencePackets'
 import type { NflRedraftDataState } from '@/lib/player-data/nflRedraftCanonicalPlayer'
 
-export const NFL_REDRAFT_PREMIUM_SERVICE_MODEL_VERSION = 'nfl-redraft-premium-service-v1' as const
+const NFL_REDRAFT_PREMIUM_SERVICE_MODEL_VERSION = 'nfl-redraft-premium-service-v1' as const
 
 export type NflRedraftPremiumTier =
   | 'FREE'
@@ -47,7 +47,7 @@ export type NflRedraftPremiumActionCategory =
   | 'fallback_review'
   | 'missing_data_review'
 
-export type NflRedraftPremiumCanonicalContext = {
+type NflRedraftPremiumCanonicalContext = {
   leagueId?: string | null
   season?: number | null
   week?: number | null
@@ -58,7 +58,7 @@ export type NflRedraftPremiumCanonicalContext = {
   surfaces?: NflRedraftEvidenceSurface[]
 }
 
-export type NflRedraftPremiumServiceInput = {
+type NflRedraftPremiumServiceInput = {
   serviceId: NflRedraftPremiumServiceId
   serviceVariant?: NflRedraftPremiumServiceVariant
   evidencePackets: NflRedraftProviderEvidencePacket[]

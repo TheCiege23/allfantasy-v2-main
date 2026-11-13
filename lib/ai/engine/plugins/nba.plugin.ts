@@ -13,7 +13,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type NbaContext = {
+type NbaContext = {
   leagueId: string
   leagueName: string
   scoringType: "roto" | "h2h_categories" | "h2h_points" | "points"
@@ -32,7 +32,7 @@ export type NbaContext = {
   standings: Array<{ rank: number; teamName: string; wins: number; losses: number }>
 }
 
-export type NbaProviderData = {
+type NbaProviderData = {
   playerStats: Array<{
     playerId: string
     playerName: string
@@ -43,7 +43,7 @@ export type NbaProviderData = {
   }>
 }
 
-export type NbaInsights = {
+type NbaInsights = {
   streamingTargets: Array<{
     playerId: string
     playerName: string

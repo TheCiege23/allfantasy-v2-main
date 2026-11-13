@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 
-export type WarRoomCompareModalProps = {
+type WarRoomCompareModalProps = {
   open: boolean
   onClose: () => void
   leagueId: string

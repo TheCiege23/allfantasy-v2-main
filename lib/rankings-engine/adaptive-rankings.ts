@@ -81,7 +81,7 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
-export function percentileScore(value: number, allValues: number[]): number {
+function percentileScore(value: number, allValues: number[]): number {
   if (allValues.length === 0) return 50
   const below = allValues.filter(v => v < value).length
   const equal = allValues.filter(v => v === value).length

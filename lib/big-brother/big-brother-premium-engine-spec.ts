@@ -12,9 +12,9 @@ export type BigBrotherTwistKey =
   | 'hidden_powers'
   | 'safety_pass'
 
-export type BigBrotherCompetitionKind = 'fantasy_scoring' | 'mini_game' | 'trivia' | 'random_event'
+type BigBrotherCompetitionKind = 'fantasy_scoring' | 'mini_game' | 'trivia' | 'random_event'
 
-export type BigBrotherPremiumEngineSpec = {
+type BigBrotherPremiumEngineSpec = {
   version: 2
   twists: {
     enabledKeys: BigBrotherTwistKey[]

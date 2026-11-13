@@ -29,13 +29,13 @@
 
 const HOUR_MS = 60 * 60 * 1000
 
-export type SportWaiverAlertCadence =
+type SportWaiverAlertCadence =
   /** Any US Eastern day on which the sport has a game. */
   | { kind: 'daily' }
   /** One Eastern weekday (0 = Sunday … 6 = Saturday), when the sport has a game in the next week. */
   | { kind: 'weekly'; weekdayEt: 0 | 1 | 2 | 3 | 4 | 5 | 6 }
 
-export type SportWaiverAlertSeason =
+type SportWaiverAlertSeason =
   /**
    * In season from the regular-season opener recorded in `lib/season-week/dailySportSeasonStarts.ts`
    * for `regularSeasonDays` days. The recorded opener is what keeps PRESEASON out: NBA and NHL games

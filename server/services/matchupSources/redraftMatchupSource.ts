@@ -16,7 +16,7 @@ import { isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
 import { safeTeamDefenseDisplayName } from '@/lib/redraft/teamDefenseIdentity'
 import type { MatchupContextResult, MatchupSideContext } from '@/server/services/matchupSources/types'
 
-export type RosterPlayerRow = {
+type RosterPlayerRow = {
   playerId: string
   playerName: string
   position: string
@@ -24,7 +24,7 @@ export type RosterPlayerRow = {
   slotType: string
 }
 
-export type RosterWithPlayers = {
+type RosterWithPlayers = {
   id: string
   ownerName: string
   teamName: string | null
@@ -36,7 +36,7 @@ export type RosterWithPlayers = {
 }
 
 /** RedraftMatchup.status → canonical week status the assembler understands. */
-export function normalizeRedraftWeekStatus(status: string | null | undefined): 'upcoming' | 'live' | 'final' {
+function normalizeRedraftWeekStatus(status: string | null | undefined): 'upcoming' | 'live' | 'final' {
   const s = String(status ?? '').toLowerCase()
   if (s === 'final' || s === 'complete' || s === 'completed') return 'final'
   if (s === 'live' || s === 'in_progress') return 'live'
@@ -44,7 +44,7 @@ export function normalizeRedraftWeekStatus(status: string | null | undefined): '
 }
 
 /** Pure: map a redraft roster (with players) into a matchup side context. Exported for tests. */
-export function buildRedraftSideContext(
+function buildRedraftSideContext(
   roster: RosterWithPlayers,
   engineTotalPoints: number,
   weekStatus: 'upcoming' | 'live' | 'final',

@@ -6,7 +6,7 @@ import type { CfpBowlDetail } from "./cfpBowlDetails"
 export const CFP_PROJECTION_CACHE = "BRACKET:cfp:projection:2026"
 export const CFP_BOWLS_CACHE = "BRACKET:cfp:bowls:2026"
 type RecordData<T> = { fetchedAt: string; value: T }
-export async function readCfpPreviewCache<T>(key: string): Promise<RecordData<T> | null> {
+async function readCfpPreviewCache<T>(key: string): Promise<RecordData<T> | null> {
   const row = await prisma.sportsDataCache.findUnique({ where: { cacheKey: key }, select: { data: true } })
   const data = row?.data as RecordData<T> | null
   return data && typeof data.fetchedAt === "string" && data.value != null ? data : null

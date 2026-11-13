@@ -3,7 +3,7 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 import { matchTeamIdForRoster } from "@/lib/leagues/rosterTeamIdentity"
 
-export type FlagManager = { rosterId: string; managerName: string; teamName: string | null }
+type FlagManager = { rosterId: string; managerName: string; teamName: string | null }
 
 type FlagLike = { id: string; leagueId: string; affectedRosterIds: string[]; evidenceJson: unknown }
 

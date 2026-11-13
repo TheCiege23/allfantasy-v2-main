@@ -47,7 +47,7 @@ const ALLOWED_DEEP_LINK_PREFIXES = [
  * Normalize a deep link path: ensure it starts with / and is not a full URL.
  * Returns the path if allowed, otherwise a safe default.
  */
-export function normalizeDeepLink(path: string | null | undefined): string {
+function normalizeDeepLink(path: string | null | undefined): string {
   const safe = safeRedirectPath(path)
   return safe
 }

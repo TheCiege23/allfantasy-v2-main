@@ -3,7 +3,7 @@ import type { ChimmyAlertDeliveryHistory } from './ChimmyAlertDeliveryRouter'
 
 // ── Suppression decision types ────────────────────────────────────────────────
 
-export type ChimmyAlertSuppressionReason =
+type ChimmyAlertSuppressionReason =
   | 'not_suppressed'
   | 'muted_class'
   | 'muted_type'
@@ -21,7 +21,7 @@ export type ChimmyAlertSuppressionReason =
   | 'commissioner_pref_disabled'
   | 'commissioner_type_gate'
 
-export interface ChimmyAlertSuppressionDecision {
+interface ChimmyAlertSuppressionDecision {
   suppress: boolean
   reason: ChimmyAlertSuppressionReason
   /** When true, severity should be degraded one level before routing. */

@@ -2,10 +2,9 @@
 import { getDateKey } from "@/lib/usage";
 import { MOOD_OPTIONS } from "@/lib/mood-options";
 
-export type { MoodOption } from "@/lib/mood-options";
 export { MOOD_OPTIONS, getMoodRecommendation } from "@/lib/mood-options";
 
-export type MoodEntry = {
+type MoodEntry = {
   id: string;
   mood: string;
   note: string | null;
@@ -13,7 +12,7 @@ export type MoodEntry = {
   createdAt: string;
 };
 
-export type MoodTrend = {
+type MoodTrend = {
   dateKey: string;
   mood: string;
   emoji: string;

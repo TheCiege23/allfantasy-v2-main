@@ -5,10 +5,5 @@
 
 export * from "./types"
 export {
-  getUserRecommendationProfile,
-  getLeagueRecommendations,
-  getPlayerRecommendations,
-  getStrategyRecommendations,
   getRecommendations,
 } from "./UserRecommendationEngine"
-export type { GetRecommendationsOptions } from "./UserRecommendationEngine"

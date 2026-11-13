@@ -1,5 +1,5 @@
 import { foldIcsLine } from './commissioner/calendar'
-export type WeeklyCalendarKind = 'game'|'lineup'|'waivers'|'trade'|'keeper'|'draft'|'poll'|'commissioner'
+type WeeklyCalendarKind = 'game'|'lineup'|'waivers'|'trade'|'keeper'|'draft'|'poll'|'commissioner'
 export type WeeklyCalendarEvent = { id:string; leagueId:string; leagueName:string; kind:WeeklyCalendarKind; title:string; at:string; source:'league-settings'|'waiver-engine'|'league-chat'|'commissioner-workspace'|'stored-lineup'; href:string }
 export type WeeklyCalendar = { generatedAt:string; through:string; events:WeeklyCalendarEvent[]; gaps:Array<{leagueId:string;leagueName:string;kind:'lineup'|'waivers'|'read'}> }
 export type WeeklyCalendarLeague = { id:string;name?:string|null;settings?:unknown; lineupAutomatic?:boolean }

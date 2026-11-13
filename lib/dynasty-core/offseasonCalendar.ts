@@ -11,7 +11,7 @@
  */
 import { rookieDraftAutoStartAt, type RookieDraftAutoOpenDecision, type RookieDraftAutoStartDays, type RookieDraftWindow } from './rookieDraftCalendar'
 
-export type OffseasonStepKey = 'season_over' | 'rookie_order' | 'draft_opens' | 'draft_starts' | 'kickoff' | 'taxi'
+type OffseasonStepKey = 'season_over' | 'rookie_order' | 'draft_opens' | 'draft_starts' | 'kickoff' | 'taxi'
 
 export type OffseasonStep = {
   key: OffseasonStepKey

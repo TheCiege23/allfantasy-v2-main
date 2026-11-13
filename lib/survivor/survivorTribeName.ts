@@ -1,9 +1,9 @@
 /** Free-text tribe names (owner's call, 2026-10-20): what a commissioner may rename a tribe to. */
 
-export const SURVIVOR_TRIBE_NAME_MIN = 2
+const SURVIVOR_TRIBE_NAME_MIN = 2
 export const SURVIVOR_TRIBE_NAME_MAX = 32
 
-export type SurvivorTribeNameResult = { ok: true; name: string } | { ok: false; error: string }
+type SurvivorTribeNameResult = { ok: true; name: string } | { ok: false; error: string }
 
 /** Trim, collapse inner whitespace, drop control characters, and bound the length. */
 export function normalizeSurvivorTribeName(raw: unknown): SurvivorTribeNameResult {

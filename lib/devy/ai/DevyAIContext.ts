@@ -9,7 +9,7 @@ import { getDevyTeamOutlook } from '../rankings/DevyTeamOutlookService'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { DEVY_LIFECYCLE_STATE } from '../types'
 
-export interface DevyAIContextBase {
+interface DevyAIContextBase {
   leagueId: string
   sport: string
   userId?: string

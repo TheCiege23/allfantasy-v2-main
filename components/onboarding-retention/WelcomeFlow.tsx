@@ -9,7 +9,7 @@ import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
  * PROMPT 149 — WelcomeFlow: first-time user flow (sports, tools, league, AI, referral).
  * Can be used as a full-page welcome or embedded; steps align with onboarding funnel API.
  */
-export interface WelcomeFlowProps {
+interface WelcomeFlowProps {
   initialStep?: OnboardingStepId
   preferredSportsInitial?: string[]
   onComplete?: () => void

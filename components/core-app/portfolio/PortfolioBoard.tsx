@@ -86,7 +86,7 @@ const VIEWS: Array<{ key: PortfolioViewKey; label: string }> = [
   { key: 'leagues', label: 'Teams' },
 ]
 
-export type PortfolioBoardProps = {
+type PortfolioBoardProps = {
   insights: PortfolioInsights
   recorded: RecordedValueDay[]
   /** Now-facts from the home loader, per league id. Null when that read failed. */

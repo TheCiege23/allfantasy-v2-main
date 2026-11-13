@@ -144,7 +144,7 @@ export function gamesToSnapshots(games: readonly LiveGameLite[]): LiveGameSnapsh
 }
 
 /** The set of team abbreviations playing in the given games (for DEF fetches). */
-export function teamsInGames(games: readonly LiveGameLite[]): string[] {
+function teamsInGames(games: readonly LiveGameLite[]): string[] {
   const set = new Set<string>()
   for (const g of games) {
     if (g.homeTeam) set.add(g.homeTeam.toUpperCase())

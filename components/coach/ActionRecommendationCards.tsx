@@ -9,7 +9,7 @@ import type {
   WaiverOpportunity,
 } from '@/lib/fantasy-coach/types';
 
-export interface ActionRecommendationCardsProps {
+interface ActionRecommendationCardsProps {
   actionRecommendations: ActionRecommendation[];
   waiverOpportunities: WaiverOpportunity[];
   tradeSuggestions: TradeSuggestion[];

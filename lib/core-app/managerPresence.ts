@@ -41,7 +41,7 @@ import { importedActivityLeagueWhere, managerKeysOf, teamResolver } from './impo
 
 export type MoveKind = 'trade' | 'waiver' | 'roster_move'
 
-export type PresenceNeed = {
+type PresenceNeed = {
   position: string
   /** Players at that position on the roster. */
   held: number

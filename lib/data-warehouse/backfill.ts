@@ -3,7 +3,7 @@
  * Call from POST /api/admin/warehouse/backfill or a scheduled job.
  */
 
-export type BackfillPipeline = 'gameStats' | 'matchups' | 'standings' | 'rosterSnapshots' | 'drafts' | 'transactions'
+type BackfillPipeline = 'gameStats' | 'matchups' | 'standings' | 'rosterSnapshots' | 'drafts' | 'transactions'
 
 type BackfillErrorPipeline = BackfillPipeline | 'orchestrator'
 

@@ -14,7 +14,7 @@
 
 import { isInIosAppClient } from "@/lib/platform/iosApp"
 
-export const IOS_PUSH_PLUGIN = "PushNotifications"
+const IOS_PUSH_PLUGIN = "PushNotifications"
 
 /** What iOS reports. `prompt` = never asked; `denied` can only be undone in iOS Settings. */
 export type IosPushPermission = "prompt" | "granted" | "denied"

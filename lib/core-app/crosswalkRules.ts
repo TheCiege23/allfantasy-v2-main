@@ -16,7 +16,7 @@
  * identity note already explains at platform level.
  */
 
-export type CrosswalkRow = {
+type CrosswalkRow = {
   /** The platform's own id, e.g. an ESPN athlete id. */
   from: string | null | undefined
   /** The Sleeper id every player-resolving surface joins on. */

@@ -1,7 +1,7 @@
 import type { EngineLeagueContext } from './types'
 import type { TradeLeagueContext } from './trade-types'
 
-export interface NormalizedTradeScoring {
+interface NormalizedTradeScoring {
   qbFormat: '1QB' | 'superflex'
   ppr: number
   tep: { enabled: boolean; premiumPprBonus: number }

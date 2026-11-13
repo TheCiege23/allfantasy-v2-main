@@ -1,4 +1,4 @@
-export const META_EVENT_NAMES = [
+const META_EVENT_NAMES = [
   "PageView",
   "ViewContent",
   "CompleteRegistration",
@@ -13,7 +13,7 @@ export type MetaEventName = (typeof META_EVENT_NAMES)[number]
 
 export const DEFAULT_META_PIXEL_ID = "1607977376870461"
 
-export const META_STANDARD_PIXEL_EVENTS = [
+const META_STANDARD_PIXEL_EVENTS = [
   "PageView",
   "ViewContent",
   "CompleteRegistration",
@@ -103,7 +103,7 @@ export function normalizeMetaCustomData(
   }
 }
 
-export function createMetaEventId(eventName: string, sourceId?: string | null): string {
+function createMetaEventId(eventName: string, sourceId?: string | null): string {
   const eventPart = sanitizeEventIdPart(eventName) || "event"
   const sourcePart = sourceId ? sanitizeEventIdPart(sourceId) : ""
   const randomPart = sanitizeEventIdPart(randomIdPart())

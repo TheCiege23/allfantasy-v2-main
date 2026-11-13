@@ -41,7 +41,7 @@ const TEMPLATES: { label: string; body: string }[] = [
   { label: 'Dues', body: 'Friendly nudge on league dues — please settle up when you get a minute.' },
 ]
 
-export function UniversalMessaging({ scope }: { scope: MessagingScope }) {
+function UniversalMessaging({ scope }: { scope: MessagingScope }) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [composing, setComposing] = useState(false)

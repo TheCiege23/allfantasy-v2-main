@@ -1,6 +1,6 @@
 /** Client-side draft copilot copy + selection context (live redraft snake room). */
 
-export type DraftCopilotStance = 'safer' | 'upside' | 'balanced'
+type DraftCopilotStance = 'safer' | 'upside' | 'balanced'
 
 export type DraftCopilotInsight = {
   headline: string

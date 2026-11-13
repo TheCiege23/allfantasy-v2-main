@@ -332,7 +332,7 @@ export function compareTriageRows(nowIso: string): (a: TriageRow, b: TriageRow) 
 /** A league whose lineup read is older than this is named on its own rather than dating the list. */
 export const ROSTER_STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000
 
-export type StaleRosterLeague = { leagueId: string; leagueName: string; asOf: string; days: number }
+type StaleRosterLeague = { leagueId: string; leagueName: string; asOf: string; days: number }
 
 /**
  * ⚠ ONE STALE LEAGUE MUST NOT DATE THE WHOLE LIST. `rostersAsOf` is the OLDEST lineup read, by design (a

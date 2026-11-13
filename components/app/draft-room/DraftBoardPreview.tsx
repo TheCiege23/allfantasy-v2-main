@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { DraftBoard } from './DraftBoard'
 import type { DraftPickSnapshot, DraftType, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 
-export type DraftBoardPreviewTeam = {
+type DraftBoardPreviewTeam = {
   id: string
   slot: number
   name: string

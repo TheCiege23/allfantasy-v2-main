@@ -18,8 +18,8 @@ export const EXPECTED_APPLE_APP_ID = "6815778932"
 /** The root Apple signs StoreKit 2 transactions and V2 notifications under. */
 const APPLE_JWS_ROOT_CN = "Apple Root CA - G3"
 
-export type CheckStatus = "ok" | "wrong" | "missing"
-export type ConfigCheck = { name: string; status: CheckStatus; detail: string }
+type CheckStatus = "ok" | "wrong" | "missing"
+type ConfigCheck = { name: string; status: CheckStatus; detail: string }
 
 type Env = Record<string, string | undefined>
 
@@ -127,7 +127,7 @@ export function checkAppleIapConfig(env: Env = process.env): ConfigCheck[] {
   return out
 }
 
-export type TestNotificationResult = {
+type TestNotificationResult = {
   environment: "sandbox" | "production"
   requested: boolean
   /** Apple accepted our signed API call: the key, key ID, issuer ID and bundle ID match. */

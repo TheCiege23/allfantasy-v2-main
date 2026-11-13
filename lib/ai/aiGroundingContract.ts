@@ -21,7 +21,7 @@ import type { SportKey, FeatureKey, UserRole, DataFreshnessTier } from "./engine
 
 // ─── Freshness labels ─────────────────────────────────────────────────────────
 
-export type FreshnessShortLabel =
+type FreshnessShortLabel =
   | "Live"
   | "Cached"
   | "Pool data"
@@ -108,7 +108,7 @@ export function buildFreshnessLabel(
 
 // ─── Contract sub-types ───────────────────────────────────────────────────────
 
-export type ContractPick = {
+type ContractPick = {
   matchId: string
   matchDescription: string
   pickedTeam: string
@@ -136,7 +136,7 @@ export type ContractFixture = {
   status: "scheduled" | "live" | "final" | "postponed" | "cancelled"
 }
 
-export type ContractLiveScore = {
+type ContractLiveScore = {
   matchId: string
   homeTeam: string
   awayTeam: string
@@ -147,7 +147,7 @@ export type ContractLiveScore = {
   status: "live" | "half_time" | "extra_time" | "penalties"
 }
 
-export type ContractOddsRow = {
+type ContractOddsRow = {
   matchId: string
   /** null = unknown — AI must NOT guess which team is favored. */
   favorite: string | null

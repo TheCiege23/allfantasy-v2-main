@@ -18,7 +18,7 @@ import { getCareerData, type CareerData, type CareerTitle } from '@/lib/core-app
  * an omission.
  */
 
-export type ShareRing = {
+type ShareRing = {
   leagueName: string
   season: number
 }
@@ -63,7 +63,7 @@ export type ShareCardData = {
  * to fall back to — "great season!" is not a fact, and a card that always finds
  * something remarkable is a card whose remarks mean nothing.
  */
-export function buildCallout(data: CareerData): string | null {
+function buildCallout(data: CareerData): string | null {
   const titles = [...data.titles].sort((a, b) => b.season - a.season)
   if (titles.length === 0) return null
 

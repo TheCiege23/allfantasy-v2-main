@@ -3,7 +3,7 @@
 import React from 'react'
 import { RefreshCw, Download, Share2, Send, Check } from 'lucide-react'
 
-export interface MediaActionBarProps {
+interface MediaActionBarProps {
   /** Retry generation (same type). */
   onRetry?: () => void
   retryLoading?: boolean

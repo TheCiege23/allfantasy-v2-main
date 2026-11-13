@@ -7,7 +7,7 @@
  * slips alternate between finalists, keeping the count close, and the deciding vote is read last.
  */
 
-export interface FinaleSlipInput {
+interface FinaleSlipInput {
   finalistRosterId: string
   /** 2 for a doubled jury vote; each unit becomes its own slip. */
   weight: number
@@ -15,7 +15,7 @@ export interface FinaleSlipInput {
   kind?: 'jury' | 'advantage'
 }
 
-export interface FinaleSlip {
+interface FinaleSlip {
   index: number
   finalistRosterId: string
   kind: 'jury' | 'advantage'

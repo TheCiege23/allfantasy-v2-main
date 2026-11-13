@@ -3,7 +3,7 @@
  */
 
 /** Structural subset of pool rows — avoids importing draftPlayerRookie (cycle). */
-export type NflRookiePolicyPlayerLike = {
+type NflRookiePolicyPlayerLike = {
   isRookie?: boolean
   rookie?: boolean
   yearsExp?: unknown
@@ -15,7 +15,7 @@ export type NflRookiePolicyPlayerLike = {
   [key: string]: unknown
 }
 
-export type NflRookiePolicySource =
+type NflRookiePolicySource =
   | 'rolling_insights_imported'
   | 'sleeper_years_exp'
   | 'sleeper_cache'
@@ -65,7 +65,7 @@ function draftYearMatchesSeason(player: NflRookiePolicyPlayerLike, season: numbe
   return candidates.some((n) => n === season)
 }
 
-export type NflRookieSourceInput = NflRookiePolicyPlayerLike & {
+type NflRookieSourceInput = NflRookiePolicyPlayerLike & {
   seasonYear?: number
 }
 

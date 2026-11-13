@@ -9,9 +9,9 @@ import { Prisma } from '@prisma/client'
 import { AI_EVENT_TYPES } from '@/lib/ai/events/aiEventTypes'
 import { prisma } from '@/lib/prisma'
 
-export type AIFeatureCategory = 'draft' | 'trade' | 'waiver' | 'coaching' | 'other'
+type AIFeatureCategory = 'draft' | 'trade' | 'waiver' | 'coaching' | 'other'
 
-export type AIDashboardFilters = {
+type AIDashboardFilters = {
   dateFrom: Date
   dateTo: Date
   sport?: string | null
@@ -22,7 +22,7 @@ export type AIDashboardFilters = {
   userSegment?: 'all' | 'high' | 'medium' | 'low'
 }
 
-export function categorizeAiFeature(feature: string | null, recommendationType: string | null): AIFeatureCategory {
+function categorizeAiFeature(feature: string | null, recommendationType: string | null): AIFeatureCategory {
   const s = `${feature ?? ''} ${recommendationType ?? ''}`.toLowerCase()
   if (/(draft|war_room|war room|adp|pick|snake|auction)/.test(s)) return 'draft'
   if (/(waiver|faab|claim|add|drop)/.test(s)) return 'waiver'
@@ -31,7 +31,7 @@ export function categorizeAiFeature(feature: string | null, recommendationType: 
   return 'other'
 }
 
-export function categorizeOutcomeType(type: string | null): AIFeatureCategory {
+function categorizeOutcomeType(type: string | null): AIFeatureCategory {
   return categorizeAiFeature(type, type)
 }
 
@@ -109,7 +109,7 @@ async function resolveSegmentUserIds(segment: 'high' | 'medium' | 'low', sport: 
   return rows.filter((x) => pick(x.aiFollowRate)).map((x) => x.userId)
 }
 
-export type GlobalAIMetrics = {
+type GlobalAIMetrics = {
   totalRecommendationsServed: number
   totalRecommendationsFollowed: number
   followRatePct: number | null
@@ -123,7 +123,7 @@ export type GlobalAIMetrics = {
   }
 }
 
-export async function getGlobalMetrics(filters: AIDashboardFilters): Promise<GlobalAIMetrics> {
+async function getGlobalMetrics(filters: AIDashboardFilters): Promise<GlobalAIMetrics> {
   const { dateFrom, dateTo, feature = 'all', userSegment, sport } = filters
 
   const segmentIds =
@@ -264,7 +264,7 @@ async function windowMetrics(filters: AIDashboardFilters): Promise<{
   return { followRatePct, avgOutcome }
 }
 
-export type FeatureBreakdownRow = {
+type FeatureBreakdownRow = {
   feature: AIFeatureCategory
   label: string
   usageCount: number
@@ -333,7 +333,7 @@ function labelFor(c: AIFeatureCategory): string {
   }
 }
 
-export type FollowVsIgnore = {
+type FollowVsIgnore = {
   pctUsersFollowing: number | null
   pctUsersIgnoring: number | null
   avgOutcomeWhenFollowed: number | null
@@ -422,13 +422,13 @@ export async function getFollowVsIgnore(filters: AIDashboardFilters): Promise<Fo
   }
 }
 
-export type OutcomeDistributionBucket = {
+type OutcomeDistributionBucket = {
   bucket: 'strong_success' | 'success' | 'neutral' | 'fail' | 'strong_fail' | 'unknown'
   label: string
   count: number
 }
 
-export async function getOutcomeDistribution(filters: AIDashboardFilters): Promise<OutcomeDistributionBucket[]> {
+async function getOutcomeDistribution(filters: AIDashboardFilters): Promise<OutcomeDistributionBucket[]> {
   const raw = await prisma.aiRecommendationOutcome.findMany({
     where: {
       createdAt: { gte: filters.dateFrom, lte: filters.dateTo },
@@ -470,7 +470,7 @@ export async function getOutcomeDistribution(filters: AIDashboardFilters): Promi
   ]
 }
 
-export type PlayerPerformanceRow = {
+type PlayerPerformanceRow = {
   playerId: string
   playerName: string | null
   recommendationCount: number
@@ -479,7 +479,7 @@ export type PlayerPerformanceRow = {
   trend: 'up' | 'down' | 'flat'
 }
 
-export async function getPlayerPerformance(filters: AIDashboardFilters, limit = 40): Promise<PlayerPerformanceRow[]> {
+async function getPlayerPerformance(filters: AIDashboardFilters, limit = 40): Promise<PlayerPerformanceRow[]> {
   try {
     const rows = await prisma.$queryRaw<
       Array<{
@@ -526,7 +526,7 @@ export async function getPlayerPerformance(filters: AIDashboardFilters, limit = 
   }
 }
 
-export type UserSegmentRow = {
+type UserSegmentRow = {
   segment: 'high' | 'medium' | 'low'
   label: string
   userCount: number
@@ -534,7 +534,7 @@ export type UserSegmentRow = {
   avgOutcomeScore: number | null
 }
 
-export async function getUserSegments(filters: AIDashboardFilters): Promise<UserSegmentRow[]> {
+async function getUserSegments(filters: AIDashboardFilters): Promise<UserSegmentRow[]> {
   const tendencies = await prisma.aiUserTendency.findMany({
     where: filters.sport && filters.sport !== 'all' ? { sport: filters.sport } : {},
     select: { userId: true, aiFollowRate: true },
@@ -580,7 +580,7 @@ export async function getUserSegments(filters: AIDashboardFilters): Promise<User
   return out
 }
 
-export type LeagueSegmentRow = {
+type LeagueSegmentRow = {
   leagueType: string
   scoringFormat: string
   aiUsage: number
@@ -588,7 +588,7 @@ export type LeagueSegmentRow = {
   avgOutcomeScore: number | null
 }
 
-export async function getLeagueSegments(filters: AIDashboardFilters): Promise<LeagueSegmentRow[]> {
+async function getLeagueSegments(filters: AIDashboardFilters): Promise<LeagueSegmentRow[]> {
   const logs = await prisma.aiRecommendationLog.findMany({
     where: {
       createdAt: { gte: filters.dateFrom, lte: filters.dateTo },
@@ -670,14 +670,14 @@ export async function getLeagueSegments(filters: AIDashboardFilters): Promise<Le
   return rows.sort((a, b) => b.aiUsage - a.aiUsage).slice(0, 30)
 }
 
-export type TimeSeriesPoint = {
+type TimeSeriesPoint = {
   date: string
   followRatePct: number | null
   avgOutcomeScore: number | null
   usageCount: number
 }
 
-export async function getTimeSeries(filters: AIDashboardFilters, range: '7d' | '30d' | 'all'): Promise<TimeSeriesPoint[]> {
+async function getTimeSeries(filters: AIDashboardFilters, range: '7d' | '30d' | 'all'): Promise<TimeSeriesPoint[]> {
   const from =
     range === '7d'
       ? new Date(Math.max(filters.dateFrom.getTime(), filters.dateTo.getTime() - 7 * 86400000))
@@ -746,7 +746,7 @@ export async function getTimeSeries(filters: AIDashboardFilters, range: '7d' | '
   })
 }
 
-export type RecommendationLogRow = {
+type RecommendationLogRow = {
   id: string
   type: string
   feature: string
@@ -761,7 +761,7 @@ export type RecommendationLogRow = {
   createdAt: string
 }
 
-export type RecommendationLogsResult = {
+type RecommendationLogsResult = {
   rows: RecommendationLogRow[]
   nextCursor: string | null
 }

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { validateBestBallRoster } from '../rosterValidator'
 import type { DraftedPlayer } from './draftAssistant'
 
-export type RosterGrade = {
+type RosterGrade = {
   overallGrade: string
   positionalBalance: string
   weeklyCeiling: string

@@ -100,7 +100,7 @@ export function discoverInputFromQuery(query: string): DiscoverLeaguesInput {
   }
 }
 
-export interface SavedSearchCheck {
+interface SavedSearchCheck {
   /** Ids to store as seen after this check. */
   seen: string[]
   /** What to tell the player, or null for nothing. */

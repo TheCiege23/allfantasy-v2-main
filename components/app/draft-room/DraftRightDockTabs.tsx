@@ -24,7 +24,7 @@ export type DraftRightDockTab = 'queue' | 'intel' | 'chimmy' | 'roster' | 'war_r
 
 const TAB_PREF_KEY = 'af:draft-right-dock-active-tab'
 
-export interface DraftRightDockTabsProps {
+interface DraftRightDockTabsProps {
   queueBody: ReactNode
   /** "Before your next pick" lookahead. Optional — the tab appears only when a body is supplied. */
   intelBody?: ReactNode

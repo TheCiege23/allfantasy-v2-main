@@ -7,7 +7,7 @@ import type { MatchupData } from '@/lib/core-app/matchup'
  * two screens cannot disagree. This module only decides what to SAY, and says each absence plainly:
  * a matchup with nothing scored is "not started", never 0–0, and a failed read is never "no matchup".
  */
-export type SideRemaining = { upcoming: number; live: number }
+type SideRemaining = { upcoming: number; live: number }
 
 export type MatchupStrip =
   | { kind: 'failed' }

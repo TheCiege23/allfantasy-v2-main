@@ -32,7 +32,7 @@ const COMPONENT_TO_KEY: Partial<Record<IdpComponent, IdpStatKey>> = {
  * would launder one small sample through another. The caller gets null and must say the
  * regression did not run rather than quietly skipping it.
  */
-export const MIN_COHORT_GAMES = 40
+const MIN_COHORT_GAMES = 40
 
 export interface CohortMember {
   position: string | null | undefined

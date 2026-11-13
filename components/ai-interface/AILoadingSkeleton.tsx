@@ -2,7 +2,7 @@
 
 import { Skeleton } from '@/components/ui/skeleton'
 
-export interface AILoadingSkeletonProps {
+interface AILoadingSkeletonProps {
   showFacts?: boolean
   showSynthesis?: boolean
   showAction?: boolean

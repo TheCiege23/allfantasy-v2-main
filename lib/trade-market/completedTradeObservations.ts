@@ -81,7 +81,7 @@ function pickValue(raw: unknown): number | null {
   return total
 }
 
-export type TradeAttribution =
+type TradeAttribution =
   | { kind: 'skip'; reason: 'no_players' | 'unparseable_pick' | 'unpriced_player' | 'side_worth_nothing' | 'picks_not_priced' }
   | { kind: 'ok'; records: Array<{ id: string; own: number; observedValue: number }> }
 
@@ -262,7 +262,7 @@ export interface CompletedTradeMarketValue {
 /** Below this many priced trades a single lopsided deal defines the player. */
 export const COMPLETED_MIN_SAMPLE = 5
 /** The most we will move a chart value, at any sample size. */
-export const COMPLETED_MAX_ADJUSTMENT = 12
+const COMPLETED_MAX_ADJUSTMENT = 12
 
 function median(xs: number[]): number | null {
   if (xs.length === 0) return null
@@ -408,7 +408,7 @@ export function tierBaselines(gathered: CompletedTradeGather): (baseValue: numbe
  * proposal path ever starts producing anything.
  */
 export const COMPLETED_SOURCE_VERSION = 'completed-trade-signals'
-export const COMPLETED_CALCULATION_VERSION = 'ct1.0'
+const COMPLETED_CALCULATION_VERSION = 'ct1.0'
 
 /**
  * Compute and (optionally) persist AllFantasy market values from completed trades.

@@ -4,7 +4,7 @@
  */
 
 /** Single error or warning from validation. */
-export interface ImportErrorItem {
+interface ImportErrorItem {
   code: string
   message: string
   /** Optional field path (e.g. "picks[3].playerName") */
@@ -74,7 +74,7 @@ export interface RawKeeperSelection {
 }
 
 /** Supported external source identifier. */
-export type ImportSource = 'sleeper' | 'espn' | 'manual' | 'generic'
+type ImportSource = 'sleeper' | 'espn' | 'manual' | 'generic'
 
 /** Top-level import payload (generic shape). */
 export interface RawDraftImportPayload {

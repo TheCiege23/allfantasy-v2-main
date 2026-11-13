@@ -65,7 +65,7 @@ export type MatchupSide = {
   projectedPoints: number | null
   unprojectedStarters: number
 }
-export type MatchupRow = {
+type MatchupRow = {
   matchupId: number
   a: MatchupSide
   b: MatchupSide

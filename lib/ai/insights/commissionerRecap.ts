@@ -14,7 +14,7 @@
 import type { InsightPool } from "./types"
 import { computeMatchupSwingScores } from "./matchupSwingScore"
 
-export type CommissionerRecapResult = {
+type CommissionerRecapResult = {
   biggestWinnerToday: {
     displayName: string
     pointsGainedToday: number

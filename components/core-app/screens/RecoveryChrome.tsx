@@ -25,7 +25,7 @@ import '@/components/core-app/af-recovery.css'
  * screens below compose this shell instead of opening their own root div.
  */
 
-export type Tone = 'accent' | 'good' | 'warn' | 'bad' | 'neutral'
+type Tone = 'accent' | 'good' | 'warn' | 'bad' | 'neutral'
 
 export function RecoveryShell({ children }: { children: ReactNode }) {
   return (
@@ -42,7 +42,7 @@ export function RecoveryShell({ children }: { children: ReactNode }) {
 }
 
 /** The AF crest, matching the lockup on the pricing and landing navs. */
-export function Crest({ size = 28 }: { size?: number }) {
+function Crest({ size = 28 }: { size?: number }) {
   return (
     <svg
       width={size}

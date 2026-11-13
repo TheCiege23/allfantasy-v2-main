@@ -23,7 +23,7 @@ export type GradeLeagueListRow = {
   hasUnifiedRecord?: boolean
 }
 
-export type GradeLeagueOption = { id: string; label: string }
+type GradeLeagueOption = { id: string; label: string }
 
 /** One option per unified league in a supported sport, newest season kept, sorted by name. Pure, for the test. */
 export function gradeLeagueOptions(rows: ReadonlyArray<GradeLeagueListRow>): GradeLeagueOption[] {

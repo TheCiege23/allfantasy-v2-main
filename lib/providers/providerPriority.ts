@@ -8,7 +8,7 @@ import type { LeagueSport } from '@prisma/client'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
 /** @alias ProviderTierId — explicit vendor tier ids */
-export type SportsDataProvider =
+type SportsDataProvider =
   | 'rolling_insights'
   | 'thesportsdb'
   | 'clearsports'
@@ -17,7 +17,7 @@ export type SportsDataProvider =
 
 export type ProviderTierId = SportsDataProvider
 
-export type ProviderField =
+type ProviderField =
   | 'player_profile'
   | 'player_stats'
   | 'projections'

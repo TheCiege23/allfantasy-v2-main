@@ -3,7 +3,7 @@
 import { useState } from 'react'
 
 /** Questions most managers ask in their first week, one tap each. */
-export const ASK_CHIMMY_STARTERS = [
+const ASK_CHIMMY_STARTERS = [
   'How does Survivor work here?',
   'How does voting work?',
   'When is the merge?',

@@ -13,7 +13,7 @@ export function isSupportedLegacySport(sport: string | null | undefined): sport 
   return isSupportedSport(sport)
 }
 
-export const LEGACY_SPORT_LABELS: Record<string, string> = {
+const LEGACY_SPORT_LABELS: Record<string, string> = {
   NFL: 'NFL',
   NHL: 'NHL',
   NBA: 'NBA',

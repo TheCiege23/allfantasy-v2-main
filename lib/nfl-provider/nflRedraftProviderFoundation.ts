@@ -27,9 +27,9 @@ export type NflRedraftProviderDomain =
   | 'league_import'
   | 'weather'
 
-export type NflRedraftProviderStatus = 'available' | 'degraded' | 'fallback_only' | 'missing_config'
-export type NflRedraftFreshnessStatus = 'fresh' | 'missing' | 'stale'
-export type NflRedraftProviderErrorCode =
+type NflRedraftProviderStatus = 'available' | 'degraded' | 'fallback_only' | 'missing_config'
+type NflRedraftFreshnessStatus = 'fresh' | 'missing' | 'stale'
+type NflRedraftProviderErrorCode =
   | 'forbidden'
   | 'invalid_credentials'
   | 'network_error'
@@ -38,7 +38,7 @@ export type NflRedraftProviderErrorCode =
   | 'timeout'
   | 'unknown'
 
-export type NflRedraftProviderCapability = {
+type NflRedraftProviderCapability = {
   providerId: NflRedraftProviderId
   domain: NflRedraftProviderDomain
   priority: number
@@ -47,7 +47,7 @@ export type NflRedraftProviderCapability = {
   note: string
 }
 
-export type NflRedraftProviderEnvRequirement = {
+type NflRedraftProviderEnvRequirement = {
   providerId: NflRedraftProviderId
   required: boolean
   envKeys: string[]
@@ -56,7 +56,7 @@ export type NflRedraftProviderEnvRequirement = {
   missingEnv: string[]
 }
 
-export type NflRedraftProviderHealth = {
+type NflRedraftProviderHealth = {
   providerId: NflRedraftProviderId
   status: NflRedraftProviderStatus
   configured: boolean
@@ -65,7 +65,7 @@ export type NflRedraftProviderHealth = {
   warnings: string[]
 }
 
-export type NflRedraftProviderHealthReport = {
+type NflRedraftProviderHealthReport = {
   generatedAtIso: string
   providers: NflRedraftProviderHealth[]
   fallbackChains: Record<NflRedraftProviderDomain, NflRedraftProviderId[]>
@@ -112,7 +112,7 @@ export type NflRedraftProviderContext = {
   leagueId?: string | null
 }
 
-export const NFL_PROVIDER_ENV_KEYS: Record<NflRedraftProviderId, string[]> = {
+const NFL_PROVIDER_ENV_KEYS: Record<NflRedraftProviderId, string[]> = {
   api_sports: ['API_SPORTS_KEY', 'APISPORTS_API_KEY', 'API_SPORTS_API_KEY'],
   clearsports: ['CLEARSPORTS_API_KEY', 'CLEAR_SPORTS_API_KEY'],
   rolling_insights: ['ROLLING_INSIGHTS_API_KEY', 'ROLLING_INSIGHTS_CLIENT_ID', 'ROLLING_INSIGHTS_CLIENT_SECRET'],
@@ -125,7 +125,7 @@ export const NFL_PROVIDER_ENV_KEYS: Record<NflRedraftProviderId, string[]> = {
   deterministic: [],
 }
 
-export const NFL_REDRAFT_PROVIDER_CAPABILITIES: NflRedraftProviderCapability[] = [
+const NFL_REDRAFT_PROVIDER_CAPABILITIES: NflRedraftProviderCapability[] = [
   { providerId: 'rolling_insights', domain: 'player_metadata', priority: 5, requiresApiKey: true, maxAgeMinutes: 1440, note: 'Primary AllFantasy NFL identity/profile import source when configured.' },
   { providerId: 'rolling_insights', domain: 'historical_stats', priority: 5, requiresApiKey: true, maxAgeMinutes: 10080, note: 'Primary imported historical player stat source when licensed.' },
   { providerId: 'rolling_insights', domain: 'injury', priority: 5, requiresApiKey: true, maxAgeMinutes: 120, note: 'Primary imported injury/designation source when licensed.' },
@@ -229,7 +229,7 @@ export function getNflRedraftFallbackChain(
     .map((capability) => capability.providerId)
 }
 
-export function getNflRedraftProviderCapabilities(providerId: NflRedraftProviderId): NflRedraftProviderDomain[] {
+function getNflRedraftProviderCapabilities(providerId: NflRedraftProviderId): NflRedraftProviderDomain[] {
   return Array.from(
     new Set(
       NFL_REDRAFT_PROVIDER_CAPABILITIES

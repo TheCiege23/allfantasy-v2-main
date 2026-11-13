@@ -8,7 +8,7 @@ import { getUnifiedManagerSummary, getUnifiedManagerSummaries } from './UnifiedP
 import { buildAIPrestigeContext } from './AIPrestigeContextResolver'
 import type { CommissionerTrustContext, UnifiedManagerSummary, AIPrestigeContextPayload } from './types'
 
-export interface PrestigeGovernanceSnapshot {
+interface PrestigeGovernanceSnapshot {
   commissionerContext: CommissionerTrustContext
   /** Sample of unified manager summaries (e.g. top 20 by legacy or reputation). */
   sampleManagerSummaries: UnifiedManagerSummary[]

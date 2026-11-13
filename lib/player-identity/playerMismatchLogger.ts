@@ -32,7 +32,7 @@ export type PlayerMismatchReason =
   | 'CROSS_SPORT_BLOCKED'
   | 'INVALID_PLAYER_ID'
 
-export type PlayerMismatchLogPayload = {
+type PlayerMismatchLogPayload = {
   leagueId?: string | null
   sport: string
   poolPlayerId?: string | null
@@ -58,7 +58,7 @@ export const MAX_TRACKED_MISMATCHES = 5_000
 /** Rows per INSERT. 16 params/row keeps us far below Postgres' 65535-parameter ceiling. */
 const FLUSH_CHUNK_ROWS = 500
 
-export type PlayerMismatchFlushResult = {
+type PlayerMismatchFlushResult = {
   /** Distinct facts held at flush time. */
   distinctFacts: number
   /** Raw record() calls represented by those facts. */

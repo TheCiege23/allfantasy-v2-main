@@ -22,7 +22,7 @@ import type { LeagueSport } from '@prisma/client'
 
 // ── Sport eligibility ─────────────────────────────────────────────────────────
 
-export type SalaryCapSport = 'NFL' | 'NCAAF'
+type SalaryCapSport = 'NFL' | 'NCAAF'
 
 export function isSalaryCapEligibleSport(sport: unknown): sport is SalaryCapSport {
   const s = String(sport ?? '').trim().toUpperCase()
@@ -35,7 +35,7 @@ export function isSalaryCapEligibleSport(sport: unknown): sport is SalaryCapSpor
  * Salary cap is auction-only. Snake/linear drafts are not permitted.
  * Auto, offline, and mock are accepted supplementary modes.
  */
-export type SalaryCapDraftType = 'auction' | 'auto' | 'offline' | 'mock_draft'
+type SalaryCapDraftType = 'auction' | 'auto' | 'offline' | 'mock_draft'
 
 export const SALARY_CAP_DRAFT_TYPE_IDS: readonly SalaryCapDraftType[] = [
   'auction',
@@ -128,7 +128,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 // ── Sub-types ─────────────────────────────────────────────────────────────────
 
-export interface SalaryCapRosterTemplate {
+interface SalaryCapRosterTemplate {
   rosterMode: 'salary_cap'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -143,7 +143,7 @@ export interface SalaryCapRosterTemplate {
   defensePosition: 'DST' | 'DEF'
 }
 
-export interface SalaryCapDraftSettings {
+interface SalaryCapDraftSettings {
   draftType: 'auction'
   requestedDraftType: SalaryCapDraftType
   engineCore: 'auction'
@@ -173,7 +173,7 @@ export interface SalaryCapDraftSettings {
   mockAuctionBudgetValidationEnabled: true
 }
 
-export interface SalaryCapCapPolicy {
+interface SalaryCapCapPolicy {
   salaryCapEnabled: true
   capPhase: 'setup'
   totalCap: number
@@ -206,7 +206,7 @@ export interface SalaryCapCapPolicy {
   offseasonPhase: 'setup'
 }
 
-export interface SalaryCapDefaultContract {
+interface SalaryCapDefaultContract {
   sport: SalaryCapSport
   league_type: 'salary_cap'
   leagueType: 'salary_cap'

@@ -18,7 +18,7 @@ const BASE_SCORES: Record<DramaType, number> = {
   DYNASTY_SHIFT: 75,
 }
 
-export interface DramaScoreInput {
+interface DramaScoreInput {
   dramaType: DramaType
   sport?: string
   /** Optional: streak length, upset margin, etc. to boost. */

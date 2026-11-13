@@ -293,7 +293,7 @@ function RailGuillotine({ line }: { line: RailGuillotineLine }) {
   )
 }
 
-export type RailRowBodyProps = {
+type RailRowBodyProps = {
   name: string
   platform: string
   /** The merged matchup (see `mergeRailMatchup`); absent draws the "no head-to-head" line. */

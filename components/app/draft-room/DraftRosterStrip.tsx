@@ -23,7 +23,7 @@ import { Users } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { PlayerAvatar } from './PlayerAvatar'
 
-export interface DraftRosterStripPick {
+interface DraftRosterStripPick {
   playerName: string
   position: string
   overall: number
@@ -39,7 +39,7 @@ export interface DraftRosterStripPick {
   teamLogoUrl?: string | null
 }
 
-export interface DraftRosterStripProps {
+interface DraftRosterStripProps {
   picks: DraftRosterStripPick[]
   /** Map of starter slot name → count (QB, RB, WR, TE, FLEX, SUPERFLEX, K, DEF, …). */
   starterSlots?: Record<string, number> | null

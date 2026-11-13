@@ -17,7 +17,7 @@ import type { ConnectedFranchiseWarRoomSide } from '@/components/core-app/screen
 export const HARNESS_LEAGUE_ID = 'e2e-redraft-core-trades'
 
 /** The deadline states the bar can show, each from the server verdict the real page passes. */
-export const DEADLINE_FIXTURES: Record<string, TradeDeadlineCountdown | null> = {
+const DEADLINE_FIXTURES: Record<string, TradeDeadlineCountdown | null> = {
   open: { state: 'weeks', deadlineWeek: 12, currentWeek: 9, weeksLeft: 3 },
   final: { state: 'weeks', deadlineWeek: 12, currentWeek: 12, weeksLeft: 0 },
   passed: { state: 'closed', by: 'week', deadlineWeek: 12, closesAtIso: null },

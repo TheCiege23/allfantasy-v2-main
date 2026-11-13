@@ -17,7 +17,7 @@ import type { OffseasonWaiverRule, PlayoffWaiverRule } from './hub-waiver-option
 
 export type WaiverSeasonPhase = 'pre_draft' | 'regular' | 'playoffs' | 'offseason'
 
-export type WaiverPhaseCode =
+type WaiverPhaseCode =
   | 'pre_draft_locked'
   | 'offseason_closed'
   | 'offseason_fcfs'
@@ -109,7 +109,7 @@ export function resolveWaiverPhasePolicy(input: {
   return applyBestBallRosterPolicy(resolvePhaseOnlyPolicy(input), input.bestBallRoster ?? null)
 }
 
-export function applyBestBallRosterPolicy(base: WaiverPhasePolicy, bb: BestBallRosterPolicy | null): WaiverPhasePolicy {
+function applyBestBallRosterPolicy(base: WaiverPhasePolicy, bb: BestBallRosterPolicy | null): WaiverPhasePolicy {
   if (!bb) return base
   const claimsAllowed = base.claimsAllowed && bb.waiversEnabled
   const immediateAddsAllowed = base.immediateAddsAllowed && bb.freeAgencyEnabled

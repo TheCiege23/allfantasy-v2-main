@@ -16,7 +16,7 @@ import { hashPlayerDataSnapshot } from '@/lib/roster-lineup-engine/rosterMoveHis
 import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
 import { readAutomaticChangeUndo, restoreLineupLayout } from './automaticChangeUndo'
 
-export const AUTOMATIC_CHANGE_UNDONE_ACTION = 'automatic_lineup_change.undone'
+const AUTOMATIC_CHANGE_UNDONE_ACTION = 'automatic_lineup_change.undone'
 const LOG_DAYS = 14
 const LOG_MAX = 20
 
@@ -89,7 +89,7 @@ export async function readAutomaticChanges(leagueId: string, userId: string, now
   return { ok: true, rows, commissioner: a.commissioner }
 }
 
-export type UndoResult = { ok: true; message: string } | { ok: false; status: number; error: string }
+type UndoResult = { ok: true; message: string } | { ok: false; status: number; error: string }
 
 export async function undoAutomaticChange(leagueId: string, userId: string, auditId: unknown): Promise<UndoResult> {
   if (typeof auditId !== 'string' || !auditId) return { ok: false, status: 400, error: 'Send { auditId }.' }

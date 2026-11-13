@@ -6,7 +6,7 @@
  */
 import { prisma } from '@/lib/prisma'
 
-export type Platform = 'sleeper' | 'yahoo' | 'mfl' | 'fantrax' | 'espn'
+type Platform = 'sleeper' | 'yahoo' | 'mfl' | 'fantrax' | 'espn'
 
 /** Thrown when this provider account is already linked to a different AllFantasy user (AF `userId` is authoritative). */
 export class PlatformIdentityConflictError extends Error {

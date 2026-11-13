@@ -19,7 +19,7 @@ import { fingerprint, type RecommendationRecord } from './provenance'
 
 export type CorpusDataSource = 'fixture' | 'single-account-smoke' | 'multi-account-cohort'
 
-export type CorpusValidationReport = {
+type CorpusValidationReport = {
   generatedAt: string
   dataSource: CorpusDataSource
   leaguesEvaluated: number

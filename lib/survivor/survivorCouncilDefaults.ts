@@ -9,7 +9,7 @@ import type { SurvivorTieRule, SurvivorVoteChangePolicy } from './survivorSettin
  */
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-export type SurvivorCouncilDefaults = {
+type SurvivorCouncilDefaults = {
   tribalCouncilDay: string
   tribalCouncilTime: string
   voteOpenOffset: number

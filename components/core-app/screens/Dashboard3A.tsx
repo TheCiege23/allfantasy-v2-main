@@ -151,7 +151,7 @@ type Dashboard3AChrome = {
  * would state falsehoods about data nobody read: "you're clean across every league" from an empty
  * issues list, "no leagues imported" from a missing summary. So the type admits exactly two shapes.
  */
-export type Dashboard3AProps = Dashboard3AChrome &
+type Dashboard3AProps = Dashboard3AChrome &
   (
     | (Dashboard3AData & { slots?: undefined })
     | ({ slots: Dashboard3ASlots } & { [K in keyof Dashboard3AData]?: undefined })

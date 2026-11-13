@@ -16,7 +16,7 @@ import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
  * missing would silently zero revenue while looking like generosity; the explicit cases below
  * are the ones this exists for, and each is pinned by a test.
  */
-export type ChimmyModelOutputLike = {
+type ChimmyModelOutputLike = {
   raw?: string | null
   error?: string | null
   skipped?: boolean | null

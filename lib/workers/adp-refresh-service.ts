@@ -25,7 +25,7 @@ type AdpRefreshQualitySummary = {
   topWarnings: string[]
 }
 
-export type AdpRefreshServiceResult = {
+type AdpRefreshServiceResult = {
   runId: string
   startedAt: string
   finishedAt: string
@@ -53,7 +53,7 @@ export type AdpRefreshServiceResult = {
   errors: string[]
 }
 
-export class AdpRefreshAlreadyRunningError extends Error {
+class AdpRefreshAlreadyRunningError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'AdpRefreshAlreadyRunningError'

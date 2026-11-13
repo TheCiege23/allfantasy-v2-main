@@ -51,7 +51,7 @@ export const FAAB_FULL_BUDGET_VALUE = 1800
  * A caller that KNOWS the budget must pass it; the point of this parameter is that the
  * fallback is visible in one place instead of being baked into three formulas.
  */
-export const FAAB_DEFAULT_BUDGET = 100
+const FAAB_DEFAULT_BUDGET = 100
 
 /**
  * Value per dollar AT THE DEFAULT BUDGET ONLY — 18, the canonical engine's historical
@@ -141,7 +141,7 @@ export interface SituationalFaabInput {
   rollover?: boolean | null
 }
 
-export interface SituationalFaabResult {
+interface SituationalFaabResult {
   value: number
   baseValue: number
   multiplier: number

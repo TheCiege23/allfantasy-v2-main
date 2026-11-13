@@ -8,7 +8,7 @@ import {
   type SeasonResultManagerLookupRow,
 } from './SeasonResultRosterIdentity'
 
-export interface EnrichedSeasonResultRow {
+interface EnrichedSeasonResultRow {
   leagueId: string
   season: string
   wins: number
@@ -22,7 +22,7 @@ export interface EnrichedSeasonResultRow {
   bestFinish: number | null
 }
 
-export interface EnrichedLeagueSeasonResultRow extends EnrichedSeasonResultRow {
+interface EnrichedLeagueSeasonResultRow extends EnrichedSeasonResultRow {
   rosterId: string
   managerId: string
   pointsFor: number

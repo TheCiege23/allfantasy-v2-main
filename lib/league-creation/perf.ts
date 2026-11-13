@@ -19,7 +19,7 @@ function hasPerfQueryFlag(search: string): boolean {
   }
 }
 
-export function isLeagueCreationPerfEnabled(): boolean {
+function isLeagueCreationPerfEnabled(): boolean {
   if (typeof window === 'undefined') return false
   if ((window as { __AF_LEAGUE_CREATION_PERF__?: boolean }).__AF_LEAGUE_CREATION_PERF__) return true
   if (hasPerfQueryFlag(window.location.search)) return true

@@ -18,7 +18,7 @@ const ACCENT = '#f59e0b'
 
 export const DRAFT_SHARE_CARD_ID = 'draft-share-card-capture'
 
-export interface DraftShareCardProps {
+interface DraftShareCardProps {
   payload: DraftShareCardPayload
   captureId?: string
   className?: string

@@ -27,8 +27,8 @@ import { platformLabel, type CareerWireData, type WireChange } from './careerWir
  * mean two screens disagreeing about what is new.
  */
 
-export type CareerFeedKind = 'sync' | 'result'
-export type CareerFeedTone = 'warn' | 'bad' | 'good'
+type CareerFeedKind = 'sync' | 'result'
+type CareerFeedTone = 'warn' | 'bad' | 'good'
 
 export type CareerFeedItem = {
   key: string

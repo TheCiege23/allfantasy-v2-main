@@ -1,13 +1,13 @@
 import { TradeAsset } from './trade-labels'
 
-export interface VetoResult {
+interface VetoResult {
   veto: boolean
   vetoReason: string | null
   warning: boolean
   warningText: string | null
 }
 
-export interface VetoInput {
+interface VetoInput {
   givenAssets: TradeAsset[]
   receivedAssets: TradeAsset[]
   fairnessScore: number

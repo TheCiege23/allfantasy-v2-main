@@ -25,7 +25,7 @@ import { isMultiTeamTrade, tradeParticipantRosterIds } from '@/lib/redraft/trade
  * Per run. A settlement costs far more than an expiry, and the host cron has a 60s budget with its own
  * waiver work to do; a backlog drains over the following hours, oldest window first.
  */
-export const DEFAULT_TRADE_REVIEW_LIMIT = 10
+const DEFAULT_TRADE_REVIEW_LIMIT = 10
 export const REVIEW_WINDOW_DECISION_REASON = 'Review window ended with no veto'
 
 export type TradeReviewSweepResult = {

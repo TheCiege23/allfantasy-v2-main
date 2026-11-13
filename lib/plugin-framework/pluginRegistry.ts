@@ -1,9 +1,9 @@
 import type { CoreLeaguePlugin } from './pluginContracts'
 import type { CorePluginId } from './pluginTypes'
 
-export type PluginLookupKey = CorePluginId | string | null | undefined
+type PluginLookupKey = CorePluginId | string | null | undefined
 
-export class PluginRegistry {
+class PluginRegistry {
   private readonly plugins = new Map<string, CoreLeaguePlugin>()
 
   registerPlugin(plugin: CoreLeaguePlugin): CoreLeaguePlugin {

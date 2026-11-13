@@ -31,7 +31,7 @@ export interface BestBallDataAvailability {
   standings: DataState
 }
 
-export interface BestBallFreshness {
+interface BestBallFreshness {
   generatedAt: string
   scoresAsOf: string | null
   injuriesAsOf: string | null

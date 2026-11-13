@@ -68,9 +68,9 @@ const HEX: Record<(typeof BUFF_COLORS)[number], string> = {
   gold: '#e8b84a', green: '#3aa86a', blue: '#3b82f6', pink: '#e45a9a',
 }
 
-export type SGTribeArt = { tribeId: string; name: string; buffSrc: string; symbolSrc: string; color: string }
+type SGTribeArt = { tribeId: string; name: string; buffSrc: string; symbolSrc: string; color: string }
 
-export function tribeIndex(tribeId: string): number {
+function tribeIndex(tribeId: string): number {
   const m = /(\d+)$/.exec(tribeId)
   if (!m) return 0
   const n = Number(m[1])
@@ -94,7 +94,7 @@ export function sgTribeArt(tribeId: string): SGTribeArt {
 
 /* ───────────────────────────── Phase ───────────────────────────── */
 
-export type SGPhase = 'setup' | 'tribal' | 'gauntlet' | 'merged' | 'finale' | 'off' | 'completed'
+type SGPhase = 'setup' | 'tribal' | 'gauntlet' | 'merged' | 'finale' | 'off' | 'completed'
 
 export function sgPhase(config: SGConfig, currentPeriod: number, status: string): { phase: SGPhase; mode: SGMode | null; label: string } {
   if (status === 'completed') return { phase: 'completed', mode: null, label: 'Season complete' }
@@ -114,8 +114,8 @@ export function sgMergePeriod(config: SGConfig): number | null {
 
 /* ───────────────────────────── Tribe race ───────────────────────────── */
 
-export type SGRaceMember = { rosterId: string; name: string; points: number | null; captain: boolean; sittingOut: boolean; you: boolean }
-export type SGRaceTribe = SGTribeArt & {
+type SGRaceMember = { rosterId: string; name: string; points: number | null; captain: boolean; sittingOut: boolean; you: boolean }
+type SGRaceTribe = SGTribeArt & {
   members: SGRaceMember[]
   totalPoints: number
   /** The engine's deciding metric for this mode: matchup wins (Match Play) or champion score. */
@@ -193,8 +193,8 @@ export function buildTribeRace(input: SGVisualInput): SGRace {
 
 /* ───────────────────────────── Chop line (danger tiers) ───────────────────────────── */
 
-export type SGTier = 'chop_zone' | 'danger' | 'safe'
-export type SGChopRow = { rosterId: string; name: string; points: number; tier: SGTier; marginAboveBlade: number; you: boolean; tribeId: string | null }
+type SGTier = 'chop_zone' | 'danger' | 'safe'
+type SGChopRow = { rosterId: string; name: string; points: number; tier: SGTier; marginAboveBlade: number; you: boolean; tribeId: string | null }
 
 /**
  * Who is under the blade right now, using the ENGINE's eligible field: every alive manager outside
@@ -249,7 +249,7 @@ export const SG_POWER_ART: Record<SGPowerKind, { src: string; blurb: string }> =
   faab_bonus: { src: `${SG_ART}/idol-boost.svg`, blurb: 'A private FAAB cache for the waiver run. Revealed when it runs.' },
 }
 
-export type SGVaultIdol = { id: string; kind: SGPowerKind; label: string; src: string; blurb: string; status: SGPower['status']; mine: boolean; throughPeriod: number }
+type SGVaultIdol = { id: string; kind: SGPowerKind; label: string; src: string; blurb: string; status: SGPower['status']; mine: boolean; throughPeriod: number }
 
 /** Own powers plus powers the engine has already revealed. Nothing else exists to this viewer. */
 export function buildIdolVault(input: SGVisualInput): { mine: SGVaultIdol[]; revealed: SGVaultIdol[] } {
@@ -265,7 +265,7 @@ export function buildIdolVault(input: SGVisualInput): { mine: SGVaultIdol[]; rev
 
 /* ───────────────────────────── Chop night ───────────────────────────── */
 
-export type SGCeremonyStep = { key: 'race' | 'idols' | 'chop' | 'torch' | 'release'; title: string; detail: string; art: string }
+type SGCeremonyStep = { key: 'race' | 'idols' | 'chop' | 'torch' | 'release'; title: string; detail: string; art: string }
 
 /** The five-beat ceremony for a completed (or host-revealed) period, from the engine's own record. */
 export function buildCeremony(period: string, row: SGVisualHistoryRow, teams: SGVisualTeam[]): SGCeremonyStep[] {
@@ -294,7 +294,7 @@ export function buildCeremony(period: string, row: SGVisualHistoryRow, teams: SG
 
 /* ───────────────────────────── Season timeline, torches, share ───────────────────────────── */
 
-export type SGTimelineEntry = { period: number; mode: string; chopped: string[]; saved: string[]; immuneTribe: string | null }
+type SGTimelineEntry = { period: number; mode: string; chopped: string[]; saved: string[]; immuneTribe: string | null }
 
 export function buildTimeline(input: SGVisualInput): SGTimelineEntry[] {
   const names = teamNames(input.teams)
@@ -309,7 +309,7 @@ export function buildTimeline(input: SGVisualInput): SGTimelineEntry[] {
     .sort((a, b) => a.period - b.period)
 }
 
-export type SGTorch = { rosterId: string; name: string; lit: boolean; you: boolean; tribeId: string | null }
+type SGTorch = { rosterId: string; name: string; lit: boolean; you: boolean; tribeId: string | null }
 export function buildTorches(input: SGVisualInput): SGTorch[] {
   const tribeOf = new Map(input.season.tribes.map((m) => [m.rosterId, m.tribeId]))
   return input.teams.filter((t) => t.legacyRosterId).map((t) => ({
@@ -318,7 +318,7 @@ export function buildTorches(input: SGVisualInput): SGTorch[] {
   }))
 }
 
-export type SGShareCard = { key: 'missed' | 'out' | 'merge' | 'winner'; title: string; line: string; art: string }
+type SGShareCard = { key: 'missed' | 'out' | 'merge' | 'winner'; title: string; line: string; art: string }
 
 /**
  * Story cards for THIS viewer, earned from engine history. Copy never names an idol holder, and

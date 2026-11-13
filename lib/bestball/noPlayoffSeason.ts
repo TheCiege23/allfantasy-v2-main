@@ -28,7 +28,7 @@ export function bestBallSettingsHaveNoPlayoffs(bestBall: unknown): boolean {
   return Number.isFinite(teams) && teams <= 0
 }
 
-export type NoPlayoffLeagueLike = {
+type NoPlayoffLeagueLike = {
   bestBallMode?: boolean | null
   leagueType?: string | null
   settings?: unknown

@@ -9,7 +9,7 @@
 import { extractLeadingTribeIcon } from './survivorVisuals'
 
 /** Catalogue mascot → emoji (lib/survivor/tribeCatalog.json ids). A mascot with no fitting emoji is left out. */
-export const TRIBE_CATALOG_EMOJI: Readonly<Record<string, string>> = {
+const TRIBE_CATALOG_EMOJI: Readonly<Record<string, string>> = {
   crab: '🦀', shark: '🦈', turtle: '🐢', moray: '🐍', manta: '🌊', octopus: '🐙', barracuda: '🐟', hammerhead: '🦈',
   boar: '🐗', croc: '🐊', komodo: '🦎', macaw: '🦜', toucan: '🦜', flyingfox: '🦇', tiki: '🗿', cobra: '🐍',
   scorpion: '🦂', lobster: '🦞', gorilla: '🦍', jaguar: '🐆', tiger: '🐅', panther: '🐈‍⬛', gecko: '🦎', iguana: '🦎',

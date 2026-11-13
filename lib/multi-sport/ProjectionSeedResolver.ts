@@ -12,7 +12,7 @@ import {
 import { resolveScheduleContextForLeague } from './MultiSportScheduleResolver'
 import type { ScoringRuleDto } from './ScoringTemplateResolver'
 
-export interface ProjectionSeedInput {
+interface ProjectionSeedInput {
   leagueId?: string
   leagueSport: LeagueSport
   season: number
@@ -20,7 +20,7 @@ export interface ProjectionSeedInput {
   formatType?: string
 }
 
-export interface ProjectionSeed {
+interface ProjectionSeed {
   sportType: string
   season: number
   weekOrRound: number

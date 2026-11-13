@@ -43,7 +43,7 @@ export interface FairnessInput {
   papgB?: number
 }
 
-export interface FairnessResult {
+interface FairnessResult {
   score: number // 0–100
   tier: 'balanced' | 'slight_edge' | 'moderate_edge' | 'lopsided'
   favoredSide: 'A' | 'B' | 'even'

@@ -5,8 +5,8 @@
  */
 
 export type LanguageCode = 'en' | 'es' | 'zh' | 'fil' | 'vi' | 'fr' | 'ar'
-export type LanguageSupportStatus = 'production-ready' | 'partial' | 'beta' | 'future-only'
-export type TextDirection = 'ltr' | 'rtl'
+type LanguageSupportStatus = 'production-ready' | 'partial' | 'beta' | 'future-only'
+type TextDirection = 'ltr' | 'rtl'
 
 export const LANG_STORAGE_KEY = 'af_lang'
 export const LANG_COOKIE_KEY = 'af_lang'
@@ -15,7 +15,7 @@ export const DEFAULT_LANG: LanguageCode = 'en'
 
 export const SUPPORTED_LANGUAGES: LanguageCode[] = ['en', 'es', 'zh', 'fil', 'vi', 'fr', 'ar']
 export const BETA_LANGUAGE_CODES: LanguageCode[] = ['zh', 'fil', 'vi']
-export const FUTURE_LANGUAGE_CODES: LanguageCode[] = ['fr', 'ar']
+const FUTURE_LANGUAGE_CODES: LanguageCode[] = ['fr', 'ar']
 
 /**
  * What the pickers actually OFFER. Future-only languages have zero bundled
@@ -39,7 +39,7 @@ export const SELECTABLE_LANGUAGES: LanguageCode[] = SUPPORTED_LANGUAGES.filter(
   (code) => !FUTURE_LANGUAGE_CODES.includes(code) && !BETA_LANGUAGE_CODES.includes(code)
 )
 
-export const LANGUAGE_DISPLAY_NAMES: Record<LanguageCode, string> = {
+const LANGUAGE_DISPLAY_NAMES: Record<LanguageCode, string> = {
   en: 'English',
   es: 'Espa\u00f1ol',
   zh: '\u4e2d\u6587',
@@ -49,7 +49,7 @@ export const LANGUAGE_DISPLAY_NAMES: Record<LanguageCode, string> = {
   ar: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629',
 }
 
-export const LANGUAGE_SUPPORT_STATUS: Record<LanguageCode, LanguageSupportStatus> = {
+const LANGUAGE_SUPPORT_STATUS: Record<LanguageCode, LanguageSupportStatus> = {
   en: 'production-ready',
   es: 'partial',
   zh: 'beta',
@@ -59,7 +59,7 @@ export const LANGUAGE_SUPPORT_STATUS: Record<LanguageCode, LanguageSupportStatus
   ar: 'future-only',
 }
 
-export const LANGUAGE_TEXT_DIRECTION: Record<LanguageCode, TextDirection> = {
+const LANGUAGE_TEXT_DIRECTION: Record<LanguageCode, TextDirection> = {
   en: 'ltr',
   es: 'ltr',
   zh: 'ltr',
@@ -69,7 +69,7 @@ export const LANGUAGE_TEXT_DIRECTION: Record<LanguageCode, TextDirection> = {
   ar: 'rtl',
 }
 
-export const LANGUAGE_INTL_LOCALE: Record<LanguageCode, string> = {
+const LANGUAGE_INTL_LOCALE: Record<LanguageCode, string> = {
   en: 'en-US',
   es: 'es',
   zh: 'zh-CN',
@@ -83,7 +83,7 @@ export function getLanguageDisplayName(code: LanguageCode): string {
   return LANGUAGE_DISPLAY_NAMES[code] ?? code
 }
 
-export function getLanguageSupportStatus(code: LanguageCode): LanguageSupportStatus {
+function getLanguageSupportStatus(code: LanguageCode): LanguageSupportStatus {
   return LANGUAGE_SUPPORT_STATUS[code] ?? 'future-only'
 }
 

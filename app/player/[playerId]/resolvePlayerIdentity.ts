@@ -25,13 +25,13 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
  * so a chooser link can never land back on the ambiguity.
  */
 
-export interface PlayerPageLookup {
+interface PlayerPageLookup {
   sport: string
   position: string | null
   team: string | null
 }
 
-export type PlayerPageResolution = {
+type PlayerPageResolution = {
   identity: PlayerIdentityMap | null
   reason: 'id' | 'sleeper_id' | NameMatchReason
   /** Only on `ambiguous`: the namesakes to choose between, best first, at most `MAX_CHOOSER_CANDIDATES`. */

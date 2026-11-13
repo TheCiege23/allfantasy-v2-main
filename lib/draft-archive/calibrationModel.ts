@@ -1,5 +1,5 @@
 import { PHASE4_VERSION, type DecisionComponents } from './phase4Model';
-export const CALIBRATION_VERSION = 'draft-calibration-v1';
+const CALIBRATION_VERSION = 'draft-calibration-v1';
 export type CalibrationCohort = { leagueId:string; draftId:string; season:number; startedAt:string; observedAt:string; finalThroughWeek:number; teams:Array<{ rosterId:string; components:[number,number,number,number]; outcome:number }> };
 export type CalibrationModel = {
   version:typeof CALIBRATION_VERSION; featureVersion:typeof PHASE4_VERSION; state:'validated'|'insufficient_data'|'failed_validation';

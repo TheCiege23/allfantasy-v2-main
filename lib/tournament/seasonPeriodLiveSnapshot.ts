@@ -11,7 +11,7 @@ type Feed = { rows: unknown[]; error?: string | null; notModified?: boolean; uns
 type FetchDay = (day: string) => Promise<Feed>
 const MAX_DAYS = 10
 
-export type SeasonPeriodLiveSnapshot = {
+type SeasonPeriodLiveSnapshot = {
   period: number; observedAt: string; expectedGames: number; fetchedGames: number; finalGames: number
   missingGameIds: string[]; futureGameIds: string[]; unknownGameIds: string[]
   snapshotDigest: string; allGameRowsFinal: boolean

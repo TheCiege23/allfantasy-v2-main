@@ -141,7 +141,7 @@ export function planBalanced(participants: readonly PlanParticipant[], capacitie
   return Object.keys(mapping).length === participants.length ? mapping : null
 }
 
-export type TribeStrength = { slot: number; size: number; average: number | null }
+type TribeStrength = { slot: number; size: number; average: number | null }
 
 export function tribeStrengths(mapping: Readonly<Record<string, number>>, participants: readonly PlanParticipant[], tribeCount: number): { tribes: TribeStrength[]; spread: number | null } {
   const tribes: TribeStrength[] = Array.from({ length: tribeCount }, (_, slot) => {

@@ -23,7 +23,7 @@ export const WAIVER_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 export type WaiverDayKey = (typeof WAIVER_DAY_KEYS)[number]
 
 /** JS `Date#getDay()` index for each key (Sun = 0). */
-export const WAIVER_DAY_JS_INDEX: Readonly<Record<WaiverDayKey, number>> = {
+const WAIVER_DAY_JS_INDEX: Readonly<Record<WaiverDayKey, number>> = {
   sun: 0,
   mon: 1,
   tue: 2,
@@ -52,12 +52,12 @@ export const DAILY_WAIVER_MODES = [
 ] as const
 export type DailyWaiverMode = (typeof DAILY_WAIVER_MODES)[number]
 
-export const LEAGUE_WAIVER_TYPES = ['faab', 'rolling', 'reverse_standings'] as const
-export type LeagueWaiverType = (typeof LEAGUE_WAIVER_TYPES)[number]
+const LEAGUE_WAIVER_TYPES = ['faab', 'rolling', 'reverse_standings'] as const
+type LeagueWaiverType = (typeof LEAGUE_WAIVER_TYPES)[number]
 
 const modeSchema = z.enum(DAILY_WAIVER_MODES)
 
-export const dailyWaiverScheduleSchema = z
+const dailyWaiverScheduleSchema = z
   .object({
     version: z.literal(1),
     enabled: z.boolean(),
@@ -106,7 +106,7 @@ export function readDailyWaiverScheduleFromSettings(settings: unknown): DailyWai
   return parseDailyWaiverSchedule((settings as Record<string, unknown>)[DAILY_WAIVER_SCHEDULE_SETTINGS_KEY])
 }
 
-export function normalizeLeagueWaiverType(raw: string | null | undefined): LeagueWaiverType {
+function normalizeLeagueWaiverType(raw: string | null | undefined): LeagueWaiverType {
   const t = String(raw ?? '').trim().toLowerCase().replace(/-/g, '_')
   if (t === 'faab') return 'faab'
   if (t === 'reverse_standings' || t === 'reverse_order') return 'reverse_standings'

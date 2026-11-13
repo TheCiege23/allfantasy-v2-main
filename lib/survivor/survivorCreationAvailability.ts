@@ -6,7 +6,7 @@ export function isSurvivorCreationSportAvailable(sport: string): boolean {
 }
 
 /** Sports where a fresh create starts on Survivor. NFL can create Survivor but starts on Guillotine. */
-export const SURVIVOR_DEFAULT_FORMAT_SPORTS = ['NBA'] as const
+const SURVIVOR_DEFAULT_FORMAT_SPORTS = ['NBA'] as const
 
 export function isSurvivorDefaultFormatSport(sport: string): boolean {
   return (SURVIVOR_DEFAULT_FORMAT_SPORTS as readonly string[]).includes(sport.trim().toUpperCase())
@@ -23,7 +23,7 @@ export const SURVIVOR_CREATION_UNAVAILABLE_MESSAGE =
 export const SURVIVOR_DUES_OFF_APP_NOTE =
   'AllFantasy never collects or holds money. Collect dues on LeagueSafe or FanCred, then mark each manager paid in League Dues.'
 
-export type SurvivorEntryFee = { mode: 'free' | 'paid'; amountCents: number | null }
+type SurvivorEntryFee = { mode: 'free' | 'paid'; amountCents: number | null }
 
 /** Reads the free/paid label from a create payload. The dues amount is optional; a bad one is an error. */
 export function readSurvivorEntryFee(modeRaw: unknown, centsRaw: unknown): SurvivorEntryFee | { error: string } {

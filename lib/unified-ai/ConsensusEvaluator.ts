@@ -6,7 +6,7 @@
 import type { ModelOutput, OrchestrationResult } from "./types"
 import type { AIModelRole } from "./types"
 
-export interface ConsensusInput {
+interface ConsensusInput {
   modelOutputs: ModelOutput[]
   preferModel?: AIModelRole
   deterministicSummary?: string

@@ -26,7 +26,7 @@ import type { SnapshotPlayer, SnapshotSlot } from './lineupIntegrityScore'
 export type SnapshotPlayerMap = Record<string, SnapshotPlayer>
 
 /** How long after the week's last kickoff its lineups are still that week's. Games end well inside it. */
-export const WEEK_END_GRACE_MS = 6 * 3_600_000
+const WEEK_END_GRACE_MS = 6 * 3_600_000
 
 export function weekEnd(lastKickoff: Date): Date {
   return new Date(lastKickoff.getTime() + WEEK_END_GRACE_MS)

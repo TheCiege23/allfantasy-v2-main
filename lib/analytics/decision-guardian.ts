@@ -2,9 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import type { ConfidenceRiskOutput, RiskTag } from '@/lib/analytics/confidence-risk-engine'
 
-export type GuardianActionType = 'trade' | 'player_drop' | 'faab_bid'
-export type GuardianSeverity = 'low' | 'medium' | 'high' | 'critical'
-export type GuardianVerdict = 'proceed' | 'caution' | 'warn' | 'danger'
+type GuardianActionType = 'trade' | 'player_drop' | 'faab_bid'
+type GuardianSeverity = 'low' | 'medium' | 'high' | 'critical'
+type GuardianVerdict = 'proceed' | 'caution' | 'warn' | 'danger'
 
 export interface TradeActionInput {
   actionType: 'trade'
@@ -46,9 +46,9 @@ export interface FaabActionInput {
   weekNumber?: number
 }
 
-export type GuardianActionInput = TradeActionInput | DropActionInput | FaabActionInput
+type GuardianActionInput = TradeActionInput | DropActionInput | FaabActionInput
 
-export interface GuardianEvaluation {
+interface GuardianEvaluation {
   shouldIntervene: boolean
   verdict: GuardianVerdict
   severity: GuardianSeverity

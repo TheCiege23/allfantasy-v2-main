@@ -8,7 +8,7 @@ import { resolveStrategyMetaPanel } from './StrategyMetaPanelResolver'
 import { resolveWarRoomMetaWidget, type WarRoomMetaWidgetPayload } from './WarRoomMetaWidgetResolver'
 import { resolveSportForMetaUI } from './SportMetaUIResolver'
 
-export interface MetaUIDataPayload {
+interface MetaUIDataPayload {
   sport: string
   leagueFormat?: string
   timeframe?: string

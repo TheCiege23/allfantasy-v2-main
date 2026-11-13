@@ -9,21 +9,21 @@
  * has no Prisma relation to DevyPlayer and the join is by devyPlayerId.
  */
 
-export type CollegeRightsRowInput = {
+type CollegeRightsRowInput = {
   id: string
   devyPlayerId: string
   state: string
   seasonYear: number | null
 }
 
-export type CollegeRightsPlayerInput = {
+type CollegeRightsPlayerInput = {
   id: string
   name: string
   position: string
   school: string
 }
 
-export type CollegeRightsEntry = {
+type CollegeRightsEntry = {
   rightsId: string
   devyPlayerId: string
   /** Null when no DevyPlayer row matches the rights row - rendered as a labeled absence, never an invented name. */

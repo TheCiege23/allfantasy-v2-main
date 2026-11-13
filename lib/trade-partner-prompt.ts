@@ -30,10 +30,10 @@ Bias:
 
 JSON only.`;
 
-export const LeagueFormatSchema = z.enum(['dynasty', 'keeper', 'redraft']);
+const LeagueFormatSchema = z.enum(['dynasty', 'keeper', 'redraft']);
 export type LeagueFormat = z.infer<typeof LeagueFormatSchema>;
 
-export const TeamRosterSchema = z.object({
+const TeamRosterSchema = z.object({
   team_id: z.string(),
   team_name: z.string().optional(),
   archetype: z.string().optional(),
@@ -44,14 +44,14 @@ export const TeamRosterSchema = z.object({
   competitive_window: z.string().optional(),
 });
 
-export const LeagueDataSchema = z.object({
+const LeagueDataSchema = z.object({
   league_id: z.string().optional(),
   format: LeagueFormatSchema,
   scoring: z.string().optional(),
   standings_summary: z.string().optional(),
 });
 
-export const TargetTeamSchema = z.object({
+const TargetTeamSchema = z.object({
   team_id: z.string(),
   team_name: z.string().optional(),
   archetype: z.string().optional(),
@@ -67,9 +67,9 @@ export const TradePartnerRequestSchema = z.object({
   other_teams: z.array(TeamRosterSchema),
 });
 
-export type TradePartnerRequest = z.infer<typeof TradePartnerRequestSchema>;
+type TradePartnerRequest = z.infer<typeof TradePartnerRequestSchema>;
 
-export const TradePartnerMatchSchema = z.object({
+const TradePartnerMatchSchema = z.object({
   partner_team_id: z.string(),
   partner_archetype: z.string(),
   why_it_works: z.string(),
@@ -77,7 +77,7 @@ export const TradePartnerMatchSchema = z.object({
   assets_to_offer: z.array(z.string()),
 });
 
-export const AvoidTeamSchema = z.object({
+const AvoidTeamSchema = z.object({
   team_id: z.string(),
   reason: z.string(),
 });

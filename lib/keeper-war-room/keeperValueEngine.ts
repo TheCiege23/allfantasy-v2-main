@@ -26,7 +26,7 @@ export function playerSeasonValue(p: KeeperPlayerFact): { value: number; source:
   return { value: 0, source: 'none' }
 }
 
-export type KeeperVerdict = 'definite_keep' | 'keep' | 'borderline' | 'let_go' | 'ineligible' | 'no_cost'
+type KeeperVerdict = 'definite_keep' | 'keep' | 'borderline' | 'let_go' | 'ineligible' | 'no_cost'
 
 export interface KeeperValueLine {
   playerId: string

@@ -55,9 +55,9 @@ import { gamesCountDb, gamesCountTablesExist, loadWeekGameScores, warnGamesCount
  * fails closed.
  */
 
-export type GamesCountRefusal = { ok: false; status: 400 | 403 | 404 | 409; code: string; error: string }
+type GamesCountRefusal = { ok: false; status: 400 | 403 | 404 | 409; code: string; error: string }
 
-export type GamesCountGameView = {
+type GamesCountGameView = {
   gameId: string
   day: string
   startTime: string | null

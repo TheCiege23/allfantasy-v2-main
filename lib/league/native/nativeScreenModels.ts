@@ -55,7 +55,7 @@ export function initialsOf(name: string): string {
 
 /* ── Position tones ──────────────────────────────────────────────────── */
 
-export type PositionTone = 'qb' | 'rb' | 'wr' | 'te' | 'k' | 'def' | 'flex' | 'bench' | 'ir' | 'other'
+type PositionTone = 'qb' | 'rb' | 'wr' | 'te' | 'k' | 'def' | 'flex' | 'bench' | 'ir' | 'other'
 
 /**
  * The handoff colours positions QB/RB/WR/TE. The tone is a NAME, mapped to a /core token in
@@ -102,7 +102,7 @@ export type ScoreboardRow = {
   opponentRosterId: string | null
 }
 
-export type ScoreboardPair = {
+type ScoreboardPair = {
   home: ScoreboardRow
   away: ScoreboardRow | null
   /** True when the viewer is one of the two teams. */
@@ -131,7 +131,7 @@ export function pairScoreboard(rows: ScoreboardRow[], viewerRosterId: string | n
 
 /* ── Standings ───────────────────────────────────────────────────────── */
 
-export type PlayoffFormat = {
+type PlayoffFormat = {
   teams: number | null
   byes: number | null
   startWeek: number | null
@@ -219,7 +219,7 @@ export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number |
 }
 
 /** Single-elimination rounds for N playoff teams: ceil(log2 N). 6 → 3, 4 → 2, 8 → 3. */
-export function playoffRoundsFor(teams: number): number | null {
+function playoffRoundsFor(teams: number): number | null {
   if (!Number.isFinite(teams) || teams < 2) return null
   return Math.ceil(Math.log2(teams))
 }
@@ -252,7 +252,7 @@ export function allPlayShare(allPlay: string | null | undefined): number | null 
   return games > 0 ? (w + t / 2) / games : null
 }
 
-export type PowerInputRow = { rosterId: string; allPlay?: string | null; pointsFor: number }
+type PowerInputRow = { rosterId: string; allPlay?: string | null; pointsFor: number }
 
 /**
  * The "Power" toggle. A ranking by all-play record (how a team would fare against every other
@@ -273,8 +273,8 @@ export function powerOrder<T extends PowerInputRow>(rows: T[]): T[] {
 
 /* ── Waivers ─────────────────────────────────────────────────────────── */
 
-export type WaiverTxLike = { addPlayerId: string; dropPlayerId: string | null }
-export type WaiverClaimLike = { addPlayerId: string }
+type WaiverTxLike = { addPlayerId: string; dropPlayerId: string | null }
+type WaiverClaimLike = { addPlayerId: string }
 
 /**
  * League-activity trend, signed: +2 per processed add and +1 per pending claim, as the existing

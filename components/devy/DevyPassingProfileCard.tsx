@@ -24,7 +24,7 @@
  * returns exactly this shape.
  */
 
-export interface PassLocationCell {
+interface PassLocationCell {
   attempts: number
   completions: number | null
   completionsMeasured: number
@@ -36,7 +36,7 @@ export interface PassLocationCell {
   interceptionsMeasured: number
 }
 
-export interface PassLocations {
+interface PassLocations {
   season: number
   attempts: number
   located: number

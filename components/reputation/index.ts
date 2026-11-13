@@ -11,9 +11,3 @@ export {
   HighRetentionChip,
   TrustedRecruitingBadge,
 } from "./PrestigeChips"
-export {
-  CommissionerPrestigeCard,
-} from "./CommissionerPrestigeCard"
-export {
-  LeaguePrestigeCard,
-} from "./LeaguePrestigeCard"

@@ -31,7 +31,7 @@ import { computeEnhancedFairness, type FairnessInput } from './enhanced-fairness
 // Types
 // ---------------------------------------------------------------------------
 
-export interface EnhancedAssetValuation {
+interface EnhancedAssetValuation {
   name: string
   type: 'player' | 'pick' | 'faab'
   position?: string

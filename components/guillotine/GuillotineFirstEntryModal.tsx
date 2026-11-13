@@ -19,7 +19,7 @@ const MAX_VISIBLE_MS = 20000
 /** Seen-state for browsers where localStorage throws (WebViews with DOM storage off). */
 const seenThisPageLoad = new Set<string>()
 
-export interface GuillotineFirstEntryModalProps {
+interface GuillotineFirstEntryModalProps {
   leagueId: string
   /** When true, show modal (e.g. first entry). When false, never show. */
   show: boolean

@@ -11,7 +11,7 @@ import {
   type LeagueEngineSubsystem,
 } from '@/lib/league-engine-performance/observability'
 
-export type TimedEngineOperationOptions = {
+type TimedEngineOperationOptions = {
   subsystem: LeagueEngineSubsystem
   action: string
   leagueId?: string

@@ -30,11 +30,11 @@ export const SIDE_CONTESTS_KEY = 'weekly_prize_contests'
 export const CONTEST_KINDS = ['high_score', 'closest_loss'] as const
 export type ContestKind = (typeof CONTEST_KINDS)[number]
 
-export type ContestConfig = { enabled: boolean; prizeCents: number }
+type ContestConfig = { enabled: boolean; prizeCents: number }
 export type SideContestsConfig = Record<ContestKind, ContestConfig>
 
 /** $10,000 a week is far past any real side pot; anything bigger is a typo. */
-export const MAX_PRIZE_CENTS = 1_000_000
+const MAX_PRIZE_CENTS = 1_000_000
 
 export const CONTEST_LABELS: Record<ContestKind, { en: string; es: string; helpEn: string; helpEs: string }> = {
   high_score: {
@@ -66,7 +66,7 @@ export function readSideContests(settings: unknown): SideContestsConfig {
   return { high_score: readOne(o.high_score), closest_loss: readOne(o.closest_loss) }
 }
 
-export type ParseResult = { ok: true; value: SideContestsConfig } | { ok: false; error: string }
+type ParseResult = { ok: true; value: SideContestsConfig } | { ok: false; error: string }
 
 /**
  * A commissioner's save. Each contest is `{ enabled, prize }` where `prize` is dollars (a number, or a
@@ -129,7 +129,7 @@ export type ContestWinner = {
   opponentRosterId?: string
 }
 
-export type WeekResult = { week: number; contests: Partial<Record<ContestKind, ContestWinner[]>> }
+type WeekResult = { week: number; contests: Partial<Record<ContestKind, ContestWinner[]>> }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 const isRegular = (m: ContestMatchup) => !m.type || m.type === 'regular'
@@ -188,7 +188,7 @@ export function weeklyResults(matchups: readonly ContestMatchup[], config: SideC
   return out
 }
 
-export type PrizeTotal = { rosterId: string; wins: Record<ContestKind, number>; prizeCents: number }
+type PrizeTotal = { rosterId: string; wins: Record<ContestKind, number>; prizeCents: number }
 
 /**
  * The season so far, per team: contests won and prize money, most money first. What the payout

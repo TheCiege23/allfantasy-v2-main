@@ -8,7 +8,7 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import type { UserLeague, LeftChatInitialTab } from '@/app/dashboard/types'
 
-export type ChimmyBubbleProps = {
+type ChimmyBubbleProps = {
   selectedLeague: UserLeague | null
   activeLeagueId?: string | null
   userId: string

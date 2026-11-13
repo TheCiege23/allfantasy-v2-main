@@ -27,7 +27,7 @@ export const ZOMBIE_VIDEO_ASSETS = {
   whispererChosen: '/zombie/videos/whisperer/Whisperer.mp4',
 } as const
 
-export type ZombieClip = { url: string; type: 'video' | 'image' }
+type ZombieClip = { url: string; type: 'video' | 'image' }
 
 /**
  * Default clip for an animation row. Callers may override via metadata; `animationEngine` merges this in.

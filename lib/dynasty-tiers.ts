@@ -1,9 +1,9 @@
 import { pickRoundTable } from '@/lib/pick-curve';
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch';
 export type AssetTier = 0 | 1 | 2 | 3 | 4;
-export type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
+type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
 
-export const TIER_TO_SEMANTIC: Record<AssetTier, SemanticTier> = {
+const TIER_TO_SEMANTIC: Record<AssetTier, SemanticTier> = {
   0: 'elite',
   1: 'high',
   2: 'starter',
@@ -11,7 +11,7 @@ export const TIER_TO_SEMANTIC: Record<AssetTier, SemanticTier> = {
   4: 'depth',
 };
 
-export interface TieredPlayer {
+interface TieredPlayer {
   name: string;
   tier: AssetTier;
   semanticTier: SemanticTier;
@@ -20,7 +20,7 @@ export interface TieredPlayer {
   notes?: string;
 }
 
-export const TIER_0_UNTOUCHABLES: TieredPlayer[] = [
+const TIER_0_UNTOUCHABLES: TieredPlayer[] = [
   { name: "Puka Nacua", tier: 0, semanticTier: 'elite', position: "WR", age: 23 },
   { name: "Justin Jefferson", tier: 0, semanticTier: 'elite', position: "WR", age: 25 },
   { name: "Ja'Marr Chase", tier: 0, semanticTier: 'elite', position: "WR", age: 24 },
@@ -34,7 +34,7 @@ export const TIER_0_UNTOUCHABLES: TieredPlayer[] = [
   { name: "Jalen Hurts", tier: 0, semanticTier: 'elite', position: "QB", age: 26, notes: "SF only" },
 ];
 
-export const TIER_1_CORNERSTONES: TieredPlayer[] = [
+const TIER_1_CORNERSTONES: TieredPlayer[] = [
   { name: "Amon-Ra St. Brown", tier: 1, semanticTier: 'high', position: "WR", age: 25 },
   { name: "A.J. Brown", tier: 1, semanticTier: 'high', position: "WR", age: 27 },
   { name: "Tyreek Hill", tier: 1, semanticTier: 'high', position: "WR", age: 30 },
@@ -49,7 +49,7 @@ export const TIER_1_CORNERSTONES: TieredPlayer[] = [
   { name: "Anthony Richardson", tier: 1, semanticTier: 'high', position: "QB", age: 22 },
 ];
 
-export const TIER_2_HIGH_END: TieredPlayer[] = [
+const TIER_2_HIGH_END: TieredPlayer[] = [
   { name: "DK Metcalf", tier: 2, semanticTier: 'starter', position: "WR", age: 27 },
   { name: "Jaxon Smith-Njigba", tier: 2, semanticTier: 'starter', position: "WR", age: 22 },
   { name: "JSN", tier: 2, semanticTier: 'starter', position: "WR", age: 22 },
@@ -66,7 +66,7 @@ export const TIER_2_HIGH_END: TieredPlayer[] = [
   { name: "Jonathan Taylor", tier: 2, semanticTier: 'starter', position: "RB", age: 25 },
 ];
 
-export const TIER_3_STARTERS: TieredPlayer[] = [
+const TIER_3_STARTERS: TieredPlayer[] = [
   { name: "De'Von Achane", tier: 3, semanticTier: 'replaceable', position: "RB", age: 23 },
   { name: "Kyren Williams", tier: 3, semanticTier: 'replaceable', position: "RB", age: 24 },
   { name: "Kenneth Walker III", tier: 3, semanticTier: 'replaceable', position: "RB", age: 24 },
@@ -86,7 +86,7 @@ export const TIER_3_STARTERS: TieredPlayer[] = [
   { name: "Mark Andrews", tier: 3, semanticTier: 'replaceable', position: "TE", age: 29 },
 ];
 
-export const TIER_4_REPLACEABLE: TieredPlayer[] = [
+const TIER_4_REPLACEABLE: TieredPlayer[] = [
   { name: "Alvin Kamara", tier: 4, semanticTier: 'depth', position: "RB", age: 29, notes: "aging" },
   { name: "Derrick Henry", tier: 4, semanticTier: 'depth', position: "RB", age: 31, notes: "aging" },
   { name: "Deebo Samuel", tier: 4, semanticTier: 'depth', position: "WR", age: 29, notes: "aging" },
@@ -128,20 +128,20 @@ export const TIER_BASE_VALUES: Record<AssetTier, number> = {
  */
 export const PICK_BASE_VALUES: Record<number, number> = pickRoundTable(650, 4);
 
-export const PICK_SLOT_MODIFIERS: Record<string, number> = {
+const PICK_SLOT_MODIFIERS: Record<string, number> = {
   'early': 1.35,
   'mid': 1.00,
   'late': 0.70,
 };
 
-export const PICK_TIME_DISCOUNT: Record<number, number> = {
+const PICK_TIME_DISCOUNT: Record<number, number> = {
   0: 1.00,
   1: 0.85,
   2: 0.70,
   3: 0.55,
 };
 
-export const PICK_SPECIFIC_SLOT_VALUES: Record<string, number> = {
+const PICK_SPECIFIC_SLOT_VALUES: Record<string, number> = {
   '1.01': 950,
   '1.02': 900,
   '1.03': 850,
@@ -174,7 +174,7 @@ export const PICK_SPECIFIC_SLOT_VALUES: Record<string, number> = {
   '3.06': 55,
 };
 
-export function getAgeCurveModifier(position: string, age: number | undefined): number {
+function getAgeCurveModifier(position: string, age: number | undefined): number {
   if (!age) return 0;
   
   const pos = position.toUpperCase();
@@ -254,7 +254,7 @@ export function getWindowMultiplier(window: number): number {
 }
 
 // NEW: Position Multiplier (SF-aware)
-export function getPositionMultiplier(position: string, isSF: boolean, isTEP: boolean): number {
+function getPositionMultiplier(position: string, isSF: boolean, isTEP: boolean): number {
   const pos = position.toUpperCase();
   
   if (pos === 'QB') {
@@ -277,7 +277,7 @@ export function getPositionMultiplier(position: string, isSF: boolean, isTEP: bo
 }
 
 // NEW: Liquidity Bonus (how easy to flip in 6 months)
-export function getLiquidityModifier(position: string, age: number | undefined, tier: AssetTier | null): number {
+function getLiquidityModifier(position: string, age: number | undefined, tier: AssetTier | null): number {
   if (!age) return 0;
   const pos = position.toUpperCase();
   
@@ -379,7 +379,7 @@ export function calculateDynastyScore(
   };
 }
 
-export function getFormatModifier(
+function getFormatModifier(
   position: string,
   tier: AssetTier,
   isSF: boolean,
@@ -408,7 +408,7 @@ export function getFormatModifier(
   return modifier;
 }
 
-export function getIDPMultiplier(idpStarterCount: number): number {
+function getIDPMultiplier(idpStarterCount: number): number {
   if (idpStarterCount === 0) return 0.05;
   if (idpStarterCount <= 3) return 0.20;
   if (idpStarterCount <= 6) return 0.30;
@@ -416,7 +416,7 @@ export function getIDPMultiplier(idpStarterCount: number): number {
   return 0.55;
 }
 
-export function isIDPPosition(position: string): boolean {
+function isIDPPosition(position: string): boolean {
   const idpPositions = ['LB', 'DB', 'DL', 'DE', 'DT', 'S', 'CB', 'IDP', 'ED', 'EDGE'];
   return idpPositions.includes(position.toUpperCase());
 }
@@ -453,7 +453,7 @@ export function findPlayerTier(playerName: string, position?: string | null): Ti
   ) || null;
 }
 
-export interface TradeAsset {
+interface TradeAsset {
   name: string;
   position?: string;
   age?: number;
@@ -465,7 +465,7 @@ export interface TradeAsset {
   pickType?: string;
 }
 
-export interface EvaluatedAsset extends TradeAsset {
+interface EvaluatedAsset extends TradeAsset {
   tier: AssetTier | null;
   baseValue: number;
   ageCurveModifier: number;
@@ -475,13 +475,13 @@ export interface EvaluatedAsset extends TradeAsset {
   isAging: boolean;
 }
 
-export interface LeagueSettings {
+interface LeagueSettings {
   isSF: boolean;
   isTEP: boolean;
   idpStarterCount: number;
 }
 
-export interface TradeEvaluation {
+interface TradeEvaluation {
   senderAssets: EvaluatedAsset[];
   receiverAssets: EvaluatedAsset[];
   senderTotalValue: number;
@@ -526,7 +526,7 @@ export interface TradeEvaluation {
   consolidationPenaltyApplied: boolean;
 }
 
-export function evaluatePickValue(
+function evaluatePickValue(
   pickYear: number,
   pickRound: number,
   pickSlot: 'early' | 'mid' | 'late' = 'mid',
@@ -714,11 +714,11 @@ export function detectSFFromRosterPositions(rosterPositions: string[]): boolean 
   return rosterPositions.some(pos => sfPositions.includes(pos.toUpperCase()));
 }
 
-export type GradeType = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
+type GradeType = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
 
 export const GRADE_PRIORITY: GradeType[] = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
 
-export function shouldShowAsSuggestion(evaluation: TradeEvaluation): boolean {
+function shouldShowAsSuggestion(evaluation: TradeEvaluation): boolean {
   if (evaluation.tierViolation) return false;
   if (evaluation.valueRatio >= 1.60) return false;
   if (evaluation.plausibility === 'UNREALISTIC') return false;

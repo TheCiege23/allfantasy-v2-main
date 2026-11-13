@@ -76,12 +76,12 @@ export type ReconcileWorld = {
   readonly knownPlayerIds: ReadonlySet<string>
 }
 
-export type ReconcileOp =
+type ReconcileOp =
   | { readonly kind: 'upsertTeam'; readonly externalTeamId: string; readonly name: string; readonly externalManagerId: string | null }
   | { readonly kind: 'upsertManager'; readonly externalManagerId: string; readonly displayName: string }
   | { readonly kind: 'setRoster'; readonly externalTeamId: string; readonly playerIds: readonly string[] }
 
-export type ReconcilePlan = {
+type ReconcilePlan = {
   readonly tenantId: string
   readonly leagueId: string
   readonly bindingId: string
@@ -261,7 +261,7 @@ export function reconcileAuditDraft(plan: ReconcilePlan, provider: string) {
 
 // ─── Apply ───────────────────────────────────────────────────────────────────
 
-export type ReconcileApplyDeps = {
+type ReconcileApplyDeps = {
   readonly withTenant: <T>(tenantId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>
   readonly applyOp: (tx: Tx, plan: ReconcilePlan, op: ReconcileOp) => Promise<void>
   readonly writeAudit: (tx: Tx, ctx: ActorContext, draft: ReturnType<typeof reconcileAuditDraft>) => Promise<void>

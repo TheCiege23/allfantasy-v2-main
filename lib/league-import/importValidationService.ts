@@ -1,7 +1,7 @@
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { type CanonicalImportBundle, type NormalizedImportResult } from '@/lib/league-import/types'
 
-export type ImportValidationResult =
+type ImportValidationResult =
   | { ok: true }
   | { ok: false; code: string; message: string }
 

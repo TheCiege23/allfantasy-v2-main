@@ -44,7 +44,7 @@ function isUrgent(priority: RecommendationPriority): boolean {
 
 // ─── Flagship: Waiver Impact Sequence (ordered, NOT a timeline) ────────────────
 
-export type WaiverOpportunity = {
+type WaiverOpportunity = {
   key: string
   /** Plain-language label. Never a provider waiver status or internal identifier. */
   label: string
@@ -56,7 +56,7 @@ export type WaiverOpportunity = {
   urgent: boolean
 }
 
-export type WaiverImpactSequenceViewModel = {
+type WaiverImpactSequenceViewModel = {
   available: boolean
   /** Explicitly ordered by existing recommendation priority — order, not chronology. */
   opportunities: WaiverOpportunity[]
@@ -146,7 +146,7 @@ export function buildWaiverOpportunityImpact(
 
 // ─── Supporting: Waiver Urgency (share that cannot wait) ───────────────────────
 
-export type WaiverUrgencyViewModel = {
+type WaiverUrgencyViewModel = {
   available: boolean
   urgentCount: number
   totalCount: number

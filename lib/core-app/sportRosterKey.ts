@@ -19,9 +19,9 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
  * (which never contains `|`).
  */
 
-export const SPORT_KEY_SEP = '|'
+const SPORT_KEY_SEP = '|'
 
-export type SportKeyParts = { sport: string; source: string; externalId: string }
+type SportKeyParts = { sport: string; source: string; externalId: string }
 
 export function sportPlayerKey(sport: string, source: string, externalId: string): string {
   return [String(sport).toUpperCase(), String(source).toLowerCase(), externalId].join(SPORT_KEY_SEP)

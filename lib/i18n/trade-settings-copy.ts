@@ -3,7 +3,7 @@
  * (components/app/settings/TradeSettingsPanel.tsx). Kept beside `lib/i18n/translations`, like
  * dynasty-format-copy.ts: one component reads it through `useLanguage()`; anything not Spanish reads English.
  */
-export type TradeSettingsLang = 'en' | 'es'
+type TradeSettingsLang = 'en' | 'es'
 
 export function tradeSettingsLang(language: string | null | undefined): TradeSettingsLang {
   return String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'

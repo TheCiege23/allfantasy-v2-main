@@ -22,7 +22,7 @@ import type { IdpWeeklyStatLine } from '@/lib/idp/statIngestionEngine'
  */
 
 /** A defender's line for one game, keyed by the canonical `idp_*` names. */
-export type IdpGameLine = {
+type IdpGameLine = {
   playerId: string
   playerName: string
   teamAbbr: string | null
@@ -71,7 +71,7 @@ function creditTackles(play: PbpPlay, lineFor: (p: PbpPlayer) => IdpWeeklyStatLi
  * fumble: a defender named for a tackle on the touchdown can carry a second, try-only entry. A try the
  * details declare but the prose does not mark cannot be separated and is read whole, as before.
  */
-export function scrimmagePartOf(play: PbpPlay): PbpPlay | null {
+function scrimmagePartOf(play: PbpPlay): PbpPlay | null {
   const attempt = twoPointTryOf(play)
   if (!attempt || !attempt.tryText) return play
   if (!attempt.touchdownText) return null

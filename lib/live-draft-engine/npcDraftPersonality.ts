@@ -22,7 +22,7 @@ export type HistoricalPickLite = {
   age?: number | null
 }
 
-export type AssignNpcDraftPersonalityInput = {
+type AssignNpcDraftPersonalityInput = {
   existingPersonality?: NpcDraftPersonalityId | null
   historicalPicks: HistoricalPickLite[]
   /** When true, no cross-season history — use seeded random. */
@@ -30,7 +30,7 @@ export type AssignNpcDraftPersonalityInput = {
   randomSeed: number
 }
 
-export type AssignNpcDraftPersonalityResult = {
+type AssignNpcDraftPersonalityResult = {
   personality: NpcDraftPersonalityId
   favoriteTeamAbbr: string | null
   source: 'existing' | 'historical' | 'random'
@@ -115,7 +115,7 @@ export function inferHistoricalDraftPersonality(picks: HistoricalPickLite[]): Np
   return 'BALANCED'
 }
 
-export function inferFavoriteTeamFromHistory(picks: HistoricalPickLite[]): string | null {
+function inferFavoriteTeamFromHistory(picks: HistoricalPickLite[]): string | null {
   const votes = new Map<string, number>()
   for (const p of picks) {
     const tm = normalizeTeam(p.team)

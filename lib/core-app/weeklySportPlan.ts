@@ -4,7 +4,7 @@ import { messagesFor } from '@/lib/i18n/messages'
 import { weeklySportPlanMessages } from './messages/weeklySportPlan'
 import { langFromFlag } from './messages/coreLocale'
 const copy = (es: boolean) => messagesFor(weeklySportPlanMessages, langFromFlag(es))
-export type WeeklySwing = { id: string; leagueId: string; leagueName: string; sport: string; tone: 'risk' | 'opportunity' | 'check'; title: string; detail: string; href: string; prompt: string }
+type WeeklySwing = { id: string; leagueId: string; leagueName: string; sport: string; tone: 'risk' | 'opportunity' | 'check'; title: string; detail: string; href: string; prompt: string }
 export function sportWeekAdvice(sport: string, es = false): string {
   const key = sport.toUpperCase()
   const m = copy(es)

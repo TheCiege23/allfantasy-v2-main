@@ -32,7 +32,7 @@ export type GameRow = {
   updatedAt?: Date | string | null
 }
 
-export type LiveGame = {
+type LiveGame = {
   state: 'live' | 'final'
   week: number
   kickoff: string

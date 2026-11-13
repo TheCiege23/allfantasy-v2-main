@@ -12,7 +12,7 @@ import { validateRawPayload, validatePreview } from './ImportValidationEngine'
 import { mergeReports } from './ImportErrorReport'
 import { createEmptyPreview } from './DraftImportPreview'
 
-export interface DraftImportResult {
+interface DraftImportResult {
   preview: DraftImportPreview
   report: ImportErrorReport
   /** True if dry-run passed (no blocking errors). */

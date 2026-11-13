@@ -14,7 +14,7 @@ export const WAREHOUSE_SPORTS: readonly SupportedSport[] = [...SUPPORTED_SPORTS]
 
 export type WarehouseSport = SupportedSport
 
-export function isWarehouseSport(s: string): s is WarehouseSport {
+function isWarehouseSport(s: string): s is WarehouseSport {
   return isSupportedSport(s)
 }
 
@@ -120,7 +120,7 @@ export interface SeasonStandingFactInput {
 
 export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver_add' | 'waiver_drop' | 'free_agent'
 
-export type WarehouseDataset =
+type WarehouseDataset =
   | 'player_stats'
   | 'team_stats'
   | 'roster_snapshots'

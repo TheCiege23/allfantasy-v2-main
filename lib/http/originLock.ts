@@ -36,14 +36,14 @@ export const ORIGIN_AUTH_HEADER = "x-af-origin-auth"
  */
 const EXEMPT_PATHS = new Set(["/api/health"])
 
-export type OriginLockMode = "off" | "report" | "enforce"
+type OriginLockMode = "off" | "report" | "enforce"
 
-export interface OriginLockEnv {
+interface OriginLockEnv {
   CF_ORIGIN_AUTH_SECRET?: string
   CF_ORIGIN_LOCK_MODE?: string
 }
 
-export type OriginLockDecision =
+type OriginLockDecision =
   | { action: "allow" }
   | { action: "report"; reason: "missing" | "mismatch" }
   | { action: "refuse"; reason: "missing" | "mismatch" }
@@ -97,7 +97,7 @@ export function checkOriginLock(
 const reported = new Set<string>()
 const MAX_REPORTED = 500
 
-export type OriginLockOutcome = "would-refuse" | "refused" | "redirected"
+type OriginLockOutcome = "would-refuse" | "refused" | "redirected"
 
 const OUTCOME_WORDS: Record<OriginLockOutcome, string> = {
   "would-refuse": "would refuse",
@@ -115,7 +115,7 @@ export function reportOriginLock(reason: string, host: string | null, pathname: 
   )
 }
 
-export type OriginLockRefusal = { kind: "redirect"; location: string } | { kind: "forbidden" }
+type OriginLockRefusal = { kind: "redirect"; location: string } | { kind: "forbidden" }
 
 /**
  * How to refuse a request the lock has rejected in enforce mode.

@@ -101,7 +101,7 @@ function isLive(row: MomentRow): boolean {
 }
 
 /** In the last minutes of regulation (or later) and within one score. */
-export function isCloseLate(sport: string, row: MomentRow): boolean {
+function isCloseLate(sport: string, row: MomentRow): boolean {
   if (!isLive(row) || row.status === 'STATUS_HALFTIME' || row.status === 'STATUS_END_PERIOD') return false
   if (row.homeScore == null || row.awayScore == null) return false
   const margin = Math.abs(row.homeScore - row.awayScore)

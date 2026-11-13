@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import type { LucideIcon } from 'lucide-react'
 
-export interface StatusCardProps {
+interface StatusCardProps {
   label: string
   statusText: string
   icon?: LucideIcon

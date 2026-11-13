@@ -35,8 +35,8 @@ export const TAXI_STEAL_CLAIMS_KEY = 'taxi_steal_claims'
 
 export const PROTECT_HOURS_CHOICES = [24, 48, 72] as const
 export const CLAIMS_PER_SEASON_CHOICES = [1, 2, 3, 5, 0] as const
-export const DEFAULT_PROTECT_HOURS = 48
-export const DEFAULT_CLAIMS_PER_SEASON = 1
+const DEFAULT_PROTECT_HOURS = 48
+const DEFAULT_CLAIMS_PER_SEASON = 1
 /** Claims kept in settings; the oldest resolved ones drop off first. */
 export const MAX_STORED_CLAIMS = 200
 
@@ -47,7 +47,7 @@ export type TaxiStealingRule = {
   claimsPerSeason: number
 }
 
-export const DEFAULT_TAXI_STEALING_RULE: TaxiStealingRule = {
+const DEFAULT_TAXI_STEALING_RULE: TaxiStealingRule = {
   enabled: false,
   protectHours: DEFAULT_PROTECT_HOURS,
   claimsPerSeason: DEFAULT_CLAIMS_PER_SEASON,
@@ -81,7 +81,7 @@ export function parseTaxiStealingRule(raw: unknown, current: TaxiStealingRule): 
   return { ok: true, value: { enabled: 'enabled' in o ? o.enabled === true : current.enabled, protectHours: hours, claimsPerSeason: per } }
 }
 
-export type TaxiStealStatus = 'open' | 'protected' | 'stolen' | 'void' | 'withdrawn'
+type TaxiStealStatus = 'open' | 'protected' | 'stolen' | 'void' | 'withdrawn'
 
 export type TaxiStealClaim = {
   id: string

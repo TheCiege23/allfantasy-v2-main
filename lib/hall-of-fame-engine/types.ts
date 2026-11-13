@@ -7,7 +7,7 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export const HOF_SPORTS = [...SUPPORTED_SPORTS] as const
 
-export const HOF_ENTITY_TYPES = [
+const HOF_ENTITY_TYPES = [
   'MANAGER',
   'TEAM',
   'MOMENT',
@@ -17,7 +17,7 @@ export const HOF_ENTITY_TYPES = [
 ] as const
 export type HallOfFameEntityType = (typeof HOF_ENTITY_TYPES)[number]
 
-export const HOF_CATEGORIES = [
+const HOF_CATEGORIES = [
   'all_time_great_managers',
   'all_time_great_teams',
   'greatest_moments',

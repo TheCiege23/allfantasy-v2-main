@@ -17,7 +17,7 @@ import { CertifiedLineupIntegrationService, type PlayerRef, type CertifiedSchedu
 
 export type { PlayerRef, CertifiedScheduleDescription }
 
-export type DraftPickSafety = {
+type DraftPickSafety = {
   block: boolean
   reason: string
   freshnessStatus: string

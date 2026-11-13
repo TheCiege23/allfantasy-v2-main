@@ -38,7 +38,7 @@ export const WAIVER_ORDER_RESET_POLICIES = ['rolling', 'weekly'] as const
 export type WaiverOrderResetPolicy = (typeof WAIVER_ORDER_RESET_POLICIES)[number]
 
 /** Why a survivor league cannot take the weekly reset (owner's decision 2026-10-25). */
-export const WEEKLY_RESET_SURVIVOR_REFUSAL =
+const WEEKLY_RESET_SURVIVOR_REFUSAL =
   "Survivor leagues keep a rolling priority order: a weekly reset would erase survivor priority boosts."
 
 /** The refusal for a save that turns the weekly reset on in a survivor league, else null. */
@@ -50,7 +50,7 @@ export function weeklyResetSurvivorRefusal(options: HubWaiverOptions, isSurvivor
 export const PRIORITY_RESET_WAIVER_TYPES = ['rolling', 'standard'] as const
 
 /** The highest minimum bid accepted, matching the hub's FAAB budget ceiling. */
-export const MAX_FAAB_MIN_BID = 10_000
+const MAX_FAAB_MIN_BID = 10_000
 
 export function readHubTiebreakRule(stored: string | null | undefined): HubTiebreakRule {
   const v = String(stored ?? '').trim().toLowerCase()
@@ -127,7 +127,7 @@ export function readFaabRolloverRule(stored: unknown): FaabRolloverRule | null {
   return v === 'reset' || v === 'carry_over' ? v : null
 }
 
-export type HubWaiverOptions = {
+type HubWaiverOptions = {
   allowZeroFaabBid?: boolean
   tiebreakRule?: HubTiebreakRule
   waiverOrderResetPolicy?: WaiverOrderResetPolicy

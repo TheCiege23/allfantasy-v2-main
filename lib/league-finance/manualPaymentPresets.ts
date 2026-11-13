@@ -13,7 +13,7 @@ export type ManualPaymentPresetId =
   | 'cash'
   | 'other'
 
-export type ManualPaymentPreset = {
+type ManualPaymentPreset = {
   id: ManualPaymentPresetId
   /** Full label in UI */
   label: string
@@ -86,7 +86,7 @@ export const MANUAL_PAYMENT_PRESETS: ManualPaymentPreset[] = [
 
 const IDS = new Set<string>(MANUAL_PAYMENT_PRESETS.map((p) => p.id))
 
-export function isManualPaymentPresetId(value: string): value is ManualPaymentPresetId {
+function isManualPaymentPresetId(value: string): value is ManualPaymentPresetId {
   return IDS.has(value)
 }
 

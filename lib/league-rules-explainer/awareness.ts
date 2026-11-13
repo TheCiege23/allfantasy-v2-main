@@ -24,10 +24,10 @@ const tEn = (k: string) => translations.en[k] ?? k
 export const RULE_CHANGE_NEWS_DAYS = 14
 
 /** How many change cards Chimmy is told about. */
-export const CHIMMY_RULE_CHANGE_LIMIT = 5
+const CHIMMY_RULE_CHANGE_LIMIT = 5
 
 /** One change card as English sentences, joined. */
-export function changeGroupSentence(group: ChangeGroup): string {
+function changeGroupSentence(group: ChangeGroup): string {
   return group.lines.map((l) => renderChangeLine(l, tEn, 'en')).join(' ')
 }
 

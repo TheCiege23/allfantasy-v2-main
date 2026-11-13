@@ -43,7 +43,7 @@ export interface TeamDecisionProfile {
   flags: string[]
 }
 
-export interface LeagueMarketContext {
+interface LeagueMarketContext {
   scarcityByPosition: Partial<Record<Position, number>>
   pickInflationIndex: number
   contenderTeamIds: string[]
@@ -322,7 +322,7 @@ function computePartnerFit(
   return fits
 }
 
-export interface BuildLeagueDecisionContextInput {
+interface BuildLeagueDecisionContextInput {
   league: SleeperLeague
   rosters: SleeperRoster[]
   tradedPicks?: Array<{ owner_id: number; roster_id: number; previous_owner_id: number; round: number; season: string }>

@@ -23,7 +23,7 @@ export type LongTermStrategyClass =
   | 'win_now_with_risk'
   | 'long_term_rise'
 
-export type LongTermPickSummary = {
+type LongTermPickSummary = {
   season: number
   round: number
   weightScore: number

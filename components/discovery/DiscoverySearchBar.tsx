@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Search } from "lucide-react"
 
-export interface DiscoverySearchBarProps {
+interface DiscoverySearchBarProps {
   value: string
   onChange: (value: string) => void
   onSubmit: () => void

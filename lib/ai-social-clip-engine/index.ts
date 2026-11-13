@@ -11,4 +11,3 @@ export {
   isOpenAIConfigured,
   isDeepSeekConfigured,
 } from "./AISocialClipOrchestrator";
-export type { OrchestratorResult } from "./AISocialClipOrchestrator";

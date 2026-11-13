@@ -16,13 +16,7 @@ export {
 
 export {
   runUnifiedAlertEngine,
-  scoreAlertUrgency,
-  scoreAlertRelevance,
   renderAlertPayload,
-  suppressDuplicateAlerts,
-  applyChannelPrefs,
-  chooseAlertChannel,
-  bindAlertActions,
   deliverAlert,
   logAlertLifecycle,
 } from './ChimmyAlertEngine'
@@ -59,5 +53,4 @@ export {
   groupLowPriorityAlerts,
   resolveEffectiveCooldownMultiplier,
 } from './ChimmyAlertSuppressionEngine'
-export type { ChimmyAlertSuppressionDecision, ChimmyAlertSuppressionReason } from './ChimmyAlertSuppressionEngine'
 

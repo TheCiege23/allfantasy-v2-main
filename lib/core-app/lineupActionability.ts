@@ -1,6 +1,6 @@
 import { isEligibleForSlot, startingSlotTemplate } from './rosterSlots'
 
-export type CoveragePlayer = { id: string; position: string | null; unavailable?: boolean; inactive?: boolean; bye?: boolean }
+type CoveragePlayer = { id: string; position: string | null; unavailable?: boolean; inactive?: boolean; bye?: boolean }
 
 /** Maximum legal assignment: each player can cover only one slot, including flex. */
 export function bestBallCoverage(slots: string[], players: CoveragePlayer[]): { missing: string[]; unknown: boolean } {

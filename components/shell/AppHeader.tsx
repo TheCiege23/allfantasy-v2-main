@@ -2,7 +2,7 @@
 
 import DesktopNavBar from "@/components/navigation/DesktopNavBar"
 
-export interface AppHeaderProps {
+interface AppHeaderProps {
   isAuthenticated: boolean
   isAdmin?: boolean
   userLabel?: string | null

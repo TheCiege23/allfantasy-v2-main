@@ -33,7 +33,7 @@ import { commissionerWeeklyDigestMessages, digestLanguage, type DigestLanguage }
 const DAY_MS = 86_400_000
 const KEY = 'commish_digest'
 
-export type DigestCounts = {
+type DigestCounts = {
   openCases: number
   tradesAudited: number
   widestGapPct: number | null
@@ -145,7 +145,7 @@ const defaultDeps: DigestDeps = {
     }),
 }
 
-export type DigestRunResult = { day: boolean; weekKey: string; candidates: number; sent: number; quiet: number; alreadySent: number; failed: number }
+type DigestRunResult = { day: boolean; weekKey: string; candidates: number; sent: number; quiet: number; alreadySent: number; failed: number }
 
 export async function runWeeklyCommishDigests(opts: { now?: Date; leagueId?: string; deadline?: number } = {}, deps: DigestDeps = defaultDeps): Promise<DigestRunResult> {
   const now = opts.now ?? new Date()

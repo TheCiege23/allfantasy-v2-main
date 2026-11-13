@@ -11,14 +11,14 @@
  * memo turns it on with `enabled: () => true`, or `AF_TTL_MEMO_IN_TESTS=1` for a module's own.
  */
 
-export interface TtlMemo<T> {
+interface TtlMemo<T> {
   get(key: string): T | undefined
   set(key: string, value: T): void
   clear(): void
   readonly size: number
 }
 
-export interface TtlMemoOptions {
+interface TtlMemoOptions {
   ttlMs: number | (() => number)
   /** Hard cap on entries; the oldest-inserted is dropped first. */
   maxEntries: number

@@ -33,17 +33,17 @@ import { aggregateWeeklyStats, type NormalizedGameStats } from '@/lib/scoring-ru
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
 
-export const DAILY_FORM_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
+const DAILY_FORM_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
 
 export function isDailyFormSport(sport: string | null | undefined): boolean {
   return DAILY_FORM_SPORTS.includes(String(sport ?? '').trim().toUpperCase())
 }
 
 /** Games that make up "recent form". A baseball line is noisier per game, so it looks further back. */
-export const RECENT_FORM_GAMES: Readonly<Record<string, number>> = { NBA: 10, NHL: 10, MLB: 15 }
+const RECENT_FORM_GAMES: Readonly<Record<string, number>> = { NBA: 10, NHL: 10, MLB: 15 }
 
 /** Below this many recent games there is no per-game rate worth multiplying out. */
-export const MIN_RECENT_FORM_GAMES = 2
+const MIN_RECENT_FORM_GAMES = 2
 
 /**
  * Prior-season shrinkage: how many games of LAST season's per-game rate are blended in.
@@ -126,7 +126,7 @@ function mapRecord(v: unknown): Record<string, unknown> {
 }
 
 /** An MLB two-way line is two rows (`<game>:batting`, `<game>:pitching`) of ONE game. */
-export function gameKeyOf(row: Pick<GameLogRow, 'gameId' | 'providerGameId'>): string {
+function gameKeyOf(row: Pick<GameLogRow, 'gameId' | 'providerGameId'>): string {
   return row.providerGameId || String(row.gameId ?? '').split(':')[0]
 }
 
@@ -281,7 +281,7 @@ function roundLine(line: Record<string, number>): Record<string, number> {
 
 // ── Read side: pure arithmetic over a stored blob and a league scorer ─────────────────────────
 
-export type StatScorer = (stats: Record<string, number>, position?: string | null) => number
+type StatScorer = (stats: Record<string, number>, position?: string | null) => number
 
 export type ScoredFormPlayer = {
   id: string

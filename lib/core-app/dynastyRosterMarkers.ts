@@ -23,7 +23,7 @@ import { agreedAge } from '@/lib/player-age-agreement'
 import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import { agingThreshold } from './dynastyAging'
 
-export type DynastyAgeTone = 'rising' | 'prime' | 'aging'
+type DynastyAgeTone = 'rising' | 'prime' | 'aging'
 
 export type DynastyRosterMarker = {
   age: number | null

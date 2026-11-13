@@ -41,7 +41,7 @@ export type SportCatalogPlayer = {
   imageUrl: string | null
 }
 
-export type TranslatedRoster = {
+type TranslatedRoster = {
   leagueId: string
   sport: string
   starters: string[]
@@ -54,9 +54,9 @@ export type TranslatedRoster = {
   total: number
 }
 
-export type SportRosterLeague = { id: string; sport: string | null; platform: string | null }
+type SportRosterLeague = { id: string; sport: string | null; platform: string | null }
 
-export type TranslatedSportRosters = {
+type TranslatedSportRosters = {
   rosters: Map<string, TranslatedRoster>
   catalog: Map<string, SportCatalogPlayer>
   /** Leagues of another sport on a platform with no id link at all — the old "can't read yet". */

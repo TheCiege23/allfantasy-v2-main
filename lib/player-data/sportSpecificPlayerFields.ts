@@ -5,11 +5,11 @@
 import type { LeagueSport } from '@prisma/client'
 
 /** Rolling Insights soccer position families for UI grouping. */
-export type SoccerPositionFamily = 'Goalkeeper' | 'Defender' | 'Midfielder' | 'Forward'
+type SoccerPositionFamily = 'Goalkeeper' | 'Defender' | 'Midfielder' | 'Forward'
 
 const WS = /\s+/g
 
-export function normalizeSoccerPositionCode(raw: string | null | undefined): string {
+function normalizeSoccerPositionCode(raw: string | null | undefined): string {
   return String(raw ?? '')
     .trim()
     .replace(WS, ' ')
@@ -30,7 +30,7 @@ export function mapSoccerPositionGroup(position: string | null | undefined): Soc
 }
 
 /** NCAAFB / NFL-adjacent offensive skill buckets (display only). */
-export type NflLikePositionCategory = 'OFF' | 'DEF' | 'ST' | 'K' | 'DST' | 'IDP' | 'UNK'
+type NflLikePositionCategory = 'OFF' | 'DEF' | 'ST' | 'K' | 'DST' | 'IDP' | 'UNK'
 
 export function mapNflLikePositionCategory(
   sport: LeagueSport | string,

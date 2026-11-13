@@ -1,17 +1,17 @@
-export interface AcceptanceBucket {
+interface AcceptanceBucket {
   key: string;
   label: string;
   score: number;
   rawDelta: number;
 }
 
-export interface AcceptanceDriver {
+interface AcceptanceDriver {
   key: string;
   delta: number;
   note: string;
 }
 
-export interface AcceptanceOutput {
+interface AcceptanceOutput {
   base: number;
   final: number;
   z: number;
@@ -26,7 +26,7 @@ export interface AcceptanceOutput {
   };
 }
 
-export interface AcceptanceInput {
+interface AcceptanceInput {
   fairnessScore: number;
   needsFitScore: number;
   volatilityDelta: number;

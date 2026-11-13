@@ -12,8 +12,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
  * rather than show an empty list that reads as "you follow nobody".
  */
 
-export type Team = { abbr: string; name: string }
-export type Follow = { sport: string; teamAbbr: string; teamName: string }
+type Team = { abbr: string; name: string }
+type Follow = { sport: string; teamAbbr: string; teamName: string }
 
 const key = (sport: string, abbr: string) => `${sport}:${abbr}`
 

@@ -17,16 +17,16 @@ import { buildSGSchedule, defaultSGConfig } from './config'
 import type { SGConfig, SGMode, SGSport } from './types'
 
 /** The concept id the create wizard and `POST /api/leagues` use. */
-export const SG_CREATE_CONCEPT = 'survivor_guillotine'
+const SG_CREATE_CONCEPT = 'survivor_guillotine'
 
 export const SG_CREATE_SPORTS: readonly SGSport[] = ['NFL', 'NBA']
-export const SG_CREATE_MIN_TEAMS = 8
+const SG_CREATE_MIN_TEAMS = 8
 /** New leagues cap at 32 managers; NBA also at its 30 clubs (lib/create-league-v2/rules-engine.ts). */
 const SG_CREATE_MAX_TEAMS: Record<SGSport, number> = { NFL: 32, NBA: 30 }
 /** `defaultSGConfig` is a 22-team season: 10 tribal chops, a 3-period Gauntlet, 3 merged chops. */
 export const SG_CREATE_DEFAULT_TEAMS = 22
 export const SG_CREATE_TRIBE_COUNTS = [2, 3, 4] as const
-export const SG_CREATE_DEFAULT_TRIBES = 2
+const SG_CREATE_DEFAULT_TRIBES = 2
 
 /** Merge lengths to try, closest to the default three first. */
 const MERGE_PREFERENCE = [3, 2, 4, 1, 5, 6] as const
@@ -72,13 +72,13 @@ export function sgCreateTeamCounts(sport: SGSport): number[] {
   return counts
 }
 
-export function readSGCreateTribeCount(conceptSetup: Record<string, unknown> | null | undefined): number | null {
+function readSGCreateTribeCount(conceptSetup: Record<string, unknown> | null | undefined): number | null {
   const raw = conceptSetup?.survivorGuillotineTribeCount
   if (raw == null) return SG_CREATE_DEFAULT_TRIBES
   return (SG_CREATE_TRIBE_COUNTS as readonly unknown[]).includes(raw) ? (raw as number) : null
 }
 
-export type SGCreateResolution =
+type SGCreateResolution =
   | { kind: 'not_sg' }
   | { kind: 'ok'; config: SGConfig }
   | { kind: 'invalid'; path: string; message: string }

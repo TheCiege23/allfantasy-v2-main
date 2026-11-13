@@ -9,7 +9,7 @@
  *    out, the rest are told who went and when those players reach waivers.
  */
 
-export type ChopAlert = { title: string; body: string; severity: 'medium' | 'high' }
+type ChopAlert = { title: string; body: string; severity: 'medium' | 'high' }
 
 const points = (n: number) => {
   const r = Math.round(n * 10) / 10
@@ -22,7 +22,7 @@ function names(list: readonly string[]): string {
 }
 
 /** When the chopped teams' players can be claimed, in the league's own release setting. */
-export function releaseWhen(rosterReleaseTiming: string | null | undefined): string {
+function releaseWhen(rosterReleaseTiming: string | null | undefined): string {
   return rosterReleaseTiming === 'immediate' ? 'are free agents now' : 'hit waivers at the next waiver run'
 }
 

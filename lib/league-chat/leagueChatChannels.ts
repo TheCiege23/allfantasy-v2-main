@@ -13,7 +13,7 @@
  * notice also in #waivers, and both stay in #general as they always have (Chat.png draws them there).
  */
 
-export const LEAGUE_CHAT_CHANNEL_IDS = ['general', 'trash-talk', 'trades', 'waivers'] as const
+const LEAGUE_CHAT_CHANNEL_IDS = ['general', 'trash-talk', 'trades', 'waivers'] as const
 export type LeagueChatChannelId = (typeof LEAGUE_CHAT_CHANNEL_IDS)[number]
 
 export const LEAGUE_CHAT_CHANNELS: ReadonlyArray<{ id: LeagueChatChannelId; description: string }> = [
@@ -23,7 +23,7 @@ export const LEAGUE_CHAT_CHANNELS: ReadonlyArray<{ id: LeagueChatChannelId; desc
   { id: 'waivers', description: 'Claims and waiver results' },
 ]
 
-export function isLeagueChatChannelId(value: unknown): value is LeagueChatChannelId {
+function isLeagueChatChannelId(value: unknown): value is LeagueChatChannelId {
   return typeof value === 'string' && (LEAGUE_CHAT_CHANNEL_IDS as readonly string[]).includes(value)
 }
 
@@ -44,7 +44,7 @@ function metadataChannel(metadata: unknown): LeagueChatChannelId | null {
 }
 
 /** The room a stored message was posted in. No key = #general. */
-export function leagueChannelOfMessage(message: ChannelMessage): LeagueChatChannelId {
+function leagueChannelOfMessage(message: ChannelMessage): LeagueChatChannelId {
   return metadataChannel(message.metadata) ?? 'general'
 }
 

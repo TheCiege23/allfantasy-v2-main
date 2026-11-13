@@ -44,7 +44,7 @@ function isUrgent(priority: RecommendationPriority): boolean {
 
 // ─── Flagship: Draft Decision Ladder (ordered, NOT a value curve) ──────────────
 
-export type DraftDecision = {
+type DraftDecision = {
   key: string
   label: string
   detail: string
@@ -54,7 +54,7 @@ export type DraftDecision = {
   urgent: boolean
 }
 
-export type DraftDecisionLadderViewModel = {
+type DraftDecisionLadderViewModel = {
   available: boolean
   /** Ordered by existing recommendation priority — a ladder, never a value curve or pick timeline. */
   decisions: DraftDecision[]
@@ -147,7 +147,7 @@ export function buildDraftPreparationImpact(
 
 // ─── Supporting: Draft Readiness (drafts approaching + open prep, no fabricated %) ─
 
-export type DraftReadinessViewModel = {
+type DraftReadinessViewModel = {
   available: boolean
   draftsApproaching: number
   prepItemsOpen: number

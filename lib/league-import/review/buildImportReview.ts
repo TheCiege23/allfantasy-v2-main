@@ -20,7 +20,7 @@ import type {
   PreviousImportSnapshot,
 } from './types'
 
-export interface BuildImportReviewInput {
+interface BuildImportReviewInput {
   platform: string
   preview: ImportReviewPreviewInput
   canonical?: ImportReviewCanonicalInput | null
@@ -50,7 +50,7 @@ const SLOT_LABELS: Record<string, string> = {
   TAXI: 'Taxi',
 }
 
-export function labelRosterSlot(slot: string): string {
+function labelRosterSlot(slot: string): string {
   const upper = String(slot).toUpperCase()
   return SLOT_LABELS[upper] ?? upper
 }
@@ -64,7 +64,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   fleaflicker: 'Fleaflicker',
 }
 
-export function labelPlatform(platform: string): string {
+function labelPlatform(platform: string): string {
   return PLATFORM_LABELS[platform.toLowerCase()] ?? platform
 }
 
@@ -83,7 +83,7 @@ const LEAGUE_TYPE_LABELS: Record<string, string> = {
   tournament: 'Tournament',
 }
 
-export function resolveImportLeagueType(
+function resolveImportLeagueType(
   preview: ImportReviewPreviewInput,
   canonical?: ImportReviewCanonicalInput | null,
 ): { id: string; label: string } {

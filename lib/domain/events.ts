@@ -28,7 +28,7 @@ import type { Tx } from './db'
 import type { DomainEventDraft, EnqueueEvents } from './ports'
 
 /** The slice of `IOutboxStore` this needs. Narrow on purpose. */
-export type OutboxLike = {
+type OutboxLike = {
   enqueue(event: Record<string, unknown>, opts?: { tx?: unknown }): Promise<void>
 }
 
@@ -94,7 +94,7 @@ export function buildDomainEvent(
   }
 }
 
-export type OutboxEnqueueOptions = {
+type OutboxEnqueueOptions = {
   readonly outbox: OutboxLike
   /** Injectable for tests; production passes nothing. */
   readonly now?: () => Date

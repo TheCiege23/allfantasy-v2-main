@@ -22,7 +22,7 @@
  *  - Fantrax: https://www.fantrax.com/fantasy/league/{leagueId}/home   (league page only)
  */
 
-export type SourcePlatform = 'sleeper' | 'espn' | 'yahoo' | 'mfl' | 'fantrax' | 'fleaflicker'
+type SourcePlatform = 'sleeper' | 'espn' | 'yahoo' | 'mfl' | 'fantrax' | 'fleaflicker'
 export type SourceActionType =
   | 'lineup'
   | 'trade'
@@ -31,7 +31,7 @@ export type SourceActionType =
   | 'roster'
   | 'league'
   | 'open'
-export type SourceDestinationType = 'action' | 'roster' | 'league' | 'homepage'
+type SourceDestinationType = 'action' | 'roster' | 'league' | 'homepage'
 
 /**
  * The screens the Player Finder sends people to. `league` is the verified
@@ -40,7 +40,7 @@ export type SourceDestinationType = 'action' | 'roster' | 'league' | 'homepage'
  */
 export type SourceScreen = 'league' | 'lineup' | 'waivers' | 'trade'
 
-export interface SourceScreenArgs {
+interface SourceScreenArgs {
   leagueId: string
   season?: string
   /** The user's own team on the platform — ESPN teamId, Yahoo team number, Sleeper roster id. */
@@ -59,7 +59,7 @@ export interface SourceScreenArgs {
  * verification step has something to click. "Never invents a route" from the
  * header still holds: an unverified format is never a destination.
  */
-export interface SourceScreenFormat {
+interface SourceScreenFormat {
   verified: boolean
   /** Null when a required id is missing — the caller then falls back. */
   build: (args: SourceScreenArgs) => string | null
@@ -151,7 +151,7 @@ export function normalizeYahooTeamId(raw: string | null | undefined): string | n
  * FantraxLeague row id (`3f0c2a1e-…`); its hyphens fail the alphanumeric rule, so it yields null and
  * the caller falls back to the homepage instead of building a league URL that 404s.
  */
-export function normalizeFantraxLeagueId(raw: string | null | undefined): string | null {
+function normalizeFantraxLeagueId(raw: string | null | undefined): string | null {
   const s = (raw ?? '').trim()
   if (!s) return null
   const fromInput = s.match(/^fantrax-league:([^|]+)\|/i)

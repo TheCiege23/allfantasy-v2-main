@@ -2,7 +2,7 @@
  * Client-safe mood UI config (no Prisma). Server mood persistence lives in lib/mood.ts.
  */
 
-export type MoodOption = {
+type MoodOption = {
   value: string;
   emoji: string;
   label: string;

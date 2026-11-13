@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { DEFAULT_SPORT, type SupportedSport } from '@/lib/sport-scope'
 
-export type DraftPoolConfig = {
+type DraftPoolConfig = {
   poolId: string
   label: string
   description: string
@@ -18,7 +18,7 @@ export type FutureDraftConfig = {
   notes: string[]
 }
 
-export type DraftPool = {
+type DraftPool = {
   draftType: 'rookie' | 'devy' | 'combined'
   season: number
   leagueId: string

@@ -5,9 +5,9 @@
 
 const BASE = 'https://allfantasy.ai'
 
-export type DiscoveryLeaguesSlug = 'fantasy-football' | 'fantasy-basketball' | 'fantasy-baseball'
+type DiscoveryLeaguesSlug = 'fantasy-football' | 'fantasy-basketball' | 'fantasy-baseball'
 
-export interface DiscoveryLeaguesFaqItem {
+interface DiscoveryLeaguesFaqItem {
   question: string
   answer: string
 }

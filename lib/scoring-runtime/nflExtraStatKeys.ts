@@ -17,7 +17,7 @@
  * the provider already computed (1 when the game reached it), so no threshold is re-derived here.
  */
 
-export type NflExtraStat = {
+type NflExtraStat = {
   key: string
   label: string
   group: 'passing' | 'rushing' | 'receiving' | 'kicking' | 'special' | 'team_def' | 'idp'

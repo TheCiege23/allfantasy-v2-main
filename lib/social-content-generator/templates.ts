@@ -16,7 +16,7 @@ function appendHashtags(text: string): string {
   return `${text.trim()}\n\n${REQUIRED_HASHTAGS_STRING}`
 }
 
-export function getDraftResultsCaption(data: DraftResultsContext): string {
+function getDraftResultsCaption(data: DraftResultsContext): string {
   const parts: string[] = []
   if (data.winnerName && data.grade) {
     parts.push(`Draft results are in. ${data.winnerName} takes the top grade with a ${data.grade}.`)
@@ -29,7 +29,7 @@ export function getDraftResultsCaption(data: DraftResultsContext): string {
   return appendHashtags(parts.join(' '))
 }
 
-export function getWeeklyRecapCaption(data: WeeklyRecapContext): string {
+function getWeeklyRecapCaption(data: WeeklyRecapContext): string {
   const parts: string[] = []
   if (data.week != null) parts.push(`Week ${data.week} recap.`)
   else parts.push('Weekly recap.')
@@ -42,7 +42,7 @@ export function getWeeklyRecapCaption(data: WeeklyRecapContext): string {
   return appendHashtags(parts.join(' '))
 }
 
-export function getTradeReactionCaption(data: TradeReactionContext): string {
+function getTradeReactionCaption(data: TradeReactionContext): string {
   const sideAText = data.sideA.length ? data.sideA.join(', ') : 'Side A'
   const sideBText = data.sideB.length ? data.sideB.join(', ') : 'Side B'
   const parts: string[] = [
@@ -54,7 +54,7 @@ export function getTradeReactionCaption(data: TradeReactionContext): string {
   return appendHashtags(parts.join(' '))
 }
 
-export function getPowerRankingsCaption(data: PowerRankingsContext): string {
+function getPowerRankingsCaption(data: PowerRankingsContext): string {
   const parts: string[] = []
   if (data.leagueName) parts.push(`${data.leagueName} power rankings.`)
   parts.push(`#${data.rank} ${data.teamName}.`)

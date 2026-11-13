@@ -65,7 +65,7 @@ export const STASH_OPTIONALITY_BONUS = 1.05
 export const ELIMINATOR_STRIKES_TO_ELIMINATION = 4
 
 /** Team state this model understands. Absent members simply switch the relevant effect off. */
-export interface FourHorsemenTeamState {
+interface FourHorsemenTeamState {
   /** Eliminator strikes accrued. 0–4. */
   eliminatorStrikes?: number | null
   /** True once the team is out of the Eliminator — its scores no longer count toward that pot. */

@@ -17,7 +17,7 @@ function readCookieDataMode(): CommissionerDataMode {
   return normalizeDataMode(match?.[1])
 }
 
-export interface DataModeIndicatorProps {
+interface DataModeIndicatorProps {
   /**
    * The modes THIS viewer may select, decided server-side by the layout — never inferred
    * here. An empty or single-entry list renders nothing, because a picker with one option

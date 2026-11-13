@@ -25,7 +25,7 @@ import type { DeviceClass } from '@/lib/observability/requestContext'
  * What is being timed. These are PHASES, not features: a phase is a thing a user waits on, and two
  * features in the same phase should feel the same.
  */
-export type BudgetPhase =
+type BudgetPhase =
   /** Server time until the app chrome has everything it renders. Point 2. */
   | 'shell'
   /** One independently-streamed card, measured from the start of its read chain. Point 3. */
@@ -53,9 +53,9 @@ export type BudgetPhase =
  * clamped to 0 and read as `within`. Its own test caught it. A status that is neither pass nor fail
  * is not a pass.
  */
-export type BudgetVerdict = 'within' | 'warn' | 'over' | 'unknown'
+type BudgetVerdict = 'within' | 'warn' | 'over' | 'unknown'
 
-export type Budget = {
+type Budget = {
   /** The target. At or under this is `within`. */
   targetMs: number
   /** Over this is `over`. Between target and ceiling is `warn`. */

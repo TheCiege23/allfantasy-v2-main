@@ -28,7 +28,7 @@ export function getMatchupAIChatUrl(suggestedPrompt?: string, options?: AIChatCo
   })
 }
 
-export type MatchupContextForAI = {
+type MatchupContextForAI = {
   teamAName: string
   teamBName: string
   projectedScoreA?: number

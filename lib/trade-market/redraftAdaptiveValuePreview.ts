@@ -5,13 +5,13 @@
  * no AI, no external calls, no recommendations. See docs/trade-adaptive-value-preview-t6.md.
  */
 
-export const PREVIEW_MIN_SAMPLE = 3
+const PREVIEW_MIN_SAMPLE = 3
 export const PREVIEW_MAX_ADJUSTMENT = 15
-export const PREVIEW_CONFIDENCE_MIN = 40
+const PREVIEW_CONFIDENCE_MIN = 40
 const PER_UNIT = 1.5
 const RECENT_WINDOW_DAYS = 30
 
-export type PreviewDirection = 'rising' | 'falling' | 'stable' | 'insufficient'
+type PreviewDirection = 'rising' | 'falling' | 'stable' | 'insufficient'
 
 /** One per-proposal observation for a player (deduped by proposalId upstream). */
 export interface PreviewObservation {
@@ -21,7 +21,7 @@ export interface PreviewObservation {
   createdAt: string | Date
 }
 
-export interface AdaptiveValuePreview {
+interface AdaptiveValuePreview {
   playerId: string
   playerName: string | null
   position: string | null

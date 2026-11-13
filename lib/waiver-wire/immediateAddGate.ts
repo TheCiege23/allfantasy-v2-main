@@ -35,7 +35,7 @@ import {
 } from "@/lib/waiver-wire/dropped-player-waivers"
 import { afterRunRefusalMessage, loadAfterRunFreeAgencyState } from "@/lib/waiver-wire/after-run-free-agency"
 
-export type ImmediateAddGateRefusal = {
+type ImmediateAddGateRefusal = {
   ok: false
   /** An add/drop error code (lib/waiver-wire/addDropErrors.ts), or the post-draft lock's own code. */
   code: AddDropErrorCode | string
@@ -45,7 +45,7 @@ export type ImmediateAddGateRefusal = {
   extra?: Record<string, unknown>
 }
 
-export type ImmediateAddGateResult = { ok: true; firstComeAdds: boolean } | ImmediateAddGateRefusal
+type ImmediateAddGateResult = { ok: true; firstComeAdds: boolean } | ImmediateAddGateRefusal
 
 function refuse(code: AddDropErrorCode, error?: string, extra?: Record<string, unknown>): ImmediateAddGateRefusal {
   return { ok: false, code, error, status: addDropErrorStatus(code), ...(extra ? { extra } : {}) }

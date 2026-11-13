@@ -11,7 +11,7 @@ import { playerValue, isInjured, type ValueSource } from './guillotineValue'
 import { evaluateSurvivalRisk } from './guillotineSurvivalRiskEngine'
 import type { GuillotinePlayerFact, GuillotineWarRoomContext } from './types'
 
-export interface GuillotineLineupSlot {
+interface GuillotineLineupSlot {
   position: string
   playerId: string | null
   playerName: string | null

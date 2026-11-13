@@ -7,7 +7,7 @@ import type { SupportedSport } from '@/lib/sport-scope'
 
 type Sub = 'board' | 'team' | 'waivers' | 'history' | 'storylines'
 
-export type GuillotineTabProps = {
+type GuillotineTabProps = {
   leagueId: string
   sport: SupportedSport | string
   leagueName?: string | null

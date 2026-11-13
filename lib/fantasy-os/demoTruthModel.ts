@@ -21,7 +21,7 @@ export type DemoDataState =
 
 export type DemoStateTone = 'success' | 'info' | 'warning' | 'neutral' | 'danger'
 
-export interface DemoStateDescriptor {
+interface DemoStateDescriptor {
   state: DemoDataState
   /** Short customer-facing label — the single canonical term for this state. */
   label: string
@@ -73,7 +73,7 @@ export function describeDemoState(state: DemoDataState): DemoStateDescriptor {
 }
 
 /** Default staleness threshold: data older than this reads as "needs sync". */
-export const STALE_AFTER_MS = 24 * 60 * 60 * 1000
+const STALE_AFTER_MS = 24 * 60 * 60 * 1000
 
 /** True when a real snapshot timestamp is older than the staleness threshold. */
 export function isStale(generatedAtIso: string | null | undefined, now: Date = new Date(), thresholdMs = STALE_AFTER_MS): boolean {

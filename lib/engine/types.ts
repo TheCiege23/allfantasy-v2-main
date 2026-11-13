@@ -1,4 +1,4 @@
-export type ScoringFormat = 'PPR' | 'Half PPR' | 'Standard' | string
+type ScoringFormat = 'PPR' | 'Half PPR' | 'Standard' | string
 
 export type TeamPhase = 'contender' | 'competitor' | 'middle' | 'rebuild' | 'unknown'
 
@@ -90,7 +90,7 @@ export interface EnginePlayerState {
   } | null
 }
 
-export type EngineAssetType = 'player' | 'pick' | 'faab'
+type EngineAssetType = 'player' | 'pick' | 'faab'
 
 export interface EngineAsset {
   id: string

@@ -8,7 +8,7 @@ import { clientIpFromHeaders } from '@/lib/http/clientIp'
 import { demoJsonBody, getDemoContext, type DemoContext } from './service'
 import type { DemoUnavailable } from './types'
 
-export const DEMO_RESPONSE_HEADERS: Record<string, string> = {
+const DEMO_RESPONSE_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json; charset=utf-8',
   // Anonymized, but still per-moment league data: never let a shared cache hold it.
   'Cache-Control': 'no-store',
@@ -16,7 +16,7 @@ export const DEMO_RESPONSE_HEADERS: Record<string, string> = {
   'X-AF-Demo': '1',
 }
 
-export function demoUnavailableResponse(u: DemoUnavailable): NextResponse {
+function demoUnavailableResponse(u: DemoUnavailable): NextResponse {
   return new NextResponse(JSON.stringify(u), { status: u.reason === 'error' ? 503 : 404, headers: DEMO_RESPONSE_HEADERS })
 }
 

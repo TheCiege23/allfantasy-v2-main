@@ -49,7 +49,7 @@ export type RuleEffectType =
  */
 export type RuleEffectExecutorStatus = 'engine' | 'planned' | 'none'
 
-export type RuleEffectDefinition = {
+type RuleEffectDefinition = {
   type: RuleEffectType
   /**
    * The `PlannedAction.actionType` string this effect emits.

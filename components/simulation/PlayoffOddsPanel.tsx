@@ -2,7 +2,7 @@
 
 import { TeamForecastCard, type TeamSeasonForecastDisplay } from './TeamForecastCard'
 
-export type PlayoffOddsPanelProps = {
+type PlayoffOddsPanelProps = {
   teamForecasts: TeamSeasonForecastDisplay[]
   playoffSpots?: number
   leagueId?: string

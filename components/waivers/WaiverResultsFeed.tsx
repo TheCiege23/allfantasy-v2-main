@@ -2,7 +2,7 @@
 
 import { CheckCircle } from "lucide-react"
 
-export type ResultTransaction = {
+type ResultTransaction = {
   id: string
   addPlayerId: string
   dropPlayerId: string | null

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 
-export interface AILayoutContainerProps {
+interface AILayoutContainerProps {
   children: ReactNode
   /** Optional strip above content (e.g. mode + provider selectors) */
   strip?: ReactNode

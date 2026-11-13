@@ -28,7 +28,7 @@ function clamp(value: number, min: number, max: number): number {
 
 export type ManagerTrajectoryStatus = 'on_track' | 'mixed' | 'needs_attention' | 'unavailable'
 
-export type ManagerDecisionItem = {
+type ManagerDecisionItem = {
   key: string
   label: string
   detail: string

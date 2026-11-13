@@ -28,12 +28,11 @@ import { demandMultiplier, type LeagueShape } from './leagueShape'
 export const PROJ_TO_VALUE = 26
 export const ADP_PIVOT = 120
 export const ADP_SLOPE = 6
-export const ADP_PREMIUM_MIN = -600
-export const ADP_PREMIUM_MAX = 1600
-export const PICK_FUTURE_DISCOUNT = 0.15
+const ADP_PREMIUM_MIN = -600
+const ADP_PREMIUM_MAX = 1600
+const PICK_FUTURE_DISCOUNT = 0.15
 
 export {
-  FAAB_DEFAULT_BUDGET,
   FAAB_FULL_BUDGET_VALUE,
   FAAB_VALUE_PER_DOLLAR,
   normalizedFaabValue,
@@ -63,7 +62,7 @@ export const SUPERFLEX_QB_MULTIPLIER = 1.6
 export const TWO_QB_MULTIPLIER = 1.8
 /** Per full point of TE premium, capped so an extreme setting can't run away. */
 export const TE_PREMIUM_PER_POINT = 0.18
-export const TE_PREMIUM_MAX_MULTIPLIER = 1.5
+const TE_PREMIUM_MAX_MULTIPLIER = 1.5
 /** Full-PPR lift by position (half-PPR applies half of it). */
 export const PPR_POSITION_LIFT: Record<string, number> = { WR: 0.08, TE: 0.10, RB: 0.04 }
 
@@ -311,7 +310,7 @@ export function normalizedPlayerValue(input: {
 }
 
 /** One step of the derivation, with the running value after it. */
-export interface ValueDerivationStep {
+interface ValueDerivationStep {
   label: string
   /** A sentence a manager can argue with. Never a formula alone. */
   detail: string
@@ -319,7 +318,7 @@ export interface ValueDerivationStep {
   value: number
 }
 
-export interface ValueDerivation {
+interface ValueDerivation {
   value: number
   basis: ValueBasis
   steps: ValueDerivationStep[]

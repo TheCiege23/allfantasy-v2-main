@@ -5,7 +5,7 @@
 import { prisma } from "@/lib/prisma"
 import type { LeaderboardSort, ReferralAudience, ReferralLeaderboardEntry, ReferralProgress } from "./types"
 
-export const REFERRAL_TIERS = [
+const REFERRAL_TIERS = [
   { minSignups: 0, id: "starter", label: "Starter" },
   { minSignups: 3, id: "bronze", label: "Bronze Ambassador" },
   { minSignups: 10, id: "silver", label: "Silver Ambassador" },

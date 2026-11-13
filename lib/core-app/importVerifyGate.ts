@@ -3,7 +3,7 @@
  * 2026-10-11). Client-safe, no I/O.
  */
 
-export type InboxShortcut = { label: string; href: string }
+type InboxShortcut = { label: string; href: string }
 
 /*
  * "Open Gmail" beats "check your email": the person is mid-task on a phone, and every app switch
@@ -34,7 +34,7 @@ export function inboxShortcutFor(email: string | null | undefined): InboxShortcu
 }
 
 /** What the send route answered, reduced to what the card shows. */
-export type SendOutcome =
+type SendOutcome =
   | { k: 'sent' }
   | { k: 'already_verified' }
   | { k: 'wait'; message: string }

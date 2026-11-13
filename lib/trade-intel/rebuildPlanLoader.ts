@@ -29,7 +29,7 @@ type RouteRoster = {
   picks: Array<{ pickId: string; label: string; value: number | null; season?: number | null; round?: number | null; fromTeam?: string | null }>
 }
 
-export type RebuildPlanContext = {
+type RebuildPlanContext = {
   viewerRosterId: string
   rosters: readonly RouteRoster[]
   /** `dynasty` / `keeper` — anything else gets no plan. */
@@ -41,7 +41,7 @@ export type RebuildPlanContext = {
   qbFormat: 'ONE_QB' | 'SUPERFLEX'
 }
 
-export type RebuildPlanDeps = {
+type RebuildPlanDeps = {
   leans: (sleeperIds: string[], qbFormat: 'ONE_QB' | 'SUPERFLEX') => Promise<Map<string, FutureLean>>
 }
 

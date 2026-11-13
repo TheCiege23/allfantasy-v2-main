@@ -21,7 +21,7 @@ import { normalizeSleeperTrade } from '../normalize/sleeperTradeNormalizer'
 import { runTradeBacktest } from '../backtest/tradeBacktestExecutor'
 import { upsertBacktestResult, upsertReplayImport } from '../writer'
 
-export interface IngestSleeperTradesResult {
+interface IngestSleeperTradesResult {
   leagueId: string
   tradesFound: number
   replaysWritten: number

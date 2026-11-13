@@ -32,7 +32,7 @@ import { rotateForFairness } from '@/lib/cron/runBudget'
  * 10-17, NBA and NHL on 10-14 AND 10-15. `deferredLastRun` puts whatever the previous six-sport fire
  * deferred at the FRONT, so no sport is deferred twice in a row while the front of a run fits.
  */
-export const RI_PROFILES_SPLIT_SPORT = 'NCAAF'
+const RI_PROFILES_SPLIT_SPORT = 'NCAAF'
 /** Fires starting before this UTC hour are the NCAAF half. Must sit between the two schedule hours. */
 export const RI_PROFILES_SPLIT_BEFORE_UTC_HOUR = 9
 
@@ -62,7 +62,7 @@ export function selectRiProfileSports<S extends string>(input: {
 }
 
 /** Stable: deferred sports first, each group keeping the rotation's order. Unknown names are ignored. */
-export function deferredFirst<S extends string>(ordered: readonly S[], deferred?: readonly string[] | null): S[] {
+function deferredFirst<S extends string>(ordered: readonly S[], deferred?: readonly string[] | null): S[] {
   const wanted = new Set((deferred ?? []).map((s) => String(s).trim().toUpperCase()))
   if (wanted.size === 0) return [...ordered]
   return [...ordered.filter((s) => wanted.has(s)), ...ordered.filter((s) => !wanted.has(s))]

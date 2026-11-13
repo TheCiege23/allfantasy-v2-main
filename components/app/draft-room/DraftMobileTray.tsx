@@ -32,7 +32,7 @@ import {
  * `onRequestCollapse`) when the user drags across the peek line. The room's own tab state remains
  * the source of truth, so a tab tap and a drag can never disagree about what is showing.
  */
-export type DraftMobileTrayProps = {
+type DraftMobileTrayProps = {
   /** True when the room has a panel selected; false collapses to peek (whole board visible). */
   open: boolean
   onRequestCollapse: () => void

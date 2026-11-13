@@ -69,7 +69,7 @@ export async function saveTemplateFromLeague(
 
 const recipeOf = (payload: unknown): TemplateRecipe | null => readRecipe(payload) ?? recipeFromLegacyPayload(payload)
 
-export type LibraryCard = {
+type LibraryCard = {
   id: string
   name: string
   description: string | null
@@ -99,7 +99,7 @@ export async function listPublicTemplates(viewerId: string | null, opts: { sport
   return cards.slice(0, limit).map(({ updatedAt: _u, ...c }) => c)
 }
 
-export type UseTemplateResult =
+type UseTemplateResult =
   | { ok: true; name: string; state: CreateLeagueV2State; tags: string[] }
   | { ok: false; error: 'not_found' }
 

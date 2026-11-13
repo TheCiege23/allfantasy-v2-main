@@ -126,7 +126,7 @@ export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
   'report-uri': [CSP_REPORT_PATH],
 }
 
-export function serializeCsp(directives: Record<string, string[]>): string {
+function serializeCsp(directives: Record<string, string[]>): string {
   return Object.entries(directives)
     .map(([name, values]) => [name, ...values].join(' '))
     .join('; ')

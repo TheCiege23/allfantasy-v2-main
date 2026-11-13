@@ -16,7 +16,7 @@ function stableHash(input: string): string {
   return n.toString(16).padStart(8, "0") + Math.imul(h, 31).toString(16).slice(0, 8)
 }
 
-export type VoiceEventKind =
+type VoiceEventKind =
   | "draft_pick_made"
   | "auto_pick_made"
   | "waiver_claim_won"
@@ -41,7 +41,7 @@ function pickVariant(seed: string, lines: string[]): string {
   return lines[idx]!
 }
 
-export type FeedFlavorInput = {
+type FeedFlavorInput = {
   personality: BotPersonalityProfile
   kind: VoiceEventKind
   teamName: string

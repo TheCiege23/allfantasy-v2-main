@@ -13,7 +13,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 import { moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 
-export interface ActivityStreamViewProps {
+interface ActivityStreamViewProps {
   events: CommissionerActivityEventContract[]
   dataMode: CommissionerDataMode
   errorMessage?: string | null

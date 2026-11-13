@@ -56,7 +56,7 @@ export {
   SLEEPER_POOL_TABLE_ROW_HEIGHT,
 } from './SleeperPoolTable.constants'
 
-export interface SleeperPoolTableProps {
+interface SleeperPoolTableProps {
   filtered: PlayerEntry[]
   draftedNames: Set<string>
   draftedPlayerIds?: ReadonlySet<string> | null

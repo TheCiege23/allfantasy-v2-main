@@ -5,7 +5,7 @@
 import type { StrategySport } from './types'
 import type { DraftPickFact } from './types'
 
-export interface DraftMetaSummary {
+interface DraftMetaSummary {
   sport: StrategySport
   leagueFormat: string
   leagueId: string

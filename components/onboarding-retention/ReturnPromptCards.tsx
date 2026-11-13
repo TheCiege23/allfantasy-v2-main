@@ -35,7 +35,7 @@ function getSafeHref(href: string): string {
   return "/dashboard"
 }
 
-export interface ReturnPromptCardsProps {
+interface ReturnPromptCardsProps {
   initialNudges?: RetentionNudge[] | null
   onDismiss?: (nudgeId: string) => void
   className?: string

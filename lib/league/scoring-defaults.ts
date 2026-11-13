@@ -12,7 +12,7 @@ export type FormatScoringModifierId =
   | 'salary_cap'
   | 'best_ball'
 
-export type FormatScoringProfile = {
+type FormatScoringProfile = {
   sport: LeagueSport
   scoringTemplateId: string
   scoringFormat: string

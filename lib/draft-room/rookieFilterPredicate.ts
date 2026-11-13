@@ -17,7 +17,7 @@
  * - Unknown rows stay excluded from both filters.
  */
 
-export type DraftSportForRookieInference =
+type DraftSportForRookieInference =
   | 'NFL'
   | 'NCAAF'
   | 'NBA'
@@ -27,7 +27,7 @@ export type DraftSportForRookieInference =
   | 'SOCCER'
   | string
 
-export type RookieFilterCandidate = {
+type RookieFilterCandidate = {
   sport?: DraftSportForRookieInference | null
   isRookie?: boolean
   rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
@@ -46,7 +46,7 @@ export type RookieFilterCandidate = {
   playerClass?: string | null
 }
 
-export type VetFilterCandidate = {
+type VetFilterCandidate = {
   isRookie?: boolean
   rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown' | null
   yearsExp?: number | null

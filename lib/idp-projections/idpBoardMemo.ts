@@ -15,7 +15,7 @@
  */
 import type { LeagueIdpVorpResult } from './leagueIdpVorp'
 
-export const IDP_BOARD_TTL_MS = 60_000
+const IDP_BOARD_TTL_MS = 60_000
 const IDP_BOARD_MEMO_MAX = 64
 
 const memo = new Map<string, { at: number; board: Promise<LeagueIdpVorpResult> }>()

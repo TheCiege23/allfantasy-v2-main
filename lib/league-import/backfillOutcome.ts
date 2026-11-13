@@ -26,9 +26,9 @@
  * `seasonsDiscovered` and `seasonsImported` can.
  */
 
-export type BackfillStatus = 'complete' | 'failed' | 'skipped' | 'unknown'
+type BackfillStatus = 'complete' | 'failed' | 'skipped' | 'unknown'
 
-export type BackfillOutcome = {
+type BackfillOutcome = {
   status: BackfillStatus
   /** Prior seasons the provider chain turned up. Null when unreadable. */
   seasonsDiscovered: number | null

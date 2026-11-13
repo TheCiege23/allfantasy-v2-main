@@ -9,12 +9,12 @@
  * - Must not look like a phone number
  */
 
-export const USERNAME_MIN = 3
-export const USERNAME_MAX = 30
+const USERNAME_MIN = 3
+const USERNAME_MAX = 30
 
 const USERNAME_RE = /^[A-Za-z0-9_]+$/
 
-export type UsernameValidationResult =
+type UsernameValidationResult =
   | { ok: true; normalized: string; lookup: string }
   | { ok: false; reason: string }
 

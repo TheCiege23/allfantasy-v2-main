@@ -10,7 +10,7 @@
  * most of the league. Two years apart is not staleness, it is two people (or a broken row), and
  * that is refused. Inside one year the HIGHER value wins, because a stale age only ever lags.
  */
-export const MAX_AGREEING_SPREAD = 1
+const MAX_AGREEING_SPREAD = 1
 
 export function agreedAge(rows: ReadonlyArray<{ age: number | null | undefined }>): number | null {
   const ages = rows.map((r) => r.age).filter((a): a is number => typeof a === 'number' && a > 0)

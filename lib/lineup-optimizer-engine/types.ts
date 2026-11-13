@@ -25,7 +25,7 @@ export interface LineupOptimizerInput {
   slots?: OptimizerSlotInput[]
 }
 
-export interface OptimizedStarter {
+interface OptimizedStarter {
   slotId: string
   slotCode: string
   slotLabel: string

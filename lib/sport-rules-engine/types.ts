@@ -31,7 +31,7 @@ export interface RosterRules {
 }
 
 /** Valid scoring format for a sport. */
-export interface ScoringFormatOption {
+interface ScoringFormatOption {
   value: string
   label: string
 }
@@ -58,7 +58,7 @@ export interface PlayerPoolRules {
 }
 
 /** Default pick-order mode when sport defaults do not specify another id. */
-export type SportRulesDefaultDraftType = Exclude<PlatformSportRulesDraftTypeId, 'mock_draft'>
+type SportRulesDefaultDraftType = Exclude<PlatformSportRulesDraftTypeId, 'mock_draft'>
 
 /** Draft options for a sport. */
 export interface DraftOptionRules {

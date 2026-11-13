@@ -24,7 +24,7 @@ export type DynastyTitleRow = {
 }
 
 /** Which roster is yours, per source. */
-export type FinalsOwnership = {
+type FinalsOwnership = {
   /** Sleeper league id (that season's) → your roster id in it, from legacy history. */
   legacyRosterBySleeperLeague: ReadonlyMap<string, number>
   /** `League.id` → the external id of the team you claimed there (the current season's id). */

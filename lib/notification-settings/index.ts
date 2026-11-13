@@ -14,12 +14,9 @@ export {
 } from "./NotificationSettingsService"
 export {
   sendTestNotification,
-  type SendTestNotificationResult,
 } from "./TestNotificationService"
 export {
   describeTestNotificationResult,
-  type TestNotificationOutcome,
-  type TestNotificationTone,
 } from "./testResultMessage"
 export type { DeliveryMethodAvailability } from "./DeliveryMethodResolver"
 export type {

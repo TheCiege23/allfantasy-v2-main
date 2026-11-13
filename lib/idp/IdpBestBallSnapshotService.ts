@@ -6,7 +6,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export interface IdpBestBallStarterEntry {
+interface IdpBestBallStarterEntry {
   playerId: string
   slotName: string
 }

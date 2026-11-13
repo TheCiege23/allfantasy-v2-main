@@ -7,7 +7,7 @@ import { sanitizeProviderError } from '@/lib/ai-orchestration/provider-utils'
 import type { ProviderStatus } from '@/lib/provider-config'
 
 export type ProviderId = 'openai' | 'deepseek' | 'grok' | 'clearsports'
-export type ProviderPublicId = 'openai' | 'deepseek' | 'xai' | 'clearsports'
+type ProviderPublicId = 'openai' | 'deepseek' | 'xai' | 'clearsports'
 
 const MAX_FAILURES_PER_PROVIDER = 50
 const MAX_FALLBACK_EVENTS = 100
@@ -113,9 +113,9 @@ export function logDiagnosticsEvent(event: 'failure' | 'fallback' | 'latency', p
   }
 }
 
-export type ProviderStatusState = 'configured' | 'available' | 'degraded' | 'unavailable' | 'fallback_active'
+type ProviderStatusState = 'configured' | 'available' | 'degraded' | 'unavailable' | 'fallback_active'
 
-export interface ProviderDiagnosticsEntry {
+interface ProviderDiagnosticsEntry {
   id: ProviderPublicId
   state: ProviderStatusState
   configured: boolean
@@ -132,19 +132,19 @@ export interface ProviderDiagnosticsEntry {
   fallbackUsedCount: number
 }
 
-export interface RecentFailureSummary {
+interface RecentFailureSummary {
   provider: ProviderPublicId
   at: number
   error?: string
 }
 
-export interface FallbackEventSummary {
+interface FallbackEventSummary {
   at: number
   primary: ProviderPublicId
   used: ProviderPublicId
 }
 
-export interface DegradedModeSummary {
+interface DegradedModeSummary {
   active: boolean
   recentEvents: Array<{
     at: number
@@ -152,7 +152,7 @@ export interface DegradedModeSummary {
   }>
 }
 
-export interface ClearSportsSyncHistoryEntry {
+interface ClearSportsSyncHistoryEntry {
   entityType: string
   sport?: string | null
   key?: string | null
@@ -167,7 +167,7 @@ export interface ClearSportsSyncHistoryEntry {
   updatedAt: number
 }
 
-export interface ProviderDiagnosticsPayload {
+interface ProviderDiagnosticsPayload {
   providers: ProviderDiagnosticsEntry[]
   recentFailures: RecentFailureSummary[]
   fallbackEvents: FallbackEventSummary[]

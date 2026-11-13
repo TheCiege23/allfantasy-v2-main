@@ -11,11 +11,11 @@
  * Client-safe and pure; pass `now` (and a time zone for "today") from the caller.
  */
 
-export const SURVIVOR_MOODS = ['day', 'dusk', 'night', 'exile'] as const
+const SURVIVOR_MOODS = ['day', 'dusk', 'night', 'exile'] as const
 export type SurvivorMood = (typeof SURVIVOR_MOODS)[number]
 
-export const SURVIVOR_SCENE_SPORTS = ['football', 'basketball', 'baseball', 'hockey', 'soccer'] as const
-export type SurvivorSceneSport = (typeof SURVIVOR_SCENE_SPORTS)[number]
+const SURVIVOR_SCENE_SPORTS = ['football', 'basketball', 'baseball', 'hockey', 'soccer'] as const
+type SurvivorSceneSport = (typeof SURVIVOR_SCENE_SPORTS)[number]
 
 /**
  * How long the island stays at night after the read-out begins when the council does not say
@@ -52,7 +52,7 @@ function calendarDay(ms: number, timeZone?: string): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
 }
 
-export type SurvivorMoodInput = {
+type SurvivorMoodInput = {
   now: Date | number
   /** The open council's vote deadline. */
   voteDeadlineAt?: Instant

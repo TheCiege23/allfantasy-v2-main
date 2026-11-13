@@ -40,7 +40,7 @@ type RiBatchEntry = {
   source: 'rolling_insights'
 }
 
-export type PlayersTabProps = {
+type PlayersTabProps = {
   league: UserLeague
   onPlayerClick: (playerId: string) => void
   sport?: string

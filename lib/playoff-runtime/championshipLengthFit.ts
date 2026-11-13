@@ -36,7 +36,7 @@ import { CHAMPIONSHIP_ROUND_WHERE, lastWeekOfPlayoffRound, readChampionshipLengt
 import { maxPlayoffTeamsThatFit, playoffRoundsForTeams } from './playoffFit'
 import { PLAYOFF_SERIES_SETTINGS_KEY, playoffSeriesSettingsValue, readPlayoffSeriesLengths } from './playoffSeries'
 
-export type PlayoffFitOverflow = {
+type PlayoffFitOverflow = {
   lastPlayoffWeek: number
   seasonWeeks: number
   /** Where `seasonWeeks` came from. */

@@ -25,7 +25,7 @@ import { planBestLineup, type LineupPlan } from '@/lib/inactive-manager/inactive
 
 export const AUTO_BENCH_BYE_KEY = 'auto_bench_bye'
 
-export type AutoBenchByeSetting = { on: boolean; byUserId: string; since: string }
+type AutoBenchByeSetting = { on: boolean; byUserId: string; since: string }
 
 const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 

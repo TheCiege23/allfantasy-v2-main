@@ -2,11 +2,11 @@ import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerPr
 import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { normalizePosition, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
-export const NFL_REDRAFT_CANONICAL_PLAYER_MODEL_VERSION = 'nfl-redraft-player-v1' as const
+const NFL_REDRAFT_CANONICAL_PLAYER_MODEL_VERSION = 'nfl-redraft-player-v1' as const
 
 export type NflRedraftDataState = 'available' | 'missing' | 'stale' | 'unknown'
 
-export type NflRedraftProviderIds = {
+type NflRedraftProviderIds = {
   allFantasyId: string
   providerPlayerId: string | null
   sleeperId: string | null
@@ -18,20 +18,20 @@ export type NflRedraftProviderIds = {
   rollingInsightsId: string | null
 }
 
-export type NflRedraftMediaFallbackKind =
+type NflRedraftMediaFallbackKind =
   | 'none'
   | 'player-silhouette'
   | 'team-badge'
   | 'team-text-badge'
 
-export type NflRedraftMediaAsset = {
+type NflRedraftMediaAsset = {
   url: string | null
   source: string | null
   fallbackKind: NflRedraftMediaFallbackKind
   safeToRenderImage: boolean
 }
 
-export type NflRedraftHistoricalSeason = {
+type NflRedraftHistoricalSeason = {
   season: number | null
   gamesPlayed: number | null
   fantasyPoints: number | null
@@ -59,7 +59,7 @@ export type NflRedraftHistoricalSeason = {
   }
 }
 
-export type NflRedraftProjectionSnapshot = {
+type NflRedraftProjectionSnapshot = {
   weeklyProjectedPoints: number | null
   seasonProjectedPoints: number | null
   restOfSeasonProjectedPoints: number | null
@@ -74,7 +74,7 @@ export type NflRedraftProjectionSnapshot = {
   unavailable: boolean
 }
 
-export type NflRedraftInjurySnapshot = {
+type NflRedraftInjurySnapshot = {
   designation: string | null
   practiceStatus: string | null
   gameStatus: string | null
@@ -83,14 +83,14 @@ export type NflRedraftInjurySnapshot = {
   freshness: NflRedraftDataState
 }
 
-export type NflRedraftNewsSnapshot = {
+type NflRedraftNewsSnapshot = {
   summary: string | null
   source: string | null
   updatedAt: string | null
   freshness: NflRedraftDataState
 }
 
-export type NflRedraftFallback = {
+type NflRedraftFallback = {
   field: string
   reason: string
   source: string | null
@@ -149,7 +149,7 @@ export type NflRedraftCanonicalPlayer = {
   fallbacks: NflRedraftFallback[]
 }
 
-export type BuildNflRedraftCanonicalPlayerOptions = {
+type BuildNflRedraftCanonicalPlayerOptions = {
   teamLogoUrl?: string | null
   now?: Date
 }

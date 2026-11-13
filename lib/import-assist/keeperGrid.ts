@@ -22,7 +22,7 @@
 import { keeperCostRound, roundLabel, type KeeperRules } from '@/lib/keeper/keeperRules'
 import type { KeeperCostRule, KeeperDraftPick } from '@/lib/keeper/importedKeeperCost'
 
-export type GridPlayer = {
+type GridPlayer = {
   playerId: string
   name: string
   /** Round he costs next season, or null when he cannot be kept / is not priced by round. */
@@ -35,7 +35,7 @@ export type GridPlayer = {
   blocked: string | null
 }
 
-export type GridTeam = { teamId: string; name: string; players: GridPlayer[] }
+type GridTeam = { teamId: string; name: string; players: GridPlayer[] }
 
 export type KeeperGrid = {
   /** The draft the costs are for. */

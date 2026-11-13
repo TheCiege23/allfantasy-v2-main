@@ -5,7 +5,7 @@
  * tribe colour. Used wherever the draft room names a manager once tribes are locked before the
  * draft (team strip, board headers, big screen).
  */
-export type SurvivorTribeBadgeTribe = { name: string; colorHex: string | null; markUrl: string | null }
+type SurvivorTribeBadgeTribe = { name: string; colorHex: string | null; markUrl: string | null }
 
 const FALLBACK = '#22d3ee'
 

@@ -18,7 +18,7 @@ export type SeasonReportRow = {
   reason: string
 }
 
-export type SeasonReportLeague = { id: string; key: string; name: string; division: string | null }
+type SeasonReportLeague = { id: string; key: string; name: string; division: string | null }
 export type SeasonReportSnapshot = {
   schemaVersion: 1
   stage: number

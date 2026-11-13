@@ -2,7 +2,7 @@ import type { LeagueSport } from '@prisma/client'
 import { OPTIMAL_LINEUP_ALGORITHM } from '@/lib/lineup-optimizer/optimalLineup'
 import { computeBestBallLineup, resolveBestBallSlots } from '@/lib/bestball/productionLineup'
 
-export type BestBallOptimizerPlayer = {
+type BestBallOptimizerPlayer = {
   playerId: string
   playerName: string
   position: string
@@ -10,7 +10,7 @@ export type BestBallOptimizerPlayer = {
   points: number
 }
 
-export type BestBallOptimizerResult = {
+type BestBallOptimizerResult = {
   starterIds: string[]
   totalPoints: number
   starters: Array<{

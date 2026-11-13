@@ -16,13 +16,13 @@ import { paidToolFetch, approvePaidToolQuote } from './paidToolClient'
  * network errors propagate as `fetch` raises them.
  */
 
-export type TokenConfirmationPreview = {
+type TokenConfirmationPreview = {
   tokenCost?: number
   currentBalance?: number
   featureLabel?: string
 }
 
-export type TokenConfirmationBody = {
+type TokenConfirmationBody = {
   code?: string
   message?: string
   preview?: TokenConfirmationPreview
@@ -53,7 +53,7 @@ function defaultConfirm(message: string): boolean {
   return window.confirm(message)
 }
 
-export type TokenConfirmedPost = {
+type TokenConfirmedPost = {
   /** The last response: the confirmed call's, or the 409 when the person declined. */
   response: Response
   /** True when the server asked and the person said no — nothing was spent. */

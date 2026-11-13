@@ -6,7 +6,7 @@ import type { PlatformChatMessage } from "@/types/platform-shared"
 import { getSafeMessageMediaUrl } from "./safeMedia"
 import { gifProviderForUrl, isAllowedGifUrl } from "./GIFIntegrationResolver"
 
-export type RichMessageRendererProps = {
+type RichMessageRendererProps = {
   message: PlatformChatMessage
   onImageClick?: (url: string) => void
   className?: string
@@ -15,7 +15,7 @@ export type RichMessageRendererProps = {
 
 type RichMeta = Record<string, unknown> | null | undefined
 
-export type MessageGif = { previewUrl: string; url: string; title: string }
+type MessageGif = { previewUrl: string; url: string; title: string }
 export type SafeGif = MessageGif & { provider: "klipy" | "giphy" | "tenor" }
 
 function str(v: unknown): string | null {

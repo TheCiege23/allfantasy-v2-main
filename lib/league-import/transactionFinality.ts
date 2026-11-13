@@ -13,7 +13,7 @@
 import type { ImportProvider } from '@/lib/league-import/types'
 
 /** Statuses the ESPN/Yahoo/MFL importers report for a transaction that actually happened. */
-export const FINAL_TRANSACTION_STATUSES: ReadonlySet<string> = new Set([
+const FINAL_TRANSACTION_STATUSES: ReadonlySet<string> = new Set([
   'processed',
   'executed',
   'complete',
@@ -27,7 +27,7 @@ export const FINAL_TRANSACTION_STATUSES: ReadonlySet<string> = new Set([
  * feed; only these stages mean assets moved. See `STATUS_PRIORITY` in
  * `lib/league-import/fleaflicker/fleaflickerTransactions.ts` for the full vocabulary.
  */
-export const FLEAFLICKER_FINAL_TRADE_STATUSES: ReadonlySet<string> = new Set([
+const FLEAFLICKER_FINAL_TRADE_STATUSES: ReadonlySet<string> = new Set([
   'trade_accepted',
   'trade_accepted_final',
 ])

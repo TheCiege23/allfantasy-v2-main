@@ -16,7 +16,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { teamIdentity } from '@/lib/tournament/importedStandingsSource'
 
-export type LinkOutcome =
+type LinkOutcome =
   | { ok: true; userId: string }
   | { ok: false; error: string; status: 400 | 404 | 409 }
 

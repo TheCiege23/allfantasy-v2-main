@@ -75,7 +75,7 @@ export function readSlotRequirements(starters: unknown): SlotRequirements | null
   return { dedicated, flex }
 }
 
-export type PositionNeed = {
+type PositionNeed = {
   position: string
   /** Dedicated slots this league starts at the position. */
   required: number
@@ -213,12 +213,12 @@ export function computeRosterNeed(args: {
  * Returns null when the need could not be computed, so callers report absence
  * rather than a neutral 1.0 that looks like a finding.
  */
-export const NEED_PREMIUM_PER_DEFICIT = 0.06
+const NEED_PREMIUM_PER_DEFICIT = 0.06
 /** Cap when the position can simply be replaced off waivers. */
-export const NEED_PREMIUM_CAP = 0.15
+const NEED_PREMIUM_CAP = 0.15
 /** Cap when nothing at the position is available anywhere. */
-export const SCARCE_PREMIUM_CAP = 0.6
-export const SURPLUS_DISCOUNT = 0.04
+const SCARCE_PREMIUM_CAP = 0.6
+const SURPLUS_DISCOUNT = 0.04
 
 /**
  * How hard this position is to fill without trading, from 0 (walk to the waiver
@@ -312,7 +312,7 @@ export function counterpartyPriceDelta(args: {
  * sentence is the deliverable, the small price nudge is not.
  */
 
-export type ByeShortfall = {
+type ByeShortfall = {
   week: number
   position: string
   /** Startable bodies at the position that week. */
@@ -332,7 +332,7 @@ export type ByeShortfall = {
  * "off" would invent collisions out of missing data, and a false alarm on a
  * trade screen is worse than a missed one — it teaches managers to ignore it.
  */
-export function byeShortfalls(args: {
+function byeShortfalls(args: {
   requirements: SlotRequirements
   roster: Array<{ position: string; byeWeek: number | null }>
 }): ByeShortfall[] {
@@ -363,10 +363,10 @@ export function byeShortfalls(args: {
 }
 
 /** How much a bye collision should move the price of one deal, and what to say. */
-export const BYE_COLLISION_DISCOUNT = 0.03
-export const BYE_COLLISION_CAP = 0.09
+const BYE_COLLISION_DISCOUNT = 0.03
+const BYE_COLLISION_CAP = 0.09
 
-export type ByeCollision = {
+type ByeCollision = {
   factor: number
   basis: string
   /** Weeks this trade would newly break. */

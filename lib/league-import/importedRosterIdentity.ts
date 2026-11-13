@@ -34,7 +34,7 @@ export type IncomingTeam = {
   keepKey?: boolean
 }
 
-export type RosterWritePlan = {
+type RosterWritePlan = {
   teamId: string
   /** The row to update, or null to create one. */
   rosterId: string | null
@@ -49,7 +49,7 @@ export type RosterWritePlan = {
   keyConflict: boolean
 }
 
-export type RosterWritePlanResult = {
+type RosterWritePlanResult = {
   plans: RosterWritePlan[]
   /** Rows bound to a team this import writes, other than the one chosen for it. */
   duplicateRows: number
@@ -76,7 +76,7 @@ export function importedOrphanOwnerKey(provider: string, teamId: string): string
 }
 
 /** Where a new row goes when its owner's key is taken: a placeholder no manager can hold. */
-export function importedPlaceholderOwnerKey(provider: string, teamId: string): string {
+function importedPlaceholderOwnerKey(provider: string, teamId: string): string {
   return `import:${String(provider || 'import').trim().toLowerCase()}:${teamId}`
 }
 

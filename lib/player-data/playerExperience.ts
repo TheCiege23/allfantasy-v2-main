@@ -14,9 +14,9 @@ import {
 import { getCollegeClassBucket, normalizeCollegeClass } from '@/lib/draft-room/collegeClass'
 import { resolveNflRookieSource } from '@/lib/providers/nflRookieSourcePolicy'
 
-export type PlayerExperienceStatus = 'rookie' | 'veteran' | 'college' | 'devy' | 'unknown'
+type PlayerExperienceStatus = 'rookie' | 'veteran' | 'college' | 'devy' | 'unknown'
 
-export type PlayerExperienceSource =
+type PlayerExperienceSource =
   | 'rolling_insights_imported'
   | 'thesportsdb'
   | 'clearsports'
@@ -63,7 +63,7 @@ function mapSignalSource(s: ProviderExperienceSignal['source']): PlayerExperienc
   }
 }
 
-export function calculateProYearsFromDraftYear(
+function calculateProYearsFromDraftYear(
   draftYear: number | null | undefined,
   currentSeason: number,
 ): { proYears: number | null; source: PlayerExperienceSource; reason: string } {
@@ -81,14 +81,14 @@ export function calculateProYearsFromDraftYear(
   return { proYears, source: 'derived_from_draft_year', reason: 'currentSeason_minus_draftYear' }
 }
 
-export function calculateProYearsFromDebutYear(
+function calculateProYearsFromDebutYear(
   debutYear: number | null | undefined,
   currentSeason: number,
 ): { proYears: number | null; source: PlayerExperienceSource; reason: string } {
   return calculateProYearsFromDraftYear(debutYear, currentSeason)
 }
 
-export type ResolvePlayerExperienceInput = {
+type ResolvePlayerExperienceInput = {
   sport: LeagueSport | string
   /** Normalized draft/waiver row */
   entry?: NormalizedDraftEntry

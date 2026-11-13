@@ -81,7 +81,7 @@ function getPointsForRound(round: string, scoring: ScoringProfile): number {
 
 // ─── Context type ─────────────────────────────────────────────────────────────
 
-export type WcContext = {
+type WcContext = {
   challengeId: string
   challengeName: string
   totalEntries: number
@@ -95,7 +95,7 @@ export type WcContext = {
 
 // ─── Provider data ────────────────────────────────────────────────────────────
 
-export type WcProviderData = {
+type WcProviderData = {
   liveFixtures: Array<{
     id: number
     homeTeam: string
@@ -110,7 +110,7 @@ export type WcProviderData = {
 
 // ─── Insights type ────────────────────────────────────────────────────────────
 
-export type WcInsights = {
+type WcInsights = {
   // Summary
   leaderboardSummary: {
     leader: { entryName: string; displayName: string; score: number } | null

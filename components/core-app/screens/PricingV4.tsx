@@ -88,7 +88,7 @@ export type PricingPack = {
   tokenAmount: number | null
 }
 
-export type PricingV4Props = {
+type PricingV4Props = {
   plans: PricingPlan[]
   packs: PricingPack[]
   /** Derived headline, e.g. "Save 28% paying yearly". Null when no plan has a yearly saving. */

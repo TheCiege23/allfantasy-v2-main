@@ -12,7 +12,7 @@ import '../survivor-core.css'
  * the tribemates and "Open tribe chat". Shown once per viewer per league; with reduced motion the
  * end state shows straight away (CSS). Only the viewer's own tribe and display names.
  */
-export interface TribeRevealData {
+interface TribeRevealData {
   tribeName: string
   crestUrl: string | null
   color: string | null
@@ -29,7 +29,7 @@ export function hasSeenTribeReveal(leagueId: string): boolean {
   }
 }
 
-export function markTribeRevealSeen(leagueId: string): void {
+function markTribeRevealSeen(leagueId: string): void {
   try { window.localStorage.setItem(SEEN_KEY(leagueId), '1') } catch { /* storage blocked: shows again next visit */ }
 }
 

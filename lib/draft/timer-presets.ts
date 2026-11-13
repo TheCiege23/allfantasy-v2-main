@@ -10,7 +10,7 @@
 
 export type TimerUnit = 'seconds' | 'minutes' | 'hours'
 
-export interface TimerPreset {
+interface TimerPreset {
   value: string
   label: string
   seconds: number

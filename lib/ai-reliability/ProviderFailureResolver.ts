@@ -4,7 +4,7 @@
 
 import type { ProviderResultMeta, ProviderStatus } from './types';
 
-export interface ProviderFailureState {
+interface ProviderFailureState {
   allFailed: boolean;
   someFailed: boolean;
   fallbackUsed: boolean;

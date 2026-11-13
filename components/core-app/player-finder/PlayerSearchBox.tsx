@@ -42,7 +42,7 @@ import { FINDER_SPORTS, type FinderSport } from '@/lib/core-app/finderSports'
 /** Languages whose chips are rebuilt from the fact; every other language keeps `suggestionChip`'s English. */
 const CHIP_TEXT: Partial<Record<string, (fact: SuggestionFact) => string>> = { es: suggestionChipText }
 
-export type SearchHit = {
+type SearchHit = {
   /** SportsPlayer.externalId, when the API is new enough to send it; the link degrades to a name search without it. */
   externalId?: string | null
   /** The feed that minted `externalId`; the ref carries it because ids collide across feeds (playerRef.ts). */

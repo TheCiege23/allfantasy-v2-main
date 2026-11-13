@@ -29,7 +29,7 @@ function withBold(text: string, token: string, bold: string) {
   )
 }
 
-export type LeagueInfoRailProps = {
+type LeagueInfoRailProps = {
   league: UserLeague
   teams: LeagueTeamSlot[]
   userTeamId?: string | null

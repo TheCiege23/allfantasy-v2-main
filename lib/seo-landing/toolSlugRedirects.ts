@@ -10,7 +10,7 @@
  */
 import type { ToolSlug } from '@/lib/seo-landing/config'
 
-export const RETIRED_TOOL_SLUGS: Record<string, ToolSlug> = {
+const RETIRED_TOOL_SLUGS: Record<string, ToolSlug> = {
   'matchup-simulator': 'simulation-lab',
 }
 

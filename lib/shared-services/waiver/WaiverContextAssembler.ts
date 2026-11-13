@@ -69,7 +69,7 @@ const SECTION_TO_SLOT: Record<RosterSectionKey, WaiverRosterPlayer['slot']> = {
   devy: 'taxi',
 }
 
-export interface BuildWaiverDecisionContextInput {
+interface BuildWaiverDecisionContextInput {
   leagueId: string
   rosterId: string
   currentWeek?: number
@@ -84,7 +84,7 @@ export interface BuildWaiverDecisionContextInput {
   maxResults?: number
 }
 
-export interface WaiverDecisionContext {
+interface WaiverDecisionContext {
   leagueId: string
   rosterId: string
   /** League.platform — 'native' or a real ImportProvider value. */

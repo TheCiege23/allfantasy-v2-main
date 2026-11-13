@@ -14,7 +14,7 @@ import '@/components/core-app/af-core-boards.css'
  * Links, not a client toggle: each view has its own loader, and a URL per view keeps both
  * addressable, as they were before.
  */
-export type LeaguesPortfolioView = 'leagues' | 'portfolio'
+type LeaguesPortfolioView = 'leagues' | 'portfolio'
 
 export function LeaguesPortfolioSwitch({ current, language }: { current: LeaguesPortfolioView; language: string }) {
   const copy = (english: string) => coreUiCopy(english, language)

@@ -13,7 +13,7 @@
 
 import type { SurvivorHostTilePayload } from './survivorHostTiles'
 
-export type PremiumThreatLevel = 'high' | 'medium' | 'low'
+type PremiumThreatLevel = 'high' | 'medium' | 'low'
 
 export type PremiumCastRow = {
   userId: string
@@ -24,14 +24,14 @@ export type PremiumCastRow = {
   isJuror: boolean
 }
 
-export type PremiumScoreRow = { userId: string; finalScore: number; wonIndividualImmunity: boolean; wonTribeImmunity: boolean }
+type PremiumScoreRow = { userId: string; finalScore: number; wonIndividualImmunity: boolean; wonTribeImmunity: boolean }
 
 /** One completed council read: the names on the parchments that counted. */
 export type PremiumReadCouncil = { week: number; councilNumber: number; votedNames: string[] }
 
 // ── Threat map ───────────────────────────────────────────────────────────────
 
-export type ThreatMapRow = {
+type ThreatMapRow = {
   name: string
   isYou: boolean
   seasonPoints: number
@@ -154,7 +154,7 @@ export function buildSocialPulseTile(input: {
 
 // ── Challenge outlook ────────────────────────────────────────────────────────
 
-export type ChallengeOutlookItem = {
+type ChallengeOutlookItem = {
   title: string
   status: 'open' | 'locked' | 'settled'
   locksAt: string | null

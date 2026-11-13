@@ -36,7 +36,7 @@ export interface VpnStatus {
   paidBlocked?: boolean
 }
 
-export type RelayRangesLoader = () => Promise<RelayRangeSet | null>
+type RelayRangesLoader = () => Promise<RelayRangeSet | null>
 
 export async function vpnStatusFromHeaders(
   headers: Headers,

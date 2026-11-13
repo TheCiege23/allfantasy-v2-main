@@ -22,7 +22,7 @@ import type { CommsTab } from './CommsDrawer'
 
 const PREFIX = 'af:comms:ui:v1:'
 
-export type CommsUiMemory = {
+type CommsUiMemory = {
   open?: boolean
   tab?: CommsTab
   scopeId?: string | null

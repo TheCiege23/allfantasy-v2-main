@@ -35,7 +35,7 @@ export function isPirateLeague(league: { name?: string | null; settings?: unknow
 }
 
 /** One side of a transaction as the stores hold it: counts are all this needs. */
-export type TransferSide = {
+type TransferSide = {
   playersIn: number
   picksIn: number
   /** FAAB received. `undefined` means the store never read FAAB — see `isOneWayTransfer`. */

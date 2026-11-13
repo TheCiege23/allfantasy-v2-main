@@ -28,7 +28,7 @@ export interface UTVEntry {
   updatedAt: string
 }
 
-export interface UTVPickEntry {
+interface UTVPickEntry {
   sport: SportKey
   year: number
   round: number

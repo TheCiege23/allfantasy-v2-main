@@ -26,7 +26,7 @@ export type LeagueType =
   | 'seasonal'
   | 'devy';
 
-export type SourceType = 'created' | 'imported';
+type SourceType = 'created' | 'imported';
 
 export type SourcePlatform =
   | 'espn'
@@ -70,7 +70,7 @@ export interface LeagueSettingsAuditEntry {
   previousSnapshot?: Partial<UnifiedLeagueSettings>;
 }
 
-export interface LeagueSettingsAudit {
+interface LeagueSettingsAudit {
   version: number;
   lastUpdatedAt: Date;
   lastUpdatedBy: string;
@@ -83,7 +83,7 @@ export interface LeagueSettingsAudit {
 // LEAGUE SETTINGS SECTIONS
 // ============================================================
 
-export interface LeagueSettingsMeta {
+interface LeagueSettingsMeta {
   sport: SupportedLeagueSport;
   leagueType: LeagueType;
   sourceType: SourceType;
@@ -93,7 +93,7 @@ export interface LeagueSettingsMeta {
   slug?: string;
 }
 
-export interface LeagueSettingsBasic {
+interface LeagueSettingsBasic {
   name: string;
   description?: string;
   visibility: 'public' | 'private' | 'invited';
@@ -101,7 +101,7 @@ export interface LeagueSettingsBasic {
   scoringFormat?: 'ppr' | 'half-ppr' | 'standard' | 'custom';
 }
 
-export interface PlayoffStructure {
+interface PlayoffStructure {
   enabled: boolean;
   numberOfPlayoffTeams?: number;
   playoffStartWeek?: number;
@@ -114,7 +114,7 @@ export interface PlayoffStructure {
   premiumPlayoffFormatEnabled?: boolean;
 }
 
-export interface LeagueSettingsLeague extends LeagueSettingsBasic {
+interface LeagueSettingsLeague extends LeagueSettingsBasic {
   playoffSettings: PlayoffStructure;
   schedule?: {
     type: 'balanced' | 'custom' | 'generated';
@@ -122,7 +122,7 @@ export interface LeagueSettingsLeague extends LeagueSettingsBasic {
   };
 }
 
-export interface TeamSettings {
+interface TeamSettings {
   numberOfTeams: number;
   teamNamingRules?: 'free' | 'enforced-name-only' | 'avatar-required';
   avatarSettings?: {
@@ -137,20 +137,20 @@ export interface TeamSettings {
   maxTransactionsPerTeam?: number;
 }
 
-export interface RosterConfigReference {
+interface RosterConfigReference {
   templateKey: string;
   isCustom: boolean;
   matchesTemplate: boolean;
   version: number;
 }
 
-export interface ScoringConfigReference {
+interface ScoringConfigReference {
   presetKey: string;
   isCustom: boolean;
   version: number;
 }
 
-export interface DraftSettings {
+interface DraftSettings {
   draftType: 'snake' | 'linear' | 'auction' | 'best-ball' | 'tournament-bracket';
   draftOrder: 'randomized' | 'manual' | 'serpentine' | 'custom';
   snakeDirection?: 'snake' | 'linear';
@@ -168,7 +168,7 @@ export interface DraftSettings {
   };
 }
 
-export interface DivisionSettings {
+interface DivisionSettings {
   enabled: boolean;
   numberOfDivisions?: number;
   divisionNames?: string[];
@@ -177,7 +177,7 @@ export interface DivisionSettings {
   minimumTeamsPerDivision?: number;
 }
 
-export interface MemberSettings {
+interface MemberSettings {
   inviteSettings: {
     requiresCommissionerApproval: boolean;
     invitationExpiry?: number; // days
@@ -200,7 +200,7 @@ export interface MemberSettings {
   bootRulesEnabled?: boolean;
 }
 
-export interface CoOwnerSettings {
+interface CoOwnerSettings {
   coOwnerEnabled: boolean;
   coOwnerPermissionScope?: 'read-only' | 'limited-edit' | 'roster-edit' | 'full-edit';
   maxCoOwnersPerTeam?: number;
@@ -210,7 +210,7 @@ export interface CoOwnerSettings {
   };
 }
 
-export interface CommissionerControlSettings {
+interface CommissionerControlSettings {
   forceLineupEnabled?: boolean;
   forceLineupLockTime?: string; // ISO time string
   lockUnlockWaiversEnabled?: boolean;
@@ -226,7 +226,7 @@ export interface CommissionerControlSettings {
   };
 }
 
-export interface ScheduleSettings {
+interface ScheduleSettings {
   type: 'balanced' | 'custom' | 'generated';
   matchupsPerTeam?: number;
   customSchedule?: Array<{

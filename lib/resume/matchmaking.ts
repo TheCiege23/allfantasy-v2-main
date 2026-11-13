@@ -26,7 +26,7 @@ export type LeaguePreferenceProfile = {
   desiredCompetitiveness: number // 0..1
 }
 
-export type MatchmakingBreakdown = {
+type MatchmakingBreakdown = {
   ratingProximity: number
   difficultyPreference: number
   formatOverlap: number
@@ -35,7 +35,7 @@ export type MatchmakingBreakdown = {
   reliability: number
 }
 
-export type MatchmakingResult = {
+type MatchmakingResult = {
   compatibility: number
   breakdown: MatchmakingBreakdown
 }

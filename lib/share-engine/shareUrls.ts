@@ -30,7 +30,7 @@ function buildShareText(payload: SharePayload, overrideMessage?: string): string
   return trimToLength(`${base}${hashtags}`.trim(), 260);
 }
 
-export function getXShareUrl(url: string, text: string): string {
+function getXShareUrl(url: string, text: string): string {
   const params = new URLSearchParams({
     url,
     text: trimToLength(text, 240),
@@ -38,7 +38,7 @@ export function getXShareUrl(url: string, text: string): string {
   return `https://twitter.com/intent/tweet?${params.toString()}`;
 }
 
-export function getRedditShareUrl(url: string, title: string): string {
+function getRedditShareUrl(url: string, title: string): string {
   const params = new URLSearchParams({
     url,
     title: trimToLength(title, 300),
@@ -46,11 +46,11 @@ export function getRedditShareUrl(url: string, title: string): string {
   return `https://www.reddit.com/submit?${params.toString()}`;
 }
 
-export function getEmailShareUrl(url: string, subject: string, body: string): string {
+function getEmailShareUrl(url: string, subject: string, body: string): string {
   return `mailto:?subject=${encodeURIComponent(trimToLength(subject, 120))}&body=${encodeURIComponent(body)}`;
 }
 
-export function getSmsShareUrl(url: string, message: string): string {
+function getSmsShareUrl(url: string, message: string): string {
   return `sms:?body=${encodeURIComponent(`${trimToLength(message, 220)} ${url}`.trim())}`;
 }
 

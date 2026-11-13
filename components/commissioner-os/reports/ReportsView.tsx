@@ -18,7 +18,7 @@ import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cosErrorText, reportsCopy, reportText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
-export interface ReportsViewProps {
+interface ReportsViewProps {
   templates: ReportTemplate[]
   history: GeneratedReport[]
   dataMode: CommissionerDataMode

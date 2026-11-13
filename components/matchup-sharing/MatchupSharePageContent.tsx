@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { MatchupShareCard } from './MatchupShareCard'
 import type { MatchupSharePayload } from '@/lib/matchup-sharing/types'
 
-export interface MatchupSharePageContentProps {
+interface MatchupSharePageContentProps {
   payload: MatchupSharePayload
 }
 

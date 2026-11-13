@@ -16,7 +16,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type PickemContext = {
+type PickemContext = {
   poolId: string
   poolName: string
   sport: string // "nfl" | "ncaa_football" | "nhl" | etc.
@@ -34,12 +34,12 @@ export type PickemContext = {
   leaderboard: Array<{ rank: number; displayName: string; entryName: string; totalScore: number; correctPicks: number }>
 }
 
-export type PickemProviderData = {
+type PickemProviderData = {
   liveScores: Array<{ gameId: string; homeScore: number; awayScore: number; status: string; quarter: string | null }>
   finalResults: Array<{ gameId: string; winner: "home" | "away" | null }>
 }
 
-export type PickemInsights = {
+type PickemInsights = {
   topSwingGame: {
     description: string
     homePicks: number

@@ -26,7 +26,7 @@ import {
   sleeperDefenseId,
 } from '@/lib/draft/sleeperNameCandidates'
 
-export interface SleeperBoardPlayer {
+interface SleeperBoardPlayer {
   /** Bare Sleeper id — a number for a player, the team abbreviation (`BUF`) for a team defense. */
   id: string
   name: string

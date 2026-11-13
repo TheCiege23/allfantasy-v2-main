@@ -6,7 +6,7 @@
 import type { CreateLeagueSuccessResponse } from '@/lib/league-creation/canonical/types'
 
 /** Extended league object for POST /api/league/create compatibility + canonical fields. */
-export type LegacyLeagueCreateSuccessJson = {
+type LegacyLeagueCreateSuccessJson = {
   success: true
   league: {
     id: string

@@ -3,7 +3,7 @@ import { cfbdScheduleTeamKeys, exactKey } from '@/lib/sports-data/collegeTeamNam
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import type { CfbdSchoolFact, NcaafIdentityRow } from './ncaafFantraxIdentityPlan'
 
-export type CurrentCfbdRosterProof = { externalId: string; name: string; position: string | null; college: string | null; team: string | null }
+type CurrentCfbdRosterProof = { externalId: string; name: string; position: string | null; college: string | null; team: string | null }
 const nameKey = (value: string) => { const p=value.split(','); return normalizePlayerName(p.length===2?`${p[1]} ${p[0]}`:value).replace(/['’-]/g,'') }
 const roles = (value: string | null) => String(value??'').toUpperCase().split(/[,/\s]+/).map(p=>p==='FB'?'RB':p==='PK'?'K':p).filter(p=>['QB','RB','WR','TE','K','P','DL','DE','DT','LB','DB','CB','S'].includes(p))
 

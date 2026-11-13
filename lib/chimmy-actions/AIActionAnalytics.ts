@@ -40,14 +40,14 @@ interface SurfaceMetric {
   conversionRate: number
 }
 
-export interface MeasurableOutcomeEvent {
+interface MeasurableOutcomeEvent {
   outcomeType: string
   value?: number
   direction?: 'positive' | 'negative' | 'neutral'
   source: string
 }
 
-export interface MeasurableOutcomeAdapter {
+interface MeasurableOutcomeAdapter {
   id: string
   match: (row: EventRow) => boolean
   derive: (row: EventRow) => MeasurableOutcomeEvent | null

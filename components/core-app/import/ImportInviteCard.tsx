@@ -21,12 +21,12 @@ import { useEffect, useState } from 'react'
 import { smsInviteHref, whatsAppInviteHref } from '@/lib/league/league-invite-link'
 import type { ImportProvider } from '@/lib/league-import/types'
 
-export function importInviteUrl(provider: ImportProvider, sourceId: string, origin: string): string {
+function importInviteUrl(provider: ImportProvider, sourceId: string, origin: string): string {
   const qs = new URLSearchParams({ provider, leagueId: sourceId })
   return `${origin.replace(/\/$/, '')}/import?${qs.toString()}`
 }
 
-export type ImportInviteCardProps = {
+type ImportInviteCardProps = {
   provider: ImportProvider
   providerLabel: string
   sourceId: string

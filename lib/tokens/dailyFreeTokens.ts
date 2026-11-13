@@ -30,7 +30,7 @@ const CHIMMY_SPEND_RULE_CODE = 'ai_chimmy_chat_message'
  */
 export const REVIEW_ACCOUNT_CHIMMY_QUESTIONS_PER_DAY = 25
 
-export function reviewAccountUserIds(env: Record<string, string | undefined> = process.env): Set<string> {
+function reviewAccountUserIds(env: Record<string, string | undefined> = process.env): Set<string> {
   return new Set(
     (env.CHIMMY_REVIEW_ACCOUNT_USER_IDS ?? '')
       .split(',')
@@ -52,7 +52,7 @@ function todayKey(userId: string, now: Date): string {
   return `daily-free:${userId}:${now.toISOString().slice(0, 10)}`
 }
 
-export type DailyFreeGrant =
+type DailyFreeGrant =
   | { granted: number; reason: 'granted' }
   | { granted: 0; reason: 'already_granted_today' | 'at_or_above_floor' | 'no_spend_rule' }
 

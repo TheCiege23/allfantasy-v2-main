@@ -7,9 +7,9 @@
  * client-safe.
  */
 
-export type SurvivorCommissionerTodoTone = 'action' | 'heads_up'
+type SurvivorCommissionerTodoTone = 'action' | 'heads_up'
 
-export type SurvivorCommissionerTodoItem = {
+type SurvivorCommissionerTodoItem = {
   id: string
   tone: SurvivorCommissionerTodoTone
   title: string

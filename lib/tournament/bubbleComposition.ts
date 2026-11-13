@@ -30,7 +30,7 @@
  * that is not ingested yet — see the weekly ingest work.
  */
 
-export type BubbleComposition<T> = {
+type BubbleComposition<T> = {
   /** Through, and not at risk. */
   safe: T[]
   /** Inside the cut, but defending their place in the bubble. */

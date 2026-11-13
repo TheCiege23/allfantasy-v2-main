@@ -32,7 +32,7 @@
  */
 
 /** One round's answer from `POST /api/core/sync`. Every field is optional: it is a wire payload. */
-export type SyncRoundResponse = {
+type SyncRoundResponse = {
   ok?: boolean
   totalCandidates?: number
   attempted?: number
@@ -81,7 +81,7 @@ export type SyncCheckpoint = {
   rounds: number
 }
 
-export type RunSyncRoundsDeps = {
+type RunSyncRoundsDeps = {
   initialOnly?: string[]
   initialCheckpoint?: SyncCheckpoint
   /** Posts one round. `only` is null on the first round, then the previous `remaining`. */

@@ -21,7 +21,7 @@ export interface ExileBossBoardView {
   myOutcome: { kind: 'beat' | 'lost'; score: number; boss: number; tokensWiped: number; earnedToken: boolean; tokensHeld: number } | null
 }
 
-export type ExileBossBoardResult =
+type ExileBossBoardResult =
   | { ok: true; board: ExileBossBoardView | null }
   | { ok: false; status: 403 | 404; error: string }
 

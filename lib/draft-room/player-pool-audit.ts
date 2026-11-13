@@ -27,7 +27,7 @@ export type PlayerPoolAuditRow = {
   thesportsdbId?: string | null
 }
 
-export type DuplicateGroup = {
+type DuplicateGroup = {
   key: string
   count: number
   players: Array<{
@@ -39,7 +39,7 @@ export type DuplicateGroup = {
   }>
 }
 
-export type PlayerPoolAuditReport = {
+type PlayerPoolAuditReport = {
   totalPlayers: number
   duplicateCanonicalGroups: DuplicateGroup[]
   duplicateProviderGroups: DuplicateGroup[]

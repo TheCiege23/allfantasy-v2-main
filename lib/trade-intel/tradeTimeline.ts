@@ -1,9 +1,9 @@
-export type SeasonedTradeTimelineItem = {
+type SeasonedTradeTimelineItem = {
   season: string | null
   sortKey: number
 }
 
-export type TradeTimelineSeasonGroup<T> = {
+type TradeTimelineSeasonGroup<T> = {
   season: string
   items: T[]
 }

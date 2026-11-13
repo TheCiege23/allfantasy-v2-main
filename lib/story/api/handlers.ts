@@ -28,7 +28,7 @@ import {
   type FeatureGatePrincipal,
 } from '../featureGate'
 
-export type StoryAccessLevel = 'member' | 'commissioner'
+type StoryAccessLevel = 'member' | 'commissioner'
 
 /** Who may read each story type. Weekly recap is member-readable (it exposes no action-item meta). */
 export const STORY_ACCESS: Record<StoryType, StoryAccessLevel> = {
@@ -39,11 +39,11 @@ export const STORY_ACCESS: Record<StoryType, StoryAccessLevel> = {
   [STORY_TYPES.HEALTH_NARRATIVE]: 'commissioner',
 }
 
-export function isStoryType(v: string | null | undefined): v is StoryType {
+function isStoryType(v: string | null | undefined): v is StoryType {
   return !!v && (ALL_STORY_TYPES as string[]).includes(v)
 }
 
-export interface ApiResult {
+interface ApiResult {
   status: number
   body: unknown
 }

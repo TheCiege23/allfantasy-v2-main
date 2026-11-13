@@ -15,7 +15,7 @@ import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
  * the old per-league path.
  */
 
-export type RecapEmailLeague = { leagueId: string; leagueName: string; week: number; season: string; text: string }
+type RecapEmailLeague = { leagueId: string; leagueName: string; week: number; season: string; text: string }
 
 /** The recap's closing line points at a tab; in an email the button below does that job. */
 const IN_APP_FOOTER = /\n*Every number here comes from your real matchups\.[^\n]*$/

@@ -34,14 +34,14 @@ export type ChimmyHallucinationIssueKind =
 
 export type ChimmyHallucinationAction = 'pass' | 'annotate' | 'replace'
 
-export type ChimmyHallucinationIssue = {
+type ChimmyHallucinationIssue = {
   kind: ChimmyHallucinationIssueKind
   severity: 'hard' | 'soft'
   excerpt: string
   detail: string
 }
 
-export type ChimmyHallucinationCheckResult = {
+type ChimmyHallucinationCheckResult = {
   safe: boolean
   action: ChimmyHallucinationAction
   issues: ChimmyHallucinationIssue[]

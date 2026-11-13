@@ -39,7 +39,7 @@ import { projectionDisagrees } from '@/lib/core-app/weekGuide'
 
 /** Universal weekly priorities, then unitless matchup closeness. No playoff-odds exclusion. */
 
-export type WeekBoardProps = {
+type WeekBoardProps = {
   priorityLeagueIds?: string[]
   board: WeekBoardData
   /**

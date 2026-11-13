@@ -79,7 +79,7 @@ export const ENDGAME_OPTIONS: ReadonlyArray<{ value: GuillotineEndgameFormat; la
   { value: 'final_two', label: 'Final two showdown', help: 'When two teams remain, the best total over three weeks wins.' },
 ]
 
-export const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: string }> = [
+const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: string }> = [
   { value: 'bench_points', label: 'Fewer bench points is chopped' },
   { value: 'season_points', label: 'Fewer season points is chopped' },
   { value: 'previous_period', label: 'Lower score last week is chopped' },

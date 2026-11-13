@@ -6,7 +6,7 @@ import type { buildDraftRoomCoreState } from '@/lib/live-draft-engine'
 
 type DraftCore = ReturnType<typeof buildDraftRoomCoreState> | null
 
-export type DraftRoomPageDerivedState = {
+type DraftRoomPageDerivedState = {
   status: DraftSessionSnapshot['status']
   /** Board layout: snake / linear / auction — same as session draftType when loaded. */
   boardMode: DraftSessionSnapshot['draftType']

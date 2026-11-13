@@ -29,7 +29,7 @@ export const PROFILE_LABELS = [
 ] as const
 export type ProfileLabel = (typeof PROFILE_LABELS)[number]
 
-export const EVIDENCE_TYPES = [
+const EVIDENCE_TYPES = [
   'draft_tendency',
   'trade_frequency',
   'trade_timing',

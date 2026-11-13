@@ -36,7 +36,7 @@ import type { UserOsSnapshot } from '@/lib/decision-os/userOs'
 import { LeagueRulesHomeHost } from '@/components/league/native/LeagueRulesHomeHost'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
-export type LeagueTabProps = {
+type LeagueTabProps = {
   league: UserLeague
   teams: LeagueTeamSlot[]
   seasonSnapshot?: LeagueSeasonSnapshot | null

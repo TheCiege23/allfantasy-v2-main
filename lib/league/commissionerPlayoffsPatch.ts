@@ -20,15 +20,15 @@
  * in (lib/playoff-runtime/consolationPlaysFor.ts) — so the panel sends it only when it was changed.
  */
 
-export type PlayoffsPanelBody = Record<string, unknown>
+type PlayoffsPanelBody = Record<string, unknown>
 
-export type CommissionerPlayoffsLeague = {
+type CommissionerPlayoffsLeague = {
   settings: unknown
   playoffTeams: number | null
   playoffLowerBracket: string | null
 }
 
-export type CommissionerPlayoffsPatch =
+type CommissionerPlayoffsPatch =
   | { ok: true; patch: Record<string, unknown> }
   | { ok: false; status: number; error: string }
 

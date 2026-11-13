@@ -28,7 +28,7 @@ type StarterSlotInstance = {
   filled: DraftPickForLineup | null
 }
 
-export interface LineupSectionsFromPicks {
+interface LineupSectionsFromPicks {
   starters: Array<Record<string, unknown>>
   bench: Array<Record<string, unknown>>
   ir: Array<Record<string, unknown>>

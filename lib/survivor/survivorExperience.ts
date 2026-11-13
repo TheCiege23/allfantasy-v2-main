@@ -10,7 +10,7 @@
  */
 import type { SurvivorExperience } from './survivorGovernanceSettings'
 
-export type ExperienceSource = 'manual' | 'history' | 'platform' | 'default'
+type ExperienceSource = 'manual' | 'history' | 'platform' | 'default'
 
 export interface CastawayExperience {
   experience: SurvivorExperience

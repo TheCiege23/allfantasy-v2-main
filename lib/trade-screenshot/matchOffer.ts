@@ -19,7 +19,7 @@ import type { OfferRead, ReadAsset, ReadTeam } from './offerRead'
  * PURE and client-safe: it runs in the Trade Center on the rosters it already loaded.
  */
 
-export type OfferMatch =
+type OfferMatch =
   | {
       ok: true
       partnerRosterId: string | null

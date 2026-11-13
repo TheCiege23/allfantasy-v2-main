@@ -25,7 +25,7 @@ const DIMENSION_LABEL: Record<keyof LeagueFitBreakdown, string> = {
   leagueTypeOverlap: "League type",
 }
 
-export type ExplanationTag = {
+type ExplanationTag = {
   /** Stable key for analytics / icons. */
   key: keyof LeagueFitBreakdown
   /** Display label. */
@@ -36,7 +36,7 @@ export type ExplanationTag = {
   tier: "strong" | "ok" | "weak"
 }
 
-export type FitExplanation = {
+type FitExplanation = {
   /** Short one-line headline (<= 80 chars). */
   headline: string
   /** Top-3 dimensions to render as chips. */

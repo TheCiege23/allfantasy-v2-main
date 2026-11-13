@@ -6,7 +6,7 @@ import type { RosterTemplateSlotDto } from '@/lib/multi-sport/RosterTemplateServ
 import type { SupportedSport } from '@/lib/sport-scope'
 import { bestBallDisplaySlots } from '@/lib/bestball/productionLineup'
 
-export type StartSitLineupCandidate = {
+type StartSitLineupCandidate = {
   playerId: string
   name: string
   position: string
@@ -15,7 +15,7 @@ export type StartSitLineupCandidate = {
   gameStartTime?: string | null
 }
 
-export type StartSitSlotAnalysis = {
+type StartSitSlotAnalysis = {
   slotName: string
   allowedPositions: string[]
   candidates: StartSitLineupCandidate[]

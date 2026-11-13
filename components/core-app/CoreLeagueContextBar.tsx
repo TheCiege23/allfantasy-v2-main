@@ -37,9 +37,9 @@ function useBarCopy() {
   return { language, surfaceLabel, concept }
 }
 
-export type CoreLeagueRecommendationValue = { action: string; rationale: string }
+type CoreLeagueRecommendationValue = { action: string; rationale: string }
 
-export type CoreLeagueContextBarProps = {
+type CoreLeagueContextBarProps = {
   leagueId: string
   leagueName: string
   platform: string

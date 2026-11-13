@@ -37,7 +37,7 @@ import {
   TRANSACTION_PRESSURE,
 } from "@/lib/ranking/league-difficulty/weights"
 
-export type LeagueDifficultyInput = {
+type LeagueDifficultyInput = {
   leagueId: string
   sport?: RankingSport | string | null
   leagueType?: string | null
@@ -68,7 +68,7 @@ export type LeagueDifficultyInput = {
   activityHint?: number | null
 }
 
-export type LeagueDifficultyBreakdown = {
+type LeagueDifficultyBreakdown = {
   sportMultiplier: number
   leagueTypeMultiplier: number
   teamCountBonus: number
@@ -217,7 +217,7 @@ function composeModifiers(breakdown: LeagueDifficultyBreakdown, input: LeagueDif
   }
 }
 
-export type LeagueDifficultyComputeResult = LeagueDifficultyRating & {
+type LeagueDifficultyComputeResult = LeagueDifficultyRating & {
   breakdown: LeagueDifficultyBreakdown
 }
 

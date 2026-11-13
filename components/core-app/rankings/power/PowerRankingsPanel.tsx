@@ -292,7 +292,7 @@ const PLATFORM_LABELS: Record<
 };
 
 /** Where this panel lives now — the old /power-rankings URL redirects here. */
-export const POWER_PANEL_HREF = "/core/rankings?scope=league&panel=power";
+const POWER_PANEL_HREF = "/core/rankings?scope=league&panel=power";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");

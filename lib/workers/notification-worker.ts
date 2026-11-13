@@ -9,7 +9,7 @@ import { ENGINE } from "@/lib/analytics/eventNames";
 import { recordEngineTelemetrySample } from "@/lib/analytics/recordAnalyticsEvent";
 import { createTimer, logStructured } from "@/lib/logging/structured";
 
-export type NotificationJobResult = {
+type NotificationJobResult = {
   ok: boolean;
   jobId: string | undefined;
   processedAt: string;

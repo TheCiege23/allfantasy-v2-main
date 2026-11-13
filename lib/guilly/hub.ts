@@ -24,8 +24,8 @@ export type GuillySummaryPayload = {
   } | null
 }
 
-export type GuillyHead = 'calm' | 'nervous' | 'ko' | 'crown'
-export type GuillyBladeRow = { rosterId: string; name: string; tier: 'chop_zone' | 'danger' | 'safe'; overBlade: number; seasonPoints: number | null; head: GuillyHead; you: boolean }
+type GuillyHead = 'calm' | 'nervous' | 'ko' | 'crown'
+type GuillyBladeRow = { rosterId: string; name: string; tier: 'chop_zone' | 'danger' | 'safe'; overBlade: number; seasonPoints: number | null; head: GuillyHead; you: boolean }
 
 export function headSrc(head: GuillyHead): string {
   return `${GUILLY_ART}/head-${head}.svg`

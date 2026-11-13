@@ -6,7 +6,7 @@ import { DYNASTY_DEFAULT_12_BENCH, DYNASTY_DEFAULT_IR, DYNASTY_DEFAULT_TAXI, DYN
 import type { DynastyRosterPresetDto } from './types'
 
 /** Default 12-team dynasty starter counts: QB=1, RB=2, WR=2, TE=1, FLEX=2, SUPERFLEX=1; BENCH=14, IR=3, TAXI=4; K/DEF off. */
-export const DEFAULT_12_TEAM_DYNASTY_STARTERS: Record<string, number> = {
+const DEFAULT_12_TEAM_DYNASTY_STARTERS: Record<string, number> = {
   QB: 1,
   RB: 2,
   WR: 2,
@@ -14,9 +14,9 @@ export const DEFAULT_12_TEAM_DYNASTY_STARTERS: Record<string, number> = {
   FLEX: 2,
   SUPERFLEX: 1,
 }
-export const DEFAULT_12_TEAM_DYNASTY_BENCH = DYNASTY_DEFAULT_12_BENCH
-export const DEFAULT_12_TEAM_DYNASTY_IR = DYNASTY_DEFAULT_IR
-export const DEFAULT_12_TEAM_DYNASTY_TAXI = DYNASTY_DEFAULT_TAXI
+const DEFAULT_12_TEAM_DYNASTY_BENCH = DYNASTY_DEFAULT_12_BENCH
+const DEFAULT_12_TEAM_DYNASTY_IR = DYNASTY_DEFAULT_IR
+const DEFAULT_12_TEAM_DYNASTY_TAXI = DYNASTY_DEFAULT_TAXI
 
 /**
  * Get roster preset DTOs for UI (1QB, Superflex, 2QB, TEP, IDP).

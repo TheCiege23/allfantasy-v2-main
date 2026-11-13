@@ -28,7 +28,7 @@ export type PlanSlot = { index: number; label: string; allowedPositions: string[
 
 export type PlanPlayer = { playerId: string; name: string; position: string | null }
 
-export type PlanMove = { playerId: string; to: 'starters' | 'bench' }
+type PlanMove = { playerId: string; to: 'starters' | 'bench' }
 
 export type LineupPlan =
   | {
@@ -63,7 +63,7 @@ function asArray(v: unknown): unknown[] {
 }
 
 /** Position spellings normalised the way the lineup validator normalises them. */
-export function normPos(p: string | null | undefined): string {
+function normPos(p: string | null | undefined): string {
   const pos = String(p ?? '').trim().toUpperCase()
   if (pos === 'GK') return 'GKP'
   if (pos === 'EDGE') return 'DE'
@@ -74,7 +74,7 @@ export function normPos(p: string | null | undefined): string {
 }
 
 /** A player listed at several positions ("PG/SG", "2B,SS") is eligible wherever any of them is. */
-export function eligible(slot: PlanSlot, position: string | null): boolean {
+function eligible(slot: PlanSlot, position: string | null): boolean {
   const positions = String(position ?? '')
     .split(/[\/,]+/)
     .map(normPos)

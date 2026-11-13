@@ -17,7 +17,7 @@ export type CorePluginId = (typeof CORE_PLUGIN_IDS)[number]
 
 export type PluginReadiness = 'implemented' | 'partial' | 'architecture_stub' | 'future'
 
-export type PluginCapabilityStatus = 'implemented' | 'partial' | 'missing' | 'future'
+type PluginCapabilityStatus = 'implemented' | 'partial' | 'missing' | 'future'
 
 export type PluginCapabilityMap = Partial<
   Record<

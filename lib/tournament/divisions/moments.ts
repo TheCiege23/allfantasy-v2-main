@@ -26,7 +26,7 @@ export type MomentContext = {
   opponent?: string
 }
 
-export type Moment = {
+type Moment = {
   id: MomentId
   label: string
   trigger: string

@@ -1,7 +1,7 @@
 import type { AcceptDriver, NegotiationToolkit } from './types'
 import type { TradeDriverData } from './trade-engine'
 
-export type NegotiationGptContract = {
+type NegotiationGptContract = {
   acceptProb: number
   drivers: Array<{
     id: string
@@ -18,7 +18,7 @@ export type NegotiationGptContract = {
   }
 }
 
-export type NegotiationGptOutput = {
+type NegotiationGptOutput = {
   opener: string
   rationale: string
   fallback: string
@@ -28,7 +28,7 @@ export type NegotiationGptOutput = {
   }>
 }
 
-export type NegotiationValidationResult = {
+type NegotiationValidationResult = {
   valid: boolean
   cleaned: NegotiationGptOutput | null
   violations: string[]
@@ -88,7 +88,7 @@ export function shouldSkipNegotiationGpt(
   return 'ok'
 }
 
-export function hasDownDrivers(contract: NegotiationGptContract): boolean {
+function hasDownDrivers(contract: NegotiationGptContract): boolean {
   return contract.drivers.some(d => d.direction === 'DOWN')
 }
 

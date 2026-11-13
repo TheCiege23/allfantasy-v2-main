@@ -24,7 +24,7 @@ export const CLEARSPORTS_NFL_QUERY_PARAMS = {
   games: ['season', 'week', 'team_id', 'date'] as const,
 } as const
 
-export type ClearSportsNflCapabilityFlag =
+type ClearSportsNflCapabilityFlag =
   | 'player_stats'
   | 'team_stats'
   | 'injuries'

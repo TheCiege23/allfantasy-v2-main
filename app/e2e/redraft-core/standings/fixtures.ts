@@ -31,7 +31,7 @@ import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
 
 export const HARNESS_LEAGUE_ID = 'e2e-redraft-core-standings'
 export const HARNESS_LEAGUE_NAME = 'Sunday Night Redraft'
-export const SEASON = 2026
+const SEASON = 2026
 const WEEKS = 14
 const SCORED = 11
 const YOU = '4'
@@ -52,7 +52,7 @@ const IDS = TEAM_NAMES.map((_, i) => String(i + 1))
 /** Higher wins its game; the gaps are wide at both ends so the table settles a spot each way. */
 const STRENGTH: Record<string, number> = { '1': 10, '2': 8.4, '3': 6.2, '4': 6, '5': 5.7, '6': 5.4, '7': 5.1, '8': 4.8, '9': 1.4, '10': 0.2 }
 
-export const RULES: StandingsRules = {
+const RULES: StandingsRules = {
   playoffTeams: 6,
   playoffTeamsSource: 'league',
   byes: 2,

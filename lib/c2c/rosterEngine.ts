@@ -4,7 +4,7 @@ import { getScoringEligibility } from '@/lib/c2c/scoringEngine'
 import { validateC2CRosterSlots } from '@/lib/merged-devy-c2c/roster/C2CRosterRules'
 import { resolveTaxiLock } from '@/lib/c2c/taxiLockResolver'
 
-export type LineupValidationResult = {
+type LineupValidationResult = {
   valid: boolean
   errors: string[]
 }

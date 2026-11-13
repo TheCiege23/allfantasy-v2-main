@@ -19,7 +19,7 @@ function streakValue(t: BoardTeam): number | null {
   return 0
 }
 
-export function sortValue(t: BoardTeam, key: StandingsSortKey, odds: StandingsOdds | null): number | null {
+function sortValue(t: BoardTeam, key: StandingsSortKey, odds: StandingsOdds | null): number | null {
   switch (key) {
     case 'seed':
       return t.seed

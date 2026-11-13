@@ -24,10 +24,7 @@ export {
   budgetFor,
   evaluateBudget,
   allBudgets,
-  type Budget,
   type BudgetKey,
-  type BudgetPhase,
-  type BudgetVerdict,
   type BudgetEvaluation,
 } from './budgets'
 
@@ -37,7 +34,6 @@ export {
   fresh,
   withSource,
   emptyFreshness,
-  ageMs,
   isStale,
   freshnessLabel,
   describeFreshness,
@@ -48,7 +44,6 @@ export {
   type Fresh,
   type FreshnessMeta,
   type FreshnessSource,
-  type FreshnessView,
 } from './freshness'
 
 export {
@@ -81,9 +76,7 @@ export {
   reactingEventTypes,
   MAX_JOBS_PER_EVENT,
   type ReactionJob,
-  type ReactionPlan,
   type ReactionEnqueue,
-  type ReactionInvalidate,
   type DispatchResult,
 } from './reactions'
 

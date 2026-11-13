@@ -46,7 +46,7 @@ export function outputTypeFor(sourceType: string): "image/png" | "image/jpeg" {
  * That keeps `coverScale` and `clampOffsets` — where the actual invariants live — unit
  * testable in node, with no canvas and no image decoding.
  */
-export interface ImageSize {
+interface ImageSize {
   width: number
   height: number
 }
@@ -117,7 +117,7 @@ export function coverScale(img: ImageSize, rotation: Transform["rotation"]): num
 export const AVATAR_VIEWPORT_PX = VIEWPORT_PX
 export const AVATAR_OUTPUT_PX = OUTPUT_PX
 
-export interface AvatarCropDialogProps {
+interface AvatarCropDialogProps {
   file: File | null
   open: boolean
   busy?: boolean

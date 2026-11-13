@@ -7,7 +7,7 @@
  */
 import type { SportsDataContext } from '@/lib/sports-data-gateway/contracts'
 
-export type RuntimeIdentityStatus = 'resolved' | 'partially_resolved' | 'unresolved'
+type RuntimeIdentityStatus = 'resolved' | 'partially_resolved' | 'unresolved'
 
 export type CertifiedSportsRuntimeContext = {
   generatedAt: string

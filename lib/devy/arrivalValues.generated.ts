@@ -18,7 +18,7 @@
  * expectation — it conditions on the player having worked out.
  */
 
-export interface ArrivalValueCell {
+interface ArrivalValueCell {
   position: 'QB' | 'RB' | 'WR' | 'TE'
   /** Skill players drafted at this position across the measured classes. */
   drafted: number

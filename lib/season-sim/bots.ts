@@ -50,7 +50,7 @@ export function allRosterIds(sections: RosterRuntimeSections): string[] {
 }
 
 /** What a manager would expect from a player: ADP-implied prior, pulled toward observed scoring. */
-export function expectedPoints(view: Pick<BotView, 'playersById' | 'observed'>, playerId: string): number {
+function expectedPoints(view: Pick<BotView, 'playersById' | 'observed'>, playerId: string): number {
   const player = view.playersById.get(playerId)
   if (!player) return 0
   const prior = Math.max(1, 20 - player.adp / 12)
@@ -90,7 +90,7 @@ function fillLineup(
 }
 
 /** Refreshes injury/bye status on the roster without moving anyone — what a ghost's lineup looks like. */
-export function refreshStatuses(view: Pick<BotView, 'week' | 'playersById' | 'injuries'>, sections: RosterRuntimeSections): RosterRuntimeSections {
+function refreshStatuses(view: Pick<BotView, 'week' | 'playersById' | 'injuries'>, sections: RosterRuntimeSections): RosterRuntimeSections {
   const refresh = (player: RosterRuntimePlayer) => {
     const source = view.playersById.get(player.playerId)
     return source ? rosterPlayerFor(source, view.week, view.injuries) : player

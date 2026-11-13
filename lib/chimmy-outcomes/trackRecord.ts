@@ -29,7 +29,7 @@ export type TrackRecordLine = RecordCounts & {
   ratePct: number | null
 }
 
-export type ChimmyTrackRecordView = {
+type ChimmyTrackRecordView = {
   /** This user's graded calls. Null when they have none. */
   you: TrackRecordLine | null
   /** Everyone's graded calls. Null when there are none. */

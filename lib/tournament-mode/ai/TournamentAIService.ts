@@ -7,7 +7,7 @@ import { createHash } from 'crypto'
 import { openaiChatText } from '@/lib/openai-client'
 import { buildTournamentAIPrompt, type TournamentAIType } from './TournamentAIPrompts'
 
-export interface TournamentAIResult {
+interface TournamentAIResult {
   text: string
   model?: string
   ok: boolean

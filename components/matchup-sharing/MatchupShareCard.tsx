@@ -13,7 +13,7 @@ const ACCENT = '#8b5cf6'
 
 export const MATCHUP_SHARE_CARD_ID = 'matchup-share-card-capture'
 
-export interface MatchupShareCardProps {
+interface MatchupShareCardProps {
   payload: MatchupSharePayload
   captureId?: string
   className?: string

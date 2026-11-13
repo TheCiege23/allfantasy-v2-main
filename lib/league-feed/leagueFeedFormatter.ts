@@ -1,7 +1,7 @@
 import type { LeagueFeedPayload } from "./leagueFeedTypes"
 import type { LeagueFeedCategory } from "./leagueFeedTypes"
 
-export type FormattedFeedItem = {
+type FormattedFeedItem = {
   id: string
   source: "league_event"
   type: string
@@ -18,7 +18,7 @@ export type FormattedFeedItem = {
   metadata?: unknown
 }
 
-export function parsePayload(raw: unknown): LeagueFeedPayload | null {
+function parsePayload(raw: unknown): LeagueFeedPayload | null {
   if (!raw || typeof raw !== "object") return null
   return raw as LeagueFeedPayload
 }

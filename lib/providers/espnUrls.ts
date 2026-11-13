@@ -60,7 +60,7 @@ export function espnSiteApiUrl(pathSegment: string, query?: Record<string, strin
  * `espn_s2` COOKIES, sent as a header by `lib/league-import/espn/espnFantasyClient.ts`. Putting
  * them in a query string would leak a live ESPN session into every log line that prints a URL.
  */
-export const ESPN_FANTASY_API_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games'
+const ESPN_FANTASY_API_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games'
 
 export type EspnFantasyGame = 'ffl' | 'flb'
 

@@ -14,7 +14,7 @@ import type { SeverityTier } from '../../tokens/colors'
 export type AutomationStatus = 'enabled' | 'disabled'
 
 /** Health is a severity signal ("how well is this currently running"), always visually distinct from status ("is this turned on"). */
-export type AutomationTriggerType = 'schedule' | 'event' | 'manual'
+type AutomationTriggerType = 'schedule' | 'event' | 'manual'
 
 /*
  * `reporting` was added when `reports.generateScheduled` — a real job with a handler, a schedule
@@ -33,7 +33,7 @@ export type AutomationCategory =
 
 export type AutomationExecutionResult = 'success' | 'failure' | 'skipped'
 
-export interface AutomationSchedule {
+interface AutomationSchedule {
   triggerType: AutomationTriggerType
   /** Human-readable description of the trigger, e.g. "Every Tuesday at 9:00 AM" or "When a waiver claim is submitted." */
   description: string

@@ -112,7 +112,7 @@ export function isBlockedAddress(address: string): boolean {
  * The caller must connect to `address`, not re-resolve `url`. That is what
  * closes the rebinding window — see the header.
  */
-export type SafeTarget = {
+type SafeTarget = {
   readonly url: string
   readonly hostname: string
   readonly address: string
@@ -192,7 +192,7 @@ export async function assertSafeWebhookUrl(
 
 // ─── Signing ─────────────────────────────────────────────────────────────────
 
-export const SIGNATURE_VERSION = 'v1'
+const SIGNATURE_VERSION = 'v1'
 /** How far a timestamp may be from now, in either direction. */
 export const SIGNATURE_TOLERANCE_MS = 5 * 60 * 1000
 
@@ -263,8 +263,8 @@ export function newWebhookSecret(): string {
 
 export const MAX_ATTEMPTS = 6
 export const DISABLE_AFTER_CONSECUTIVE_FAILURES = 20
-export const BASE_BACKOFF_MS = 1000
-export const MAX_BACKOFF_MS = 60 * 60 * 1000
+const BASE_BACKOFF_MS = 1000
+const MAX_BACKOFF_MS = 60 * 60 * 1000
 
 /**
  * Exponential backoff with jitter.

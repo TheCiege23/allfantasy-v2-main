@@ -14,7 +14,7 @@
  */
 import { normalizePickNumber, sleeperOwnerByRosterId, sleeperPickOwnerId } from './sleeperDraftPickIdentity'
 
-export type SleeperSeasonDraftSource = {
+type SleeperSeasonDraftSource = {
   season: number
   /** That season's rosters payload (`roster_id`, `owner_id`); null when it could not be read. */
   rosters: unknown[] | null
@@ -33,7 +33,7 @@ export type ExistingDraftFact = {
 
 export type DraftOwnerUpdate = { draftId: string; ownerSleeperId: string }
 
-export type DraftOwnerPlan = {
+type DraftOwnerPlan = {
   updates: DraftOwnerUpdate[]
   /** Rows that already carry an owner — left alone. */
   alreadyOwned: number
@@ -108,7 +108,7 @@ export type DraftOwnerBackfillDeps = {
   write(updates: DraftOwnerUpdate[]): Promise<number>
 }
 
-export type DraftOwnerBackfillResult = DraftOwnerPlan & {
+type DraftOwnerBackfillResult = DraftOwnerPlan & {
   leagueId: string
   seasonsRead: number[]
   written: number

@@ -56,7 +56,7 @@ const FAILURE_RETRY_MS = 30 * 60 * 1000
 /** Bound credential probes per league; a league can have many importing users. */
 const MAX_USER_CANDIDATES = 3
 
-export interface MflMatchupConnection {
+interface MflMatchupConnection {
   /** `League.platformLeagueId` — MFL's own league id. */
   platformLeagueId: string
   season: number

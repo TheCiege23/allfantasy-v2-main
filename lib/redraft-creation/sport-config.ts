@@ -8,7 +8,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 export type SoccerPipeline = 'mls' | 'euro'
 
-export type RedraftSportIntegrationDefaults = {
+type RedraftSportIntegrationDefaults = {
   standingsEnabled: boolean
   schedulesEnabled: boolean
   injuriesEnabled: boolean
@@ -21,7 +21,7 @@ export type RedraftSportIntegrationDefaults = {
 const NFL_OUTDOOR_WEATHER = true
 
 /** Default max teams for Soccer / EURO (config knob). */
-export const REDRAFT_SOCCER_EURO_MAX_TEAMS = 20
+const REDRAFT_SOCCER_EURO_MAX_TEAMS = 20
 
 const BASE: Record<
   LeagueSport,

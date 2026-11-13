@@ -18,9 +18,9 @@ import type { Next24Row } from '@/lib/core-app/todayStrip'
  * `playFeedPresentation` now writes, a betting line from the parts `todayStrip` writes — either one
  * without parts stays whole English.
  */
-export type GameDayPlay = Pick<PlayFeedItem, 'id' | 'type' | 'playerName' | 'position' | 'team' | 'imageUrl' | 'headline' | 'actionParts'>
+type GameDayPlay = Pick<PlayFeedItem, 'id' | 'type' | 'playerName' | 'position' | 'team' | 'imageUrl' | 'headline' | 'actionParts'>
 
-export type GameDayRow = Pick<Next24Row, 'time' | 'tone' | 'text' | 'sub' | 'parts' | 'game'> & { key: string }
+type GameDayRow = Pick<Next24Row, 'time' | 'tone' | 'text' | 'sub' | 'parts' | 'game'> & { key: string }
 
 const TYPE_LABEL: Record<PlayFeedItem['type'], string> = {
   TOUCHDOWN: 'TD',

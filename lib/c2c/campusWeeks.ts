@@ -11,7 +11,7 @@
  */
 import type { PrismaClient } from '@prisma/client'
 
-export type ScheduledGame = { week: number | null; startTime: Date | string | null }
+type ScheduledGame = { week: number | null; startTime: Date | string | null }
 
 const DAY = 86_400_000
 /** Tuesday 08:00 UTC: after Monday night football ends in every US zone. */

@@ -10,7 +10,7 @@ export type TournamentStaffPermissions = {
   fullAdmin?: boolean
 }
 
-export type LegacyTournamentAccess = {
+type LegacyTournamentAccess = {
   isCreator: boolean
   staff: { permissions: TournamentStaffPermissions } | null
 }

@@ -17,7 +17,7 @@ export interface AnalyticsKpi {
   trend?: { direction: 'up' | 'down' | 'flat'; label: string }
 }
 
-export interface AnalyticsTrendPoint {
+interface AnalyticsTrendPoint {
   label: string
   value: number
 }
@@ -45,7 +45,7 @@ export interface TransactionWeek {
   waiverClaimCount: number
 }
 
-export interface RosterUtilizationEntry {
+interface RosterUtilizationEntry {
   teamName: string
   utilizationPercent: number
 }

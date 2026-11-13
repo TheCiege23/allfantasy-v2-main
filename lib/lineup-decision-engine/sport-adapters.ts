@@ -3,7 +3,7 @@
  * what each sport emphasizes when filling PremiumPlayerSignals from feeds/cache.
  */
 
-export type SportSignalHints = {
+type SportSignalHints = {
   primary: string[]
   secondary: string[]
 }

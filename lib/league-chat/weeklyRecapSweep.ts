@@ -17,9 +17,9 @@
  *     actually start a conversation, and they should not be the ones a time budget cuts off.
  */
 
-export type SweepLeague = { id: string; platformLeagueId: string }
+type SweepLeague = { id: string; platformLeagueId: string }
 
-export type RecapSweepPlan<T extends SweepLeague> = {
+type RecapSweepPlan<T extends SweepLeague> = {
   /** Visit in this order, until the time budget runs out. */
   order: T[]
   /** Already recapped this week — not visited at all. */

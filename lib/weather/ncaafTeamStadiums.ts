@@ -1,5 +1,5 @@
 /** Selected FBS home venues for weather (expand over time). Unmapped teams skip weather until geocoding is added. */
-export type StadiumCoords = { lat: number; lng: number; dome: boolean; label: string }
+type StadiumCoords = { lat: number; lng: number; dome: boolean; label: string }
 
 export const NCAAF_TEAM_STADIUM: Record<string, StadiumCoords> = {
   UGA: { lat: 33.9498, lng: -83.3733, dome: false, label: 'Sanford Stadium' },

@@ -17,7 +17,7 @@ import { ArrowRight, X, History } from 'lucide-react'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
-export interface PickTradeHistoryModalProps {
+interface PickTradeHistoryModalProps {
   open: boolean
   onClose: () => void
   tradedPicks: TradedPickRecord[]

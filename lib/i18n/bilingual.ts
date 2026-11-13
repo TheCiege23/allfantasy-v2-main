@@ -8,7 +8,7 @@ import { getIntlLocale, resolveLanguage } from './constants'
  * read them with `t`. This is the one place a component's English/Spanish choice is made, so a
  * screen never needs its own `language === 'es'` (scripts/i18n-ternary-ratchet.mjs).
  */
-export type EnEs = 'en' | 'es'
+type EnEs = 'en' | 'es'
 
 export function enEsLanguage(language: string | null | undefined): EnEs {
   return resolveLanguage(language) === 'es' ? 'es' : 'en'

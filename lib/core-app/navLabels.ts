@@ -34,7 +34,7 @@ export const CORE_NAV_LABELS = {
   schedule: { label: 'Schedule' },
 } as const satisfies Record<string, { label: string; short?: string }>
 
-export type CoreNavLabelKey = keyof typeof CORE_NAV_LABELS
+type CoreNavLabelKey = keyof typeof CORE_NAV_LABELS
 
 /** The English name for a destination; pass it through `coreUiCopy` to render. */
 export function navLabel(key: CoreNavLabelKey, form: 'full' | 'short' = 'full'): string {

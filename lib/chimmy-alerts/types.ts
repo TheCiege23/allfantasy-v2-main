@@ -39,7 +39,7 @@ export type ChimmyAlertLifecycleEvent =
   | 'resolved'
   | 'expired'
 
-export interface ChimmyAlertAction {
+interface ChimmyAlertAction {
   label: string
   href?: string
   actionType?: AIActionType

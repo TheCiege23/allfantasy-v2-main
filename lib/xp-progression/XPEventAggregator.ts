@@ -27,7 +27,7 @@ const XP_SUCCESSFUL_TRADE = XP_VALUES.successful_trade ?? 10
 const XP_DRAFT_ACCURACY = XP_VALUES.draft_accuracy ?? 15
 const XP_LEAGUE_PARTICIPATION = XP_VALUES.league_participation ?? 5
 const XP_COMMISSIONER_SERVICE = XP_VALUES.commissioner_service ?? 25
-export interface AggregatedXPResult {
+interface AggregatedXPResult {
   managerId: string
   totalXP: number
   eventsCreated: number

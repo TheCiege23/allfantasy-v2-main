@@ -15,7 +15,7 @@ const STRATEGY_LABEL: Record<StartVsStrategyMode, string> = {
   protect_lead: 'Protect lead',
 }
 
-export interface StartVsComparisonCardProps {
+interface StartVsComparisonCardProps {
   data: StartVsApiResponse | null
   loading?: boolean
   error?: string | null

@@ -4,7 +4,7 @@ import { trackVideoJob } from '@/lib/fantasy-media/VideoGenerationJobTracker'
 import type { MediaType } from '@/lib/fantasy-media/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export interface QueueLeagueEventVideoInput {
+interface QueueLeagueEventVideoInput {
   userId: string
   leagueId: string
   leagueName?: string | null
@@ -16,7 +16,7 @@ export interface QueueLeagueEventVideoInput {
   eventPayload?: Record<string, unknown>
 }
 
-export interface QueueLeagueEventVideoResult {
+interface QueueLeagueEventVideoResult {
   ok: boolean
   reason?: 'not_configured' | 'invalid_input' | 'create_failed' | 'exception'
   episodeId?: string

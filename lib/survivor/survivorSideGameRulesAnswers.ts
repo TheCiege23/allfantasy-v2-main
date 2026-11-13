@@ -6,7 +6,7 @@
 
 import { exileSlotLabel, SURVIVOR_SIDE_GAME_DEFAULTS, type SurvivorSideGameSettings } from './survivorSideGameSettings'
 
-export type SideGameRulesTopic = 'token_pool' | 'survivor_pool' | 'auction' | 'token_shop'
+type SideGameRulesTopic = 'token_pool' | 'survivor_pool' | 'auction' | 'token_shop'
 
 const isEs = (language?: string | null) => String(language ?? '').toLowerCase().startsWith('es')
 const block = (title: string, items: Array<string | false | null | undefined>) => [`**${title}**`, ...items.filter((x): x is string => Boolean(x)).map((x) => `• ${x}`)].join('\n')

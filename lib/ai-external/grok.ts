@@ -55,14 +55,14 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-export type GrokClientConfig = {
+type GrokClientConfig = {
   baseUrl: string;
   apiKey: string;
   model?: string;
   timeoutMs?: number;
 };
 
-export function getGrokConfigFromEnv(): GrokClientConfig | null {
+function getGrokConfigFromEnv(): GrokClientConfig | null {
   const baseUrl = env("GROK_BASE_URL");
   const apiKey = env("GROK_API_KEY") || env("XAI_API_KEY");
   const model = env("GROK_MODEL");

@@ -1,4 +1,4 @@
-export type TradeLabel = {
+type TradeLabel = {
   id: string
   name: string
   type: 'positive' | 'warning' | 'neutral'
@@ -6,7 +6,7 @@ export type TradeLabel = {
   description: string
 }
 
-export const TRADE_LABELS: Record<string, TradeLabel> = {
+const TRADE_LABELS: Record<string, TradeLabel> = {
   ELITE_ASSET_THEFT: {
     id: 'elite_asset_theft',
     name: 'Elite Asset Theft',
@@ -65,7 +65,7 @@ export const TRADE_LABELS: Record<string, TradeLabel> = {
   }
 }
 
-export interface AssetValueRef {
+interface AssetValueRef {
   marketValue: number
   impactValue: number
   vorpValue: number
@@ -84,7 +84,7 @@ export interface TradeAsset {
   pickYear?: number
 }
 
-export interface TradeLabelsInput {
+interface TradeLabelsInput {
   givenAssets: TradeAsset[]
   receivedAssets: TradeAsset[]
   fairnessScore: number

@@ -44,7 +44,7 @@ type SpendEntry = {
   createdAt: string | null
 }
 
-export type TokenCentreV4Props = {
+type TokenCentreV4Props = {
   packs: Array<{ sku: string; amountUsd: number; tokenAmount: number | null }>
 }
 

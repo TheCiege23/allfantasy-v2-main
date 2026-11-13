@@ -17,7 +17,7 @@ import '@/components/core-app/af-my-team-dynasty.css'
  * carries its own marker in its payload and draws it with `DynastyMarkerChips`.
  */
 
-export const dynastyRosterMessages = defineMessages({
+const dynastyRosterMessages = defineMessages({
   en: {
     rookie: 'Rookie',
     rookieTitle: 'No completed pro season on file.',
@@ -59,13 +59,13 @@ export function DynastyMarkersScope({ markers, children }: { markers: Record<str
 }
 
 /** Whether this screen shows markers at all (a dynasty league with at least one on file). */
-export function useHasDynastyMarkers(): boolean {
+function useHasDynastyMarkers(): boolean {
   const markers = useContext(MarkersContext)
   return !!markers && Object.keys(markers).length > 0
 }
 
 /** This row's marker from the screen's scope, or null (non-dynasty league, or nothing agreed on file). */
-export function useDynastyMarker(key: string | null | undefined): DynastyRosterMarker | null {
+function useDynastyMarker(key: string | null | undefined): DynastyRosterMarker | null {
   const markers = useContext(MarkersContext)
   return key ? (markers?.[key] ?? null) : null
 }

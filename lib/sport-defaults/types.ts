@@ -28,7 +28,7 @@ export type NFLLeagueVariant =
 export type LeagueVariant = NFLLeagueVariant | 'STANDARD' | string
 
 /** Player pool source for ingestion and draft/waiver. */
-export type PlayerPoolSource = 'sports_player' | 'sleeper' | 'external' | 'manual'
+type PlayerPoolSource = 'sports_player' | 'sleeper' | 'external' | 'manual'
 
 /** Sport-level metadata: display, icon, logo, season type, player pool, labels. */
 export interface SportMetadata {
@@ -145,7 +145,7 @@ export interface RosterDefaults {
 }
 
 /** Single scoring rule (for in-registry fallback when template not loaded). */
-export interface ScoringRuleDefault {
+interface ScoringRuleDefault {
   statKey: string
   pointsValue: number
   multiplier?: number
@@ -163,25 +163,25 @@ export interface ScoringDefaults {
 }
 
 /** Draft timer defaults (per-pick and behavior). */
-export interface DraftTimerDefaults {
+interface DraftTimerDefaults {
   per_pick_seconds: number | null
   auto_pick_enabled?: boolean
 }
 
 /** Snake vs linear behavior for non-auction drafts. */
-export type SnakeOrLinear = 'snake' | 'linear'
+type SnakeOrLinear = 'snake' | 'linear'
 
 /** Autopick behavior when timer expires. */
-export type AutopickBehavior = 'queue-first' | 'bpa' | 'need-based' | 'skip'
+type AutopickBehavior = 'queue-first' | 'bpa' | 'need-based' | 'skip'
 
 /** Pre-draft ranking source for AI and queue. */
-export type PreDraftRankingSource = 'adp' | 'dynasty_adp' | 'ecr' | 'projections' | 'tiers' | 'custom' | 'sport_default' | 'adp_projection_rank_fallback'
+type PreDraftRankingSource = 'adp' | 'dynasty_adp' | 'ecr' | 'projections' | 'tiers' | 'custom' | 'sport_default' | 'adp_projection_rank_fallback'
 
 /** Roster fill order for AI/autopick (slot priority). */
-export type RosterFillOrder = 'starter_first' | 'need_based' | 'bpa' | 'position_scarcity'
+type RosterFillOrder = 'starter_first' | 'need_based' | 'bpa' | 'position_scarcity'
 
 /** Position filter behavior in draft room. */
-export type PositionFilterBehavior = 'all' | 'by_slot' | 'by_need' | 'by_eligibility'
+type PositionFilterBehavior = 'all' | 'by_slot' | 'by_need' | 'by_eligibility'
 
 /** Draft defaults — full preset per sport/variant for draft room and league creation. */
 export interface DraftDefaults {
@@ -213,19 +213,19 @@ export interface DraftDefaults {
 }
 
 /** Waiver type (supported modes). */
-export type WaiverTypeDefault = 'faab' | 'rolling' | 'reverse_standings' | 'fcfs' | 'standard'
+type WaiverTypeDefault = 'faab' | 'rolling' | 'reverse_standings' | 'fcfs' | 'standard'
 
 /** Claim priority / tiebreak behavior. */
-export type ClaimPriorityBehavior = 'faab_highest' | 'priority_lowest_first' | 'reverse_standings' | 'earliest_claim'
+type ClaimPriorityBehavior = 'faab_highest' | 'priority_lowest_first' | 'reverse_standings' | 'earliest_claim'
 
 /** When free agents unlock (FCFS). */
-export type FreeAgentUnlockBehavior = 'after_waiver_run' | 'game_lock' | 'slate_lock' | 'instant' | 'daily'
+type FreeAgentUnlockBehavior = 'after_waiver_run' | 'game_lock' | 'slate_lock' | 'instant' | 'daily'
 
 /** Game lock behavior for waiver eligibility. */
-export type GameLockBehavior = 'game_time' | 'first_game' | 'slate_lock' | 'manual'
+type GameLockBehavior = 'game_time' | 'first_game' | 'slate_lock' | 'manual'
 
 /** FAAB reset rules. */
-export type FaabResetRule = 'never' | 'yearly' | 'midseason' | 'weekly'
+type FaabResetRule = 'never' | 'yearly' | 'midseason' | 'weekly'
 
 /** Waiver defaults — full preset per sport/variant for league creation and waiver processor. */
 export interface WaiverDefaults {
@@ -256,7 +256,7 @@ export interface WaiverDefaults {
 }
 
 /** Single team metadata (for team list / logos). */
-export interface TeamMetadataDefault {
+interface TeamMetadataDefault {
   team_id: string
   team_name: string
   city: string

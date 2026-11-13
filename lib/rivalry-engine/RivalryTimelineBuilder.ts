@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import type { RivalryEventType } from './types'
 import { normalizeSportForRivalry } from './SportRivalryResolver'
 
-export interface RivalryTimelineItem {
+interface RivalryTimelineItem {
   eventId: string
   rivalryId: string
   eventType: RivalryEventType

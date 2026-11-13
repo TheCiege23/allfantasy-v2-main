@@ -16,7 +16,7 @@ export interface CouncilScopePlayer {
   displayName: string
 }
 
-export interface ComputeEligibilityInput {
+interface ComputeEligibilityInput {
   /** Active players in the council's scope (attending tribe pre-merge, or all active post-merge). */
   scopePlayers: CouncilScopePlayer[]
   /** Self-votes allowed? (default false) */

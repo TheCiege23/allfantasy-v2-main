@@ -5,7 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export interface ZombieUniverseSettings {
+interface ZombieUniverseSettings {
   leagueCount?: number
   levelNames?: string[]
   teamsPerLeague?: number

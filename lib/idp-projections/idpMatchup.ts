@@ -25,7 +25,7 @@ import { loadActualWeeklyPoints, type ActualWeekOutcome } from './actualWeeklyPo
  * and say so when the two disagree rather than quietly presenting a recomputation as the result.
  */
 
-export type IdpMatchupState =
+type IdpMatchupState =
   | 'ok'
   | 'not_idp_league'
   | 'no_team_claimed'
@@ -34,7 +34,7 @@ export type IdpMatchupState =
   /** The rosters are the provider's own ids (see `isForeignIdSpace`) — not "no matchup on file". */
   | 'ids_unreadable'
 
-export interface IdpMatchupPlayer {
+interface IdpMatchupPlayer {
   sleeperId: string
   name: string
   position: string | null
@@ -83,7 +83,7 @@ const EMPTY = (state: IdpMatchupState, notes: string[] = []): IdpMatchupPayload 
   notes,
 })
 
-export interface LoadIdpMatchupArgs {
+interface LoadIdpMatchupArgs {
   prisma: PrismaClient
   /** Either id space. */
   leagueId: string

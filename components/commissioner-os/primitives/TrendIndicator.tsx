@@ -1,6 +1,6 @@
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
 
-export interface TrendIndicatorProps {
+interface TrendIndicatorProps {
   direction: 'up' | 'down' | 'flat'
   label: string
   /** Whether an upward trend is the good direction for this metric — a rising risk count is bad, a rising health score is good. */

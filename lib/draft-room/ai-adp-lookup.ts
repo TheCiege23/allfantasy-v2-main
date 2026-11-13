@@ -13,9 +13,9 @@ export type AiAdpSnapshotRow = {
   lowSample?: boolean
 }
 
-export type AiAdpMatchData = { adp: number; sampleSize: number; lowSample?: boolean }
+type AiAdpMatchData = { adp: number; sampleSize: number; lowSample?: boolean }
 
-export type AiAdpLookupMaps = {
+type AiAdpLookupMaps = {
   strict: Map<string, AiAdpMatchData>
   loose: Map<string, AiAdpMatchData>
 }

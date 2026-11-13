@@ -22,7 +22,7 @@ const TYPE_LABELS: Record<ZombieUniverseAIType, string> = {
   commissioner_anomaly_summary: 'Commissioner anomaly summary',
 }
 
-export interface ZombieUniverseAIPanelProps {
+interface ZombieUniverseAIPanelProps {
   universeId: string
 }
 

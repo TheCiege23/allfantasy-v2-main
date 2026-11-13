@@ -5,7 +5,7 @@ import {
   buildSignupHrefWithIntent,
 } from "@/lib/auth/PostAuthIntentRouter"
 
-export interface AuthRedirectInput extends PostAuthIntentInput {}
+interface AuthRedirectInput extends PostAuthIntentInput {}
 
 export function resolveAuthRedirect(input: AuthRedirectInput): string {
   return resolvePostAuthIntentDestination(input)

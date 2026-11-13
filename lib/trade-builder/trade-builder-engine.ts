@@ -15,20 +15,20 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export const TradeBuilderModeEnum = z.enum([
+const TradeBuilderModeEnum = z.enum([
   'target_player', 'position_upgrade', 'strategy', 'liquidation', 'consolidation',
 ])
 
-export const StrategyGoalEnum = z.enum([
+const StrategyGoalEnum = z.enum([
   'win_now', 'sustainable_contender', 'fast_rebuild', 'value_accumulation',
   'youth_movement', 'pick_collection', 'depth_fix', 'star_consolidation',
 ])
 
-export const TradeStyleEnum = z.enum([
+const TradeStyleEnum = z.enum([
   'balanced', 'aggressive', 'safe', 'opportunistic', 'lowball', 'premium_push',
 ])
 
-export interface TradeBuilderPlayer {
+interface TradeBuilderPlayer {
   id: string
   name: string
   position: string
@@ -38,7 +38,7 @@ export interface TradeBuilderPlayer {
   slot: 'starter' | 'bench' | 'ir' | 'taxi'
 }
 
-export interface TradeBuilderTeam {
+interface TradeBuilderTeam {
   rosterId: number
   managerName: string
   players: TradeBuilderPlayer[]
@@ -93,9 +93,9 @@ export const TradeBuilderInputSchema = z.object({
   riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).default('moderate'),
 })
 
-export type TradeBuilderInput = z.infer<typeof TradeBuilderInputSchema>
+type TradeBuilderInput = z.infer<typeof TradeBuilderInputSchema>
 
-export interface TradePackage {
+interface TradePackage {
   id: string
   label: string
   targetManagerId: number
@@ -114,7 +114,7 @@ export interface TradePackage {
   fallbackVersionAvailable: boolean
 }
 
-export interface FallbackPackage {
+interface FallbackPackage {
   basedOnPackageId: string
   label: string
   sendAssets: string[]
@@ -122,7 +122,7 @@ export interface FallbackPackage {
   strategicAdjustment: string
 }
 
-export interface TradeBuilderResult {
+interface TradeBuilderResult {
   strategyGoal: string
   tradeStyle: string
   recommendedTarget: string

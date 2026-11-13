@@ -32,7 +32,7 @@ const CACHE_MS = 5 * 60_000
 type BoardCandidate = { sleeperId?: string | null; name: string; position: string | null; gain: number }
 type Board = { state?: string; candidates?: BoardCandidate[] }
 
-export type BestAdd =
+type BestAdd =
   | { kind: 'add'; sleeperId: string | null; name: string; position: string | null; gain: number }
   | { kind: 'none' }
 
@@ -60,7 +60,7 @@ export function bestAddCtaText(add: BestAdd | null, leagueName: string, es: bool
  * The same words without the league, for a button that already sits in that league's row. Paired
  * with `bestAddInLeague` it rebuilds `bestAddCtaText` exactly — see the compact render below.
  */
-export function bestAddLeadText(add: BestAdd | null, es: boolean): string {
+function bestAddLeadText(add: BestAdd | null, es: boolean): string {
   const m = messagesFor(coreTriageMessages, langFromFlag(es))
   if (!add) return m.bestAddSearchLead
   if (add.kind === 'none') return m.bestAddNoneLead

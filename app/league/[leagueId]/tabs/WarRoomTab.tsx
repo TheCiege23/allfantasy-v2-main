@@ -34,7 +34,7 @@ import './redraft-tailwind-tabs.css'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import '@/components/dynasty/dynasty-details.css'
 
-export type WarRoomTabProps = {
+type WarRoomTabProps = {
   league: UserLeague
   sport?: string
   dashboardEmbed?: boolean

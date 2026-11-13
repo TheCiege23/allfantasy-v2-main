@@ -54,7 +54,7 @@ function earliestLeagueDate(info: Pick<FantraxLeagueInfo, 'startDate' | 'scoring
  *      basketball/hockey, so it is used only when there is no calendar to check it against;
  *   4. the season in progress on `now`.
  */
-export function fantraxSplitSeasonStartYear(
+function fantraxSplitSeasonStartYear(
   info: Pick<FantraxLeagueInfo, 'seasonYear' | 'startDate' | 'scoringPeriods'>,
   now: Date = new Date(),
 ): number {

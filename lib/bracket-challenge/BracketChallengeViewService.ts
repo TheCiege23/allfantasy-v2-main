@@ -3,9 +3,9 @@
  * Lock state, can-edit, total picks, progress, empty/loading/error.
  */
 
-export type BracketViewState = 'editing' | 'locked' | 'submitted' | 'scored' | 'loading' | 'error'
+type BracketViewState = 'editing' | 'locked' | 'submitted' | 'scored' | 'loading' | 'error'
 
-export type BracketProgressDisplay = {
+type BracketProgressDisplay = {
   totalGames: number
   pickedCount: number
   percentComplete: number

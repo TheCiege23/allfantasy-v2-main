@@ -23,13 +23,13 @@ export type RosterLabelId =
   | 'nba-std' | 'nba-small' | 'nba-deep'
 
 /** One row of a label's value table. `key` is the design key from the handoff's rules.json. */
-export type ScoringLabelValue = { key: string; label: string; value: number }
+type ScoringLabelValue = { key: string; label: string; value: number }
 
 /**
  * The existing preset a label stands for. `null` means no live preset scores this option yet —
  * the label exists (art, copy, design values) but league creation cannot pick it.
  */
-export type ScoringBacking =
+type ScoringBacking =
   | { kind: 'nfl'; presetKey: 'af_default' | 'af_ppr' | 'af_standard'; tePremiumPoints?: number }
   | { kind: 'nba'; presetKey: 'af_default' }
   | { kind: 'nba_category'; categoryPresetId: 'nba_9cat' | 'nba_8cat_standard' }
@@ -56,7 +56,7 @@ export type ScoringLabel = {
   backing: ScoringBacking
 }
 
-export type RosterBacking =
+type RosterBacking =
   | { kind: 'nfl'; templateKey: 'redraft' | 'superflex' | 'idp' }
   | { kind: 'nba'; templateKey: 'redraft' }
   | null

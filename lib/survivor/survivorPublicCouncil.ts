@@ -1,7 +1,7 @@
 import { gateRevealPayload, type PublicRevealStep } from './survivorRevealGate'
 
 /** Fields the gate adds or replaces on every public council projection. */
-export interface SurvivorPublicRevealFields {
+interface SurvivorPublicRevealFields {
   revealSequence: PublicRevealStep[] | null
   revealMode: 'one_at_a_time' | 'all_at_once'
   revealTotalSteps: number | null
@@ -9,9 +9,9 @@ export interface SurvivorPublicRevealFields {
   revealNextStepAt: string | null
 }
 
-export type SurvivorPublicCouncil<T> = Omit<T, keyof SurvivorPublicRevealFields> & SurvivorPublicRevealFields
+type SurvivorPublicCouncil<T> = Omit<T, keyof SurvivorPublicRevealFields> & SurvivorPublicRevealFields
 
-export interface SurvivorPublicCouncilOptions {
+interface SurvivorPublicCouncilOptions {
   /** League.survivorRevealMode. */
   revealMode?: string | null
   now?: Date

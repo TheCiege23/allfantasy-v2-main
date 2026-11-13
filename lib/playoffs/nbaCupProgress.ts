@@ -55,13 +55,13 @@ const GROUPS_2026 = [
 
 export const cupTeamName = (name: string) => name === "Los Angeles Clippers" ? "LA Clippers" : name
 type GroupGame = Pick<PlayoffSeriesView, "id" | "round" | "homeTeamName" | "awayTeamName" | "winnerTeamName" | "liveHomeScore" | "liveAwayScore" | "status" | "providerGamesJson">
-export type CupTeamStanding = {
+type CupTeamStanding = {
   team: string; wins: number; losses: number; remaining: number; rank: number; tied: boolean
   differential: number | null; maxWins: number; canWinGroup: boolean | null; canFinishSecond: boolean | null
   status: "Qualified" | "Group winner" | "Eliminated" | "Group leader" | "In contention" | "Tiebreak pending" | "Schedule pending"
   road: string
 }
-export type CupGroupStanding = { name: string; conference: string; teams: CupTeamStanding[]; scheduleComplete: boolean }
+type CupGroupStanding = { name: string; conference: string; teams: CupTeamStanding[]; scheduleComplete: boolean }
 
 /** Enumerate only 10 group games (at most 1024 outcomes). Tied places remain possible, never guessed. */
 function possibilities(teams: readonly string[], games: GroupGame[]) {

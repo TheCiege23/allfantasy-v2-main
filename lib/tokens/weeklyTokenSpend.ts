@@ -13,7 +13,7 @@ import { TOKEN_ENTRY_TYPES } from './constants'
  * Weeks run Monday 00:00 UTC to Monday, the same for every viewer, oldest first; the current week is
  * the last bar and is partial.
  */
-export type TokenSpendRow = { createdAt: Date; entryType: string; tokenDelta: number }
+type TokenSpendRow = { createdAt: Date; entryType: string; tokenDelta: number }
 export type WeeklyTokenSpend = { weekStart: string; spent: number }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000

@@ -26,7 +26,7 @@
 /** Players a manager may shield. Everyone else on the roster is takeable. */
 export const PROTECTION_SLOTS = 3
 
-export type StealExposure = {
+type StealExposure = {
   /** The best player you could actually lose if you lose this week. */
   atRiskValue: number | null
   /** How many rostered players are exposed. */
@@ -70,7 +70,7 @@ export function stealExposure(args: {
   }
 }
 
-export type AcquisitionSafety = {
+type AcquisitionSafety = {
   /** Whether the incoming player would fit inside the protection cap. */
   protectable: boolean
   /** Who he would displace from protection, if anyone. */

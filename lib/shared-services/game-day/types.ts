@@ -46,7 +46,7 @@ export type GameDayMatchupState =
   | 'stale'
   | 'unavailable'
 
-export interface SourceAttribution {
+interface SourceAttribution {
   source: string
   fetchedAt: string
   providerTimestamp: string | null
@@ -125,7 +125,7 @@ export interface UserPlayerExposure {
   gameWindow: GameWindowId | null
 }
 
-export type GameWindowId = string
+type GameWindowId = string
 
 export interface GameWindow {
   id: GameWindowId

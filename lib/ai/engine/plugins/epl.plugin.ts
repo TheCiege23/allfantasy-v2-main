@@ -14,7 +14,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type EplContext = {
+type EplContext = {
   leagueId: string
   leagueName: string
   currentGameweek: number
@@ -34,13 +34,13 @@ export type EplContext = {
   }>
 }
 
-export type EplProviderData = {
+type EplProviderData = {
   fixtureDifficultyRatings: Array<{ teamName: string; nextThreeGwFdr: number[] }>
   cleanSheetProbabilities: Array<{ teamName: string; csProbability: number }>
   expectedGoalsAndAssists: Array<{ playerId: string; xG: number; xA: number }>
 }
 
-export type EplInsights = {
+type EplInsights = {
   captainPick: {
     playerName: string
     captainScore: number // form × (1 - FDR/5) × homeBonus × projectedReturn

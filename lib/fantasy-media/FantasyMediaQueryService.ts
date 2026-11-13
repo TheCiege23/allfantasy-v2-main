@@ -5,7 +5,7 @@
 import { prisma } from '@/lib/prisma';
 import type { MediaType } from './types';
 
-export interface ListEpisodesInput {
+interface ListEpisodesInput {
   userId: string;
   mediaType?: MediaType | string;
   sport?: string;
@@ -34,7 +34,7 @@ export async function getEpisode(episodeId: string, userId?: string) {
   return prisma.fantasyMediaEpisode.findFirst({ where });
 }
 
-export interface CreateEpisodeInput {
+interface CreateEpisodeInput {
   userId: string;
   sport: string;
   leagueId?: string | null;

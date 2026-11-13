@@ -17,16 +17,16 @@
  * slots, so leaving him out would inflate every share; he is counted as "club not on file" instead.
  */
 
-export const TEAM_SPLIT_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
+const TEAM_SPLIT_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
 export const TEAMS_SHOWN = 6
 /** Names listed per club, most starts first. */
 export const PLAYERS_PER_TEAM = 3
 
 export type SplitStarter = { sleeperId: string; name: string; team: string | null; position: string | null; starts: number }
 
-export type TeamShare = { team: string; starts: number; share: number; players: string[] }
+type TeamShare = { team: string; starts: number; share: number; players: string[] }
 
-export type ByeCrunch = { week: number; starts: number; share: number; teams: string[] }
+type ByeCrunch = { week: number; starts: number; share: number; teams: string[] }
 
 export type TeamSplit = {
   /** Every starting QB/RB/WR/TE slot across your rosters, including those whose club is unknown. */

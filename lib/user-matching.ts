@@ -1,4 +1,4 @@
-export interface PartyLike {
+interface PartyLike {
   userId?: string
   teamName?: string
   displayName?: string

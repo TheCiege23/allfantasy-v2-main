@@ -30,7 +30,7 @@ export type EdgeWaiverClaim = {
   atIso: string
 }
 
-export type EdgeWaiverManager = {
+type EdgeWaiverManager = {
   teamExternalId: string
   name: string
   faabRemaining: number | null
@@ -41,7 +41,7 @@ export type EdgeWaiverManager = {
  * another language without parsing the English (lib/core-app/playerCardCopy.ts `waiverFactText`).
  * The `text` stays the English, byte for byte.
  */
-export type WaiverFactParts =
+type WaiverFactParts =
   | { kind: 'faab_left'; name: string; left: number; viewer: number | null }
   | { kind: 'no_claims'; name: string }
   | { kind: 'claims'; name: string; claims: number; spent: number | null }
@@ -53,7 +53,7 @@ export type WaiverFactParts =
 
 export type WaiverEdgeFact = EdgeFact & { parts?: WaiverFactParts }
 
-export type WaiverEdgeRival = {
+type WaiverEdgeRival = {
   manager: { name: string; teamExternalId: string }
   faabRemaining: number | null
   claims: number

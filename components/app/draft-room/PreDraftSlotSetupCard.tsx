@@ -16,7 +16,7 @@ import React, { useMemo, useState } from 'react'
 
 import type { DraftSessionSnapshot, SlotOrderEntry } from '@/lib/live-draft-engine/types'
 
-export interface PreDraftSlotSetupCardProps {
+interface PreDraftSlotSetupCardProps {
   leagueId: string
   session: DraftSessionSnapshot | null
   /** Called with the server's updated slotOrder so the caller can merge it back into local state. */

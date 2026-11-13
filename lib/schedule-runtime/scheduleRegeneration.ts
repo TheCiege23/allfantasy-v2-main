@@ -34,7 +34,7 @@ export const SCHEDULE_REGEN_CONFIRM_FLAG = 'confirmMidSeasonChange'
 export const SCHEDULE_REGEN_CONFIRMATION_MESSAGE =
   "This league's season has started. Regenerating keeps every week that has started and rebuilds only the weeks after it. Confirm to continue."
 
-export type ScheduleRegenerationRefusal = {
+type ScheduleRegenerationRefusal = {
   code: 'DRAFT_IN_PROGRESS' | 'LEAGUE_ARCHIVED'
   message: string
 }
@@ -60,7 +60,7 @@ export function scheduleRegenerationLifecycleRefusal(input: {
   return null
 }
 
-export type PersistedScheduleRow = {
+type PersistedScheduleRow = {
   week: number
   status?: string | null
   homeScore?: number | null
@@ -73,7 +73,7 @@ function rowStarted(row: PersistedScheduleRow): boolean {
   return Number(row.homeScore ?? 0) !== 0 || Number(row.awayScore ?? 0) !== 0
 }
 
-export type WeekStartInput = {
+type WeekStartInput = {
   currentWeek: number
   /** `RedraftSeason.sport` (config key, e.g. `NCAABB`) or a league sport. */
   sport: string | null | undefined

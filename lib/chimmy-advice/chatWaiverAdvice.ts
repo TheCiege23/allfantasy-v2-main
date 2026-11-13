@@ -30,7 +30,7 @@ import type { WaiverClaimRecommendation } from '@/lib/decision-os/waiver/decisio
  * nothing else could ever resolve the receipt.
  */
 
-export type ChatWaiverAdviceOutcome =
+type ChatWaiverAdviceOutcome =
   | 'recorded'
   | 'unavailable'
   | 'invalid'

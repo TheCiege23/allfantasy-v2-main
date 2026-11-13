@@ -4,7 +4,7 @@ import { type ReactNode } from 'react';
 import { useSportPreset, type LeagueSportOption } from '@/hooks/useSportPreset';
 import { Loader2 } from 'lucide-react';
 
-export interface LeagueCreationTemplateLoaderProps {
+interface LeagueCreationTemplateLoaderProps {
   sport: LeagueSportOption;
   variant?: string | null;
   children: (payload: NonNullable<ReturnType<typeof useSportPreset>['preset']>) => ReactNode;

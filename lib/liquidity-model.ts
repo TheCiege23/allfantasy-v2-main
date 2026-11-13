@@ -21,7 +21,7 @@ export function computeLiquidity(metrics: LiquidityMetrics): number {
   return Math.round(score * 100)
 }
 
-export type LiquidityTier = 'FROZEN' | 'LOW' | 'MODERATE' | 'HIGH' | 'VERY_HIGH'
+type LiquidityTier = 'FROZEN' | 'LOW' | 'MODERATE' | 'HIGH' | 'VERY_HIGH'
 
 export function liquidityTier(score: number): LiquidityTier {
   if (score < 15) return 'FROZEN'
@@ -31,7 +31,7 @@ export function liquidityTier(score: number): LiquidityTier {
   return 'VERY_HIGH'
 }
 
-export function liquidityAcceptanceModifier(score: number): number {
+function liquidityAcceptanceModifier(score: number): number {
   const tier = liquidityTier(score)
   switch (tier) {
     case 'FROZEN': return -0.10

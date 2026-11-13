@@ -143,7 +143,7 @@ function count(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null
 }
 
-export type ImportedLineupLeague = {
+type ImportedLineupLeague = {
   sport: string | null | undefined
   settings: unknown
   /** `League.taxiSlots` — used when the settings carry no taxi count. */

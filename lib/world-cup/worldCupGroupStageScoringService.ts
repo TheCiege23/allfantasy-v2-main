@@ -3,20 +3,20 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { WorldCupScoringValues } from "./types"
 
-export const WORLD_CUP_GROUP_STAGE_ROUND_KEYS = {
+const WORLD_CUP_GROUP_STAGE_ROUND_KEYS = {
   rankings: "group_stage_rankings",
   perfectGroupBonus: "group_stage_perfect_group_bonus",
   thirdPlaceAdvancers: "group_stage_third_place_advancers",
 } as const
 
-export type WorldCupGroupStageScoringValues = Partial<WorldCupScoringValues> & {
+type WorldCupGroupStageScoringValues = Partial<WorldCupScoringValues> & {
   groupExactPlacementPoints?: number | null
   groupQualifiedTeamPoints?: number | null
   perfectGroupBonusPoints?: number | null
   thirdPlaceAdvancerPoints?: number | null
 }
 
-export type WorldCupGroupRankingPickForScoring = {
+type WorldCupGroupRankingPickForScoring = {
   id?: string
   groupId: string
   teamId: string
@@ -26,7 +26,7 @@ export type WorldCupGroupRankingPickForScoring = {
   isCorrect?: boolean | null
 }
 
-export type WorldCupThirdPlaceAdvancerPickForScoring = {
+type WorldCupThirdPlaceAdvancerPickForScoring = {
   id?: string
   groupId: string
   teamId: string
@@ -36,7 +36,7 @@ export type WorldCupThirdPlaceAdvancerPickForScoring = {
   isCorrect?: boolean | null
 }
 
-export type WorldCupGroupStageScoreSummary = {
+type WorldCupGroupStageScoreSummary = {
   groupRankingScore: number
   perfectGroupBonusScore: number
   thirdPlaceAdvancerScore: number
@@ -59,7 +59,7 @@ function groupScoring(scoring?: WorldCupGroupStageScoringValues | null) {
   }
 }
 
-export function evaluateWorldCupGroupRankingPick(
+function evaluateWorldCupGroupRankingPick(
   pick: WorldCupGroupRankingPickForScoring,
   scoring?: WorldCupGroupStageScoringValues | null
 ) {
@@ -79,7 +79,7 @@ export function evaluateWorldCupGroupRankingPick(
   }
 }
 
-export function evaluateWorldCupThirdPlaceAdvancerPick(
+function evaluateWorldCupThirdPlaceAdvancerPick(
   pick: WorldCupThirdPlaceAdvancerPickForScoring,
   scoring?: WorldCupGroupStageScoringValues | null
 ) {
@@ -122,7 +122,7 @@ export function getWorldCupGroupStageCompletionState(input: {
   }
 }
 
-export function buildWorldCupGroupStageScoreSummary(input: {
+function buildWorldCupGroupStageScoreSummary(input: {
   groupRankingPicks?: WorldCupGroupRankingPickForScoring[]
   thirdPlaceAdvancerPicks?: WorldCupThirdPlaceAdvancerPickForScoring[]
   scoring?: WorldCupGroupStageScoringValues | null
@@ -211,7 +211,7 @@ async function actualRankLookup(challengeId: string) {
   return new Map(rows.map((row) => [`${row.groupId}:${row.teamId}`, row.actualRank]))
 }
 
-export async function scoreWorldCupGroupRankingPicks(input: { challengeId: string; entryId: string }) {
+async function scoreWorldCupGroupRankingPicks(input: { challengeId: string; entryId: string }) {
   const [challenge, picks, actualRanks] = await Promise.all([
     prisma.worldCupBracketChallenge.findUnique({
       where: { id: input.challengeId },
@@ -250,7 +250,7 @@ export async function scoreWorldCupGroupRankingPicks(input: { challengeId: strin
   })
 }
 
-export async function scoreWorldCupThirdPlaceAdvancerPicks(input: { challengeId: string; entryId: string }) {
+async function scoreWorldCupThirdPlaceAdvancerPicks(input: { challengeId: string; entryId: string }) {
   const [challenge, picks] = await Promise.all([
     prisma.worldCupBracketChallenge.findUnique({
       where: { id: input.challengeId },

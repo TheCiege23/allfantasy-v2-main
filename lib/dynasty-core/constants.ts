@@ -66,7 +66,7 @@ export const DYNASTY_PLAYOFF_PRESETS = [
   { playoffTeamCount: 10, label: '10-team playoffs' },
 ] as const
 
-export const DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS = 14
+const DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS = 14
 
 /**
  * The regular-season length a dynasty league gets when nobody chose one.

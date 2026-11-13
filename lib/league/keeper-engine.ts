@@ -4,8 +4,6 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 export {
   resolveKeeperPolicy,
   supportsKeeperDeclarations,
-  type KeeperRecommendation,
-  type KeeperWindow,
 } from './keeper-policy'
 
 const prismaAny = prisma as any

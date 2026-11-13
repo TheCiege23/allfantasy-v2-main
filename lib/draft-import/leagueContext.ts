@@ -8,7 +8,7 @@ function normalize(s: string): string {
   return (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-export interface LeagueRosterInfo {
+interface LeagueRosterInfo {
   id: string
   displayName: string
 }

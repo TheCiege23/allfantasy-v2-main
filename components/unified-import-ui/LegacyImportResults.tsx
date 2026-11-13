@@ -34,13 +34,13 @@ type LegacyProfilePayload = {
   last_import?: { status?: string; progress?: number } | null
 }
 
-export type LeagueImportSuccessPayload = {
+type LeagueImportSuccessPayload = {
   leagueId: string
   leagueName: string
   sport: string
 }
 
-export type LegacyImportResultsProps = {
+type LegacyImportResultsProps = {
   variant: 'legacy_sleeper' | 'league_created'
   returnTo: string
   /** Sleeper username for profile fetch */

@@ -23,7 +23,7 @@ import '@/components/core-app/af-league-tile.css'
  * file is how the two drift apart.
  */
 
-export type LeagueTileProps = {
+type LeagueTileProps = {
   model: LeagueTileModel
   /** Names that appear more than once in this list — see `findCollidingNames`. */
   collidingNames?: ReadonlySet<string>
@@ -101,7 +101,7 @@ function TileScore({ score }: { score: NonNullable<LeagueTileModel['score']> }) 
   )
 }
 
-export function LeagueTile({ model, collidingNames, variant = 'card' }: LeagueTileProps) {
+function LeagueTile({ model, collidingNames, variant = 'card' }: LeagueTileProps) {
   const name = resolveTileName(model, collidingNames)
   const { status } = model
 

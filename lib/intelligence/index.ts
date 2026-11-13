@@ -13,7 +13,6 @@ export type { AiToolPayloadEnvelope } from '@/lib/intelligence/buildAiToolPayloa
 export { attachIntelligenceToChimmyPayload } from '@/lib/intelligence/chimmyIntelligenceMerge'
 
 export { buildStandardAiPayload } from '@/lib/ai-payload/buildStandardAiPayload'
-export type { BuildStandardAiPayloadArgs } from '@/lib/ai-payload/buildStandardAiPayload'
 export type {
   AllFantasyStandardAiPayload,
   AiTeamContextPayload,
@@ -34,31 +33,19 @@ export {
   IntelligenceAccessError,
   computeHealth,
   deriveActionItems,
-  type LeagueActivitySummary,
-  type LeagueHealthSnapshot,
-  type LeagueHealthStatus,
-  type ManagerActivitySnapshot,
   type CommissionerActionItem,
-  type ActionItemSeverity,
-  type ActionItemThresholds,
-  type AuditFeedItem,
-  type AuditFeedPage,
 } from '@/lib/intelligence/IntelligenceQueryService'
 export {
   INTELLIGENCE_FEATURES,
-  AllowAllFeatureGate,
   defaultFeatureGate,
   type IFeatureGate,
   type IntelligenceFeature,
   type FeatureGatePrincipal,
-  type FeatureGateDecision,
 } from '@/lib/intelligence/featureGate'
 // G15.9 — Chimmy commissioner-intelligence grounding adapter
 export {
   detectCommissionerIntelligenceIntent,
   buildCommissionerGrounding,
   formatCommissionerGroundingText,
-  type CommissionerGrounding,
   type CommissionerGroundingSummary,
-  type CommissionerGroundingStatus,
 } from '@/lib/intelligence/chimmy/commissionerGrounding'

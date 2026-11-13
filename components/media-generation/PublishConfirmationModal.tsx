@@ -3,7 +3,7 @@
 import React from 'react'
 import { X } from 'lucide-react'
 
-export interface PublishConfirmationModalProps {
+interface PublishConfirmationModalProps {
   open: boolean
   onClose: () => void
   onConfirm: () => void

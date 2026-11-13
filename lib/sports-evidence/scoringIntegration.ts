@@ -16,7 +16,7 @@ import 'server-only'
  */
 import { CertifiedMatchupIntegrationService, type CertifiedMatchupContext, type MatchupFinalityEvidence } from './matchupIntegration'
 
-export type StatSourceAvailability = {
+type StatSourceAvailability = {
   /**
    * Honest capability report. Phase 5F-a: certified player-game statistics now EXIST as a certified data
    * capability (`certified-not-scoring-input`) but are deliberately NOT yet a scoring input — the scoring engine
@@ -29,7 +29,7 @@ export type StatSourceAvailability = {
   note: string
 }
 
-export type ScoringFinalityDecision = {
+type ScoringFinalityDecision = {
   /** Certified evidence can only ALLOW finalization to proceed (stricter). It never declares scoring complete. */
   certifiedGamesSupportFinalization: boolean
   certifiedAllGamesFinal: boolean

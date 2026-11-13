@@ -1,4 +1,4 @@
-export type PlayerInsight = { trend: 'rising' | 'falling' | 'stable'; outlookText: string }
+type PlayerInsight = { trend: 'rising' | 'falling' | 'stable'; outlookText: string }
 
 export async function generatePlayerInsight(
   _playerId: string,

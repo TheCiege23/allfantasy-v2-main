@@ -18,7 +18,7 @@ import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import { commissionerHealthChartsMessages } from '@/lib/core-app/messages/commissionerHealthCharts'
 import { pie3dGeometry, lastWeeks, type ManagerActivity, type MixSlice, type MoveKind, type WeekPoint } from '@/lib/core-app/commissioner/healthCharts'
 
-export type LeagueHealthChartsProps = {
+type LeagueHealthChartsProps = {
   language?: string
   weeks: WeekPoint[]
   managers: ManagerActivity[] | null

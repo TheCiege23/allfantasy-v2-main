@@ -5,7 +5,7 @@ export {
   getNewsFeedBySport,
   getAggregatedFeed,
 } from './NewsAggregationService';
-export { summarizeHeadlines, type ItemForSummary } from './NewsSummarizerAI';
+export { summarizeHeadlines } from './NewsSummarizerAI';
 export {
   fetchAndPrepareNews,
   getEnrichedNewsFeed,

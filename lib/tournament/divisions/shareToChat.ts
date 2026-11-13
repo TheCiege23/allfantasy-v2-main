@@ -35,7 +35,7 @@ import { getBaseUrl } from '@/lib/get-base-url'
 import { loadTrophy } from './lifecycle'
 import { buildShareCard, type ShareCard } from './shareCard'
 
-export const SHARE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+const SHARE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 
 export class ShareToChatError extends Error {
   constructor(message: string, readonly status: number) {
@@ -44,19 +44,19 @@ export class ShareToChatError extends Error {
   }
 }
 
-export const trophyHref = (tournamentId: string, entryId: string) => `/tournament-trophy/${encodeURIComponent(tournamentId)}?entry=${encodeURIComponent(entryId)}`
+const trophyHref = (tournamentId: string, entryId: string) => `/tournament-trophy/${encodeURIComponent(tournamentId)}?entry=${encodeURIComponent(entryId)}`
 
 /** Deterministic chat row id: one post per poster, entry and moment. */
-export function shareMessageId(tournamentId: string, entryId: string, userId: string, headline: string): string {
+function shareMessageId(tournamentId: string, entryId: string, userId: string, headline: string): string {
   return 'tshare_' + createHash('sha256').update([tournamentId, entryId, userId, headline].join('\u0000')).digest('hex').slice(0, 40)
 }
 
-export function shareCaption(card: ShareCard, tournamentName: string): string {
+function shareCaption(card: ShareCard, tournamentName: string): string {
   return `${card.team} · ${card.headline} — ${tournamentName}. ${card.subtitle}`.slice(0, 400)
 }
 
 /** The app league the user plays in for this tournament, when they are a member of it. */
-export async function findShareChatLeague(tournamentId: string, userId: string): Promise<{ leagueId: string; name: string } | null> {
+async function findShareChatLeague(tournamentId: string, userId: string): Promise<{ leagueId: string; name: string } | null> {
   const rows = await prisma.tournamentLeagueParticipant.findMany({
     where: { userId, league: { tournamentId, leagueId: { not: null } } },
     select: { league: { select: { leagueId: true, name: true } } },
@@ -77,7 +77,7 @@ export async function canPostShareCard(tournamentId: string, userId: string | nu
   return Boolean(await findShareChatLeague(tournamentId, userId).catch(() => null))
 }
 
-export type ShareToChatResult = { leagueId: string; leagueName: string; messageId: string; image: boolean }
+type ShareToChatResult = { leagueId: string; leagueName: string; messageId: string; image: boolean }
 
 export async function postShareCardToLeagueChat(input: { userId: string; tournamentId: string; entryId: string; image: Blob | null }): Promise<ShareToChatResult> {
   const view = await loadTrophy(input.tournamentId)

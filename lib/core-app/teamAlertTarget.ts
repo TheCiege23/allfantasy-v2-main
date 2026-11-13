@@ -22,7 +22,7 @@ export function teamAlertDecision(data:MyTeamData,target:TeamAlertTarget,now:num
   return {state:'current' as const,slotIndex:target.slotIndex,player}
 }
 
-export type DeadlineAlertTarget={key:string;deadline:string}
+type DeadlineAlertTarget={key:string;deadline:string}
 export function teamDeadlineAlertHref(leagueId:string,key:string,deadline:string){
   return `/core/schedule?${new URLSearchParams({league:leagueId,alertEvent:key,alertDeadline:deadline})}#af-team-deadline-alert`
 }

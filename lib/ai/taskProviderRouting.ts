@@ -33,7 +33,7 @@
 import type { FeatureKey } from '@/lib/ai/engine/types'
 import type { ProviderName } from '@/lib/ai/providerRouter'
 
-export type TaskRoute = {
+type TaskRoute = {
   provider: ProviderName
   /** Why this task routes here. Surfaced in admin logs, never to end users. */
   rationale: string

@@ -1,6 +1,6 @@
 import type { CommissionerAiTeamAssignment } from './ai-manager'
 
-export interface DraftTradeGuardrailContext {
+interface DraftTradeGuardrailContext {
   commissionerDisableAiTrades?: boolean
   allowAiOutboundProposals?: boolean
   allowAiAccept?: boolean
@@ -8,7 +8,7 @@ export interface DraftTradeGuardrailContext {
   maxProposalsPerHour?: number
 }
 
-export function isAiToAiTrade(teamA: string, teamB: string, aiByTeamId: Map<string, CommissionerAiTeamAssignment>): boolean {
+function isAiToAiTrade(teamA: string, teamB: string, aiByTeamId: Map<string, CommissionerAiTeamAssignment>): boolean {
   const a = aiByTeamId.get(teamA)?.active
   const b = aiByTeamId.get(teamB)?.active
   return Boolean(a && b)

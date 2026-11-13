@@ -27,7 +27,7 @@ export type GuardrailCandidateDebug = {
   details?: Record<string, any>;
 };
 
-export type GuardrailsResult = {
+type GuardrailsResult = {
   filtered: TradeCandidate[];
   removedCount: number;
   notes: string[];
@@ -78,7 +78,7 @@ function rosterAssetValue(intel: LeagueIntelligence, rosterId: number): number {
   return sum;
 }
 
-export function computeTpiByRosterId(intel: LeagueIntelligence): Record<number, number> {
+function computeTpiByRosterId(intel: LeagueIntelligence): Record<number, number> {
   const anyIntel = intel as any;
 
   const rosterIds: number[] = Array.isArray(anyIntel.rosterIds)

@@ -23,7 +23,7 @@ interface InviteRow {
   acceptedCount: number
 }
 
-export interface InviteManagementPanelProps {
+interface InviteManagementPanelProps {
   type?: string
 }
 

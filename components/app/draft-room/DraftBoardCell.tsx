@@ -86,7 +86,7 @@ function TinyHeadshot({
 
 export type PickHighlightTone = 'none' | 'user' | 'ai'
 
-export type DraftBoardCellProps = {
+type DraftBoardCellProps = {
   pick: DraftBoardCellPick
   isEmpty: boolean
   isCurrentPick?: boolean

@@ -136,7 +136,7 @@ export function getDefaultChimmyChips(options?: {
   return deduped
 }
 
-export interface ChimmyToolDisplayContext {
+interface ChimmyToolDisplayContext {
   toolName?: string
   summary?: string
   leagueName?: string | null

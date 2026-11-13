@@ -33,7 +33,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
  * different population — lib/league-access.ts measured it rejecting 98 of 176 real members.
  * This module does not read it.
  */
-export interface UserRosterResolution {
+interface UserRosterResolution {
   /** `Roster.id` for the user's own team. */
   rosterId: string
   /** Everything on that roster, in the platform's player-id space (Sleeper ids for NFL). */

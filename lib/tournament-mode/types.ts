@@ -5,7 +5,7 @@
 
 import { TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED } from './pool-sizes'
 
-export type TournamentDraftType = 'snake' | 'auction'
+type TournamentDraftType = 'snake' | 'auction'
 
 /** Participant pools accepted by tournament creation flows. */
 export const TOURNAMENT_PARTICIPANT_POOL_SIZES = TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED
@@ -51,7 +51,7 @@ export interface TournamentSettings {
   eliminationAdvancementPerLeague?: number
 }
 
-export interface TournamentHubSettings {
+interface TournamentHubSettings {
   visibility: 'public' | 'unlisted' | 'private'
   forumAnnouncements: boolean
   bannerTheme?: string

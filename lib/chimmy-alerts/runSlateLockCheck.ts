@@ -41,9 +41,9 @@ import { openSlate, playsInSlate, renderSlateLock, slateIssues } from './slateLo
  * is advice nobody can take. The weekly check, hours earlier, is the one that emails.
  */
 
-export const SLATE_LOCK_ALERT_TYPE = 'slate_lock_check'
+const SLATE_LOCK_ALERT_TYPE = 'slate_lock_check'
 
-export type SlateLockUserOutcome =
+type SlateLockUserOutcome =
   | 'sent'
   | 'would_send'
   | 'clean'
@@ -78,12 +78,12 @@ export type SlateLockRun =
 const DEFAULT_BUDGET_MS = 90_000
 
 /** `chimmy-slate-lock:<season>-w<week>-<slate ISO>` — the dispatcher appends `:<userId>`. */
-export function slateLockDedupeKey(season: string | number, week: number, slate: Date): string {
+function slateLockDedupeKey(season: string | number, week: number, slate: Date): string {
   return `chimmy-slate-lock:${season}-w${week}-${slate.toISOString()}`
 }
 
 /** An empty slot is said once per league per week, whichever slate first sees it. */
-export function emptySlotClaimKey(season: string | number, week: number, leagueId: string): string {
+function emptySlotClaimKey(season: string | number, week: number, leagueId: string): string {
   return `chimmy-slate-lock-empty:${season}-w${week}:${leagueId}`
 }
 

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 const MAX_WEEK = 18;
 const WEEK_OPTIONS = Array.from({ length: MAX_WEEK }, (_, i) => i + 1);
 
-export interface PowerRankingsPageProps {
+interface PowerRankingsPageProps {
   leagueId: string;
 }
 

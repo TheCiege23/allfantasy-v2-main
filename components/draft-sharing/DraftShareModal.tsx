@@ -5,7 +5,7 @@ import { DraftShareCard, DRAFT_SHARE_CARD_ID } from './DraftShareCard'
 import { DraftShareBar } from './DraftShareBar'
 import type { DraftShareCardPayload, DraftShareVariant } from '@/lib/draft-sharing/types'
 
-export interface DraftShareModalProps {
+interface DraftShareModalProps {
   leagueId: string
   season: string
   /** Roster options for "Share my grade" (rosterId, optional name) */

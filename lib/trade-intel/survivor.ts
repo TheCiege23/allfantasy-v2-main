@@ -42,7 +42,7 @@
  */
 export const CONVERTING_IDOLS = ['convert idol → faab', 'convert idol → points'] as const
 
-export type IdolHorizon = {
+type IdolHorizon = {
   weeksToMerge: number
   /** 1 with the whole pre-merge stretch left, approaching 0 at the merge. */
   usabilityMultiplier: number
@@ -130,7 +130,7 @@ export function stealIdolValue(args: {
   }
 }
 
-export type TribeRelation = 'tribemate' | 'rival' | 'post-merge' | 'unknown'
+type TribeRelation = 'tribemate' | 'rival' | 'post-merge' | 'unknown'
 
 /**
  * Whether this deal helps the tribe that keeps you out of Tribal Council.

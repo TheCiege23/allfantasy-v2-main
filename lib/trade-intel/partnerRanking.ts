@@ -35,7 +35,7 @@
 import { DEFAULT_SLOT_ELIGIBILITY, fillLineup, type SlotEligibility } from '@/lib/decision-os/trade/rosterImpact'
 import { REFERENCE_NFL_BUCKETS } from '@/lib/sports-data-gateway/canonical/canonicalPosition'
 
-export type RankingPlayer = {
+type RankingPlayer = {
   id: string
   name: string
   position: string | null
@@ -43,7 +43,7 @@ export type RankingPlayer = {
   value: number | null
 }
 
-export type RankingPick = { pickId: string; label: string; value: number | null }
+type RankingPick = { pickId: string; label: string; value: number | null }
 
 export type RankingRoster = {
   rosterId: string

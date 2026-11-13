@@ -3,7 +3,7 @@
  * optional draft fullscreen flags used by dashboard overlays / iframes.
  */
 
-export type EmbedSearchParamsInput =
+type EmbedSearchParamsInput =
   | URLSearchParams
   | Record<string, string | string[] | undefined>
   | null

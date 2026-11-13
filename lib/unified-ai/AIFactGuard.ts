@@ -5,7 +5,7 @@
 
 import type { AIContextEnvelope, ModelOutput } from "./types"
 
-export interface FactGuardResult {
+interface FactGuardResult {
   allowed: boolean
   warnings: string[]
   suggestedPrefix?: string

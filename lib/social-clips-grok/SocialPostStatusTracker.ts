@@ -4,7 +4,7 @@
 
 import { prisma } from '@/lib/prisma';
 
-export interface PublishLogEntry {
+interface PublishLogEntry {
   id: string;
   platform: string;
   status: string;

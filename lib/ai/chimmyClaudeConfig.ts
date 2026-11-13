@@ -16,7 +16,7 @@
  * Claude Opus 5 unless `CHIMMY_CLAUDE_MODEL` names another. Changing it is a cost decision for the
  * owner: `claude-sonnet-5` is roughly 40% of the per-token price.
  */
-export const CHIMMY_CLAUDE_DEFAULT_MODEL = 'claude-opus-5'
+const CHIMMY_CLAUDE_DEFAULT_MODEL = 'claude-opus-5'
 
 export function resolveChimmyClaudeModel(override?: string | null): string {
   return override?.trim() || process.env.CHIMMY_CLAUDE_MODEL?.trim() || CHIMMY_CLAUDE_DEFAULT_MODEL

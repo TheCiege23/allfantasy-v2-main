@@ -75,14 +75,14 @@ const PACK = {
 } satisfies Pack
 
 /** What the shell reads from the same payload: commissioner badge and an unanswered sit-out. */
-export const league = {
+const league = {
   ...PACK,
   viewerIsCommissioner: true,
   commissionerNotifications: { unread: 2, actionRequired: 1 },
   hordeSitOuts: { myPendingResponse: null },
 } satisfies Pack & ZMeta
 
-export const matchups = {
+const matchups = {
   week: 10,
   rules: { bashingThreshold: 30, maulingThreshold: 50, bashShare: 0.1, maulShare: 0.25 },
   matchups: [
@@ -132,10 +132,10 @@ const INVENTORY = {
 } satisfies InvPayload
 
 /** The same /api/zombie/inventory payload: Armory reads InvPayload, Chat also reads the viewer's role fields. */
-export const inventory = { ...INVENTORY, isWhisperer: false, ambushesRemaining: null, pendingBashingDecision: null }
+const inventory = { ...INVENTORY, isWhisperer: false, ambushesRemaining: null, pendingBashingDecision: null }
 
 /** GET /api/zombie/settings — the commissioner's paid/free panel. */
-export const settings = {
+const settings = {
   isPaid: true, buyInAmount: 50, commissionerFee: 0, currencyLabel: 'Outbreak Points', weeklyPayoutEnabled: true, ultimateSurvivorPot: false,
 }
 

@@ -6,8 +6,8 @@ import type { AnalysisSelection, DraftAnalysisReport } from './analysisModel';
 export const PHASE4_VERSION = 'draft-decision-v1';
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 const id = (v: unknown) => typeof v === 'string' && v ? v : null;
-export type DecisionPick = AnalysisSelection & { overall: number; amount?: number | null; auctionEvidence?: unknown; selectedAt?: string | null; adpDifference?: number | null };
-export type FrozenPlayer = ImpactPlayer & { name: string; aliases: string[] };
+type DecisionPick = AnalysisSelection & { overall: number; amount?: number | null; auctionEvidence?: unknown; selectedAt?: string | null; adpDifference?: number | null };
+type FrozenPlayer = ImpactPlayer & { name: string; aliases: string[] };
 /** Frozen identity evidence remains useful even when projection scoring is incomplete. */
 export function frozenIdentities(basis:unknown,start:string|null):Array<{playerId:string;sleeperId:string|null}>{
   const b=obj(basis),seen=new Set<string>();
@@ -143,7 +143,7 @@ export function auctionAlternative(data:ReplayData,overall:number,playerId:strin
 }
 
 /** Restricted membership is frozen separately from projections, with explicit seasonal provenance. */
-export function frozenPoolEligibility(basis:unknown,context:PreparationContext,start:string|null):string[]|null{
+function frozenPoolEligibility(basis:unknown,context:PreparationContext,start:string|null):string[]|null{
   if(context.playerPool==='all')return null;
   const e=obj(obj(basis).eligibility),observed=typeof e.observedAt==='string'?Date.parse(e.observedAt):NaN,captured=typeof e.capturedAt==='string'?Date.parse(e.capturedAt):NaN;
   if(!start||e.version!=='draft-pool-eligibility-v1'||e.pool!==context.playerPool||e.season!==context.season||e.source!=='Sleeper years_exp by verified ID'||!Number.isFinite(observed)||!Number.isFinite(captured)||observed>captured||captured>Date.parse(start)||captured-observed>86400000||!Array.isArray(e.playerIds)||!e.playerIds.length||e.playerIds.length>5000||e.playerIds.some(p=>!id(p))||new Set(e.playerIds).size!==e.playerIds.length)return null;

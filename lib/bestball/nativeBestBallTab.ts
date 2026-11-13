@@ -13,12 +13,12 @@
  */
 import { frozenBestBallPositions, frozenBestBallSlots, readBestBallRuleStamp } from '@/lib/bestball/resultRuleStamp'
 
-export type SnapshotAssignment = { slot: string; seat?: number; playerId: string; playerName?: string | null; points: number }
+type SnapshotAssignment = { slot: string; seat?: number; playerId: string; playerName?: string | null; points: number }
 
 /** Daily best ball: one player's points summed across the days he was in the counted lineup. */
-export type SnapshotDailyCounted = { playerId: string; playerName?: string | null; points: number; days: number }
+type SnapshotDailyCounted = { playerId: string; playerName?: string | null; points: number; days: number }
 
-export type SnapshotSide = {
+type SnapshotSide = {
   points?: number
   allFinal?: boolean
   missingPlayerIds?: string[]
@@ -31,7 +31,7 @@ export type SnapshotSide = {
   }
 }
 
-export type WeekRosterPlayer = {
+type WeekRosterPlayer = {
   playerId: string
   playerName: string
   position: string
@@ -41,9 +41,9 @@ export type WeekRosterPlayer = {
 }
 
 /** `count`: how many seats of this slot; present when known (the stored stamp, `buildBestBallSlots`). */
-export type SlotEligibility = { slot: string; eligible: readonly string[]; count?: number }
+type SlotEligibility = { slot: string; eligible: readonly string[]; count?: number }
 
-export type LineupStatus = 'final' | 'provisional'
+type LineupStatus = 'final' | 'provisional'
 
 export type NativeLineupCard = {
   rosterId: string

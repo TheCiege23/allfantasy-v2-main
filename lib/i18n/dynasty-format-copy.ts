@@ -6,7 +6,7 @@
  * concurrent changes, and these strings belong to two components only. Both read `useLanguage()`
  * and pick a column here; anything that is not Spanish reads English.
  */
-export type DynastyFormatLang = 'en' | 'es'
+type DynastyFormatLang = 'en' | 'es'
 
 export function dynastyFormatLang(language: string | null | undefined): DynastyFormatLang {
   return String(language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'

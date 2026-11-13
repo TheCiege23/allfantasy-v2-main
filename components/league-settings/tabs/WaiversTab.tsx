@@ -59,35 +59,35 @@ export const HUB_WAIVER_TYPE_OPTIONS = [
 ]
 
 /** FAAB bid-tie rules (lib/waiver-wire/hub-waiver-options.ts). Shown only while FAAB is in use. */
-export const HUB_TIEBREAK_OPTIONS: Array<{ value: HubTiebreakRule; labelKey: string }> = HUB_TIEBREAK_RULES.map((value) => ({
+const HUB_TIEBREAK_OPTIONS: Array<{ value: HubTiebreakRule; labelKey: string }> = HUB_TIEBREAK_RULES.map((value) => ({
   value,
   labelKey: { priority_lowest_first: 'lsHub.wv.tb.priority', reverse_standings: 'lsHub.wv.tb.reverse', earliest_claim: 'lsHub.wv.tb.earliest' }[value],
 }))
 
 /** Priority reset policy. Shown only for the priority-list types (rolling, standard). */
-export const HUB_RESET_POLICY_OPTIONS: Array<{ value: WaiverOrderResetPolicy; labelKey: string }> = WAIVER_ORDER_RESET_POLICIES.map((value) => ({
+const HUB_RESET_POLICY_OPTIONS: Array<{ value: WaiverOrderResetPolicy; labelKey: string }> = WAIVER_ORDER_RESET_POLICIES.map((value) => ({
   value,
   labelKey: value === 'weekly' ? 'lsHub.wv.reset.weekly' : 'lsHub.wv.reset.rolling',
 }))
 
 /** Season-phase rules (lib/waiver-wire/season-phase-policy.ts). Always shown; defaults first. */
-export const HUB_OFFSEASON_RULE_OPTIONS: Array<{ value: OffseasonWaiverRule; labelKey: string }> = OFFSEASON_WAIVER_RULES.map((value) => ({
+const HUB_OFFSEASON_RULE_OPTIONS: Array<{ value: OffseasonWaiverRule; labelKey: string }> = OFFSEASON_WAIVER_RULES.map((value) => ({
   value,
   labelKey: `lsHub.wv.offseason.${value}`,
 }))
-export const HUB_PLAYOFF_RULE_OPTIONS: Array<{ value: PlayoffWaiverRule; labelKey: string }> = PLAYOFF_WAIVER_RULES.map((value) => ({
+const HUB_PLAYOFF_RULE_OPTIONS: Array<{ value: PlayoffWaiverRule; labelKey: string }> = PLAYOFF_WAIVER_RULES.map((value) => ({
   value,
   labelKey: `lsHub.wv.playoffs.${value}`,
 }))
 
 /** Free agency (lib/waiver-wire/after-run-free-agency.ts). Hidden for FCFS, which has no run to clear. */
-export const HUB_FREE_AGENCY_MODE_OPTIONS: Array<{ value: FreeAgencyMode; labelKey: string }> = FREE_AGENCY_MODES.map((value) => ({
+const HUB_FREE_AGENCY_MODE_OPTIONS: Array<{ value: FreeAgencyMode; labelKey: string }> = FREE_AGENCY_MODES.map((value) => ({
   value,
   labelKey: `waiverFa.mode.${value}`,
 }))
 
 /** FAAB at season rollover (lib/waiver-wire/faab-rollover.ts). Shown with the FAAB fields. */
-export const HUB_FAAB_ROLLOVER_OPTIONS: Array<{ value: FaabRolloverRule; labelKey: string }> = FAAB_ROLLOVER_RULES.map((value) => ({
+const HUB_FAAB_ROLLOVER_OPTIONS: Array<{ value: FaabRolloverRule; labelKey: string }> = FAAB_ROLLOVER_RULES.map((value) => ({
   value,
   labelKey: `waiverFa.rollover.${value}`,
 }))

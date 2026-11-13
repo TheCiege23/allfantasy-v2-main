@@ -513,7 +513,7 @@ function BrowserTabs({ browsers }: { browsers: BrowserPath[] }) {
   )
 }
 
-export type ImportGuideProps = {
+type ImportGuideProps = {
   provider: ImportProvider
   providerLabel: string
   /** Whether the provider can be imported today. A paused one gets a status card, not steps. */

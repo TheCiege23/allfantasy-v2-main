@@ -4,7 +4,7 @@ import React from 'react'
 import type { UncertaintyItem } from '@/lib/ai-context-envelope'
 import UncertaintyBlock from './UncertaintyBlock'
 
-export interface UncertaintyNoticeProps {
+interface UncertaintyNoticeProps {
   /** Uncertainty items — show when deterministic data is incomplete. */
   items: UncertaintyItem[]
   title?: string

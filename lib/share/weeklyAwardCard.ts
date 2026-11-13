@@ -21,7 +21,7 @@ export function isAwardKind(v: unknown): v is AwardKind {
   return typeof v === 'string' && (AWARD_KINDS as readonly string[]).includes(v)
 }
 
-export type AwardView = {
+type AwardView = {
   kind: AwardKind
   label: string
   season: string

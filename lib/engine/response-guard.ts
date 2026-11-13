@@ -1,4 +1,4 @@
-export interface GuardMeta {
+interface GuardMeta {
   fallbackMode: boolean
   rankingSource: string
   rankingSourceNote: string

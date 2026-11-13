@@ -24,7 +24,7 @@
 
 import type { LeagueIdentityColumn } from './externalIdNamespace'
 
-export type RiCrosswalkIdentity = {
+type RiCrosswalkIdentity = {
   rollingInsightsId: string
   canonicalName: string | null
   currentTeam: string | null
@@ -44,7 +44,7 @@ export type RiCrosswalkDb = {
   }
 }
 
-export type RiCrosswalk = {
+type RiCrosswalk = {
   /** Requested id → the identity whose RI id it resolves to. Unmapped and ambiguous ids are absent. */
   byId: Map<string, RiCrosswalkIdentity>
   /** Requested ids refused because the mapping was not one-to-one. */

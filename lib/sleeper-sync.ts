@@ -10,7 +10,7 @@ import {
   LeagueDeletedByUserError,
 } from '@/lib/league-delete/leagueTombstones';
 
-export interface SleeperSyncResult {
+interface SleeperSyncResult {
   success: boolean;
   leagueId: string;
   unifiedLeagueId: string;

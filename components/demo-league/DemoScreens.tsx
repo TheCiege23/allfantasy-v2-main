@@ -18,7 +18,7 @@ function syncedAgo(iso: string | null): string {
   return h < 48 ? `synced ${h} h ago` : `synced ${Math.round(h / 24)} days ago`
 }
 
-export type DemoOverviewOptions = {
+type DemoOverviewOptions = {
   /** Sample (generated) league: no team pages to link to, no "synced N min ago", no header. */
   sample?: boolean
   /** Where "Create your own league" goes; a format demo pre-selects its format. */

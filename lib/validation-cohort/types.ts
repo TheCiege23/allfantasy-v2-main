@@ -170,7 +170,7 @@ export type OperatingSystemKey =
   | 'waiver'
   | 'draft'
 
-export type DecisionOutputReachability = 'available' | 'empty' | 'db-backed-only'
+type DecisionOutputReachability = 'available' | 'empty' | 'db-backed-only'
 
 /** The result of probing one Decision OS output for one league (DB-less). */
 export type DecisionOutputProbe = {

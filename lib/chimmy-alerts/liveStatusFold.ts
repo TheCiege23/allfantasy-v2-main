@@ -38,7 +38,7 @@ export type SleeperIdentityRow = {
   position: string | null
 }
 
-export type LiveFoldRow = {
+type LiveFoldRow = {
   sleeperId: string
   status: string
   name: string

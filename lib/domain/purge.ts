@@ -129,7 +129,7 @@ export const LEAGUE_PURGE_BLOCKERS = ['LeagueManagerClaim'] as const
  */
 export const PURGE_EXEMPT_MODELS = ['AuditEvent'] as const
 
-export type PurgeStep = {
+type PurgeStep = {
   readonly model: string
   readonly reason: string
 }
@@ -164,12 +164,12 @@ export function planLeaguePurge(): readonly PurgeStep[] {
  * keeps the role boundary visible at the composition root rather than buried
  * here, and it is what makes this testable without granting a test DELETE.
  */
-export type PurgeDeps = {
+type PurgeDeps = {
   readonly deleteMany: (model: string, where: Record<string, unknown>) => Promise<number>
   readonly now?: () => Date
 }
 
-export type PurgeReport = {
+type PurgeReport = {
   readonly leagueId: string
   readonly deleted: ReadonlyArray<{ model: string; rows: number }>
 }

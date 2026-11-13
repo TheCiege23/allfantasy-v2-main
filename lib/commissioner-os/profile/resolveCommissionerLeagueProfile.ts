@@ -53,7 +53,7 @@ export type CommissionerLeagueRow = {
   lifecycleState?: string | null
 }
 
-export type ResolveCommissionerLeagueProfileInput = {
+type ResolveCommissionerLeagueProfileInput = {
   league: CommissionerLeagueRow
   /**
    * The asking user's role in this league.

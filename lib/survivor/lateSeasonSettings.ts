@@ -21,7 +21,7 @@
  *     it was created with. A median boss only ever comes from an explicit value.
  */
 
-export type SurvivorFinalistCount = 2 | 3
+type SurvivorFinalistCount = 2 | 3
 export type SurvivorMergeNamingMode = 'commissioner' | 'manager_vote'
 export type SurvivorExileBossMode = 'median' | 'fixed' | 'topN' | 'chimmy_roster'
 
@@ -36,9 +36,9 @@ export interface SurvivorLateSeasonSettings {
 /** Written into a new league's settings at creation. */
 export const NEW_LEAGUE_EXILE_BOSS_MODE = 'median' as const
 /** Read-time fallback when nothing is stored: the pre-existing (Chimmy roster) behaviour. */
-export const LEGACY_EXILE_BOSS_MODE = 'chimmy_roster' as const
+const LEGACY_EXILE_BOSS_MODE = 'chimmy_roster' as const
 
-export const SURVIVOR_LATE_SEASON_DEFAULTS: SurvivorLateSeasonSettings = {
+const SURVIVOR_LATE_SEASON_DEFAULTS: SurvivorLateSeasonSettings = {
   finalistCount: 3,
   mergeNamingMode: 'commissioner',
   exileBossMode: LEGACY_EXILE_BOSS_MODE,

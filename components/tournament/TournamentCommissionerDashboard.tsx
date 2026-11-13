@@ -131,7 +131,7 @@ type AccessFlags = {
   canEditHubSettings: boolean
 }
 
-export type LegacyStandingsSnapshot = {
+type LegacyStandingsSnapshot = {
   round: {
     id: string
     roundNumber: number

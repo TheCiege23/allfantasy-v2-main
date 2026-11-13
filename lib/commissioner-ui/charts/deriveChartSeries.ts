@@ -21,12 +21,12 @@ import type { SeverityTier } from '../tokens/colors'
  * sentence beside it does not. The views test for `length` and say so.
  */
 
-export interface CategoryPoint {
+interface CategoryPoint {
   label: string
   value: number
 }
 
-export interface StackedRow {
+interface StackedRow {
   label: string
   values: Record<string, number>
 }

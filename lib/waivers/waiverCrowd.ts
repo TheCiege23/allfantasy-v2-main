@@ -25,7 +25,7 @@ export { CROWD_MIN_LEAGUES, crowdLine } from './waiverCrowdLine'
  * about the player.
  */
 
-export const CROWD_WINDOW_DAYS = 7
+const CROWD_WINDOW_DAYS = 7
 const TTL_MS = 15 * 60_000
 const MAX_IDS = 40
 

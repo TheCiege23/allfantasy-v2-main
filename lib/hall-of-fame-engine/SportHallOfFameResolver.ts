@@ -15,7 +15,7 @@ export function isSupportedHallOfFameSport(sport: string | null | undefined): sp
 }
 
 /** Sport display labels for UI. */
-export const HOF_SPORT_LABELS: Record<string, string> = {
+const HOF_SPORT_LABELS: Record<string, string> = {
   NFL: 'NFL',
   NHL: 'NHL',
   NBA: 'NBA',

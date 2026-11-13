@@ -66,7 +66,7 @@ const TEMPLATE_ELIGIBILITY: Record<string, () => Array<{ key: string; eligiblePo
   SOCCER: getAllSoccerSlots,
 }
 
-export function bestBallSlotEligibility(sport: string, token: string): string[] {
+function bestBallSlotEligibility(sport: string, token: string): string[] {
   const base = allowedPositionsForSlot(sport, token)
   const defs = TEMPLATE_ELIGIBILITY[String(sport ?? '').trim().toUpperCase()]
   if (!defs) return base
@@ -105,7 +105,7 @@ const TEMPLATE_RESOLVERS: Record<string, (leagueType: string) => { slots: Record
  * with no best ball template, so a caller can say "unresolved" instead of borrowing NFL's slots
  * (`getRedraftSportConfig` falls back to NFL for an unknown sport).
  */
-export function bestBallTemplateRosterSlots(sport: string | null | undefined): Record<string, number> | null {
+function bestBallTemplateRosterSlots(sport: string | null | undefined): Record<string, number> | null {
   const resolve = TEMPLATE_RESOLVERS[String(sport ?? '').trim().toUpperCase()]
   return resolve ? { ...resolve('best_ball').slots } : null
 }
@@ -130,7 +130,7 @@ export function resolveBestBallSlots(sport: string, leagueSettings?: unknown): L
   return slots.some((s) => s.count > 0) ? slots : null
 }
 
-export type BestBallDisplaySlot = { code: string; count: number; allowedPositions: string[] }
+type BestBallDisplaySlot = { code: string; count: number; allowedPositions: string[] }
 
 /**
  * The same slots for display: `code` is the roster key a person reads (`FLEX`, `SUPERFLEX`), not the
@@ -154,7 +154,7 @@ function displayToken(token: string): string {
   return token
 }
 
-export type BestBallLineupPlayer = { playerId: string; position: string | null | undefined; points: number; playerName?: string | null }
+type BestBallLineupPlayer = { playerId: string; position: string | null | undefined; points: number; playerName?: string | null }
 
 /** Seat a best ball lineup exactly as production does, over slots already resolved for the league. */
 export function computeBestBallLineup(input: {

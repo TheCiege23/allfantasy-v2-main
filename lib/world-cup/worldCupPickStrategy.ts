@@ -5,7 +5,7 @@ import { WORLD_CUP_ROUND_LABELS } from "./types"
 import type { WorldCupMatchView } from "./types"
 import { getWorldCupSeedStrength } from "./worldCupAiInsights"
 
-export type WinProbabilitySides = {
+type WinProbabilitySides = {
   safePickSide: "home" | "away"
   upsetPickSide: "home" | "away"
   safePickTeamName: string

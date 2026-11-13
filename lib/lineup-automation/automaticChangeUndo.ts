@@ -17,9 +17,9 @@
 import { buildPlayerDataFromSections, getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { STARTER_SLOT_INDEX_KEY } from '@/lib/league/lineupSlotPositions'
 
-export const UNDO_SECTIONS: readonly RosterSectionKey[] = ['starters', 'bench', 'ir', 'taxi', 'devy']
+const UNDO_SECTIONS: readonly RosterSectionKey[] = ['starters', 'bench', 'ir', 'taxi', 'devy']
 
-export type LineupLayout = {
+type LineupLayout = {
   starters: Array<{ id: string; slot: number | null }>
   bench: string[]
   ir: string[]
@@ -68,7 +68,7 @@ export function readAutomaticChangeUndo(metadata: unknown): AutomaticChangeUndo 
   return { layout: { starters: starters as LineupLayout['starters'], bench, ir, taxi, devy }, afterHash: u.afterHash, season: u.season, week: u.week }
 }
 
-export type RestoreResult = { ok: true; nextPlayerData: Record<string, unknown> } | { ok: false; reason: 'players_changed' | 'nothing_to_undo' }
+type RestoreResult = { ok: true; nextPlayerData: Record<string, unknown> } | { ok: false; reason: 'players_changed' | 'nothing_to_undo' }
 
 /**
  * The current lineup with every player put back where `layout` had them. Player details come from the

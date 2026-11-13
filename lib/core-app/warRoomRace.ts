@@ -25,10 +25,10 @@ import type { WarPosture } from './warRoomFront'
 const RACING: ReadonlySet<WarPosture> = new Set(['bubble', 'contender', 'long_shot'])
 
 /** A team is in the race when its odds sit strictly between these, or it is near the cut by seed. */
-export const CONTESTED_LOW = 2
-export const CONTESTED_HIGH = 98
+const CONTESTED_LOW = 2
+const CONTESTED_HIGH = 98
 /** Seeds this close to the cut line (either side) are in the race whatever their odds say. */
-export const NEAR_CUT = 2
+const NEAR_CUT = 2
 export const MAX_ROWS = 8
 
 export type RaceRow = {

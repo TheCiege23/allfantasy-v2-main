@@ -17,7 +17,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type AewContext = {
+type AewContext = {
   poolId: string
   poolName: string
   eventName: string
@@ -35,7 +35,7 @@ export type AewContext = {
   leaderboard: Array<{ rank: number; displayName: string; entryName: string; totalScore: number }>
 }
 
-export type AewProviderData = {
+type AewProviderData = {
   // AEW uses a historical DB, not a live API
   // Results come from the DB after they are recorded (no spoilers from API)
   recordedResults: Array<{
@@ -47,7 +47,7 @@ export type AewProviderData = {
   }>
 }
 
-export type AewInsights = {
+type AewInsights = {
   topSwingMatch: {
     description: string
     pickDistribution: Record<string, number>

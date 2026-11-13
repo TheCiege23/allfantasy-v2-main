@@ -54,7 +54,7 @@ export const MISSING_STAT_BLOCKING_VERDICTS: ReadonlySet<MissingStatVerdict> = n
 /** Bound on the teammate lookup; a week-keyed team has ~50 players, a full league slate a few thousand. */
 const TEAMMATE_CAP = 6000
 
-export type MissingStatPlayer = {
+type MissingStatPlayer = {
   playerId: string
   sport: string
   /** The roster row's team, as this league spells it. Null when the row carries none. */
@@ -62,7 +62,7 @@ export type MissingStatPlayer = {
   position?: string | null
 }
 
-export type MissingStatClassification = {
+type MissingStatClassification = {
   /** Keyed `${sport}::${playerId}`, as the finalizer keys its starters. */
   verdicts: Map<string, MissingStatVerdict>
   /** Teams (as spelled on the roster rows) whose game the feed is missing or has not finished. */
@@ -75,7 +75,7 @@ type EvidenceDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'playerWeeklyScore'
 const keyOf = (p: { sport: string; playerId: string }) => `${p.sport}::${p.playerId}`
 
 /** A real box line: a non-empty stat object. `{}` is a sealed (or verified) zero and proves nothing. */
-export function isRealStatLine(stats: unknown): boolean {
+function isRealStatLine(stats: unknown): boolean {
   return !!stats && typeof stats === 'object' && !Array.isArray(stats) && Object.keys(stats as object).length > 0
 }
 

@@ -14,7 +14,7 @@
 
 import type { LeagueFanoutEventType } from '@/lib/league-events/types'
 
-export type LeagueFanoutHandler = (input: {
+type LeagueFanoutHandler = (input: {
   leagueId: string
   eventType: LeagueFanoutEventType | string
   actorUserId?: string | null

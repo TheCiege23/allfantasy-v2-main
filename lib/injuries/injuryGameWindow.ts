@@ -13,8 +13,8 @@ import { prisma } from '@/lib/prisma'
  * That covers every slate — Thursday, the Sunday 1:00 / 4:05 / 4:25 / 8:20 waves, Monday, and
  * international mornings — from the schedule itself, with no clock table to go stale.
  */
-export const WINDOW_BEFORE_KICKOFF_MS = 150 * 60_000
-export const WINDOW_AFTER_KICKOFF_MS = 30 * 60_000
+const WINDOW_BEFORE_KICKOFF_MS = 150 * 60_000
+const WINDOW_AFTER_KICKOFF_MS = 30 * 60_000
 
 /** Pure: the [from, to] range of kickoff times that puts `now` inside a game window. */
 export function kickoffRangeForWindow(now: Date): { from: Date; to: Date } {

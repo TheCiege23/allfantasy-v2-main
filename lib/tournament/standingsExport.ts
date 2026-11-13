@@ -22,7 +22,7 @@
  * character by character.
  */
 
-export type ExportTeamRow = {
+type ExportTeamRow = {
   /** Rank WITHIN its league block, 1-based. */
   rank: number
   teamName: string
@@ -46,7 +46,7 @@ export type ExportLeagueBlock = {
   rows: ExportTeamRow[]
 }
 
-export type ConferenceStandingsExport = {
+type ConferenceStandingsExport = {
   /** Header row plus one block per league, blank-separated, as the sheet is laid out. */
   tsv: string
   /** Rows whose record could not be matched — surfaced, never silently zeroed. */
@@ -117,7 +117,7 @@ export function buildConferenceStandingsExport(
   return { tsv: lines.join('\n'), unmatchedCount }
 }
 
-export type TopScorer = {
+type TopScorer = {
   rank: number
   teamName: string
   leagueName: string
@@ -152,7 +152,7 @@ export function buildTopScorersExport(scorers: TopScorer[]): string {
   return lines.join('\n')
 }
 
-export type RedraftExportLeague = {
+type RedraftExportLeague = {
   name: string
   managers: Array<{
     seed: number

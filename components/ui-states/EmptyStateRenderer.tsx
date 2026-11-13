@@ -33,7 +33,7 @@ import { Inbox } from "lucide-react"
  * Ten call sites pass the old props and none of them were touched.
  */
 
-export interface EmptyStateAction {
+interface EmptyStateAction {
   id: string
   label: string
   href?: string
@@ -47,7 +47,7 @@ export interface EmptyStateAction {
   variant?: "primary" | "ghost"
 }
 
-export interface EmptyStateRendererProps {
+interface EmptyStateRendererProps {
   title: string
   description: string
   icon?: React.ReactNode

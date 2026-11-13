@@ -40,7 +40,7 @@ import { isBestBallGuillotine, lineupSetsItself } from '@/lib/guillotine/guillot
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { resolveBestBallScoringPeriod, storedBestBallSettings, type BestBallScoringPeriodValue } from './scoringPeriod'
 
-export type BestBallLeagueStateInput = {
+type BestBallLeagueStateInput = {
   platform?: string | null
   sport?: string | null
   bestBallMode?: boolean | null
@@ -56,9 +56,9 @@ export type BestBallLeagueStateInput = {
 }
 
 /** Which saved shape the league is: Classic Best Ball, Guilly + Best Ball, or neither. */
-export type BestBallLeagueShape = 'classic' | 'guillotine' | null
+type BestBallLeagueShape = 'classic' | 'guillotine' | null
 
-export type BestBallTransactionPolicy = {
+type BestBallTransactionPolicy = {
   /** Waiver claims. null = best ball imposes nothing; the league's other rules decide. */
   waivers: boolean | null
   /** Instant free-agent adds. null = as above. */
@@ -67,9 +67,9 @@ export type BestBallTransactionPolicy = {
   trades: boolean | null
 }
 
-export type BestBallCompetition = 'tournament' | 'cumulative' | 'head_to_head' | 'guillotine'
+type BestBallCompetition = 'tournament' | 'cumulative' | 'head_to_head' | 'guillotine'
 
-export type BestBallLeagueState = {
+type BestBallLeagueState = {
   shape: BestBallLeagueShape
   /** The league scores the best lineup and refuses lineup saves — the one lineup-mode answer. */
   lineupSetsItself: boolean

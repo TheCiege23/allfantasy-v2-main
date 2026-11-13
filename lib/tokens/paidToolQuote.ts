@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 
 const TTL = 10 * 60_000
 const DOMAIN = 'af-paid-tool-quote-v1:'
-export type PaidToolQuoteInput = { userId: string; requestId: string; fingerprint: string; ruleCode: string; tokenCost: number }
+type PaidToolQuoteInput = { userId: string; requestId: string; fingerprint: string; ruleCode: string; tokenCost: number }
 type Dependencies = { secret?: string; now?: () => number }
 function key(deps: Dependencies): string {
   const value = deps.secret ?? process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET

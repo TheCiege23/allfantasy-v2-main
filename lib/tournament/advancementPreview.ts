@@ -26,7 +26,7 @@ import {
 /** How stale a league's records may be before the preview says so. */
 const STALE_AFTER_HOURS = 24
 
-export type PreviewManager = {
+type PreviewManager = {
   displayName: string
   leagueName: string
   conferenceRank: number
@@ -35,7 +35,7 @@ export type PreviewManager = {
   pointsFor: number
 }
 
-export type ConferencePreview = {
+type ConferencePreview = {
   conferenceId: string
   conferenceName: string
   fieldSize: number

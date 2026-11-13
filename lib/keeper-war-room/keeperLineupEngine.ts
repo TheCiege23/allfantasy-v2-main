@@ -10,7 +10,7 @@
 import { playerSeasonValue, type SeasonValueSource } from './keeperValueEngine'
 import type { KeeperPlayerFact, KeeperWarRoomContext } from './types'
 
-export interface KeeperLineupAssignment {
+interface KeeperLineupAssignment {
   position: string
   playerId: string | null
   playerName: string | null

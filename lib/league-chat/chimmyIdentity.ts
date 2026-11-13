@@ -48,7 +48,7 @@ export const CHIMMY_SERVER_KEYS = ['chimmy', 'chimmyMoment', 'chimmyPrivateReply
  *   - `commissioner_alerts`  — the automatic governance cycle's summary, when the commissioner set
  *                              notices to go to chat. Automatic, so it counts against the cap.
  */
-export const CHIMMY_MOMENT_KINDS = [
+const CHIMMY_MOMENT_KINDS = [
   'weekly_awards',
   'trade',
   'close_finish',
@@ -60,7 +60,7 @@ export const CHIMMY_MOMENT_KINDS = [
 export type ChimmyMomentKind = (typeof CHIMMY_MOMENT_KINDS)[number]
 
 /** A short label drawn beside Chimmy's name. Never "AI" — the post is Chimmy's. */
-export const CHIMMY_MOMENT_LABELS: Record<ChimmyMomentKind, string> = {
+const CHIMMY_MOMENT_LABELS: Record<ChimmyMomentKind, string> = {
   weekly_awards: 'Weekly awards',
   trade: 'Trade take',
   close_finish: 'Close finish',
@@ -88,7 +88,7 @@ export function isChimmyAuthored(metadata: unknown): boolean {
 }
 
 /** The moment a Chimmy post was for, when it was one (awards, trade …). */
-export function chimmyMomentKindOf(metadata: unknown): ChimmyMomentKind | null {
+function chimmyMomentKindOf(metadata: unknown): ChimmyMomentKind | null {
   const meta = record(metadata)
   if (!meta || !isChimmyAuthored(meta)) return null
   const kind = record(meta.chimmyMoment)?.kind
@@ -107,7 +107,7 @@ export function chimmyMomentLabelOf(metadata: unknown): string | null {
  * Hub's Automations section through `PATCH /api/league/settings` (`settingsMerge`), which is
  * commissioner-gated and audited. Listed in `AF_OWNED_LEAGUE_SETTINGS_KEYS` so a re-import keeps it.
  */
-export const CHIMMY_SPEAKS_UP_SETTING_KEY = 'chimmySpeaksUp'
+const CHIMMY_SPEAKS_UP_SETTING_KEY = 'chimmySpeaksUp'
 
 /** ON unless the commissioner explicitly switched it off. Anything but a literal `false` is on. */
 export function readChimmySpeaksUp(settings: unknown): boolean {

@@ -10,9 +10,9 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type WaiverSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAAF' | 'NCAAB' | 'SOCCER'
+type WaiverSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 
-export interface SportWaiverAdapter {
+interface SportWaiverAdapter {
   sport: WaiverSport
   /** Position scarcity multipliers (higher = more scarce) */
   positionScarcity: Record<string, number>

@@ -24,7 +24,7 @@ import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
  * component with the same name.
  */
 
-export const WATCHED_ACTIONS_ID = 'af-pf-lv-actions'
+const WATCHED_ACTIONS_ID = 'af-pf-lv-actions'
 
 export function StickyActionBar({ view, playerName }: { view: PlayerLeagueView | null; playerName: string }) {
   const { language } = useOptionalLanguage()

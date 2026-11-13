@@ -1,7 +1,6 @@
 export type {
   RecommendationPlayer,
   RecommendationResult,
-  LegacyDraftGraderId,
   LegacyDraftGraderResult,
   DraftGraderDivergence,
   ManagerTendencyContext,
@@ -23,7 +22,7 @@ export {
 
 export { runLegacyDraftGrader } from './DraftRecommendationAdapter'
 
-export { evaluateDraftShadow, evaluateDraftShadowFromContext, type EvaluateDraftShadowInput } from './DraftShadowService'
+export { evaluateDraftShadow } from './DraftShadowService'
 
 export {
   InMemoryDraftShadowResultStore,

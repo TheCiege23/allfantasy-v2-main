@@ -5,7 +5,7 @@ import { isPirateLeague, isProtectionLocked, protectedIds } from './rules'
 type TradeDb = Pick<PrismaClient,
   'league' | 'redraftSeason' | 'redraftMatchup' | 'gameSchedule' | 'fantasyScheduleGame' | 'pirateProtectionSet'>
 
-export type PirateTradeAsset = {
+type PirateTradeAsset = {
   fromRosterId: string
   assetType: string
   playerId?: string | null

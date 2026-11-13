@@ -1,6 +1,6 @@
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
-export type RoundTemplate = {
+type RoundTemplate = {
   roundNumber: number
   roundType: string
   roundLabel: string

@@ -11,11 +11,11 @@
  * Pure and dependency-free (moved out of materializeRedraftRosterPlayers.ts, 2026-09-27).
  */
 
-export function asRecord(v: unknown): Record<string, unknown> {
+function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
-export function idOf(entry: unknown): string {
+function idOf(entry: unknown): string {
   if (typeof entry === 'string') return entry
   const r = asRecord(entry)
   return String(r.id ?? r.player_id ?? '')
@@ -92,7 +92,7 @@ export function slotTypeFor(playerData: unknown, playerId: string, position: str
   return 'bench'
 }
 
-export type SlotCategory = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
+type SlotCategory = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
 
 /**
  * What a slot MEANS to the engines — the unit the save path compares, so a starter already stored

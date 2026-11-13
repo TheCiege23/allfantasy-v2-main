@@ -31,7 +31,7 @@ export type ImportedGuillyInput = {
   now: Date
 }
 
-export type ImportedGuillyFinding = {
+type ImportedGuillyFinding = {
   code:
     | 'unconfirmed_format'
     | 'plays_head_to_head'
@@ -58,7 +58,7 @@ export type ImportedGuillyHealth = {
 }
 
 /** Our read is stale in season after this long: a week's chop can land in a day. */
-export const IMPORTED_GUILLY_STALE_MS = 24 * 60 * 60 * 1000
+const IMPORTED_GUILLY_STALE_MS = 24 * 60 * 60 * 1000
 
 function confirmedType(settings: unknown): string | null {
   const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : null

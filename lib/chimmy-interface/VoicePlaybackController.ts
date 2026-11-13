@@ -118,7 +118,7 @@ export function stopChimmyVoice(): void {
   cleanupSpeechResources();
 }
 
-export interface SpeakChimmyOptions {
+interface SpeakChimmyOptions {
   voice?: ChimmyTtsVoice;
   /** 0–1, applied to HTMLAudioElement when using server audio */
   volume?: number;

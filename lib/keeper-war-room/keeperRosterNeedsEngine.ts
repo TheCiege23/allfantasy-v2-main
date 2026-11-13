@@ -10,7 +10,7 @@
 import { recommendKeepers } from './keeperRecommendationEngine'
 import type { KeeperWarRoomContext } from './types'
 
-export interface KeeperTeamNeed {
+interface KeeperTeamNeed {
   position: string
   severity: 'critical' | 'high' | 'moderate'
   reason: string

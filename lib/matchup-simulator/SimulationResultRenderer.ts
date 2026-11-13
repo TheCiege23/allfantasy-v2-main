@@ -6,7 +6,7 @@
 import type { MatchupSimulationResult } from '@/components/simulation/MatchupSimulationCard'
 import { getDisplayPayload } from './MatchupSimulatorViewService'
 
-export type SimulationDisplayProps = {
+type SimulationDisplayProps = {
   projectedScoreA: number
   projectedScoreB: number
   scoreRangeA: [number, number]

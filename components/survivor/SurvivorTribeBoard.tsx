@@ -7,7 +7,7 @@ import type { SurvivorSummary } from './types'
 import { SurvivorAvatar, SurvivorOutChip, SurvivorTorchIcon, survivorAvatarStatus } from './weekly/SurvivorAvatar'
 import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
 
-export interface SurvivorTribeBoardProps {
+interface SurvivorTribeBoardProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>

@@ -58,7 +58,7 @@ export type MissingCoverageFlag =
   | 'player_info'
   | 'team_info'
 
-export type CoverageAggregateOptions = {
+type CoverageAggregateOptions = {
   /** When set, only rows whose JSON includes a matching RI soccer `league` (EPL/LALIGA/SERIEA) are counted. */
   soccerLeague?: string | null
 }
@@ -300,7 +300,7 @@ function scanJsonSignals(blob: unknown): {
   return { hasStats, hasRookieHints, hasExperienceHints, classLabel }
 }
 
-export type CoverageAggregate = {
+type CoverageAggregate = {
   sport: string
   rollingInsightsSportCode: string
   total: number

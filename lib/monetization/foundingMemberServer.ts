@@ -17,7 +17,7 @@ import {
 type Env = Record<string, string | undefined>
 
 /** `AppUser.createdAt`, or null when there is no such user or the read failed. */
-export async function readAccountCreatedAt(userId: string): Promise<Date | null> {
+async function readAccountCreatedAt(userId: string): Promise<Date | null> {
   try {
     const row = await prisma.appUser.findUnique({ where: { id: userId }, select: { createdAt: true } })
     return row?.createdAt ?? null

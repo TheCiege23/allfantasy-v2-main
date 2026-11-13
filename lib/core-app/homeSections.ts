@@ -48,9 +48,9 @@ export type HomeSectionId =
   | 'following'
   | 'insights'
 
-export type HomeSectionGroup = 'top' | 'week' | 'side' | 'more'
+type HomeSectionGroup = 'top' | 'week' | 'side' | 'more'
 
-export type HomeSectionDef = {
+type HomeSectionDef = {
   id: HomeSectionId
   group: HomeSectionGroup
   /** The `HomeCardName`s (components/core-app/home/HomeCards.tsx) this switch hides. */

@@ -28,11 +28,11 @@
  * Pure: no clock, no network, no DOM — which is the whole reason it is not inline in the page.
  */
 
-export interface SeasonScoped {
+interface SeasonScoped {
   season: string
 }
 
-export interface LatestSeasonResult<T extends SeasonScoped> {
+interface LatestSeasonResult<T extends SeasonScoped> {
   /** The leagues to render. */
   visibleLeagues: T[]
   /** The season they belong to, or null when no league carries a readable one. */

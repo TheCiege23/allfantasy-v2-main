@@ -19,7 +19,7 @@ import { realManagerName, rosterLabel } from '@/lib/core-app/managerName'
  * ⚠ ONLY SLICES CROSS THE BOUNDARY. Each card gets the five fields it shows, never the WeekBoard
  * (its projections and model text would be serialized into the page for nothing).
  */
-export type ScheduleBandCard = {
+type ScheduleBandCard = {
   key: string
   href: string
   leagueName: string
@@ -28,7 +28,7 @@ export type ScheduleBandCard = {
   platform: string
 }
 
-export type ScheduleBandViewProps = {
+type ScheduleBandViewProps = {
   /** The week to name, or null for the neutral "This week" (see the band on why). */
   week: number | null
   /** `kickoffDayLabel` output ("Oct 4") for a kickoff still ahead; null otherwise. */

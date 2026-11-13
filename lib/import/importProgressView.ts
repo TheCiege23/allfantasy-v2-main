@@ -1,4 +1,4 @@
-export type ImportProgressStage = 'queued' | 'discovering' | 'importing' | 'finalizing' | 'complete' | 'failed'
+type ImportProgressStage = 'queued' | 'discovering' | 'importing' | 'finalizing' | 'complete' | 'failed'
 
 export function buildImportProgressView(input: {
   status: string

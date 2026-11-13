@@ -20,13 +20,13 @@ export const SURVIVOR_NOTIFICATION_KINDS = [
   'jury_vote_open',
   'season_champion',
 ] as const
-export type SurvivorNotificationKind = (typeof SURVIVOR_NOTIFICATION_KINDS)[number]
+type SurvivorNotificationKind = (typeof SURVIVOR_NOTIFICATION_KINDS)[number]
 
 export function isSurvivorNotificationKind(value: unknown): value is SurvivorNotificationKind {
   return typeof value === 'string' && (SURVIVOR_NOTIFICATION_KINDS as readonly string[]).includes(value)
 }
 
-export interface SurvivorNotificationSpec {
+interface SurvivorNotificationSpec {
   trigger: string
   channels: string
   urgency: 'critical' | 'high' | 'medium'
@@ -51,7 +51,7 @@ export const SURVIVOR_NOTIFICATION_SPECS: Record<SurvivorNotificationKind, Survi
   season_champion: { trigger: 'Final reveal complete', channels: 'All members', urgency: 'high', mood: 'day', heroPath: '/survivor/late/champion-trophy.svg', kicker: 'Season champion', cta: 'See the season story', path: l => `${base(l)}/story` },
 }
 
-export interface SurvivorNotificationCopy { title: string; body: string }
+interface SurvivorNotificationCopy { title: string; body: string }
 
 export type SurvivorNotificationInput =
   | { kind: 'votes_close_soon' }
@@ -88,7 +88,7 @@ export function survivorNotificationCopy(input: SurvivorNotificationInput): Surv
   }
 }
 
-export function escapeEmailHtml(value: string): string {
+function escapeEmailHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 

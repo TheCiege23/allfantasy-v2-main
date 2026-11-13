@@ -9,7 +9,7 @@ import { useCallback, useState } from 'react'
 import { buildDiscordShareContent, buildRedditReadyPost } from '@/lib/community-integration'
 import type { CommunityShareInput } from '@/lib/community-integration/types'
 
-export interface CommunitySharePanelProps {
+interface CommunitySharePanelProps {
   input: CommunityShareInput
   /** Optional: show Discord webhook form */
   showWebhook?: boolean

@@ -16,7 +16,7 @@ import { StepHelp } from '@/components/league-creation-wizard/StepHelp'
 import { SLEEPER_IMPORT_SPORTS } from '@/lib/league-import/sleeper/import-sports'
 import { getImportPlatforms } from '@/lib/league-import/provider-ui-config'
 
-export type LegacyRankingsImportPanelProps = {
+type LegacyRankingsImportPanelProps = {
   onImportSuccess: () => void
   /** Optional compact layout for dashboard (single column on mobile, tighter grid). */
   variant?: 'default' | 'dashboard'

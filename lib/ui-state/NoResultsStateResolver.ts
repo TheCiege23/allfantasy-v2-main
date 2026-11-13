@@ -1,25 +1,25 @@
 import { resolveFallbackRoute } from "./FallbackRouteResolver"
 
-export type NoResultsContext =
+type NoResultsContext =
   | "search"
   | "dashboard_leagues"
   | "notifications"
   | "legacy_import"
 
-export interface NoResultsActionSpec {
+interface NoResultsActionSpec {
   id: string
   label: string
   href?: string
   action?: "clear_query" | "clear_filters"
 }
 
-export interface NoResultsState {
+interface NoResultsState {
   title: string
   description: string
   actions: NoResultsActionSpec[]
 }
 
-export interface ResolveNoResultsStateInput {
+interface ResolveNoResultsStateInput {
   context: NoResultsContext
   query?: string
   hasFilters?: boolean

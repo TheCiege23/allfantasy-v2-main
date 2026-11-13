@@ -5,7 +5,7 @@ import { ArrowRight, Search, TrendingDown, TrendingUp } from 'lucide-react'
 import { ZombieStatusBadge } from '@/app/zombie/components/ZombieStatusBadge'
 import type { ZombieMovementProjection, ZombieUniverseStandingsRow } from './types'
 
-export interface ZombieUniverseStandingsClientProps {
+interface ZombieUniverseStandingsClientProps {
   universeId: string
   season?: number
 }

@@ -2,9 +2,9 @@
  * Canonical shape for league feed rows (stored in `LeagueEvent.payload` + title/description).
  */
 
-export type LeagueFeedActorType = "user" | "ai" | "system" | "commissioner"
+type LeagueFeedActorType = "user" | "ai" | "system" | "commissioner"
 
-export type LeagueFeedImportance = "low" | "normal" | "high"
+type LeagueFeedImportance = "low" | "normal" | "high"
 
 /** Stored inside LeagueEvent.payload JSON */
 export type LeagueFeedPayload = {

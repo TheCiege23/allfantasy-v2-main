@@ -32,10 +32,10 @@ import { fmt, isoMinute, latest, nameToken, num } from '@/lib/chimmy/tools/stats
 
 type Db = Pick<typeof defaultPrisma, '$queryRaw'>
 
-export type DailySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
+type DailySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 /** The daily sports whose season totals come from Rolling Insights `fantasy_stat_lines`. */
-export type RiSeasonSport = Exclude<DailySport, 'NCAAB' | 'SOCCER'>
+type RiSeasonSport = Exclude<DailySport, 'NCAAB' | 'SOCCER'>
 
 /**
  * ⚠ NCAAB IS A DAILY SPORT FOR GAME LOGS AND STANDINGS, BUT NOT FOR SEASON TOTALS. Its vendor
@@ -492,7 +492,7 @@ const total = (path: readonly string[]): Pick<DailyLeaderSpec, 'parts' | 'value'
 
 const G = ['games_played'] as const
 
-export const DAILY_LEADER_STATS: Record<RiSeasonSport, Record<string, DailyLeaderSpec>> = {
+const DAILY_LEADER_STATS: Record<RiSeasonSport, Record<string, DailyLeaderSpec>> = {
   MLB: {
     home_runs: { label: 'home runs', ...total(['batting', 'HR']) },
     rbi: { label: 'RBI', ...total(['batting', 'RBI']) },

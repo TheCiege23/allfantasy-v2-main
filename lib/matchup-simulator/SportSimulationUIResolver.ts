@@ -11,7 +11,7 @@ import type {
 } from '@/lib/simulation-engine/types'
 import { getPositionSlotsForSport, getPositionSlotWeight } from './PositionComparisonResolver'
 
-export type SportOption = { value: string; label: string }
+type SportOption = { value: string; label: string }
 export type SimulationTeamPreset = {
   id: string
   name: string
@@ -19,7 +19,7 @@ export type SimulationTeamPreset = {
   stdDev: number
   scheduleFactors?: MatchupScheduleFactorsInput
 }
-export type SimulationScheduleFactorDefinition = {
+type SimulationScheduleFactorDefinition = {
   id: keyof MatchupScheduleFactorsInput
   label: string
   description: string
@@ -125,7 +125,7 @@ export function getSportOptionsForSimulation(): SportOption[] {
 /**
  * Display label for a sport in simulation UI.
  */
-export function getSportLabel(sport: string): string {
+function getSportLabel(sport: string): string {
   const normalized = normalizeToSupportedSport(sport)
   return SPORT_LABELS[normalized] ?? normalized
 }

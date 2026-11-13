@@ -2,7 +2,7 @@
 
 import { getErrorMessage } from '@/lib/error-handling'
 
-export type ErrorFallbackProps = {
+type ErrorFallbackProps = {
   error: Error
   resetErrorBoundary?: () => void
   /** Override title */

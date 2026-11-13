@@ -32,7 +32,7 @@ function getOpenAIClient(): OpenAI | null {
 
 export type GuillotineAIType = 'draft' | 'survival' | 'waiver' | 'recap' | 'orphan'
 
-export interface GuillotineAIResult {
+interface GuillotineAIResult {
   explanation: string
   model?: string
 }

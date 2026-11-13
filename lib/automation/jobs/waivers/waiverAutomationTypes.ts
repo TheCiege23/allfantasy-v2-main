@@ -12,7 +12,7 @@ import type { ProcessedClaimResult } from "@/lib/waiver-wire/types"
 
 import type { WaiverAutomationSummary } from "./waiverAutomationSummary"
 
-export type WaiverAutomationTrigger = "cron" | "admin" | "manual" | "test"
+type WaiverAutomationTrigger = "cron" | "admin" | "manual" | "test"
 
 export type DueWaiverLeague = {
   leagueId: string

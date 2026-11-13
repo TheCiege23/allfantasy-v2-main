@@ -152,7 +152,7 @@ export function formatSeconds(total: number): string {
 }
 
 /** "2026-08-30 19:05 UTC" from an ISO string or epoch milliseconds; null when it is neither. */
-export function formatTime(value: unknown): string | null {
+function formatTime(value: unknown): string | null {
   const ms = typeof value === 'number' && value > 1e11 ? value : typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) ? Date.parse(value) : NaN
   if (!Number.isFinite(ms)) return null
   return new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'

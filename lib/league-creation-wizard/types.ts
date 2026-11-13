@@ -25,7 +25,7 @@ export type WizardStepId =
   | 'review'
 
 /** Where the user is drawing inspiration from at league setup. */
-export type WizardSetupSource = 'fresh' | 'copy_league' | 'external_guide'
+type WizardSetupSource = 'fresh' | 'copy_league' | 'external_guide'
 
 /** Mirror common host defaults for scoring/roster presets (AllFantasy = platform defaults). */
 export type PlatformStyleMirror = 'af' | 'espn' | 'yahoo' | 'sleeper'

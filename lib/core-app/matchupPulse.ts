@@ -93,9 +93,9 @@ function initialsOf(name: string, take = 2): string {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
-export type PulseBasis = 'scored' | 'projected'
+type PulseBasis = 'scored' | 'projected'
 
-export type PulseRow = {
+type PulseRow = {
   leagueId: string
   leagueName: string
   platform: string
@@ -159,7 +159,7 @@ export type PulseRow = {
   href: string
 }
 
-export type MatchupPulse = {
+type MatchupPulse = {
   leading: PulseRow[]
   trailing: PulseRow[]
   /**
@@ -281,7 +281,7 @@ export type MatchupPulse = {
  * his club in this week, kicking off in the FUTURE and not final, is unambiguous: he has not played.
  * Anything else that `starterGameStates` could not place stays `unknown`.
  */
-export function weekGameStates(
+function weekGameStates(
   players: ReadonlyMap<string, { team: string | null }>,
   games: WeekGame[],
   now: Date,

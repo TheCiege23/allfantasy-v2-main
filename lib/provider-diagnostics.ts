@@ -11,12 +11,4 @@ export {
   logDiagnosticsEvent,
   getProviderDiagnostics,
   type ProviderId,
-  type ProviderPublicId,
-  type ProviderStatusState,
-  type ProviderDiagnosticsEntry,
-  type RecentFailureSummary,
-  type FallbackEventSummary,
-  type DegradedModeSummary,
-  type ClearSportsSyncHistoryEntry,
-  type ProviderDiagnosticsPayload,
 } from '@/lib/admin/provider-status-service'

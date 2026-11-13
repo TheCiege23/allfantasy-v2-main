@@ -4,12 +4,12 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface DistributionBarPoint {
+interface DistributionBarPoint {
   label: string
   value: number
 }
 
-export interface DistributionBarChartProps {
+interface DistributionBarChartProps {
   data: DistributionBarPoint[]
   height?: number
   /** Required — Recharts' SVG output carries no semantics of its own, so this is the chart's only accessible description. */

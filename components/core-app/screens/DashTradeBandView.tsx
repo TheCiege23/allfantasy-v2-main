@@ -60,14 +60,14 @@ export type TradeBandCard = {
  * The "why this grade" line is AF Pro's trade depth. Locked, the band never receives the reasons at
  * all (DashTradeBand strips them server-side), so this only decides what the lock row says.
  */
-export type TradeBandWhy = {
+type TradeBandWhy = {
   unlocked: boolean
   upgradePath: string
   planName: string
 }
 
 /** No trade in the window, but there were some recently: one quiet row that still points somewhere. */
-export type TradeBandQuiet = {
+type TradeBandQuiet = {
   leagueName: string
   href: string
   ago: string | null

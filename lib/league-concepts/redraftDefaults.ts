@@ -3,7 +3,7 @@ import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
 import { NFL_CONFIG } from '@/lib/sportConfig/configs/nfl'
 import { firstRoundByesForTeams, fittedPlayoffStartWeek, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 
-export type FootballRedraftSport = 'NFL' | 'NCAAF'
+type FootballRedraftSport = 'NFL' | 'NCAAF'
 export type RedraftDraftType =
   | 'snake'
   | 'linear'
@@ -12,11 +12,11 @@ export type RedraftDraftType =
   | 'auto'
   | 'mock_draft'
 
-export type RedraftDraftSurface = 'live' | 'mock'
+type RedraftDraftSurface = 'live' | 'mock'
 
 type EngineDraftType = 'snake' | 'linear' | 'auction'
-export type RedraftScoringPresetFormat = 'standard' | 'half_ppr' | 'ppr'
-export type CanonicalRedraftSlotKey =
+type RedraftScoringPresetFormat = 'standard' | 'half_ppr' | 'ppr'
+type CanonicalRedraftSlotKey =
   | 'QB'
   | 'RB'
   | 'WR'
@@ -32,7 +32,7 @@ export type CanonicalRedraftSlotKey =
   | 'IR'
   | 'K'
 
-export interface RedraftRosterTemplate {
+interface RedraftRosterTemplate {
   rosterMode: 'redraft'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -53,7 +53,7 @@ export interface RedraftRosterTemplate {
   lineupValidationRules: Record<string, unknown>
 }
 
-export interface RedraftDraftSettings {
+interface RedraftDraftSettings {
   draftType: EngineDraftType
   requestedDraftType: RedraftDraftType
   rounds: number
@@ -101,7 +101,7 @@ export interface RedraftDefaultContract {
   disabledSettings: Record<string, unknown>
 }
 
-export const REDRAFT_DRAFT_TYPE_IDS: readonly RedraftDraftType[] = [
+const REDRAFT_DRAFT_TYPE_IDS: readonly RedraftDraftType[] = [
   'snake',
   'linear',
   'auction',

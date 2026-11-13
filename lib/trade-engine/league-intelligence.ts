@@ -44,7 +44,7 @@ export function computeStarterStrengthIndex(assets: Asset[], starterSlots: numbe
  * Upper-cased sport when it is NBA, MLB or NHL — sports whose cornerstone rule is a single,
  * position-agnostic value bar — else null (NFL and unknown sports keep the positional rules).
  */
-export function nonNflCornerstoneSport(sport: string | null | undefined): 'NBA' | 'MLB' | 'NHL' | null {
+function nonNflCornerstoneSport(sport: string | null | undefined): 'NBA' | 'MLB' | 'NHL' | null {
   const s = String(sport ?? '').trim().toUpperCase()
   return s === 'NBA' || s === 'MLB' || s === 'NHL' ? s : null
 }
@@ -137,7 +137,7 @@ export function inferPickProjection(teamRank: number, numTeams: number): PickPro
 // CONTENDER TIER
 // ============================================
 
-export function computeContenderTier(
+function computeContenderTier(
   wins: number,
   losses: number,
   pointsFor: number,
@@ -456,7 +456,7 @@ export function buildLeagueIntelligence(
 
 import { buildTradeBlockIndex } from './tradeBlock'
 
-export type ScoringProfile = {
+type ScoringProfile = {
   ppr: number
   tepBonus: number
   isSF: boolean

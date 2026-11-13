@@ -5,7 +5,7 @@ type SearchParamReader = {
   get: (name: string) => string | null
 }
 
-export const MESSAGES_AI_PATH = "/messages"
+const MESSAGES_AI_PATH = "/messages"
 
 type MessageTab = "dm" | "groups" | "ai"
 

@@ -41,7 +41,7 @@ export interface PlayerValuationInput {
   historicalPerformance?: number // 0–100: career track record
 }
 
-export interface PlayerValuationResult {
+interface PlayerValuationResult {
   totalValue: number // 0–1000 composite
   factors: {
     marketValue: { raw: number; weighted: number; weight: number }

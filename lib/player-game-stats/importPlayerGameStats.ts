@@ -34,7 +34,7 @@ import { ingestSportStats } from '@/lib/schedule-stats'
 import { generateGameFactsFromExistingStats } from '@/lib/data-warehouse/HistoricalFactGenerator'
 import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 
-export interface ProviderWeekStatRow {
+interface ProviderWeekStatRow {
   playerId: string
   gameId: string | null
   stats: Record<string, number>
@@ -60,13 +60,13 @@ export interface ProviderWeekStatRow {
   gameDate: Date | null
 }
 
-export type WeekFetchFailureKind = 'timeout' | 'http' | 'network'
+type WeekFetchFailureKind = 'timeout' | 'http' | 'network'
 
-export type WeekFetchOutcome =
+type WeekFetchOutcome =
   | { ok: true; rows: ProviderWeekStatRow[] }
   | { ok: false; failure: WeekFetchFailureKind; status?: number }
 
-export interface WeeklyStatsFetchArgs {
+interface WeeklyStatsFetchArgs {
   sport: 'NFL'
   season: number
   week: number
@@ -100,10 +100,10 @@ const MAX_NFL_WEEK = 18
  * costs one bounded slot, not the whole invocation. No automatic retry — the week stays
  * non-completed in the ledger and the next run picks it up.
  */
-export const PROVIDER_REQUEST_TIMEOUT_MS = 20_000
+const PROVIDER_REQUEST_TIMEOUT_MS = 20_000
 
 /** A run/job row older than this with no completion is considered stale and swept. */
-export const STALE_RUN_THRESHOLD_MS = 10 * 60 * 1000
+const STALE_RUN_THRESHOLD_MS = 10 * 60 * 1000
 
 /** Ledger identity for this pipeline inside the shared StatIngestionJob table. */
 const LEDGER_SOURCE = 'sleeper-weekly'
@@ -244,7 +244,7 @@ async function markWeekLedger(
   })
 }
 
-export interface WeekWorkPlan {
+interface WeekWorkPlan {
   /** Weeks with no usable data at all — need a full provider fetch. */
   missing: number[]
   /** Weeks whose stats exist but whose facts don't reconcile — repairable WITHOUT a provider call. */
@@ -548,7 +548,7 @@ export async function isPlayerGameStatsSchemaReady(): Promise<boolean> {
 
 // ── Stale-state sweep + atomic run lock ───────────────────────────────────────────────────
 
-export interface StaleSweepResult {
+interface StaleSweepResult {
   sweptRuns: number
   sweptLedger: number
 }
@@ -607,7 +607,7 @@ export async function acquireRunLock(trigger: string): Promise<string | null> {
 
 // ── Fact reconciliation ───────────────────────────────────────────────────────────────────
 
-export interface WeekReconciliation {
+interface WeekReconciliation {
   week: number
   statCount: number
   factCountBefore: number
@@ -616,7 +616,7 @@ export interface WeekReconciliation {
   error?: string
 }
 
-export interface SeasonReconciliationReport {
+interface SeasonReconciliationReport {
   season: number
   weeksScanned: number
   repaired: number

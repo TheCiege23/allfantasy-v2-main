@@ -40,7 +40,7 @@ export function moveKindOf(activityType: string): MoveKind | null {
 
 // ── Health components ──────────────────────────────────────────────────────
 
-export type HealthComponentKey = 'lineups' | 'waivers' | 'trades' | 'dues' | 'chat'
+type HealthComponentKey = 'lineups' | 'waivers' | 'trades' | 'dues' | 'chat'
 
 export type HealthComponent = {
   key: HealthComponentKey
@@ -55,7 +55,7 @@ export type HealthComponent = {
 
 export type Participation = { participants: number; managers: number } | { unmeasured: string }
 
-export type HealthComponentsInput = {
+type HealthComponentsInput = {
   teamCount: number
   /** The hub's own lineup and dues flags — the same verdicts the task cards use. */
   flags: HealthFlag[]

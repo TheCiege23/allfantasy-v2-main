@@ -25,7 +25,7 @@ import { getTeamDepthChart } from '@/lib/depth-charts'
  * `unlisted` role with a zero `listed` count means.
  */
 
-export type DepthRole = {
+type DepthRole = {
   position: string
   /** 1 = listed first at the position. Null when he is not on the chart. */
   rank: number | null

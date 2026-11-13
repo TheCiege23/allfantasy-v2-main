@@ -1,4 +1,4 @@
-export type LeagueListStatus = 'pre_draft' | 'drafting' | 'in_season' | 'complete' | string
+type LeagueListStatus = 'pre_draft' | 'drafting' | 'in_season' | 'complete' | string
 
 export interface UserLeague {
   id: string

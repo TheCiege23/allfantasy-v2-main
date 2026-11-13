@@ -14,9 +14,9 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export type StrategicPosture = 'safe' | 'balanced' | 'aggressive' | 'chaos' | 'block_and_protect'
+type StrategicPosture = 'safe' | 'balanced' | 'aggressive' | 'chaos' | 'block_and_protect'
 
-export interface GameTheoryPlayer {
+interface GameTheoryPlayer {
   playerId: string
   playerName: string
   position: string
@@ -45,9 +45,9 @@ export const GameTheoryInputSchema = z.object({
   riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).default('moderate'),
   opponentArchetype: z.string().optional(),
 })
-export type GameTheoryInput = z.infer<typeof GameTheoryInputSchema>
+type GameTheoryInput = z.infer<typeof GameTheoryInputSchema>
 
-export interface DecisionPath {
+interface DecisionPath {
   pathLabel: string
   useCase: string
   move: string
@@ -55,7 +55,7 @@ export interface DecisionPath {
   riskLevel: 'low' | 'medium' | 'high'
 }
 
-export interface GameTheoryResult {
+interface GameTheoryResult {
   decisionMode: string
   confidencePct: number
   strategicPosture: StrategicPosture

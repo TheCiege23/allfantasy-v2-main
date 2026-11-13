@@ -4,7 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export interface CollusionFlag {
+interface CollusionFlag {
   leagueId: string
   rosterIdA: string
   rosterIdB: string

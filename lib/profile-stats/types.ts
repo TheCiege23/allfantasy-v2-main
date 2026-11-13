@@ -34,7 +34,7 @@ export interface RankingEntry {
 }
 
 /** Achievement with earned status (from achievement-system). */
-export interface AchievementWithEarned {
+interface AchievementWithEarned {
   id: string
   name: string
   description: string

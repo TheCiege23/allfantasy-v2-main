@@ -14,7 +14,7 @@ const DEFAULT_POSITION_WEIGHTS: Record<string, number> = {
   F: 80, M: 80, GK: 70,
 }
 
-export interface ReorderQueueInput {
+interface ReorderQueueInput {
   queue: QueueEntry[]
   /** Current user's roster (positions already drafted) */
   rosterPositions: string[]
@@ -25,7 +25,7 @@ export interface ReorderQueueInput {
   generateExplanation?: boolean
 }
 
-export interface ReorderQueueResult {
+interface ReorderQueueResult {
   reordered: QueueEntry[]
   explanation: string
   /** Position need scores used for ordering */

@@ -16,17 +16,17 @@ import {
 /* ───────────────────────────── Tribe setup (SGTribeSetup) ───────────────────────────── */
 
 /** The engine's tribe limits (config.ts buildSGSchedule): 2–4 tribes, each with at least one team. */
-export const SG_ENGINE_MIN_TRIBES = 2
-export const SG_ENGINE_MAX_TRIBES = 4
+const SG_ENGINE_MIN_TRIBES = 2
+const SG_ENGINE_MAX_TRIBES = 4
 
-export const SG_FORMATION_LABELS: Record<SGConfig['tribeFormation'], string> = {
+const SG_FORMATION_LABELS: Record<SGConfig['tribeFormation'], string> = {
   random: 'Random draw when the draft completes',
   commissioner: 'Commissioner assigns tribes',
   captain_draft: 'Captains draft their tribes live',
   manager_choice: 'Managers choose; sizes stay balanced',
 }
 
-export type SGTribeCountOption = { count: number; sizes: string; allowed: boolean; reason: string | null }
+type SGTribeCountOption = { count: number; sizes: string; allowed: boolean; reason: string | null }
 
 /** Every count the handoff shows (2–8), marked allowed only where the engine accepts it. */
 export function sgTribeCountOptions(teamCount: number): SGTribeCountOption[] {

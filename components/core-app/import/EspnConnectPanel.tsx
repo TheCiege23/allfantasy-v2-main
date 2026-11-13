@@ -146,7 +146,7 @@ function sendExtensionMessage(message: { type: string }): Promise<ExtensionMessa
   })
 }
 
-export type EspnConnectPanelProps = {
+type EspnConnectPanelProps = {
   /**
    * Told when the connection state changes, so the surface around the panel can
    * react — the import screen uses it to swap its "connect first" copy for the

@@ -26,7 +26,7 @@ export const SELL_TEAMS_SHOWN = 3
 export const PRICED_SHARE_MIN = 0.8
 export const SKILL_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
 
-export type SellPlayer = { id: string; name: string; position: string; value: number | null }
+type SellPlayer = { id: string; name: string; position: string; value: number | null }
 export type SellRoster = { key: string; teamName: string; players: SellPlayer[] }
 
 export type SellTeam = {

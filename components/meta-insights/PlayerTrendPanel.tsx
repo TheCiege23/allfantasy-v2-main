@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { DEFAULT_SPORT } from "@/lib/sport-scope"
 
-export interface TrendingPlayer {
+interface TrendingPlayer {
   playerId: string
   sport: string
   trendScore: number

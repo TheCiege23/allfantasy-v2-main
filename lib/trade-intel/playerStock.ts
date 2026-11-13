@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma'
 
 export type StockDirection = 'up' | 'down' | 'flat'
 
-export type PlayerStock = {
+type PlayerStock = {
   /** Change in market value over 30 days, in the same units as the value beside it. */
   trend30d: number
   /** The value that change is measured against, which is what makes the threshold meaningful. */

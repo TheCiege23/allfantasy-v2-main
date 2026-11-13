@@ -9,9 +9,9 @@
  * SOCCER. Anything else takes the football wording the tab always used, so nothing regresses.
  */
 
-export type ScoreBugTone = 'live' | 'final' | 'upcoming'
+type ScoreBugTone = 'live' | 'final' | 'upcoming'
 
-export type ScoreBugGame = {
+type ScoreBugGame = {
   status: string
   period: number
   clock: string

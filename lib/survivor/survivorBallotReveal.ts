@@ -7,7 +7,7 @@
  * caller cannot leak a live ballot by passing the wrong flag. Cancelled councils are left out.
  */
 
-export interface BallotRevealCouncilInput {
+interface BallotRevealCouncilInput {
   id: string
   week: number
   councilNumber: number
@@ -17,7 +17,7 @@ export interface BallotRevealCouncilInput {
   eliminatedUserId: string | null
 }
 
-export interface BallotRevealVoteInput {
+interface BallotRevealVoteInput {
   councilId: string
   voterUserId: string | null
   voterName: string | null
@@ -36,7 +36,7 @@ export interface BallotRevealCouncil {
   ballots: Array<{ voterName: string; targetName: string; counted: boolean; late: boolean }>
 }
 
-export function ballotRevealAvailable(input: { enabled: boolean; seasonComplete: boolean }): boolean {
+function ballotRevealAvailable(input: { enabled: boolean; seasonComplete: boolean }): boolean {
   return input.enabled && input.seasonComplete
 }
 

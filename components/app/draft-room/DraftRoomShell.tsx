@@ -20,7 +20,7 @@ const DOCK_SIZE_PREF_KEY = 'af:draft-premium-dock-size'
  * - `half`: board and panel split the screen (default).
  * - `tall`: the panel takes most of the screen, the board keeps a strip at the top.
  */
-export type DraftDockSize = 'min' | 'half' | 'tall'
+type DraftDockSize = 'min' | 'half' | 'tall'
 
 const BOARD_ZONE_BY_DOCK_SIZE: Record<DraftDockSize, string> = {
   min: 'min-h-0 max-h-[unset] flex-1',
@@ -30,7 +30,7 @@ const BOARD_ZONE_BY_DOCK_SIZE: Record<DraftDockSize, string> = {
 
 export type MobileDraftTab = 'board' | 'players' | 'queue' | 'intel' | 'helper' | 'roster' | 'keepers' | 'chat'
 
-export type DraftRoomShellProps = {
+type DraftRoomShellProps = {
   /**
    * Premium ambient gradient for `/draft/[id]/snake` redraft room. `dynasty` is the dynasty
    * skin: the same layout on the ink/vault ground. Redraft rooms never receive it.

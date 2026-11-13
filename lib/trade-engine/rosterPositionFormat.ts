@@ -55,11 +55,11 @@ export function expandRosterPositionTokens(rawPositions: string[]): string[] {
   return expanded
 }
 
-export function isBenchToken(token: string): boolean {
+function isBenchToken(token: string): boolean {
   return BENCH_TOKENS.has(token.toUpperCase())
 }
 
-export function isIrToken(token: string): boolean {
+function isIrToken(token: string): boolean {
   return IR_TOKENS.has(token.toUpperCase())
 }
 

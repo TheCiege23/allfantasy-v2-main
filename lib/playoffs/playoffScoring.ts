@@ -1,14 +1,14 @@
 import type { PlayoffPickView, PlayoffRoundKey, PlayoffSeriesView, PlayoffSport } from "./types"
 
-export type PlayoffEntryScore = {
+type PlayoffEntryScore = {
   totalScore: number
   correctPicks: number
   resolvedPicks: number
 }
 
-export type PlayoffPickResultStatus = "correct" | "wrong" | "pending" | "no_pick"
+type PlayoffPickResultStatus = "correct" | "wrong" | "pending" | "no_pick"
 
-export type PlayoffPickResult = {
+type PlayoffPickResult = {
   status: PlayoffPickResultStatus
   points: number
   pickTeamName: string | null

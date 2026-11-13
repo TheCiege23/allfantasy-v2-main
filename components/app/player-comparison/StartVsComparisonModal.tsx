@@ -10,7 +10,7 @@ import {
 import type { StartVsApiResponse } from '@/lib/player-comparison-lab'
 import { cn } from '@/lib/utils'
 
-export interface StartVsComparisonModalProps {
+interface StartVsComparisonModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   data: StartVsApiResponse | null

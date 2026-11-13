@@ -1,6 +1,6 @@
 'use client';
 
-export interface SimulationChartProps {
+interface SimulationChartProps {
   /** Expected scores for labels */
   expectedScoreA: number;
   expectedScoreB: number;

@@ -21,7 +21,6 @@ export { runSeasonSimulation } from './SeasonSimulator'
 export {
   runSeason,
   calculatePlayoffOdds,
-  type TeamPlayoffOdds,
 } from './SimulationEngine'
 export {
   getMatchupSimulation,

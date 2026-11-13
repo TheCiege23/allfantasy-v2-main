@@ -7,7 +7,7 @@ import { findPlayerTier } from './dynasty-tiers';
 // AI is FORBIDDEN from changing totals or proposing new values
 
 // Trade candidate for AI layer
-export interface TradeCandidate {
+interface TradeCandidate {
   offer_id: string;
   teamA_id: string;
   teamA_name: string;
@@ -87,11 +87,11 @@ Output JSON only:
 // UI LABELS & DISPLAY SYSTEM
 // ============================================
 
-export type DisplayLabel = 'STRONG' | 'FAIR_AGGRESSIVE' | 'SPECULATIVE' | 'LONG_SHOT';
-export type AcceptanceRate = 'HIGH' | 'MEDIUM' | 'LOW';
-export type PriorityPill = 'HIGH_PRIORITY' | 'AGGRESSIVE' | 'SPECULATIVE' | 'LONG_SHOT';
+type DisplayLabel = 'STRONG' | 'FAIR_AGGRESSIVE' | 'SPECULATIVE' | 'LONG_SHOT';
+type AcceptanceRate = 'HIGH' | 'MEDIUM' | 'LOW';
+type PriorityPill = 'HIGH_PRIORITY' | 'AGGRESSIVE' | 'SPECULATIVE' | 'LONG_SHOT';
 
-export interface UILabels {
+interface UILabels {
   displayLabel: DisplayLabel;
   displayText: string;
   displayEmoji: string;
@@ -102,7 +102,7 @@ export interface UILabels {
 }
 
 // Map score to display label
-export function getDisplayLabel(score: number): { label: DisplayLabel; text: string; emoji: string } {
+function getDisplayLabel(score: number): { label: DisplayLabel; text: string; emoji: string } {
   if (score >= 85) {
     return { label: 'STRONG', text: 'Strong Offer (Likely Accepted)', emoji: '✅' };
   }
@@ -116,7 +116,7 @@ export function getDisplayLabel(score: number): { label: DisplayLabel; text: str
 }
 
 // Map acceptance percentage to label
-export function getAcceptanceLabel(acceptancePct: number): { rate: AcceptanceRate; text: string } {
+function getAcceptanceLabel(acceptancePct: number): { rate: AcceptanceRate; text: string } {
   if (acceptancePct >= 60) {
     return { rate: 'HIGH', text: 'High' };
   }
@@ -127,7 +127,7 @@ export function getAcceptanceLabel(acceptancePct: number): { rate: AcceptanceRat
 }
 
 // Priority pill rules
-export function getPriorityPill(
+function getPriorityPill(
   score: number,
   hardRuleViolations: string[],
   cornerstoneRulesSatisfied: boolean,
@@ -187,13 +187,13 @@ export function generateUILabels(
 // DYNAMIC THRESHOLD CALCULATION (from FantasyCalc)
 // ============================================
 
-export interface PositionPercentiles {
+interface PositionPercentiles {
   p90: number;
   p95: number;
   p98: number;
 }
 
-export interface CalculatedThresholds {
+interface CalculatedThresholds {
   QB_CORNERSTONE_SF: number;
   QB_CORNERSTONE_1QB: number;
   TE_CORNERSTONE_TEP: number;
@@ -282,7 +282,7 @@ export interface TradePipelineInput {
   constraints?: Constraints;
 }
 
-export interface ValidatedTrade extends TradeCandidate {
+interface ValidatedTrade extends TradeCandidate {
   hardRuleResult: HardRuleResult;
   uiLabels: UILabels;
   cornerstoneRulesSatisfied: boolean;
@@ -298,7 +298,7 @@ export interface TradePipelineOutput {
 // CONFIGURABLE CORNERSTONE THRESHOLDS
 // ============================================
 
-export interface Thresholds {
+interface Thresholds {
   QB_CORNERSTONE_SF: number;      // SF QB threshold (QBs are gold in SF)
   QB_CORNERSTONE_1QB: number;     // 1QB QB threshold (only truly elite matter)
   TE_CORNERSTONE_TEP: number;     // TEP TE threshold (more TEs valuable)
@@ -309,7 +309,7 @@ export interface Thresholds {
 
 // Default thresholds based on FantasyCalc value distributions
 // Tune these with real distribution data
-export const DEFAULT_THRESHOLDS: Thresholds = {
+const DEFAULT_THRESHOLDS: Thresholds = {
   QB_CORNERSTONE_SF: 7500,      // SF: QBs are gold (Mahomes, Allen, Hurts, Stroud, Lamar)
   QB_CORNERSTONE_1QB: 9500,     // 1QB: Only truly elite QBs matter
   TE_CORNERSTONE_TEP: 6500,     // TEP: More TEs have value, lower threshold
@@ -319,7 +319,7 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
 };
 
 // Extended league settings for accurate detection
-export interface LeagueSettings {
+interface LeagueSettings {
   superflex: boolean;
   tePremium: boolean;
   tePremiumMultiplier?: number; // e.g., 1.5 for 1.5 PPR TE
@@ -328,14 +328,14 @@ export interface LeagueSettings {
 }
 
 // Helper: Detect if league is true Superflex
-export function isSuperflex(league: LeagueSettings): boolean {
+function isSuperflex(league: LeagueSettings): boolean {
   return league.superflex || 
          league.format === 'superflex' || 
          (league.startingQB !== undefined && league.startingQB >= 2);
 }
 
 // Helper: Detect if league has meaningful TE Premium
-export function isTEPremium(league: LeagueSettings): boolean {
+function isTEPremium(league: LeagueSettings): boolean {
   return league.tePremium && 
          (league.tePremiumMultiplier === undefined || league.tePremiumMultiplier >= 1.25);
 }
@@ -344,7 +344,7 @@ export function isTEPremium(league: LeagueSettings): boolean {
 // LEAGUE-LEVEL CONSTRAINTS
 // ============================================
 
-export interface Constraints {
+interface Constraints {
   maxAssetsPerSide: number;           // 3 recommended
   allowFaab: boolean;                 // true
   faabMaxPercentOfTotal: number;      // 0.15 recommended (FAAB can only balance)
@@ -358,7 +358,7 @@ export interface Constraints {
   banOneForOneCornerstoneForNon: boolean; // true
 }
 
-export const DEFAULT_CONSTRAINTS: Constraints = {
+const DEFAULT_CONSTRAINTS: Constraints = {
   maxAssetsPerSide: 3,
   allowFaab: true,
   faabMaxPercentOfTotal: 0.15,
@@ -376,12 +376,12 @@ export const DEFAULT_CONSTRAINTS: Constraints = {
 // HARD REJECT VALIDATION
 // ============================================
 
-export interface Trade {
+interface Trade {
   teamA_gives: Asset[];
   teamA_gets: Asset[];
 }
 
-export interface HardRuleResult {
+interface HardRuleResult {
   ok: boolean;
   reasons: string[];
 }
@@ -468,13 +468,13 @@ export function violatesHardRules(
 }
 
 // Legacy constants for backwards compatibility
-export const QB_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.QB_CORNERSTONE_SF;
-export const TE_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.TE_CORNERSTONE_STD;
-export const SKILL_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.SKILL_CORNERSTONE;
+const QB_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.QB_CORNERSTONE_SF;
+const TE_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.TE_CORNERSTONE_STD;
+const SKILL_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.SKILL_CORNERSTONE;
 
-export type AssetClassification = 'CORNERSTONE' | 'STANDARD';
+type AssetClassification = 'CORNERSTONE' | 'STANDARD';
 
-export interface LeagueSettingsForClassification {
+interface LeagueSettingsForClassification {
   superflex: boolean;
   tePremium: boolean;
 }
@@ -483,12 +483,12 @@ export interface LeagueSettingsForClassification {
 // UNIFIED ASSET TYPE
 // ============================================
 
-export type AssetType = 'PLAYER' | 'PICK' | 'FAAB';
-export type PlayerPosition = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
-export type PickRound = 1 | 2 | 3 | 4;
-export type PickProjection = 'early' | 'mid' | 'late' | 'unknown';
+type AssetType = 'PLAYER' | 'PICK' | 'FAAB';
+type PlayerPosition = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
+type PickRound = 1 | 2 | 3 | 4;
+type PickProjection = 'early' | 'mid' | 'late' | 'unknown';
 
-export interface Asset {
+interface Asset {
   id: string;
   type: AssetType;
 
@@ -516,7 +516,7 @@ export interface Asset {
 }
 
 // Legacy interface for backwards compatibility
-export interface AssetForClassification {
+interface AssetForClassification {
   type: 'QB' | 'RB' | 'WR' | 'TE' | 'PICK' | 'FAAB';
   value: number;
   name?: string;
@@ -527,7 +527,7 @@ export interface AssetForClassification {
 
 // Compute cornerstone flag for an Asset
 // Uses the user's classifier logic with proper league detection
-export function computeCornerstone(
+function computeCornerstone(
   asset: Asset, 
   league: LeagueSettings | LeagueSettingsForClassification,
   thresholds: Thresholds = DEFAULT_THRESHOLDS
@@ -608,7 +608,7 @@ export function classifyCornerstone(
   };
 }
 
-export function classifyAsset(
+function classifyAsset(
   asset: AssetForClassification, 
   leagueSettings: LeagueSettingsForClassification
 ): AssetClassification {
@@ -642,7 +642,7 @@ export function classifyAsset(
   return 'STANDARD';
 }
 
-export function classifyTradeAssets(
+function classifyTradeAssets(
   assets: AssetForClassification[],
   leagueSettings: LeagueSettingsForClassification
 ): { cornerstones: AssetForClassification[]; standard: AssetForClassification[] } {
@@ -664,7 +664,7 @@ export function classifyTradeAssets(
 // COMPOSITE FAIRNESS SCORING SYSTEM
 // ============================================
 
-export type FairnessLabel = 'STRONG' | 'FAIR_AGGRESSIVE' | 'SPECULATIVE' | 'UNLIKELY';
+type FairnessLabel = 'STRONG' | 'FAIR_AGGRESSIVE' | 'SPECULATIVE' | 'UNLIKELY';
 
 // Helper: clamp value between min and max
 function clamp(value: number, min: number, max: number): number {
@@ -672,7 +672,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 // 3.1 Base ratio score
-export function valueRatioScore(ratio: number): number {
+function valueRatioScore(ratio: number): number {
   // ratio = (teamA_gets_total / teamA_gives_total)
   if (ratio >= 1.00 && ratio <= 1.05) return 100;
   if (ratio >= 0.95 && ratio < 1.00) return 85;
@@ -683,7 +683,7 @@ export function valueRatioScore(ratio: number): number {
 }
 
 // 3.2 Scarcity / cornerstone modifier
-export function scarcityScore(trade: Trade): number {
+function scarcityScore(trade: Trade): number {
   const aGivesCornerstone = trade.teamA_gives.some(x => x.isCornerstone);
   const aGetsCornerstone = trade.teamA_gets.some(x => x.isCornerstone);
 
@@ -699,11 +699,11 @@ export function scarcityScore(trade: Trade): number {
 }
 
 // 3.3 Roster fit score (facts only)
-export interface TeamRosterContext {
+interface TeamRosterContext {
   weakPositions: PlayerPosition[]; // Positions where team needs help
 }
 
-export function rosterFitScore(
+function rosterFitScore(
   teamContext: TeamRosterContext,
   trade: Trade
 ): number {
@@ -735,7 +735,7 @@ export function rosterFitScore(
 }
 
 // 3.4 Market reality score (the "insult filter")
-export function marketRealityScore(
+function marketRealityScore(
   trade: Trade,
   hardRuleViolations: string[]
 ): number {
@@ -755,7 +755,7 @@ export function marketRealityScore(
 }
 
 // 3.5 Final fairness score (the main entry point)
-export interface HumanFairnessResult {
+interface HumanFairnessResult {
   final: number;
   label: FairnessLabel;
   recommendation: string;
@@ -816,10 +816,10 @@ export function humanFairness(
 // ============================================
 // Only use provable facts from roster/standings data
 
-export type TeamDirection = 'CONTENDER' | 'MIDDLE' | 'REBUILD';
+type TeamDirection = 'CONTENDER' | 'MIDDLE' | 'REBUILD';
 
 // Facts you can safely use (derived from data)
-export interface TeamFacts {
+interface TeamFacts {
   teamNeeds: Record<string, PlayerPosition[]>;     // Position needs per team ID
   teamDirection: Record<string, TeamDirection>;    // Win-now vs rebuild
   teamSurplus: Record<string, PlayerPosition[]>;   // Proven surplus positions
@@ -827,7 +827,7 @@ export interface TeamFacts {
 }
 
 // Trade side for explanation building
-export interface TradeSide {
+interface TradeSide {
   gets: Asset[];
   gives: Asset[];
 }
@@ -918,7 +918,7 @@ export function buildWhyTeamAccepts(
   return reasons.slice(0, 3);
 }
 
-export interface RosterEvidence {
+interface RosterEvidence {
   position: 'QB' | 'RB' | 'WR' | 'TE';
   startableCount: number;       // How many startable players at this position
   starterSlots: number;         // How many starter slots for this position
@@ -933,18 +933,18 @@ export interface TeamEvidence {
   hasNeedAt: ('QB' | 'RB' | 'WR' | 'TE')[];    // Computed: startableCount < starterSlots
 }
 
-export type RosterReason = 
+type RosterReason = 
   | { type: 'FILLS_STARTER_NEED'; position: string; currentStarters: number; slots: number }
   | { type: 'HAS_SURPLUS'; position: string; startableCount: number; slots: number; names: string[] }
   | { type: 'LACKS_DEPTH'; position: string; currentCount: number }
   | { type: 'STARTS_AT_POSITION'; position: string; rank: string }; // e.g., "WR3"
 
-export type DirectionReason =
+type DirectionReason =
   | { type: 'REBUILDING_CONVERTING'; from: string; to: string } // "converting RB production into picks"
   | { type: 'CONTENDING_NEEDS_NOW'; position: string }
   | { type: 'MIDDLE_FLEXIBLE'; }; // Can go either way
 
-export type MarketReason =
+type MarketReason =
   | { type: 'POSITIONAL_SCARCITY'; position: string }
   | { type: 'PREMIUM_JUSTIFIED'; premium: number }
   | { type: 'YOUTH_DISCOUNT'; ageGap: number };
@@ -979,7 +979,7 @@ export function computeTeamNeeds(evidence: RosterEvidence[]): {
   return { surplus, needs };
 }
 
-export interface FairnessScoreResult {
+interface FairnessScoreResult {
   totalScore: number;
   label: FairnessLabel;
   breakdown: {
@@ -991,7 +991,7 @@ export interface FairnessScoreResult {
   recommendation: string;
 }
 
-export interface RosterContext {
+interface RosterContext {
   startingNeeds: ('QB' | 'RB' | 'WR' | 'TE')[];  // Positions that would start
   luxuryPositions: ('QB' | 'RB' | 'WR' | 'TE')[]; // Already stacked, don't need
 }
@@ -1187,7 +1187,7 @@ export interface TradeRejection {
   code: 'CORNERSTONE_1_FOR_1' | 'CORNERSTONE_UNDERPAID' | 'TOO_MANY_ASSETS' | 'FAAB_AS_ANCHOR' | null;
 }
 
-export interface TradeConstraints {
+interface TradeConstraints {
   max_assets_per_side: number;
   no_filler_threshold_value: number;
   cornerstone_premium_required: number;
@@ -1225,14 +1225,14 @@ export const DEFAULT_TRADE_CONSTRAINTS: TradeConstraints = {
   },
 };
 
-export interface TradeableAsset {
+interface TradeableAsset {
   name: string;
   pos: string;
   value: number;
   reason?: string;
 }
 
-export interface RuntimeConstraints extends TradeConstraints {
+interface RuntimeConstraints extends TradeConstraints {
   cornerstone_list_teamA: string[];
   cornerstone_list_teamB: string[];
   untouchables_teamA: string[];
@@ -1336,7 +1336,7 @@ export function validateCornerstoneProtection(
   };
 }
 
-export interface RosterPlayer {
+interface RosterPlayer {
   name: string;
   pos: string;
   slot?: string;
@@ -1345,7 +1345,7 @@ export interface RosterPlayer {
   value?: number;
 }
 
-export function buildTradeableAssets(
+function buildTradeableAssets(
   roster: RosterPlayer[],
   playerValues: Map<string, number> | Record<string, number>,
   untouchables: string[],

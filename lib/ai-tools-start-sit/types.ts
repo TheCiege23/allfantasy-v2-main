@@ -72,7 +72,7 @@ export type StartSitStructuredDecision = {
   lineupBehaviorNote: string | null
 }
 
-export type StartSitLineupSlotAnalysis = {
+type StartSitLineupSlotAnalysis = {
   slotName: string
   allowedPositions: string[]
   topCandidates: string[]

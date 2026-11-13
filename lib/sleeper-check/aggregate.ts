@@ -14,7 +14,7 @@ import { normalizePosition } from '@/lib/core-app/positionNormalization'
  */
 
 export type CheckSlot = 'starter' | 'bench' | 'ir' | 'taxi'
-export type CheckSeverity = 'out' | 'risk'
+type CheckSeverity = 'out' | 'risk'
 
 export type CheckLeague = {
   leagueId: string
@@ -22,7 +22,7 @@ export type CheckLeague = {
   bestBall: boolean
 }
 
-export type CheckPlayerLeague = { leagueId: string; slot: CheckSlot }
+type CheckPlayerLeague = { leagueId: string; slot: CheckSlot }
 
 export type CheckPlayer = {
   sleeperId: string

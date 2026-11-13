@@ -262,7 +262,7 @@ export type LeagueDifficultyContextSlice = {
  * `SEVERITY_TUNABLES`. Will switch to `recommendationPriority` once that
  * formula is finalized.
  */
-export type RecommendationSeverity =
+type RecommendationSeverity =
   | "CRITICAL"
   | "HIGH"
   | "MODERATE"
@@ -417,7 +417,7 @@ export type ReplayInsightSlice = {
  * Reserved hook for future vector-store memory retrieval.
  * Phase 2A: always empty array. Phase 3+: top-K retrieved summaries.
  */
-export type MemoryRef = {
+type MemoryRef = {
   type: "matchup" | "trade" | "draft" | "season_summary" | "user_note"
   id: string
   summary: string

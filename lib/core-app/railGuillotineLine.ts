@@ -12,7 +12,7 @@
  */
 import { standingIn, type RailSideProjection, type RailStanding } from './railMatchups'
 
-export type RailGuillotineState =
+type RailGuillotineState =
   /** In the live field and clear of the chop line. */
   | 'alive'
   /** In the live field, at or under the chop line this week. */
@@ -65,7 +65,7 @@ export type GuillotineTeamInput = {
   starterCount?: number
 }
 
-export type GuillotineLineInput = {
+type GuillotineLineInput = {
   /** Null when the league has no season yet. */
   week: number | null
   firstChopWeek: number | null

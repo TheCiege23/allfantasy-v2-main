@@ -3,7 +3,6 @@ export {
   getActivitySummary,
   getEngagementStreak,
 } from "./UserActivityTracker"
-export type { ActivitySummary, EngagementStreakData } from "./UserActivityTracker"
 
 export {
   sendDailyDigest,

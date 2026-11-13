@@ -23,7 +23,7 @@
 export type BestBallScoringPeriodValue = 'weekly' | 'daily'
 
 /** The sports with per-day stat rows and a daily week window (`resolveDailySportWeekWindow`). */
-export const DAILY_BEST_BALL_SPORTS = ['NBA', 'NHL', 'MLB'] as const
+const DAILY_BEST_BALL_SPORTS = ['NBA', 'NHL', 'MLB'] as const
 
 export function bestBallSportSupportsDaily(sport: string | null | undefined): boolean {
   return (DAILY_BEST_BALL_SPORTS as readonly string[]).includes(String(sport ?? '').trim().toUpperCase())

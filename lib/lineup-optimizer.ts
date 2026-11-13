@@ -14,7 +14,7 @@ export interface RosterSlots {
   superflex: boolean
 }
 
-export interface LineupResult {
+interface LineupResult {
   totalImpact: number
   totalVorp: number
   starters: LineupPlayer[]
@@ -32,7 +32,7 @@ const DEFAULT_ROSTER_SLOTS: RosterSlots = {
 const FLEX_ELIGIBLE = new Set(['RB', 'WR', 'TE'])
 const SUPERFLEX_ELIGIBLE = new Set(['QB', 'RB', 'WR', 'TE'])
 
-export function optimizeLineup(
+function optimizeLineup(
   players: LineupPlayer[],
   slots: RosterSlots = DEFAULT_ROSTER_SLOTS
 ): LineupResult {

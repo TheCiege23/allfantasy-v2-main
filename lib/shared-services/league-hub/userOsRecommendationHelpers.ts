@@ -23,7 +23,7 @@ import type { SyncFreshness } from './types'
  * string, so refreshing the recommendation feed never creates a duplicate
  * for an unchanged condition. Never includes a timestamp or random value.
  */
-export function buildRecommendationId(parts: {
+function buildRecommendationId(parts: {
   leagueId: string
   domain: LeagueRecommendationDomain
   type: string
@@ -32,7 +32,7 @@ export function buildRecommendationId(parts: {
   return [parts.domain, parts.type, parts.leagueId, parts.key].join(':')
 }
 
-export interface BuildRecommendationInput {
+interface BuildRecommendationInput {
   leagueId: string
   teamId?: string
   rosterId?: string

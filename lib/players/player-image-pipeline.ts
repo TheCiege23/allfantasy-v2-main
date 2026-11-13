@@ -17,7 +17,7 @@
 
 import { isProviderImage, isAfPlaceholderImage } from '@/lib/draft-room/player-canonical-identity'
 
-export type ImagePipelineInput = {
+type ImagePipelineInput = {
   sleeperId?: string | null
   thesportsdbId?: string | null
   apiSportsId?: string | null
@@ -29,7 +29,7 @@ export type ImagePipelineInput = {
   name?: string | null
 }
 
-export type ImageResolution = {
+type ImageResolution = {
   /** Resolved URL, or null if nothing found. */
   url: string | null
   /** Source that produced the URL. */
@@ -49,7 +49,7 @@ export function sleeperHeadshotUrl(sleeperId: string | null | undefined, sport: 
 }
 
 /** Build a TheSportsDB player cutout URL if a raw image path string is available. */
-export function thesportsdbHeadshotUrl(rawImagePath: string | null | undefined): string | null {
+function thesportsdbHeadshotUrl(rawImagePath: string | null | undefined): string | null {
   if (!rawImagePath) return null
   const s = String(rawImagePath).trim()
   if (!s) return null
@@ -67,7 +67,7 @@ export function apiSportsHeadshotUrl(apiSportsId: string | null | undefined, spo
 }
 
 /** Team logo URL from ESPN CDN — used as last-resort for DEF or when no headshot found. */
-export function espnTeamLogoUrl(team: string | null | undefined, sport: string | null | undefined = 'NFL'): string | null {
+function espnTeamLogoUrl(team: string | null | undefined, sport: string | null | undefined = 'NFL'): string | null {
   const t = String(team ?? '').trim().toLowerCase()
   if (!t) return null
   const sp = (sport ?? 'NFL').toLowerCase()

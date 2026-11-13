@@ -43,7 +43,7 @@ export function appliedCorrection(list: readonly ScoreAdjustment[], matchupId: s
   return statCorrectionApplied(list, matchupId, rosterId)
 }
 
-export type CorrectionAdjustment = { matchupId: string; rosterId: string; points: number }
+type CorrectionAdjustment = { matchupId: string; rosterId: string; points: number }
 
 /** Pure: the adjustments still owed so every corrected team ends on its corrected score. */
 export function planCorrectionAdjustments(matchups: readonly MatchupCorrection[], existing: readonly ScoreAdjustment[]): CorrectionAdjustment[] {

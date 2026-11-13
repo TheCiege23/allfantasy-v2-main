@@ -32,7 +32,7 @@ const BLOCK_SEPARATOR = '\n\n'
  */
 export const DEFAULT_GROUNDING_BUDGET = 30_000
 
-export type GroundingBudgetResult = {
+type GroundingBudgetResult = {
   text: string
   keptBlocks: number
   droppedBlocks: number

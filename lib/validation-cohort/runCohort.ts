@@ -21,7 +21,7 @@ import { probeLeague } from './decisionOsProbe'
 import { detectLeagueAnomalies, detectCohortAnomalies, detectAlwaysEmptyOutputs } from './anomalyDetector'
 import { buildLeagueResult, buildAggregate } from './reportBuilder'
 
-export type RunOptions = ResolveOptions & {
+type RunOptions = ResolveOptions & {
   concurrency?: number
   /** League references already processed in a prior run — skipped for resumability. */
   alreadyDone?: Set<string>
@@ -31,7 +31,7 @@ export type RunOptions = ResolveOptions & {
   maxLeagues?: number
 }
 
-export type RunResult = {
+type RunResult = {
   accounts: ValidationAccount[]
   report: CohortAggregateReport
 }

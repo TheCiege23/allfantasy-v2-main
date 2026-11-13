@@ -22,7 +22,7 @@ export type ProjectionBasis =
 
 export type ProjectionConfidenceBand = 'high' | 'medium' | 'low'
 
-export type NormalizedPosition = {
+type NormalizedPosition = {
   code: string | null
   /** Sport-specific grouping, e.g. offense / idp / sp / rp */
   bucket: string | null
@@ -34,7 +34,7 @@ export type NormalizedTeamRef = {
   name: string | null
 }
 
-export type NormalizedGameRef = {
+type NormalizedGameRef = {
   id: string | null
   startTime: string | null
   homeTeamAbbrev: string | null
@@ -51,7 +51,7 @@ export type NormalizedInjuryStatus = {
 }
 
 /** Slice attached to projections — sourced from DB + cached news pipeline only. */
-export type NormalizedInjuryNewsProjectionSlice = {
+type NormalizedInjuryNewsProjectionSlice = {
   adjustedPoints: number | null
   baselinePoints: number | null
   multiplier: number | null

@@ -11,9 +11,9 @@
  * automatically the moment its engine is registered here. Client-safe: no server imports.
  */
 
-export type SurvivorIdolPlayFlow = 'council' | 'roster'
+type SurvivorIdolPlayFlow = 'council' | 'roster'
 
-export type SurvivorIdolPlayEngine = {
+type SurvivorIdolPlayEngine = {
   /** Foundation route that resolves the play. */
   route: string
   flow: SurvivorIdolPlayFlow
@@ -31,7 +31,7 @@ export const SURVIVOR_IDOL_PLAY_ENGINES = {
   island_raid: { route: 'play-steal-three', flow: 'roster', idolTypeId: null },
 } as const satisfies Record<string, SurvivorIdolPlayEngine>
 
-export type SurvivorIdolEnginePower = keyof typeof SURVIVOR_IDOL_PLAY_ENGINES
+type SurvivorIdolEnginePower = keyof typeof SURVIVOR_IDOL_PLAY_ENGINES
 
 export function survivorIdolPlayEngine(power: string | null | undefined): SurvivorIdolPlayEngine | null {
   if (!power || !Object.prototype.hasOwnProperty.call(SURVIVOR_IDOL_PLAY_ENGINES, power)) return null

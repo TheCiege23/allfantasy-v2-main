@@ -2,7 +2,7 @@
 
 import type { BroadcastStorylineRow } from '@/lib/broadcast-engine/types'
 
-export interface StorylineOverlayProps {
+interface StorylineOverlayProps {
   storylines: BroadcastStorylineRow[]
   title?: string
   className?: string

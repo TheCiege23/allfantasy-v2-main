@@ -7,7 +7,7 @@ import type { CanonicalLeagueRules } from '@/lib/league-runtime'
 
 export type SimLeagueFormat = 'redraft' | 'guillotine'
 
-export type SimRulesInput = {
+type SimRulesInput = {
   leagueId: string
   season: number
   format: SimLeagueFormat

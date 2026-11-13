@@ -61,7 +61,7 @@ import {
 
 type EntitlementSummary = ReturnType<typeof resolveWorldCupEntitlementSummary>
 
-export type WorldCupAiInsightsCTAProps = {
+type WorldCupAiInsightsCTAProps = {
   challengeId: string
   entitlementSummary: EntitlementSummary
   selectedEntryId: string | null

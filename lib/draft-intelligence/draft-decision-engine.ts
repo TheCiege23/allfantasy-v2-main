@@ -15,7 +15,7 @@ import { analyzeDraftBoard, type DraftBoardAnalysis } from './draft-board-analyz
 // Types
 // ---------------------------------------------------------------------------
 
-export type AIStrategy = 'balanced' | 'value' | 'upside' | 'positional-need' | 'stack' | 'league-winning'
+type AIStrategy = 'balanced' | 'value' | 'upside' | 'positional-need' | 'stack' | 'league-winning'
 
 export interface DraftRosterPlayer {
   position: string

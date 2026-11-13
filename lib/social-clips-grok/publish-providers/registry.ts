@@ -8,7 +8,7 @@ import { RedditSocialPublishProvider } from "./RedditSocialPublishProvider"
 
 let cache: SocialPublishProvider[] | null = null
 
-export function getSocialPublishProviders(): SocialPublishProvider[] {
+function getSocialPublishProviders(): SocialPublishProvider[] {
   if (cache) return cache
   cache = [
     new XSocialPublishProvider(),

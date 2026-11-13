@@ -196,7 +196,7 @@ export function toWeeklyObservation(week: number, statMap: unknown): WeeklyObser
   }
 }
 
-export interface RecencyResult {
+interface RecencyResult {
   value: number
   weeksUsed: number
   /** Weeks are weighted 0.5^(age/halfLife); carried so the caller can state it. */

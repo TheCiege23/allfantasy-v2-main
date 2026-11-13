@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const VerdictEnum = z.enum([
+const VerdictEnum = z.enum([
   "Team A",
   "Team B",
   "Even",
@@ -9,7 +9,7 @@ export const VerdictEnum = z.enum([
   "Disagreement",
 ]);
 
-export const PeerReviewVerdictSchema = z.object({
+const PeerReviewVerdictSchema = z.object({
   verdict: VerdictEnum.exclude(["Disagreement"]),
   confidence: z.number().min(0).max(100),
   reasons: z.array(z.string()).min(1),
@@ -17,9 +17,9 @@ export const PeerReviewVerdictSchema = z.object({
   warnings: z.array(z.string()),
 }).strict();
 
-export type PeerReviewVerdict = z.infer<typeof PeerReviewVerdictSchema>;
+type PeerReviewVerdict = z.infer<typeof PeerReviewVerdictSchema>;
 
-export type PeerReviewProviderResult = {
+type PeerReviewProviderResult = {
   provider: "openai" | "grok";
   verdict: PeerReviewVerdict | null;
   raw: any;
@@ -28,7 +28,7 @@ export type PeerReviewProviderResult = {
   schemaValid: boolean;
 };
 
-export type DisagreementCode =
+type DisagreementCode =
   | 'verdict_polarity_mismatch'
   | 'confidence_spread_high'
   | 'reason_overlap_low'
@@ -59,7 +59,7 @@ export type PeerReviewConsensus = {
   };
 };
 
-export const LegacyWinnerEnum = z.enum([
+const LegacyWinnerEnum = z.enum([
   "Team A",
   "Team B",
   "Even",
@@ -67,7 +67,7 @@ export const LegacyWinnerEnum = z.enum([
   "Slight edge to Team B",
 ]);
 
-export const ConfidenceBreakdownSchema = z.object({
+const ConfidenceBreakdownSchema = z.object({
   data_quality: z.number().min(0).max(100),
   market_alignment: z.number().min(0).max(100),
   risk_weighting: z.number().min(0).max(100),
@@ -75,7 +75,7 @@ export const ConfidenceBreakdownSchema = z.object({
 
 export type ConfidenceBreakdown = z.infer<typeof ConfidenceBreakdownSchema>;
 
-export const TradeAnalysisSchema = z.object({
+const TradeAnalysisSchema = z.object({
   winner: LegacyWinnerEnum,
   confidence: z.number().min(0).max(100),
   reasoning: z.string().min(1),
@@ -97,9 +97,9 @@ export const TradeAnalysisSchema = z.object({
   reason: z.string().optional(),
 });
 
-export type TradeAnalysis = z.infer<typeof TradeAnalysisSchema>;
+type TradeAnalysis = z.infer<typeof TradeAnalysisSchema>;
 
-export type ProviderResult = {
+type ProviderResult = {
   provider: "openai" | "grok";
   analysis: TradeAnalysis | null;
   raw: any;

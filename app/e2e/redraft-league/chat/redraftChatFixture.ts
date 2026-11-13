@@ -29,7 +29,7 @@ export const FIXTURE_LEAGUE_ID = 'e2e-redraft-chat'
 export const FIXTURE_VIEWER_ID = 'u-me'
 const OWNER = { authorId: 'u-owner', authorName: 'TheCiege', authorAvatarUrl: null }
 
-export function fixtureCopy(sport: string): Copy {
+function fixtureCopy(sport: string): Copy {
   return COPY[sport.toUpperCase()] ?? COPY.NFL
 }
 

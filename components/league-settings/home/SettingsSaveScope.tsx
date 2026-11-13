@@ -17,7 +17,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
  * button (roster, scoring, draft, guillotine) do not register and are unaffected.
  */
 
-export type SaveScopeParticipant = {
+type SaveScopeParticipant = {
   isDirty: () => boolean
   /** Resolves true when everything saved. */
   save: () => Promise<boolean>
@@ -104,7 +104,7 @@ export function useSaveScopeParticipant(dirty: boolean, save: () => Promise<bool
   return scope != null
 }
 
-export type SettingsSaveScopeHandle = {
+type SettingsSaveScopeHandle = {
   isDirty: () => boolean
   discardAll: () => void
 }

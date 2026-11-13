@@ -5,7 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export interface TournamentLeagueConfig {
+interface TournamentLeagueConfig {
   tournamentId: string
   tournamentName: string
   sport: string

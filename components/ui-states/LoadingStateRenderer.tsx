@@ -19,7 +19,7 @@ import { Loader2 } from "lucide-react"
  * per call site.
  */
 
-export interface LoadingStateRendererProps {
+interface LoadingStateRendererProps {
   label?: string
   compact?: boolean
   testId?: string

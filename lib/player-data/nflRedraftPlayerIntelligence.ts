@@ -14,9 +14,9 @@ import type {
   NflRedraftProviderFreshnessMetadata,
 } from '@/lib/player-data/nflRedraftPlayerMetadata'
 
-export const NFL_REDRAFT_PLAYER_INTELLIGENCE_MODEL_VERSION = 'nfl-redraft-player-intelligence-v1' as const
+const NFL_REDRAFT_PLAYER_INTELLIGENCE_MODEL_VERSION = 'nfl-redraft-player-intelligence-v1' as const
 
-export type NflRedraftProjectionRange = {
+type NflRedraftProjectionRange = {
   low: number | null
   high: number | null
 }
@@ -69,7 +69,7 @@ export type NflRedraftPlayerIntelligence = {
   providerFallback: NflRedraftProviderFallbackMetadata
 }
 
-export type NormalizeNflRedraftProviderIntelligenceOptions = {
+type NormalizeNflRedraftProviderIntelligenceOptions = {
   now?: Date
   fetchedAtIso?: string | null
   sourceUpdatedAtIso?: string | null

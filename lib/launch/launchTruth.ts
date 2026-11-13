@@ -26,12 +26,12 @@ import {
   type MonetizationCatalogItem,
 } from "@/lib/monetization/catalog"
 
-export type LaunchSport = "NFL" | "NCAAF"
-export type LaunchContext = "global" | "team" | "commissioner"
-export type LaunchTheme = "light" | "dark" | "af"
-export type LaunchLanguage = "en" | "es"
+type LaunchSport = "NFL" | "NCAAF"
+type LaunchContext = "global" | "team" | "commissioner"
+type LaunchTheme = "light" | "dark" | "af"
+type LaunchLanguage = "en" | "es"
 
-export type LaunchPlatform = {
+type LaunchPlatform = {
   provider: string
   label: string
   /** Real user can complete an import today. */
@@ -56,20 +56,20 @@ export const LAUNCH_PLATFORMS_AVAILABLE: readonly LaunchPlatform[] = LAUNCH_PLAT
 export const LAUNCH_SPORTS: readonly LaunchSport[] = ["NFL", "NCAAF"] as const
 
 /** Customer contexts (Global Command Center, Team Focus, Commissioner Focus). */
-export const LAUNCH_CONTEXTS: readonly LaunchContext[] = ["global", "team", "commissioner"] as const
+const LAUNCH_CONTEXTS: readonly LaunchContext[] = ["global", "team", "commissioner"] as const
 
 /** Themes the app ships. */
-export const LAUNCH_THEMES: readonly LaunchTheme[] = ["light", "dark", "af"] as const
+const LAUNCH_THEMES: readonly LaunchTheme[] = ["light", "dark", "af"] as const
 
 /** Languages certified for launch surfaces. */
-export const LAUNCH_LANGUAGES: readonly LaunchLanguage[] = ["en", "es"] as const
+const LAUNCH_LANGUAGES: readonly LaunchLanguage[] = ["en", "es"] as const
 
 /**
  * Imported external leagues are, without exception:
  * read-only upstream · DB-first · persistent · resumable · source-linked ·
  * isolated per user · never written back to the external platform.
  */
-export const IMPORTED_LEAGUE_POLICY = {
+const IMPORTED_LEAGUE_POLICY = {
   readOnlyUpstream: true,
   dbFirst: true,
   persistent: true,
@@ -80,7 +80,7 @@ export const IMPORTED_LEAGUE_POLICY = {
 } as const
 
 /** The launch feature set (what the closed beta promises — nothing beyond this). */
-export const LAUNCH_FEATURES = [
+const LAUNCH_FEATURES = [
   "account_creation",
   "external_league_import",
   "db_first_dashboard",

@@ -17,7 +17,7 @@ export interface QuickActionItem {
 /** Quick actions shown in search overlay (e.g. when empty or "go to" actions). */
 const CHIMMY_HREF = getChimmyQuickActionLink({ source: "quick_action" }).href
 
-export const UNIVERSAL_QUICK_ACTIONS: QuickActionItem[] = [
+const UNIVERSAL_QUICK_ACTIONS: QuickActionItem[] = [
   {
     id: "mock_draft",
     label: "Start mock draft",
@@ -132,7 +132,7 @@ export const UNIVERSAL_QUICK_ACTIONS: QuickActionItem[] = [
   },
 ]
 
-export function getQuickActions(): QuickActionItem[] {
+function getQuickActions(): QuickActionItem[] {
   return [...UNIVERSAL_QUICK_ACTIONS]
 }
 

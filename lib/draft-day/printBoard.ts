@@ -13,11 +13,11 @@ import { buildDraftBoard, cellForSlot, type DraftKind } from '@/lib/draft-board/
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 
-export type PrintSlot = { slot: number; rosterId: string; displayName: string }
-export type PrintPick = { overall: number; playerName: string; position: string; team: string | null }
-export type PrintKeeper = { overall: number; playerName: string; position: string; team: string | null }
+type PrintSlot = { slot: number; rosterId: string; displayName: string }
+type PrintPick = { overall: number; playerName: string; position: string; team: string | null }
+type PrintKeeper = { overall: number; playerName: string; position: string; team: string | null }
 
-export type PrintCell = {
+type PrintCell = {
   label: string
   overall: number
   kind: 'pick' | 'keeper' | 'open'
@@ -27,7 +27,7 @@ export type PrintCell = {
   ownedBy: string | null
 }
 
-export type PrintBoard = {
+type PrintBoard = {
   managers: PrintSlot[]
   rows: Array<{ round: number; reversed: boolean; cells: PrintCell[] }>
   picksMade: number

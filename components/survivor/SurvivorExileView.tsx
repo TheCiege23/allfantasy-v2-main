@@ -6,7 +6,7 @@ import type { SurvivorSummary } from './types'
 import { EXILE_ISLAND_RULES, SURVIVOR_TOKEN_POOL_BLURB } from '@/lib/survivor/survivorIslandContent'
 import { ExileBossBoard } from './late/ExileBossBoard'
 
-export interface SurvivorExileViewProps {
+interface SurvivorExileViewProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>

@@ -1,6 +1,6 @@
-export type Side = "HOME" | "AWAY";
+type Side = "HOME" | "AWAY";
 
-export type BracketNodeSeedSpec = {
+type BracketNodeSeedSpec = {
   slot: string;
   round: number;
   region: string | null;
@@ -10,20 +10,20 @@ export type BracketNodeSeedSpec = {
   nextSide?: Side | null;
 };
 
-export type FirstFourMapping = {
+type FirstFourMapping = {
   ff16A: { nextSlot: string; nextSide: Side };
   ff16B: { nextSlot: string; nextSide: Side };
   ff11A: { nextSlot: string; nextSide: Side };
   ff11B: { nextSlot: string; nextSide: Side };
 };
 
-export type FinalFourMapping = {
+type FinalFourMapping = {
   semi1: { regionA: RegionKey; regionB: RegionKey };
   semi2: { regionA: RegionKey; regionB: RegionKey };
 };
 
-export type RegionKey = "E" | "W" | "S" | "M";
-export type RegionName = "East" | "West" | "South" | "Midwest";
+type RegionKey = "E" | "W" | "S" | "M";
+type RegionName = "East" | "West" | "South" | "Midwest";
 
 const REGION_NAME: Record<RegionKey, RegionName> = {
   E: "East",
@@ -56,7 +56,7 @@ function e8Slot(region: RegionKey) {
   return `${region}-E8-1`;
 }
 
-export function defaultFirstFourMapping(): FirstFourMapping {
+function defaultFirstFourMapping(): FirstFourMapping {
   return {
     ff16A: { nextSlot: "E-R64-1", nextSide: "AWAY" },
     ff16B: { nextSlot: "W-R64-1", nextSide: "AWAY" },
@@ -65,7 +65,7 @@ export function defaultFirstFourMapping(): FirstFourMapping {
   };
 }
 
-export function defaultFinalFourMapping(): FinalFourMapping {
+function defaultFinalFourMapping(): FinalFourMapping {
   return {
     semi1: { regionA: "E", regionB: "W" },
     semi2: { regionA: "S", regionB: "M" },

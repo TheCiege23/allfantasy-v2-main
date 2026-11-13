@@ -4,7 +4,7 @@ import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { AFCrestButton } from '@/components/weather/AFCrestButton'
 import type { AFCrestButtonProps } from '@/components/weather/afCrestTypes'
 
-export type ProjectionDisplayProps = {
+type ProjectionDisplayProps = {
   projection: number | null | undefined
   suffix?: string
   showAFCrest?: boolean

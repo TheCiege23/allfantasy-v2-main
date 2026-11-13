@@ -11,7 +11,7 @@
  * charset and a length and collapses to `other` when it fails.
  */
 
-export type Surface =
+type Surface =
   | 'core'
   | 'league'
   | 'players'
@@ -26,11 +26,11 @@ export type Surface =
 
 export type DeviceClass = 'mobile' | 'tablet' | 'desktop' | 'bot' | 'unknown'
 
-export type NavigationKind = 'document' | 'rsc' | 'prefetch' | 'api' | 'other'
+type NavigationKind = 'document' | 'rsc' | 'prefetch' | 'api' | 'other'
 
-export type HeaderBag = Record<string, string | string[] | undefined> | undefined | null
+type HeaderBag = Record<string, string | string[] | undefined> | undefined | null
 
-export type RequestLike = {
+type RequestLike = {
   url?: string | null
   method?: string | null
   headers?: HeaderBag
@@ -202,7 +202,7 @@ export function routeKeyFor(surface: Surface, pathname: string, screen: string |
   return `${surface}:/${kept.map(collapse).join('/')}`
 }
 
-export function classifyNavigation(surface: Surface, headers: HeaderBag, searchParams: URLSearchParams): NavigationKind {
+function classifyNavigation(surface: Surface, headers: HeaderBag, searchParams: URLSearchParams): NavigationKind {
   if (surface === 'api' || surface === 'job' || surface === 'health') return 'api'
   if (surface === 'asset') return 'other'
   const prefetch = readHeader(headers, 'next-router-prefetch')

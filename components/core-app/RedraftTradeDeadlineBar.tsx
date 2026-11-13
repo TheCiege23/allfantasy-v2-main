@@ -13,7 +13,7 @@ const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayout
  * The redraft sport of the /core shell this component sits in, or null. Starts null (the server and
  * the first client render agree), then reads the shell's stamp before the browser paints.
  */
-export function useRedraftShellSport(): { ref: React.RefObject<HTMLSpanElement | null>; sport: string | null; decided: boolean } {
+function useRedraftShellSport(): { ref: React.RefObject<HTMLSpanElement | null>; sport: string | null; decided: boolean } {
   const ref = useRef<HTMLSpanElement | null>(null)
   const [state, setState] = useState<{ sport: string | null; decided: boolean }>({ sport: null, decided: false })
   useIsoLayoutEffect(() => {

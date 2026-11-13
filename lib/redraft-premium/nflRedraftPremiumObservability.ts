@@ -88,7 +88,7 @@ export type NflRedraftPremiumDiagnostics = {
   }
 }
 
-export type NflRedraftPremiumEvidenceSnapshotInput = {
+type NflRedraftPremiumEvidenceSnapshotInput = {
   serviceId: NflRedraftPremiumServiceId
   serviceVariant?: NflRedraftPremiumServiceVariant
   canonicalIds: NflRedraftPremiumApiCanonicalIds
@@ -110,7 +110,7 @@ export type NflRedraftPremiumEvidenceSnapshotInput = {
   enabled?: boolean
 }
 
-export type NflRedraftPremiumEvidenceSnapshotDeps = {
+type NflRedraftPremiumEvidenceSnapshotDeps = {
   prismaClient?: PrismaLike
 }
 

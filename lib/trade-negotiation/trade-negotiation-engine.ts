@@ -14,20 +14,20 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export type NegotiationPosture = 'soft_probe' | 'balanced_pitch' | 'firm_offer' | 'patient_wait' | 'counter_now' | 'walk_away'
-export type ToneRecommendation = 'friendly' | 'businesslike' | 'confident' | 'light' | 'cautious'
+type NegotiationPosture = 'soft_probe' | 'balanced_pitch' | 'firm_offer' | 'patient_wait' | 'counter_now' | 'walk_away'
+type ToneRecommendation = 'friendly' | 'businesslike' | 'confident' | 'light' | 'cautious'
 
-export const NegotiationStageEnum = z.enum([
+const NegotiationStageEnum = z.enum([
   'first_contact', 'exploratory', 'offer_sent', 'counter_received', 'stalled', 'rejected', 'final_push',
 ])
 
-export const TradeGoalEnum = z.enum([
+const TradeGoalEnum = z.enum([
   'acquire_star', 'move_veteran', 'gain_picks', 'gain_youth', 'fix_depth',
   'consolidate_assets', 'cash_out_peak_value', 'buy_low_target',
   'devy_pipeline_move', 'c2c_balance_move',
 ])
 
-export interface SequencingStep {
+interface SequencingStep {
   step: number
   action: string
   rationale: string
@@ -56,9 +56,9 @@ export const NegotiationInputSchema = z.object({
   previousOfferRejected: z.boolean().default(false),
   negotiationHistoryNotes: z.array(z.string()).default([]),
 })
-export type NegotiationInput = z.infer<typeof NegotiationInputSchema>
+type NegotiationInput = z.infer<typeof NegotiationInputSchema>
 
-export interface NegotiationResult {
+interface NegotiationResult {
   negotiationStage: string
   recommendedPosture: NegotiationPosture
   confidencePct: number

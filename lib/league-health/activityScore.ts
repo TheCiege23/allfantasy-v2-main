@@ -34,7 +34,7 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
 
-export interface ActivityScoreInput {
+interface ActivityScoreInput {
   /** Managers still playing, over total. Drives the base — see below. */
   activeManagers: number
   numTeams: number

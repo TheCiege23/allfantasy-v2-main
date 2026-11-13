@@ -67,13 +67,13 @@ export type Pick = {
   createdAt: string
 }
 
-export type PickResult = {
+type PickResult = {
   ok: boolean
   pick: Pick
   state: DraftState
 }
 
-export type DraftRecap = {
+type DraftRecap = {
   draftId: string
   leagueId: string
   leagueName: string
@@ -82,7 +82,7 @@ export type DraftRecap = {
   sections: Record<string, unknown>
 }
 
-export type DraftPlayerPoolEntry = {
+type DraftPlayerPoolEntry = {
   playerId: string
   name: string
   position: string
@@ -113,7 +113,7 @@ export type DraftPlayerPoolEntry = {
   playerImageUrl?: string | null
 }
 
-export type AIPickRecommendation = {
+type AIPickRecommendation = {
   player: {
     playerId: string | null
     name: string
@@ -132,7 +132,7 @@ export type AIPickRecommendation = {
   alerts: string[]
 }
 
-export type LookaheadResult = {
+type LookaheadResult = {
   queue: AIPickRecommendation['queue']
   predictions: Array<Record<string, unknown>>
   alerts: string[]

@@ -8,9 +8,9 @@
  * `scripts/check-staging-env.ts` is the thin CLI that loads `.env` and runs this.
  */
 
-export type StagingEnvInput = Record<string, string | undefined>
+type StagingEnvInput = Record<string, string | undefined>
 
-export type StagingEnvOptions = {
+type StagingEnvOptions = {
   /** Allow DATABASE_URL that doesn't look like staging (DANGEROUS). */
   allowProdDb?: boolean
   /** Allow live Stripe keys (DANGEROUS — real charges). */
@@ -33,7 +33,7 @@ function hostOf(url: string): string {
   }
 }
 
-export type StagingEnvResult = {
+type StagingEnvResult = {
   ok: boolean
   errors: string[]
   warnings: string[]

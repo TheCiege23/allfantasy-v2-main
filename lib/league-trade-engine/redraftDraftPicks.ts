@@ -38,7 +38,7 @@ type Db = Prisma.TransactionClient
 export const FUTURE_PICKS_NOT_ALLOWED_IN_REDRAFT = 'future_picks_not_allowed_in_redraft'
 export const REDRAFT_PICK_ALREADY_USED = 'redraft_pick_already_used'
 export const REDRAFT_NO_DRAFT_PICKS = 'redraft_no_draft_picks_available'
-export const REDRAFT_PICK_RECEIVER_NOT_IN_DRAFT = 'redraft_pick_receiver_not_in_draft'
+const REDRAFT_PICK_RECEIVER_NOT_IN_DRAFT = 'redraft_pick_receiver_not_in_draft'
 
 export const FUTURE_PICKS_REDRAFT_REASON =
   'Future draft picks cannot be traded in a redraft league. Only picks in this season’s draft can be traded.'
@@ -55,7 +55,7 @@ export class CodedTradeError extends Error {
 export { isRedraftPickLeague }
 
 /** The draft is run by AllFantasy itself, so a pick traded here is the pick the room drafts with. */
-export function isNativeDraftPlatform(platform: string | null | undefined): boolean {
+function isNativeDraftPlatform(platform: string | null | undefined): boolean {
   const p = String(platform ?? '').trim().toLowerCase()
   return p === '' || p === 'manual' || p === 'allfantasy'
 }
@@ -257,7 +257,7 @@ export async function loadRedraftPickBook(
   return buildRedraftPickBook(session as RedraftSessionView | null, season)
 }
 
-export type RedraftPickCheck =
+type RedraftPickCheck =
   | { ok: true; kind: 'current_draft'; pick: RedraftDraftPick }
   | { ok: true; kind: 'legacy' }
   | { ok: false; code: string; message: string }

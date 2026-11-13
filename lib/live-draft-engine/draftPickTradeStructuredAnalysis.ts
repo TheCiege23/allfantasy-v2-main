@@ -3,11 +3,11 @@
  * Complements narrative AI; does not replace pick ownership validation.
  */
 
-export type TradeMoveDirection = 'up' | 'down' | 'neutral'
-export type TradeFairnessBand = 'favorable' | 'balanced' | 'costly'
-export type TradeGuidanceTone = 'good_move' | 'okay_move' | 'risky_move'
+type TradeMoveDirection = 'up' | 'down' | 'neutral'
+type TradeFairnessBand = 'favorable' | 'balanced' | 'costly'
+type TradeGuidanceTone = 'good_move' | 'okay_move' | 'risky_move'
 
-export type DraftPickTradeStructuredAnalysis = {
+type DraftPickTradeStructuredAnalysis = {
   overallDelta: number | null
   moveDirection: TradeMoveDirection
   fairnessBand: TradeFairnessBand

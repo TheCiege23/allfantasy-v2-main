@@ -2,9 +2,9 @@ import { getServerNowUTC } from '@/lib/time-engine/serverClock'
 import { normalizeToUTC } from '@/lib/time-engine/normalize'
 
 /** Wall-clock skew threshold between device-reported instant and server (seconds). */
-export const DEFAULT_CLOCK_SKEW_WARN_SECONDS = 120
+const DEFAULT_CLOCK_SKEW_WARN_SECONDS = 120
 
-export type MismatchResult = {
+type MismatchResult = {
   timezoneMismatch: boolean
   deviceClockMismatch: boolean
   clockSkewSeconds: number | null

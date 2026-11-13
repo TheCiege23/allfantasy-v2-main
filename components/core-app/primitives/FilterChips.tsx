@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 
 import './af-primitives.css'
 
-export type FilterChipOption<T extends string> = {
+type FilterChipOption<T extends string> = {
   id: T
   label: ReactNode
   /** An optional count beside the label; 0 is shown, absent is not. */

@@ -36,7 +36,7 @@ export const config = {
   } satisfies C2CConfigClient,
 }
 
-export const season = {
+const season = {
   season: {
     id: 'e2e-c2c-season',
     season: 2026,
@@ -92,7 +92,7 @@ const theirs: RosterBuckets = {
   bench: [], taxi: [], devy: [], ir: [],
 }
 
-export const rosters: Record<string, { roster: RosterBuckets }> = { 'ro-me': { roster: mine }, 'ro-opp': { roster: theirs } }
+const rosters: Record<string, { roster: RosterBuckets }> = { 'ro-me': { roster: mine }, 'ro-opp': { roster: theirs } }
 
 const score = (rosterId: string, campusScore: number, cantonScore: number, campusResult: string | null, cantonResult: string | null): C2CMatchupScore => ({
   id: `s-${rosterId}`, leagueId: 'e2e-c2c', matchupId: 'mu-10', rosterId, week: 10, season: 2026,
@@ -108,7 +108,7 @@ export const matchup = {
   c2cScores: { 'mu-10': { home: score('ro-me', 128.6, 141.2, 'W', null), away: score('ro-opp', 112.3, 149.8, 'L', null) } },
 }
 
-export const picks = {
+const picks = {
   picks: [
     ...[2027, 2028].flatMap((season) =>
       [1, 2, 3].flatMap((round) => [

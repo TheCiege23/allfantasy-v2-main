@@ -46,7 +46,7 @@ export type ImportDoneStat = {
   tone?: 'accent' | 'bad' | 'good'
 }
 
-export type ImportDoneProps = {
+type ImportDoneProps = {
   providerLabel: string
   /** Where "open what I just imported" goes. Null when the run wrote nothing new. */
   leagueHref: string | null

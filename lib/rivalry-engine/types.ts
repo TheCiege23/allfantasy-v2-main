@@ -16,7 +16,7 @@ export const DEFAULT_TIER_THRESHOLDS: Record<RivalryTier, { min: number; max?: n
   'League Classic': { min: 85 },
 }
 
-export const RIVALRY_EVENT_TYPES = [
+const RIVALRY_EVENT_TYPES = [
   'h2h_matchup',
   'playoff_matchup',
   'elimination',

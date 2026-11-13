@@ -2,8 +2,6 @@ export {
   getProductEntryRoute,
   getProductRouteConfigs,
   isPathInProduct,
-  PRODUCT_ROUTE_CONFIGS,
-  type ProductRouteConfig,
 } from "./CrossProductRouteResolver"
 export {
   getProductSwitchHref,
@@ -23,10 +21,8 @@ export {
 } from "./ProtectedRouteResolver"
 export {
   getUnauthorizedFallback,
-  DEFAULT_UNAUTHORIZED_FALLBACK,
 } from "./UnauthorizedFallbackResolver"
 export {
-  normalizeDeepLink,
   isAllowedDeepLink,
   getDeepLinkRedirect,
 } from "./DeepLinkHandler"
