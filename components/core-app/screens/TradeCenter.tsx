@@ -3,6 +3,12 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { summarizeTrades, tradesChips, tradesHeadline, type TradesChip } from '@/lib/core-app/tradesGuide'
+import { tradesGuideMessages } from '@/lib/core-app/messages/tradesGuide'
+import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
+import { sleeperOfferEntryHref } from '@/components/trades/SleeperOffersNotice'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/trades/af-trades-guide.css'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
@@ -386,7 +392,13 @@ function sportFromMeta(meta: string | null | undefined): string | null {
  * no-league analyzer. The Trades hub renders it in its evaluator section; Home renders it inside a
  * folded card (HomeTradeEvaluatorCard). One component, so the two cannot drift apart.
  */
-export function LeagueTradeEvaluator(props: { leagues: StripLeague[]; viewerId?: string | null }) {
+export function LeagueTradeEvaluator(props: {
+  leagues: StripLeague[]
+  viewerId?: string | null
+  /** The trades guide: say, in one line, how to grade an offer Sleeper has not shared yet. */
+  offerHint?: boolean
+}) {
+  const guide = useMessages(tradesGuideMessages)
   const language = useOptionalLanguage().language
   const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   /*
@@ -414,6 +426,17 @@ export function LeagueTradeEvaluator(props: { leagues: StripLeague[]; viewerId?:
         <>
           <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
           {/*
+            Replaces the long "Trade offers still waiting in Sleeper" box on the all-leagues page with the
+            one thing it was for: Sleeper shares a trade only once accepted, so a pending offer is graded
+            from a screenshot (SleeperOffersNotice, `?enter=offer`).
+          */}
+          {props.offerHint && evalLeague.platform.toLowerCase() === 'sleeper' ? (
+            <p className="af-tg-hint">
+              {guide.sleeperHint}{' '}
+              <Link href={sleeperOfferEntryHref(evalLeague.id)}>{guide.sleeperHintLink}</Link>
+            </p>
+          ) : null}
+          {/*
             The league's own Trade Center builder, keyed by league so switching leagues starts a
             clean deal instead of carrying one team's players into another league.
           */}
@@ -433,43 +456,115 @@ export function LeagueTradeEvaluator(props: { leagues: StripLeague[]; viewerId?:
   )
 }
 
+/** One headline chip, the same markup and tones as the home, week and live guides. */
+function TradesChipView({ chip, guide }: { chip: TradesChip; guide: (typeof tradesGuideMessages)['en'] }) {
+  const label =
+    chip.key === 'offers' ? guide.chipOffers : chip.key === 'new' ? guide.chipNew : chip.key === 'deadlines' ? guide.chipDeadlines : guide.chipOpen
+  // af-hg tones: warn = red, info = accent, ok = muted.
+  const tone = chip.tone === 'bad' ? 'warn' : chip.tone === 'plain' ? 'ok' : 'info'
+  const body = (
+    <>
+      <b>{chip.value}</b>
+      <span>{label}</span>
+    </>
+  )
+  return chip.href ? (
+    <a className="af-hg-chip" data-tone={tone} data-chip={chip.key} href={chip.href}>
+      {body}
+    </a>
+  ) : (
+    <span className="af-hg-chip af-tg-chip" data-tone={tone} data-chip={chip.key}>
+      {body}
+    </span>
+  )
+}
+
+/**
+ * The all-leagues Trades page (2026-11-13, owner: "simplify and make sure that users know what it's
+ * supposed to be used for"). It used to open on sixteen "None visible" offer tiles, then a full builder,
+ * then the market, then a second "Trades" page title, then an 82-league grid. Now, in the order a
+ * manager needs it:
+ *
+ *   1. one headline (offers waiting › new trades › quiet week) and up to four chips
+ *   2. offers waiting — a tile only for a league that has one, a plain line otherwise
+ *   3. Check a trade — the builder, with the Sleeper screenshot route said in one line
+ *   4. Trades in your leagues — TradesBoard `embedded` (no second h1)
+ *   5. Who's rising and falling — the market, below your own leagues
+ *   6. All your leagues — the grid, folded
+ */
 function AllLeaguesTradeHub(props: {
   leagues: StripLeague[]
   valueActions: CrossLeagueValueAction[]
   board?: ReactNode
+  /** The same TradesBoard data the board renders — the headline and chips are read from it. */
+  boardData?: TradesBoardData | null
   viewerId?: string | null
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
+  const guide = useMessages(tradesGuideMessages)
   const [query, setQuery] = useState('')
   const needle = query.trim().toLowerCase()
   const visibleLeagues = needle
     ? props.leagues.filter((league) => `${league.name} ${league.platform} ${league.meta ?? ''}`.toLowerCase().includes(needle))
     : props.leagues
+  const summary = summarizeTrades(props.boardData)
+  const head = tradesHeadline(summary)
+  const chips = tradesChips(summary)
+  const title =
+    head.kind === 'offers'
+      ? guide.headOffers(head.n)
+      : head.kind === 'new'
+        ? guide.headNew(head.n)
+        : head.kind === 'quiet'
+          ? guide.headQuiet
+          : guide.headUnknown
 
   return (
-    <div className="af-tc af-tc--hub">
-      <PageHeader
-        className="af-tc-head af-tc-hub-head"
-        subClassName="af-tc-lede"
-        eyebrow={<>{copy("Core · ")}{copy('Trades')}</>}
-        title={copy('Trade command center')}
-        sub={copy('See what needs attention across your leagues, then open one league to review, counter or build a deal.')}
-      />
-
-      <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} />
-
-      <section className="af-tc-hub-evaluator" aria-label={copy('Trade evaluator')}>
-        <div className="af-tc-hub-section-head">
-          <div>
-            <div className="af-label">{copy('Trade evaluator')}</div>
-            <h2>{copy('Build a trade in one of your leagues')}</h2>
-          </div>
-        </div>
-        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} />
+    <div className="af-tc af-tc--hub af-tg">
+      <section className="af-hg-head af-tg-head" aria-labelledby="af-tg-h1">
+        <PageHeader
+          className="af-tc-head af-tc-hub-head"
+          eyebrowClassName="af-hg-eyebrow"
+          titleClassName="af-hg-title"
+          // Not `af-tc-lede`: that class is hidden under 720px, and this line is what the page is for.
+          subClassName="af-hg-intro"
+          eyebrow={guide.eyebrow(props.leagues.length)}
+          title={<span id="af-tg-h1">{title}</span>}
+          sub={guide.intro}
+        />
+        {chips.length > 0 ? (
+          <ul className="af-hg-chips">
+            {chips.map((chip) => (
+              <li key={chip.key}>
+                <TradesChipView chip={chip} guide={guide} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
-      <TradeMarketMovers limit={5} heading={copy('What real trades say right now')} testId="trade-hub-market" />
+
+      <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} waitingOnly />
+
+      <section className="af-tc-hub-evaluator af-tg-check" aria-labelledby="af-tg-check-h">
+        <div className="af-tg-sec-head">
+          <h2 id="af-tg-check-h">{guide.checkTitle}</h2>
+          <p>{guide.checkSub}</p>
+        </div>
+        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} offerHint />
+        <p className="af-tg-teach">
+          <b>{guide.why}</b> {guide.checkTeach}
+        </p>
+      </section>
+
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
+
+      <section className="af-tg-market" aria-label={guide.marketTitle}>
+        <TradeMarketMovers limit={5} heading={guide.marketTitle} testId="trade-hub-market" />
+        <p className="af-tg-teach">
+          <b>{guide.why}</b> {guide.marketTeach}
+        </p>
+      </section>
 
       {props.valueActions.length > 0 ? (
         <section className="af-tc-hub-actions">
@@ -500,17 +595,16 @@ function AllLeaguesTradeHub(props: {
         </section>
       ) : null}
 
-      <section className="af-tc-hub-leagues">
-        <div className="af-tc-hub-section-head">
-          <div>
-            <div className="af-label">{copy('All connected leagues')}</div>
-            <h2>{copy('Choose where you want to trade')}</h2>
-          </div>
-          <label className="af-tc-hub-search">
-            <span className="af-sr-only">{copy('Search leagues')}</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy('Search league or platform')} />
-          </label>
-        </div>
+      {/* Your leagues were listed three times (the offer tiles, the builder's picker and this grid); the grid folds. */}
+      <details className="af-tc-hub-leagues af-tg-all">
+        <summary>
+          <b>{guide.allLeagues(props.leagues.length)}</b>
+          <span>{guide.allLeaguesSub}</span>
+        </summary>
+        <label className="af-tc-hub-search">
+          <span className="af-sr-only">{copy('Search leagues')}</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy('Search league or platform')} />
+        </label>
         <div className="af-tc-hub-league-grid">
           {visibleLeagues.map((league) => (
             <Link key={league.id} href={`/core/trades?league=${encodeURIComponent(league.id)}`} className="af-tc-hub-league">
@@ -521,7 +615,7 @@ function AllLeaguesTradeHub(props: {
           ))}
         </div>
         {visibleLeagues.length === 0 ? <p className="af-tc-timeline-empty">{copy('No connected league matches that search.')}</p> : null}
-      </section>
+      </details>
     </div>
   )
 }
@@ -635,6 +729,8 @@ export function TradeCenter(props: {
   /** Portfolio-wide value changes, already scoped to rosters owned by this manager. */
   valueActions?: CrossLeagueValueAction[] | null
   board?: ReactNode
+  /** All-leagues only: the TradesBoard data behind `board`, for the guide's headline and chips. */
+  boardData?: TradesBoardData | null
   /**
    * Where to actually send the finished trade — the platform's own trade page.
    * Null for a native league, or when the resolver could not verify a host.
@@ -1598,7 +1694,7 @@ export function TradeCenter(props: {
   }, [props.league?.id, result, noSignal, myRoster, partnerRoster, theirLabel, give, get, yourGrade, theirGrade, analyzedAt, language, copy])
 
   if (!props.league) {
-    return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} board={props.board} viewerId={props.viewerId} />
+    return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} board={props.board} boardData={props.boardData} viewerId={props.viewerId} />
   }
 
   const hasAssets = giveAssets.length > 0 || getAssets.length > 0

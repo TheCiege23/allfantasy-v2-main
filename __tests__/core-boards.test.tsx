@@ -1395,7 +1395,8 @@ describe('TradesBoard — a priced pick shows its price', () => {
   it('names both managers in the value split, summing to 100', () => {
     const { container } = render(<TradesBoard data={withPick(1231, 'D', 42)} allHref="/core/trades?all=1" />)
     const text = container.textContent ?? ''
-    expect(text).toContain('Value split')
+    // Relabelled from "Value split" in the trades guide pass (2026-11-13).
+    expect(text).toContain('Who got more value')
     expect(text).toContain('TheCiege24 42%')
     expect(text).toContain('Jordan 58%')
   })

@@ -2,6 +2,8 @@
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
 import { useEffect, useState } from 'react'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradesGuideMessages } from '@/lib/core-app/messages/tradesGuide'
 import Link from 'next/link'
 import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
@@ -144,8 +146,19 @@ function statusLine(s: TileState, platform: string): { text: string; tone: strin
   }
 }
 
-export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId: string | null }) {
+export function TradeLeagueStrip(props: {
+  leagues: StripLeague[]
+  activeLeagueId: string | null
+  /**
+   * The all-leagues trades guide (2026-11-13): draw a tile ONLY for a league with an offer waiting, and
+   * one plain line otherwise. On the account that asked for this, 16 tiles read "None visible · open
+   * offers live in Sleeper" — the same non-answer sixteen times above the page's first real content.
+   * The reads are unchanged (same leagues, same cap, same two-at-a-time); only the empty tiles go.
+   */
+  waitingOnly?: boolean
+}) {
   const {copy,locale}=useTradeVisualCopy()
+  const guide = useMessages(tradesGuideMessages)
 
   const [visibleCount, setVisibleCount] = useState(MAX_LEAGUES_READ)
   const leagues = props.leagues.slice(0, visibleCount)
@@ -249,6 +262,72 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
   if (leagues.length === 0) return null
 
   const beyond = props.leagues.length - leagues.length
+
+  if (props.waitingOnly) {
+    const waiting = leagues.filter((l) => states[l.id]?.kind === 'waiting')
+    const kindOf = (id: string) => states[id]?.kind ?? 'checking'
+    const checking = leagues.filter((l) => kindOf(l.id) === 'checking').length
+    /*
+     * ⚠ A FAILED OR UNREAD LEAGUE IS NOT "NO OFFERS". Only a read that answered counts toward "No offers
+     * waiting in N leagues"; the rest are named as not checked, so a failed read never reads as all-clear.
+     */
+    const answered = leagues.filter((l) => kindOf(l.id) === 'clear' || kindOf(l.id) === 'waiting').length
+    const notRead = leagues.filter((l) => kindOf(l.id) === 'failed' || kindOf(l.id) === 'unread').length
+    const anySleeper = leagues.some((l) => l.platform.toLowerCase() === 'sleeper')
+    return (
+      <section className="af-tc-strip af-tg-offers" id="af-tg-offers" aria-labelledby="af-tg-offers-h">
+        <div className="af-tg-sec-head">
+          <h2 id="af-tg-offers-h">{guide.offersTitle}</h2>
+          <p role="status">
+            {checking > 0
+              ? guide.offersChecking(checking)
+              : waiting.length === 0 && answered > 0
+                ? guide.offersNone(answered, props.leagues.length)
+                : null}
+            {checking === 0 && notRead > 0 ? ` ${guide.offersFailed(notRead)}` : null}
+            {checking === 0 && anySleeper ? ` ${guide.offersSleeper}` : null}
+          </p>
+        </div>
+        {waiting.length > 0 ? (
+          <div className="af-tc-tiles">
+            {waiting.map((l) => {
+              const s = states[l.id]!
+              const line = statusLine(s, l.platform)
+              return (
+                <Link
+                  key={l.id}
+                  href={s.kind === 'waiting' && s.nativeCount > 0
+                    ? `/league/${encodeURIComponent(l.id)}?view=trades`
+                    : `/core/trades?league=${encodeURIComponent(l.id)}`}
+                  className="af-tc-tile"
+                >
+                  <span className="af-tc-tile-head">
+                    <span className="af-tc-mark af-platform" data-platform={l.platform.toLowerCase()} aria-hidden>
+                      {copy(l.mark)}
+                    </span>
+                    <span className="af-tc-tile-body">
+                      <span className="af-tc-tile-name">{l.name}</span>
+                      {l.meta ? <span className="af-tc-tile-meta">{copy(l.meta)}</span> : null}
+                    </span>
+                  </span>
+                  <span className="af-tc-tile-status af-num" data-tone={line.tone}>
+                    {copy(line.text)}
+                  </span>
+                  <span className="af-tc-tile-deadline">{copy(deadlineLine(l))}</span>
+                  <span className="af-tc-tile-action">{copy(nextAction(s, l.platform))} <span aria-hidden>{copy("→")}</span></span>
+                </Link>
+              )
+            })}
+          </div>
+        ) : null}
+        {beyond > 0 && checking === 0 ? (
+          <button type="button" className="af-tg-more" onClick={() => setVisibleCount((count) => count + MAX_LEAGUES_READ)}>
+            {guide.offersMore(Math.min(beyond, MAX_LEAGUES_READ))}
+          </button>
+        ) : null}
+      </section>
+    )
+  }
 
   return (
     <section className="af-tc-strip" aria-label={copy("Offers across your leagues")}>
