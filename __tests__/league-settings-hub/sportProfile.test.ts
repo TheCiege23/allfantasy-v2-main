@@ -100,3 +100,26 @@ describe('sport copy', () => {
     expect(reminder('NFL')).toMatch(/kickoff/)
   })
 })
+
+describe('no stat AF itself stores lands in Other (live leagues, 2026-11-13)', () => {
+  const keysOf = (csv: string) => rules(csv.split(',').map((k) => [k, 1] as [string, number]))
+  const otherOf = (csv: string, sport: string) => groupScoringRules(keysOf(csv), sport).find((c) => c.key === 'other')?.rows.map((r) => r.key) ?? []
+
+  it('basketball: the plural "turnovers" is Playmaking, and AF’s plain keys have real names', () => {
+    const t = tabs(groupScoringRules(rules([['turnovers', -1], ['three_pointers_made', 0.5], ['points', 1]]), 'NBA'))
+    expect(t.Playmaking).toEqual(['Turnovers'])
+    expect(t.Scoring).toEqual(['3-Pointers Made', 'Points'])
+    expect(otherOf('points,rebounds,assists,steals,blocks,turnovers,three_pointers_made', 'NCAAB')).toEqual([])
+  })
+
+  it('hockey: the singular template keys and game milestones are sorted into Skaters / Goalies / Bonuses', () => {
+    const live = 'goal,assist,shot_on_goal,blocked_shot,power_play_point,short_handed_point,save,goal_allowed,win,loss,shutout,minor_penalty,major_penalty,misconduct,forty_save_game,fifty_save_game,overtime_win,shootout_win,three_assist_game,five_point_game,multi_goal_game,multi_assist_game,ten_shot_game,five_hit_game,five_block_game,empty_net_goal,shootout_goal,shootout_miss,high_danger_chances'
+    expect(otherOf(live, 'NHL')).toEqual([])
+    const t = tabs(groupScoringRules(keysOf('goal,save,win,five_hit_game'), 'NHL'))
+    expect(t).toEqual({ Skaters: ['Goal'], Goalies: ['Save', 'Win'], Bonuses: ['5+ Hit Game'] })
+  })
+
+  it('football: fumble recoveries and returns have a tab', () => {
+    expect(otherOf('fumble_recovery,off_fumble_recovery_td,return_yards,return_td', 'NFL')).toEqual([])
+  })
+})
