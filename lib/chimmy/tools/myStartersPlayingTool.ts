@@ -12,7 +12,7 @@ import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
 import { resolveInjuryFacts, type InjuryFact } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { isHealthyDesignation, ruledOutByFact } from '@/lib/core-app/injuryStatus'
-import { isBestBallSettings } from '@/lib/core-app/lineupMode'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 /**
  * HOW MANY OF THE USER'S LEAGUES HAVE A STARTER IN TODAY'S / TONIGHT'S NFL GAMES.
@@ -348,9 +348,10 @@ export async function buildMyStartersPlayingContext(
     injuries && p.name ? injuries.byPlayer.get(normalizeMatchName(p.name)) : undefined
 
   const bestBallRows = await prisma.league
-    .findMany({ where: { id: { in: readResults.map((r) => r.league.id) } }, select: { id: true, settings: true, leagueType: true } })
-    .catch(() => [] as Array<{ id: string; settings?: unknown; leagueType?: string | null }>)
-  const bestBallOf = new Map(bestBallRows.map((r) => [r.id, isBestBallSettings(r.settings) || String(r.leagueType ?? '').includes('best_ball')]))
+    .findMany({ where: { id: { in: readResults.map((r) => r.league.id) } }, select: { id: true, settings: true, leagueType: true, bestBallMode: true, leagueVariant: true } })
+    .catch(() => [] as Array<{ id: string; settings?: unknown; leagueType?: string | null; bestBallMode?: boolean | null; leagueVariant?: string | null }>)
+  // The column too (see myRosterInjuriesTool): `isBestBallLeagueRow` is the import-inclusive answer.
+  const bestBallOf = new Map(bestBallRows.map((r) => [r.id, isBestBallLeagueRow(r) || String(r.leagueType ?? '').includes('best_ball')]))
 
   const hits: LeagueHit[] = []
   const onlyOut: string[] = []

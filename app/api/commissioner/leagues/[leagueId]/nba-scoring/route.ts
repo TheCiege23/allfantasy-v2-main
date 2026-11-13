@@ -19,6 +19,7 @@ import {
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 const featureGate = new FeatureGateService()
 
@@ -41,7 +42,7 @@ export async function GET(
 
   const config = await getLeagueNbaScoringConfig(leagueId)
   const presets = getNbaScoringPresets()
-  const isCommissioner = league.userId === session.user.id
+  const isCommissioner = await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id)
 
   let isPremium = false
   try {
@@ -65,7 +66,7 @@ export async function PUT(
     select: { userId: true, sport: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   const locked = await settingsLockedResponse(leagueId, 'scoring')
   if (locked) return locked
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })

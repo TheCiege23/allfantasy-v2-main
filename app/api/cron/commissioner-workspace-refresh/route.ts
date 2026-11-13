@@ -10,6 +10,7 @@ import { postUntouchedRecapDrafts } from '@/lib/recap-review/recapReviewService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runScheduledAiCommissionerAlerts } from '@/lib/ai-commissioner/scheduledAlertsBatch'
 import { scanImportedLeaguesForTanking } from '@/lib/integrity/scanImportedTanking'
+import { runWeeklyCommishDigests } from '@/lib/commissioner-workspace/weeklyDigest'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -155,7 +156,16 @@ export async function GET(request: Request) {
         console.error('[cron-commissioner] imported tanking scan failed:', toErrorMessage(e))
         return { discovered: 0, scanned: 0, flagged: 0, failed: 1 }
       })
-      return { ...workspace, reports, recipes, recapDrafts, aiAlerts, importedTanking }
+      /*
+       * The weekly commissioner digest (lib/commissioner-workspace/weeklyDigest.ts): Tuesday, with
+       * Wednesday as catch-up; a no-op the other five days. LAST on purpose, so it counts the cases
+       * the tanking scan above has just opened.
+       */
+      const digest = await runWeeklyCommishDigests({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] weekly digest failed:', toErrorMessage(e))
+        return { day: true, weekKey: '', candidates: 0, sent: 0, quiet: 0, alreadySent: 0, failed: 1 }
+      })
+      return { ...workspace, reports, recipes, recapDrafts, aiAlerts, importedTanking, digest }
     },
     (r) => ({
       rowsRead: r.discovered,
@@ -188,6 +198,10 @@ export async function GET(request: Request) {
         importedTankingScanned: r.importedTanking.scanned,
         importedTankingFlagged: r.importedTanking.flagged,
         importedTankingFailed: r.importedTanking.failed,
+        digestDay: r.digest.day,
+        digestSent: r.digest.sent,
+        digestQuiet: r.digest.quiet,
+        digestFailed: r.digest.failed,
       },
     }),
   )

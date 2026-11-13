@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getPlayoffBracketView } from "@/lib/playoffs/playoffService"
 import PlayoffBracketShell from "@/components/brackets/playoffs/PlayoffBracketShell"
+import { cfpInviteChallengeId } from "@/lib/playoffs/cfpInvite"
 
 export const dynamic = "force-dynamic"
 
@@ -119,7 +120,7 @@ export default async function BracketLeagueDetailPage(
     console.warn("[brackets/leagues] session lookup failed", { leagueId: params.leagueId, error: String(err) })
   }
 
-  if (!session?.user?.id && typeof searchParams?.code === "string" && /^[a-z0-9]{8}$/i.test(searchParams.code)) {
+  if (!session?.user?.id && typeof searchParams?.code === "string" && (/^[a-z0-9]{8}$/i.test(searchParams.code) || cfpInviteChallengeId(searchParams.code) === params.leagueId.toLowerCase())) {
     const destination = `/brackets/leagues/${encodeURIComponent(params.leagueId)}?code=${encodeURIComponent(searchParams.code)}`
     redirect(`/login?callbackUrl=${encodeURIComponent(destination)}`)
   }
@@ -133,6 +134,7 @@ export default async function BracketLeagueDetailPage(
         challengeId: params.leagueId,
         user: session?.user ?? null,
         requestedEntryId: searchParams?.entryId ?? null,
+        inviteCode: searchParams?.code ?? null,
       })
     } catch (err) {
       if (isExpectedPlayoffRouteError(err)) {
@@ -177,7 +179,7 @@ export default async function BracketLeagueDetailPage(
           challengeId: playoffView.challenge.id,
         })
       }
-      return <PlayoffBracketShell initialView={playoffView} />
+      return <PlayoffBracketShell initialView={playoffView} initialInviteCode={searchParams?.code ?? null} />
     }
 
     console.warn("[brackets/leagues] checking legacy league", { leagueId: params.leagueId })

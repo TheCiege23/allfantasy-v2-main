@@ -137,8 +137,8 @@ describe('the grade carries it', () => {
   })
 
   it('tells the manager the drop is already counted', () => {
-    expect(tradePackageReview(lines, { rosterSpotCharged: true })!.note).toMatch(/already counts the roster spot/)
-    expect(tradePackageReview(lines)!.note).toMatch(/sums quoted asset prices/)
+    expect(tradePackageReview(lines, { rosterSpotCharged: true })!.note).toMatch(/already counts what that roster spot is worth/)
+    expect(tradePackageReview(lines)!.note).toMatch(/only adds up values/)
   })
 })
 

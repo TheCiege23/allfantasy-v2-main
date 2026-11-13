@@ -19,6 +19,8 @@ type ContextPayload = {
   league: { keeperCount: number | null }
   session: SessionRow | null
   viewerRoster: { id: string; seasonId: string } | null
+  /** The viewer's team in the season just played: the players listed here come from it. */
+  sourceRoster?: { id: string; seasonId: string } | null
 }
 
 type RosterPlayer = {
@@ -94,7 +96,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
           `/api/keeper/eligibility?leagueId=${encodeURIComponent(leagueId)}&seasonId=${encodeURIComponent(c.session.seasonId)}&rosterId=${encodeURIComponent(c.viewerRoster.id)}`,
           { credentials: 'include' },
         ),
-        fetch(`/api/redraft/roster?rosterId=${encodeURIComponent(c.viewerRoster.id)}&week=1`, {
+        // Keepers come FROM last season's team; `viewerRoster` is next season's empty shell they land on.
+        fetch(`/api/redraft/roster?rosterId=${encodeURIComponent(c.sourceRoster?.id ?? c.viewerRoster.id)}&week=1`, {
           credentials: 'include',
         }),
         fetch(

@@ -46,6 +46,8 @@ export type AutoDraftFillOutcome = {
     | 'auction'
     | 'no_pool'
     | 'submit_failed'
+    /** The league is an offline draft (only reachable if its mode changed mid-fill). */
+    | 'offline_draft'
     | `status_${string}`
 }
 

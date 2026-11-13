@@ -33,6 +33,7 @@ import { survivorChatMessages } from '@/lib/core-app/messages/survivorChat'
 import { useMessages } from '@/components/i18n/useMessages'
 import {
   describeReactors,
+  avatarToneFor,
   initialsFor,
   isDeletedMessage,
   isEditedMessage,
@@ -148,7 +149,7 @@ function MessageAvatar({ name, url }: { name: string; url: string | null | undef
   const safe = safeAvatarUrl(url)
   const [failed, setFailed] = useState(false)
   return (
-    <span className="af-cm-avatar" aria-hidden="true">
+    <span className="af-cm-avatar" aria-hidden="true" data-tone={avatarToneFor(name)}>
       {safe && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={safe} alt="" loading="lazy" onError={() => setFailed(true)} />

@@ -70,7 +70,7 @@ export async function GET(
   let finalNomineeRosterIds: string[] = []
   let eligibility: Awaited<ReturnType<typeof getEligibility>> = null
   let jury: { rosterId: string; evictedWeek: number }[] = []
-  let ballot: { canVote: boolean; voteDeadlineAt: string | null; closed: boolean } | null = null
+  let ballot: { canVote: boolean; voteDeadlineAt: string | null; closed: boolean; hasVoted: boolean } | null = null
   let haveNotRosterIds: string[] = []
   let vetoChallenge: { competitorRosterIds: string[]; challengeMode: string; themeHints: string[] } | null = null
 
@@ -110,8 +110,22 @@ export async function GET(
 
     if (cycle && myRosterId) {
       const canVote = (eligibility?.canVote.includes(myRosterId) ?? false) && cycle.phase === 'VOTING_OPEN' && !cycle.closedAt && (!cycle.voteOpenedAt || new Date(cycle.voteOpenedAt) <= new Date()) && (!cycle.voteDeadlineAt || new Date(cycle.voteDeadlineAt) > new Date())
+      /*
+       * The viewer's OWN ballot only: whether they have voted this cycle, never who for and never anyone
+       * else's (sealed ballots, PRD §5.5). `canVote` does not account for it, so without this the home
+       * could not tell "vote now" from "your vote is in".
+       */
+      let hasVoted = false
+      if (cycle.phase === 'VOTING_OPEN' || cycle.phase === 'VOTING_LOCKED') {
+        try {
+          hasVoted = (await prisma.bigBrotherEvictionVote.findUnique({ where: { cycleId_voterRosterId: { cycleId: current.id, voterRosterId: myRosterId } }, select: { id: true } })) != null
+        } catch {
+          // Unknown reads as "not voted": the home then asks for a vote the voting screen will show as cast.
+        }
+      }
       ballot = {
         canVote,
+        hasVoted,
         voteDeadlineAt: cycle.voteDeadlineAt,
         closed: !!cycle.closedAt || cycle.phase === 'VOTING_LOCKED' || !!cycle.voteDeadlineAt && new Date(cycle.voteDeadlineAt) <= new Date(),
       }

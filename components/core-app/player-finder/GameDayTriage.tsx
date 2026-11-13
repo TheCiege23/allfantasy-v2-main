@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { playerFinderMessages } from '@/lib/core-app/messages/playerFinder'
@@ -9,7 +10,8 @@ import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineups'
 import { TriageLineupLinks } from '@/components/core-app/player-finder/TriageLineupLinks'
-import { chipDetail, type GameDayTriage as Triage } from '@/lib/core-app/gameDayTriage'
+import { chipDetail, splitRosterAges, type GameDayTriage as Triage } from '@/lib/core-app/gameDayTriage'
+import { gamePlanMessages } from '@/lib/core-app/messages/gamePlan'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { lockState } from '@/lib/core-app/lineupLock'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
@@ -32,10 +34,20 @@ import { playerRef } from '@/lib/core-app/playerRef'
  * goes through `coreUiCopy`, and each lock through LockClock, which translates its own label.
  */
 
+/**
+ * ⚠ HOW MANY ROWS SHOW BEFORE "SHOW ALL" (2026-11-09 phone pass). Live at 375px Player Finder was
+ * 10,949px: this list and Your shares were twenty rows each, ~200px a row on a phone, 7,600px
+ * between them. The rows arrive ranked, so the first five are the ones to act on.
+ */
+export const FINDER_LIST_PREVIEW = 5
+
 export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionState<Triage>; nowIso: string; leagueCount: number }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(playerFinderMessages)
+  /* The stale-league note says exactly what War Room's Game Plan says, in both languages. */
+  const gp = useMessages(gamePlanMessages)
   const copy = (english: string) => coreUiCopy(english, language)
+  const [showAll, setShowAll] = useState(false)
   if (!state.available) {
     return (
       <section className="af-card af-pf-triage af-pf-triage--empty" aria-labelledby="af-pf-triage-h">
@@ -52,6 +64,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
   const unsupported = state.data.unsupportedLeagues ?? 0
   const weekLabel = week ? m.triageWeek(week.week) : m.triageThisWeek
   const weekKey = week ? `${week.season}-${week.week}` : 'current'
+  const ages = splitRosterAges(state.data, nowIso)
 
   return (
     <section className="af-card af-pf-triage" aria-labelledby="af-pf-triage-h" data-count={rows.length}>
@@ -62,10 +75,29 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
         <span className="af-pf-triage-sub af-num">
           {m.triageRead(leaguesRead, leagueCount)}
           {bestBall > 0 ? m.triageBestBall(bestBall) : ''}
-          {unsupported > 0 ? m.triageUnsupported(unsupported) : ''} · {weekLabel}
+          {unsupported > 0 ? m.triageUnsupported(unsupported) : ''}
+          {(state.data.unidentifiedStarters ?? 0) > 0 ? m.triageUnidentified(state.data.unidentifiedStarters ?? 0) : ''} · {weekLabel}
         </span>
       </header>
-      <RefreshLineups asOf={state.data.rostersAsOf ?? null} nowIso={nowIso} />
+      {/*
+        ⚠ Dated by the leagues that are syncing, not by the single oldest one (2026-11-09): one stale
+        league made this read "Lineups as of 53d ago" over 47 fresh ones. Stale leagues are named
+        below with their age, the same rule and words as Game Plan (splitRosterAges).
+      */}
+      <RefreshLineups asOf={ages.stampAsOf} nowIso={nowIso} />
+      {ages.stale.length > 0 && ages.freshCount > 0 ? (
+        <p className="af-pf-triage-warn af-pf-triage-stale" role="note">
+          {gp.staleNote}{' '}
+          {ages.stale.map((a, i) => (
+            <span key={a.leagueId}>
+              {i > 0 ? ', ' : ''}
+              <Link href={`/core/sync?league=${encodeURIComponent(a.leagueId)}`}>{a.leagueName}</Link>{' '}
+              <span className="af-num">({gp.daysAgo(a.days)})</span>
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
       {notRead > 0 ? (
         <p className="af-pf-triage-warn" role="note">
           {m.triageNotRead(notRead)}
@@ -77,8 +109,9 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
           {m.triageClear(weekLabel)}
         </p>
       ) : (
-        <ul className="af-pf-triage-list">
-          {rows.map((r) => {
+        <>
+        <ul className="af-pf-triage-list" id="af-pf-triage-list">
+          {(showAll ? rows : rows.slice(0, FINDER_LIST_PREVIEW)).map((r) => {
             const href = `/core/players?q=${encodeURIComponent(r.player.name)}&player=${encodeURIComponent(playerRef(r.player.sport, r.player.externalId, r.player.source))}`
             const locked = r.kickoff ? lockState(r.kickoff, nowIso).state === 'locked' : false
             const detail = chipDetail(r.status?.label ?? null, r.description)
@@ -136,6 +169,18 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
             )
           })}
         </ul>
+        {rows.length > FINDER_LIST_PREVIEW ? (
+          <button
+            type="button"
+            className="af-pf-list-more"
+            aria-expanded={showAll}
+            aria-controls="af-pf-triage-list"
+            onClick={() => setShowAll((open) => !open)}
+          >
+            {showAll ? m.listShowFewer : m.listShowAll(rows.length)}
+          </button>
+        ) : null}
+        </>
       )}
       <p className="af-pf-triage-foot">
         {m.triageFoot}

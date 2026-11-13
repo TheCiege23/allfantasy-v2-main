@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { computeRosterScoreForWeek } from '@/lib/multi-sport/MultiSportMatchupScoringService'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { selectBestBallLineupForRoster } from './best-ball-engine'
+import { readStoredPositions } from '@/lib/bestball/resultRuleStamp'
 
 type JsonRecord = Record<string, unknown>
 const prismaAny = prisma as any
@@ -119,9 +120,37 @@ export async function scoreLeagueWeek(input: {
   const pending: Array<{
     teamId: string
     points: number
-    data: { starterIds: string[]; bestBallEnabled: boolean; bestBallStatus: string | null; byPlayerId: Record<string, number> }
+    data: {
+      starterIds: string[]
+      bestBallEnabled: boolean
+      bestBallStatus: string | null
+      byPlayerId: Record<string, number>
+      sealedPositions?: Record<string, string | null>
+    }
   }> = []
   const unavailableTeams: LeagueWeekScoreResult['unavailable'] = []
+
+  /*
+   * 🛑 A LOCKED BEST BALL WEEK KEEPS THE POSITIONS IT WAS LOCKED AT. There is no position history in the
+   * schema (`SportsPlayer.position` is the CURRENT position), so a TE re-listed as a WR in week 10 used to
+   * re-seat every locked week on rescore. The write that locks a week records each optimized player's
+   * position in `data.sealedPositions`; every later rescore seats those players there and carries the map
+   * forward (`data` is replaced on update). Same rule as the native stamp (lib/bestball/resultRuleStamp.ts):
+   * recorded only by the locking write, never back-filled onto a week locked before this existed.
+   */
+  const previousByTeam = new Map<string, { locked: boolean; sealedPositions: Record<string, string | null> | null }>()
+  if (bestBallEnabled) {
+    const previous = await prisma.teamPerformance.findMany({
+      where: { teamId: { in: Array.from(teamIdByRosterExternalId.values()) }, season: input.season, week: input.weekOrRound },
+      select: { teamId: true, result: true, data: true },
+    })
+    for (const row of previous) {
+      previousByTeam.set(row.teamId, {
+        locked: row.result === 'locked',
+        sealedPositions: readStoredPositions(toJsonRecord(row.data).sealedPositions),
+      })
+    }
+  }
 
   for (const roster of league.rosters) {
     const rosterPlayerIds = getRosterPlayerIds(roster.playerData)
@@ -130,9 +159,8 @@ export async function scoreLeagueWeek(input: {
     const teamId = teamIdByRosterExternalId.get(roster.platformUserId)
     if (!teamId) continue
 
-    // On UNAVAILABLE/unfillable the engine returns EMPTY starterIds by contract, so the
-    // fallback below uses the roster's actual starters instead of an arbitrary all-zero
-    // "optimized" lineup. The status is persisted so the stored score is auditable.
+    const previous = previousByTeam.get(teamId)
+    const lockedPositions = previous?.locked ? previous.sealedPositions : null
     const bestBallResult = bestBallEnabled
       ? await selectBestBallLineupForRoster({
           leagueId: league.id,
@@ -142,11 +170,28 @@ export async function scoreLeagueWeek(input: {
           rosterPlayerIds,
           platform: league.platform,
           formatType,
+          leagueSettings: league.settings,
+          sealedPositions: lockedPositions,
         })
       : null
-    const derivedStarterIds = bestBallResult?.starterIds ?? []
 
-    const starterIds = derivedStarterIds.length > 0 ? derivedStarterIds : extractStarterIds(roster.playerData)
+    /*
+     * 🛑 A BEST BALL TEAM IS SCORED ON ITS OPTIMAL LINEUP OR NOT AT ALL. When the engine has no lineup
+     * (no stats, an unfillable lineup, unresolvable slots) this used to fall back to the draft's stale
+     * starters — and, with none, to `rosterPlayerIds`: the WHOLE ROSTER summed as a best ball score
+     * (audit 2026-11-06, finding #17). Now the team is unavailable, and the week is written for nobody,
+     * exactly like any other team this function cannot score.
+     */
+    if (bestBallResult && bestBallResult.starterIds.length === 0) {
+      unavailableTeams.push({
+        rosterId: roster.id,
+        teamId,
+        reason: `best_ball_${bestBallResult.status.toLowerCase()}: ${bestBallResult.notes[0] ?? 'no best ball lineup'}`,
+      })
+      continue
+    }
+
+    const starterIds = bestBallResult ? bestBallResult.starterIds : extractStarterIds(roster.playerData)
     const score = await computeRosterScoreForWeek({
       leagueId: league.id,
       leagueSport: league.sport as LeagueSport,
@@ -169,6 +214,12 @@ export async function scoreLeagueWeek(input: {
         bestBallEnabled,
         bestBallStatus: bestBallResult?.status ?? null,
         byPlayerId: score.byPlayerId,
+        // Carried once locked; recorded only by the write that locks.
+        ...(previous?.locked
+          ? lockedPositions ? { sealedPositions: lockedPositions } : {}
+          : input.lockScores && bestBallResult?.positionsUsed
+            ? { sealedPositions: { ...bestBallResult.positionsUsed } }
+            : {}),
       },
     })
   }

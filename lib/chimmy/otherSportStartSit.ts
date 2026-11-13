@@ -9,6 +9,7 @@ import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolut
 import { viewerRosterOf, activePlayerIds } from './leagueRosterIndex'
 import { collectRosterIds, isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 import { bridgeImportedGameLogIds } from '@/lib/redraft/importedGameLogIdBridge'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
@@ -47,8 +48,9 @@ export async function buildOtherSportStartSit(args: {
   if (!eligibility) return missing(`Starting-slot eligibility for ${sport} is not on file.`)
   const provider = String(world.provenance?.provider ?? '').toLowerCase()
   const imported = provider === 'espn' || (provider === 'sleeper' && sport === 'NBA') || isForeignIdSpace(provider)
-  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true } })
-  if (!league || league.bestBallMode) return missing('This league has no manual start/sit decision on file.')
+  const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { sport: true, settings: true, season: true, leagueType: true, bestBallMode: true, leagueVariant: true, guillotineMode: true } })
+  // Classic Best Ball or best ball Guilly: the optimizer sets the lineup (lib/bestball/bestBallLeagueState.ts).
+  if (!league || bestBallLineupSetsItself(league)) return missing('This league has no manual start/sit decision on file.')
   if (sport === 'SOCCER') await ensureDailySportSeasonStart('SOCCER', league.season, { db: prisma }).catch(() => null)
   if (!canRunSeasonForSport(sport, league.season)) return missing(`${sport} fantasy scoring is not operational for a full season yet. No league-specific start/sit call can be made.`)
   const roster = viewerRosterOf(world, args.userId)

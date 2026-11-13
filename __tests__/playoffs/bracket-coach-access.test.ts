@@ -24,7 +24,7 @@ describe("private coach access", () => {
   })
   it("scopes rival SQL to this pool and its locked series and refuses unrelated or draft rivals", async () => {
     await loadBracketCoach({ challengeId: "cup", user: { id: "me" } })
-    expect(mocks.picks).toHaveBeenCalledWith({ where: { challengeId: "cup", entryId: "other", seriesId: { in: ["locked"] } }, select: { seriesId: true, pickTeamName: true } })
+    expect(mocks.picks).toHaveBeenCalledWith({ where: { challengeId: "cup", entryId: "other", seriesId: { in: ["locked"] } }, select: { seriesId: true, pickTeamName: true, confirmedAt: true } })
     await expect(loadBracketCoach({ challengeId: "cup", rivalId: "different-pool", user: { id: "me" } })).rejects.toMatchObject({ status: 404 })
     const draft = view(); draft.entries[1].isComplete = false; mocks.view.mockResolvedValueOnce(draft)
     await expect(loadBracketCoach({ challengeId: "cup", rivalId: "other", user: { id: "me" } })).rejects.toMatchObject({ status: 404 })

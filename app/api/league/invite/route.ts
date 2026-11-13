@@ -1,3 +1,4 @@
+import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
@@ -103,12 +104,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invite not found or expired' }, { status: 404 })
   }
 
-  const [linkedPlatformUserIds, zombie] = await Promise.all([
+  const [linkedPlatformUserIds, zombie, careerGate] = await Promise.all([
     userId
       ? resolveLinkedPlatformUserIds({ userId, platform: invite.league.platform })
       : Promise.resolve(new Set<string>()),
     // A Zombie league's invite shows its hero and how-it-works; a failure here must not break the join.
     getZombieJoinPreview(invite.leagueId).catch(() => null),
+    userId ? evaluateCareerJoinGate(userId, invite.leagueId, invite.league) : null,
   ])
 
   return NextResponse.json({
@@ -117,6 +119,7 @@ export async function GET(req: NextRequest) {
     sport: invite.league.sport,
     teamCount: invite.league.leagueSize,
     zombie,
+    careerBlocked: careerGate && !careerGate.canJoin ? careerJoinRefusal(careerGate, invite.leagueId) : null,
     teams: invite.league.teams.map((team) => ({
       id: team.id,
       externalId: team.externalId,

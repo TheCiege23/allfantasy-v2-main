@@ -8,6 +8,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { isLeaguePrefEnabled, parseLeagueNotificationPrefs } from '@/lib/league/league-notification-prefs'
 import type { WorkspaceTaskCandidate } from '@/lib/commissioner-workspace/taskSources'
+import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
 import { groupSettingsChanges } from './explain'
 import { loadSettingsChangeEvents } from './load'
 import { isRulesExplainerLeague, rulesSportOf } from './snapshot'
@@ -35,7 +36,10 @@ async function loadChanges(leagueId: string): Promise<{ league: Row; events: Set
   // Imported leagues have no change history here: their rules change on their platform.
   if (!league || !isRulesExplainerLeague(league)) return null
   const events = await loadSettingsChangeEvents(leagueId)
-  return { league, events, groups: groupSettingsChanges(events, { sport: rulesSportOf(league.sport) }) }
+  // The period length words a previous-period tiebreak "last period" in a two-week Guilly league, as the
+  // rules page does (ruleSnapshotFromLeague). Only a Guilly league stores it; every other league reads 1.
+  const context = { sport: rulesSportOf(league.sport), chopPeriodWeeks: readPeriodWeeks(league.settings) }
+  return { league, events, groups: groupSettingsChanges(events, context) }
 }
 
 /** For the Chimmy route's league context. Empty when the league has no explainable changes. */

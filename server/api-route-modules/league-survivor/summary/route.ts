@@ -321,6 +321,15 @@ export async function GET(
   const publicCouncil = survivorPublicCouncil(council, privacy.decisions.canSeePrivateVotes, { revealMode: leagueMeta?.survivorRevealMode })
   // Double-elimination weeks run two councils back to back; say which one this is.
   const councilWeekPosition = council ? await loadCouncilWeekPosition(leagueId, council, leagueSettingsRow?.settings) : null
+  // The viewer's OWN ballot only — whether it is in, never who for — so the home can say "your vote is in".
+  let myCouncilVoteSubmitted = false
+  if (council && myRosterId && !council.closedAt) {
+    try {
+      myCouncilVoteSubmitted = (await prisma.survivorVote.count({ where: { councilId: council.id, voterRosterId: myRosterId } })) > 0
+    } catch {
+      // Unknown reads as "not voted"; the council screen shows the real ballot.
+    }
+  }
 
   const body = {
     leagueName: leagueMeta?.name ?? 'Survivor League',
@@ -394,6 +403,7 @@ export async function GET(
       // Voted-out castaways stay listed (struck through, "Out · Wk N") with a snuffed torch.
       outMembers: outMembersByTribe.get(t.id) ?? [],
     })),
+    myCouncilVoteSubmitted,
     council: publicCouncil
       ? {
           id: publicCouncil.id,

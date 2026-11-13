@@ -9,6 +9,8 @@ import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
+import { withLeagueWaiverLock } from '@/lib/waiver-wire/leagueWaiverLock'
+import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -174,7 +176,25 @@ export async function processWaiverWindow(
 ): Promise<ProcessedClaim[]> {
   const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } })
   if (!season) return []
+  /*
+   * 🛑 THIS ENGINE TOOK NO LOCK. It reads "who is rostered" from `RedraftRosterPlayer` and then writes
+   * from that read — the same check-then-write the native waiver run and the instant add hold
+   * `waiver:process:{leagueId}` around (lib/waiver-wire/leagueWaiverLock.ts). Without it, an instant add
+   * (either engine) or a second run between this run's read and its write put one player on two rosters.
+   * Busy: skip; the claims stay pending for the next hourly run.
+   */
+  const out = await withLeagueWaiverLock(leagueId, 'redraft-waiver-window', () => processWaiverWindowLocked(leagueId, seasonId, season, now))
+  if (out.ran) return out.value
+  console.info(`[redraft-waivers] league ${leagueId} skipped: another waiver run or add holds the league; pending claims stay pending`)
+  return []
+}
 
+async function processWaiverWindowLocked(
+  leagueId: string,
+  seasonId: string,
+  season: { sport: string | null },
+  now: Date,
+): Promise<ProcessedClaim[]> {
   const claimsCutoff = await guillotineClaimsCutoff(leagueId, now)
   const claims = await prisma.redraftWaiverClaim.findMany({
     where: { leagueId, seasonId, status: 'pending', ...(claimsCutoff ? { submittedAt: { lt: claimsCutoff } } : {}) },
@@ -187,6 +207,15 @@ export async function processWaiverWindow(
       { id: 'asc' },
     ],
   })
+  if (claims.length === 0) return []
+
+  // 🛑 A Guilly week's chop lands before the run that follows it (lib/guillotine/chopBeforeWaivers.ts):
+  // run first and the doomed team wins claims while bids on its players are denied. Nothing is touched.
+  const chop = await guillotineChopPendingForWaivers(leagueId)
+  if (chop.hold) {
+    console.info(`[redraft-waivers] league ${leagueId} skipped: week ${chop.week}'s Guilly chop has not landed; pending claims stay pending`)
+    return []
+  }
 
   // A Survivor Steal 3 raid grants the raided roster top priority for this week.
   // Claims can have been submitted before the raid, so their stored priority is

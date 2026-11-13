@@ -3,18 +3,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { listInjuryFacts, type InjuryFactListItem } from '@/lib/injuries/injuryReadPort'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/auth-guard'
 
 const openai = getOpenAIRouteClient()
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/community-insights", tool: "LegacyCommunityInsights" })(async (request: NextRequest) => {
-  const auth = requireAuthOrOrigin(request)
-  if (!auth.authenticated) {
-    return forbiddenResponse(auth.error || 'Unauthorized')
-  }
+  /*
+   * PUBLIC DATA, so the origin check stays as the only gate on the plain read: league-wide
+   * news and injury rows, keyed to no user. This used `requireAuthOrOrigin`, which behaves
+   * identically (it passes any caller with a matching `Origin`) but reads as authentication,
+   * which it is not -- so it is spelled as what it is.
+   *
+   * `summarize=true` is different: it spends a paid model call per request, so it requires a
+   * real NextAuth session (cost abuse, not data exposure).
+   */
+  if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
   const { searchParams } = new URL(request.url)
   const summarize = searchParams?.get('summarize') === 'true'
+  if (summarize) {
+    const session = await requireAuth()
+    if (!session.ok) return session.response
+  }
 
   const sourcesUsed: string[] = []
   const missingSources: string[] = []

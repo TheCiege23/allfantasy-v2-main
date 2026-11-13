@@ -98,8 +98,20 @@ export function buildAutomationOverview(f: AutomationFacts): AutomationRow[] {
       group: 'lineups',
       label: 'Lineup minimums for eliminated teams',
       state: paid(Boolean(eliminated)),
-      detail: eliminated ? (eliminated.autoFill ? 'Short spots filled from the bench' : 'Managers warned') : null,
-      detailEs: eliminated ? (eliminated.autoFill ? 'Puestos faltantes llenados desde la banca' : 'Se avisa a los mánagers') : null,
+      detail: eliminated
+        ? eliminated.optimize
+          ? 'Best lineup set before kickoff'
+          : eliminated.autoFill
+            ? 'Short spots filled from the bench'
+            : 'Managers warned'
+        : null,
+      detailEs: eliminated
+        ? eliminated.optimize
+          ? 'Mejor alineación puesta antes del inicio'
+          : eliminated.autoFill
+            ? 'Puestos faltantes llenados desde la banca'
+            : 'Se avisa a los mánagers'
+        : null,
       href: '#ch-eliminated-lineups',
       plan: 'commissioner',
     },

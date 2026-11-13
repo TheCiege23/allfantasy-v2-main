@@ -38,7 +38,12 @@ if (typeof window !== 'undefined' && !(window as HarnessWindow).__afHarnessFetch
   }
 }
 
-type Props = { screen: HarnessScreen; sport: string; platform: string; leagueType: string; identityOff: boolean }
+type Props = { screen: HarnessScreen; sport: string; platform: string; leagueType: string; identityOff: boolean; bestBall?: boolean }
+
+/** `?bestBall=1`: the same fixture league scored as best ball, the flags lib/core-app/myTeam.ts sets. */
+function bestBallMyTeam(d: ReturnType<typeof myTeamFixture>): ReturnType<typeof myTeamFixture> {
+  return { ...d, bestBall: true, league: { ...d.league, bestBall: true } }
+}
 
 /** Harness only (app/e2e is 404 in production): the real AfCoreShell around the real screen, fixture data. */
 export default function RedraftCoreMyTeamHarnessClient(props: Props) {
@@ -55,6 +60,8 @@ export default function RedraftCoreMyTeamHarnessClient(props: Props) {
       selectedLeagueId={league.id}
       nativeLeague
       redraftSport={redraftSport}
+      /* The app passes this for a dynasty ?league= on EVERY screen (page.tsx, coreShellDynasty). */
+      dynastyEra={props.leagueType === 'dynasty'}
       hasIdpDefense={props.screen === 'defense-hub'}
       syncAge={{ label: 'just now', stale: false }}
       syncEligibleCount={0}
@@ -63,7 +70,7 @@ export default function RedraftCoreMyTeamHarnessClient(props: Props) {
     >
       <div data-testid="redraft-core-myteam-fixture" data-screen={props.screen} data-sport-fixture={sport}>
         {props.screen === 'my-team' ? (
-          <MyTeam data={myTeamFixture(sport)} />
+          <MyTeam data={props.bestBall ? bestBallMyTeam(myTeamFixture(sport)) : myTeamFixture(sport)} />
         ) : props.screen === 'week' ? (
           <YourWeekLeague board={weekBoardFixture(sport)} allWeeksHref="/core/week" lineups={null} />
         ) : (

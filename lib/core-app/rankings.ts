@@ -35,6 +35,7 @@ import {
   parseSort,
   platformLabel,
   rankBoard,
+  rankingLeagueKey,
   scoreRows,
   seasonTrend,
   seriesFor,
@@ -275,6 +276,7 @@ export type PortfolioTableRow = {
   ppg: string
   index: string
   finish: string
+  score: number | null
   counted: boolean
   updated: string | null
 }
@@ -458,6 +460,8 @@ function fmtPct(n: number | null): string {
 
 function finishLabel(r: CareerLedgerRow): string {
   if (r.specialty === 'draft_only') return 'Draft only'
+  if (r.survival && !r.wonChampionship) return `${r.survival.periods}/${r.survival.totalPeriods} periods survived`
+  if ((r.specialty === 'guillotine' || r.specialty === 'survivor') && !r.survival) return 'Survival result unavailable'
   if (!isResultRow(r)) return 'No results recorded'
   if (!r.completed) return 'In progress'
   if (r.wonChampionship) return 'Champion'
@@ -477,7 +481,7 @@ function formatLabel(r: CareerLedgerRow): string {
 
 function typeLabel(r: CareerLedgerRow): string {
   const base = r.leagueType === 'unknown' ? '' : r.leagueType.charAt(0).toUpperCase() + r.leagueType.slice(1)
-  const special = r.specialty === 'bestball' ? 'Best ball' : r.specialty === 'guillotine' ? 'Guilly' : r.specialty === 'draft_only' ? 'Draft only' : ''
+  const special = r.specialty === 'bestball' ? 'Best ball' : r.specialty === 'guillotine' ? 'Guillotine' : r.specialty === 'survivor' ? 'Survivor' : r.specialty === 'draft_only' ? 'Draft only' : ''
   return [base, special].filter(Boolean).join(' · ') || '—'
 }
 
@@ -496,6 +500,7 @@ function portfolioRow(r: CareerLedgerRow, cohorts: ScoringCohorts): PortfolioTab
     ppg: ppg == null ? '—' : ppg.toFixed(1),
     index: ppg != null && cohort ? ((ppg / cohort.mean) * 100).toFixed(1) : '—',
     finish: finishLabel(r),
+    score: scoreRows([r], cohorts).score,
     counted: isResultRow(r),
     updated: r.updatedAt,
   }
@@ -561,6 +566,7 @@ export async function getRankingsData(
 ): Promise<RankingsData> {
   const filters = parseRankingFilters(sp)
   const scope = parseScope(one(sp, 'scope'), leagueId != null)
+  if (scope !== 'portfolio') filters.league = null
   const board = parseBoard(one(sp, 'board'))
   const { sort, dir } = parseSort(one(sp, 'sort'), one(sp, 'dir'))
 
@@ -843,6 +849,22 @@ export async function getRankingsData(
   const classView = scope === 'class' ? await getClassView(userId, one(sp, 'division')).catch(() => null) : null
 
   const optionRows = scope === 'portfolio' ? mineRows : base.rows
+  const options = filterOptions(optionRows)
+  if (scope === 'portfolio') {
+    const leagues = new Map<string, { value: string; label: string; count: number }>()
+    for (const row of mineRows) {
+      const value = rankingLeagueKey(row)
+      const item = leagues.get(value) ?? {
+        value,
+        label: `${row.leagueName?.trim() || 'Unnamed league'} · ${platformLabel(row.platform)}`,
+        count: 0,
+      }
+      item.count += 1
+      leagues.set(value, item)
+    }
+    options.leagues = [...leagues.values()].sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value))
+  }
+  const selectedName = options.leagues?.find((l) => l.value === filters.league)?.label
   const shareable =
     userId != null && scope === 'global' && global?.you != null
       ? `/api/share/career-card${qs([['design', 'rank'], ...boardParams.filter(([k]) => k !== 'scope' && k !== 'league')])}`
@@ -859,8 +881,8 @@ export async function getRankingsData(
     panel,
     signedIn: userId != null,
     filters,
-    filtersLabel: describeFilters(filters),
-    options: filterOptions(optionRows),
+    filtersLabel: selectedName ? [selectedName, describeFilters(filters)].filter((label) => label !== 'All leagues').join(' · ') : describeFilters(filters),
+    options,
     baseQuery: qs(boardParams),
     you,
     xpRows,
@@ -983,6 +1005,12 @@ export function gradeFor(score: number): string {
   return GRADE_SCALE.find((g) => score >= g.min)?.grade ?? 'D'
 }
 
+export const COMPARE_PLATFORMS = ['allfantasy', 'sleeper', 'espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker'] as const
+
+export function parseComparePlatform(value: string | null) {
+  return COMPARE_PLATFORMS.find((platform) => platform === value) ?? 'allfantasy'
+}
+
 export type CompareKind = 'managers' | 'leagues' | 'teams' | 'players'
 
 export function parseCompareKind(raw: string | null | undefined): CompareKind {
@@ -1074,6 +1102,11 @@ export async function getCompareData(userId: string | null, handle: string, sp: 
     return { ok: false, reason: 'signed-out', message: 'Sign in to compare your career with another manager.' }
   }
   const filters = parseRankingFilters(sp)
+  filters.league = null
+  const lookup = parseComparePlatform(one(sp, 'lookup'))
+  const compareScope = one(sp, 'compareScope')
+  if (compareScope === 'all') filters.platform = null
+  if (compareScope === 'platform') filters.platform = lookup
   const base = await loadCommunity()
   const entries = communityEntries(base, filters)
   const me = entries.find((e) => e.userId === userId) ?? null
@@ -1086,15 +1119,39 @@ export async function getCompareData(userId: string | null, handle: string, sp: 
   }
 
   const needle = handle.trim().replace(/^@/, '').toLowerCase()
-  const themProfile =
-    base.profiles.find(
-      (p) => p.username?.toLowerCase() === needle || p.displayName?.trim().toLowerCase() === needle,
-    ) ?? null
+  let identities = lookup === 'allfantasy' ? [] : await prisma.platformIdentity.findMany({
+    where: { platform: lookup, platformUsername: { equals: needle, mode: 'insensitive' } },
+    distinct: ['userId'],
+    select: { userId: true },
+    take: 2,
+  })
+  if (lookup !== 'allfantasy' && identities.length === 0) {
+    // Some providers link through a claimed team and do not create a PlatformIdentity row.
+    const linked = await prisma.leagueTeam.findMany({
+      where: {
+        league: { platform: lookup },
+        claimedByUserId: { not: null },
+        ...(lookup === 'fantrax'
+          ? { platformUserId: { equals: `fantrax-user:${needle}`, mode: 'insensitive' } }
+          : { platformUserId: { not: null }, ownerName: { equals: needle, mode: 'insensitive' } }),
+      },
+      select: { claimedByUserId: true },
+      distinct: ['claimedByUserId'],
+      take: 2,
+    })
+    identities = linked.flatMap((team) => team.claimedByUserId ? [{ userId: team.claimedByUserId }] : [])
+  }
+  const themProfile = lookup === 'allfantasy'
+    ? base.profiles.find((p) => p.username?.toLowerCase() === needle)
+      ?? base.profiles.find((p) => p.displayName?.trim().toLowerCase() === needle)
+    : identities.length === 1 ? base.profiles.find((p) => p.userId === identities[0].userId) : null
   if (!themProfile) {
     return {
       ok: false,
       reason: 'not-found',
-      message: `No ranked manager matches @${needle}. Only managers who have been ranked can be compared.`,
+      message: identities.length > 1
+        ? 'More than one linked account uses this platform name. Try the manager’s AllFantasy username.'
+        : `No ranked AllFantasy manager has @${needle} linked on ${platformLabel(lookup)}.`,
     }
   }
   if (themProfile.userId === userId) {
@@ -1214,10 +1271,11 @@ export async function getCompareData(userId: string | null, handle: string, sp: 
       return { season: r.season, league: r.leagueName?.trim() || 'Unnamed league', you: line(r), them: line(t) }
     })
 
-  const titleRate = {
-    you: ms.totals.playoffs > 0 ? ms.totals.titles / ms.totals.playoffs : null,
-    them: ts.totals.playoffs > 0 ? ts.totals.titles / ts.totals.playoffs : null,
+  const titleConversion = (rows: CareerLedgerRow[]) => {
+    const berths = rows.filter((r) => r.completed && isResultRow(r) && !r.survival && (r.madePlayoffs || r.wonChampionship))
+    return berths.length ? berths.filter((r) => r.wonChampionship).length / berths.length : null
   }
+  const titleRate = { you: titleConversion(myRows), them: titleConversion(theirRows) }
 
   return {
     ok: true,

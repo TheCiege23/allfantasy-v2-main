@@ -47,7 +47,7 @@ export interface GuillotineSpecialtySummary {
   myRosterId?: string | null
   myEscapes?: { weekOrPeriod: number; margin: number }[]
   home?: GuillotineHomeExtras | null
-  config?: { tiebreakerOrder: string[]; teamsPerChop: number; dangerMarginPoints: number | null; eliminationEndWeek?: number | null } | null
+  config?: { tiebreakerOrder: string[]; teamsPerChop: number; dangerMarginPoints: number | null; eliminationEndWeek?: number | null; periodWeeks?: number } | null
   /** Set when the chop line is this week's live one, by the chop's own rules (lib/guillotine/chopWatch.ts). */
   chopWatch?: { live: true; week: number; chopCount: number; chopLine: number | null } | null
 }
@@ -126,7 +126,7 @@ export function GuillotineSpecialtyHome({
     return items.sort((a, b) => b.week - a.week).slice(0, 4)
   }, [home?.chopped, summary.myEscapes])
 
-  const tiebreaks = tiebreakLabels(summary.config?.tiebreakerOrder)
+  const tiebreaks = tiebreakLabels(summary.config?.tiebreakerOrder, summary.config?.periodWeeks)
   const me = line.me
   const meTone = me?.tier ?? 'safe'
 

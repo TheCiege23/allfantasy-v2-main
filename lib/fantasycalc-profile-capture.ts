@@ -1,4 +1,5 @@
 import type { FantasyCalcPlayer, FantasyCalcSettings } from '@/lib/fantasycalc'
+import { REFERENCE_TEAMS } from '@/lib/pick-curve'
 
 /**
  * ONE LEAGUE PROFILE'S FANTASYCALC BOARD, AS IT STOOD ON ONE UTC DAY. PURE: the key and the payload
@@ -53,13 +54,16 @@ export function buildFantasyCalcCacheKey(settings: FantasyCalcSettings): string 
  * (`createLeagueTradeGrader` → `profile`), so the capture a trade is priced on is the board this
  * league's chart would request today.
  */
+export const LARGE_LEAGUE_PICK_THRESHOLD = 32
+
 export function fantasyCalcSettingsForChart(chart: {
   chartIsDynasty: boolean
   isSuperFlex: boolean
   leagueSize: number
   pprNfl: 0 | 0.5 | 1
 }): FantasyCalcSettings {
-  return { isDynasty: chart.chartIsDynasty, numQbs: chart.isSuperFlex ? 2 : 1, numTeams: chart.leagueSize, ppr: chart.pprNfl }
+  const numTeams = chart.chartIsDynasty && chart.leagueSize > LARGE_LEAGUE_PICK_THRESHOLD ? REFERENCE_TEAMS : chart.leagueSize
+  return { isDynasty: chart.chartIsDynasty, numQbs: chart.isSuperFlex ? 2 : 1, numTeams, ppr: chart.pprNfl }
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/

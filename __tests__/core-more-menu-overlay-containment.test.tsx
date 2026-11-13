@@ -86,8 +86,12 @@ const moreButton = (c: HTMLElement) =>
     (b) => b.textContent?.includes('More'),
   )!
 const moreSheet = (c: HTMLElement) => c.querySelector('#af-mobile-more')
-/* The phone opens the league tray from the bar's Leagues tab (the floating pill is gone). */
-const railHandle = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
+/*
+ * The tray's own toggle, so either overlay can be opened while the other is up. (The bar's Leagues tab
+ * that used to open it is gone — Waivers took the slot, 2026-11-07 — and More → Leagues closes More
+ * first by design, so it cannot build the "both open" state these tests need.)
+ */
+const railHandle = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('.af-rail-toggle')!
 const railOpen = (c: HTMLElement) =>
   c.querySelector('.af-shell')?.getAttribute('data-rail-open') === 'true'
 

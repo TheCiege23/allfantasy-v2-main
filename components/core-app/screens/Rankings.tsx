@@ -416,7 +416,7 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
             )}
             <span className="af-rk-classnote">
               {g.divisionFilter.active
-                ? `Managers in Division ${g.divisionFilter.division} and the ones next to it — who public leagues match you with. Managers without an established Class are not shown.`
+                ? `Managers in Division ${g.divisionFilter.division} and the ones next to it. Managers without an established Class are not shown.`
                 : `You are in Division ${g.divisionFilter.division}. This shows the managers public leagues would match you with.`}
             </span>
           </div>
@@ -666,7 +666,7 @@ function XpBreakdownCard({ data }: { data: RankingsData }) {
         </p>
       ) : null}
       <p className="af-rk-note">
-        XP is a ladder, not a ranking: losses never subtract, and imported Sleeper, ESPN and Yahoo seasons count the same
+        XP is a ladder, not a ranking: losses never subtract, and imported seasons count the same
         as leagues played here. Playoff berths only count once games have been played.
       </p>
     </section>
@@ -735,6 +735,7 @@ function portfolioColumns(p: PortfolioView, data: RankingsData): RankColumn[] {
     { key: 'ppg', label: 'PPG', srLabel: 'Points per game', align: 'right', hideOnPhone: true },
     { key: 'index', label: 'Index', srLabel: 'Scoring index, 100 is average for the format', align: 'right', ...col('index') },
     { key: 'finish', label: 'Finish' },
+    { key: 'score', label: 'Manager score', align: 'right' },
   ]
 }
 
@@ -828,7 +829,7 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
             id: r.key,
             cells: [
               { text: String(r.season) },
-              { text: r.league, sub: r.counted ? undefined : 'not counted — no games yet' },
+              { text: r.league, sub: r.counted ? undefined : 'No measured result' },
               { text: r.platform },
               { text: r.type },
               { text: r.format },
@@ -840,6 +841,7 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
                 text: r.finish,
                 tone: r.finish === 'Champion' ? 'warn' : r.finish === 'Playoffs' ? 'good' : r.counted ? undefined : 'muted',
               },
+              { text: r.score?.toFixed(1) ?? '—' },
             ],
           }))}
           emptyText={`You have no league-seasons in ${data.filtersLabel}.`}
@@ -1269,8 +1271,7 @@ function ClassMethodCard() {
         </li>
         <li>
           <b>Class is your weight class.</b> Class 1–25 is where you sit among established managers; every five Classes
-          is a Division. Public leagues match managers within one division of each other. A commissioner can invite anyone,
-          and a provisional manager is never turned away.
+          is a Division. Find a League uses this to sort NFL matches by competitive fit.
         </li>
       </ul>
       <p className="af-rk-note">
@@ -1425,6 +1426,8 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
             <Link className="af-rk-btn af-rk-btn--primary" href="/core/rankings?view=faq">
               How ranking works
             </Link>
+            <Link className="af-rk-btn" href="/core/career">Your Career</Link>
+            <Link className="af-rk-btn" href="/find-league">Find a League</Link>
           </>
         }
         you={data.you}

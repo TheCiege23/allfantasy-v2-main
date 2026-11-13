@@ -80,7 +80,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/waiver", tool: "AiWaiver" 
 
     if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Invalid request format', details: parseResult.error.errors },
+        { error: 'Invalid request format', details: parseResult.error.issues },
         { status: 400 }
       );
     }

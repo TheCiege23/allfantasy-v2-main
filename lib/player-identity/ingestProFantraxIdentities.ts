@@ -34,7 +34,7 @@ export async function ingestProFantraxIdentities(sport: ProFantraxSport, dryRun 
     const universe = universeKey ? await prisma.sportsDataCache.findUnique({ where: { cacheKey: universeKey }, select: { cacheKey: true } }) : true
     if (universe) return { skipped: 'weekly cadence', updated: 0 }
   }
-  const map = await getFantraxPlayerIds(sport)
+  const map = await getFantraxPlayerIds(sport === 'SOCCER' ? 'EPL' : sport)
   if (!map.ok) throw new Error(map.failure.message)
   let universeStored = 0
   if (universeKey && !dryRun) {
@@ -63,3 +63,4 @@ export async function ingestProFantraxIdentities(sport: ProFantraxSport, dryRun 
 
 export const ingestNbaFantraxIdentities = (dryRun = false) => ingestProFantraxIdentities('NBA', dryRun)
 export const ingestNhlFantraxIdentities = (dryRun = false) => ingestProFantraxIdentities('NHL', dryRun)
+export const ingestSoccerFantraxIdentities = (dryRun = false) => ingestProFantraxIdentities('SOCCER', dryRun)

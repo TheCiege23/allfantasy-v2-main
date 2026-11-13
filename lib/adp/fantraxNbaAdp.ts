@@ -27,6 +27,7 @@
  */
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { storeFantraxProspectAdp } from './fantraxProspectAdp'
 import { getFantraxAdp, type FantraxAdpEntry } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizePlayerName, normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
@@ -157,7 +158,7 @@ export function matchFantraxAdp(
 }
 
 export type FantraxNbaAdpLoad =
-  | { ok: true; priced: number; result: NbaAdpMatchResult }
+  | { ok: true; priced: number; result: NbaAdpMatchResult; prospectsStored?: number }
   | { ok: false; reason: string }
 
 /** Fetch Fantrax NBA ADP and match it to our NBA identities. Ingestion only. */
@@ -173,5 +174,6 @@ export async function loadFantraxAdp(sport: FantraxAdpSport): Promise<FantraxNba
     where: { sport },
     select: { id: true, canonicalName: true, position: true, currentTeam: true, fantraxId: true },
   })
-  return { ok: true, priced: res.data.length, result: matchFantraxAdp(sport, res.data, identities) }
+  const prospectsStored = sport === 'NHL' || sport === 'MLB' ? await storeFantraxProspectAdp(sport, res.data).catch(() => 0) : undefined
+  return { ok: true, priced: res.data.length, result: matchFantraxAdp(sport, res.data, identities), ...(prospectsStored == null ? {} : { prospectsStored }) }
 }

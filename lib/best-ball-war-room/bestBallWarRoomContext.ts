@@ -20,7 +20,10 @@ import { resolveLeagueAccess } from '@/lib/league-access'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getBestBallSportProfile, normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { resolveBestBallScoringPeriod, withEffectiveScoringPeriod } from '@/lib/bestball/scoringPeriod'
 import { hasVerifiedBestBallRuleConfiguration } from './bestBallRuleEvidence'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
 import type {
@@ -104,8 +107,13 @@ function parseRosterPlayers(playerData: unknown): RawRosterPlayer[] {
   return out
 }
 
-function buildRosterSettings(sport: string): BestBallRosterSettings {
-  const profile = getBestBallSportProfile(sport)
+/*
+ * 🛑 THE WAR ROOM USED THE SPORT-DEFAULT SLOTS (audit 2026-11-06, finding #22) — NBA's 9 starters while
+ * the league's matchups were scored on its 11. It now reads the league's own seats, from the same
+ * source matchup scoring seats (`getBestBallSportProfile(sport, settings)` → `buildBestBallSlots`).
+ */
+export function buildRosterSettings(sport: string, leagueSettings: unknown): BestBallRosterSettings {
+  const profile = getBestBallSportProfile(sport, leagueSettings ?? {})
   const lineupSlots: BestBallLineupSlot[] = profile.lineupSlots.map((s) => ({
     code: s.code,
     count: s.count,
@@ -132,6 +140,46 @@ function buildRosterSettings(sport: string): BestBallRosterSettings {
   }
 }
 
+type WarRoomWeeklyScoreRow = { playerId: string; points: number; isStarter: boolean; createdAt: Date }
+
+/*
+ * 🛑 A LEAGUE WE HOST HAD NO SCORE HISTORY HERE (audit 2026-11-06, "Chimmy reads real state"). This read
+ * only `weeklyScore`, which the legacy weekly processor fills and native scoring never writes — the same
+ * gap the Best Ball tab had (lib/bestball/nativeBestBallTab.ts). Native best ball scoring
+ * (`scoreRosterBestBall`) writes every player's counted points, and whether he was in the counted lineup,
+ * to `league_player_weekly_scores` keyed on OUR league id with source `allfantasy`
+ * (lib/redraft/nativePlayerWeeklyScores.ts). So a native league reads that; an imported league keeps
+ * `weeklyScore`, the table its processor writes.
+ */
+export async function loadWarRoomWeeklyScores(args: {
+  leagueId: string
+  season: number
+  platform: string | null | undefined
+  playerIds: string[]
+}): Promise<WarRoomWeeklyScoreRow[]> {
+  if (!args.playerIds.length) return []
+  if (resolveWriteAuthority(args.platform) === 'NATIVE') {
+    const rows = (await prisma.leaguePlayerWeeklyScore
+      .findMany({
+        where: {
+          leagueId: args.leagueId,
+          seasonYear: args.season,
+          source: NATIVE_PLAYER_SCORE_SOURCE,
+          playerId: { in: args.playerIds },
+        },
+        select: { playerId: true, points: true, isStarter: true, updatedAt: true },
+      })
+      .catch(() => [])) as Array<{ playerId: string; points: number; isStarter: boolean; updatedAt: Date }>
+    return rows.map((r) => ({ playerId: r.playerId, points: r.points, isStarter: r.isStarter, createdAt: r.updatedAt }))
+  }
+  return (await prisma.weeklyScore
+    .findMany({
+      where: { leagueId: args.leagueId, season: args.season, playerId: { in: args.playerIds } },
+      select: { playerId: true, points: true, isStarter: true, createdAt: true },
+    })
+    .catch(() => [])) as WarRoomWeeklyScoreRow[]
+}
+
 export async function buildBestBallWarRoomContext(
   input: BuildBestBallWarRoomContextInput,
 ): Promise<BuildBestBallWarRoomContextResult> {
@@ -148,6 +196,7 @@ export async function buildBestBallWarRoomContext(
       season: true,
       leagueSize: true,
       bestBallMode: true,
+      platform: true,
       bbMatchupFormat: true,
       bbScoringPeriod: true,
       settings: true,
@@ -169,15 +218,17 @@ export async function buildBestBallWarRoomContext(
   const ruleConfigurationVerified = hasVerifiedBestBallRuleConfiguration(settingsRecord)
   const bbSettings = normalizeBestBallSettings({
     sport,
-    conceptSetup: (settingsRecord.best_ball_settings as Record<string, unknown> | null) ?? null,
+    // The period the league is ACTUALLY scored with: a legacy NBA/NHL/MLB "daily" was only a default.
+    conceptSetup: withEffectiveScoringPeriod(sport, settingsRecord),
     draftType: typeof settingsRecord.canonical_draft_mode === 'string' ? settingsRecord.canonical_draft_mode : 'snake',
   })
-  const roster = buildRosterSettings(sport)
+  const roster = buildRosterSettings(sport, league.settings)
 
   const scoring: BestBallScoringSettings = {
     sport,
     scoringPreset: String((settingsRecord.scoringSettings as Record<string, unknown> | undefined)?.preset ?? bbSettings.mode ?? 'PPR').toUpperCase(),
-    scoringPeriod: String(league.bbScoringPeriod ?? bbSettings.scoringPeriod ?? 'weekly'),
+    // Never `League.bbScoringPeriod`: legacy rows say "daily" for leagues that were always scored weekly.
+    scoringPeriod: resolveBestBallScoringPeriod({ sport, settings: settingsRecord }),
     matchupFormat: String(league.bbMatchupFormat ?? bbSettings.matchupFormat ?? 'h2h'),
     cumulative: bbSettings.cumulativeScoring,
   }
@@ -214,15 +265,7 @@ export async function buildBestBallWarRoomContext(
   const injuryNews = await fetchRedraftInjuryNews(sport)
 
   // --- weekly scores → spike-week ceiling (real, when present) ---
-  type WSRow = { playerId: string; points: number; isStarter: boolean; createdAt: Date }
-  const wsRows = allIds.length
-    ? ((await prisma.weeklyScore
-        .findMany({
-          where: { leagueId, season, playerId: { in: allIds } },
-          select: { playerId: true, points: true, isStarter: true, createdAt: true },
-        })
-        .catch(() => [])) as WSRow[])
-    : []
+  const wsRows = await loadWarRoomWeeklyScores({ leagueId, season, platform: league.platform, playerIds: allIds })
   const wsAgg = new Map<string, { sum: number; n: number; max: number; started: number }>()
   let scoresAsOf: Date | null = null
   for (const row of wsRows) {

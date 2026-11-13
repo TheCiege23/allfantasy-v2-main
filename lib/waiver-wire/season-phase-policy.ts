@@ -17,7 +17,15 @@ import type { OffseasonWaiverRule, PlayoffWaiverRule } from './hub-waiver-option
 
 export type WaiverSeasonPhase = 'pre_draft' | 'regular' | 'playoffs' | 'offseason'
 
-export type WaiverPhaseCode = 'pre_draft_locked' | 'offseason_closed' | 'offseason_fcfs' | 'playoffs_locked' | 'playoffs_eliminated'
+export type WaiverPhaseCode =
+  | 'pre_draft_locked'
+  | 'offseason_closed'
+  | 'offseason_fcfs'
+  | 'playoffs_locked'
+  | 'playoffs_eliminated'
+  | 'best_ball_draft_only'
+  | 'best_ball_no_claims'
+  | 'best_ball_no_adds'
 
 export type WaiverPhasePolicy = {
   phase: WaiverSeasonPhase
@@ -38,6 +46,11 @@ export const PHASE_REASONS: Record<WaiverPhaseCode, string> = {
   offseason_fcfs: 'Waiver claims are closed for the offseason. Free agents are first come, first served — add a player directly.',
   playoffs_locked: 'Waiver claims are closed: every roster is locked for the playoffs.',
   playoffs_eliminated: 'Waiver claims are closed for your team: only teams still alive in the playoff bracket can make moves.',
+  best_ball_draft_only:
+    'Waiver claims are closed: this is a draft-only Best Ball league. Rosters are set at the draft and the best lineup is picked automatically each week.',
+  best_ball_no_claims: 'Waiver claims are closed in this Best Ball league. The commissioner has turned waivers off.',
+  best_ball_no_adds:
+    'Waiver claims are closed to direct adds in this Best Ball league: the commissioner has turned free agency off. Claim players through waivers instead.',
 }
 
 const OFFSEASON_STATES = new Set(['completed', 'offseason', 'renewal_pending'])
@@ -71,10 +84,54 @@ function blocked(phase: WaiverSeasonPhase, code: WaiverPhaseCode): WaiverPhasePo
 }
 
 /**
+ * A native Classic Best Ball league's saved transaction policy (`League.bbWaiversEnabled` /
+ * `bbFaEnabled`). Null for every other league — including Guilly + Best Ball, whose survivors MUST
+ * keep waivers and FAAB to claim released rosters.
+ */
+export type BestBallRosterPolicy = { waiversEnabled: boolean; freeAgencyEnabled: boolean }
+
+/**
+ * 🛑 CLASSIC BEST BALL IS DRAFT-ONLY UNLESS THE COMMISSIONER SAID OTHERWISE, AND UNTIL 2026-11-06
+ * NOTHING ON THE SERVER SAID SO. Creation and `/api/bestball/settings` save `bbWaiversEnabled` /
+ * `bbFaEnabled` (both default false), and no waiver path read either: a Classic Best Ball manager
+ * could add, drop and claim exactly like a redraft manager. The phase gate is the one choke point
+ * every waiver path already goes through (add/drop, `createClaim`, the redraft claim route, the
+ * processor), so the saved policy is applied here — narrowing, never widening, what the phase allows.
+ */
+export function resolveWaiverPhasePolicy(input: {
+  phase: WaiverSeasonPhase
+  offseasonRule: OffseasonWaiverRule
+  playoffRule: PlayoffWaiverRule
+  dynastyFamily: boolean
+  eliminated: boolean | null
+  bestBallRoster?: BestBallRosterPolicy | null
+}): WaiverPhasePolicy {
+  return applyBestBallRosterPolicy(resolvePhaseOnlyPolicy(input), input.bestBallRoster ?? null)
+}
+
+export function applyBestBallRosterPolicy(base: WaiverPhasePolicy, bb: BestBallRosterPolicy | null): WaiverPhasePolicy {
+  if (!bb) return base
+  const claimsAllowed = base.claimsAllowed && bb.waiversEnabled
+  const immediateAddsAllowed = base.immediateAddsAllowed && bb.freeAgencyEnabled
+  if (claimsAllowed === base.claimsAllowed && immediateAddsAllowed === base.immediateAddsAllowed) return base
+  // A phase refusal already explains itself; only an otherwise-open phase takes the best ball reason.
+  const code: WaiverPhaseCode =
+    base.code ?? (!claimsAllowed && !immediateAddsAllowed ? 'best_ball_draft_only' : !claimsAllowed ? 'best_ball_no_claims' : 'best_ball_no_adds')
+  return {
+    ...base,
+    claimsAllowed,
+    immediateAddsAllowed,
+    firstComeAdds: immediateAddsAllowed && base.firstComeAdds,
+    code,
+    reason: PHASE_REASONS[code],
+  }
+}
+
+/**
  * What the phase allows. `eliminated` is the asking team's title-bracket state: true = out, false =
  * still alive, null = unknown (no team, or no bracket) — unknown never blocks.
  */
-export function resolveWaiverPhasePolicy(input: {
+function resolvePhaseOnlyPolicy(input: {
   phase: WaiverSeasonPhase
   offseasonRule: OffseasonWaiverRule
   playoffRule: PlayoffWaiverRule

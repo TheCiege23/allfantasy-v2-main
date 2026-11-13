@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { createWalletLedgerEntry, getPlatformWalletSummary } from '@/lib/platform/wallet-service'
+import { leagueMoneyRefusal } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 
+/**
+ * POST /api/shared/wallet/withdraw — a payout request against the platform wallet balance.
+ *
+ * 🛑 BEHIND THE SAME SWITCH AS LEAGUE MONEY. AllFantasy holds no user money: deposits are already
+ * disabled (./deposit), so the only balance this could draw on is one nobody paid in. While
+ * `ALLFANTASY_LEAGUE_ENTRY_FEE_ENABLED` is off it refuses, like every league-money route; the ledger
+ * rows already written are kept.
+ */
 export async function POST(req: NextRequest) {
+  const moneyOff = leagueMoneyRefusal('wallet withdrawals')
+  if (moneyOff) return NextResponse.json({ error: moneyOff.error, code: moneyOff.code }, { status: moneyOff.status })
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

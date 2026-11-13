@@ -1387,3 +1387,703 @@
 .af-im-coverage-list > li {
   margin: 2px 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Import v5 (2026-11-06) — the /core page language: hero card, a wide two-column
+ * connect card with the step guide beside the form, compact league rows and a
+ * sticky import bar. Overrides only; everything above still applies.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Hero card ────────────────────────────────────────────────────────── */
+
+.af-im-head {
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.af-im-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
+  padding: 26px 28px;
+  border-radius: 20px;
+  border: 1px solid var(--accent-line);
+  background:
+    radial-gradient(620px 280px at 0% 0%, var(--accent-soft), transparent 72%),
+    radial-gradient(380px 220px at 100% 100%, var(--accent-soft), transparent 70%),
+    var(--surface);
+  box-shadow: var(--shadow), inset 3px 0 0 var(--accent);
+  overflow: hidden;
+}
+
+.af-im-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.af-im-hero-copy .af-label {
+  color: var(--accent);
+}
+
+.af-im-hero .af-im-sub {
+  max-width: 54ch;
+  color: var(--text2);
+}
+
+.af-im-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(92px, auto));
+  gap: 8px;
+  margin: 0;
+}
+.af-im-hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+.af-im-hero-stat dt {
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-im-hero-stat dd {
+  margin: 0;
+  font: 900 26px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.af-im-hero-stat:last-child dd {
+  color: var(--good);
+}
+
+.af-im-create-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 22px;
+  padding: 0 4px;
+}
+.af-im-create-row .af-im-create-option {
+  font-size: 13px;
+}
+.af-im-create-row .af-im-create-option a {
+  color: var(--text2);
+  text-decoration-color: var(--line2);
+}
+.af-im-create-row .af-im-create-option a:hover {
+  color: var(--accent);
+}
+
+/* ── Platform tiles: the effort chip ──────────────────────────────────── */
+
+.af-im-effort {
+  flex: 0 0 auto;
+  margin-left: auto;
+  align-self: flex-start;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.af-im-provider[data-active='true'] .af-im-effort {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ── The wide layout ──────────────────────────────────────────────────── */
+
+@media (min-width: 1024px) {
+  .af-im > .af-im-topbar,
+  .af-im > .af-im-steps-wrap,
+  .af-im > .af-im-head,
+  .af-im > .af-im-card--connect,
+  .af-im > .af-im-card--leagues,
+  .af-im > .af-im-error,
+  .af-im > .af-im-note,
+  .af-im > .af-im-fx-disclosure {
+    max-width: 1120px;
+  }
+
+  /*
+   * ⚠ THE GUIDE SPANS EVERY ROW, AND THE LAST ROW IS 1fr ON PURPOSE. The guide is a direct child
+   * of this grid (so on a phone it can sit between the platform row and the field), and the
+   * left-column items auto-place into rows 1..n. If the guide is taller than the left column, an
+   * all-`auto` row set would share the extra height out between the left items and open gaps
+   * inside the form. A spanned flexible track takes all of it instead, at the bottom.
+   * Ten auto rows is headroom: the left column has at most seven children.
+   */
+  .af-im-card--connect {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+    grid-template-rows: repeat(10, auto) 1fr;
+    column-gap: 28px;
+    row-gap: 0;
+    align-items: start;
+    padding: 24px;
+  }
+  .af-im-card--connect > * {
+    grid-column: 1;
+    min-width: 0;
+  }
+  .af-im-card--connect > * + * {
+    margin-top: 14px;
+  }
+  .af-core .af-im-card--connect > .af-guide {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: start;
+    position: sticky;
+    top: 16px;
+    margin-top: 0;
+  }
+  /* The trust card sits in a ~650px column now; two halves still fit side by side. */
+  .af-core .af-im-card--connect > .af-im-trust {
+    margin-top: 18px;
+  }
+
+  /* A long league list reads in two columns on a wide screen. */
+  .af-im-card--leagues[data-many='true'] .af-im-league-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+/* ── Discovered leagues: compact rows at every width ─────────────────────── */
+
+.af-im-select-tools {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.af-im-select-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--text2);
+  font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-im-select-btn:hover:not(:disabled) {
+  border-color: var(--line2);
+  color: var(--text);
+}
+.af-im-select-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-im-select-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.af-im-card--leagues .af-im-league {
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+}
+/* 120px, not more: at 375px a 160px basis put the row 0.25px over and wrapped every button. */
+.af-im-card--leagues .af-im-league-main {
+  flex: 1 1 120px;
+}
+.af-im-card--leagues .af-im-league-name {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.af-im-card--leagues .af-im-league-outcome {
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  /*
+   * ⚠ THE ROW NO LONGER STACKS. A stacked row was checkbox, name, meta and a full-width
+   * Import button — ~165px per league, so a 55-league account was a nine-screen scroll to
+   * reach the bulk button. Name and button share the row now and wrap only when they must.
+   */
+  .af-im-card--leagues .af-im-league {
+    flex-direction: row;
+    align-items: center;
+  }
+  .af-core .af-im-card--leagues .af-im-league-btn {
+    width: auto;
+    margin-left: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* The bulk bar is the last thing in the card and rides the bottom of the screen while you pick. */
+.af-im-card--leagues .af-im-bulk {
+  position: sticky;
+  bottom: 12px;
+  z-index: 3;
+  margin: 4px 0 0;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.af-im-bulk-count {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+}
+.af-im-card--leagues .af-im-bulk-btn {
+  margin-left: auto;
+}
+.af-im-card--leagues .af-im-bulk-summary {
+  flex: 1 1 100%;
+  order: 3;
+}
+
+@media (max-width: 720px) {
+  .af-im-hero {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 22px 18px;
+  }
+  .af-im-hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .af-im-hero-stat {
+    padding: 10px 12px;
+  }
+  .af-im-hero-stat dd {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Two tiles to a row on a phone; the guide right under the row carries the effort instead. */
+  .af-im-effort {
+    display: none;
+  }
+}
+
+/*
+ * ⚠ ON THIS SCREEN, AN EXTENSION CARD WITH NOTHING TO INSTALL IS HIDDEN. While the Connect-ESPN
+ * extension is unpublished (no NEXT_PUBLIC_ESPN_EXTENSION_STORE_URL), the card says "One click,
+ * once it is installed" above a sentence admitting it cannot be installed — the loudest box in the
+ * ESPN flow, and the one thing in it nobody can act on. The guide beside the form already walks the
+ * cookie path that IS the way in. The card returns by itself the moment it carries a real Install
+ * link (`.af-espn-go`) or the extension is detected (`data-ready="true"`). Settings keeps it.
+ */
+.af-core .af-im-espn .af-espn-card[data-ready='false']:not(:has(.af-espn-go)) {
+  display: none;
+}
+
+/* The "on your phone?" banner is for phones and tablets — a desktop reader is already on the
+   device the cookie step needs. */
+@media (min-width: 1024px) {
+  .af-core .af-guide[data-provider='espn'] .af-guide-heads {
+    display: none;
+  }
+}
+
+/* The wrong-box paste hint: an ESPN link in the Sleeper box, and so on. */
+.af-im-wrongbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 9px 10px 9px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-im-wrongbox strong {
+  color: var(--text);
+}
+.af-im-wrongbox-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-left: auto;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 800 13px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-im-wrongbox-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ═══ Import v5, batch 3 — preview and confirmation in focus ═══════════════ */
+
+/*
+ * While a preview or a confirmation is open, the connect form steps aside (CSS only — it stays
+ * mounted, so Back returns to exactly what was typed). The card then sits directly under the
+ * league list instead of below the form and the whole guide.
+ */
+.af-im[data-phase='preview'] > .af-im-card--connect,
+.af-im[data-phase='preview'] > .af-im-fx-disclosure,
+.af-im[data-phase='attest'] > .af-im-card--connect,
+.af-im[data-phase='attest'] > .af-im-fx-disclosure {
+  display: none;
+}
+
+.af-im-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-im-preview-head .af-platform-mark {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+.af-core .af-im-card--preview .af-im-preview-head .af-label {
+  color: var(--good);
+}
+.af-core .af-im-card--preview[data-blocked='true'] .af-im-preview-head .af-label {
+  color: var(--warn);
+}
+
+.af-im-card--preview {
+  border-color: var(--accent-line);
+  background:
+    radial-gradient(520px 220px at 0% 0%, var(--accent-soft), transparent 70%),
+    var(--surface);
+}
+.af-im-card--preview .af-im-preview-name {
+  font: 900 clamp(22px, 3.4vw, 28px) / 1.12 var(--font-archivo, Archivo), system-ui, sans-serif;
+  letter-spacing: -0.03em;
+}
+
+/* The platform's own caveat, as a note rather than another grey line. */
+.af-im-card--preview .af-im-coverage {
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+}
+.af-im-card--preview .af-im-coverage .af-im-field-help {
+  margin: 0;
+  color: var(--text2);
+}
+.af-im-card--preview .af-im-coverage .af-im-field-help + .af-im-field-help {
+  margin-top: 4px;
+}
+
+.af-im-coverage-tally {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/*
+ * What comes across, as a grid of status chips. The state stays in WORDS inside each item
+ * ("Partial (41)") — the icon is decoration in ::before, so it adds nothing to the text a screen
+ * reader or a test reads, and colour is never the only signal.
+ */
+.af-im-card--preview .af-im-coverage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.af-im-card--preview .af-im-coverage-list > li {
+  position: relative;
+  margin: 0;
+  padding: 8px 10px 8px 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.af-im-card--preview .af-im-coverage-list > li strong {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-im-card--preview .af-im-coverage-list > li::before {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='full']::before {
+  content: '✓';
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='partial']::before {
+  content: '◐';
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='partial'] {
+  border-color: var(--warn);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='missing']::before {
+  content: '✕';
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-im-card--preview .af-im-coverage-list > li[data-state='missing'] {
+  border-style: dashed;
+}
+
+/* Import / Back ride the bottom of the screen while a long team list scrolls past. */
+.af-im-card--preview .af-im-actions,
+.af-im-card--attest .af-im-actions {
+  position: sticky;
+  bottom: 12px;
+  z-index: 3;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--accent-line);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.af-core .af-im-card--preview .af-im-actions .af-im-submit,
+.af-core .af-im-card--attest .af-im-actions .af-im-submit {
+  flex: 1 1 200px;
+}
+
+/* ── Confirmation ── */
+.af-im-card--attest {
+  border-color: var(--warn);
+}
+.af-core .af-im-card--attest .af-im-preview-head .af-label {
+  color: var(--warn);
+}
+.af-im-attest-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 900;
+  font-size: 15px;
+}
+.af-im-card--attest .af-im-attest {
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+@media (min-width: 1024px) {
+  .af-im > .af-im-card--preview,
+  .af-im > .af-im-card--attest {
+    max-width: 860px;
+  }
+}
+
+/* ═══ Import v5, batch 4 — bring your leaguemates ════════════════════════ */
+
+.af-im-card--invite {
+  border-color: var(--good);
+  background:
+    radial-gradient(480px 200px at 100% 0%, var(--good-soft), transparent 70%),
+    var(--surface);
+}
+.af-core .af-im-card--invite .af-im-preview-head .af-label {
+  color: var(--good);
+}
+.af-im-invite-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--good-soft);
+  color: var(--good);
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1;
+}
+.af-im-invite-title {
+  margin: 0;
+  font: 900 20px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-im-invite-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  min-width: 0;
+}
+.af-im-invite-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 12px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  color: var(--text2);
+}
+.af-im-invite-copy {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 800 13px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-im-invite-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-im-invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-core .af-im-invite-actions .af-btn {
+  flex: 1 1 120px;
+  min-height: 44px;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* ── Fantrax CSV disclosure, as a card rather than a stray link ── */
+.af-im-fx-disclosure {
+  border: 1px dashed var(--line2);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 4px 16px;
+}
+.af-im-fx-disclosure[open] {
+  border-style: solid;
+  padding-bottom: 16px;
+}
+.af-im-fx-disclosure > summary.af-im-fx-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  cursor: pointer;
+  color: var(--text2);
+  font-weight: 700;
+  list-style: none;
+}
+.af-im-fx-disclosure > summary.af-im-fx-link::-webkit-details-marker {
+  display: none;
+}
+.af-im-fx-disclosure > summary.af-im-fx-link::after {
+  content: '+';
+  margin-left: auto;
+  font-size: 18px;
+  color: var(--muted);
+}
+.af-im-fx-disclosure[open] > summary.af-im-fx-link::after {
+  content: '–';
+}
+.af-im-fx-disclosure > summary.af-im-fx-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.af-im-fx-disclosure .af-im-fx {
+  margin-top: 6px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* ── ESPN: "Who's the commissioner of this league?" ─────────────────────────
+   Shown only for a public ESPN league previewed without proof of membership.
+   Each option is a full-width 44px+ touch row, same surface as the team list. */
+.af-im-runby {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-im-runby > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.af-im-runby-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  cursor: pointer;
+}
+
+.af-im-runby-option[data-selected='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.af-im-runby-option input {
+  margin-top: 3px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.af-im-runby-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.af-im-runby-text .af-im-field-help {
+  margin: 0;
+}
+
+.af-im-league-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

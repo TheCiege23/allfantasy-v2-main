@@ -67,7 +67,8 @@ export function validateRedraftCreatePayload(input: unknown):
     const issues: RedraftValidationIssue[] = parsed.error.issues.map((i) => {
       const path = i.path.join('.') || 'request'
       let message = i.message
-      if (i.code === 'invalid_enum_value') {
+      // zod 4 reports a failed z.enum as `invalid_value` (v3 called it `invalid_enum_value`).
+      if (i.code === 'invalid_value') {
         if (i.path[0] === 'sport') message = 'Invalid sport'
         else if (i.path[0] === 'draftType') message = 'Invalid draft type'
       }

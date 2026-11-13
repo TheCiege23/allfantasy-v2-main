@@ -60,8 +60,15 @@ export type RecipeDefinition = {
   description: string
   cadence: string
   /** Null when the recipe works for this league; otherwise why it cannot. */
-  unavailableReason: (league: { platform: string; sport: string }) => string | null
+  unavailableReason: (league: RecipeLeague) => string | null
 }
+
+/**
+ * What a recipe's availability depends on. `bestBall` is `isBestBallLeagueRow` (lib/core-app/leagueBestBall.ts),
+ * the test Chimmy's lineup and slate-lock alerts skip by: a Best Ball league or a best ball Guilly league sets
+ * its own lineup, so a "check your lineup" post names managers for a slot nobody can fill.
+ */
+export type RecipeLeague = { platform: string; sport: string; bestBall?: boolean }
 
 /** English, read straight from the catalog: the recipes job posts these words into league chat. */
 const EN = commissionerToolsMessages.en
@@ -76,6 +83,7 @@ export const RECIPES: RecipeDefinition[] = [
     description: EN.recipesLineupReminderDescription,
     cadence: EN.recipesLineupReminderCadence,
     unavailableReason: (league) => {
+      if (league.bestBall) return EN.recipesUnavailableBestBall
       const p = league.platform.toLowerCase()
       if (p === 'mfl' || p === 'fantrax') {
         return p === 'mfl' ? EN.recipesUnavailableMflLineups : EN.recipesUnavailableFantraxLineups
@@ -161,12 +169,13 @@ const UNAVAILABLE_KEYS = [
   'recipesUnavailableMflLineups',
   'recipesUnavailableFantraxLineups',
   'recipesUnavailableWeeklyRecap',
+  'recipesUnavailableBestBall',
 ] as const
 
 /** One recipe as the hub's catalog shows it, in the reader's language (default English). */
 export function recipeCatalogEntry(
   recipe: RecipeDefinition,
-  league: { platform: string; sport: string },
+  league: RecipeLeague,
   language = 'en',
 ): { key: RecipeKey; label: string; description: string; cadence: string; unavailable: string | null } {
   const unavailable = recipe.unavailableReason(league)
@@ -245,6 +254,8 @@ export type RecipeFacts = {
   leagueName: string
   sport: string
   platform: string
+  /** Lineups set themselves (`RecipeLeague.bestBall`): no lineup reminder is ever due. */
+  bestBall?: boolean
   /** pre_draft | drafting | in_season | complete */
   status: string | null
   season: number | null
@@ -303,7 +314,7 @@ function list(names: string[], max = 6): string {
 export function dueRecipeMessages(values: Record<RecipeKey, boolean>, facts: RecipeFacts): DueMessage[] {
   const out: DueMessage[] = []
   const inSeason = (facts.status ?? '').toLowerCase() === 'in_season'
-  const league = { platform: facts.platform, sport: facts.sport }
+  const league: RecipeLeague = { platform: facts.platform, sport: facts.sport, bestBall: facts.bestBall === true }
   const usable = (key: RecipeKey) =>
     values[key] && (RECIPES.find((r) => r.key === key)?.unavailableReason(league) ?? null) === null
 

@@ -1,0 +1,100 @@
+/*
+ * Playoff readiness (components/core-app/screens/WarPlayoffReady.tsx) — War Room phase 7.
+ * Same tokens and rhythm as the rest of the War Room. All text at or above the 11px floor.
+ */
+
+.af-core .af-wr {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scroll-margin-top: 72px;
+}
+
+.af-core .af-wr-heading,
+.af-core .af-wr-sub {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-core .af-wr-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+}
+
+.af-core .af-wr-weeks {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-core .af-wr-odds {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-core .af-wr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 10px;
+}
+
+.af-core .af-wr-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  background: var(--surface);
+  min-width: 0;
+}
+
+.af-core .af-wr-block[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+
+.af-core .af-wr-block[data-tone='ok'] {
+  border-left-color: var(--good);
+}
+
+.af-core .af-wr-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.af-core .af-wr-list li[data-kind='out'] {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.af-core .af-wr-ok {
+  margin: 0;
+  font-size: 13px;
+  color: var(--good);
+}
+
+.af-core .af-wr-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 72ch;
+}

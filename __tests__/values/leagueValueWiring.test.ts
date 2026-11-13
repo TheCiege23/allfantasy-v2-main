@@ -59,10 +59,6 @@ const MUST_WIRE: ReadonlyArray<{ file: string; why: string }> = [
     why: 'ranks every roster in the league to find trade partners',
   },
   {
-    file: 'lib/trade-engine/trade-context-assembler.ts',
-    why: 'assembles the context a proposed trade is graded against',
-  },
-  {
     /*
      * The trade value console's pricer and chart, moved out of runTradeConsoleAnalysis.ts on
      * 2026-09-24 so the one trade grade prices every surface with them — see

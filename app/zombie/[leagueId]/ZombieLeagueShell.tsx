@@ -13,7 +13,7 @@ type ZombiePendingSitOutResponse = {
   week: number
 }
 
-type ZMeta = {
+export type ZMeta = {
   league?: {
     name?: string | null
     universeId?: string | null
@@ -190,7 +190,7 @@ export default function ZombieLeagueShell({
   }
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="af-draft-dark flex min-h-screen flex-col md:flex-row">
       <aside className="hidden w-[270px] shrink-0 border-r border-[var(--zombie-border)] bg-[radial-gradient(circle_at_top,_rgba(220,38,38,0.14),_transparent_35%),linear-gradient(180deg,#0a0b10_0%,#12141c_52%,#0c0d12_100%)] p-4 md:block">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4 shadow-[0_0_40px_rgba(220,38,38,0.08)]">
           <p className="text-[11px] font-bold uppercase tracking-widest text-[var(--zombie-text-dim)]">{t('zombie.shell.ops')}</p>

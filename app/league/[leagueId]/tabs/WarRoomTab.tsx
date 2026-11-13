@@ -162,7 +162,8 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       {
         title: 'Trade finder',
         description: 'Find partners and structure dynasty / redraft trades.',
-        href: '/trade-finder',
+        /* The one trade finder, on the Trades screen (2026-11-12; /trade-finder redirects there). */
+        href: `/core/trades?league=${encodeURIComponent(league.id)}#trade-finder`,
         icon: Coins,
       },
       {
@@ -172,9 +173,10 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         icon: BookOpen,
       },
       {
-        title: 'Dynasty trade analyzer',
-        description: 'Value-based trade breakdowns for dynasty leagues.',
-        href: '/dynasty-trade-analyzer',
+        title: 'Trade analyzer',
+        description: 'Grade a trade in this league, with its own scoring and dynasty values.',
+        /* The Trade Analyzer's league tab, on this league (the dynasty analyzer was merged into it, 2026-11-12). */
+        href: `/trade-evaluator?leagueId=${encodeURIComponent(league.id)}`,
         icon: Scale,
       },
       {
@@ -184,7 +186,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         icon: Sparkles,
       },
     ],
-    [sportQs],
+    [sportQs, league.id],
   )
 
   const gatedTools: GatedTool[] = useMemo(
@@ -242,7 +244,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         featureId: 'war_room_pipeline_analysis',
         title: 'Pipeline analysis',
         description: 'Prospect and pipeline evaluation (AF Legacy).',
-        href: '/trade-finder',
+        href: `/core/trades?league=${encodeURIComponent(league.id)}#trade-finder`,
         cta: 'Analyze pipeline',
       },
     ],
@@ -265,7 +267,11 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
               <p className={`rdt-eyebrow ${identity ? 'rdt-eyebrow-accent' : ''}`}>
                 {identity
                   ? `Redraft war room · ${identity.sportLabel}${typeof league.currentWeek === 'number' ? ` · Week ${league.currentWeek}` : ''}`
-                  : 'War room'}
+                  : isGuillotineLeague
+                    ? `Guilly war room · ${sportU}${typeof league.currentWeek === 'number' ? ` · Week ${league.currentWeek}` : ''}`
+                    : isDynasty
+                      ? `Dynasty war room · ${sportU}${typeof league.currentWeek === 'number' ? ` · Week ${league.currentWeek}` : ''}`
+                      : 'War room'}
               </p>
               <h1 className="text-lg font-bold tracking-tight rdt-text md:text-xl">AF Legacy</h1>
               <p className="text-[12px] rdt-faint">
@@ -287,6 +293,14 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         </Link>
       </header>
 
+      {/* Dynasty leagues get the dynasty-horizon War Room (value/age/direction) FIRST: the plan upsell used to sit above
+          it, so on a phone the panel about this league began a screen and a half down. */}
+      {isDynasty ? <DynastyWarRoomPanel leagueId={league.id} /> : null}
+
+      {/* Guillotine leagues get the survival-first War Room (elimination risk / FAAB / weekly plan) FIRST: in a Guilly
+          league the plan upsell used to sit above it, a screen and a half of scrolling on a phone before this week. */}
+      {isGuillotineLeague ? <GuillotineWarRoomPanel leagueId={league.id} /> : null}
+
       {isZombieLeague && <ZombieWarRoomShortcuts leagueId={league.id} />}
 
       <div className="rdt-bridge">
@@ -296,17 +310,11 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       {/* Redraft leagues get a data-grounded War Room scoped to THIS league. */}
       {isRedraftLeague ? <RedraftWarRoomPanel leagueId={league.id} /> : null}
 
-      {/* Dynasty leagues get the dynasty-horizon War Room (value/age/direction). */}
-      {isDynasty ? <DynastyWarRoomPanel leagueId={league.id} /> : null}
-
       {/* Keeper leagues get the keeper War Room (value surplus / keep-cut / draft plan). */}
       {isKeeperLeague ? <KeeperWarRoomPanel leagueId={league.id} /> : null}
 
       {/* Best-ball leagues get the best-ball War Room (construction / depth / upside / stacks). */}
       {isBestBallLeague ? <BestBallWarRoomPanel leagueId={league.id} /> : null}
-
-      {/* Guillotine leagues get the survival-first War Room (elimination risk / FAAB / weekly plan). */}
-      {isGuillotineLeague ? <GuillotineWarRoomPanel leagueId={league.id} /> : null}
 
       {liveDraftCompanion && leagueDraftCompanion.error ? (
         <p

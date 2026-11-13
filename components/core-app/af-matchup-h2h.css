@@ -1,0 +1,123 @@
+/*
+ * Matchup — the head-to-head look (2026-11-09).
+ *
+ * The slot board as one continuous broadcast list: your starter and theirs on one line, a tinted
+ * position pill on the spine between them, a large headshot, and the points set big enough to read
+ * across the table. Same data, same rules as af-matchup.css: an unplayed starter still reads "—", a
+ * projection is never put in the points column, BYE / OUT stay beside the number.
+ *
+ * ⚠ WIDE BOARDS ONLY. Everything here sits inside `@container af-mu (min-width: 761px)`, the exact
+ * complement of af-matchup.css's `(max-width: 760px)` phone block, so the phone board (two-row
+ * halves, 26px portraits, the SUPER_FLEX wrap fix) is untouched. Scoped to `[data-look='h2h']`, which
+ * Matchup.tsx sets on the board, so no other `.af-mu-board-row` changes.
+ *
+ * The redraft shell (af-core-redraft-matchup.css) keeps its own slot frame and live edge; these rules
+ * set geometry, not colour, apart from the rows' shared surface.
+ */
+@container af-mu (min-width: 761px) {
+  .af-mu-board[data-look='h2h'] {
+    gap: 0;
+  }
+
+  .af-mu-board[data-look='h2h'] .af-mu-board-head {
+    grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr);
+    gap: 14px;
+    padding: 0 16px 8px;
+  }
+
+  /* One list, not a stack of cards: rows share their borders and only the ends are rounded. */
+  .af-mu-board[data-look='h2h'] .af-mu-board-row {
+    grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr);
+    gap: 14px;
+    min-height: 72px;
+    padding: 12px 16px;
+    border-radius: 0;
+    border-width: 0 1px 1px;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-board-head + .af-mu-board-row {
+    border-top-width: 1px;
+    border-top-left-radius: var(--af-radius-inner, 12px);
+    border-top-right-radius: var(--af-radius-inner, 12px);
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-board-row:has(+ .af-mu-board-foot),
+  .af-mu-board[data-look='h2h'] .af-mu-board-row:last-child {
+    border-bottom-left-radius: var(--af-radius-inner, 12px);
+    border-bottom-right-radius: var(--af-radius-inner, 12px);
+  }
+
+  .af-mu-board[data-look='h2h'] .af-mu-board-foot {
+    grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr);
+    gap: 14px;
+    margin-top: 10px;
+    padding: 12px 16px;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-foot-total {
+    font-size: 22px;
+  }
+
+  .af-mu-board[data-look='h2h'] .af-mu-half {
+    gap: 12px;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-half[data-state='none'] {
+    min-height: 46px;
+  }
+
+  .af-mu-board[data-look='h2h'] .af-mu-portrait,
+  .af-mu-board[data-look='h2h'] .af-mu-face,
+  .af-mu-board[data-look='h2h'] .af-mu-portrait--empty {
+    width: 46px;
+    height: 46px;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-face--none {
+    font-size: 16px;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-club {
+    width: 19px;
+    height: 19px;
+    right: -4px;
+    bottom: -4px;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-half[data-align='right'] .af-mu-club {
+    right: auto;
+    left: -4px;
+  }
+
+  .af-mu-board[data-look='h2h'] .af-mu-half-name {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-half-sub {
+    margin-top: 3px;
+    font-size: 12px;
+  }
+
+  /* The number is the story once a game is played: big, mono, tabular, against the spine. */
+  .af-mu-board[data-look='h2h'] .af-mu-half-pts {
+    min-width: 76px;
+    font-size: 21px;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-half[data-align='left'] .af-mu-half-pts {
+    text-align: right;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-half[data-align='right'] .af-mu-half-pts {
+    text-align: left;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-half-proj,
+  .af-mu-board[data-look='h2h'] .af-mu-half-af {
+    margin-top: 4px;
+    font-size: 11.5px;
+    letter-spacing: 0;
+  }
+
+  /* The spine: a solid position pill, sized like a control (it reads as the row's anchor). */
+  .af-mu-board[data-look='h2h'] .af-mu-slot {
+    font-size: 12px;
+  }
+  .af-mu-board[data-look='h2h'] .af-mu-slot[data-pos] {
+    min-width: 56px;
+    padding: 9px 8px;
+    border-radius: 9px;
+  }
+}

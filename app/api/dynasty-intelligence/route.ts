@@ -3,6 +3,9 @@
  * GET ?sport=NFL&position=WR&age=25&baseValue=5000&playerId=...
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   getPlayerDynastyIntelligence,
   getDynastyIntelligenceSupportedSports,
@@ -50,6 +53,16 @@ export async function GET(request: NextRequest) {
     })
 
     if (includeAI) {
+      /*
+       * ⚠ `ai=1` CALLED DEEPSEEK / OPENAI / XAI WITH NO SIGN-IN AT ALL — anyone on the internet could run
+       * it. The AI insight is the War Room's "Dynasty Projections" (`war_room_dynasty_projections`), so it
+       * now needs a signed-in user on that plan. The deterministic numbers above stay as they were.
+       */
+      const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string; email?: string | null } } | null
+      const userId = session?.user?.id
+      if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'sign_in_required' }, { status: 401 })
+      const gate = await requireFeatureEntitlement({ userId, userEmail: session?.user?.email ?? null, featureId: 'war_room_dynasty_projections' })
+      if (!gate.ok) return gate.response
       const insight = await getDynastyAIInsight(result)
       return NextResponse.json({ data: result, insight })
     }

@@ -49,6 +49,9 @@ const chat = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock('@/lib/automation/notifications', () => ({ enqueueLeagueChatNotification: chat }))
 vi.mock('@/lib/automation/locks', () => ({
   withAutomationLock: async (_k: string, _o: unknown, fn: () => Promise<unknown>) => ({ ok: true, value: await fn() }),
+  // The engine's own per-league run lock (process-engine.ts).
+  acquireAutomationLock: async () => ({ ok: true, backend: 'postgres' }),
+  releaseAutomationLock: async () => {},
 }))
 vi.mock('@/lib/automation/engine', () => ({
   runAutomationJob: async (_ctx: unknown, handler: (c: { jobId: string }) => Promise<Record<string, unknown>>) => ({

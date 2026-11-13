@@ -218,7 +218,7 @@ function StandingsView({ view, divisionIndex, setDivision, openWildcard }: { vie
     : tab === 'top16' ? division.rows.slice(0, 16)
     : division.rows.filter(r => r.conferenceIndex === myConf)
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
       <section className={card + ' min-w-0 p-3 sm:p-4'}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <Seg label="Division" value={String(divisionIndex) as '0' | '1'} onChange={v => setDivision(Number(v) as 0 | 1)} options={[['0', `${view.divisions[0].name} division`], ['1', `${view.divisions[1].name} division`]]} />
@@ -262,7 +262,7 @@ function WildcardView({ view, divisionIndex, setDivision, back }: { view: HubVie
     <div className="space-y-5">
       <SubHeader back={back} division={division} title={`Wildcard bubble · ${division.name} division`} sub={`${division.pool.rows.length} teams, ${division.pool.spots} spots, ranked on season points only · locks after week ${view.calendar.seedingLocksAfter}`}
         right={<Seg label="Division" value={String(divisionIndex) as '0' | '1'} onChange={v => setDivision(Number(v) as 0 | 1)} options={[['0', view.divisions[0].name], ['1', view.divisions[1].name]]} />} />
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section className={card + ' min-w-0 p-3 sm:p-4'}>
           <div className="hidden grid-cols-[2.5rem_minmax(0,1fr)_9.5rem_3.5rem_5rem_4.5rem] gap-2 px-3 pb-2 text-[11px] font-bold uppercase tracking-widest text-slate-500 sm:grid" aria-hidden="true">
             <span className="text-right">WC</span><span>Team</span><span>How they got here</span><span>W-L</span><span className="text-right">Points</span><span className="text-right">To line</span>
@@ -351,7 +351,7 @@ function BracketView({ view, divisionIndex, setDivision, back, openChampionship 
           <Seg label="Division" value={String(divisionIndex) as '0' | '1'} onChange={v => setDivision(Number(v) as 0 | 1)} options={[['0', view.divisions[0].name], ['1', view.divisions[1].name]]} />
           <Seg label="Region" value={region} onChange={setRegion} options={REGIONS.map(r => [r, r] as [Region, string])} />
         </div>} />
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <section className="min-w-0 overflow-x-auto pb-2" aria-label={`${region} region bracket`}>
           {!division.seeded ? <p className={card + ' p-6 text-slate-300'}>The bracket appears once every division has enough teams to fill {bracketSize} seeds. Seeding locks after week {view.calendar.seedingLocksAfter}.</p> : (
             <div className="flex gap-4">
@@ -428,7 +428,7 @@ function ChampionshipView({ view, back }: { view: HubView; back: () => void }) {
       <section className="rounded-3xl border border-white/10 p-6 sm:p-10" style={{ background: `radial-gradient(ellipse at 20% 40%, ${side(dA.sideId).dark}88, transparent 55%), radial-gradient(ellipse at 80% 40%, ${side(dB.sideId).dark}88, transparent 55%), #0b0d14` }}>
         <p className="text-center text-xs font-bold uppercase tracking-[0.25em] text-[#ffd98a]">Week {week} · Championship{game?.scoreA != null && !game.winnerId ? ' · live' : game?.winnerId ? ' · final' : ''}</p>
         <h2 className="mt-2 text-center text-4xl font-black tracking-tight text-white sm:text-6xl">{dA.name} vs {dB.name}</h2>
-        <div className="mt-8 grid items-center gap-8 md:grid-cols-[1fr_auto_1fr]">
+        <div className="mt-8 grid grid-cols-1 items-center gap-8 md:grid-cols-[1fr_auto_1fr]">
           {sideBlock(game?.a ?? null, game?.scoreA ?? null, 0)}
           <div className="flex flex-col items-center gap-2" aria-hidden="true">
             {/* The pack's championship mark has "BLACK" and "GOLD" baked in, so it is used only for that pair. */}
@@ -439,7 +439,7 @@ function ChampionshipView({ view, back }: { view: HubView; back: () => void }) {
           </div>
           {sideBlock(game?.b ?? null, game?.scoreB ?? null, 1)}
         </div>
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
           {([0, 1] as const).map(i => {
             const other = 1 - i
             const lead = Math.round(totals[i]! - totals[other]!)
@@ -529,7 +529,7 @@ export function DivisionsHub({ view, initialScreen = 'standings', canManage = fa
   const myDivision = view.me ? view.divisions[view.me.divisionIndex] : null
   const back = () => setScreen('standings')
   return (
-    <main className="mx-auto min-h-screen max-w-[1500px] space-y-5 bg-[#07080d] px-4 py-5 text-white sm:px-6">
+    <main className="af-draft-dark mx-auto min-h-screen max-w-[1500px] space-y-5 bg-[#07080d] px-4 py-5 text-white sm:px-6">
       <nav aria-label="Tournament screens" className="flex flex-wrap items-center gap-3">
         <Seg label="Tournament screens" value={screen} onChange={setScreen} options={[['standings', 'Standings'], ['wildcard', 'Wildcard'], ['bracket', 'Bracket'], ['championship', 'Championship']]} />
         {!view.sample && <span className="flex flex-wrap gap-2">

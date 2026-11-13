@@ -269,7 +269,9 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
         </div>
       )}
 
-      <div className="rdt-line border-b px-4 py-3 md:px-5">
+      {/* Below md the games come first: this tool (~380px) used to fill a phone's first screen, the first game at
+          y=897 on an 844px screen. The root is a flex column, so `order` moves it without touching desktop. */}
+      <div className="rdt-line border-b px-4 py-3 max-md:order-last max-md:border-b-0 max-md:border-t md:px-5">
         <div className="rdt-card rdt-bridge p-3">
           <p className="rdt-eyebrow mb-2">Start A vs B</p>
           <StartVsComparisonLauncher leagueId={league.id} sport={resolved} weekOrPeriod={`Week ${week}`} showNameInputs />

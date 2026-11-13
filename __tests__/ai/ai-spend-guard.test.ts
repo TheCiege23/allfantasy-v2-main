@@ -221,7 +221,6 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/draft/ai-claude.ts',
     'lib/fantasy-news-aggregator/NewsSummarizerAI.ts',
     'lib/guillotine/ai/GuillotineAIService.ts',
-    'lib/integrity/TankingDetectionEngine.ts',
     'lib/salary-cap/ai/SalaryCapAIService.ts',
     'lib/smart-trade-recommendations.ts',
     'lib/social-sharing/GrokShareCopyService.ts',
@@ -316,7 +315,10 @@ describe('AI spend guard — provider boundary coverage', () => {
     // fetcher ImproveTradeModal was mounted by nothing). A deletion, not a silent revert.
     // Then 31 the same day: app/api/start-sit/chimmy/route.ts was DELETED (dead route, its only
     // fetcher StartSitPopup was mounted by nothing; 0 production requests in 7 days). A deletion.
-    expect(GUARDED.length).toBeGreaterThanOrEqual(31)
+    // Then 30 on 2026-11-06: lib/integrity/TankingDetectionEngine.ts is no longer a provider boundary —
+    // its direct Anthropic verdict (a model id that returned 404) was deleted for code-computed rules
+    // (lib/integrity/tankingRules.ts), the same move collusion made. A deletion, not a silent revert.
+    expect(GUARDED.length).toBeGreaterThanOrEqual(30)
   })
 
   it('the unguarded ratchet has not grown', () => {

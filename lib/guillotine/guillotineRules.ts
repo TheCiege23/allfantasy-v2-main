@@ -13,6 +13,7 @@
  *   rosterReleaseTiming   GuillotineEliminationEngine → releaseChoppedRosters
  *   faabOnChop            GuillotineEliminationEngine → redistributeChoppedFaab (./faabOnChop.ts)
  *   bestBall              scoringEngine.leagueIsBestBall → each team's best lineup (./guillotineBestBall.ts)
+ *   periodWeeks           nativeGuillotineWeek → which weeks chop and how many weeks a score adds (./eliminationPeriods.ts)
  *
  * components/league/GuillotineFormatTab.tsx used to list ~25 settings, most of which nothing read
  * (AI toggles, "Chop Clock", "FAAB visible"…) and whose save always failed. It was deleted rather
@@ -41,6 +42,12 @@ export type GuillotineRules = {
    * League.settings.best_ball (./guillotineBestBall.ts); changeable only before the draft.
    */
   bestBall: boolean
+  /**
+   * Weeks per elimination period: 1, or 2 for MLB (both weeks' scores added, one chop at the end of the
+   * pair). Stored as League.settings.guillotine_period_weeks (./eliminationPeriods.ts); fixed once the
+   * first chop has happened.
+   */
+  periodWeeks: 1 | 2
 }
 
 /** League.settings key for `aiRecapAuto`. Absent = on. */
@@ -80,6 +87,15 @@ export const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: strin
   { value: 'commissioner', label: 'Commissioner decides' },
   { value: 'random', label: 'Random' },
 ]
+
+/**
+ * A tiebreak step's label for this league. In an MLB two-week league (./eliminationPeriods.ts) the
+ * previous-period step compares the last PERIOD, so it says so; every other label is the plain one.
+ */
+export function tiebreakLabel(step: string, periodWeeks?: number): string {
+  if (step === 'previous_period' && (periodWeeks ?? 1) > 1) return 'Lower score last period is chopped'
+  return TIEBREAK_OPTIONS.find((o) => o.value === step)?.label ?? step
+}
 
 export const RELEASE_OPTIONS: ReadonlyArray<{ value: GuillotineRules['rosterReleaseTiming']; label: string; help: string }> = [
   { value: 'next_waiver_run', label: 'At the next waiver run', help: 'Everyone bids on the chopped roster at the same time.' },
@@ -189,6 +205,11 @@ export function normalizeGuillotineRulesPatch(
   if ('bestBall' in r) {
     if (typeof r.bestBall !== 'boolean') return { ok: false, error: { field: 'bestBall', message: 'Turn best ball lineups on or off.' } }
     out.bestBall = r.bestBall
+  }
+  if ('periodWeeks' in r) {
+    const n = int(r.periodWeeks)
+    if (n !== 1 && n !== 2) return { ok: false, error: { field: 'periodWeeks', message: 'An elimination period is one week or two.' } }
+    out.periodWeeks = n
   }
   if (Object.keys(out).length === 0) return { ok: false, error: { field: null, message: 'Nothing to save.' } }
   return { ok: true, value: out }

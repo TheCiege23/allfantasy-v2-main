@@ -1,5 +1,6 @@
 import { leagueForbidsTrades, tradeBanReason } from '@/lib/league-rules/tradeLegality'
 import type { ChimmyDecisionKind } from './decisionAnswerContract'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 
 /**
  * Decisions a league's FORMAT rules out, before any engine runs.
@@ -38,6 +39,8 @@ export type DecisionFormatInput = {
   isDynasty: boolean
   settings: unknown
   bestBallMode: boolean | null
+  leagueVariant?: string | null
+  guillotineMode?: boolean | null
 }
 
 export type DecisionFormatBlock = {
@@ -53,7 +56,10 @@ export type DecisionFormatBlock = {
 export { leagueForbidsTrades, tradeBanReason }
 
 export function decisionFormatBlock(league: DecisionFormatInput, kind: ChimmyDecisionKind): DecisionFormatBlock | null {
-  if (kind === 'lineup' && league.bestBallMode === true) {
+  // Classic Best Ball (the column) OR best ball Guilly (`guillotineMode`/`leagueType: 'guillotine'` +
+  // `settings.best_ball`). The column alone answered "start/sit is yours" in a Guilly league whose lineup
+  // the optimizer picks and whose lineup saves are refused (lib/bestball/bestBallLeagueState.ts).
+  if (kind === 'lineup' && bestBallLineupSetsItself(league)) {
     return {
       code: 'best_ball_auto_lineup',
       detail: 'This is a Best Ball league: your highest-scoring players count automatically each week, so there is no start/sit or lineup move to make.',

@@ -3,6 +3,15 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { WizardSetupSource } from '@/lib/league-creation-wizard/types'
+import { availableImportPlatformsPhrase, getImportPlatforms } from '@/lib/league-import/provider-ui-config'
+
+/** Read from the import config so a coming-soon platform (Yahoo) is never offered as importable. */
+const LIVE_IMPORT_PHRASE = availableImportPlatformsPhrase()
+const LIVE_IMPORT_CHIPS = `${getImportPlatforms()
+  .filter((p) => p.status === 'live')
+  .slice(0, 3)
+  .map((p) => p.name)
+  .join(' · ')} · more`
 import { StepHeader } from './StepHelp'
 import { Label } from '@/components/ui/label'
 import {
@@ -69,7 +78,7 @@ export function LeagueSourceSection({
     <section className="space-y-4 rounded-2xl border border-white/10 bg-black/25 p-4">
       <StepHeader
         title="Where should we start?"
-        description="Build from scratch, mirror another league you run on AllFantasy, or import a synced league from Sleeper, ESPN, or Yahoo on the import page."
+        description={`Build from scratch, mirror another league you run on AllFantasy, or import a synced league from ${LIVE_IMPORT_PHRASE} on the import page.`}
         help={
           <>
             Copying applies saved rules from that league as a starting point. You still confirm every setting before
@@ -84,7 +93,7 @@ export function LeagueSourceSection({
           [
             { id: 'fresh' as const, title: 'New league', sub: 'Defaults for your sport' },
             { id: 'copy_league' as const, title: 'Copy AF league', sub: 'Reuse settings you like' },
-            { id: 'external_guide' as const, title: 'Import site', sub: 'Sleeper · ESPN · Yahoo · more' },
+            { id: 'external_guide' as const, title: 'Import site', sub: LIVE_IMPORT_CHIPS },
           ] as const
         ).map((opt) => (
           <button
@@ -144,7 +153,7 @@ export function LeagueSourceSection({
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-3 py-3 text-sm text-white/80">
           <p className="font-medium text-cyan-100">Import from another host</p>
           <p className="mt-1 text-xs text-white/55">
-            Use the import page to connect Sleeper, ESPN, Yahoo, Fantrax, MFL, or Fleaflicker. After import, your league
+            Use the import page to connect {LIVE_IMPORT_PHRASE}. After import, your league
             appears in the app with live sync.
           </p>
           <Link

@@ -22,6 +22,7 @@ import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import {
   PROSPECT_STASH_UNAVAILABLE_CODE,
   PROSPECT_STASH_UNAVAILABLE_MESSAGE,
@@ -32,6 +33,7 @@ import {
   leagueSupportsTaxiDevy,
   isTaxiDevySlot,
 } from '@/lib/league-creation/prospectStashPolicy'
+import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,7 +112,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, leagueType: true, leagueVariant: true, isDynasty: true } })
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: {
+      userId: true, sport: true, leagueType: true, leagueVariant: true, isDynasty: true,
+      // The best ball pool check below: is this a best ball league, and how many teams does it seat.
+      settings: true, bestBallMode: true, guillotineMode: true, leagueSize: true,
+    },
+  })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const registry = getRosterEngineRegistry()
@@ -118,7 +127,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     return NextResponse.json({ error: `Roster settings not yet available for ${league.sport}` }, { status: 400 })
   }
 
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   const locked = await settingsLockedResponse(leagueId, 'rosters')
   if (locked) return locked
 
@@ -144,6 +153,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
       { status: 400 },
     )
   }
+  /*
+   * Best ball: every team's starter seats are filled from what it drafted, so the new seats must fit the
+   * sport's player pool at this league size (lib/bestball/poolCapacity.ts). An impossible layout is
+   * refused before anything is written; a tight one saves and comes back with a warning.
+   */
+  const poolCheck = league.leagueSize
+    ? checkLeagueBestBallPool(league, { teamCount: league.leagueSize, rosterSlots: slots })
+    : null
+  if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
   invalidateLeagueDraftCaches(leagueId)
   // Rounds = draftable roster spots, so the draft follows the roster it was just given.
@@ -195,7 +213,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   }
 
   await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
-  return NextResponse.json({ ok: true, config, unifiedConfig, draftRounds })
+  return NextResponse.json({
+    ok: true, config, unifiedConfig, draftRounds,
+    bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],
+  })
 }
 
 /** AF Commissioner plan — the one shared check (lib/entitlements/afCommissionerPlan.ts). */

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import PlayerBadge from '@/components/PlayerBadge'
 import PlayerSearchDropdown from '@/components/PlayerSearchDropdown'
 import { normalizePlayer } from '@/lib/normalize-player'
+import { legacyPromptSeason as currentYear } from '@/lib/legacy/promptSeason'
 import NegotiationSheet, { type NegotiationBlock } from '@/components/ai/NegotiationSheet'
 import type { TradeCandidate } from '@/lib/trade-finder/apply-counter'
 import type { TradeAsset as IndexTradeAsset } from '@/lib/trade-finder/asset-index'
@@ -379,11 +380,6 @@ function extractPlayerContextFromAssets(assetsA: TradeAsset[], assetsB: TradeAss
   return deduped
 }
 
-function currentYear() {
-  return 2026
-}
-
-
 type LeagueType = 'standard' | 'bestball'
 
 type LeagueOption = {
@@ -697,7 +693,7 @@ export default function LegacyTradeAnalyzerPage() {
       if (!res.ok) throw new Error('User not found')
       const userData = await res.json()
       
-      const leaguesRes = await fetch(`https://api.sleeper.app/v1/user/${userData.user_id}/leagues/${sportLower}/2025`) // db-first-exception: legacy trade analyzer bootstrap
+      const leaguesRes = await fetch(`https://api.sleeper.app/v1/user/${userData.user_id}/leagues/${sportLower}/${currentYear()}`) // db-first-exception: legacy trade analyzer bootstrap
       if (!leaguesRes.ok) throw new Error('Failed to fetch leagues')
       const leagues = await leaguesRes.json()
       
@@ -1251,6 +1247,11 @@ export default function LegacyTradeAnalyzerPage() {
     setError(null)
     setResult(null)
 
+    if (sport !== 'NFL') {
+      setError('Use the Trade Evaluator for NBA trades.')
+      return
+    }
+
     if (!sleeperA.trim() || !sleeperB.trim()) {
       setError('Please enter both Sleeper usernames.')
       return
@@ -1422,7 +1423,8 @@ export default function LegacyTradeAnalyzerPage() {
                 Trade Analyzer
               </h1>
               <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-white/60 truncate">
-                NFL (with IDP) + NBA trade evaluation, powered by Chimmy
+                NFL trade evaluation with IDP support, powered by Chimmy.{' '}
+                <Link href="/trade-evaluator" className="underline">Evaluate NBA trades</Link>
               </p>
             </div>
           </div>
@@ -1628,7 +1630,6 @@ export default function LegacyTradeAnalyzerPage() {
                   }}
                   options={[
                     { value: 'NFL', label: 'NFL' },
-                    { value: 'NBA', label: 'NBA' },
                   ]}
                 />
               </div>

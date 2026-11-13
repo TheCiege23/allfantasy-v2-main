@@ -170,7 +170,6 @@ const ASSISTANT_LABEL_FILES = [
   'app/sports/[sport]/SportLandingClient.tsx',
   'app/world-cup/layout.tsx',
   'app/world-cup/page.tsx',
-  'components/DynastyTradeForm.tsx',
   'components/app/settings/AISettingsPanel.tsx',
   'components/bracket-brain/BracketBrainLockedCard.tsx',
   'components/brackets/world-cup/WorldCupMatchupIntelligencePanel.tsx',

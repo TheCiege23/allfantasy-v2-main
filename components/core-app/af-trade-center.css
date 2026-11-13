@@ -2486,6 +2486,26 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-moves-why b { color: var(--text); }
 .af-tc-moves-why[data-dir='up'] b { color: var(--good); }
 .af-tc-moves-why[data-dir='down'] b { color: var(--bad); }
+/*
+ * Counteroffer rows STACK. They borrow `.af-tc-moves` for its spacing, but its `li` is a two-column
+ * grid built for "name | number" rows. A counter row has five children (title, sentence, two detail
+ * lines, button), so the grid paired them up: the long sentence took the `auto` column and squeezed
+ * the title, the value labels and the button into a sliver beside it — one word per line, text
+ * overlapping, "Add to proposal" spilling out of its button on a phone (reported 2026-11-11).
+ */
+.af-tc-counters li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.af-tc-counters li > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.af-tc-counters li > p { margin: 0; }
+.af-tc-counters li > .af-btn { margin-top: 4px; }
 
 /* ── Phone audit, 2026-10-01 ─────────────────────────────────────────────────
  *
@@ -2576,6 +2596,17 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-generic-pick > strong { flex-basis: 100%; }
 .af-tc-generic-pick label { display: grid; gap: 5px; min-width: 85px; font-size: 13px; }
 .af-tc-generic-pick button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--accent-line); border-radius: var(--af-radius-inner, 12px); background: var(--accent-soft); color: var(--text); cursor: pointer; }
+.af-tc-generic-format { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 14px 0; padding: 12px 14px; border: 1px solid var(--line, #334155); border-radius: var(--af-radius-inner, 12px); }
+.af-tc-generic-format legend { padding: 0 6px; font-weight: 700; }
+.af-tc-generic-format label { display: grid; gap: 5px; font-size: 13px; }
+.af-tc-generic-format select { min-height: 40px; }
+.af-tc-generic-format > small { flex-basis: 100%; }
+.af-tc-generic-market {margin: 14px 0; padding: 14px; border: 1px solid var(--accent-line, #334155); border-radius: var(--af-radius-inner, 12px); background: var(--accent-soft, transparent); }
+.af-tc-generic-market ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.af-tc-generic-market li { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
+.af-tc-generic-market li > small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.af-tc-generic-up { color: var(--good, #34d399); font-variant-numeric: tabular-nums; }
+.af-tc-generic-down { color: var(--bad, #f87171); font-variant-numeric: tabular-nums; }
 .af-tc-generic-confirm { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--text); font-weight: 700; }
 .af-tc-generic-confirm input { width: 20px; height: 20px; accent-color: var(--accent); }
 .af-tc-tile-sync { display: block; margin-top: 3px; color: var(--warn, #fbbf24); font-size: 11px; line-height: 1.35; }
@@ -3104,4 +3135,73 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
     order: 3;
     flex-basis: 100%;
   }
+}
+
+/* ── Rebuild plan (components/core-app/screens/RebuildPlanCard.tsx) ─────────────────────────────── */
+.af-tc-rebuild-group {
+  margin-top: 16px;
+}
+.af-tc-rebuild-group[data-group='sell'] .af-tc-rebuild-h { color: var(--warn); }
+.af-tc-rebuild-group[data-group='hold'] .af-tc-rebuild-h { color: var(--good, #34d399); }
+.af-tc-rebuild-group[data-group='target'] .af-tc-rebuild-h,
+.af-tc-rebuild-group[data-group='package'] .af-tc-rebuild-h { color: var(--accent); }
+.af-tc-rebuild-h {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af-tc-rebuild-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-tc-rebuild-item {
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: var(--surface2);
+  padding: 10px 12px;
+}
+.af-tc-rebuild-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+.af-tc-rebuild-pos {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-tc-rebuild-why {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-tc-rebuild-buyers {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-tc-rebuild-buyers small {
+  color: var(--muted);
+}
+.af-tc-rebuild-buyers ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+}
+.af-tc-rebuild-buyers li + li {
+  margin-top: 2px;
+}
+.af-tc-rebuild-foot {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
 }

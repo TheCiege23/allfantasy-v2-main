@@ -1,3 +1,7 @@
+/* My Team's highlights card sits OUTSIDE the player-card sheet, whose own base size these rules
+   lean on — so without this its line, picker and button inherited My Team's 18px body text. */
+.af-team-highlights { font-size: 13px; line-height: 1.5; }
+.af-team-highlights > .af-pc-faint { margin: 0 0 4px; }
 .af-team-highlights-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .af-team-highlights-controls select { min-height: 44px; margin-left: 8px; padding: 8px; background: var(--panel, #191b29); color: inherit; border: 1px solid var(--line, #303344); border-radius: 8px; }
 .af-team-highlights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 20px; }

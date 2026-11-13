@@ -13,6 +13,12 @@ import type { FantraxLeagueInfo } from './fantraxApi'
 /** Stored `FantraxLeague.sport` values whose season spans two calendar years. */
 const SPLIT_SEASON_SPORTS = new Set(['nba', 'nhl', 'ncaab'])
 
+/** Imports that retain Fantrax’s period calendar on the canonical league. */
+export function usesFantraxPeriodCalendar(sport: string | null | undefined): boolean {
+  const key = String(sport ?? '').trim().toLowerCase()
+  return key === 'soccer' || key === 'ncaab'
+}
+
 export function isFantraxSplitSeasonSport(sport: string | null | undefined): boolean {
   return SPLIT_SEASON_SPORTS.has(String(sport ?? '').trim().toLowerCase())
 }
@@ -74,6 +80,13 @@ export function fantraxImportSeason(
   now: Date = new Date(),
 ): number {
   if (isFantraxSplitSeasonSport(sport)) return fantraxSplitSeasonStartYear(info, now)
+  if (String(sport ?? '').trim().toLowerCase() === 'soccer') {
+    const range = String(info.seasonYear ?? '').trim().match(/^(\d{4})\s*[-/–]\s*(\d{2}|\d{4})$/)
+    if (range) return Number(range[1])
+    // Soccer leagues can start in either half of the year. Use the source calendar year.
+    const start = earliestLeagueDate(info)
+    if (start) return start.getUTCFullYear()
+  }
   return Number(info.seasonYear) || now.getFullYear()
 }
 
@@ -175,17 +188,22 @@ const FOOTBALL_SLOT_CODES: Record<string, string> = {
   RWT: 'FLEX', SFX: 'SUPER_FLEX',
   DL: 'DL', DE: 'DE', DT: 'DT', LB: 'LB', DB: 'DB', CB: 'CB', S: 'S', ID: 'IDP_FLEX',
 }
-const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB', Record<string, string>> = {
+const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB' | 'SOCCER', Record<string, string>> = {
   NFL: FOOTBALL_SLOT_CODES,
   NCAAF: FOOTBALL_SLOT_CODES,
+  SOCCER: { G: 'GKP', D: 'DEF', M: 'MID', F: 'FWD' },
   MLB: {
     C: 'C', '1B': '1B', '2B': '2B', '3B': '3B', SS: 'SS', OF: 'OF', CI: 'CI', MI: 'MI',
     SP: 'SP', RP: 'RP', P: 'P', UT: 'UTIL', UTIL: 'UTIL',
   },
 }
 
+export function fantraxSoccerPosition(position: string): string {
+  return LINEUP_SLOT_CODES.SOCCER[position] ?? position
+}
+
 /**
- * A Fantrax NFL, college-football or MLB league's starting lineup, as `SLOT:COUNT` entries.
+ * A Fantrax league's starting lineup, as `SLOT:COUNT` entries.
  *
  * 🛑 ALL OR NOTHING, unlike the NBA/NHL mapper. These slots feed `importedLineupTemplateSlots`, which
  * trusts a pair list as the whole lineup — so a lineup with one seat dropped would be a smaller lineup
@@ -194,7 +212,7 @@ const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB', Record<string, string>>
  * lineup" resolution.
  */
 export function mapFantraxLineupSlots(
-  sport: 'NFL' | 'NCAAF' | 'MLB',
+  sport: 'NFL' | 'NCAAF' | 'MLB' | 'SOCCER',
   rosterInfo: unknown,
 ): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
   const mapped = mapSlots(LINEUP_SLOT_CODES[sport], sport, rosterInfo)

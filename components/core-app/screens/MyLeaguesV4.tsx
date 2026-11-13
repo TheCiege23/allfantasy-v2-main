@@ -16,10 +16,10 @@ import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --accent,
 // the --p-* platform pairs …) that every rule in af-my-leagues.css reads. This screen
-// renders at /leagues inside ProductShellLayout rather than inside AfCoreShell, so
-// without this import — and without `af-core` on the root element below — every var()
-// resolves to the empty string and the page paints as unstyled boxes. Same failure and
-// same two-part fix as PricingV4, LandingV4 and AuthV4, each of which carries the note.
+// now renders at /core/leagues inside AfCoreShell (/leagues redirects there), which
+// already carries both — but keep the import and the `af-core` root class: the
+// af-my-leagues-redesign.css rules are scoped `.af-core.af-ml`, and /dev/leagues-preview
+// still renders the screen without the shell.
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-my-leagues.css'
 // The My Leagues board restyle (2026-11-05): layered on top so the screen's own rules stay the base.

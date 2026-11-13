@@ -98,14 +98,14 @@ export function GuillySetup() {
             choices={GUILLY_AUCTION_BUDGETS.map((n) => ({ value: n, label: `$${n}`, disabledReason: isGuillyOptionSupported({ auctionBudget: n }) ? undefined : GUILLY_UNSUPPORTED.auctionBudget }))} />
         </Opt>
       ) : null}
-      <Opt icon="icon-bestball.svg" title="Lineups" sub="Managers set daily lineups.">
-        <Seg label="Lineups" value={s.lineups} onChange={(v) => set('lineups', v)} choices={[{ value: 'managed', label: 'Managed' }, { value: 'bestball', label: 'Bestball', disabledReason: GUILLY_UNSUPPORTED.bestball }]} />
+      <Opt icon="icon-bestball.svg" title="Lineups" sub={s.lineups === 'bestball' ? 'Lineups set themselves: every team plays its best lineup each week.' : 'Managers set daily lineups.'}>
+        <Seg label="Lineups" value={s.lineups} onChange={(v) => set('lineups', v)} choices={[{ value: 'managed', label: 'Managed' }, { value: 'bestball', label: 'Bestball' }]} />
       </Opt>
       <Opt icon="icon-danger.svg" title="First chop" sub="Week the blade starts falling.">
         <Seg label="First chop week" value={s.firstChopWeek} onChange={(v) => set('firstChopWeek', v)} choices={GUILLY_FIRST_CHOP_WEEKS.map((n) => ({ value: n, label: String(n) }))} />
       </Opt>
-      <Opt icon="icon-tomb.svg" title="Double-chop weeks" sub="Two heads a week until the field fits the calendar.">
-        <Seg label="Double-chop weeks" value={s.doubleChop} onChange={(v) => set('doubleChop', v)} choices={[{ value: false, label: 'Off' }, { value: true, label: 'On', disabledReason: GUILLY_UNSUPPORTED.doubleChop }]} />
+      <Opt icon="icon-tomb.svg" title="Double-chop weeks" sub={s.doubleChop ? `Two heads fall in week ${s.firstChopWeek}. An AF Commissioner setting.` : 'One head a week, every week.'}>
+        <Seg label="Double-chop weeks" value={s.doubleChop} onChange={(v) => set('doubleChop', v)} choices={[{ value: false, label: 'Off' }, { value: true, label: 'On' }]} />
       </Opt>
       <Opt icon="icon-faab.svg" title="Season FAAB" sub="Has to last through every frenzy.">
         <Seg label="Season FAAB" value={s.faabBudget} onChange={(v) => set('faabBudget', v)} choices={GUILLY_FAAB_BUDGETS.map((n) => ({ value: n, label: `$${n.toLocaleString('en-US')}` }))} />

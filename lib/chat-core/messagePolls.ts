@@ -23,6 +23,11 @@ export type ViewerPollOption = {
   count: number
   /** Whether this is the option the viewer chose. */
   mine: boolean
+  /**
+   * A moment this option stands for (ISO), e.g. a draft start time offered in the draft scheduler. The
+   * poll shows it in the VIEWER's own time zone; `text` is the league-zone fallback.
+   */
+  startsAt?: string
 }
 
 export type ViewerPoll = {
@@ -106,6 +111,7 @@ export function readViewerPoll(
       text,
       count: votes.length,
       mine: Boolean(viewerUserId) && votes.includes(viewerUserId as string),
+      ...(typeof entry.startsAt === 'string' && Number.isFinite(Date.parse(entry.startsAt)) ? { startsAt: entry.startsAt } : {}),
     })
   })
 

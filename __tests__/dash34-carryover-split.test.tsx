@@ -60,7 +60,7 @@ describe('Dash34Carryover', () => {
         })}
       />,
     )
-    expect(container.textContent).not.toContain('What this screen is not watching')
+    expect(container.textContent).not.toContain('What Home doesn’t track yet')
   })
 })
 
@@ -117,7 +117,7 @@ describe('Dash34Coverage', () => {
         })}
       />,
     )
-    expect(container.textContent).toContain('What this screen is not watching (2)')
+    expect(container.textContent).toContain('What Home doesn’t track yet (2)')
     expect(container.querySelector('details')).toBeTruthy()
     // Collapsed by default — a footnote that opens itself is not a footnote.
     expect(container.querySelector('details')?.hasAttribute('open')).toBe(false)

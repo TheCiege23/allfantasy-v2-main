@@ -89,7 +89,7 @@ export type PartnerRecommendation = {
  * different measure — the card shows the grade, never a letter derived from `percentApart`.
  */
 export type SuggestionGrade =
-  | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
+  | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; leagueValueLetter?: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
   | { graded: false; reason: string }
 
 export type PartnerRanking = {
@@ -104,7 +104,7 @@ const WEIGHTS = { availability: 0.35, need: 0.25, package: 0.25, history: 0.15 }
  * The lineup model's slot map plus the flex names `rosterNeed` also recognises, so a league using
  * Sleeper's `DEF_FLEX` or ESPN's `WRRB_WRT` is not reported as having a slot nobody can fill.
  */
-const ELIGIBILITY: SlotEligibility = {
+export const ELIGIBILITY: SlotEligibility = {
   ...DEFAULT_SLOT_ELIGIBILITY,
   WRRB_WRT: ['RB', 'WR', 'TE'],
   SF: ['QB', 'RB', 'WR', 'TE'],
@@ -135,6 +135,13 @@ const BUCKETS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'] as const
 function bucketOf(position: string): string {
   for (const b of BUCKETS) if (ELIGIBILITY[b]?.includes(position)) return b
   return position
+}
+
+/** `League.starters` as stored → the starting slots, bench and reserve slots dropped. Unreadable ⇒ []. */
+export function readStarterSlots(starterSlots: unknown): string[] {
+  return Array.isArray(starterSlots)
+    ? starterSlots.map((s) => String(s).toUpperCase().trim()).filter((s) => s && !['BN', 'BE', 'BENCH', 'IR', 'TAXI', 'RES'].includes(s))
+    : []
 }
 
 /** Trimmed, upper-case. The player's own detailed position is kept — see `ELIGIBILITY`. */
@@ -306,9 +313,7 @@ export function rankTradePartners(args: {
   const viewerRoster = args.rosters.find((r) => r.rosterId === args.viewerRosterId)
   if (!viewerRoster) return { partners: [], gaps: ['Your team could not be identified in this league.'] }
 
-  const slots = Array.isArray(args.starterSlots)
-    ? args.starterSlots.map((s) => String(s).toUpperCase().trim()).filter((s) => s && !['BN', 'BE', 'BENCH', 'IR', 'TAXI', 'RES'].includes(s))
-    : []
+  const slots = readStarterSlots(args.starterSlots)
   const lineupKnown = slots.length > 0
   if (!lineupKnown) {
     gaps.push("This league's starting lineup is not on file, so roster needs and spare players could not be judged.")

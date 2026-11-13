@@ -8,6 +8,7 @@ export const runtime = "nodejs"
 const savePickSchema = z.object({
   seriesId: z.string().min(1),
   pickTeamName: z.string().trim().min(1).max(120),
+  confirmationMode: z.literal("per_day").optional(),
 })
 
 export async function POST(request: Request, context: { params: Promise<{ challengeId: string; entryId: string }> }) {
@@ -33,6 +34,7 @@ export async function POST(request: Request, context: { params: Promise<{ challe
       user: auth.user,
       seriesId: parsed.data.seriesId,
       pickTeamName: parsed.data.pickTeamName,
+      confirmationMode: parsed.data.confirmationMode,
     })
 
     const view = await getPlayoffBracketView({

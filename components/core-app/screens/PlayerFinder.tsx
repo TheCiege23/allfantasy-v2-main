@@ -84,6 +84,8 @@ import type { WeeklyMvp } from '@/lib/core-app/weeklyMvp'
 import type { TrendingFreeIn } from '@/lib/core-app/trendingFree'
 import { leagueActionsCopy } from '@/lib/core-app/leagueActionsCopy'
 import { FollowingBoard } from '@/components/core-app/player-finder/FollowingBoard'
+import { HomeSportTabs } from '@/components/core-app/player-finder/HomeSportTabs'
+import type { HomeSport } from '@/lib/core-app/finderHomeSports'
 import { PushAsk } from '@/components/core-app/player-finder/PushAsk'
 import { followCopy } from '@/lib/core-app/finderFollowCopy'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
@@ -230,6 +232,8 @@ export type PlayerFinderProps = {
   depth?: PlayerDepth | null
   /** "Your shares" (Phase 2): the players you roster most across the picked leagues; home only. */
   shares?: SectionState<PlayerShares> | null
+  /** The sports the finder's leagues are in, with counts — the home's sport tabs (finderHomeSports.ts). Home only. */
+  homeSports?: HomeSport[]
   /** "Following" on the "My players" home (2026-10-08); null = follows unavailable, and the board is hidden. Home only. */
   following?: FollowingCardData | null
   /** Is the open player followed? Null = follows unavailable, and "Alert me" is not offered. */
@@ -461,6 +465,7 @@ export function PlayerFinder({
   depthAccess = null,
   depth = null,
   shares = null,
+  homeSports = [],
   following = null,
   followingPlayer = null,
   weeklyMvp = null,
@@ -908,6 +913,8 @@ export function PlayerFinder({
           </header>
         ) : null}
         {/* Push reaches 2 of 42 managers (2026-10-10); ask here on the days the game-day banner does not. */}
+        {/* One tab per sport your leagues are in (2026-11-11): every list below is read for that sport's leagues. */}
+        {myPlayersHome ? <HomeSportTabs sports={homeSports} active={sport} leagueId={selectedLeagueId} /> : null}
         {myPlayersHome ? <PushAsk placement="finder_home" notOnGameDays /> : null}
         {myPlayersHome ? <WeeklyMvpCard mvp={weeklyMvp} /> : null}
         {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}

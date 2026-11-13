@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
+import { Bell, BellOff, Lock, MoreHorizontal, Search, Users } from 'lucide-react'
 import type { ReportReason } from '@/lib/moderation/shared'
 import { TypingNote } from './TypingNote'
 import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
@@ -747,8 +747,10 @@ export function ThreadPanel({
               onClick={() => void toggleMute()}
               aria-pressed={Boolean(openThread.isMuted)}
               title={openThread.isMuted ? 'Muted — tap to unmute' : 'Mute this conversation'}
+              aria-label={openThread.isMuted ? 'Unmute this conversation' : 'Mute this conversation'}
             >
-              {openThread.isMuted ? '🔕' : '🔔'}
+              {/* Line icons, not 🔔/🔕 emoji: the emoji rendered as a bright yellow bell beside line-icon search. */}
+              {openThread.isMuted ? <BellOff size={17} aria-hidden /> : <Bell size={17} aria-hidden />}
             </button>
             <button
               type="button"

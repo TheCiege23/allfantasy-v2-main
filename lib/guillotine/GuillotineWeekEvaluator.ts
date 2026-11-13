@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import type { GuillotineWeekEvalResult, PeriodScoreRow } from './types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { previousPeriodEnd } from './eliminationPeriods'
 
 export interface WeekEvaluatorInput {
   leagueId: string
@@ -15,6 +16,11 @@ export interface WeekEvaluatorInput {
   periodScores?: PeriodScoreRow[]
   /** Period end time (UTC); used for correction-window check. */
   periodEndedAt?: Date
+  /**
+   * Weeks per elimination period (./eliminationPeriods.ts). Absent = 1. Decides which stored row is the
+   * PREVIOUS period when the scores are read from the DB: a week ago, or two for an MLB two-week league.
+   */
+  periodWeeks?: number
 }
 
 /**
@@ -103,7 +109,7 @@ export async function evaluateWeek(input: WeekEvaluatorInput): Promise<Guillotin
       select: { rosterId: true, periodPoints: true, seasonPointsCumul: true },
     })
     const prevRows = await prisma.guillotinePeriodScore.findMany({
-      where: { leagueId, weekOrPeriod: weekOrPeriod - 1 },
+      where: { leagueId, weekOrPeriod: previousPeriodEnd(weekOrPeriod, input.periodWeeks ?? 1) },
       select: { rosterId: true, periodPoints: true },
     })
     const prevByRoster = new Map(prevRows.map((r) => [r.rosterId, r.periodPoints]))

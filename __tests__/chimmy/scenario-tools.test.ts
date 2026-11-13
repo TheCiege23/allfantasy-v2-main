@@ -49,7 +49,12 @@ describe('runTradeScenarioTool', () => {
   it('composes "give for get" and returns the engine\'s block', async () => {
     const out = await runTradeScenarioTool({ give: ["Ja'Marr Chase", '2027 1st'], get: ['Justin Jefferson'], ...LEAGUE })
     expect(out).toBe('TRADE BLOCK ok')
-    expect(h.trade).toHaveBeenCalledWith({ message: "Ja'Marr Chase and 2027 1st for Justin Jefferson", leagueId: 'L1', userId: 'u1' })
+    expect(h.trade).toHaveBeenCalledWith({
+      message: "Ja'Marr Chase and 2027 1st for Justin Jefferson",
+      leagueId: 'L1',
+      userId: 'u1',
+      playerSides: { give: ["Ja'Marr Chase", '2027 1st'], get: ['Justin Jefferson'] },
+    })
   })
 
   /* The name extractor matches capitalised runs; lowercase names would compose a sentence with none. */

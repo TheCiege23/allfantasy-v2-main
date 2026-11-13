@@ -73,6 +73,12 @@ describe("NBA Cup remaining-games competition", () => {
     expect(eligibleNbaCupPicks(games, picks, null)).toEqual([])
     expect(eligibleNbaCupPicks(games, picks, "2026-11-07T00:00:00Z")).toEqual([{ seriesId: "future" }])
   })
+  it("uses the individual pick confirmation time and excludes unconfirmed drafts", () => {
+    const games = [{ id: "a", startsAt: "2026-11-07T00:00:00Z" }, { id: "b", startsAt: "2026-11-07T00:00:00Z" }]
+    const picks = [{ seriesId: "a", confirmedAt: "2026-11-06T23:00:00Z" }, { seriesId: "b", confirmedAt: null }]
+    expect(eligibleNbaCupPicks(games, picks, "2026-11-01T00:00:00Z")).toEqual([picks[0]])
+    expect(eligibleNbaCupPicks(games, [{ seriesId: "a", confirmedAt: "2026-11-07T00:00:00Z" }], "2026-11-01T00:00:00Z")).toEqual([])
+  })
   it("keeps a team alive after losing a group game and uses the displayed group points", () => {
     const games = [{ id: "past", round: "cup_group_play" as const, homeTeamName: "Boston Celtics", awayTeamName: "Charlotte Hornets", winnerTeamName: "Charlotte Hornets", liveHomeScore: 100, liveAwayScore: 110 }, { id: "future", round: "cup_quarterfinals" as const, homeTeamName: "Boston Celtics", awayTeamName: "Miami Heat", winnerTeamName: null, liveHomeScore: null, liveAwayScore: null }]
     expect(scoreAndPotential(games, [{ seriesId: "past", pickTeamName: "Charlotte Hornets" }, { seriesId: "future", pickTeamName: "Boston Celtics" }], "nba_cup")).toMatchObject({ totalScore: 1, potentialTotal: 2 })

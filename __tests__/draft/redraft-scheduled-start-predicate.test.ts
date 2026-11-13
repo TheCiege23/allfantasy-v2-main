@@ -18,6 +18,16 @@ describe('startsAtScheduledTimeRegardlessOfAutostart', () => {
     expect(starts({ ...REDRAFT, sport })).toBe(true)
   })
 
+  it.each(['NFL', 'NBA', 'NHL', 'MLB'])('is true for a native Classic Best Ball %s league', (sport) => {
+    expect(starts({ ...REDRAFT, sport, leagueType: 'best_ball' })).toBe(true)
+  })
+
+  it('is false for dynasty or imported best ball, and for Guilly + Best Ball', () => {
+    expect(starts({ ...REDRAFT, leagueType: 'best_ball', isDynasty: true })).toBe(false)
+    expect(starts({ ...REDRAFT, leagueType: 'best_ball', platform: 'sleeper' })).toBe(false)
+    expect(starts({ ...REDRAFT, leagueType: 'guillotine', guillotineMode: true })).toBe(false)
+  })
+
   it('treats a null platform as native, as the server does', () => {
     expect(starts({ ...REDRAFT, platform: null })).toBe(true)
   })

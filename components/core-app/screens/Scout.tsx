@@ -75,6 +75,38 @@ export type ScoutProps = {
    */
   leaguePlan?: ReactNode
   /**
+   * War Room phase 2: trades that move your odds in THIS league (warRoomTrades.ts), after the plan —
+   * what to fix this week, then what to trade for, then the rivals. A node for the same reason as
+   * `leaguePlan`: Scout stays a reader of standings; the page decides what the strategist shows.
+   */
+  tradeIdeas?: ReactNode
+  /**
+   * War Room phase 5: the road ahead (WarCampaign) — every game you have left priced both ways, and the
+   * tiebreak picture. After the plan and before the trade ideas: what this week decides, then what to
+   * trade for. A node for the same reason as `leaguePlan`.
+   */
+  road?: ReactNode
+  /**
+   * War Room phase 6: the war chest (WarChest) — FAAB left, yours against every team's. After the trade
+   * ideas. A node for the same reason as `leaguePlan`.
+   */
+  chest?: ReactNode
+  /**
+   * War Room phase 7: playoff readiness (WarPlayoffReady) — byes, injuries and depth for your playoff
+   * weeks. After the road ahead: the season's games, then whether the lineup will be there for the title.
+   */
+  ready?: ReactNode
+  /**
+   * War Room phase 8: the race (WarRace) — the teams around the playoff cut, their odds and the schedule
+   * each has left. Right after the road ahead: your games, then the teams you are racing.
+   */
+  race?: ReactNode
+  /**
+   * War Room phase 3: how this league is won and the plan for next season (WarStrategyBrief), after
+   * the trade ideas. A node for the same reason as `leaguePlan`.
+   */
+  brief?: ReactNode
+  /**
    * Elimination formats: your place against the cut this week — the rail's own read (getRailMatchups
    * `standing`), handed down so this banner and the rail cannot disagree. Null outside an elimination
    * week or when the rail could not rank the league.
@@ -582,6 +614,12 @@ export function Scout({
   edge = null,
   edgeAccess = null,
   leaguePlan = null,
+  tradeIdeas = null,
+  road = null,
+  chest = null,
+  ready = null,
+  race = null,
+  brief = null,
   eliminationStanding = null,
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
@@ -627,6 +665,18 @@ export function Scout({
       {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
 
       {leaguePlan}
+
+      {road}
+
+      {race}
+
+      {ready}
+
+      {tradeIdeas}
+
+      {chest}
+
+      {brief}
 
       {/*
         ⚠ BEFORE THE CARDS, ALWAYS. What the records are measured over changes how every one of them

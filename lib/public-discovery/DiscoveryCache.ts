@@ -107,6 +107,19 @@ export function setCachedFantasyCards(
   setCached(fantasyCache, getFantasyCacheKey(baseUrl, sport, query), cards)
 }
 
+/** Private "ask to join" cards (privateLeagueRequests.ts): sport + query, kept apart from public ones. */
+export function getPrivateFantasyCacheKey(sport: string | null, query: string | null): string {
+  return `private-fantasy:${sport ?? "all"}:${(query ?? "").slice(0, 80)}`
+}
+
+export function getCachedPrivateFantasyCards(sport: string | null, query: string | null): DiscoveryCard[] | null {
+  return getCached(fantasyCache, getPrivateFantasyCacheKey(sport, query))
+}
+
+export function setCachedPrivateFantasyCards(sport: string | null, query: string | null, cards: DiscoveryCard[]): void {
+  setCached(fantasyCache, getPrivateFantasyCacheKey(sport, query), cards)
+}
+
 /** Cache key for computed discovery lists (post-filter/sort, pre-pagination). */
 export function getComputedDiscoveryListCacheKey(
   baseUrl: string,

@@ -104,7 +104,7 @@ beforeEach(() => {
 
 describe('the lineup screen save (persistRosterLineupWithEngine)', () => {
   it('refuses swapping a starter and a bench player, and writes nothing', async () => {
-    expect(await engineSave({ starters: [P('p2')], bench: [P('p1')], ir: [P('p3')] })).toEqual({ ok: false, status: 409, error: BEST_BALL_LINEUP_MESSAGE })
+    expect(await engineSave({ starters: [P('p2')], bench: [P('p1')], ir: [P('p3')] })).toEqual({ ok: false, status: 409, error: BEST_BALL_LINEUP_MESSAGE, code: 'best_ball_lineup' })
     expect(h.tx.roster.update).not.toHaveBeenCalled()
   })
 

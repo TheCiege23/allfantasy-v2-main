@@ -18,6 +18,7 @@ const {
   pipelineMock,
   persistMock,
   leagueAuthUpsertMock,
+  connectionTestMock,
 } = vi.hoisted(() => ({
   requireVerifiedUserMock: vi.fn(),
   assertImportCommissionerMock: vi.fn(),
@@ -25,6 +26,33 @@ const {
   pipelineMock: vi.fn(),
   persistMock: vi.fn(),
   leagueAuthUpsertMock: vi.fn(),
+  connectionTestMock: vi.fn(),
+}))
+
+/*
+ * Synthetic cookies in the real shape. Pasted cookies are now format-checked and then tried
+ * against the league BEFORE they are saved, so placeholder strings like '{SWID}' / 's2' are
+ * refused at the door and never reach the write this suite is about.
+ */
+const FAKE_SWID = '{ABCD1234-EF56-7890-ABCD-1234567890AB}'
+const FAKE_S2 = `AEB${'k3Pq9ZtW1xYv%2B7mN0rLs'.repeat(14)}%3D%3D`
+const CONNECTION_OK = {
+  ok: true,
+  access: 'private',
+  sport: 'NFL',
+  leagueId: '12345',
+  season: 2026,
+  leagueName: 'L',
+  teamCount: 10,
+  viewerTeamName: 'Mine',
+  viewerTeamFound: true,
+  cookiesVerified: true,
+  usedSavedCookies: false,
+  needsCookiesToImport: false,
+}
+
+vi.mock('@/lib/league-import/espn/EspnConnectionTestService', () => ({
+  testEspnLeagueConnection: connectionTestMock,
 }))
 
 vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock }))
@@ -78,6 +106,7 @@ beforeEach(() => {
   })
   leagueAuthUpsertMock.mockResolvedValue({})
   recordImportAttestationMock.mockResolvedValue(undefined)
+  connectionTestMock.mockResolvedValue(CONNECTION_OK)
 })
 
 describe('POST /api/import-espn — commissioner gate', () => {
@@ -115,13 +144,50 @@ describe('POST /api/import-espn — commissioner gate', () => {
     assertImportCommissionerMock.mockResolvedValue({ ok: false, reason: 'no' })
     const { POST } = await import('@/app/api/import-espn/route')
     await POST(
-      post('http://localhost/api/import-espn', { leagueId: '12345', season: 2026, espnS2: 's2', swid: '{SWID}' }),
+      post('http://localhost/api/import-espn', { leagueId: '12345', season: 2026, espnS2: FAKE_S2, swid: FAKE_SWID }),
     )
 
     expect(leagueAuthUpsertMock).toHaveBeenCalledTimes(1)
     expect(leagueAuthUpsertMock.mock.invocationCallOrder[0]).toBeLessThan(
       assertImportCommissionerMock.mock.invocationCallOrder[0],
     )
+  })
+
+  it('refuses malformed cookies without saving them or running the gate', async () => {
+    const { POST } = await import('@/app/api/import-espn/route')
+    const res = await POST(
+      post('http://localhost/api/import-espn', { leagueId: '12345', season: 2026, espnS2: 's2', swid: '{SWID}' }),
+    )
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('INVALID_COOKIES')
+    expect(leagueAuthUpsertMock).not.toHaveBeenCalled()
+    expect(assertImportCommissionerMock).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite a saved connection with cookies ESPN refuses', async () => {
+    connectionTestMock.mockResolvedValue({ ok: false, reason: 'cookies_rejected', message: 'nope' })
+    const { POST } = await import('@/app/api/import-espn/route')
+    const res = await POST(
+      post('http://localhost/api/import-espn', { leagueId: '12345', season: 2026, espnS2: FAKE_S2, swid: FAKE_SWID }),
+    )
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('COOKIES_REJECTED')
+    expect(leagueAuthUpsertMock).not.toHaveBeenCalled()
+    expect(assertImportCommissionerMock).not.toHaveBeenCalled()
+  })
+
+  it('does not save cookies from an ESPN account with no team in the league', async () => {
+    connectionTestMock.mockResolvedValue({ ...CONNECTION_OK, viewerTeamName: null, viewerTeamFound: false })
+    const { POST } = await import('@/app/api/import-espn/route')
+    const res = await POST(
+      post('http://localhost/api/import-espn', { leagueId: '12345', season: 2026, espnS2: FAKE_S2, swid: FAKE_SWID }),
+    )
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('WRONG_ESPN_ACCOUNT')
+    expect(leagueAuthUpsertMock).not.toHaveBeenCalled()
   })
 
   it('maps not-found to 404 and a provider outage to 503, not a flat 403', async () => {

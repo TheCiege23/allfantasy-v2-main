@@ -46,7 +46,9 @@ describe('DecisionQueue', () => {
     expect(screen.getByRole('heading', { name: 'Top decisions' })).toBeTruthy()
     expect(screen.getByText('NFL leagues')).toBeTruthy()
     expect(screen.getByText('8 OPEN')).toBeTruthy()
-    const top = screen.getByRole('list', { name: 'The 5 most urgent' })
+    // Every row here is a `warn` inside a week, so all five sit in one tier (lib/core-app/homeGuide.ts).
+    expect(screen.getByText('Before this week’s games')).toBeTruthy()
+    const top = screen.getByRole('list', { name: 'Before this week’s games · The 5 most urgent' })
     expect(top.querySelectorAll(':scope > li')).toHaveLength(5)
     expect(top.textContent).toContain('Decision 1')
     expect(top.textContent).not.toContain('Decision 6')
@@ -55,6 +57,29 @@ describe('DecisionQueue', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     const rest = document.getElementById(toggle.getAttribute('aria-controls')!)!
     expect(rest.hidden).toBe(true)
+  })
+
+  it('groups rows by tier, teaches each kind once, and drops the UTC verification stamp', () => {
+    const slot = (n: number): CoreIssue =>
+      issue(n, {
+        severity: 'bad',
+        deadline: null,
+        meta: `Sleeper › Lineup · a slot with nobody in it scores zero · Checked 21:27 UTC · 2026-11-12`,
+        parts: { kind: 'empty-slot', count: 1, leagueName: `League ${n}`, platform: 'Sleeper', checkedAt: null },
+      })
+    const draft = issue(9, {
+      severity: 'info',
+      parts: { kind: 'draft-upcoming', today: false, leagueName: 'League 9', platform: 'Sleeper', at: NOW, actionPlatform: null },
+    })
+    render(<DecisionQueue issues={[slot(1), slot(2), draft]} scopeLabel="All leagues" scopeKey="all" nowIso={NOW} />)
+
+    expect(screen.getByRole('list', { name: /^Costs points now/ }).querySelectorAll(':scope > li')).toHaveLength(2)
+    expect(screen.getByRole('list', { name: /^Good to know/ }).querySelectorAll(':scope > li')).toHaveLength(1)
+    // Two empty-slot rows, one lesson: the line teaches once instead of repeating down the list.
+    expect(screen.getAllByText(/An empty starting slot scores zero/)).toHaveLength(1)
+    expect(screen.getAllByText(/Set your queue before the draft starts/)).toHaveLength(1)
+    expect(document.body.textContent).not.toContain('UTC')
+    expect(document.body.textContent).toContain('a slot with nobody in it scores zero')
   })
 
   it('remembers "show more" for this scope across a remount — the home unmounts when you leave it', () => {

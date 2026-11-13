@@ -7,7 +7,7 @@ import { LeagueClipOverlayHost } from '@/components/league/LeagueClipOverlayHost
 import { ZombieBashingCard, type ZombieBashingRules } from '@/components/zombie/ZombieBashingCard'
 import type { ZombieMatchupView } from '@/lib/zombie/zombieMatchupBoard'
 
-type MatchupsPayload = {
+export type MatchupsPayload = {
   matchups?: ZombieMatchupView[]
   week?: number
   rules?: ZombieBashingRules

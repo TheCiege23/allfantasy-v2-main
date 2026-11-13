@@ -866,6 +866,13 @@ it('reveals a player after the roster mounts and does not jump on routine refres
     HTMLElement.prototype.scrollIntoView = previous
   }
 })
+it('a Best Ball league AllFantasy hosts names AllFantasy, not "your provider", as the one picking the lineup',()=>{
+ const d=data()
+ const view=render(<MyTeam data={data({league:{...d.league,platform:'manual',bestBall:true}})} />)
+ expect(view.container.textContent).toContain('AllFantasy counts your highest-scoring legal lineup each week automatically')
+ expect(view.container.textContent).not.toContain('Your provider selects')
+ view.unmount()
+})
 it('shows automatic lineup guidance for a confirmed Best Ball league',()=>{
  const d=data()
  const view=render(<MyTeam data={data({league:{...d.league,bestBall:true}})} />)

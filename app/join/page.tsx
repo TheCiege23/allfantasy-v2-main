@@ -12,6 +12,7 @@ import { SurvivorJoin, type SurvivorJoinPreview } from '@/components/survivor/Su
 import { ZombieJoin, type ZombieJoinPreview } from '@/components/zombie/ZombieJoin'
 import { SleeperTeamClaim } from '@/components/league-join/SleeperTeamClaim'
 import { formatGuillotineSeatLine, type GuillotineSeatSummary } from '@/lib/guillotine/lateStartSeatMath'
+import { ApprovedRequestJoin } from './ApprovedRequestJoin'
 
 type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean; survivor?: SurvivorJoinPreview | null; zombie?: ZombieJoinPreview | null; guillotineSeats?: GuillotineSeatSummary | null }
 
@@ -19,6 +20,8 @@ type Preview = { leagueId: string; name: string | null; sport: string; requiresP
 export default function JoinByCodePage() {
   const searchParams = useSearchParams()
   const codeFromUrl = searchParams?.get('code')?.trim()
+  /* A private league's commissioner approved this player's Find a League request (./ApprovedRequestJoin). */
+  const approvedLeagueId = searchParams?.get('approved')?.trim() || null
   const joinOnArrival = searchParams?.get('go') === '1'
   /* Where the link came from — `recap` for one shared from Chimmy's weekly recap (RecapShareButton). */
   const src = inviteSource(searchParams?.get('src'))
@@ -53,6 +56,7 @@ export default function JoinByCodePage() {
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return
+        setClassBlocked(isClassGateBlocked(data.careerBlocked) ? data.careerBlocked : null)
         if (data.leagueId && data.sport !== undefined) {
           setPreview({
             leagueId: data.leagueId,
@@ -140,6 +144,16 @@ export default function JoinByCodePage() {
             setMessage(typeof data.error === 'string' ? data.error : '')
             return
           }
+          /*
+           * The code matched a league that said no — full, drafted, link turned off, password. Show
+           * that answer. Only a code no league knows (404) may be a creator-league invite; trying
+           * the creator join for the rest replaced a clear refusal with "Invalid code".
+           */
+          if (httpStatus !== 404 && typeof data.error === 'string' && data.error) {
+            setStatus('error')
+            setMessage(data.error)
+            return null
+          }
           return fetch('/api/creator-invites/join', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -184,12 +198,34 @@ export default function JoinByCodePage() {
 
   /* Back from signing in with `go=1`: join at once, once. A password-protected league still asks. */
   useEffect(() => {
-    if (autoJoined.current || !joinOnArrival || !codeFromUrl) return
+    if (autoJoined.current || !joinOnArrival || !codeFromUrl || classBlocked) return
     if (authStatus !== 'authenticated' || !preview || preview.requiresPassword || previewError) return
     if (status !== 'idle') return
     autoJoined.current = true
     join(codeFromUrl, '')
-  }, [authStatus, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+  }, [authStatus, classBlocked, codeFromUrl, join, joinOnArrival, preview, previewError, status])
+
+  if (classBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
+        <div className="max-w-md mx-auto px-4 w-full">
+          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
+            Request to join
+          </h1>
+          {preview?.name && (
+            <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
+              {preview.name} · {preview.sport}
+            </p>
+          )}
+          <ClassGateNotice blocked={classBlocked} code={effectiveCode} tone="theme" />
+        </div>
+      </div>
+    )
+  }
+
+  if (approvedLeagueId && !codeFromUrl) {
+    return <ApprovedRequestJoin leagueId={approvedLeagueId} />
+  }
 
   if (codeFromUrl && preview?.zombie && !previewError) {
     return <ZombieJoin
@@ -426,24 +462,6 @@ export default function JoinByCodePage() {
               Browse creators
             </Link>
           </p>
-        </div>
-      </div>
-    )
-  }
-
-  if (classBlocked) {
-    return (
-      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
-        <div className="max-w-md mx-auto px-4 w-full">
-          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
-            Join league
-          </h1>
-          {preview?.name && (
-            <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
-              {preview.name} · {preview.sport}
-            </p>
-          )}
-          <ClassGateNotice blocked={classBlocked} code={effectiveCode} tone="theme" />
         </div>
       </div>
     )

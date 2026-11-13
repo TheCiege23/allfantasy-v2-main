@@ -100,7 +100,8 @@ function Tile({
         height: size,
         background: bg,
         color: fg,
-        fontSize: Math.round(size * 0.3),
+        // The app's type floor is 11px; size × 0.3 drew 22px tiles' initials at 7px. Two letters at 11px still fit.
+        fontSize: Math.max(11, Math.round(size * 0.42)),
         lineHeight: `${size}px`,
         display: 'inline-block',
       }}
@@ -346,7 +347,7 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
   if (!conference) {
     /* No conferences is a setup state, not a failure — say which step is missing. */
     return (
-      <main className="af-th">
+      <main className="af-th af-draft-dark">
         <HubTopBar />
         <h1 className="af-th-title">{board.name}</h1>
         <p className="af-th-note">
@@ -358,7 +359,7 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
   }
 
   return (
-    <main className="af-th">
+    <main className="af-th af-draft-dark">
       <HubTopBar />
 
       <header className="af-th-head">

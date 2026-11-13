@@ -39,7 +39,8 @@ describe('what it is, in the first screen', () => {
 
   it('the countdown comes after the hero, not before it', () => {
     const { doc } = page('en')
-    const order = ['.af-lp-hero', '[data-testid="launch-banner"]', '.af-lp-connects', '#how', '.af-lp-chimmy'].map(
+    // "Every league + Chimmy" sits right under the platform strip, ahead of How it works (reviewer feedback).
+    const order = ['.af-lp-hero', '[data-testid="launch-banner"]', '.af-lp-connects', '.af-lp-chimmy', '#how'].map(
       (sel) => {
         const el = doc.querySelector(sel)
         expect(el, sel).not.toBeNull()

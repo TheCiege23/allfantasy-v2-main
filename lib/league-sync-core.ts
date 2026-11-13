@@ -13,6 +13,12 @@ import {
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings';
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity';
 import { XMLParser } from 'fast-xml-parser';
+import {
+  EspnApiResponseError,
+  buildEspnCookieHeader,
+  espnDefaultSeasonCandidates,
+  fetchEspnLeagueJsonFirstSeason,
+} from '@/lib/league-import/espn/espnFantasyClient';
 
 export interface LeaguePayload {
   name: string;
@@ -165,19 +171,39 @@ export async function fetchMflLeague(platformLeagueId: string, apiKey: string): 
   };
 }
 
-export async function fetchEspnLeague(platformLeagueId: string, swid: string, s2: string): Promise<LeaguePayload> {
-  const year = new Date().getFullYear();
-  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${platformLeagueId}?view=mRoster&view=mTeam&view=mSettings`;
+export async function fetchEspnLeague(
+  platformLeagueId: string,
+  swid: string,
+  s2: string,
+  now: Date = new Date(),
+): Promise<LeaguePayload> {
+  /*
+   * ⚠ NOT `new Date().getFullYear()` ALONE. ESPN keys a league on the year its season starts, so the
+   * calendar year 404s every league that has not been renewed yet (most of the offseason) and, in
+   * January, reads the wrong season while the playoffs are still on. Same candidates as the importer.
+   */
+  const seasons = espnDefaultSeasonCandidates(now);
 
-  const res = await fetch(url, {
-    headers: {
-      Cookie: `SWID=${swid}; espn_s2=${s2}`,
-    },
-  });
+  // Shared ESPN transport: timeout, retries with backoff, and errors that never carry the cookies.
+  let data: any;
+  let year: number;
+  try {
+    const found = await fetchEspnLeagueJsonFirstSeason(
+      { game: 'ffl', seasons, leagueId: platformLeagueId, views: ['mRoster', 'mTeam', 'mSettings'] },
+      { cookieHeader: buildEspnCookieHeader({ swid, espnS2: s2 }) },
+    );
+    data = found.raw;
+    year = found.season;
+  } catch (error) {
+    if (error instanceof EspnApiResponseError) {
+      if (error.status === 404) {
+        throw new Error(`ESPN league ${platformLeagueId} was not found for ${seasons.join(' or ')}.`);
+      }
+      throw new Error('Failed to fetch ESPN league — check your SWID and ESPN_S2 cookies');
+    }
+    throw error;
+  }
 
-  if (!res.ok) throw new Error('Failed to fetch ESPN league — check your SWID and ESPN_S2 cookies');
-
-  const data = await res.json();
   const settings = data.settings || {};
   const teams = data.teams || [];
 

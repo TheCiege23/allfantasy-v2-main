@@ -499,6 +499,10 @@
  * not clipped mid-cell by the card's padding.
  */
 .af-th-scroll {
+  /* Positioned so it is the containing block of the visually-hidden labels (.af-th-sr) in its rows. Unpositioned,
+     an absolute label resolved against the page and sat at its in-flow spot inside the scrolled table — 586px
+     across on a 390px phone — widening the whole document by ~200px (2026-11-09 hub audit). */
+  position: relative;
   overflow-x: auto;
   margin: 0 -20px -18px;
   padding: 0 20px 18px;

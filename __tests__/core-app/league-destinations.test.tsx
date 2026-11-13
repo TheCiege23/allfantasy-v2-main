@@ -27,6 +27,7 @@ import CoreLeagueContextBar from '@/components/core-app/CoreLeagueContextBar'
 import {
   LEAGUE_DESTINATION_GATES,
   NAV_SECTION_ORDER,
+  NAV_SECTION_ORDER_NO_LEAGUE,
   leagueDestinationHidden,
   navSectionFor,
 } from '@/lib/core-app/leagueDestinations'
@@ -129,6 +130,63 @@ describe('the rail, grouped by job', () => {
   it('offers Schedule and Moves only with a league held', () => {
     const { hrefs } = shell({ selectedLeagueId: null })
     expect(hrefs.some((h) => h.startsWith('/core/schedule') || h.startsWith('/core/moves'))).toBe(false)
+  })
+
+  /* 2026-11-12: each no-league board repeated Your week or Season Outlook, so these need a league. */
+  it('offers My team, Waivers, Matchup, Standings and War Room only with a league held', () => {
+    const { hrefs } = shell({ selectedLeagueId: null })
+    for (const key of ['my-team', 'waivers', 'matchup', 'standings', 'war-room']) {
+      expect(hrefs.some((h) => h.startsWith(`/core/${key}`))).toBe(false)
+    }
+    expect(hrefs).toContain('/core/week')
+    expect(hrefs).toContain('/core/season-outlook')
+    // ...and every one of them is back once a league is held.
+    const held = shell().hrefs
+    for (const key of ['my-team', 'waivers', 'matchup', 'standings', 'war-room']) {
+      expect(held).toContain(`/core/${key}?league=l1`)
+    }
+  })
+
+  /* 2026-11-12: Portfolio is the second view behind My Leagues, not an entry of its own. */
+  it('has one My Leagues entry and no Portfolio entry, with or without a league', () => {
+    for (const selectedLeagueId of ['l1', null]) {
+      const { hrefs } = shell({ selectedLeagueId })
+      expect(hrefs.filter((h) => h.startsWith('/core/leagues'))).toEqual(['/core/leagues'])
+      expect(hrefs.some((h) => h.startsWith('/core/portfolio'))).toBe(false)
+    }
+  })
+
+  /* 2026-11-12: Tools' links moved to the screens they belong to (lib/core-app/moreTools.ts). */
+  it('has no Tools entry, with or without a league', () => {
+    for (const selectedLeagueId of ['l1', null]) {
+      const { hrefs } = shell({ selectedLeagueId, isAdmin: true })
+      expect(hrefs.some((h) => h.startsWith('/core/tools'))).toBe(false)
+    }
+  })
+
+  it('lights My Leagues on the Portfolio screen', () => {
+    const { container } = shell({ selectedLeagueId: null, active: 'portfolio' })
+    const lit = Array.from(container.querySelectorAll('#af-nav a[aria-current="page"]')).map((a) => a.getAttribute('href'))
+    expect(lit).toEqual(['/core/leagues'])
+  })
+
+  it('regroups the rail with no league: Your week leads This week, and there is no League group', () => {
+    const { groups } = shell({ selectedLeagueId: null })
+    expect(groups.map((g) => g.heading).filter(Boolean)).toEqual(['This week', 'Plan ahead', 'All leagues', 'Manage'])
+    const group = (h: string) => groups.find((g) => g.heading === h)!.hrefs
+    expect(group('This week')).toEqual(['/core/week', '/core/live', '/core/trades'])
+    expect(group('Plan ahead')).toEqual(['/core/season-outlook', '/core/players', '/core/draft-hq'])
+  })
+
+  it('every key named in a no-league rail group renders with no league, and none lands in a trailing group', () => {
+    const { groups } = shell({ selectedLeagueId: null, commissionerCount: 1, isAdmin: true })
+    const rendered = new Set(groups.flatMap((g) => g.hrefs).map((h) => h.replace(/^\/core\/?/, '').replace(/\?.*$/, '')))
+    const conditional = new Set(['devy', 'brackets', 'find-league', 'my-leagues', 'settings', 'plans', 'admin', 'home'])
+    for (const section of NAV_SECTION_ORDER_NO_LEAGUE) {
+      for (const key of section.keys) if (!conditional.has(key)) expect(rendered.has(key)).toBe(true)
+    }
+    // A trailing unheaded group after Manage means some key was placed in neither list.
+    expect(groups[groups.length - 1]!.heading).not.toBeNull()
   })
 })
 

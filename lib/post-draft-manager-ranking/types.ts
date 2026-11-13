@@ -89,6 +89,11 @@ export interface DraftResultsPayload {
   managerRankings: ManagerRankingEntry[]
   /** Indicates whether AI explanation generation was requested and returned. */
   aiExplanationEnabled?: boolean
+  /**
+   * Set when AI explanations were asked for but the viewer lacks `draft_rankings` (AF Commissioner).
+   * The deterministic rankings are still returned; this carries the plan's sentence and upgrade path.
+   */
+  aiExplainLocked?: { message: string; upgradePath: string | null } | null
   /** Best single pick in the draft (max valueScore across all picks). */
   bestPickOfDraft: PickScoreEntry | null
   /** Worst reach in the draft (min valueScore). */

@@ -36,6 +36,7 @@ import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRul
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
+import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,6 +126,8 @@ export async function GET(
 
   // "Who's next?" for chopped managers. Never fails the summary.
   const nextChopPick = await loadNextChopPickState(leagueId, myRosterId).catch(() => null)
+  // 2 in an MLB two-week league (lib/guillotine/eliminationPeriods.ts): the home's tiebreak copy says "last period".
+  const periodWeeks = readPeriodWeeks((await (async () => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))().catch(() => null))?.settings)
 
   return NextResponse.json({
     ...summary,
@@ -145,6 +148,7 @@ export async function GET(
           advanced,
           scheduleLines: advanced ? describeSchedule(advanced, config.teamsPerChop, config.eliminationStartWeek) : [],
           canEditPaidRules,
+          periodWeeks,
         }
       : null,
   })
@@ -236,7 +240,7 @@ export async function PATCH(
     const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
     if (!saved.ok) {
       const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
-      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : saved.error
+      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : ('message' in saved && saved.message) || saved.error
       return NextResponse.json({ error: message, code: saved.error }, { status })
     }
     if (before) {

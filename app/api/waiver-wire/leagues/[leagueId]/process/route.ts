@@ -8,6 +8,7 @@ import { assertLeagueActionGate } from "@/server/services/leagueActionGate"
 import { dedupeLeagueRequest } from "@/lib/league-engine-performance/leagueRequestDedupe"
 import { withLeagueEngineTimedOperation } from "@/lib/league-engine-performance/jobRunner"
 import { DEFAULT_SLOW_ROUTE_MS } from "@/lib/league-engine-performance/observability"
+import { constantTimeEqual } from "@/lib/http/machineCredential"
 
 /**
  * POST: run waiver processing for the league (cron or commissioner).
@@ -24,8 +25,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   })
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
-  const cronSecret = req.headers.get("x-cron-secret") ?? req.nextUrl.searchParams?.get("cronSecret")
-  const isCron = cronSecret === process.env.CRON_SECRET
+  // Header only: a secret in the query string lands in access logs, history and Referer.
+  // (Every other cron route already refuses `?cronSecret=` in production.)
+  const cronSecret = req.headers.get("x-cron-secret") ?? ""
+  const isCron = constantTimeEqual(process.env.CRON_SECRET ?? "", cronSecret)
 
   if (!isCron) {
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

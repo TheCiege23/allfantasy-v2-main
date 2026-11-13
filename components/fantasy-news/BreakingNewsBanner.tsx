@@ -3,11 +3,13 @@
 import type { EnrichedNewsItem } from '@/lib/fantasy-news-aggregator/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertCircle } from 'lucide-react';
-import { getPlayerPageHref } from '@/lib/fantasy-news-aggregator/playerLinkResolver';
+import { newsPlayerHref } from '@/lib/fantasy-news-aggregator/playerLinkResolver';
 
 export interface BreakingNewsBannerProps {
   /** Top 1–3 items to highlight as breaking (e.g. by importanceScore or recency). */
   items: EnrichedNewsItem[];
+  /** The feed's sport — player links resolve the name in it when an item carries none. */
+  sport?: string | null;
 }
 
 function formatTime(publishedAt: string | null): string {
@@ -22,7 +24,7 @@ function formatTime(publishedAt: string | null): string {
   return d.toLocaleDateString();
 }
 
-export function BreakingNewsBanner({ items }: BreakingNewsBannerProps) {
+export function BreakingNewsBanner({ items, sport }: BreakingNewsBannerProps) {
   if (items.length === 0) return null;
 
   const top = items.slice(0, 3);
@@ -55,7 +57,7 @@ export function BreakingNewsBanner({ items }: BreakingNewsBannerProps) {
                   {item.playersMentioned.map((name) => (
                     <a
                       key={name}
-                      href={getPlayerPageHref(name)}
+                      href={newsPlayerHref(item, name, sport)}
                       onClick={(e) => e.stopPropagation()}
                       className="text-xs text-cyan-400 hover:underline"
                       data-audit="player-link-opens-player-page"

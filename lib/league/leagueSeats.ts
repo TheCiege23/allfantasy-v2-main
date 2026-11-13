@@ -140,7 +140,7 @@ export async function assignLeagueSeat(
   const { leagueId, rosterId, userId } = args
 
   const [league, roster, user] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
     tx.roster.findFirst({
       where: { id: rosterId, leagueId },
       select: { id: true, platformUserId: true, playerData: true, settings: true },
@@ -276,9 +276,11 @@ export async function assignLeagueSeat(
   }
   const teamNumber = slot?.slotNumber ?? (typeof foundation.slotNumber === 'number' ? foundation.slotNumber : null)
 
-  // Creation reserves a draft slot for every open Survivor team. Claiming the
-  // roster must also replace its draft-room "Open Team" label and open flag.
-  if (native && league.survivorMode) {
+  // Creation reserves a draft slot for every open team, labelled "Open Team N". Claiming the roster
+  // must also replace that draft-room label and open flag — in EVERY native league. This was Survivor-
+  // only (#2313), so a dynasty or redraft draft room kept showing each joined manager as "Open Team N"
+  // until the draft (found by the dynasty simulation, 2026-11-09: 11 of 12 joined managers).
+  if (native) {
     const draft = await tx.draftSession.findFirst({
       where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true },
@@ -330,7 +332,7 @@ export async function releaseLeagueSeat(
 ): Promise<{ ok: true; previousOwner: string | null } | { ok: false; code: 'ROSTER_NOT_FOUND' }> {
   const { leagueId, rosterId } = args
   const [league, roster] = await Promise.all([
-    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true, survivorMode: true } }),
+    tx.league.findUnique({ where: { id: leagueId }, select: { platform: true, userId: true } }),
     tx.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
   ])
   if (!league || !roster) return { ok: false, code: 'ROSTER_NOT_FOUND' }
@@ -373,7 +375,8 @@ export async function releaseLeagueSeat(
     })
   }
   await tx.leagueEntrySlot.updateMany({ where: { leagueId, rosterId }, data: { status: 'OPEN' } })
-  if (native && league.survivorMode) {
+  // The reverse of the claim above: a seat given up before the draft reads "Open Team N" again.
+  if (native) {
     const draft = await tx.draftSession.findFirst({
       where: { leagueId, status: 'pre_draft' }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
       select: { id: true, slotOrder: true },

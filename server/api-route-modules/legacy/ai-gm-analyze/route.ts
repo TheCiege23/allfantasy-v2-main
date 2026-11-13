@@ -10,20 +10,26 @@ import {
 import { getSleeperUser, getLeagueInfo, getLeagueRosters, getAllPlayers, getLeagueUsers } from '@/lib/sleeper-client'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
-import { requireAuthOrOrigin, forbiddenResponse, validateRequestOrigin } from '@/lib/api-auth'
+import { forbiddenResponse, validateRequestOrigin } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/ai-gm-analyze", tool: "LegacyAiGmAnalyze" })(async (request: NextRequest) => {
   if (!validateRequestOrigin(request)) {
     return forbiddenResponse('Invalid origin')
   }
 
+  /*
+   * The origin check above is CSRF hygiene, not authentication -- this read the pre-analysis
+   * readiness of whatever `username` was named. The param is now only compared; the
+   * readiness read is the caller's own.
+   */
   const { searchParams } = new URL(request.url)
-  const username = searchParams?.get('username')
   const leagueId = searchParams?.get('leagueId')
-
-  if (!username) {
-    return NextResponse.json({ error: 'Username required' }, { status: 400 })
-  }
+  const gate = await requireLegacySleeperIdentity(request, {
+    requestedUsername: searchParams?.get('username'),
+  })
+  if (!gate.ok) return gate.response
+  const username = gate.identity.sleeperUsername
 
   try {
     const readiness = await runPreAnalysisForUser(username, leagueId || '')
@@ -35,10 +41,13 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/ai-gm-analyze", tool: "
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/ai-gm-analyze", tool: "LegacyAiGmAnalyze" })(async (request: NextRequest) => {
-  const auth = requireAuthOrOrigin(request)
-  if (!auth.authenticated) {
-    return forbiddenResponse(auth.error || 'Unauthorized')
-  }
+  /*
+   * Was `requireAuthOrOrigin`, which passes any anonymous caller sending a matching `Origin`
+   * header -- so this paid-model endpoint ran for anyone, as anyone. The origin check stays
+   * as CSRF protection; identity comes from the shared legacy gate, and a guest (no account,
+   * no plan) cannot spend model calls here.
+   */
+  if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
   const ip = getClientIp(request)
   const rateLimitResult = consumeRateLimit({
@@ -58,12 +67,18 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-gm-analyze", tool: 
 
   try {
     const body = await request.json()
-    const { 
-      username, 
-      leagueId, 
+    const {
+      leagueId,
       trade,
       sport = 'nfl',
     } = body
+
+    const gate = await requireLegacySleeperIdentity(request, {
+      requestedUsername: typeof body?.username === 'string' ? body.username : null,
+      rateLimit: { action: 'ai_gm_analyze', maxRequests: 5, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
 
     if (!username || !leagueId || !trade) {
       return NextResponse.json({ 

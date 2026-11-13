@@ -49,7 +49,7 @@ export function RoundProgressBar({
             </div>
           )
         })}
-        <div className="ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--tournament-gold)]/40 bg-yellow-500/10 text-lg">
+        <div className="ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-tournament-gold/40 bg-yellow-500/10 text-lg">
           🏆
         </div>
       </div>

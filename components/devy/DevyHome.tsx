@@ -6,11 +6,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { DevyPromotionPanel } from './DevyPromotionPanel'
 import { DevyCommissionerTools } from './DevyCommissionerTools'
 import { DevyDraftCenter } from './DevyDraftCenter'
-import { DevyLeagueHomeCards } from './DevyLeagueHomeCards'
 import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
 import { DevySpecialtyHome, type DevyHomeBlock } from '@/components/league/specialty/devy/DevySpecialtyHome'
 import { DevyPromotionMoment } from '@/components/league/specialty/devy/DevyPromotionMoment'
@@ -119,7 +117,12 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
 
   return (
     <SpecialtyShell format="devy" testId="devy-specialty">
-    <div className="space-y-4">
+    {/*
+      The specialty shell is dark in every mode, so the Tailwind panels under the hero (pool line, Draft Center,
+      promotion panel, commissioner tools) opt out of the light-mode readability clamp, which otherwise turned their
+      text-white dark on this dark panel (Devy audit item 4, 2026-11-08).
+    */}
+    <div className="af-draft-dark space-y-4" data-devy-home-body>
       <DevySpecialtyHome
         leagueId={leagueId}
         sport={sport}
@@ -133,20 +136,6 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         {config.bestBallEnabled ? ' · Best ball on: your highest-scoring legal lineup counts each week.' : ''}
       </p>
 
-      {draftPhaseInfo && (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-          <h3 className="text-sm font-medium text-white">Draft</h3>
-          <p className="mt-1 text-sm text-white/70">{draftPhaseInfo.description}</p>
-          <p className="mt-1 text-xs text-white/50">Status: {draftPhaseInfo.status}</p>
-          <Link
-            href={`/league/${leagueId}?tab=Draft`}
-            className="mt-3 inline-block rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/15"
-          >
-            Go to Draft
-          </Link>
-        </div>
-      )}
-
       <DevyDraftCenter
         leagueId={leagueId}
         startupRounds={summary.config.startupVetRounds ?? undefined}
@@ -155,26 +144,24 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         startupType={summary.config.startupDraftType}
         rookieType={summary.config.rookieDraftType}
         devyType={summary.config.devyDraftType}
-        devySlotsUsed={0}
+        devySlotsUsed={devySlots.used}
         devySlotCount={summary.config.devySlotCount}
         bestBallEnabled={summary.config.bestBallEnabled}
+        current={draftPhaseInfo ? { phase: draftPhaseInfo.phase, status: draftPhaseInfo.status } : null}
       />
 
-      <DevyLeagueHomeCards
-        leagueId={leagueId}
-        promotionEligibleCount={summary.promotionEligibleCount ?? 0}
-      />
-
-      <DevyPromotionPanel leagueId={leagueId} rosterId={rosterId} isCommissioner={isCommissioner} />
+      {/*
+        DevyLeagueHomeCards used to sit here: six cards (draft countdowns, promotion window, class strength, best
+        stashes, graduates) with no data source — five always read "Date TBD" / "No data" / "—", and the promotion
+        window always "Closed", contradicting the hero above (Devy audit item 2, 2026-11-07). Removed, not hidden.
+      */}
+      {/* Only when someone can be promoted: otherwise it only said "none right now" (the hero covers declared players). */}
+      {(summary.promotionEligibleCount ?? 0) > 0 ? (
+        <DevyPromotionPanel leagueId={leagueId} rosterId={rosterId} isCommissioner={isCommissioner} />
+      ) : null}
 
       {isCommissioner && <DevyCommissionerTools leagueId={leagueId} />}
 
-      <Link
-        href={`/league/${leagueId}?tab=Settings`}
-        className="block rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 hover:bg-white/10"
-      >
-        League settings
-      </Link>
     </div>
     </SpecialtyShell>
   )

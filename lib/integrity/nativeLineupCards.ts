@@ -24,7 +24,19 @@ import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime/canonicalN
  * kickoff when the scan runs at finalization, but not a snapshot taken at lock.
  */
 
-export type LineupCardPlayer = { playerId: string; status?: string; proj?: number; byeWeek?: number | null }
+/**
+ * `position` and `slot` let the scan ask the only fair question about an unplayable starter: could
+ * a healthy bench player have LEGALLY filled that slot? Without them a benched QB read as a better
+ * option for a WR slot. `slot` is the starter's slot for the week (`FLEX`, `RB`…); absent on bench.
+ */
+export type LineupCardPlayer = {
+  playerId: string
+  status?: string
+  proj?: number
+  byeWeek?: number | null
+  position?: string | null
+  slot?: string
+}
 export type LineupCard = { rosterId: string; starters: LineupCardPlayer[]; bench: LineupCardPlayer[] }
 
 export type RosterPlayerRow = {
@@ -44,8 +56,8 @@ export function buildLineupCards(players: readonly RosterPlayerRow[], lineups: W
     if (!saved || !saved.has(p.playerId)) continue // only players the saved lineup named
     const card = cards.get(p.rosterId) ?? { rosterId: p.rosterId, starters: [], bench: [] }
     const slot = weekSlotType(p, lineups)
-    const entry: LineupCardPlayer = { playerId: p.playerId, status: p.injuryStatus ?? undefined, byeWeek: p.byeWeek }
-    if (isNflRedraftScoringStarterSlot(slot)) card.starters.push(entry)
+    const entry: LineupCardPlayer = { playerId: p.playerId, status: p.injuryStatus ?? undefined, byeWeek: p.byeWeek, position: p.position }
+    if (isNflRedraftScoringStarterSlot(slot)) card.starters.push({ ...entry, slot })
     else if (slot === 'bench') card.bench.push(entry)
     cards.set(p.rosterId, card)
   }

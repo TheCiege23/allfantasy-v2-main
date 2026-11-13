@@ -92,6 +92,12 @@ export type GameDayTriage = {
    * player's Sleeper id.
    */
   unsupportedLeagues?: number
+  /**
+   * Starters in another sport's leagues (Fantrax, native…) whose id reached no catalog player
+   * (sportRosterTranslate.ts). Dropped rather than read raw — and counted, because a starter we could
+   * not identify is one we could not check, and the list must not read as a clean bill for him.
+   */
+  unidentifiedStarters?: number
   /** When the OLDEST lineup read was last synced (Roster.updatedAt), ISO — the list is only as current as that. */
   rostersAsOf?: string | null
   /**
@@ -104,6 +110,98 @@ export type GameDayTriage = {
    * leagues behind an old `rostersAsOf` instead of letting one stale league date the whole list.
    */
   rosterAges?: Array<{ leagueId: string; leagueName: string; asOf: string }>
+  /**
+   * EVERY league handed to the loader whose lineup was not read, each with the reason — so
+   * `leaguesRead + skipped.length` is the whole account. See `classifySkippedLeagues`.
+   * Optional so older callers and fixtures need not carry it.
+   */
+  skipped?: SkippedLeague[]
+}
+
+/**
+ * Why a league's lineup was not read. One reason per league, the FIRST that applied in the
+ * loader's order — so the reasons partition the skipped set and their counts add up.
+ */
+export type SkipReason =
+  | 'not_read' // past the loader's bound
+  | 'no_team' // no team claimed by this user, so there is no lineup that is theirs
+  | 'best_ball' // the platform sets the lineup
+  | 'unsupported' // a platform whose player ids we cannot translate yet
+  | 'pre_season' // pre-draft / drafting: no lineup to set yet
+  | 'season_over' // complete / archived
+  | 'eliminated' // a guillotine (or similar) team already out
+  | 'no_roster' // a claimed team, but no synced roster of theirs to read
+
+export type SkippedLeague = { leagueId: string; leagueName: string | null; platform: string | null; reason: SkipReason }
+
+/** The order the screen lists them in: the ones pointing at the user's own setup first. */
+export const SKIP_REASON_ORDER: readonly SkipReason[] = [
+  'no_team',
+  'no_roster',
+  'unsupported',
+  'not_read',
+  'best_ball',
+  'pre_season',
+  'season_over',
+  'eliminated',
+]
+
+/** League stages with no lineup to fix, split by which side of the season they fall on. */
+const PRE_SEASON_STAGES = new Set(['pre_draft', 'predraft', 'setup', 'drafting', 'draft'])
+const SEASON_OVER_STAGES = new Set(['complete', 'completed', 'season_over', 'archived'])
+
+/** `pre_season` / `season_over` for a stage with no lineup to fix; null for an in-season league. */
+export function offSeasonReason(stage: string): 'pre_season' | 'season_over' | null {
+  const s = stage.toLowerCase()
+  if (PRE_SEASON_STAGES.has(s)) return 'pre_season'
+  if (SEASON_OVER_STAGES.has(s)) return 'season_over'
+  return null
+}
+
+/**
+ * Every league asked for and not read, with why.
+ *
+ * 🛑 THE POINT IS THAT NOTHING IS SILENT. The loader used to count only three of its eight skips
+ * (best ball, unsupported, over the bound). A league with no claimed team, no synced roster, an
+ * off-season stage or an eliminated team dropped out with no trace, so "N starters checked across
+ * 48 leagues" could not be squared with the user's own league count — reported from the War Room
+ * as "shows less leagues than I am actually in" (2026-11-11).
+ *
+ * Precedence follows the loader: a league is classified by the first gate that stopped it. The
+ * roster loop's own reason (`loopReasons`) only applies when no earlier gate did, and a league
+ * that was READ is never listed, whatever a loop reason says about another of its rosters.
+ */
+export function classifySkippedLeagues(args: {
+  /** De-duplicated ids, in the order asked. */
+  ids: readonly string[]
+  /** Ids past the loader's bound. */
+  overflow: ReadonlySet<string>
+  /** Ids with a team claimed by the viewer. */
+  claimed: ReadonlySet<string>
+  bestBall: ReadonlySet<string>
+  unsupported: ReadonlySet<string>
+  /** Reasons the roster loop recorded (off-season, eliminated). */
+  loopReasons: ReadonlyMap<string, SkipReason>
+  /** Ids whose lineup was read. */
+  read: ReadonlySet<string>
+  leagueInfo: ReadonlyMap<string, { name: string | null; platform: string | null }>
+}): SkippedLeague[] {
+  const out: SkippedLeague[] = []
+  for (const id of args.ids) {
+    if (args.read.has(id)) continue
+    const reason: SkipReason = args.overflow.has(id)
+      ? 'not_read'
+      : !args.claimed.has(id)
+        ? 'no_team'
+        : args.bestBall.has(id)
+          ? 'best_ball'
+          : args.unsupported.has(id)
+            ? 'unsupported'
+            : (args.loopReasons.get(id) ?? 'no_roster')
+    const info = args.leagueInfo.get(id)
+    out.push({ leagueId: id, leagueName: info?.name ?? null, platform: info?.platform ?? null, reason })
+  }
+  return out
 }
 
 const SEVERITY: Record<MoveTone, number> = { bad: 0, warn: 1, good: 2 }
@@ -228,5 +326,39 @@ export function compareTriageRows(nowIso: string): (a: TriageRow, b: TriageRow) 
     const sb = b.status ? SEVERITY[b.status.tone] : 3
     if (sa !== sb) return sa - sb
     return a.player.name.localeCompare(b.player.name)
+  }
+}
+
+/** A league whose lineup read is older than this is named on its own rather than dating the list. */
+export const ROSTER_STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000
+
+export type StaleRosterLeague = { leagueId: string; leagueName: string; asOf: string; days: number }
+
+/**
+ * ⚠ ONE STALE LEAGUE MUST NOT DATE THE WHOLE LIST. `rostersAsOf` is the OLDEST lineup read, by design (a
+ * newest-first stamp would say "just now" over a league last seen at 9am). But one league that stopped
+ * syncing made fifty read "as of 101d ago" on Game Plan, and "53d ago" on Player Finder (2026-11-09).
+ * So a league past ROSTER_STALE_AFTER_MS is NAMED, oldest first, with its age, and the stamp describes
+ * the rest. When every league is stale, or no ages are known, the stamp stays `rostersAsOf`.
+ *
+ * One rule, two screens: War Room's Game Plan and Player Finder's Game day both call this.
+ */
+export function splitRosterAges(
+  data: Pick<GameDayTriage, 'rostersAsOf' | 'rosterAges'>,
+  nowIso: string,
+): { stale: StaleRosterLeague[]; freshCount: number; stampAsOf: string | null } {
+  const nowMs = new Date(nowIso).getTime()
+  const ages = data.rosterAges ?? []
+  const isStale = (asOf: string) => nowMs - new Date(asOf).getTime() > ROSTER_STALE_AFTER_MS
+  const stale = ages
+    .filter((a) => isStale(a.asOf))
+    .sort((a, b) => a.asOf.localeCompare(b.asOf))
+    .map((a) => ({ ...a, days: Math.floor((nowMs - new Date(a.asOf).getTime()) / 86_400_000) }))
+  const fresh = ages.filter((a) => !isStale(a.asOf))
+  const freshOldest = fresh.length > 0 ? fresh.map((a) => a.asOf).sort()[0]! : null
+  return {
+    stale,
+    freshCount: fresh.length,
+    stampAsOf: stale.length > 0 && freshOldest ? freshOldest : (data.rostersAsOf ?? null),
   }
 }

@@ -2,6 +2,13 @@
 .cols { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
 .slotsCol { flex: 0 1 280px; min-width: 0; }
 .stashCol { flex: 1 1 420px; min-width: 0; }
+/*
+  The shared rail is a fixed 380px column. Between ~1000px and ~1500px of content it wraps under the main column and
+  stayed 380 wide, leaving half the row empty (Devy audit item 5, 2026-11-08). Here it grows to fill whatever row it is
+  on and sets pipeline / rules / latest side by side when there is room. Doubled class: beats the shared .rail
+  whatever order the two modules load in.
+*/
+.railWide.railWide { flex: 1 1 380px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: start; gap: 16px; }
 .slotGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .slotGrid>i { display: block; aspect-ratio: 1.15; border-radius: 6px; background: #2a4a8a; }
 .slotGrid>i.slotOpen { background: transparent; border: 1px dashed rgba(255, 255, 255, .22); }
@@ -61,4 +68,9 @@
   .decide>h2 { font-size: 26px; }
   .slotsCol { flex-basis: 100%; }
   .prod { width: 64px; }
+}
+
+/* Room for the rail beside the main column (600 + 20 gap + 380 + 2x24 page padding): keep the shared 380px column. */
+@container (min-width: 1048px) {
+  .railWide.railWide { flex: 0 1 380px; display: flex; flex-direction: column; align-items: stretch; }
 }

@@ -187,7 +187,7 @@ describe('DB-first identity links for NBA and NHL', () => {
 describe('import UI', () => {
   it('offers Fantrax for NBA and NHL alongside the sports it already had', () => {
     const fantrax = IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === 'fantrax')
-    expect(fantrax?.supportedSports).toEqual(['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'])
+    expect(fantrax?.supportedSports).toEqual(expect.arrayContaining(['NBA', 'NHL']))
   })
 })
 

@@ -48,10 +48,19 @@ function badgeFor(label: string): string | null {
 
 describe('Core tab urgency badges', () => {
   it('puts each league count on its own tab', () => {
-    render(shell({ urgencyBadges: { myTeam: 2, trades: 1, draftHq: 3 } }))
+    render(shell({ selectedLeagueId: 'lg1', urgencyBadges: { myTeam: 2, trades: 1, draftHq: 3 } }))
     expect(badgeFor('My team')).toBe('2')
     expect(badgeFor('Trades')).toBe('1')
     expect(badgeFor('Draft HQ')).toBe('3')
+    // Your week carries the lineup count only when My team is off the nav.
+    expect(badgeFor('Your week')).toBeNull()
+  })
+
+  /* My team is league-only since 2026-11-12, so with no league its lineup count moves to Your week. */
+  it('shows the lineup count on Your week when no league is selected', () => {
+    render(shell({ urgencyBadges: { myTeam: 2 } }))
+    expect(badgeFor('My team')).toBeNull()
+    expect(badgeFor('Your week')).toBe('2')
   })
 
   /* Sync left the rail for every league on 2026-10-31; a stale count must not bring it back. */
@@ -63,7 +72,7 @@ describe('Core tab urgency badges', () => {
   })
 
   it('draws nothing for a zero, a null, or an absent prop', () => {
-    render(shell({ urgencyBadges: { myTeam: 0, trades: null } }))
+    render(shell({ selectedLeagueId: 'lg1', urgencyBadges: { myTeam: 0, trades: null } }))
     expect(badgeFor('My team')).toBeNull()
     expect(badgeFor('Trades')).toBeNull()
   })

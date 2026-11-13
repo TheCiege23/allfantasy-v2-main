@@ -1,0 +1,59 @@
+/*
+ * CFP projected bracket (CfpProjectionPreview.tsx). Broadcast styling: white cards
+ * with gold borders and gold connectors on a warm dark field, our own trophy crest
+ * in place of the official mark.
+ */
+.cfp-preview{--cfp-gold:#c9a24a;--cfp-cream:#fffdf7;--cfp-ink:#14110a;--cfp-muted:#cdbb8a;--cfp-hint:#74653f;padding:24px;border:1px solid #6b5525;border-radius:20px;background:radial-gradient(ellipse at 50% 32%,#3a2e12 0,#1d170b 46%,#0b0e16 100%);color:var(--cfp-cream);overflow:hidden}
+.cfp-preview-heading{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+.cfp-preview-title{display:flex;align-items:center;gap:16px;min-width:0}
+.cfp-preview-heading h2{font-size:clamp(24px,4vw,38px);font-weight:850;line-height:1.08;margin:8px 0;color:#fff}
+.cfp-preview-heading p{margin:0;color:var(--cfp-muted)}
+.cfp-preview-eyebrow{font-size:12px;letter-spacing:.16em;font-weight:800;color:var(--cfp-gold)!important}
+.cfp-preview-tag{border:1px solid var(--cfp-gold);border-radius:999px;padding:6px 10px;color:#ffdb99;font-size:11px;font-weight:800;letter-spacing:.09em;white-space:nowrap}
+.cfp-preview-description,.cfp-preview-footnote{font-size:12px;line-height:1.55;color:#d6c9a4;margin:15px 0}
+.cfp-preview-footnote a{color:#f0cf7a;text-decoration:underline}
+
+/* Wide containers get the broadcast bracket; narrow ones get the rounds stacked. */
+.cfp-board{container:cfp-board/inline-size;margin:8px 0 4px}
+.cfp-stage{display:none}
+.cfp-stack{display:grid;gap:22px}
+@container cfp-board (min-width: 940px){.cfp-stage{display:block}.cfp-stack{display:none}}
+
+.cfp-stage-inner{position:relative;width:100%;aspect-ratio:1232/474}
+.cfp-stage-head{position:absolute;font-size:max(11px,1.05cqw);font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--cfp-gold)}
+.cfp-stage-line{position:absolute;background:var(--cfp-gold);border-radius:2px}
+.cfp-slot{position:absolute;box-sizing:border-box;display:flex;align-items:center;gap:.6cqw;padding:0 .8cqw;background:var(--cfp-cream);border:3px solid var(--cfp-gold);border-radius:12px;box-shadow:0 6px 16px #0006;color:var(--cfp-ink);overflow:hidden}
+.cfp-slot:not([data-filled]){justify-content:center}
+.cfp-slot-seed{font-weight:850;font-size:max(12px,1.22cqw);flex:none}
+.cfp-slot-team{flex:1;min-width:0;font-size:max(11px,1.14cqw);line-height:1.15;font-weight:800;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cfp-slot-rank{flex:none;font-size:max(11px,.97cqw);font-weight:800;color:#5a4a22}
+.cfp-slot-hint{font-size:max(11px,.97cqw);font-weight:700;color:var(--cfp-hint);text-align:center;line-height:1.2}
+.cfp-stage-label{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.cfp-champion{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:var(--cfp-cream);border:4px solid var(--cfp-gold);border-radius:14px;box-shadow:0 10px 26px #0008;color:var(--cfp-ink)}
+.cfp-champion strong{font-size:max(12px,1.14cqw);font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+.cfp-champion span{font-size:max(11px,.97cqw);font-weight:700;color:var(--cfp-hint)}
+
+/* Bowl tag: our crest, the bowl, the date. Sits above every game from the quarterfinals on. */
+.cfp-bowl-tag{display:inline-flex;align-items:center;gap:7px;padding:3px 11px 3px 5px;border-radius:999px;background:#0b0e16e0;border:1px solid var(--cfp-gold);white-space:nowrap}
+.cfp-bowl-tag .af-pb-crest{display:block;flex:none}
+.cfp-bowl-tag-name{font-size:max(11px,.97cqw);font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--cfp-cream)}
+.cfp-bowl-tag-date{font-size:max(11px,.97cqw);font-weight:600;color:var(--cfp-muted)}
+
+/* Stacked rounds. */
+.cfp-round h3{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 0 12px;padding-bottom:6px;border-bottom:2px solid var(--cfp-gold);font-size:14px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:var(--cfp-cream)}
+.cfp-round h3 span{font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--cfp-muted)}
+.cfp-round-games{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:14px}
+.cfp-game{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0}
+.cfp-game .cfp-bowl-tag-name,.cfp-game .cfp-bowl-tag-date{font-size:12px}
+.cfp-game-card{width:100%;box-sizing:border-box;background:var(--cfp-cream);border:3px solid var(--cfp-gold);border-radius:12px;overflow:hidden;color:var(--cfp-ink)}
+.cfp-game-row{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px}
+.cfp-game-row+.cfp-game-row{border-top:2px solid #e8ddbf}
+.cfp-game-row .cfp-slot-seed{font-size:16px;min-width:24px}
+.cfp-game-row .cfp-slot-team{font-size:14px}
+.cfp-game-row .cfp-slot-rank{font-size:12px}
+.cfp-game-row .cfp-slot-hint{font-size:13px;text-align:left}
+
+@media(max-width:600px){.cfp-preview{padding:16px}.cfp-preview-heading{flex-direction:column}.cfp-preview-title .af-pb-crest{width:48px;height:56px}.cfp-preview-heading h2{font-size:25px}.cfp-preview-description{font-size:12px}}
+
+/* The bowl schedule inside the preview: the preview's palette, and its heading and note sized like the rest of this card. */
+.cfp-preview [data-testid="cfp-bowl-schedule"]{--pb-line2:#6b5525;--pb-surface2:#1f190d;--pb-surface:#14100a;--pb-text:#fffdf7;--pb-text2:#eadfbf;--pb-muted:#cdbb8a;margin-top:26px}.cfp-preview [data-testid="cfp-bowl-schedule"]>h2{font-size:15px;font-weight:800;color:#fffdf7;margin:0 0 4px}.cfp-preview [data-testid="cfp-bowl-schedule"] .af-pb-note{font-size:12px;line-height:1.55;color:#d6c9a4;margin:0 0 12px}.cfp-preview [data-testid="cfp-bowl-schedule"] .af-pb-note a{color:#f0cf7a;text-decoration:underline}

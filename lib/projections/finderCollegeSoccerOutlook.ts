@@ -66,8 +66,10 @@ export async function loadFinderCollegeSoccerOutlook(
   const scorer = buildLeagueStatScorer({ sport, settings: args.league.settings })
   const rules = resolveLeagueScoringRules({ sport, settings: args.league.settings })
   if (!scorer || !rules) return empty('no_scoring_rules')
+  const fantraxWeights = Object.values(rules.fantraxSoccer?.positionWeights ?? {})
   const scoredKeys = new Set(rules.categories.filter((category) =>
-    (rules.overrides[category.key] ?? category.defaultPoints) !== 0)
+    (rules.overrides[category.key] ?? category.defaultPoints) !== 0 ||
+    fantraxWeights.some((weights) => (weights[category.key] ?? 0) !== 0))
     .flatMap((category) => [category.key, ...(category.tierStatKey ? [category.tierStatKey] : [])]))
   const season = args.league.season
   if (!season || !Number.isInteger(season)) return empty('no_season')

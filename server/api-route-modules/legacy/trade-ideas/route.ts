@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { FantasyCalcSettings } from '@/lib/fantasycalc'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/sleeper-client'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
 
@@ -185,13 +186,24 @@ function calculateAcceptanceProbability(
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-ideas", tool: "LegacyTradeIdeas" })(async (req: NextRequest) => {
   try {
-    const auth = requireAuthOrOrigin(req)
-    if (!auth.authenticated) {
-      return forbiddenResponse(auth.error || 'Unauthorized')
-    }
+    // CSRF protection only -- `requireAuthOrOrigin` stood here and authenticated nobody.
+    if (!validateRequestOrigin(req)) return forbiddenResponse('Invalid request origin')
 
     const body = await req.json()
-    const { leagueId, username, goals, depth, count = 5 } = body
+    const { leagueId, goals, depth, count = 5 } = body
+
+    /*
+     * A paid model call with NO rate limit, reachable by any anonymous caller sending a
+     * matching `Origin`. Identity is now the caller's own linked Sleeper account (no guests:
+     * model spend), the body's `username` is only compared, and the gate's limiter keys on
+     * the resolved actor.
+     */
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: typeof body?.username === 'string' ? body.username : null,
+      rateLimit: { action: 'trade_ideas', maxRequests: 6, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
     const normalizedLeagueId = String(leagueId || '').trim()
     
     if (!normalizedLeagueId || !username) {

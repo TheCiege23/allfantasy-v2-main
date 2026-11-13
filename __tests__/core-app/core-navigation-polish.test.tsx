@@ -34,10 +34,11 @@ describe('league navigation regressions', () => {
     fireEvent.click(screen.getByRole('link', { name: /AF League/ }))
     expect(push).toHaveBeenCalledExactlyOnceWith('/league/af-two')
   })
-  it('makes All leagues explicitly bypass the remembered league landing', () => {
-    render(<ScopeSwitcher leagues={[]} scopeValue={null} label="All leagues" selectedLeagueId={null} favoriteIds={[]} leagueScreen={false} />)
+  it('makes "Show all leagues on Home" explicitly bypass the remembered league landing', () => {
+    render(<ScopeSwitcher leagues={[{ id: 'a', name: 'Alpha', sport: 'NFL', platform: 'sleeper' }, { id: 'b', name: 'Bravo', sport: 'NBA', platform: 'sleeper' }]} scopeValue="sport:NFL" label="NFL leagues" selectedLeagueId={null} favoriteIds={[]} leagueScreen={false} />)
     fireEvent.click(screen.getByRole('button', { name: /Viewing/ }))
-    expect(screen.getByRole('link', { name: /All leagues/ })).toHaveAttribute('href', '/core?view=all&scope=all')
+    fireEvent.click(screen.getByRole('button', { name: /All leagues/ }))
+    expect(screen.getByRole('link', { name: /Show all leagues on Home/ })).toHaveAttribute('href', '/core?view=all&scope=all')
   })
 })
 describe('league artwork', () => {

@@ -103,7 +103,7 @@ function ToastItem({ toast, onDismiss }: { toast: ZombieToast; onDismiss: (id: s
   return (
     <div
       className={clsx(
-        'rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)]/95 backdrop-blur-md py-3 pl-4 pr-3 border-l-4 shadow-lg',
+        'rounded-xl border border-[var(--zombie-border)] bg-zombie-panel/95 backdrop-blur-md py-3 pl-4 pr-3 border-l-4 shadow-lg',
         'animate-in slide-in-from-right-full fade-in duration-300',
         border,
         anim,

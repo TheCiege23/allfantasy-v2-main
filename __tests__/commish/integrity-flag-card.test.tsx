@@ -346,3 +346,24 @@ describe('IntegrityFlagCard — compact on a phone', () => {
     expect(screen.getByText('63% value gap')).toBeTruthy()
   })
 })
+
+describe('IntegrityFlagCard — the manager’s reply', () => {
+  const ev = { teamName: 'Punt Gods', illegalOrSuspiciousStarters: [{ slotPosition: 'QB', startedPlayerName: 'J. Allen', startedPlayerStatus: 'OUT' }], detector: 'rules' }
+
+  it('quotes the manager’s explanation for the commissioner to read before ruling', () => {
+    render(<IntegrityFlagCard flag={flag({ flagType: 'tanking', evidenceJson: { ...ev, managerReply: { text: 'Late scratch.', submittedAt: new Date().toISOString() } } })} />)
+    expect(screen.getByTestId('integrity-manager-reply').textContent).toContain('Late scratch.')
+  })
+
+  it('without one, says the manager can still reply', () => {
+    render(<IntegrityFlagCard flag={flag({ flagType: 'tanking', evidenceJson: ev })} />)
+    expect(screen.queryByTestId('integrity-manager-reply')).toBeNull()
+    expect(screen.getByText(/can reply before you rule/)).toBeTruthy()
+  })
+
+  it('a rules-raised tanking flag shows how it was found, not a confidence', () => {
+    render(<IntegrityFlagCard flag={flag({ flagType: 'tanking', aiConfidence: 0, evidenceJson: ev })} />)
+    expect(screen.getByText(/Found by the lineup check/)).toBeTruthy()
+    expect(screen.queryByText(/Confidence/)).toBeNull()
+  })
+})

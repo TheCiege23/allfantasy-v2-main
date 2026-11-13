@@ -44,6 +44,8 @@ export type LeagueTypeId =
   | 'salary_cap'
   | 'big_brother'
   | 'pirate'
+  /** Redraft shell with Survivor Guilly season rules (lib/survivor-guillotine/createFit.ts). Not a format-engine id. */
+  | 'survivor_guillotine'
 
 export type DraftTypeId =
   | 'snake'

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, Search } from 'lucide-react'
 import { ProjectionRow } from '@/components/sports/ProjectionCard'
 import { useProjectionsList } from '@/hooks/useProjections'
+import { playerProfileHref } from '@/lib/player-links/playerProfileHref'
 import { AfProjectionRow, type AfProjectionView } from '@/components/projections/AfProjectionRow'
 
 type SportFilter = 'NFL' | 'NBA' | 'MLB' | 'NHL'
@@ -247,7 +248,7 @@ export function ProjectionsClient() {
             {filtered.map((p, i) => (
               <Link
                 key={`${p.playerName}-${i}`}
-                href={`/player/${encodeURIComponent(p.playerName.toLowerCase().replace(/\s+/g, '-'))}?${new URLSearchParams({ sport, position: p.position ?? '', team: p.team ?? '' })}`}
+                href={playerProfileHref({ name: p.playerName, sport, position: p.position, team: p.team }) ?? '/players'}
                 className="block rounded-lg px-1 py-0.5 transition hover:bg-white/[0.04]"
               >
                 <ProjectionRow

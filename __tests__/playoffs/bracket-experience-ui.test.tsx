@@ -12,7 +12,7 @@ const paid=vi.hoisted(()=>vi.fn())
 vi.mock("@/components/i18n/LanguageProviderClient",()=>({useOptionalLanguage:()=>({language:language.value})}))
 vi.mock("@/lib/tokens/paidToolClient",()=>({paidToolFetchWithConfirm:paid}))
 vi.mock("next/link",()=>({default:({href,children}:any)=><a href={href}>{children}</a>}))
-const data=():BracketExperience=>({checklist:{hasEntry:true,finalizedAt:null,available:2,saved:1,missing:1,firstMissingId:"g2",nextDeadline:"2099-11-07T01:20:00Z",readyToFinalize:false,pendingMatchups:7},officialTotal:1,explainedTotal:1,
+const data=():BracketExperience=>({checklist:{hasEntry:true,finalizedAt:null,available:2,saved:1,missing:1,firstMissingId:"g2",nextDeadline:"2099-11-07T01:20:00Z",readyToFinalize:false,pendingConfirmation:0,pendingMatchups:7},officialTotal:1,explainedTotal:1,
  ledger:[{id:"g1",round:"cup_group_play",home:"Boston Celtics",away:"Atlanta Hawks",pick:"Boston Celtics",winner:"Boston Celtics",points:1,available:1,reason:"correct",homeScore:100,awayScore:90,sourceAt:"2026-11-07T01:00:00Z"}],history:{available:false,since:null,events:[],trimmed:0},alerts:{...defaultBracketAlerts},standings:{asOf:"2026-11-07T01:00:00Z",liveGames:1,staleGames:1,rows:[{id:"mine",name:"My bracket",officialScore:1,officialRank:2,provisionalScore:2,provisionalRank:1,livePoints:1,movement:1}]}})
 beforeEach(()=>{language.value="en";vi.clearAllMocks()})
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
@@ -35,6 +35,12 @@ describe("complete bracket experience controls",()=>{
    expect(screen.getByRole("link",{name:/Review missing picks/})).toHaveAttribute("href","/brackets/leagues/pool/entries/mine#playoff-series-g2")
    expect(screen.getByText(/Saving is not finalizing/)).toBeInTheDocument();expect(fetcher).not.toHaveBeenCalled()
    expect(screen.getByText("Correct finalized pick")).toBeInTheDocument()
+ })
+ it("distinguishes unconfirmed daily edits from the bracket's earlier finalization",()=>{
+   const value=data();value.checklist.finalizedAt="2026-11-01T12:00:00Z";value.checklist.pendingConfirmation=2
+   render(<BracketExperiencePanel experience={value} challengeId="pool" entryId="mine"/>)
+   expect(screen.getByText(/2 saved picks need game-day finalization/)).toBeInTheDocument()
+   expect(screen.getByRole("link",{name:/Review and finalize/})).toHaveAttribute("href","/brackets/leagues/pool/entries/mine")
  })
  it("keeps official standings separate from the live hypothesis and flags stale data",()=>{
    render(<BracketExperiencePanel experience={data()} challengeId="pool" entryId="mine"/>)
