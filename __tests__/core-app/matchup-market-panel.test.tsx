@@ -159,7 +159,7 @@ describe('Spanish — no English left', () => {
         1,
       ),
     )
-    expect(t).toContain('Entorno de anotación')
+    expect(t).toContain('Panorama de los partidos de tus jugadores (líneas de apuestas)')
     expect(t).toContain('27.5 pts esperados')
     expect(t).toContain('favorito por 3.5')
     expect(t).toContain('no favorito por 2.5')
@@ -280,7 +280,7 @@ describe('the Matchup screen carries the panel', () => {
   it('mounts it, asks for your starters’ clubs once each, and renders present + partial', async () => {
     const fetchFn = stubFetch(MARKET)
     const { container } = render(<Matchup data={data()} />)
-    await screen.findByText('Scoring environment')
+    await screen.findByText('Game outlook for your players (betting lines)')
 
     expect(fetchFn).toHaveBeenCalledTimes(1)
     const url = String(fetchFn.mock.calls[0][0])
@@ -315,7 +315,7 @@ describe('the Matchup screen carries the panel', () => {
     h.language = 'es'
     stubFetch(MARKET)
     const { container } = render(<Matchup data={data()} />)
-    await screen.findByText('Entorno de anotación')
+    await screen.findByText('Panorama de los partidos de tus jugadores (líneas de apuestas)')
     expect(container.querySelector('.af-mu-market')!.textContent).toContain('favorito por 3.5')
   })
 

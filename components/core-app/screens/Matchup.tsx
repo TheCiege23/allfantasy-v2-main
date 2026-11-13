@@ -25,6 +25,11 @@ import { matchupConfidenceText, matchupReasonText } from '@/lib/core-app/matchup
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { MatchupMarketPanel } from '@/components/core-app/MatchupMarketPanel'
+import { matchupHeadline, pct } from '@/lib/core-app/matchupGuide'
+import { matchupGuideMessages } from '@/lib/core-app/messages/matchupGuide'
+import { platformLabel } from '@/lib/core-app/platformLinks'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/matchup/af-matchup-guide.css'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -721,7 +726,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
       */}
       <p className="af-mu-note af-mu-note--lead">
         {live
-          ? m.livePoints(data.playerScoring.data.source, data.playerScoring.data.playersScored)
+          ? m.livePoints(platformLabel(data.playerScoring.data.source), data.playerScoring.data.playersScored)
           : matchupReasonText(data.playerScoring.reason, language)}
       </p>
       {/* The key for the per-player markers — only when one is on the board. */}
@@ -968,6 +973,32 @@ export function Matchup({ data }: MatchupProps) {
 
   const bannerRef = useRef<HTMLElement | null>(null)
 
+  /*
+   * 2026-11-13 guide: the title said only "Matchup". It now says the answer people open the page for —
+   * who's winning — by the same rule as the margin chip (scored once anyone has played, projected
+   * before). One line says what the page is for; up to three numbers sit under it.
+   */
+  const g = useMessages(matchupGuideMessages)
+  const pWin = data.winProbability.available ? data.winProbability.data.pWin : null
+  const head = matchupHeadline({ weekState, scored, projected, pWin })
+  const winPct = pct(pWin)
+  const suffix = winPct != null && head.kind !== 'final' ? g.toWinSuffix(winPct) : ''
+  const f1 = (n: number) => n.toFixed(1)
+  const headline =
+    head.kind === 'final'
+      ? (head.result === 'won' ? g.won : head.result === 'lost' ? g.lost : g.tied)(f1(head.you), f1(head.them))
+      : head.kind === 'live'
+        ? (head.leader === 'you' ? g.liveAhead(f1(head.margin)) : head.leader === 'them' ? g.liveBehind(f1(head.margin)) : g.liveLevel) + suffix
+        : head.kind === 'projected'
+          ? (head.leader === 'you' ? g.projWin : head.leader === 'them' ? g.projLose : g.projLevel)(f1(head.you), f1(head.them)) +
+            (winPct != null ? g.chanceSuffix(winPct) : '')
+          : g.unknown
+  const platformName = data.league.platform && data.league.platform !== 'manual' ? platformLabel(data.league.platform) : null
+  const guideChips: Array<{ key: string; value: string; label: string }> = []
+  if (winPct != null && weekState !== 'final') guideChips.push({ key: 'win', value: `${winPct}%`, label: g.chipWin })
+  if (projected && weekState !== 'final') guideChips.push({ key: 'projected', value: `${f1(projected.you)}–${f1(projected.opponent)}`, label: g.chipProjected })
+  if (yourLeft != null && theirLeft != null) guideChips.push({ key: 'left', value: `${yourLeft}–${theirLeft}`, label: g.chipLeft })
+
   return (
     /*
       Every name in this lineup belongs to THIS league, so the card opens in
@@ -990,12 +1021,30 @@ export function Matchup({ data }: MatchupProps) {
         The page title, through the shared header like every other /core screen: "Matchup", with the
         week as its eyebrow. The week banner and the head-to-head card follow directly, unchanged.
       */}
-      <PageHeader
-        className="af-mu-head"
-        title={copy('Matchup')}
-        eyebrow={data.week.available ? `${copy('Week')} ${data.week.data.week}` : null}
-        eyebrowTestId="matchup-week-eyebrow"
-      />
+      <section className="af-hg-head af-mug-head" aria-labelledby="af-mug-title">
+        <PageHeader
+          className="af-mu-head"
+          eyebrowClassName="af-hg-eyebrow"
+          titleClassName="af-hg-title"
+          subClassName="af-hg-intro"
+          title={<span id="af-mug-title">{headline}</span>}
+          eyebrow={data.week.available ? g.eyebrow(data.week.data.week) : null}
+          eyebrowTestId="matchup-week-eyebrow"
+          sub={g.intro(platformName)}
+        />
+        {guideChips.length > 0 ? (
+          <ul className="af-hg-chips">
+            {guideChips.map((c) => (
+              <li key={c.key}>
+                <span className="af-hg-chip af-mug-chip" data-tone="ok" data-chip={c.key}>
+                  <b>{c.value}</b>
+                  <span>{c.label}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
 
       {/* ── Week banner ─────────────────────────────────────────────── */}
       <header className="af-mu-week">
@@ -1229,10 +1278,16 @@ export function Matchup({ data }: MatchupProps) {
                     is a Gaussian over projected margins, and the detail line is
                     what stops it being mistaken for a count of simulated seasons.
                   */}
-                  <p className="af-mu-centre-why">
+                  {/*
+                    Folded (2026-11-13 guide): the model's own sentence — "17 yet to start · … · 250.7
+                    projected points outstanding · LOW confidence" — stays attached to the number, one
+                    tap away, rather than as four lines of counts under it.
+                  */}
+                  <details className="af-mu-centre-why af-mug-sure">
+                    <summary>{g.howSure}</summary>
                     {matchupReasonText(data.winProbability.data.detail, language)} ·{' '}
                     {matchupConfidenceText(data.winProbability.data.confidence, language)}
-                  </p>
+                  </details>
                 </>
               ) : (
                 <>
@@ -1317,19 +1372,25 @@ export function Matchup({ data }: MatchupProps) {
           {data.lineups.available ? <BoardTip live={data.playerScoring.available} /> : null}
         </header>
         <LineupBoard data={data} />
+        {data.lineups.available ? (
+          <p className="af-mug-teach">
+            <b>{g.why}</b> {g.boardTeach}
+          </p>
+        ) : null}
       </section>
 
       {/* ── What decides it ─────────────────────────────────────────── */}
-      <section className="af-frame af-mu-section">
-        <header className="af-mu-section-head">
-          <h2 className="af-label">{copy('What decides it')}</h2>
-        </header>
-        <ul className="af-mu-missing">
-          {/*
-            The series with this manager. "Meetings on file", never "all-time": a Sleeper league gets a
-            new id every season, so what is on file is this season's league.
-          */}
-          {data.headToHead && data.headToHead.meetings.length > 0 ? (
+      {/*
+        "What decides it" listed players yet to play and the projected final — both already on the
+        scoreboard and in the headline chips (2026-11-13 guide). The one thing only it said, the series
+        with this manager, stays, under a name that says what it is.
+      */}
+      {data.headToHead && data.headToHead.meetings.length > 0 ? (
+        <section className="af-frame af-mu-section">
+          <header className="af-mu-section-head">
+            <h2 className="af-label">{g.historyTitle}</h2>
+          </header>
+          <ul className="af-mu-missing">
             <li>
               <span className="af-mu-missing-key">{copy('Head to head')}</span>
               <span className="af-mu-missing-value af-num">
@@ -1341,41 +1402,9 @@ export function Matchup({ data }: MatchupProps) {
                 </em>
               </span>
             </li>
-          ) : null}
-          <li>
-            <span className="af-mu-missing-key">{copy('Players yet to play')}</span>
-            <span className="af-mu-missing-why">{matchupReasonText(data.yetToPlay.reason, language)}</span>
-          </li>
-          <li>
-            <span className="af-mu-missing-key">{copy(data.projectedFinal.available && data.projectedFinal.data.model === 'best_ball_full_roster' ? 'Projected Best Ball final' : 'Projected final')}</span>
-            {data.projectedFinal.available ? (
-              <span className="af-mu-missing-value af-num">
-                {data.projectedFinal.data.you.toFixed(1)} –{' '}
-                {data.projectedFinal.data.opponent.toFixed(1)}
-                {data.projectedFinal.data.model === 'best_ball_full_roster' ? (
-                  <em className="af-mu-missing-caveat"> — {copy('highest projected legal lineup from each eligible full roster')}</em>
-                ) : null}
-                {/*
-                  ⚠ SHOWN WHENEVER EITHER SIDE IS SHORT, BECAUSE THE TWO SIDES CAN
-                  BE SHORT BY DIFFERENT AMOUNTS. That does not just make both totals
-                  low, it tilts the comparison — the side missing more starters
-                  looks like it is losing when it may not be.
-                */}
-                {data.projectedFinal.data.unprojected.you +
-                  data.projectedFinal.data.unprojected.opponent >
-                0 ? (
-                  <em className="af-mu-missing-caveat">
-                    {' '}
-                    — {m.builtWithout(data.projectedFinal.data.unprojected.you, data.projectedFinal.data.unprojected.opponent)}
-                  </em>
-                ) : null}
-              </span>
-            ) : (
-              <span className="af-mu-missing-why">{matchupReasonText(data.projectedFinal.reason, language)}</span>
-            )}
-          </li>
-        </ul>
-      </section>
+          </ul>
+        </section>
+      ) : null}
       </>
       )}
       {/* Your starters' scoring environment, from the stored odds. Self-contained: nothing off-NFL or once final. */}

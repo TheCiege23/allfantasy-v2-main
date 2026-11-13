@@ -176,7 +176,7 @@ describe('rendered: the page header is the shared one', () => {
     expect(link?.getAttribute('href')).toBe('/core/my-team?league=l1')
     expect(link?.getAttribute('data-prefetch')).toBe('false')
     // The page title is the shared header's; with no week on file there is no eyebrow.
-    expect(pageTitle(container).textContent).toBe('Matchup')
+    expect(pageTitle(container).textContent).toBe('This week’s matchup')
     expect(container.querySelector('.af-pg-eyebrow')).toBeNull()
     expect(container.querySelector('p.af-mu-league-name')?.textContent).toBe('L')
   })

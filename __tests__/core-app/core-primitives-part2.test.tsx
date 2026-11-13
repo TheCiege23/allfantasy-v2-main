@@ -272,18 +272,20 @@ describe('Matchup: the shared page header, the week as its eyebrow', () => {
     starterCountsBySide: null,
   }
 
+  // 2026-11-13 guide: the h1 says the matchup in words (here nothing is scored or projected, so it
+  // names the page); the eyebrow carries "Matchup · Week N".
   it('titles the page "Matchup" with "Week 9" above it, then the unchanged week banner', () => {
     const data = { ...base, week: { available: true, data: { week: 9, season: 2026, isFinal: true } } } as unknown as MatchupData
     const { container } = render(<Matchup data={data} />)
     const h1s = [...container.querySelectorAll('h1')]
     expect(h1s).toHaveLength(1)
-    expect(h1s[0].textContent).toBe('Matchup')
-    expect(h1s[0].className).toBe('af-pg-title')
+    expect(h1s[0].textContent).toBe('This week’s matchup')
+    expect(h1s[0].className).toBe('af-pg-title af-hg-title')
     const head = h1s[0].closest('header.af-pg-head')!
     expect(head.classList.contains('af-mu-head')).toBe(true)
-    expect(screen.getByTestId('matchup-week-eyebrow').textContent).toBe('Week 9')
-    // The banner follows the header directly, still naming the league (as text) and the week.
-    const banner = head.nextElementSibling as HTMLElement
+    expect(screen.getByTestId('matchup-week-eyebrow').textContent).toBe('Matchup · Week 9')
+    // The banner follows the guide block directly, still naming the league (as text) and the week.
+    const banner = head.closest('section.af-mug-head')!.nextElementSibling as HTMLElement
     expect(banner.className).toBe('af-mu-week')
     expect(banner.querySelector('p.af-mu-league-name')?.textContent).toBe('Kings of Buffalo')
     expect(banner.querySelector('.af-mu-week-label')?.textContent).toBe('Week 9 · 2026')
@@ -293,7 +295,7 @@ describe('Matchup: the shared page header, the week as its eyebrow', () => {
   it('has no eyebrow when no week is on file, rather than an empty line', () => {
     const data = { ...base, week: { available: false, reason: 'no weekly results stored for this league' } } as unknown as MatchupData
     const { container } = render(<Matchup data={data} />)
-    expect(container.querySelector('h1')?.textContent).toBe('Matchup')
+    expect(container.querySelector('h1')?.textContent).toBe('This week’s matchup')
     expect(container.querySelector('.af-pg-eyebrow')).toBeNull()
   })
 
