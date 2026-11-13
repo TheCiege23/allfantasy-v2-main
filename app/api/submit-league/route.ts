@@ -165,7 +165,7 @@ async function parseSubmissionRequest(request: NextRequest): Promise<{ payload: 
 
     const parsed = submissionSchema.safeParse(payloadCandidate);
     if (!parsed.success) {
-      return { payload: null, error: parsed.error.errors[0]?.message || "Invalid submission data", documentMeta };
+      return { payload: null, error: parsed.error.issues[0]?.message || "Invalid submission data", documentMeta };
     }
     return { payload: parsed.data, documentMeta };
   }
@@ -173,7 +173,7 @@ async function parseSubmissionRequest(request: NextRequest): Promise<{ payload: 
   const body = await request.json();
   const parsed = submissionSchema.safeParse(body);
   if (!parsed.success) {
-    return { payload: null, error: parsed.error.errors[0]?.message || "Invalid submission data", documentMeta: null };
+    return { payload: null, error: parsed.error.issues[0]?.message || "Invalid submission data", documentMeta: null };
   }
   return { payload: parsed.data, documentMeta: null };
 }

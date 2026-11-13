@@ -25,7 +25,7 @@ export const AutoCoachUserPreferencesSchema = z.object({
   confidenceThreshold: z.number().min(0).max(100).default(65),
 
   /** Position-specific settings (e.g., { 'QB': { disabled: true } }) */
-  positionOverrides: z.record(z.object({
+  positionOverrides: z.record(z.string(), z.object({
     disabled: z.boolean().optional(),
     minProjectionDelta: z.number().optional(),
   }).optional()).default({}),

@@ -2282,7 +2282,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     }
     logAiFailure(error, { tool: 'TradeEvaluator', endpoint: '/api/trade-evaluator' })
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request format', details: error.errors }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request format', details: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to evaluate trade' }, { status: 500 })
   }

@@ -35,7 +35,7 @@ const dropSchema = z.object({
   aiRecommendedDrop: z.string().optional(),
   aiRecommendedDropValue: z.number().optional(),
   rosterContext: z.object({
-    positionDepth: z.record(z.number()).optional(),
+    positionDepth: z.record(z.string(), z.number()).optional(),
     totalRosterValue: z.number().optional(),
   }).optional(),
 })

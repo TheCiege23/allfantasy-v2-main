@@ -35,7 +35,7 @@ async function callerOwnsDecisionLog(decisionLogId: string, sleeperUsername: str
 }
 
 const SingleEvalSchema = z.object({
-  decisionLogId: z.string().uuid(),
+  decisionLogId: z.guid(),
   evaluationWeeks: z.number().int().min(1).max(16).optional(),
 })
 

@@ -140,7 +140,7 @@ const LeagueContextSchema = z.object({
     idp: z.boolean().optional(),
   }).optional(),
   roster: z.object({
-    slots: z.record(z.number()).optional(),
+    slots: z.record(z.string(), z.number()).optional(),
     limits: z.object({ maxRoster: z.number().optional() }).optional(),
   }).optional(),
   trade: z.object({
@@ -151,13 +151,13 @@ const LeagueContextSchema = z.object({
 }).optional()
 
 const MarketContextSchema = z.object({
-  ldi: z.record(z.number()).optional(),
-  partnerTendencies: z.record(z.any()).optional(),
+  ldi: z.record(z.string(), z.number()).optional(),
+  partnerTendencies: z.record(z.string(), z.any()).optional(),
 }).optional()
 
 const NflContextSchema = z.object({
   asOf: z.string().optional(),
-  players: z.record(z.any()).optional(),
+  players: z.record(z.string(), z.any()).optional(),
 }).optional()
 
 const TradeAnalyzeRequestSchema = z.object({
@@ -1270,7 +1270,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     const parsedReq = TradeAnalyzeRequestSchema.safeParse(body)
     if (!parsedReq.success) {
       return NextResponse.json(
-        { error: 'Invalid request format', details: parsedReq.error.errors },
+        { error: 'Invalid request format', details: parsedReq.error.issues },
         { status: 400 }
       )
     }

@@ -8,7 +8,7 @@ import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperI
 
 const resolveSchema = z.object({
   action: z.literal('resolve'),
-  interventionId: z.string().uuid(),
+  interventionId: z.guid(),
   userDecision: z.enum(['proceed', 'cancel']),
   overrideReason: z.string().max(500).optional(),
 })
