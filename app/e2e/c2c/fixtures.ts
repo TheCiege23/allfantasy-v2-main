@@ -8,6 +8,7 @@ import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 import type { C2CPlayerRow } from '@/app/c2c/components/c2cPlayerTypes'
 import type { C2CPickRow } from '@/app/c2c/components/C2CPicksBoard'
 import type { RosterBuckets } from '@/app/c2c/[leagueId]/roster/C2CRosterClient'
+import type { HarnessApiRoute } from '../harnessApi'
 
 export const HARNESS_USER_ID = 'e2e-c2c-user'
 
@@ -118,3 +119,12 @@ const picks = {
     ),
   ] satisfies C2CPickRow[],
 }
+
+/** Every /api/ answer the C2C screens need, served by scripts/e2e-harness-capture.mjs. */
+export const HARNESS_API: HarnessApiRoute[] = [
+  { path: '/api/c2c', body: config },
+  { path: '/api/redraft/season', body: season },
+  ...Object.entries(rosters).map(([rosterId, body]) => ({ path: '/api/c2c/roster', query: { rosterId }, body })),
+  { path: '/api/redraft/matchup', body: matchup },
+  { path: '/api/c2c/picks', body: picks },
+]

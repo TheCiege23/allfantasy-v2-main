@@ -9,6 +9,7 @@ import type { RequestRow } from '@/components/tournament/TournamentApprovalsCent
 import type { DraftScheduleV1 } from '@/lib/tournament/draft-schedule-types'
 import { defaultAiAutomationV1 } from '@/lib/tournament/ai-automation-hub'
 import { TOURNAMENT_ID } from './fixtures'
+import type { HarnessApiRoute } from '../harnessApi'
 
 const FEEDERS = [
   ['Gridiron North', 'Gridiron Conference', 'GRDN7Q'],
@@ -93,3 +94,16 @@ export const approvals: { requests: RequestRow[] } = {
     },
   ],
 }
+
+const base = `/api/tournament/${TOURNAMENT_ID}`
+
+/** Every /api/ answer the commissioner dashboard needs, served by scripts/e2e-harness-capture.mjs. */
+export const COMMISSIONER_HARNESS_API: HarnessApiRoute[] = [
+  { path: `${base}/access`, body: access },
+  { path: `${base}/commissioner-dashboard`, body: summary },
+  { path: `${base}/announcements`, body: { announcements } },
+  { path: `${base}/waitlist`, body: waitlist },
+  { path: `${base}/staff`, body: staff },
+  { path: `${base}/control`, body: control },
+  { path: `${base}/league-settings-request`, body: approvals },
+]

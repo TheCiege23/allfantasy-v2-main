@@ -4,6 +4,7 @@
  * screen the app never could. They are dumped to JSON for the capture script. Harness-only.
  */
 import type { IdpCapSummaryJson, IdpSalaryRecordJson } from '@/app/idp/hooks/useIdpTeamCap'
+import type { HarnessApiRoute } from '../harnessApi'
 
 export const HARNESS_USER_ID = 'e2e-idp-user'
 const HARNESS_ROSTER_ID = 'ckidproster00001'
@@ -73,3 +74,13 @@ const deadMoney = {
 
 /** /api/league/settings — only `hasAfCommissionerSub` is read here; false shows the upgrade note. */
 const settings = { hasAfCommissionerSub: false }
+
+/** Every /api/ answer the IDP cap screens need, served by scripts/e2e-harness-capture.mjs. */
+export const HARNESS_API: HarnessApiRoute[] = [
+  { path: '/api/redraft/season', body: season },
+  { path: '/api/idp/cap', query: { type: 'summary' }, body: summary },
+  { path: '/api/idp/cap', query: { type: 'contracts' }, body: contracts },
+  { path: '/api/idp/cap', query: { type: 'projections' }, body: projections },
+  { path: '/api/idp/cap', query: { type: 'dead_money' }, body: deadMoney },
+  { path: '/api/league/settings', body: settings },
+]

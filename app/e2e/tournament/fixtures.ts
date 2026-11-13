@@ -11,6 +11,7 @@
  */
 import type { TournamentLayoutPayload } from '@/lib/tournament/tournamentPageData'
 import type { fetchTournamentStandingsJson } from '@/lib/tournament/tournamentStandingsFetch'
+import type { HarnessApiRoute } from '../harnessApi'
 
 export const HARNESS_USER_ID = 'e2e-tournament-user'
 export const TOURNAMENT_ID = 'e2e-tournament'
@@ -86,3 +87,6 @@ export const standings: Standings = {
     }),
   })),
 }
+
+/** The player screens' one /api/ read, served by scripts/e2e-harness-capture.mjs (the commissioner screen's are in commissioner-fixtures.ts). */
+export const HARNESS_API: HarnessApiRoute[] = [{ path: '/api/tournament/standings', body: standings }]
