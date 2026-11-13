@@ -2,7 +2,8 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
@@ -139,7 +140,7 @@ const LeagueContextSchema = z.object({
     idp: z.boolean().optional(),
   }).optional(),
   roster: z.object({
-    slots: z.record(z.number()).optional(),
+    slots: z.record(z.string(), z.number()).optional(),
     limits: z.object({ maxRoster: z.number().optional() }).optional(),
   }).optional(),
   trade: z.object({
@@ -150,13 +151,13 @@ const LeagueContextSchema = z.object({
 }).optional()
 
 const MarketContextSchema = z.object({
-  ldi: z.record(z.number()).optional(),
-  partnerTendencies: z.record(z.any()).optional(),
+  ldi: z.record(z.string(), z.number()).optional(),
+  partnerTendencies: z.record(z.string(), z.any()).optional(),
 }).optional()
 
 const NflContextSchema = z.object({
   asOf: z.string().optional(),
-  players: z.record(z.any()).optional(),
+  players: z.record(z.string(), z.any()).optional(),
 }).optional()
 
 const TradeAnalyzeRequestSchema = z.object({
@@ -201,7 +202,7 @@ const TradeAnalyzeRequestSchema = z.object({
 
 const TradeAnalyzeResponseSchema = z.object({
   grade: z.enum(['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F']).optional(),
-  verdict: z.enum(['Fair', 'Slightly favors A', 'Slightly favors B', 'Strongly favors A', 'Strongly favors B']),
+  verdict: z.enum(['Fair', 'Slightly favors A', 'Slightly favors B', 'Strongly favors A', 'Strongly favors B']).optional(),
   winProbabilityShift: z.number().optional(),
   
   teamAnalysis: z.object({
@@ -693,10 +694,10 @@ Assign ONE verdict_tone based on trade quality:
 - ❌ DONT_DO_THIS: Bad value, wrong direction, or emotional mistake
 
 === STRUCTURED DRIVER CONSTRAINT ===
-SCORING FORMULA: Verdict = 40% Lineup Impact + 25% Replacement/Scarcity (VORP) + 20% Market Value + 15% Manager/League Behavior.
+Use the structured drivers to explain roster impact and risk. The trade receipt supplies the grade and value verdict.
 When structuredDriverData is present in the input:
 1. Your expertAnalysis MUST reference the dominantDriver (e.g. "lineup impact", "replacement value (VORP)", "market consensus", "manager/league behavior").
-2. You MUST explain the fairnessScore using ALL four sub-scores (lineupImpact, vorp, market, behavior).
+2. Explain the relevant lineup, replacement, market, and manager signals without using them to recalculate the grade.
 3. You MUST mention material risk flags from the driver data.
 4. You MUST NOT invent scoring dimensions not present in structuredDriverData.
 5. If scoringMode is "market_proxy", you MUST NOT claim you analyzed actual lineup impact from roster data. Instead say the score is based on market-estimated starter likelihood.
@@ -706,8 +707,6 @@ When structuredDriverData is present in the input:
 
 === OUTPUT FORMAT ===
 {
-  "grade": "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D" | "F",
-  "verdict": "Fair" | "Slightly favors A" | "Slightly favors B" | "Strongly favors A" | "Strongly favors B",
   "verdict_tone": "SMART" | "RISKY" | "BOLD" | "DONT_DO_THIS",
   "verdict_emoji": "🟢" | "⚠️" | "🔥" | "❌",
   "verdict_message": string (conversational verdict like "This trade helps you long-term but hurts your ${season} ceiling."),
@@ -827,34 +826,13 @@ Signature Phrases (use naturally throughout):
 The Goal:
 After 10 minutes, users should feel: "This AI understands my team and my league better than my league mates do."
 
-=== FANTASYCALC VALUES ARE AUTHORITATIVE ===
-The calculatedTradeBalance contains pre-computed values from FantasyCalc (crowdsourced from ~1 million real fantasy trades). These values are your PRIMARY source of truth:
-
-VALUE INTERPRETATION:
-- sideAValue = total value Team A RECEIVES
-- sideBValue = total value Team B RECEIVES
-- difference = sideAValue - sideBValue (positive = favors A, negative = favors B)
-- percentDiff = how lopsided the trade is
-
-GRADING RULES (MANDATORY):
-- percentDiff < 5%: Fair trade (C to B- range)
-- percentDiff 5-10%: Slight edge (B to B+ range) 
-- percentDiff 10-20%: Clear winner (B+ to A- range)
-- percentDiff 20-30%: Strong advantage (A to A range)
-- percentDiff > 30%: Smash win (A+ if you're winning, F if you're losing)
-
-YOUR VERDICT MUST ALIGN WITH THE CALCULATED VALUES. You can adjust by ±1 grade level based on:
-- Team needs and context (rebuilder getting picks is better than contender)
-- Injury concerns or situation changes not reflected in values
-- Roster fit and positional scarcity
-
-But you CANNOT flip the verdict direction. If calculatedTradeBalance says "Favors A", your verdict cannot be "Favors B" unless you have VERY strong justification.
+=== TRADE RECEIPT ===
+Use the supplied TRADE GRADE section for the grade, which team gains more value, and the asset values. The application fills the grade and verdict fields from the receipt. Explain the result in your analysis and keep team fit, injury risk, and negotiation context separate from the grade. If the receipt withholds a grade, explain the missing evidence.
 
 === CRITICAL RULES ===
 - Be SPECIFIC. Reference actual player names, stats, and situations.
 - Use the playerStats data provided to make concrete points.
-- Reference FantasyCalc values explicitly: "According to market values, Player X (7,500) is worth more than Player Y (5,200)."
-- Grade like Sleeper: A+ is a smash win, C is fair, F is getting fleeced.
+- Reference the receipt's league values when available.
 - "expertAnalysis" should read like elite fantasy analysis, not generic advice.
 - "tradePitch" should be a message Team A could send to sell this trade to their league.
 - When you have 3+ 1sts, trading one for positional stability is SMART, not overpay.
@@ -866,18 +844,9 @@ But you CANNOT flip the verdict direction. If calculatedTradeBalance says "Favor
 Before outputting your final JSON, run an internal validation step using these Gatekeeper rules. If any rule fails, adjust your analysis or flag the issue:
 
 HARD FAIL CONDITIONS (must flag or reject):
-1. FAIRNESS BAND VIOLATIONS:
-   - Standard trades: ratio must be 0.92-1.08
-   - CORNERSTONE TRADES: The side GIVING UP the cornerstone must receive 1.10-1.25 ratio (10-25% premium)
-   - If cornerstone seller receives less than 1.10 ratio → TRADE IS INVALID, flag as "CORNERSTONE_UNDERPAID"
-2. Trade contains "balance filler" players with no clear purpose: Remove from recommendations or flag
-3. CORNERSTONE VIOLATION: If a cornerstone (elite TE, SF QB, top-3 positional player) is being traded:
-   - 1-for-1 trades ONLY valid if return is also a cornerstone
-   - Non-cornerstone returns MUST include +15-25% premium with MEANINGFUL assets (early 1st, elite player)
-   - Single mid-tier player for cornerstone = INSTANT REJECT, flag as "CORNERSTONE_UNDERVALUED"
-   - Late picks + filler for cornerstone = INSTANT REJECT
-4. Trade violates league settings (Superflex QB value ignored, TEP ignored): Adjust analysis
-5. Neither team benefits or has believable acceptance narrative: Flag as "NO_CLEAR_WINNER"
+1. Flag filler assets in suggested alternatives.
+2. Flag potential negotiation resistance when a cornerstone moves. Suggest a meaningful return in a counteroffer.
+3. Explain material scoring rules or roster fit when supported by the league context.
 
 CORNERSTONE EXAMPLES (these require premium or cornerstone-for-cornerstone):
 - Elite TEs: Kelce, Andrews, Bowers, LaPorta (positional scarcity + ceiling)
@@ -915,13 +884,13 @@ If a trade fails the realism check, either:
 2. Flag it in riskFlags as "UNREALISTIC_OFFER" with explanation
 
 REPAIR RULES (apply if close to failing):
-- If fairness is close but fails, suggest smallest adjustment in counterOffers (swap bench asset, adjust pick tier)
+- If the receipt shows a small imbalance, suggest a small adjustment in counterOffers (swap a bench asset or adjust a pick tier).
 - Never exceed 3 assets per side in any counter-offer
 - Replace filler with purposeful depth (handcuff, position need) when suggesting alternatives
 
 VALIDATION CHECKLIST (run mentally before output):
 [ ] Are all players in this trade from the tradeable_assets lists?
-[ ] Is the value ratio between 0.92-1.08 (or 0.90-1.10 for rebuilders)?
+[ ] Do the value claims agree with the trade receipt?
 [ ] Does each side have a clear "why they accept" narrative?
 [ ] Are cornerstones protected or properly compensated?
 [ ] Are pick values accurate (early/mid/late, not generic "1st")?
@@ -1162,11 +1131,11 @@ function buildUserPrompt(args: {
         },
         hindsightVerdict: historicalContext.hindsightVerdict,
         hindsightScore: historicalContext.hindsightScore,
-        guidance: `For HISTORICAL trades, use valueAtTrade to grade the trade AS IT WAS at the time. The currentValue and trend show how it aged. hindsightVerdict gives retrospective analysis.`
+        guidance: `For historical context, valueAtTrade describes the stored trade-date values. Use currentValue and trend to explain how the trade aged. The trade receipt supplies the displayed grade.`
       } : null,
       
       realTimePlayerNews: playerNews && playerNews.length > 0 ? {
-        critical_note: 'THIS REAL-TIME NEWS FROM X/TWITTER SUPERSEDES STATIC VALUES. Adjust analysis accordingly.',
+        critical_note: 'Use recent news to explain risk or context using the values from the trade receipt.',
         players: playerNews.filter(p => p.news.length > 0 || p.buzz).map(p => ({
           playerName: p.playerName,
           sentiment: p.sentiment,
@@ -1240,11 +1209,11 @@ The grade and verdict are FIXED by the engine (see TRADE GRADE). Explain them; d
         'FLAG CONCERNS: Include risk_flags for: retirement candidates (Rodgers, Brady-types), backup RBs with limited upside, aging WRs, multiple picks to a team already loaded with picks.',
         'USE PLAYER STATS: playerStats holds each player\'s stored season stat line and current injury designation, matched to that player\'s own position and team. A player listed in playerStatsUnresolved has NO stats or injury on file here — do not state stats or an injury for them, and never borrow another player\'s (a same-named player at another position is a different person). An injury of null means none on file, not "healthy".',
         'USE FANTASYCALC: fantasyCalcMarketValues contains crowdsourced trade values from ~1 million real fantasy trades. Use these to assess market value and price each side of the trade. 30-day trends show rising/falling players.',
-        'USE HISTORICAL VALUES: historicalValueContext (when present) contains what players were actually worth at the time of a historical trade. For past trades, this is CRITICAL - grade the trade based on valueAtTrade (what it looked like THEN), not currentValue. The hindsightVerdict shows how it aged. This enables accurate grading of trades from months/years ago.',
-        'USE CALCULATED BALANCE: calculatedTradeBalance contains the pre-calculated value totals for each side based on FantasyCalc data. Use this as your primary value reference. The verdict field gives initial guidance, but you should adjust based on team context and needs.',
+        'HISTORICAL CONTEXT: historicalValueContext can explain how a trade aged. The TRADE GRADE section supplies the grade to explain.',
+        'USE CALCULATED BALANCE: calculatedTradeBalance and TRADE GRADE contain the engine’s totals and verdict. Use the trade receipt for value claims and explain roster fit separately.',
         'BESTBALL LEAGUES: When leagueType is "bestball", apply Bestball-specific valuation: (1) Boom/bust players with high ceilings are MORE valuable, (2) Depth and quantity matter more than consolidating into one elite player, (3) Handcuffs and injury insurance matter less, (4) Weekly floor is less important than weekly ceiling, (5) High-variance WRs and RBs who can score 25+ any week are premium assets.',
         tradeGoal ? `USER TRADE GOAL: The user has specified their goal as "${tradeGoal}". Evaluate the trade in the context of this goal. Does the trade help them achieve it? Be specific about how this trade aligns or conflicts with their stated objective.` : '',
-        'CRITICAL - REAL-TIME NEWS: realTimePlayerNews contains LIVE news from X/Twitter (last 7 days). If a player was RELEASED, CUT, INJURED, or had a BREAKOUT PERFORMANCE, this MUST be reflected in your analysis. Real-time news SUPERSEDES static FantasyCalc values. Always mention relevant breaking news in your expertAnalysis and playerBreakdowns.',
+        'RECENT NEWS: Mention relevant news in expertAnalysis and playerBreakdowns as context for risk. Use the receipt for all values and the grade.',
         newsValueAdjustments && newsValueAdjustments.length > 0 ? `NEWS VALUE ADJUSTMENTS APPLIED: The trade balance numbers above ALREADY include news-based value adjustments. ${formatNewsAdjustmentsForPrompt(newsValueAdjustments)}` : '',
       ].filter(Boolean),
       
@@ -1294,16 +1263,14 @@ function buildTradeIntelReconciliationDirective(audit: TradeProviderAudit): stri
 }
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: "LegacyTradeAnalyze" })(async (request: NextRequest) => {
   try {
-    const auth = requireAuthOrOrigin(request)
-    if (!auth.authenticated) {
-      return forbiddenResponse(auth.error || 'Unauthorized')
-    }
+    // CSRF protection only. This was `requireAuthOrOrigin`, which authenticates nobody.
+    if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
     const body = await request.json()
     const parsedReq = TradeAnalyzeRequestSchema.safeParse(body)
     if (!parsedReq.success) {
       return NextResponse.json(
-        { error: 'Invalid request format', details: parsedReq.error.errors },
+        { error: 'Invalid request format', details: parsedReq.error.issues },
         { status: 400 }
       )
     }
@@ -1408,6 +1375,27 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     if (errA) return NextResponse.json({ error: errA }, { status: 400 })
     const errB = validateSideAssets(assetsBRaw, 'Side B')
     if (errB) return NextResponse.json({ error: errB }, { status: 400 })
+
+    /*
+     * 🛑 A PAID MODEL CALL (OpenAI + Grok news) THAT ANY ANONYMOUS CALLER COULD RUN, AS ANYONE.
+     *
+     * Identity is now the caller's own linked Sleeper account (no guests: model spend). It is
+     * resolved here -- after the cheap request-shape validation above, before any provider,
+     * roster or model work below.
+     *
+     * `sleeper_username_a` is deliberately NOT compared against it. The analyzer legitimately
+     * grades any two teams in a league -- the trade hub sends DISPLAY names, and the analyzer
+     * page lets you put any manager on either side -- so a mismatch is not an attack and a 403
+     * would break the screen. What Side A must not do is select someone ELSE's private data.
+     * So every read and write that is keyed on Side A's identity (manager DNA, historical hit
+     * rate, confidence-risk history, the decision log, the private coaching DM, the trade-offer
+     * event) runs only when Side A resolves to the caller -- see `ownSideA` below.
+     */
+    const gate = await requireLegacySleeperIdentity(request, {
+      rateLimit: { action: 'trade_analyze', maxRequests: 20, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const viewerSleeperUsername = gate.identity.sleeperUsername
 
     // Client-provided rosters (already prepared by frontend)
     const clientRosterA = (reqData.rosterA || []) as RosteredPlayer[]
@@ -1669,6 +1657,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         rosterIds: { userRosterId: resolvedUserRosterId, partnerRosterId: resolvedPartnerRosterId },
       })
     }
+
+    // Side A's identity, but ONLY when Side A is the caller. Everything that reads or writes
+    // per-user private state keys on this, never on the caller-chosen `canonicalA`.
+    const ownSideA =
+      canonicalA && canonicalA.trim().toLowerCase() === viewerSleeperUsername.trim().toLowerCase()
+        ? canonicalA
+        : ''
 
     // Prefer client-provided rosters, fallback to API-fetched rosters
     const finalRosterA = clientRosterA.length > 0 ? clientRosterA : sideARoster
@@ -1993,9 +1988,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     }
 
     let managerDnaContext = '';
-    if (canonicalA) {
+    if (ownSideA) {
       try {
-        const dna = await getCachedDNA(canonicalA);
+        const dna = await getCachedDNA(ownSideA);
         if (dna) {
           managerDnaContext = formatDNAForPrompt(dna);
         }
@@ -2235,6 +2230,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       leagueId: leagueId || null,
       userId: sleeperA || null,
       partnerId: sleeperB || null,
+      // Results built with the caller's own manager DNA must never be served to someone
+      // naming that caller as Side A, so the owner and non-owner views cache apart.
+      viewerOwnsSideA: Boolean(ownSideA),
       sport,
       format,
       leagueType,
@@ -2282,7 +2280,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         sentiment: n?.sentiment || null,
         updatedAt: n?.updatedAt || n?.timestamp || null,
       })),
-      promptVersion: 'v2',
+      promptVersion: 'v3-receipt-grade',
     }
 
     const aiResult = await getOrCreateAiResult({
@@ -2384,7 +2382,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       }
     })
 
-    const hitRate = await getHistoricalHitRate(canonicalA, 'trade', leagueId || undefined).catch(() => null)
+    const hitRate = ownSideA
+      ? await getHistoricalHitRate(ownSideA, 'trade', leagueId || undefined).catch(() => null)
+      : null
 
     // Honesty (Task 2): classify every valuation that entered the balance math. Since the one engine
     // (2026-09-26) a balance exists only when EVERY asset was priced on league values, so nothing
@@ -2408,7 +2408,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     const crResult = computeConfidenceRisk({
       category: 'trade',
-      userId: canonicalA || undefined,
+      userId: ownSideA || undefined,
       leagueId: leagueId || undefined,
       assets: tradeAssets,
       dataCompleteness: {
@@ -2427,15 +2427,15 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       historicalHitRate: hitRate,
     })
 
-    if (canonicalA && leagueId) {
+    if (ownSideA && leagueId) {
       autoLogDecision({
-        userId: canonicalA,
+        userId: ownSideA,
         leagueId: leagueId || 'unknown',
         decisionType: 'trade',
         aiRecommendation: {
-          summary: `Trade: ${data.verdict || 'analyzed'}`,
-          grade: data.grade,
-          verdict: data.verdict,
+          summary: `Trade: ${legacyVerdictFromGrade(evaluationReceipt.grade) ?? 'analyzed'}`,
+          grade: evaluationReceipt.grade.graded ? evaluationReceipt.grade.letter : null,
+          verdict: legacyVerdictFromGrade(evaluationReceipt.grade),
           format,
           sport,
         },
@@ -2663,9 +2663,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     })
 
     const notifications = {
-      private_dm: canonicalA
+      private_dm: ownSideA
         ? buildPrivateTradeCoachingNotification({
-            userId: canonicalA,
+            userId: ownSideA,
             recommendation: recommendationLabel,
             summary:
               recommendationLabel === 'accept'
@@ -2695,7 +2695,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     logTradeOfferEvent({
       leagueId: leagueId || null,
-      senderUserId: canonicalA || null,
+      senderUserId: ownSideA || null,
       // The sender is Team A, which GIVES `assetsB` and RECEIVES `assetsA`.
       assetsGiven: assetsB.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
       assetsReceived: assetsA.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
@@ -2707,8 +2707,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         weights: [0.40, 0.25, 0.20, 0.15],
       } : null,
       acceptProb: tradeDriverData?.acceptProbability ?? null,
-      verdict: data.verdict || tradeDriverData?.verdict || null,
-      grade: data.grade || null,
+      verdict: legacyVerdictFromGrade(evaluationReceipt.grade),
+      grade: evaluationReceipt.grade.graded ? evaluationReceipt.grade.letter : null,
       confidenceScore: crResult.confidenceScore01,
       driverSet: tradeDriverData?.acceptDrivers?.map(d => ({ id: d.id, evidence: d.evidence?.note || d.evidence?.metric || '' })) ?? null,
       segmentParts: {

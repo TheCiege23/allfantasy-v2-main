@@ -162,7 +162,8 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       {
         title: 'Trade finder',
         description: 'Find partners and structure dynasty / redraft trades.',
-        href: '/trade-finder',
+        /* The one trade finder, on the Trades screen (2026-11-12; /trade-finder redirects there). */
+        href: `/core/trades?league=${encodeURIComponent(league.id)}#trade-finder`,
         icon: Coins,
       },
       {
@@ -172,9 +173,10 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         icon: BookOpen,
       },
       {
-        title: 'Dynasty trade analyzer',
-        description: 'Value-based trade breakdowns for dynasty leagues.',
-        href: '/dynasty-trade-analyzer',
+        title: 'Trade analyzer',
+        description: 'Grade a trade in this league, with its own scoring and dynasty values.',
+        /* The Trade Analyzer's league tab, on this league (the dynasty analyzer was merged into it, 2026-11-12). */
+        href: `/trade-evaluator?leagueId=${encodeURIComponent(league.id)}`,
         icon: Scale,
       },
       {
@@ -184,7 +186,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         icon: Sparkles,
       },
     ],
-    [sportQs],
+    [sportQs, league.id],
   )
 
   const gatedTools: GatedTool[] = useMemo(
@@ -242,7 +244,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         featureId: 'war_room_pipeline_analysis',
         title: 'Pipeline analysis',
         description: 'Prospect and pipeline evaluation (AF Legacy).',
-        href: '/trade-finder',
+        href: `/core/trades?league=${encodeURIComponent(league.id)}#trade-finder`,
         cta: 'Analyze pipeline',
       },
     ],

@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { pricePlayer, pricePick, PricedAsset, ValuationContext, PickInput } from '@/lib/hybrid-valuation'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
@@ -278,8 +279,8 @@ function buildProposal(
 }
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generator", tool: "LegacyTradeProposalGenerator" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
+  // CSRF protection only -- `requireAuthOrOrigin` stood here and authenticated nobody.
+  if (!validateRequestOrigin(req)) return forbiddenResponse('Invalid request origin')
 
   const ip = getClientIp(req)
   const rl = consumeRateLimit({
@@ -304,13 +305,24 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
       return NextResponse.json({ error: 'Invalid request', details: parsed.error.issues }, { status: 400 })
     }
 
+    /*
+     * Paid model call, plus decision-log and trade-offer writes keyed on `username`. Identity is
+     * the caller's own linked Sleeper account (no guests: model spend); the body's username is
+     * only compared, so a mismatch is a visible 403.
+     */
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: parsed.data.username,
+      rateLimit: { action: 'trade_proposal', maxRequests: 10, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
+
     const {
       myTeam,
       targetTeam,
       desiredAssets,
       format,
       isSuperFlex,
-      username,
     } = parsed.data
 
     const today = new Date().toISOString().split('T')[0]
@@ -513,11 +525,11 @@ Respond in JSON format:
       pickRound: a.pickRound,
     }))
 
-    const hitRate = await getHistoricalHitRate(parsed.data.username, 'trade_proposal', parsed.data.leagueId).catch(() => null)
+    const hitRate = await getHistoricalHitRate(username, 'trade_proposal', parsed.data.leagueId).catch(() => null)
 
     const crResult = computeConfidenceRisk({
       category: 'trade_proposal',
-      userId: parsed.data.username,
+      userId: username,
       leagueId: parsed.data.leagueId,
       assets: proposalAssets,
       dataCompleteness: {
@@ -533,7 +545,7 @@ Respond in JSON format:
     })
 
     autoLogDecision({
-      userId: parsed.data.username,
+      userId: username,
       leagueId: parsed.data.leagueId,
       decisionType: 'trade_proposal',
       aiRecommendation: {
@@ -551,7 +563,7 @@ Respond in JSON format:
       const g = grades[i]!
       logTradeOfferEvent({
         leagueId: parsed.data.leagueId,
-        senderUserId: parsed.data.username,
+        senderUserId: username,
         opponentUserId: String(parsed.data.targetRosterId),
         assetsGiven: p.myOffer.map((a) => ({ name: a.name, value: a.value })),
         assetsReceived: p.theirOffer.map((a) => ({ name: a.name, value: a.value })),

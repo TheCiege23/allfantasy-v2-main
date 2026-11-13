@@ -90,9 +90,9 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
             className={`rounded-lg px-3 py-1.5 text-[11px] font-bold ${
               tab === t
                 ? t === 'OFFENSE'
-                  ? 'bg-[color:var(--idp-offense)]/25 text-blue-100'
+                  ? 'bg-idp-offense/25 text-blue-100'
                   : t === 'DEFENSE'
-                    ? 'bg-[color:var(--idp-defense)]/25 text-red-100'
+                    ? 'bg-idp-defense/25 text-red-100'
                     : 'bg-violet-500/25 text-violet-100'
                 : 'text-white/45 hover:bg-white/[0.04]'
             }`}
@@ -103,7 +103,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
       </div>
 
       {draftMethod === 'auction' || draftMethod === 'hybrid' ? (
-        <div className="rounded-lg border border-[color:var(--cap-contract)]/30 bg-[color:var(--cap-contract)]/10 px-3 py-2 text-[11px] text-white/85">
+        <div className="rounded-lg border border-cap-contract/30 bg-cap-contract/10 px-3 py-2 text-[11px] text-white/85">
           <span className="font-semibold text-cyan-100">Auction</span>
           <span className="text-white/50"> — Current bid fills in as nominations progress. Max affordable per row updates from your remaining cap.</span>
         </div>
@@ -192,7 +192,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
                       <span
                         className={`rounded border px-2 py-0.5 font-mono ${
                           affordable
-                            ? 'border-[color:var(--cap-green)]/40 bg-[color:var(--cap-green)]/10 text-emerald-100'
+                            ? 'border-cap-green/40 bg-cap-green/10 text-emerald-100'
                             : 'border-white/10 text-white/40'
                         }`}
                       >
@@ -200,7 +200,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
                       </span>
                     </div>
                     <div className="text-right text-white/55">
-                      <span className="rounded-full bg-[color:var(--cap-contract)]/15 px-2 py-0.5 font-mono text-[color:var(--cap-contract)]">
+                      <span className="rounded-full bg-cap-contract/15 px-2 py-0.5 font-mono text-[color:var(--cap-contract)]">
                         ${sal.toFixed(1)}M/yr
                       </span>
                       <p className="mt-0.5 text-[11px]">
@@ -226,7 +226,7 @@ export function IDPDraftFilters({ pickIndex = 7 }: IDPDraftFiltersProps) {
       )}
 
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0a1228]/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:static sm:z-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-0">
-        <div className="mx-auto flex max-w-lg flex-col gap-2 sm:max-w-none sm:flex-row sm:items-center sm:justify-between sm:rounded-lg sm:border sm:border-[color:var(--cap-contract)]/25 sm:bg-black/35 sm:px-3 sm:py-2">
+        <div className="mx-auto flex max-w-lg flex-col gap-2 sm:max-w-none sm:flex-row sm:items-center sm:justify-between sm:rounded-lg sm:border sm:border-cap-contract/25 sm:bg-black/35 sm:px-3 sm:py-2">
           <div className="flex items-center justify-between gap-3 text-[11px] sm:justify-start">
             <span className="font-semibold text-white/80">Your cap remaining</span>
             <span className="font-mono text-sm font-bold text-[color:var(--cap-green)]">${DEMO_CAP_REMAINING_M.toFixed(1)}M</span>

@@ -13,11 +13,13 @@ const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
 
 describe('my team on a narrow page leads with the lineup', () => {
   it('moves the decision and every roster section up, in a top-level narrow-page query', () => {
-    const start = code.lastIndexOf('@container af-mt (max-width: 500px) {')
+    // The block holding the decision rule, not merely the last narrow-page block: later passes append more.
+    const start = code.lastIndexOf('@container af-mt (max-width: 500px) {', code.indexOf('.af-core .af-mt .af-mt-decision,'))
     expect(start).toBeGreaterThan(-1)
     const before = code.slice(0, start)
     expect((before.match(/\{/g) ?? []).length).toBe((before.match(/\}/g) ?? []).length)
-    const block = code.slice(start)
+    const end = code.indexOf('\n}\n', start)
+    const block = code.slice(start, end + 3)
     for (const sel of ['.af-mt-decision', '#af-mt-starters', '.af-mt-bench', '.af-mt-ir', '.af-mt-taxi']) {
       expect(block, sel).toContain(`.af-core .af-mt ${sel}`)
     }

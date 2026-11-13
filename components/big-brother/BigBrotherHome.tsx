@@ -17,6 +17,7 @@ import { BigBrotherTwistsPanel } from './BigBrotherTwistsPanel'
 import { BigBrotherHistoryPanel } from './BigBrotherHistoryPanel'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 import { BigBrotherSpecialtyHome, type BigBrotherSpecialtySummary } from './BigBrotherSpecialtyHome'
+import { bigBrotherPhaseLabel } from './bigBrotherCopy'
 
 const VIEW_LABELS: Record<BigBrotherView, string> = {
   house: 'House',
@@ -93,15 +94,19 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
   }
 
   const names = summary?.rosterDisplayNames ?? {}
+  // A roster with no name reads as a houseguest, as on the house view — never as its id.
+  const nameOf = (id: string) => names[id] ?? 'A houseguest'
   const cycle = summary?.cycle
-  const phase = cycle?.phase ?? '—'
+  const phase = bigBrotherPhaseLabel(cycle?.phase)
 
   const viewOptions = (Object.keys(VIEW_LABELS) as BigBrotherView[]).filter(
     (v) => v !== 'commissioner' || isCommissioner,
   )
 
   return (
-    <div className="relative space-y-6 overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#0c1428]/95 via-[#070b18] to-[#040915] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-6">
+    // `af-draft-dark`: Big Brother is dark in every mode, as its house view already is; the light clamp blanked
+    // the other views' text (2026-11-09 audit).
+    <div className="af-draft-dark relative space-y-6 overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#0c1428]/95 via-[#070b18] to-[#040915] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-6">
       <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-amber-500/[0.07] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-28 left-0 h-48 w-48 rounded-full bg-cyan-500/[0.06] blur-3xl" />
       {/* The house view opens with the specialty-league home (2026-10-18), which carries the title and your status. */}
@@ -237,7 +242,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
           <div className="rounded-2xl border border-amber-500/35 bg-gradient-to-br from-amber-950/40 to-[#0a1228]/90 p-5 shadow-[0_12px_40px_rgba(180,80,0,0.12)]">
             <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200/85">Head of Household</h3>
             {cycle?.hohRosterId ? (
-              <p className="mt-2 text-2xl font-bold text-amber-100">{names[cycle.hohRosterId] ?? cycle.hohRosterId}</p>
+              <p className="mt-2 text-2xl font-bold text-amber-100">{nameOf(cycle.hohRosterId)}</p>
             ) : (
               <p className="mt-2 text-sm text-amber-200/75">HOH not set for this week yet.</p>
             )}
@@ -249,7 +254,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
               <ul className="mt-2 flex flex-wrap gap-2 text-sm text-white/75">
                 {summary.eligibility.canCompeteHOH.map((id) => (
                   <li key={id} className="rounded-lg border border-white/[0.06] bg-black/20 px-2 py-1">
-                    {names[id] ?? id}
+                    {nameOf(id)}
                   </li>
                 ))}
               </ul>
@@ -264,7 +269,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
             <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200/85">Veto</h3>
             {cycle?.vetoWinnerRosterId ? (
               <p className="mt-2 text-lg font-semibold text-cyan-100">
-                Winner: {names[cycle.vetoWinnerRosterId] ?? cycle.vetoWinnerRosterId}
+                Winner: {nameOf(cycle.vetoWinnerRosterId)}
               </p>
             ) : (
               <p className="mt-2 text-sm text-cyan-200/70">Veto not awarded yet.</p>
@@ -272,7 +277,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
             {cycle?.vetoParticipantRosterIds && cycle.vetoParticipantRosterIds.length > 0 ? (
               <ul className="mt-3 text-sm text-white/65">
                 {cycle.vetoParticipantRosterIds.map((id) => (
-                  <li key={id}>• {names[id] ?? id}</li>
+                  <li key={id}>• {nameOf(id)}</li>
                 ))}
               </ul>
             ) : null}
@@ -282,7 +287,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
 
       {view === 'twists' && <BigBrotherTwistsPanel leagueId={leagueId} />}
 
-      {view === 'history' && <BigBrotherHistoryPanel leagueId={leagueId} />}
+      {view === 'history' && <BigBrotherHistoryPanel leagueId={leagueId} names={names} />}
 
       {view === 'ceremony' && summary && (
         <BigBrotherCeremonyCenter leagueId={leagueId} summary={summary} />

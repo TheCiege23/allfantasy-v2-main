@@ -25,30 +25,30 @@ export function tradeEvidence(lines: readonly TradeGradeLine[], at: string, gaps
   const issues = new Set(gaps.filter(Boolean))
   for (const line of lines) {
     if (line.leagueValue == null || !Number.isFinite(line.leagueValue) || line.leagueValue < 0) {
-      issues.add(`${line.name}: value unavailable or invalid.`)
+      issues.add(`${line.name}: no value found.`)
       continue
     }
     priced++
     const source = line.valueSource
-    if (!source) issues.add(`${line.name}: the price source was not recorded.`)
-    if (source && APPROXIMATE.has(source)) issues.add(`${line.name}: priced by an estimate or formula (${source.replaceAll('_', ' ')}).`)
+    if (!source) issues.add(`${line.name}: we don’t know where this value came from.`)
+    if (source && APPROXIMATE.has(source)) issues.add(`${line.name}: this value is an estimate (${source.replaceAll('_', ' ')}).`)
     const date = line.valueAsOf ? Date.parse(line.valueAsOf) : NaN
     if (Number.isFinite(date) && Number.isFinite(now) && date <= now + DAY) {
       dates.push(date)
-      if (now - date > TRADE_VALUE_STALE_DAYS * DAY) issues.add(`${line.name}: source is more than ${TRADE_VALUE_STALE_DAYS} days old.`)
+      if (now - date > TRADE_VALUE_STALE_DAYS * DAY) issues.add(`${line.name}: this value is more than ${TRADE_VALUE_STALE_DAYS} days old.`)
     } else {
-      issues.add(`${line.name}: source date unavailable or invalid${line.valueScope ? ` (projection scope: ${line.valueScope})` : ''}.`)
+      issues.add(`${line.name}: this value has no date${line.valueScope ? ` (projection for ${line.valueScope})` : ''}.`)
     }
     if (source && !MARKET.has(source) && !APPROXIMATE.has(source)) {
-      issues.add(`${line.name}: value uses ${source.replaceAll('_', ' ')}; a market quote is not independently verified.`)
+      issues.add(`${line.name}: this value comes from ${source.replaceAll('_', ' ')}, not the trade market.`)
     }
   }
-  if (!lines.length) issues.add('Asset evidence was not recorded for this evaluation.')
-  if (!Number.isFinite(now)) issues.add('Evaluation time was not recorded; freshness cannot be checked.')
+  if (!lines.length) issues.add('No player values were saved for this grade.')
+  if (!Number.isFinite(now)) issues.add('We don’t know when this was graded, so we can’t check how fresh the values are.')
   const status = priced !== lines.length || !lines.length || !dates.length ? 'limited' : issues.size ? 'mixed' : 'dated'
   return {
     status,
-    label: status === 'dated' ? 'Dated market evidence' : status === 'mixed' ? 'Mixed evidence' : 'Limited evidence',
+    label: status === 'dated' ? 'Values are up to date' : status === 'mixed' ? 'Some values need a check' : 'Some values are missing',
     priced, total: lines.length, dated: dates.length,
     oldest: dates.length ? new Date(Math.min(...dates)).toISOString() : null,
     newest: dates.length ? new Date(Math.max(...dates)).toISOString() : null,
@@ -71,12 +71,12 @@ export function tradePackageReview(
   return {
     givePlayers, getPlayers, netPlayerSlots,
     note: `You send ${givePlayers} player${givePlayers === 1 ? '' : 's'} and receive ${getPlayers}. ${netPlayerSlots > 0
-      ? `That adds ${netPlayerSlots} player roster slot${netPlayerSlots === 1 ? '' : 's'}; a full roster may require drops.`
-      : `That frees ${-netPlayerSlots} player roster slot${netPlayerSlots === -1 ? '' : 's'}; check that outgoing starters are replaced.`
+      ? `You’ll need ${netPlayerSlots} more roster spot${netPlayerSlots === 1 ? '' : 's'}; if your roster is full, you’ll have to drop someone.`
+      : `That opens ${-netPlayerSlots} roster spot${netPlayerSlots === -1 ? '' : 's'}; make sure you can replace any starters you send.`
     } ${opts.rosterSpotCharged
       // The grade carries the open-spot credit (`lib/trade-value/rosterSpotCharge.ts`).
-      ? 'The value grade already counts the roster spot at the league’s last-rostered-player price. Which starter a drop displaces still needs a roster review.'
-      : 'The value grade sums quoted asset prices. Usable starter value and the cost of any drops require a roster review.'}`,
+      ? 'The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.'
+      : 'The grade only adds up values, so check your lineup and any drops too.'}`,
   }
 }
 

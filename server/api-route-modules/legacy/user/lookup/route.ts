@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { getSleeperUser } from '@/lib/sleeper-client'
 import { withApiUsage } from '@/lib/telemetry/usage'
 
@@ -14,9 +14,16 @@ const bodySchema = z.object({
 
 export const POST = withApiUsage({ endpoint: '/api/legacy/user/lookup', tool: 'LegacyUserLookup' })(
   async (request: NextRequest) => {
-    const auth = requireAuthOrOrigin(request)
-    if (!auth.authenticated) {
-      return forbiddenResponse(auth.error || 'Unauthorized')
+    /*
+     * DELIBERATELY ORIGIN-ONLY. This resolves a handle against Sleeper's PUBLIC user endpoint
+     * and returns only the public profile fields Sleeper itself serves to anyone; it reads no
+     * AllFantasy row and keys nothing to a user. It is also the first step of the import /
+     * guest-import flow, before any session exists, so requiring one would make onboarding
+     * impossible. It used `requireAuthOrOrigin`, which behaves identically but reads as
+     * authentication; it is spelled as what it is -- a CSRF / same-site check.
+     */
+    if (!validateRequestOrigin(request)) {
+      return forbiddenResponse('Invalid request origin')
     }
 
     const body = await request.json().catch(() => null)

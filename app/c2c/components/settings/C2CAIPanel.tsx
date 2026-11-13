@@ -100,8 +100,7 @@ export function C2CAIPanel({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
           <span>
-            AF Commissioner Subscription gates C2C AI execution — toggles are local preferences only until AfSub is
-            active.
+            C2C AI runs with AF Commissioner. Until then, these toggles are saved as preferences only.
           </span>
           <SubscriptionGateBadge
             featureId="commissioner_c2c_scouting"
@@ -190,7 +189,7 @@ export function C2CAIPanel({
       ) : null}
 
       <div className="space-y-3 rounded-xl border border-white/[0.08] bg-[#0a1228] p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Run tools (AfSub)</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Run tools (AF Commissioner)</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"

@@ -10,6 +10,7 @@ import {
   YahooImportConnectionError,
   type YahooCredentialContext,
 } from '@/lib/yahoo/yahooCredentialStore'
+import { isYahooImportLive, yahooComingSoonJson } from '@/lib/yahoo/yahooAvailability'
 
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID
 const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET
@@ -110,6 +111,9 @@ function notConnected(error: unknown): NextResponse | null {
 }
 
 export const GET = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLeagues" })(async (_request: NextRequest) => {
+  // Coming soon: answer plainly instead of calling a Yahoo API that 403s every unapproved app.
+  if (!isYahooImportLive()) return yahooComingSoonJson()
+
   const auth = await requireVerifiedUser()
   if (!auth.ok) {
     return auth.response
@@ -209,6 +213,8 @@ export const GET = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLe
 })
 
 export const POST = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLeagues" })(async (request: NextRequest) => {
+  if (!isYahooImportLive()) return yahooComingSoonJson()
+
   const auth = await requireVerifiedUser()
   if (!auth.ok) {
     return auth.response

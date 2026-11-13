@@ -150,7 +150,7 @@ export function ZombieOverridePanel({ leagueId, canEdit }: { leagueId: string; c
             className={clsx(
               'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition disabled:opacity-40',
               selectedAction === action.id
-                ? 'border-[var(--zombie-crimson)]/40 bg-[var(--zombie-crimson)]/[0.06]'
+                ? 'border-zombie-crimson/40 bg-[var(--zombie-crimson)]/[0.06]'
                 : 'border-[var(--zombie-border)] bg-[var(--zombie-panel)] hover:bg-white/[0.02]',
             )}
           >
@@ -256,7 +256,7 @@ export function ZombieOverridePanel({ leagueId, canEdit }: { leagueId: string; c
               type="button"
               disabled={d || (needsUser && !selectedUser) || !reason.trim()}
               onClick={() => actionDef?.destructive ? setConfirmOpen(true) : void executeAction()}
-              className="rounded-lg bg-[var(--zombie-crimson)]/20 px-5 py-2 text-[12px] font-semibold text-[var(--zombie-crimson)] transition hover:bg-[var(--zombie-crimson)]/30 disabled:opacity-40"
+              className="rounded-lg bg-zombie-crimson/20 px-5 py-2 text-[12px] font-semibold text-[var(--zombie-crimson)] transition hover:bg-zombie-crimson/30 disabled:opacity-40"
             >
               Execute override
             </button>

@@ -57,6 +57,7 @@ import {
   type RecipeFacts,
 } from '@/lib/core-app/commissioner/recipes'
 import { Prisma } from '@prisma/client'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 const SEEN_PREFIX = 'commissioner-recipe:v1:'
 const SEEN_TTL_MS = 400 * 24 * 60 * 60 * 1000
@@ -97,6 +98,9 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       settings: true,
       starters: true,
       lastSyncedAt: true,
+      bestBallMode: true,
+      leagueVariant: true,
+      leagueType: true,
     },
   })
   if (!league?.userId) return null
@@ -215,6 +219,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       leagueName: league.name?.trim() || 'League',
       sport,
       platform: String(league.platform ?? '').toLowerCase(),
+      bestBall: isBestBallLeagueRow(league),
       status: league.status,
       season: league.season,
       currentWeek: leagueWeekFromSettings(league.settings),

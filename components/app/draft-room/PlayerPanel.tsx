@@ -817,7 +817,7 @@ function PlayerPanelInner({
           sport: payload.sport,
         })
         if (leagueId) q.set('leagueId', leagueId)
-        window.location.href = `/player-compare?${q.toString()}`
+        window.location.href = `/player-comparison-lab?${q.toString()}`
       }
       setCompareAnchor(null)
     },

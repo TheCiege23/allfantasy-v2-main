@@ -37,10 +37,16 @@ import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import type { Dash34Result } from '@/lib/core-app/dash34'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StreakSummary } from '@/lib/core-app/dailyStreak'
-import { DailyStreakCardView, StreakGlanceView, type StreakGlanceItem } from '@/components/core-app/home/DailyStreakCardView'
-import '@/components/core-app/home/af-streak.css'
 import type { PortfolioSummaryMeta } from '@/lib/core-app/homePortfolioSummary'
 import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
+import { HomeHeadline, type HeadlineChip } from '@/components/core-app/home/HomeHeadline'
+import { HomeSeasonPulse } from '@/components/core-app/home/HomeSeasonPulse'
+import { HomeCommishCard } from '@/components/core-app/home/HomeCommishCard'
+import { buildSeasonPulse, foldInjuredStarters, type PulseLeague } from '@/lib/core-app/homeGuide'
+import type { CommissionerOverviewData } from '@/lib/core-app/commissionerOverview'
+import { HomeFormatGuide } from '@/components/core-app/home/HomeFormatGuide'
+import { HomePlatformCalendar, type CalendarDisplayRow } from '@/components/core-app/home/HomePlatformCalendar'
+import type { FormatCount } from '@/lib/core-app/homeFormats'
 
 /**
  * The /core home, one streamed card at a time.
@@ -118,6 +124,20 @@ export type HomeLoads = {
   streak: Promise<StreakSummary | null>
   brief: Promise<ComponentProps<typeof DashSinceLastVisit>['brief']>
   drafts: Promise<ComponentProps<typeof DashDraftsBand>['data']>
+  /**
+   * Your standing in every league in view (2026-11-12) — the season pulse card. Absent or null hides
+   * the card: a failed read is not "no games yet".
+   */
+  standings?: Promise<PulseLeague[] | null>
+  /**
+   * The Commissioner Hub's overview over the leagues you run (2026-11-12). Absent or null — not a
+   * commissioner, the section hidden, or a failed read — hides the card.
+   */
+  commish?: Promise<CommissionerOverviewData | null>
+  /** The format guide's counts (lib/core-app/homeFormats.ts). Absent or null hides the card. */
+  formats?: Promise<FormatCount[] | null>
+  /** The platform calendar's rows (lib/core-app/platformCalendar.ts). Absent or null hides the card. */
+  calendar?: Promise<CalendarDisplayRow[] | null>
 }
 
 /**
@@ -147,11 +167,20 @@ export function emptyHomeLoads(): HomeLoads {
     streak: none(null),
     brief: none(null),
     drafts: none(null),
+    standings: none(null),
+    commish: none(null),
+    formats: none(null),
+    calendar: none(null),
   }
 }
 
 /** The render-failure boundaries' names (the `af.card` tag on a reported card failure). */
 export type HomeCardName =
+  | 'headline'
+  | 'season-pulse'
+  | 'commish'
+  | 'calendar'
+  | 'formats'
   | 'since-last-visit'
   | 'game-day'
   | 'drafts'
@@ -160,6 +189,7 @@ export type HomeCardName =
   | 'carryover'
   | 'user-os'
   | 'schedule'
+  | 'trade-evaluator'
   | 'routine'
   | 'issues'
   | 'streak'
@@ -210,6 +240,16 @@ function summaryStamp(data: { summary?: PortfolioSummaryMeta } | null, now: Date
   return { ...freshnessStamp('Summary', meta.builtAt, now, { parts: { kind: 'summary' } }), stale: meta.source === 'last-known' }
 }
 
+/**
+ * Whether the injury report (`Dash3ATriage`, "Starters in doubt") will draw an injured starter — only
+ * then may the queue's per-league injury rows fold into one row pointing at it. A summary pointing at
+ * nothing is worse than the rows it replaced.
+ */
+function injuryReportRenders(data: Dash34Result): boolean {
+  const book = (data.book ?? []) as unknown as TriageBookRow[]
+  return book.some((p) => (p.startingIn ?? 0) > 0)
+}
+
 function Stamps({ stamps }: { stamps: CardFreshnessStamp[] }) {
   return <CardFreshness stamps={stamps} />
 }
@@ -228,13 +268,17 @@ async function DecisionsCard({
   scope,
   rostersStamp,
   prefetch,
+  injuryReportOn,
 }: Pick<HomeLoads, 'dash34' | 'issues' | 'trades'> & {
   now: Date
   scope: HomeScopeInfo
   rostersStamp: CardFreshnessStamp
   prefetch: { unreadNotifications: number; gameDayActive: boolean }
+  /** The injury report section is switched on — its rows then fold into one (homeGuide.ts). */
+  injuryReportOn: boolean
 }) {
-  const [data, list] = await Promise.all([dash34, issues])
+  const [data, raw] = await Promise.all([dash34, issues])
+  const list = data ? foldInjuredStarters(raw, injuryReportOn && injuryReportRenders(data)) : raw
   if (!data) {
     // The panel that used to replace the whole home when this read failed — see the header. Its
     // words are said in the reader's language by a client panel (HomePanels.tsx).
@@ -243,6 +287,8 @@ async function DecisionsCard({
   return (
     <DecisionQueue
       issues={list}
+      // The headline above says the count; the queue does not say it a second time.
+      showCount={false}
       noLeagues={scope.total === 0}
       scopeLabel={scope.label}
       scopeKey={scope.key}
@@ -322,54 +368,126 @@ async function TriageCard({ dash34, playerDepth, now }: { dash34: HomeLoads['das
   )
 }
 
-/**
- * The daily streak strip. It awaits ONLY the streak read — one cache row — so it paints before the
- * league reads land; today's glance streams into it separately (StreakGlance) and is simply absent
- * until then. A failed streak read renders nothing: no card beats a "Day 0" that is not true.
- */
-async function StreakCard({ loads, now }: { loads: HomeLoads; now: Date }) {
-  const streak = await loads.streak.catch(() => null)
-  if (!streak) return null
-  return (
-    <DailyStreakCardView streak={streak}>
-      <Suspense fallback={null}>
-        <StreakGlance dash34={loads.dash34} trades={loads.trades} now={now} />
-      </Suspense>
-    </DailyStreakCardView>
-  )
-}
-
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /**
- * Today at a glance: lineups, injuries, trades — counted from reads the home already makes, so the
- * glance costs no query of its own. A read that failed drops its chip rather than claiming "all set".
+ * The headline (2026-11-12): what the page is, how many things need you, and the breakdown — said once.
+ * See HomeHeadline.tsx for why it replaced four separate counts of the same queue.
  */
-async function StreakGlance({ dash34, trades, now }: Pick<HomeLoads, 'dash34' | 'trades'> & { now: Date }) {
-  const [data, recent] = await Promise.all([dash34.catch(() => null), trades.catch(() => null)])
-  const items: StreakGlanceItem[] = []
+async function HeadlineCard({
+  loads,
+  now,
+  scope,
+  showStreak,
+  injuryReportOn,
+}: {
+  loads: HomeLoads
+  now: Date
+  scope: HomeScopeInfo
+  showStreak: boolean
+  injuryReportOn: boolean
+}) {
+  const [data, raw, recent, streak, commish] = await Promise.all([
+    loads.dash34.catch(() => null),
+    loads.issues.catch(() => null),
+    loads.trades.catch(() => null),
+    showStreak ? loads.streak.catch(() => null) : Promise.resolve(null),
+    (loads.commish ?? Promise.resolve(null)).catch(() => null),
+  ])
+  const chips: HeadlineChip[] = []
+  let openCount: number | null = null
   if (data) {
+    if (raw) openCount = foldInjuredStarters(raw, injuryReportOn && injuryReportRenders(data)).length
     const leagues = data.allLeagues ?? data.leagues ?? []
     const needs = leagues.filter((l) => (l.emptyStarters ?? 0) > 0 || (l.hurtStarters ?? 0) > 0)
-    items.push({
+    chips.push({
       key: 'lineups',
-      tone: needs.length > 0 ? 'warn' : 'ok',
       count: needs.length,
       href: needs[0] ? `/core/my-team?league=${encodeURIComponent(needs[0].id)}` : '/core/my-team',
     })
-    const flagged =
-      ((data.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length +
-      (data.depthAlerts?.length ?? 0)
-    items.push({ key: 'injuries', tone: flagged > 0 ? 'warn' : 'ok', count: flagged, href: flagged > 0 ? '#af-home-triage' : '/my-players' })
+    const flagged = ((data.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length
+    chips.push({ key: 'injuries', count: flagged, href: flagged > 0 ? '#af-home-triage' : '/my-players' })
   }
   if (Array.isArray(recent)) {
     const n = recent.filter((t) => {
       const at = new Date(t.acceptedAt).getTime()
       return Number.isFinite(at) && now.getTime() - at <= DAY_MS
     }).length
-    items.push({ key: 'trades', tone: 'ok', count: n, href: '/core/trades' })
+    chips.push({ key: 'trades', count: n, href: '/core/trades' })
   }
-  return <StreakGlanceView items={items} />
+  if (commish && commish.runCount > 0) {
+    chips.push({ key: 'run', count: commish.queue.length, href: '/core/commissioner' })
+  }
+  return (
+    <HomeHeadline
+      /*
+       * ⚠ NO WEEK LABEL, AND THE SCOPE'S COUNT (measured on a real account, 2026-11-12). The summary's
+       * `weekLabel` names the next game in ANY sport played, so a mostly-NFL portfolio read "NHL WK 7"
+       * (the top bar already carries it), and `connectedLeagueCount` counts past seasons too — it said
+       * 574 for a person with 82 leagues. `scope.count` is the number the rail and switcher show.
+       */
+      weekLabel={null}
+      leagueCount={scope.count}
+      openCount={openCount}
+      chips={chips}
+      streakDays={streak?.current ?? null}
+      // A reader who has only just started gets the page explained in a sentence; after that, a line.
+      firstVisit={!streak || streak.best < 3}
+    />
+  )
+}
+
+/** "How your season is going" — HomeSeasonPulse.tsx. Renders nothing when the read failed or is empty. */
+async function SeasonPulseCard({ standings }: { standings: HomeLoads['standings'] }) {
+  const rows = await (standings ?? Promise.resolve(null)).catch(() => null)
+  if (!rows || rows.length === 0) return null
+  return <HomeSeasonPulse pulse={buildSeasonPulse(rows)} />
+}
+
+/**
+ * "Leagues you run" — HomeCommishCard.tsx. Only the slice it draws crosses to the client: the hub's
+ * headline figures and its worst three tasks.
+ */
+async function CommishCard({ commish }: { commish: HomeLoads['commish'] }) {
+  const data = await (commish ?? Promise.resolve(null)).catch(() => null)
+  if (!data || data.runCount === 0) return null
+  return (
+    <HomeCommishCard
+      runCount={data.runCount}
+      stats={data.stats.map((s) => ({ value: s.value, label: s.label, tone: s.tone }))}
+      risks={data.queue.slice(0, 3).map((q) => ({
+        id: q.id,
+        severity: q.severity,
+        title: q.title,
+        detail: q.detail,
+        leagueName: q.leagueName,
+        action: q.action,
+      }))}
+      partial={data.partial}
+      // Null when no in-season league's activity was read — "not measured", never "everyone active".
+      ladder={
+        (data.ladderLeagues ?? 0) > 0
+          ? (data.ladder ?? [])
+          : data.activityChecked > 0
+            ? 'off-season'
+            : null
+      }
+    />
+  )
+}
+
+/** "When things happen" — HomePlatformCalendar.tsx. The next kickoff is the summary's first lineup lock. */
+async function CalendarCard({ calendar, dash34 }: { calendar: HomeLoads['calendar']; dash34: HomeLoads['dash34'] }) {
+  const [rows, data] = await Promise.all([(calendar ?? Promise.resolve(null)).catch(() => null), dash34.catch(() => null)])
+  if (!rows) return null
+  return <HomePlatformCalendar rows={rows} nextKickoffIso={data?.firstLock?.countdownTo ?? null} />
+}
+
+/** "Your league formats" — HomeFormatGuide.tsx. Renders nothing when the read failed or found no league. */
+async function FormatsCard({ formats }: { formats: HomeLoads['formats'] }) {
+  const counts = await (formats ?? Promise.resolve(null)).catch(() => null)
+  if (!counts || counts.length === 0) return null
+  return <HomeFormatGuide formats={counts} />
 }
 
 async function TradeBandCard({ trades, tradeDepth, now }: { trades: HomeLoads['trades']; tradeDepth: HomeLoads['tradeDepth']; now: Date }) {
@@ -622,10 +740,22 @@ export function CoreHomeCards({
             the "Outstanding issues" section inside the dashboard below; see DecisionQueue.
           */}
           {/*
-            The daily streak leads as a single compact row (founder, 2026-10-08). It sits above the
-            decision queue but stays one row tall on a phone, so the decisions still open the fold.
+            The headline (2026-11-12) leads in place of the daily streak strip (founder, 2026-10-08):
+            the page explained, the open count said once, and the streak — kept on, per the founder —
+            as a pill inside it. Turning the streak section off drops only the pill; the headline is
+            the page's own title, not a section.
           */}
-          {card('streak', <StreakCard loads={loads} now={now} />)}
+          {card(
+            'headline',
+            <HeadlineCard
+              loads={loads}
+              now={now}
+              scope={scope}
+              showStreak={!isHidden('streak')}
+              injuryReportOn={!isHidden('triage')}
+            />,
+            150,
+          )}
           {card(
             'issues',
             <DecisionsCard
@@ -636,21 +766,34 @@ export function CoreHomeCards({
               scope={scope}
               rostersStamp={leagueStamp}
               prefetch={prefetch}
+              injuryReportOn={!isHidden('triage')}
             />,
             220,
           )}
 
           {shown(order.bands).map((name) => bands[name])}
 
+          {/* The two guide cards (2026-11-12): the leagues you run, then where you stand in yours. */}
+          {card('commish', <CommishCard commish={loads.commish} />)}
+          {card('season-pulse', <SeasonPulseCard standings={loads.standings} />)}
+          {/* The teaching cards (2026-11-12): when things happen on each platform, and what each format means. */}
+          {card('calendar', <CalendarCard calendar={loads.calendar} dash34={loads.dash34} />)}
+          {card('formats', <FormatsCard formats={loads.formats} />)}
+
           {/*
             The league trade evaluator, folded to one row (owner, 2026-11-06). After the news bands so
             decisions and news still lead; it opens into the Trades hub's own picker and builder.
           */}
-          {tradeLeagues && tradeLeagues.length > 0 ? (
+          {/*
+            With no trade league it opens the open-market grade instead. A Settings → Home page
+            switch since 2026-11-12, off by default (lib/core-app/homeSections.ts). Still no
+            `data-home-card`: it was never part of the per-viewer card ORDER, and it is not now.
+          */}
+          {isHidden('trade-evaluator') ? null : (
             <CoreCardBoundary card="trade-evaluator" resetKey={resetKey}>
-              <Suspense fallback={null}><HomeTradeEvaluatorCard leagues={tradeLeagues} viewerId={viewerId} /></Suspense>
+              <Suspense fallback={null}><HomeTradeEvaluatorCard leagues={tradeLeagues ?? []} viewerId={viewerId} /></Suspense>
             </CoreCardBoundary>
-          ) : null}
+          )}
 
           {/*
             3a mounted as the screen BODY. It ships its own rail/nav/topbar

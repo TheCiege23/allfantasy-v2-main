@@ -77,7 +77,13 @@ const VIEWS: Array<{ key: PortfolioViewKey; label: string }> = [
   { key: 'exposure', label: 'Exposure' },
   { key: 'risk', label: 'Risk' },
   { key: 'value', label: 'Value' },
-  { key: 'leagues', label: 'Leagues' },
+  /*
+   * "Teams", not "Leagues" (2026-11-12): this screen now sits behind the My Leagues entry, whose
+   * switch already offers "Leagues" — two controls with one name on one page. It is also the more
+   * accurate word: one row per CLAIMED TEAM (see Portfolio.tsx), with the board's filters applied.
+   * The `pf_view=leagues` param is unchanged, so old links still open this tab.
+   */
+  { key: 'leagues', label: 'Teams' },
 ]
 
 export type PortfolioBoardProps = {

@@ -23,8 +23,8 @@ const createBodySchema = z.object({
   sport: z.string().min(1).max(8),
   season: z.number().int().optional(),
   variant: z.string().max(32).optional(),
-  settings: z.record(z.unknown()).optional(),
-  hubSettings: z.record(z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
+  hubSettings: z.record(z.string(), z.unknown()).optional(),
   conferenceNames: z.tuple([z.string(), z.string()]).optional(),
   leagueNames: z.array(z.string()).optional(),
 })

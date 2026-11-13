@@ -9,7 +9,7 @@ describe('usable roster package economics',()=>{
     const result=reviewPackageCost(args)
     expect(result).toMatchObject({activeBefore:2,activeAfter:3,requiredDrops:1,displacedStarters:['starter']})
     expect(result.candidates).toEqual([{playerId:'starter',name:'starter',singleDropLineupCost:0}])
-    expect(result.note).toContain('zero weekly starter cost does not mean')
+    expect(result.note).toContain('A zero only means no lineup points this week')
   })
   it('measures a retained starter’s loss and withholds costs with incomplete projection coverage',()=>{
     expect(reviewPackageCost({...args,sent:[],incoming:[p('in',5)]}).candidates.find(c=>c.playerId==='starter')?.singleDropLineupCost).toBe(12)
@@ -27,17 +27,18 @@ describe('actionable trade summaries',()=>{
     const next=grade.graded?{...grade,giveValue:130,getValue:140}:grade
     const text=counterDecision({before:grade,after:next,addTo:'give',cost:reviewPackageCost(args)})
     expect(text).toContain('from 40 to 10')
-    expect(text).toContain('needs 0 drops')
-    expect(text).toContain('not proof of the smallest possible fair change')
+    expect(text).toContain('You have room for this player.')
+    // It is one evaluated change, never presented as the smallest fair counter.
+    expect(text).not.toMatch(/smallest|minimum|best possible/i)
   })
   it('does not equate a price win with a lineup win',()=>{
     const summary=decisionSummary({grade,evaluatedAt:'2026-10-03',visual:{impact:{unit:'league_points_week',week:5,startingPointsBefore:100,startingPointsAfter:90,startingPointsDelta:-10,blockedReason:null,unpricedExcluded:0,depthChanges:[]},reason:null,moved:[],returned:[],rostersStale:false,rostersSyncedAt:'2026-10-03',evaluatedAt:'2026-10-03',season:'2026'}})
-    expect(summary.accept.join(' ')).toContain('quoted value')
-    expect(summary.hesitate.join(' ')).toContain('10.0 points lower')
-    expect(summary.change.join(' ')).toContain('not a confidence interval')
+    expect(summary.accept.join(' ')).toContain('gets 140 in value and sends 100')
+    expect(summary.hesitate.join(' ')).toContain('10.0 points less')
+    expect(summary.change.join(' ')).toContain('If values shift 10% either way')
   })
   it('withholds a verdict and keeps generic analysis independent of league projections',()=>{
-    expect(decisionSummary({grade:{graded:false,reason:'Missing asset',basis:null}})).toMatchObject({headline:'More evidence needed',hesitate:['Missing asset']})
-    expect(decisionSummary({grade,generic:true}).hesitate.join(' ')).toContain('No league roster')
+    expect(decisionSummary({grade:{graded:false,reason:'Missing asset',basis:null}})).toMatchObject({headline:'Not enough values to grade',hesitate:['Missing asset']})
+    expect(decisionSummary({grade,generic:true}).hesitate.join(' ')).toContain('doesn’t check league rosters')
   })
 })

@@ -385,7 +385,7 @@ test.describe('@ai ai system final integration click audit', () => {
     )
     await expect(page.getByRole('link', { name: /Open trade finder/i })).toHaveAttribute(
       'href',
-      `/trade-finder?leagueId=${leagueId}`
+      `/core/trades?league=${leagueId}#trade-finder`
     )
   })
 })

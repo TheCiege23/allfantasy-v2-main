@@ -12,6 +12,7 @@ import { isSubscriptionEntitlementBypassUserId } from "@/lib/dev-admin/access";
 import { getDisplayPlanName } from "@/lib/subscription/feature-access";
 import type { PricingAccount } from "@/lib/core-app/pricingAccount";
 import { readWeeklyTokenSpend } from "@/lib/tokens/readWeeklyTokenSpend";
+import { buildPlanComparison, PLAN_EXAMPLES } from "@/lib/monetization/planComparison";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -35,7 +36,7 @@ import { readWeeklyTokenSpend } from "@/lib/tokens/readWeeklyTokenSpend";
 export const metadata: Metadata = buildSeoMeta({
   title: "Pricing & Plans — AllFantasy.ai | Fantasy Tools & Subscriptions",
   description:
-    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. League dues and payouts are handled on FanCred.",
+    "Every league is free. Compare AF Pro, AF Commissioner and AF Supreme. Tokens for pay-per-use. Secure Stripe checkout. AllFantasy never holds league dues; commissioners track who has paid.",
   canonicalPath: "/pricing",
   openGraphTitle: "AllFantasy Pricing — Unlock fantasy tools for your league",
   openGraphDescription:
@@ -130,6 +131,9 @@ export default async function PricingPage(
       savingsHeadline={describeYearlySavings(presentations)}
       signedIn={Boolean(session?.user?.id)}
       account={account}
+      // Computed from the entitlement checks the paywall enforces (lib/monetization/planComparison.ts).
+      comparison={buildPlanComparison()}
+      examples={PLAN_EXAMPLES}
     />
   );
 }

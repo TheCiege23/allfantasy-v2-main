@@ -202,8 +202,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
       ).catch(error => console.error('[cron/import-players] MLB Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
       // NBA/NHL: the same weekly, batched, additive link for Fantrax basketball and hockey leagues.
       // Each sport keeps its own cadence marker, so after the first week these are one cache read each.
-      const { ingestNbaFantraxIdentities, ingestNhlFantraxIdentities } = await import('@/lib/player-identity/ingestProFantraxIdentities')
-      for (const [sport, ingest] of [['NBA', ingestNbaFantraxIdentities], ['NHL', ingestNhlFantraxIdentities]] as const) {
+      const { ingestNbaFantraxIdentities, ingestNhlFantraxIdentities, ingestSoccerFantraxIdentities } = await import('@/lib/player-identity/ingestProFantraxIdentities')
+      for (const [sport, ingest] of [['NBA', ingestNbaFantraxIdentities], ['NHL', ingestNhlFantraxIdentities], ['SOCCER', ingestSoccerFantraxIdentities]] as const) {
         await withSyncJobRun(
           { jobName: `${sport.toLowerCase()}-fantrax-identities`, sport, provider: 'fantrax', trigger: 'cron' },
           () => ingest(),
@@ -620,6 +620,8 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
           leftForReview: repaired.leftForReview,
           newlyMapped: filled.written,
           coverage: filled.coverageAfter,
+          // ESPN ids filled from the same Sleeper directory (lib/player-match/sleeperEspnIdFill.ts).
+          espnIds: filled.espnIds ?? null,
         }
       } catch (identityError) {
         const message = identityError instanceof Error ? identityError.message : String(identityError)

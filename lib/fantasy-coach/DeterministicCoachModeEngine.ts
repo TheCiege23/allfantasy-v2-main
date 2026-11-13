@@ -8,7 +8,6 @@ import { summarizeMatchupTeamInput } from '@/lib/simulation-engine/Deterministic
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import type { MatchupLineupSlotSummary } from '@/lib/simulation-engine/types';
 import {
-  getPlayerPageHref,
   getRankingsToolHref,
   getTradeAnalyzerHref,
   getWaiverToolHref,
@@ -363,9 +362,12 @@ function buildWaiverOpportunities(snapshot: CoachEngineSnapshot): WaiverOpportun
       position: slot.slotLabel,
       priority: index === 0 ? 'high' : 'medium',
       reason: `${slot.slotLabel} is the softest weekly room on the roster, so add a ${template.focus} profile that can cover a ${slot.floor.toFixed(1)} downside band without forcing a panic trade.`,
-      playerHref: getPlayerPageHref(playerName, {
+      // `playerName` is an ARCHETYPE ("Pocket Tempo QB"), not a person, so there is no player page to
+      // open. It linked /player-comparison (a landing page that ignored it); it now opens the waiver
+      // tool on that slot, exactly as this coach's own "Open Waiver AI" action does (2026-11-12).
+      playerHref: getWaiverToolHref(snapshot.leagueId, {
         sport: snapshot.sport,
-        source: 'coach-mode',
+        focus: slot.slotLabel,
       }),
     };
   });

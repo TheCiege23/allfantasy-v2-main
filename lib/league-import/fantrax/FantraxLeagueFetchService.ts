@@ -8,7 +8,7 @@ import type {
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
 import { readStoredFantraxDerived, readStoredFantraxDraft } from './fantraxSnapshotHistory'
-import { isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots } from './fantraxProSports'
+import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
 
 type LegacyStanding = {
   rank?: unknown
@@ -45,6 +45,7 @@ type LegacyRosterPlayer = {
   primaryPosition?: unknown
   position?: unknown
   nflTeam?: unknown
+  team?: unknown
   /**
    * Which team owns him. Present on live-API imports, absent on CSV-era
    * snapshots — a CSV only ever held the uploader's own squad, so an untagged
@@ -429,11 +430,12 @@ function medianRosterSize(players: LegacyRosterPlayer[]): number | null {
   return counts.length % 2 === 0 ? Math.round((counts[mid - 1]! + counts[mid]!) / 2) : counts[mid]!
 }
 
-function buildRosterPlayerMap(players: LegacyRosterPlayer[]): Record<string, { name: string; position: string; team: string }> {
+function buildRosterPlayerMap(players: LegacyRosterPlayer[], sport: string): Record<string, { name: string; position: string; team: string }> {
   const map: Record<string, { name: string; position: string; team: string }> = {}
   for (const player of players) {
     const playerId = asString(player.fantraxId)
     if (!playerId) continue
+    const position = (asString(player.primaryPosition) || asString(player.position) || 'N/A').toUpperCase()
     map[playerId] = {
       /*
        * ⚠ A RAW FANTRAX ID IS NOT A NAME. `|| playerId` put "069b6" in the name
@@ -449,8 +451,8 @@ function buildRosterPlayerMap(players: LegacyRosterPlayer[]): Record<string, { n
        * either.
        */
       name: asString(player.name) || `Unknown player (${playerId})`,
-      position: (asString(player.primaryPosition) || asString(player.position) || 'N/A').toUpperCase(),
-      team: asString(player.nflTeam),
+      position: sport === 'SOCCER' ? fantraxSoccerPosition(position) : position,
+      team: asString(player.nflTeam) || (sport === 'SOCCER' ? asString(player.team) : ''),
     }
   }
   return map
@@ -517,7 +519,8 @@ export async function fetchFantraxLeagueForImport(
   const lookup = parseFantraxSourceInput(sourceInput)
   let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
   let liveScoringGaps: string[] = []
-  let sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> } | undefined
+  let sourceSettings: Extract<import('./importFantraxLeague').FantraxImportOutcome, { ok: true }>['sourceSettings'] | undefined
+  let sourceCurrentPeriod: number | null = null
   let sourceSeasonState: string | null = null
 
   /*
@@ -567,6 +570,7 @@ export async function fetchFantraxLeagueForImport(
     liveScoringGaps = outcome.scoringGaps
     sourceSettings = outcome.sourceSettings
     sourceSeasonState = outcome.seasonState
+    sourceCurrentPeriod = outcome.currentPeriod
   }
 
   const includeConfig = {
@@ -640,6 +644,7 @@ export async function fetchFantraxLeagueForImport(
     liveScoringGaps = outcome.scoringGaps
     sourceSettings = outcome.sourceSettings
     sourceSeasonState = outcome.seasonState
+    sourceCurrentPeriod = outcome.currentPeriod
   }
 
   const username = leagueRecord.user?.fantraxUsername ?? lookup.username ?? 'fantrax-user'
@@ -655,7 +660,7 @@ export async function fetchFantraxLeagueForImport(
     matchups,
     userTeam,
   })
-  const rosterPlayerMap = buildRosterPlayerMap(rosterPlayers)
+  const rosterPlayerMap = buildRosterPlayerMap(rosterPlayers, sport)
   /*
    * ⚠ ROSTERS ARE PER TEAM NOW. Everything used to be attributed to the
    * uploader's team because a CSV export contained nothing else; the live API
@@ -684,7 +689,7 @@ export async function fetchFantraxLeagueForImport(
     const isUserTeam = normalizeTeamLabel(userTeam) === normalizedLabel
     const ownPlayers = rosterByTeam.get(normalizedLabel) ?? []
     const teamPlayerMap = ownPlayers.length
-      ? buildRosterPlayerMap(ownPlayers)
+      ? buildRosterPlayerMap(ownPlayers, sport)
       : isUserTeam
         ? rosterPlayerMap
         : {}
@@ -785,7 +790,9 @@ export async function fetchFantraxLeagueForImport(
   const firstUnscored = schedule.find((week) =>
     week.matchups.every((m) => m.points1 == null && m.points2 == null),
   )
+  const usesPeriodCalendar = usesFantraxPeriodCalendar(sport)
   const currentWeek =
+    (usesPeriodCalendar ? sourceCurrentPeriod : null) ??
     firstUnscored?.week ?? (schedule.length > 0 ? schedule[schedule.length - 1].week : null)
 
   const transactions: FantraxImportTransaction[] = transactionRows.map((transaction, index) => {
@@ -941,7 +948,7 @@ export async function fetchFantraxLeagueForImport(
    */
   const proSlots = splitSeason && (sport === 'NBA' || sport === 'NHL')
     ? mapFantraxRosterSlots(sport, sourceSettings?.rosterInfo)
-    : sport === 'NFL' || sport === 'NCAAF' || sport === 'MLB'
+    : sport === 'NFL' || sport === 'NCAAF' || sport === 'MLB' || sport === 'SOCCER'
       ? mapFantraxLineupSlots(sport, sourceSettings?.rosterInfo)
       : null
 
@@ -976,12 +983,13 @@ export async function fetchFantraxLeagueForImport(
        */
       isFinished:
         sourceSeasonState === 'complete' ||
-        (splitSeason ? isFantraxSplitSeasonFinished(season) : season < new Date().getFullYear()),
+        ((!usesPeriodCalendar || !sourceSeasonState) &&
+          (splitSeason ? isFantraxSplitSeasonFinished(season) : season < new Date().getFullYear())),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),
     },
     settings: {
-      scoringType: sport === 'MLB' || splitSeason ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
+      scoringType: sport === 'MLB' || sport === 'SOCCER' || splitSeason ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
       rosterPositions: proSlots ? proSlots.slots : buildRosterPositionCounts(),
       /* The real per-team size, so the mapper stops deriving it from the pool. */
       rosterSize: medianRosterSize(rosterPlayers) ?? (() => {

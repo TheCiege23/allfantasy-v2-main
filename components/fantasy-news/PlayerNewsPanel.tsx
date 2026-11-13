@@ -4,13 +4,15 @@ import type { EnrichedNewsItem } from '@/lib/fantasy-news-aggregator/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Share2, ExternalLink } from 'lucide-react';
-import { getPlayerPageHref } from '@/lib/fantasy-news-aggregator/playerLinkResolver';
+import { newsPlayerHref } from '@/lib/fantasy-news-aggregator/playerLinkResolver';
 
 export interface PlayerNewsPanelProps {
   items: EnrichedNewsItem[];
   title?: string;
   /** Callback when user clicks share on a card. */
   onShare?: (item: EnrichedNewsItem) => void;
+  /** The feed's sport — player links resolve the name in it when an item carries none. */
+  sport?: string | null;
 }
 
 function formatTime(publishedAt: string | null): string {
@@ -36,7 +38,7 @@ async function handleShare(item: EnrichedNewsItem): Promise<void> {
   }
 }
 
-export function PlayerNewsPanel({ items, title = 'News', onShare }: PlayerNewsPanelProps) {
+export function PlayerNewsPanel({ items, title = 'News', onShare, sport }: PlayerNewsPanelProps) {
   return (
     <Card className="border-white/10 bg-white/5" data-audit="player-news-panel">
       <CardHeader>
@@ -92,7 +94,7 @@ export function PlayerNewsPanel({ items, title = 'News', onShare }: PlayerNewsPa
                     {item.playersMentioned.map((name) => (
                       <a
                         key={name}
-                        href={getPlayerPageHref(name)}
+                        href={newsPlayerHref(item, name, sport)}
                         className="text-xs text-cyan-400 hover:underline"
                         data-audit="player-link-opens-player-page"
                         data-testid={`fantasy-news-player-link-${item.id}-${name.replace(/\s+/g, '-').toLowerCase()}`}

@@ -1,8 +1,6 @@
 import type { LeagueSport } from '@prisma/client'
-import { optimizeLineupDeterministic } from '@/lib/lineup-optimizer-engine/LineupOptimizerEngine'
-import { getBestBallSportProfile } from '@/lib/bestball/rules'
-import { optimizeSoccerFormation } from '@/lib/bestball/soccerFormationOptimizer'
-import type { OptimizerPlayer } from '@/lib/bestball/types'
+import { OPTIMAL_LINEUP_ALGORITHM } from '@/lib/lineup-optimizer/optimalLineup'
+import { computeBestBallLineup, resolveBestBallSlots } from '@/lib/bestball/productionLineup'
 
 export type BestBallOptimizerPlayer = {
   playerId: string
@@ -36,84 +34,65 @@ function normalizeSoccerPosition(raw: string): 'GK' | 'DEF' | 'MID' | 'FWD' | nu
   return null
 }
 
+/**
+ * The best ball lineup for one roster-week in the generic weekly processor (`server/services/weeklyProcessor.ts`).
+ *
+ * 🛑 THIS WAS A DFS OVER HARD-CODED SLOTS (`lib/bestball/rules.ts`): no K, no DST, no superflex, never the
+ * league's own roster, and exponential — 18 s on a 30-player MLB roster (audit 2026-11-06, finding #17).
+ * It now seats the league's slots (`buildBestBallSlots(sport, leagueSettings)`, what matchup scoring
+ * seats) with the production optimizer (`computeOptimalLineup`, exact, polynomial).
+ *
+ * `leagueSettings` is the league's `settings`; omitted, the sport's `best_ball` template is used (what a
+ * new league is given). A sport with no best ball slots returns an empty lineup and says so in `notes` —
+ * never a sum of the roster.
+ */
 export function optimizeBestBallLeagueLineup(
   sport: LeagueSport | string,
   players: BestBallOptimizerPlayer[],
+  leagueSettings?: unknown,
 ): BestBallOptimizerResult {
-  const profile = getBestBallSportProfile(sport)
+  const sportKey = String(sport ?? 'NFL').trim().toUpperCase()
   const safePlayers = players
     .filter((player) => player.playerId)
-    .map((player) => ({
-      ...player,
-      position: String(player.position ?? 'UTIL').trim().toUpperCase() || 'UTIL',
-      points: Number.isFinite(player.points) ? player.points : 0,
-    }))
+    .map((player) => {
+      const position = String(player.position ?? 'UTIL').trim().toUpperCase() || 'UTIL'
+      return {
+        ...player,
+        // Soccer feeds alias positions (CB, ST, …); the league's seats read DEF / MID / FWD / GK.
+        position: sportKey === 'SOCCER' ? (normalizeSoccerPosition(position) ?? position) : position,
+        points: Number.isFinite(player.points) ? player.points : 0,
+      }
+    })
 
-  if (profile.sport === 'SOCCER') {
-    const soccerPlayers: OptimizerPlayer[] = []
-    for (const player of safePlayers) {
-      const normalized = normalizeSoccerPosition(player.position)
-      if (!normalized) continue
-      soccerPlayers.push({
-        playerId: player.playerId,
-        playerName: player.playerName,
-        position: normalized,
-        points: player.points,
-      })
-    }
-
-    const optimized = optimizeSoccerFormation(
-      soccerPlayers.sort((a, b) => b.points - a.points),
-      { lineupSlots: profile.lineupSlots },
-    )
-    const starterIds = optimized.assignments.map((assignment) => assignment.player.playerId)
-    const starterIdSet = new Set(starterIds)
+  const slots = resolveBestBallSlots(sportKey, leagueSettings)
+  if (!slots) {
     return {
-      starterIds,
-      totalPoints: optimized.totalPoints,
-      starters: optimized.assignments.map((assignment) => ({
-        playerId: assignment.player.playerId,
-        playerName: assignment.player.playerName,
-        position: assignment.player.position,
-        slot: assignment.slot,
-        points: assignment.player.points,
-      })),
-      benchIds: safePlayers.map((player) => player.playerId).filter((playerId) => !starterIdSet.has(playerId)),
-      notes: [optimized.log ?? `Valid soccer formation ${optimized.formation}`],
+      starterIds: [],
+      totalPoints: 0,
+      starters: [],
+      benchIds: safePlayers.map((p) => p.playerId),
+      notes: [`No best ball lineup slots could be resolved for ${sportKey}; no lineup was scored.`],
     }
   }
 
-  const optimized = optimizeLineupDeterministic({
-    sport: profile.sport,
-    players: safePlayers.map((player) => ({
-      id: player.playerId,
-      name: player.playerName,
-      positions: [player.position],
-      projectedPoints: player.points,
-      team: player.team ?? undefined,
-    })),
-    slots: profile.lineupSlots.flatMap((slot) =>
-      Array.from({ length: slot.count }, (_, index) => ({
-        id: `${slot.code}-${index + 1}`,
-        code: slot.code,
-        label: slot.code,
-        allowedPositions: slot.allowedPositions,
-      })),
-    ),
-  })
-
-  const starterIds = optimized.starters.map((starter) => starter.playerId)
+  const lineup = computeBestBallLineup({ slots, players: safePlayers })
+  const byId = new Map(safePlayers.map((p) => [p.playerId, p]))
+  const starterIds = lineup.assignments.map((a) => a.playerId)
+  const seated = new Set(starterIds)
   return {
     starterIds,
-    totalPoints: optimized.totalProjectedPoints,
-    starters: optimized.starters.map((starter) => ({
-      playerId: starter.playerId,
-      playerName: starter.playerName,
-      position: starter.selectedPosition,
-      slot: starter.slotCode,
-      points: starter.projectedPoints,
+    totalPoints: lineup.total,
+    starters: lineup.assignments.map((a) => ({
+      playerId: a.playerId,
+      playerName: byId.get(a.playerId)?.playerName ?? a.playerId,
+      position: byId.get(a.playerId)?.position ?? '',
+      slot: a.slot,
+      points: a.points,
     })),
-    benchIds: optimized.bench.map((bench) => bench.playerId),
-    notes: optimized.deterministicNotes,
+    benchIds: [...new Set(safePlayers.map((p) => p.playerId))].filter((id) => !seated.has(id)),
+    notes: [
+      `algorithm=${OPTIMAL_LINEUP_ALGORITHM}`,
+      ...lineup.unfilledSlots.map((u) => `${u.slot} #${u.seat} unfilled — no eligible player`),
+    ],
   }
 }

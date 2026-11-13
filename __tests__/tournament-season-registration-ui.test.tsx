@@ -11,11 +11,15 @@ beforeEach(() => { vi.restoreAllMocks(); nav.refresh.mockReset() })
 describe('entrant registration interface', () => {
   it('opens a released draft from the saved league reveal without exposing an unreleased room', () => {
     const view = entry()
-    view.assignment = { key: 'opening-1', name: 'Opening One', division: null, art: { sideId: 'gold', emblemId: 'basketball' }, teams: 8, draftSlot: 3, startsAt: '2026-10-19T22:00:00Z' }
+    view.assignment = { key: 'opening-1', name: 'Opening One', division: null, art: { sideId: 'gold', emblemId: 'basketball' }, teams: 8, draftSlot: 3, leagueId: 'opening-room', startsAt: '2026-10-19T22:00:00Z' }
     const { rerender } = render(<SeasonTournamentEntry entry={view} />)
     fireEvent.click(screen.getByRole('button', { name: 'Reveal my league' }))
     expect(screen.queryByRole('link', { name: 'Open my draft room' })).not.toBeInTheDocument()
     rerender(<SeasonTournamentEntry entry={{ ...view, assignment: { ...view.assignment, draftId: 'draft-one' } }} />)
+    expect(screen.getByRole('link', { name: 'Open my draft room' })).toHaveAttribute('href', '/drafts/draft-one')
+    fireEvent.click(screen.getByRole('button', { name: 'Hide league reveal' }))
+    expect(screen.queryByRole('link', { name: 'Open my draft room' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal my league' }))
     expect(screen.getByRole('link', { name: 'Open my draft room' })).toHaveAttribute('href', '/drafts/draft-one')
   })
   it('requires acceptance and submits the displayed rule version', async () => {

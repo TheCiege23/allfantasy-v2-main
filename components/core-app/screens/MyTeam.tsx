@@ -12,6 +12,8 @@ import { DynastyAgeKey, DynastyMarkersScope, DynastyRowMarkers } from './Dynasty
 import '@/components/core-app/af-my-team.css'
 /* After af-my-team.css: the redraft batch's rules apply only under the shell's redraft stamp. */
 import '@/components/core-app/af-core-redraft-myteam.css'
+// The head-to-head row look (wide pages only); after the base and redraft sheets so it sizes over them.
+import '@/components/core-app/af-my-team-h2h.css'
 import { statusShorthand } from '@/lib/core-app/myTeamStatusShorthand'
 import { lineupPeriodLabel, noGameBadge, redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { lineupDecision } from '@/lib/core-app/lineupDecision'
@@ -30,6 +32,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import {
   defaultProjectionKind,
@@ -1950,7 +1953,10 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {bestBall ? <div className="af-mt-lock" data-urgent={false}>
         <span className="af-label af-mt-lock-label">{copy('Best Ball · automatic lineup')}</span>
-        <span className="af-mt-lock-note">{copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
+        {/* A league AllFantasy hosts is scored by AllFantasy, not by "your provider". */}
+        <span className="af-mt-lock-note">{isNativePlatform(data.league.platform)
+          ? copy('AllFantasy counts your highest-scoring legal lineup each week automatically. Review injuries and roster depth; no lineup changes are needed.')
+          : copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
       </div> : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
@@ -2217,7 +2223,7 @@ export function MyTeam({ data }: MyTeamProps) {
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
         {data.starters.available ? (
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.starters.data.map((slot, i) => (
               <SlotRow
                 key={`${slot.slotLabel}-${i}`}
@@ -2258,7 +2264,7 @@ export function MyTeam({ data }: MyTeamProps) {
         </header>
         {data.bench.available ? (
           <>
-            <ul className="af-mt-list">
+            <ul className="af-mt-list" data-look="h2h">
               {data.bench.data.map((p) => (
                 <BenchRow key={p.sleeperId} player={p} slotLabel="BN" />
               ))}
@@ -2276,7 +2282,7 @@ export function MyTeam({ data }: MyTeamProps) {
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Injured reserve')}</h2>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.ir.data.map((p) => (
               <BenchRow key={p.sleeperId} player={p} slotLabel="IR" />
             ))}
@@ -2298,7 +2304,7 @@ export function MyTeam({ data }: MyTeamProps) {
               {copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')}
             </span>
           </header>
-          <ul className="af-mt-list">
+          <ul className="af-mt-list" data-look="h2h">
             {data.taxi.data.map((p) => (
               <BenchRow
                 key={p.sleeperId}

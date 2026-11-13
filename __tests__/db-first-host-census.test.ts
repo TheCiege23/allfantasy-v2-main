@@ -143,7 +143,11 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * server/ or scripts/ ever starts fetching one, this classification fails rather than
    * quietly exempting a data read.
    */
-  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
+  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|hooks\.stripe\.com|www\.google-analytics\.com)$/i },
+  // Ad and analytics vendors Google Tag Manager injects into the visitor's page; named in
+  // the report-only CSP (lib/security/cspReportOnly.ts) from the measured csp-report log.
+  // Same NEVER_FETCHED guarantee as above: our code must never call them.
+  { name: 'browser-only', why: 'GTM-injected ad/analytics pixels (TikTok, Reddit, Google Ads, Cloudflare Insights) listed in the report-only CSP; never fetched by our code', test: /^(analytics\.tiktok\.com|analytics-ipv6\.tiktokw\.us|www\.redditstatic\.com|alb\.reddit\.com|pixel-config\.reddit\.com|analytics\.google\.com|www\.google\.com|ad\.doubleclick\.net|stats\.g\.doubleclick\.net|googleads\.g\.doubleclick\.net|static\.cloudflareinsights\.com|cloudflareinsights\.com)$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
   { name: 'share-link', why: 'the social newsroom opens these composers / upload pages in the admin\'s browser, never fetched — app/admin/social-newsroom/NewsroomBoard.tsx', test: /^(www\.threads\.net|www\.instagram\.com|www\.tiktok\.com)$/i },
   /*

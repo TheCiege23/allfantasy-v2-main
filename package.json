@@ -127,6 +127,7 @@
     "test:commissioner-os:types": "node --max-old-space-size=8192 ./node_modules/typescript/lib/tsc.js -p tsconfig.commissioner-os-types.json",
     "simulate:league-engine": "tsx scripts/run-league-engine-simulation.ts",
     "simulate:league-engine:full": "tsx scripts/run-league-engine-simulation.ts --full",
+    "sim:season": "tsx scripts/run-season-sim.ts",
     "test:watch": "vitest",
     "test:i18n": "vitest run __tests__/i18n-placeholder-parity.test.ts",
     "test:no-ai-copy": "vitest run __tests__/no-ai-customer-copy.test.ts",
@@ -215,9 +216,9 @@
     "@apple/app-store-server-library": "^3.1.0",
     "@aws-sdk/client-s3": "^3.1136.0",
     "@dnd-kit/core": "^6.3.1",
-    "@fontsource/archivo": "^5.3.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource/archivo": "^5.3.0",
     "@graphql-tools/schema": "^10.0.31",
     "@headlessui/react": "^2.2.9",
     "@hookform/resolvers": "^5.2.2",
@@ -226,7 +227,7 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
-    "@sentry/nextjs": "^10.45.0",
+    "@sentry/nextjs": "^10.78.0",
     "@tailwindcss/forms": "^0.5.11",
     "@tanstack/react-virtual": "^3.13.23",
     "@testing-library/jest-dom": "^6.9.1",
@@ -253,7 +254,7 @@
     "jose": "^4.15.9",
     "jspdf": "^4.1.0",
     "lucide-react": "^0.563.0",
-    "next": "^15.5.27",
+    "next": "^15.5.29",
     "next-auth": "^4.24.15",
     "openai": "^6.17.0",
     "opentype.js": "^1.3.4",
@@ -280,7 +281,7 @@
     "uploadthing": "^7.7.4",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
-    "zod": "^3.25.76",
+    "zod": "^4.6.7",
     "zod-validation-error": "^5.0.0"
   },
   "prisma": {
@@ -292,15 +293,16 @@
     "@types/canvas-confetti": "^1.6.4",
     "@types/csv-parse": "^1.1.12",
     "@types/node": "^22.9.0",
+    "@types/pg": "^8.15.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^15.5.27",
+    "eslint-config-next": "^15.5.29",
     "jsdom": "^29.0.1",
-    "postcss": "^8.4.47",
+    "postcss": "^8.5.32",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.21.0",
@@ -311,6 +313,8 @@
     "react-simple-maps": {
       "react": "$react",
       "react-dom": "$react-dom"
-    }
+    },
+    "effect": "^3.22.4",
+    "postcss": "$postcss"
   }
 }

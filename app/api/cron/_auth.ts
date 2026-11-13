@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { constantTimeEqual } from '@/lib/http/machineCredential'
 
 function cleanSecret(value?: string | null): string | undefined {
   const trimmed = value?.trim()
@@ -26,10 +27,9 @@ export function requireCronAuth(req: NextRequest, preferredSecretEnv?: string): 
     cleanSecret(process.env.BRACKET_ADMIN_SECRET) ?? cleanSecret(process.env.ADMIN_PASSWORD)
   const importWorkerSecret = cleanSecret(process.env.IMPORT_WORKER_SECRET)
 
-  return Boolean(
-    provided &&
-      ((cronSecret && provided === cronSecret) ||
-        (importWorkerSecret && provided === importWorkerSecret) ||
-        (adminSecret && provided === adminSecret))
+  // Constant-time, and every candidate is compared (no short-circuit on the first match).
+  const matches = [cronSecret, importWorkerSecret, adminSecret].map((secret) =>
+    Boolean(provided && secret && constantTimeEqual(secret, provided)),
   )
+  return matches.some(Boolean)
 }

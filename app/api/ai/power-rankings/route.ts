@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { assertLeagueAccess, requireSleeper } from '@/lib/ai/league-settings-ai/access'
 import { callClaudeJson } from '@/lib/ai/league-settings-ai/claude'
 import { consumeDailyLimit } from '@/lib/rate-limit-daily'
@@ -25,6 +26,10 @@ export async function POST(req: Request) {
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // Plan gate before any rate-limit spend or AI call: `commissioner_power_rankings` (lib/monetization/entitlements.ts).
+  const gate = await requireFeatureEntitlement({ userId: userId, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'commissioner_power_rankings' })
+  if (!gate.ok) return gate.response
 
   let body: { leagueId?: string }
   try {

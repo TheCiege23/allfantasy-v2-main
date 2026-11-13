@@ -21,6 +21,7 @@ import {
 } from '@/lib/import-os/runner'
 import { createSleeperScopeFetcher } from './sleeperScopeFetcher'
 import {
+  connectionReadableWithoutCredential,
   fetchNormalizedForConnection,
   resolveStoredCredentialUserIds,
   SyncLeagueGoneError,
@@ -269,7 +270,8 @@ export async function syncConnectedLeague(
    */
   if (!deps.skipCredentialPreflight && providerNeedsCredential(connection.provider)) {
     const withCredentials = await resolveStoredCredentialUserIds(connection)
-    if (withCredentials.length === 0) {
+    /* A public ESPN league owned by the system account reads without any credential. */
+    if (withCredentials.length === 0 && !(await connectionReadableWithoutCredential(connection))) {
       const reason = `no importing user has stored ${connection.provider} credentials for this league`
       /* Durable, so the explanation outlives this cron response — see the note above. */
       await recordSkippedConnection(connection, seasonState, reason)

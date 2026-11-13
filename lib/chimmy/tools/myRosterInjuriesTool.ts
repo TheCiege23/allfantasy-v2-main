@@ -9,7 +9,7 @@ import { resolveInjuryFacts, type InjuryFact, type InjuryLookup } from '@/lib/in
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { listMemberLeagues } from '@/lib/chimmy/tools/leagueByName'
 import type { AiRosterPlayerRef } from '@/lib/ai-payload/types'
-import { isBestBallSettings } from '@/lib/core-app/lineupMode'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 import { listedPositionCounts } from '@/lib/chimmy/rosterCounts'
 import { LINEUP_ACTION_RULES, kickoffLabel, type KickoffCheck } from '@/lib/chimmy/lineupActionEvidence'
 import { checkStartedGames } from '@/lib/chimmy/actions/gameLocks'
@@ -173,10 +173,12 @@ export async function buildMyRosterInjuriesContext(input: MyRosterInjuriesInput)
   const overCap = current.slice(maxLeagues)
 
   const platformRows = await prisma.league
-    .findMany({ where: { id: { in: scanned.map((l) => l.id) } }, select: { id: true, platform: true, settings: true, leagueType: true } })
-    .catch(() => [] as Array<{ id: string; platform: string; settings?: unknown; leagueType?: string | null }>)
+    .findMany({ where: { id: { in: scanned.map((l) => l.id) } }, select: { id: true, platform: true, settings: true, leagueType: true, bestBallMode: true, leagueVariant: true } })
+    .catch(() => [] as Array<{ id: string; platform: string; settings?: unknown; leagueType?: string | null; bestBallMode?: boolean | null; leagueVariant?: string | null }>)
   const platformOf = new Map(platformRows.map((r) => [r.id, r.platform]))
-  const automaticOf = new Map(platformRows.map((r) => [r.id, isBestBallSettings(r.settings) || String(r.leagueType ?? '').includes('best_ball')]))
+  // The column too: a Classic Best Ball row whose `leagueType` is not 'best_ball' and has no settings flag
+  // read as a manual lineup here (lib/core-app/leagueBestBall.ts is the import-inclusive answer).
+  const automaticOf = new Map(platformRows.map((r) => [r.id, isBestBallLeagueRow(r) || String(r.leagueType ?? '').includes('best_ball')]))
 
   const scan = await scanWithinBudget(scanned, {
     concurrency: input.scan?.concurrency ?? ROSTER_CONCURRENCY,

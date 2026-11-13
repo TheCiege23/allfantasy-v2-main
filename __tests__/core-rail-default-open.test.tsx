@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -51,6 +51,17 @@ const LEAGUES = [
   { id: 'l1', name: 'Dynasty Warriors', platform: 'sleeper', mark: 'DW' },
   { id: 'l2', name: 'Pirate League', platform: 'sleeper', mark: 'PL' },
 ]
+
+/* The bar's More button, and More → Leagues, which is how a phone opens the tray (2026-11-07). */
+const moreButton = (c: HTMLElement) =>
+  Array.from(c.querySelectorAll<HTMLButtonElement>('.af-tabbar-item')).find((b) => b.textContent?.includes('More'))!
+async function openTrayFromMore(c: HTMLElement) {
+  fireEvent.click(moreButton(c))
+  fireEvent.click(c.querySelector<HTMLButtonElement>('[data-testid="af-more-leagues"]')!)
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0))
+  })
+}
 
 function shell() {
   return (
@@ -123,26 +134,24 @@ describe('the desktop rail opens without being asked', () => {
     expect(railFlag(container)).toBeNull()
   })
 
-  /* The floating "Leagues" pill is gone (2026-10-29); the bar's Leagues tab opens the tray. */
-  it('opens the phone tray from the bar\'s Leagues tab, which reports its state', () => {
+  /* No floating pill (2026-10-29) and no bar tab (2026-11-07): More → Leagues opens the tray. */
+  it('opens the phone tray from More → Leagues, closing More on the way', async () => {
     setViewport(false)
     const { container } = render(shell())
     expect(container.querySelector('.af-rail-handle')).toBeNull()
-    const tab = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
-    expect(tab.textContent).toBe('Leagues')
-    expect(tab).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(tab)
-    expect(tab).toHaveAttribute('aria-expanded', 'true')
+    expect(container.querySelector('[data-testid="af-tabbar-leagues"]')).toBeNull()
+    await openTrayFromMore(container)
+    expect(container.querySelector('#af-mobile-more')).toBeNull()
     expect(railFlag(container)).toBe('true')
   })
 
   /* The open tray's header row is its close control at the top: a ✕ that says so, and that closes it. */
-  it('turns the tray header into a close control on mobile, and only while open', () => {
+  it('turns the tray header into a close control on mobile, and only while open', async () => {
     setViewport(false)
     const { container } = render(shell())
     const toggle = container.querySelector<HTMLButtonElement>('.af-rail-toggle')!
     expect(toggle.getAttribute('aria-label')).toBeNull()
-    fireEvent.click(container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!)
+    await openTrayFromMore(container)
     expect(toggle.getAttribute('aria-label')).toBe('Close leagues')
     expect(toggle.querySelector('.af-rail-toggle-icon')?.textContent).toBe('✕')
     fireEvent.click(toggle)
@@ -157,19 +166,20 @@ describe('the desktop rail opens without being asked', () => {
     expect(toggle.querySelector('.af-rail-toggle-icon')?.textContent).toBe('«')
   })
 
-  it('contains phone tray focus, closes with Escape, and restores the page', () => {
+  it('contains phone tray focus, closes with Escape, and restores the page', async () => {
     setViewport(false)
     // jsdom has no layout; treat these rendered controls as visible here.
     vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList)
     const { container } = render(shell())
-    const opener = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
+    // The tray opens from inside More, which closes first; focus comes back to the bar's More button.
+    const opener = moreButton(container)
     const close = container.querySelector<HTMLButtonElement>('.af-rail-toggle')!
     const rail = container.querySelector<HTMLElement>('#af-rail')!
     const home = container.querySelector<HTMLAnchorElement>('.af-rail-logo')!
     const content = container.querySelector<HTMLElement>('#af-content')!
     const previousOverflow = document.body.style.overflow
     opener.focus()
-    fireEvent.click(opener)
+    await openTrayFromMore(container)
     // With the pill gone the tray's own ✕ header row is where focus starts — it is the way out.
     expect(document.activeElement).toBe(close)
     expect(document.body.style.overflow).toBe('hidden')
@@ -182,20 +192,20 @@ describe('the desktop rail opens without being asked', () => {
     fireEvent.keyDown(document, { key: 'Tab' })
     expect(document.activeElement).toBe(home)
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(opener).toHaveAttribute('aria-expanded', 'false')
+    expect(railFlag(container)).not.toBe('true')
     expect(document.activeElement).toBe(opener)
     expect(document.body.style.overflow).toBe(previousOverflow)
     expect(content.closest('.af-main')?.inert ?? content.inert).not.toBe(true)
   })
 
-  it('closes the phone tray for its home and utility links too', () => {
+  it('closes the phone tray for its home and utility links too', async () => {
     setViewport(false)
     const { container } = render(shell())
-    const handle = container.querySelector<HTMLButtonElement>('[data-testid="af-tabbar-leagues"]')!
     for (const selector of ['.af-rail-logo', '.af-rail-add', '.af-rail-profile']) {
-      fireEvent.click(handle)
+      await openTrayFromMore(container)
+      expect(railFlag(container)).toBe('true')
       fireEvent.click(container.querySelector(selector)!)
-      expect(handle).toHaveAttribute('aria-expanded', 'false')
+      expect(railFlag(container)).not.toBe('true')
       expect(document.body.style.overflow).not.toBe('hidden')
     }
   })
@@ -245,11 +255,11 @@ describe('the desktop rail opens without being asked', () => {
     expect(railFlag(container)).toBeNull()
   })
 
-  it('does not save a temporary phone tray as the desktop preference', () => {
+  it('does not save a temporary phone tray as the desktop preference', async () => {
     setViewport(false)
     window.localStorage.setItem('af-rail-open', '0')
     const { container } = render(shell())
-    fireEvent.click(container.querySelector('[data-testid="af-tabbar-leagues"]')!)
+    await openTrayFromMore(container)
     expect(railFlag(container)).toBe('true')
     expect(window.localStorage.getItem('af-rail-open')).toBe('0')
   })

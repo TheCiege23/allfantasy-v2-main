@@ -15,6 +15,9 @@ import {
   submitNflRedraftWaiverClaim,
   type NflRedraftWaiverRuntimeState,
 } from '@/lib/waiver-runtime'
+import { checkImmediateAddGate } from '@/lib/waiver-wire/immediateAddGate'
+import { assertWaiverClaimEligibility } from '@/lib/waiver-wire/transaction-eligibility'
+import { ADD_DROP_ERROR_COPY, addDropErrorStatus, mapAddDropErrorCode } from '@/lib/waiver-wire/addDropErrors'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -91,6 +94,14 @@ async function rosterAccess(input: {
   const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId)
   if (commissioner.ok) return { ok: true as const, roster, isCommissioner: true }
   return { ok: false as const, status: 403 as const, error: 'Forbidden' }
+}
+
+/** The generic `Roster.id` the native add rules are keyed on: by link, then by owner. */
+async function genericRosterIdFor(leagueId: string, redraftRoster: { id: string; ownerId: string }): Promise<string | null> {
+  const linked = await prisma.roster.findFirst({ where: { leagueId, redraftRosterId: redraftRoster.id }, select: { id: true } })
+  if (linked) return linked.id
+  const owned = await prisma.roster.findFirst({ where: { leagueId, platformUserId: redraftRoster.ownerId }, select: { id: true } })
+  return owned?.id ?? null
 }
 
 function filteredForMember(
@@ -181,7 +192,6 @@ export async function POST(request: Request) {
 
     const access = await rosterAccess({ rosterId: body.rosterId, seasonId: body.seasonId, leagueId, userId })
     if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status })
-    const commissionerOverride = body.commissionerOverride === true && access.isCommissioner
 
     if (action === 'submit_claim') {
       const addPlayerId = body.addPlayerId?.trim()
@@ -256,19 +266,65 @@ export async function POST(request: Request) {
 
     if (action === 'add_free_agent') {
       if (!body.addPlayerId?.trim()) return NextResponse.json({ error: 'addPlayerId required' }, { status: 400 })
-      const result = await addNflRedraftFreeAgent({
-        seasonId: body.seasonId,
-        leagueId,
-        rosterId: access.roster.id,
-        addPlayerId: body.addPlayerId.trim(),
-        addPlayerName: body.addPlayerName,
-        addPlayerPosition: body.addPlayerPosition,
-        addPlayerTeam: body.addPlayerTeam,
-        dropPlayerId: body.dropPlayerId,
-        dropPlayerName: body.dropPlayerName,
-        actorUserId: userId,
-        commissionerOverride,
-      })
+      const addPlayerId = body.addPlayerId.trim()
+      const dropPlayerId = body.dropPlayerId?.trim() || null
+      /*
+       * 🛑 THIS ADD SKIPPED EVERY RULE THE NATIVE ADD ENFORCES. Any rostered member could instant-add
+       * here with Best Ball free agency switched off (`bbFaEnabled`), from a chopped Guilly team, or a
+       * player still held on waivers after a chop or a drop. It now passes the native add/drop's own gate
+       * (lib/waiver-wire/immediateAddGate.ts) and, inside the league waiver lock, the same eligibility
+       * check `executeImmediateAddDrop` runs — refused with the same codes and messages.
+       *
+       * 🛑 NO COMMISSIONER OVERRIDE ON AN ADD (owner's call, 2026-11-07). `commissionerOverride` used to skip
+       * every rule above for a commissioner — including the Guilly chop-pending freeze — and the native add
+       * has no such escape. It is ignored here now; the commissioner's manual waiver run keeps its own.
+       */
+      let precheck: (() => Promise<void>) | undefined
+      {
+        const genericRosterId = await genericRosterIdFor(leagueId, access.roster)
+        if (!genericRosterId) {
+          return NextResponse.json({ ok: false, code: 'UNAUTHORIZED', error: 'You do not have a roster in this league.' }, { status: addDropErrorStatus('UNAUTHORIZED') })
+        }
+        const gate = await checkImmediateAddGate({ leagueId, rosterId: genericRosterId, userId, addPlayerId, dropPlayerId })
+        if (!gate.ok) {
+          return NextResponse.json(
+            { ok: false, code: gate.code, error: gate.error ?? (ADD_DROP_ERROR_COPY as Record<string, string>)[gate.code], ...(gate.extra ?? {}) },
+            { status: gate.status },
+          )
+        }
+        precheck = () =>
+          assertWaiverClaimEligibility({
+            leagueId,
+            rosterId: genericRosterId,
+            addPlayerId,
+            dropPlayerId,
+            faabBid: null,
+            claimMetadata: { source: 'free_agent_immediate' },
+            ...(gate.firstComeAdds ? { offseasonFreeAgency: true } : {}),
+          })
+      }
+      let result: Awaited<ReturnType<typeof addNflRedraftFreeAgent>>
+      try {
+        result = await addNflRedraftFreeAgent({
+          seasonId: body.seasonId,
+          leagueId,
+          rosterId: access.roster.id,
+          addPlayerId,
+          addPlayerName: body.addPlayerName,
+          addPlayerPosition: body.addPlayerPosition,
+          addPlayerTeam: body.addPlayerTeam,
+          dropPlayerId,
+          dropPlayerName: body.dropPlayerName,
+          actorUserId: userId,
+          commissionerOverride: false,
+          precheck,
+        })
+      } catch (error) {
+        if (!precheck) throw error
+        const message = error instanceof Error ? error.message : 'Add failed'
+        const code = mapAddDropErrorCode(message, { hasDrop: Boolean(dropPlayerId) })
+        return NextResponse.json({ ok: false, code, error: message }, { status: addDropErrorStatus(code) })
+      }
       return NextResponse.json({ ok: true, ...result })
     }
 

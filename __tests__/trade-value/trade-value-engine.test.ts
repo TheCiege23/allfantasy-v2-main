@@ -10,6 +10,7 @@ import {
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import { canonicalFairnessGrade as gradeTrade } from '@/lib/decision-os/trade/fairnessGrader'
 import { buildTradeValueSnapshot } from '@/lib/trade-value/snapshot'
+import { snapshotToEvaluation } from '@/lib/decision-os/trade/decision'
 import type { SideTotals } from '@/lib/trade-value/types'
 
 describe('valueEngine', () => {
@@ -134,6 +135,27 @@ describe('grader', () => {
 })
 
 describe('snapshot', () => {
+  it.each([
+    [90, 70, 'B', 'Team B gains modestly more total value'],
+    [70, 90, 'A', 'Team A gains modestly more total value'],
+    [90, 30, 'B', 'Trade is significantly uneven toward Team B'],
+    [30, 90, 'A', 'Trade is significantly uneven toward Team A'],
+  ])('names the team receiving more when A sends %i and B sends %i', (a, b, winner, bullet) => {
+    const sources = { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null }
+    const snapshot = buildTradeValueSnapshot({
+      proposerRosterId: 'A',
+      receiverRosterId: 'B',
+      currentSeason: 2026,
+      context: { sport: 'NFL', leagueType: 'redraft', scoring: 'ppr', rosterFormat: 'standard', capturedAt: '2026-06-21T00:00:00Z' },
+      assets: [
+        { kind: 'faab', fromRosterId: 'A', toRosterId: 'B', faabAmount: a, sources },
+        { kind: 'faab', fromRosterId: 'B', toRosterId: 'A', faabAmount: b, sources },
+      ],
+    })
+    expect(snapshot.grade.bullets[0]).toContain(bullet)
+    expect(snapshotToEvaluation('proposal', snapshot).leanedTo).toBe(winner)
+  })
+
   it('builds a two-sided snapshot with totals + grade and is deterministic', () => {
     const snap = buildTradeValueSnapshot({
       proposerRosterId: 'A',

@@ -14,6 +14,7 @@ import { parseSGActionCommand, parseSGPowerCommand, powersVisibleTo, validateSGP
 import type { SGConfig, SGMatchup, SGPower, SGTeam } from './types'
 import { readFaabOnChop } from '@/lib/guillotine/faabOnChop'
 import { readSGFaabSplit, reverseSGFaabSplit, splitSGChoppedFaab, type SGFaabSplit } from './faabSplit'
+import { writeSGRulesInTransaction } from './rulesWrite'
 
 export type SGTribeMember = { rosterId: string; tribeId: string; captain?: boolean }
 export type SGLivePeriod = {
@@ -92,24 +93,10 @@ export async function saveSGLiveLeague(leagueId: string, config: SGConfig) {
   if (existing && await prisma.survivorGuillotinePower.count({ where: { leagueId } })) throw new Error('Rules are locked after hidden powers are seeded.')
   if (await prisma.waiverTransaction.count({ where: { leagueId } })) throw new Error('FAAB budget cannot be reset after waiver transactions.')
   return prisma.$transaction(async tx => {
-    const currentLeague = await tx.league.findUniqueOrThrow({ where: { id: leagueId }, select: { settings: true } })
-    const settings = currentLeague.settings && typeof currentLeague.settings === 'object' && !Array.isArray(currentLeague.settings)
-      ? currentLeague.settings as Record<string, unknown> : {}
     const current = await tx.survivorGuillotineLeague.findUnique({ where: { leagueId }, select: { status: true } })
     if (current?.status !== 'setup' && current) throw new Error('An active season cannot be reconfigured.')
     if (await tx.survivorGuillotinePower.count({ where: { leagueId } })) throw new Error('Rules are locked after hidden powers are seeded.')
-    const result = await tx.survivorGuillotineLeague.upsert({ where: { leagueId },
-      create: { id: randomUUID(), leagueId, config: config as unknown as Prisma.InputJsonValue },
-      update: { config: config as unknown as Prisma.InputJsonValue, revision: { increment: 1 } },
-      select: { leagueId: true, status: true, revision: true } })
-    await tx.league.update({ where: { id: leagueId }, data: { leagueVariant: 'survivor_guillotine', waiverType: 'faab', waiverBudget: config.faabBudget,
-      settings: { ...settings, survivorGuillotine: { tradesEnabled: config.tradesEnabled } } as Prisma.InputJsonValue } })
-    await tx.leagueWaiverSettings.upsert({ where: { leagueId },
-      create: { leagueId, waiverType: 'faab', faabBudget: config.faabBudget, instantFaAfterClear: false },
-      update: { waiverType: 'faab', faabBudget: config.faabBudget, instantFaAfterClear: false } })
-    await tx.roster.updateMany({ where: { leagueId }, data: { faabRemaining: config.faabBudget } })
-    await tx.redraftRoster.updateMany({ where: { leagueId }, data: { faabBalance: config.faabBudget } })
-    return result
+    return writeSGRulesInTransaction(tx, leagueId, config)
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 }
 

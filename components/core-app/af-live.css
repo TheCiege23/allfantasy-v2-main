@@ -299,6 +299,43 @@
   color: var(--faint);
 }
 
+/*
+ * A marquee college rivalry (lib/college/rivalryCrests.ts) gets a band under the
+ * status bar: our own crest, the rivalry's name, then the teams as usual. The
+ * crest has its own dark fill, so it holds on every theme.
+ */
+.af-live-rivalry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--af-radius-inner, 12px);
+  background: var(--chip);
+  border: 1px solid var(--line);
+}
+.af-live-rivalry .af-pb-crest {
+  display: block;
+  flex: none;
+}
+.af-live-rivalry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.af-live-rivalry-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-live-rivalry-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
 .af-live-teams {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

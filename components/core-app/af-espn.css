@@ -404,14 +404,19 @@
   color: var(--faint);
 }
 
+/*
+ * ⚠ BLOCK, NOT FLEX. The note is a sentence with a <strong> spliced into it by renderRich, and
+ * a flex container turns every text run and the <strong> into separate columns — the sentence
+ * rendered as three side-by-side fragments ("…on most" | "allfantasy.ai" | "on your computer…").
+ * The lock rides inline at the start instead.
+ */
 .af-core .af-espn-note--mobile {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: block;
 }
 .af-core .af-espn-lock {
-  flex: 0 0 auto;
-  margin-top: 1px;
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 6px;
   color: var(--faint);
 }
 
@@ -481,4 +486,61 @@
    screen reader; the accent carries it to everyone else. */
 .af-core .af-espn-reveal[aria-pressed='true'] {
   color: var(--accent);
+}
+
+/* ── Guided import: Test connection (EspnLeagueCheck) ────────────────── */
+
+.af-core .af-espn-check {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.af-core .af-espn-check-btn {
+  justify-self: start;
+  min-height: 44px;
+}
+.af-core .af-espn-check-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.af-core .af-espn-check-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+  min-width: 0;
+}
+.af-core .af-espn-check[data-status='ok'] .af-espn-check-result {
+  border-color: var(--good);
+}
+.af-core .af-espn-check-league {
+  color: var(--text);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.af-core .af-espn-check-league strong {
+  font-weight: 800;
+}
+.af-core .af-espn-check-note {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-core .af-espn-check-private {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface2);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-core .af-espn-check-private strong {
+  color: var(--text);
 }

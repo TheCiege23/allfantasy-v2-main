@@ -54,7 +54,10 @@ export function GuillotineNextChopPick({
         ) : (
           <div className="space-y-2">
             <label className="block text-[13px] text-white/80" htmlFor="guillotine-next-chop-select">
-              Your pick for week {state.week} <span className="text-white/45">(locks when week {state.week} starts)</span>
+              {/* An MLB two-week league picks for a period: weeks 3–4, locking when week 3 starts. */}
+              {state.locksWeek != null && state.locksWeek !== state.week
+                ? <>Your pick for weeks {state.locksWeek}–{state.week} <span className="text-white/45">(locks when week {state.locksWeek} starts)</span></>
+                : <>Your pick for week {state.week} <span className="text-white/45">(locks when week {state.week} starts)</span></>}
             </label>
             <div className="flex flex-wrap gap-2">
               <select

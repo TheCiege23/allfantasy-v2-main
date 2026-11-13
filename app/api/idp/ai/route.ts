@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isIdpLeague } from '@/lib/idp'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
+import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   getDefenderStartSitRec,
@@ -53,14 +54,16 @@ type Action =
   | 'ai_prefs'
 
 export async function POST(req: NextRequest) {
-  const gate = await requireAfSub()
-  if (typeof gate !== 'string') return gate
-  const userId = gate
-
   const raw = (await req.json().catch(() => null)) as Record<string, unknown> | null
   const body: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId.trim() : ''
   const action = body.action as Action | undefined
+
+  // Cap advice is sold under AF Pro (`commissioner_cap_advice` — the key the Cap Room's upgrade prompt
+  // already names). Every other action here stays on the Commissioner AI gate.
+  const gate = action === 'cap_advice' ? await requireEntitlement('commissioner_cap_advice') : await requireAfSub()
+  if (typeof gate !== 'string') return gate
+  const userId = gate
   const week = typeof body.week === 'number' && Number.isFinite(body.week) ? Math.min(18, Math.max(1, body.week)) : 1
 
   if (!leagueId || !action) {

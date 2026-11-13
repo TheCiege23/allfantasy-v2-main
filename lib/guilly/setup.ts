@@ -55,15 +55,27 @@ export const GUILLY_DEFAULTS: GuillySetupState = {
  * disables exactly these; the PR lists them under "Rules needing a decision".
  */
 export const GUILLY_UNSUPPORTED = {
-  doubleChop: 'Double-chop weeks need a per-week chop count. GuillotineLeagueConfig.teamsPerChop is one number for the whole season.',
-  bestball: 'Guilly weekly scoring (scoreRosterForWeek) treats a league as best ball only via bestBallMode / a best-ball variant, which a Guilly league never has, and there is no daily NBA auto-lineup.',
   auctionBudget: 'League creation fixes the auction budget at $200 per team (createCanonicalLeagueInTransaction); other budgets need a create-time setting.',
   freeAgency: 'Releasing chopped rosters straight to free agency is rosterReleaseTiming "immediate", but no route sets it; creation always writes "next_waiver_run" (blind FAAB).',
 } as const
 
+/*
+ * Best ball and double-chop weeks USED to be listed above as unsupported. Both reasons went stale:
+ *  - best ball: a Guilly league's lineups set themselves through `settings.best_ball`
+ *    (lib/guillotine/guillotineBestBall.ts) — the same flag the main create wizard writes from its
+ *    Guilly "best ball" box (`conceptSetup.guillotineBestBall`). The create route carries
+ *    `roster_mode: 'best_ball'` to that flag (legacyManualToCanonicalCreateBody.ts).
+ *  - double chops: the chop schedule takes a per-week count (lib/guillotine/chopSchedule.ts
+ *    `overrides`), saved through the existing summary PATCH (`{ advanced }`, AF Commissioner).
+ */
 export function isGuillyOptionSupported(option: 'doubleChop' | 'bestball' | 'freeAgency' | { auctionBudget: number }): boolean {
   if (typeof option === 'object') return option.auctionBudget === 200
-  return false
+  return option === 'doubleChop' || option === 'bestball'
+}
+
+/** Double-chop weeks: the first chop week takes two heads (one week of the schedule's `overrides`). */
+export function guillyDoubleChopWeeks(s: Pick<GuillySetupState, 'doubleChop' | 'firstChopWeek'>): number[] {
+  return s.doubleChop ? [s.firstChopWeek] : []
 }
 
 export interface GuillySummary {
@@ -75,10 +87,11 @@ export interface GuillySummary {
   warning: string | null
 }
 
-/** One chop per week (the engine's teamsPerChop = 1), last team standing. */
-export function summarizeGuilly(s: Pick<GuillySetupState, 'leagueSize' | 'firstChopWeek'>): GuillySummary {
+/** One chop per week (the engine's teamsPerChop = 1) plus any double-chop week, last team standing. */
+export function summarizeGuilly(s: Pick<GuillySetupState, 'leagueSize' | 'firstChopWeek'> & Partial<Pick<GuillySetupState, 'doubleChop'>>): GuillySummary {
   const chops = s.leagueSize - 1
-  const lastChopWeek = s.firstChopWeek + chops - 1
+  // Each double-chop week takes one extra head, so the blade finishes a week sooner.
+  const lastChopWeek = s.firstChopWeek + chops - 1 - guillyDoubleChopWeeks({ doubleChop: s.doubleChop === true, firstChopWeek: s.firstChopWeek }).length
   const fitsSeason = lastChopWeek <= GUILLY_NBA_SEASON_WEEKS
   return {
     chops,
@@ -102,8 +115,7 @@ export function validateGuillySetup(s: GuillySetupState): string[] {
   if (!GUILLY_FAAB_BUDGETS.includes(s.faabBudget)) errors.push('Choose a season FAAB of $500, $1,000 or $2,000.')
   if (s.draft !== 'auction' && s.draft !== 'snake') errors.push('Choose an auction or snake draft.')
   if (s.draft === 'auction' && !isGuillyOptionSupported({ auctionBudget: s.auctionBudget })) errors.push(GUILLY_UNSUPPORTED.auctionBudget)
-  if (s.lineups === 'bestball') errors.push(GUILLY_UNSUPPORTED.bestball)
-  if (s.doubleChop) errors.push(GUILLY_UNSUPPORTED.doubleChop)
+  if (s.lineups !== 'managed' && s.lineups !== 'bestball') errors.push('Choose managed or best ball lineups.')
   if (s.release === 'free_agency') errors.push(GUILLY_UNSUPPORTED.freeAgency)
   const summary = summarizeGuilly(s)
   if (summary.warning) errors.push(summary.warning)
@@ -119,7 +131,9 @@ export function buildGuillyCreateBody(s: GuillySetupState) {
     leagueSize: s.leagueSize,
     leagueType: 'guillotine',
     draftType: s.draft,
-    settings: { teamCount: s.leagueSize, roster_mode: 'redraft' },
+    // `best_ball` is carried to `conceptSetup.guillotineBestBall` -> `settings.best_ball`, exactly what
+    // the main wizard's Guilly best ball box saves.
+    settings: { teamCount: s.leagueSize, roster_mode: s.lineups === 'bestball' ? 'best_ball' : 'redraft' },
   }
 }
 
@@ -131,6 +145,16 @@ export function buildGuillyFollowUps(leagueId: string, s: GuillySetupState): Gui
   const out: GuillyFollowUp[] = [
     { method: 'PUT', url: `/api/waiver-wire/leagues/${id}/settings`, body: { waiverType: 'faab', faabBudget: s.faabBudget }, label: 'Season FAAB' },
   ]
+  const doubleWeeks = guillyDoubleChopWeeks(s)
+  // After the first chop week is saved: the summary PATCH checks the schedule against the calendar.
+  if (doubleWeeks.length) {
+    out.unshift({
+      method: 'PATCH',
+      url: `/api/leagues/${id}/guillotine/summary`,
+      body: { advanced: { steps: [], overrides: Object.fromEntries(doubleWeeks.map((w) => [w, 2])), immunity: 'off' } },
+      label: 'Double-chop week (AF Commissioner)',
+    })
+  }
   if (s.firstChopWeek !== 1) {
     out.unshift({ method: 'PATCH', url: `/api/leagues/${id}/guillotine/summary`, body: { eliminationStartWeek: s.firstChopWeek }, label: 'First chop week' })
   }

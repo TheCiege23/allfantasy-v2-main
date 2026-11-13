@@ -66,6 +66,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
   /* The filter bar: a name search and one position chip at a time, over the ranked adds only. */
   const [query, setQuery] = useState('')
   const [pos, setPos] = useState<string | null>(null)
+  /* Phone only: the coverage notes fold behind one button (the stylesheet decides; see af-waivers.css). */
+  const [notesOpen, setNotesOpen] = useState(false)
   const { data: intelResponse } = useWaiverIntel(leagueId, faab != null)
   const bidQuotes = intelResponse && intelResponse.supported ? (intelResponse.intel?.bidQuotes ?? null) : null
   /*
@@ -328,11 +330,24 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         Coverage rides with the ranking. A board built from a third of the wire is a different
         claim from one built off all of it, and nothing else on screen would say which.
       */}
-      {board.notes.map((n) => (
-        <p key={n} className="af-wlb-note">
-          {copy(n)}
-        </p>
-      ))}
+      {board.notes.length > 0 ? (
+        <button
+          type="button"
+          className="af-wlb-notes-toggle"
+          aria-expanded={notesOpen}
+          aria-controls="af-wlb-notes"
+          onClick={() => setNotesOpen((open) => !open)}
+        >
+          {notesOpen ? m.hideListNotes : m.howThisListWasBuilt}
+        </button>
+      ) : null}
+      <div className="af-wlb-notes" id="af-wlb-notes" data-open={notesOpen || undefined}>
+        {board.notes.map((n) => (
+          <p key={n} className="af-wlb-note">
+            {copy(n)}
+          </p>
+        ))}
+      </div>
     </section>
   )
 }

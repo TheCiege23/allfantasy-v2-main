@@ -36,7 +36,7 @@ describe('pending email uses the shared proposal grade', () => {
     expect(subject).toContain('C for you')
     expect(html).toContain('Our read, for your team')
     expect(html).toContain('Market: D (')
-    expect(html).toContain('Your roster fit · what your grade is taken on')
+    expect(html).toContain('How it fits your roster · used for your grade')
     expect(html).toContain('1,695')
     expect(html).toContain('&lt;script&gt;player&lt;/script&gt;')
     expect(html).not.toContain('<script>player</script>')

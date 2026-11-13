@@ -10,6 +10,8 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { decisionQueueMessages } from '@/lib/core-app/messages/decisionQueue'
 import { scopeLabelText } from '@/lib/core-app/shellCopy'
 import { issueText } from '@/lib/core-app/decisionQueueCopy'
+import { groupByTier, stripVerificationStamp, teachLine, type DecisionTier, type TeachLine } from '@/lib/core-app/homeGuide'
+import { homeGuideMessages } from '@/lib/core-app/messages/homeGuide'
 import '@/components/core-app/af-dash-3a.css'
 import '@/components/core-app/home/af-core-home.css'
 
@@ -121,6 +123,33 @@ function ActionLink({
   )
 }
 
+type GuideText = (typeof homeGuideMessages)['en']
+
+function teachText(line: TeachLine, g: GuideText): string {
+  switch (line.key) {
+    case 'emptySlot':
+      return g.teachEmptySlot
+    case 'starterOut':
+      return g.teachStarterOut
+    case 'injurySummary':
+      return g.teachInjurySummary
+    case 'drafting':
+      return g.teachDrafting
+    case 'draftUpcoming':
+      return g.teachDraftUpcoming
+    case 'bestBall':
+      return g.teachBestBall
+    case 'stale':
+      return g.teachStale(line.platform)
+  }
+}
+
+function tierText(tier: DecisionTier, g: GuideText): { title: string; hint: string } {
+  if (tier === 'now') return { title: g.tierNow, hint: g.tierNowHint }
+  if (tier === 'week') return { title: g.tierWeek, hint: g.tierWeekHint }
+  return { title: g.tierFyi, hint: g.tierFyiHint }
+}
+
 export function DecisionQueue({
   issues,
   scopeLabel,
@@ -130,7 +159,10 @@ export function DecisionQueue({
   freshness,
   children,
   noLeagues = false,
+  showCount = true,
 }: {
+  /** Draw the "N OPEN" pill. Off on the /core home, whose headline already says the count. */
+  showCount?: boolean
   issues: CoreIssue[]
   /** "All leagues", "NFL leagues"… — the queue always says what it covers. */
   scopeLabel: string
@@ -158,14 +190,21 @@ export function DecisionQueue({
   const restId = 'af-decisions-rest'
   const { language } = useOptionalLanguage()
   const t = useMessages(decisionQueueMessages)
+  const g = useMessages(homeGuideMessages)
   const scopeText = scopeLabelText(scopeLabel, language)
+  /** Lesson kinds already explained above, in this render — so each is taught once. */
+  const taught = new Set<string>()
 
   return (
     <section className="af3a-sec af-decisions" aria-labelledby="af-decisions-title">
       <header className="af3a-sechead">
         <h2 id="af-decisions-title">{t.title}</h2>
         {help}
-        {total > 0 ? <span className="af3a-open">{t.openCount(total)}</span> : null}
+        {/*
+          The "N OPEN" pill (2026-11-12): the home's headline now says the same count above this card,
+          so it is drawn only where the queue stands alone (`showCount`) — never twice on one screen.
+        */}
+        {showCount && total > 0 ? <span className="af3a-open">{t.openCount(total)}</span> : null}
         <span className="af3a-note">
           {t.mostUrgentFirst} · <b>{scopeText}</b>
         </span>
@@ -199,13 +238,31 @@ export function DecisionQueue({
         </div>
       ) : (
         <>
+          {/*
+            Tiers (2026-11-12, lib/core-app/homeGuide.ts): the same ranked top rows, grouped under
+            "Costs points now / Before this week's games / Good to know" so every platform's alerts
+            share one language of urgency. Each kind's "why it matters" line is shown on its FIRST
+            row only — it teaches once instead of repeating down the list.
+          */}
+          {groupByTier(top, nowMs).map(({ tier, issues: tierIssues }) => {
+            const tierCopy = tierText(tier, g)
+            return (
+          <div key={tier} className="af-decision-tier" data-tier={tier}>
+          <p className="af-decision-tierhead">
+            <b>{tierCopy.title}</b>
+            <span>{tierCopy.hint}</span>
+          </p>
           <ol
             className="af-decisions-top"
-            aria-label={t.topUrgentLabel(Math.min(total, TOP_DECISION_LIMIT))}
+            aria-label={`${tierCopy.title} · ${t.topUrgentLabel(Math.min(total, TOP_DECISION_LIMIT))}`}
           >
-            {top.map((issue) => {
+            {tierIssues.map((issue) => {
               const when = deadlineLabel(issue.deadline, nowMs)
               const text = issueText(issue, language)
+              const lesson = teachLine(issue)
+              const lessonKey = lesson ? `${lesson.key}` : null
+              const showLesson = lessonKey != null && !taught.has(lessonKey)
+              if (showLesson) taught.add(lessonKey)
               const clock = clockOf(issue, nowMs)
               const clockAt = clock && mounted && issue.deadline ? clockWhen(issue.deadline, t.clockLocale) : null
               const platform = issue.platform ? issue.platform.toLowerCase() : null
@@ -249,8 +306,13 @@ export function DecisionQueue({
                           </b>{' '}
                         </>
                       ) : null}
-                      {text.meta}
+                      {stripVerificationStamp(text.meta)}
                     </p>
+                    {showLesson && lesson ? (
+                      <p className="af-decision-why">
+                        <b>{g.why}</b> {teachText(lesson, g)}
+                      </p>
+                    ) : null}
                   </div>
                   {issue.action ? (
                     <ActionLink action={issue.action} label={text.actionLabel ?? issue.action.label} severity={issue.severity} />
@@ -259,6 +321,9 @@ export function DecisionQueue({
               )
             })}
           </ol>
+          </div>
+            )
+          })}
 
           {rest.length > 0 ? (
             <>

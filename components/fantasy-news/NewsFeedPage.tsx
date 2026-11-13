@@ -179,10 +179,11 @@ export function NewsFeedPage() {
 
       {items.length > 0 && (
         <>
-          <BreakingNewsBanner items={breaking} />
+          <BreakingNewsBanner items={breaking} sport={sport} />
           <PlayerNewsPanel
             items={rest.length > 0 ? rest : items}
             title={feedType === 'team' ? 'Team feed' : 'Player feed'}
+            sport={sport}
             onShare={(item) => {
               setLastSharedHeadline(item.headline || item.title);
             }}

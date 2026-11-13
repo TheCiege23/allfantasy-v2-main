@@ -446,6 +446,28 @@ model PlayerTeamHistory {
   @@map("player_team_history")
 }
 
+model SportsStatCoverage {
+  sport                String
+  source               String
+  periodId             String
+  kind                 String
+  identitySpace        String
+  season               Int
+  week                 Int?
+  startTime            DateTime @db.Timestamptz(6)
+  endTime              DateTime @db.Timestamptz(6)
+  teams                String[]
+  participantIds       String[]
+  gameKeys             String[]
+  recordedAt           DateTime @default(now()) @db.Timestamptz(6)
+  firstFinalObservedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([sport, source, periodId])
+  @@index([sport, startTime], map: "sports_stat_coverage_window_idx")
+  @@index([sport, season, week], map: "sports_stat_coverage_week_idx")
+  @@map("sports_stat_coverage")
+}
+
 model SportsGame {
   id         String    @id @default(uuid())
   sport      String
@@ -3976,6 +3998,7 @@ model AppUser {
   bracketMemberships                       BracketLeagueMember[]
   bracketPayments                          BracketPayment[]                       @relation("BracketPayments")
   legacyImportJobs                         LegacyImportJob[]
+  sleeperCareerSurvival                    SleeperCareerSurvival[]
   fantraxLeagues                           FantraxLeague[]
   aiRecommendationLogs                     AiRecommendationLog[]
   legacyUser                               LegacyUser?                            @relation(fields: [legacyUserId], references: [id])
@@ -4729,6 +4752,8 @@ model PlayoffBracketPick {
   entryId      String                  @map("entry_id")
   seriesId     String                  @map("series_id")
   pickTeamName String                  @map("pick_team_name")
+  confirmedAt  DateTime?               @map("confirmed_at")
+  draftTeamName String?                @map("draft_team_name")
   createdAt    DateTime                @default(now()) @map("created_at")
   updatedAt    DateTime                @updatedAt @map("updated_at")
   challenge    PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -7040,6 +7065,89 @@ model IntegrityFlag {
   @@map("integrity_flags")
 }
 
+/// What each manager could see when his lineup locked: one row per team per week (2026-11-07).
+///
+/// 🛑 NOTHING ELSE STORES A PROJECTION AS IT WAS AT KICKOFF. `fantasy_projections` is upserted daily
+/// and injury status is overwritten on every sync, so a week-close judgement of "did he start his best
+/// players" read TODAY's numbers — a player hurt on Monday night looked like a bad Sunday start. The
+/// hourly writer (lib/integrity/lineupLockSnapshots.ts) refreshes every player whose game has not
+/// started and FREEZES each one at his own kickoff, so the score is computed from what the manager saw.
+///
+/// `rosterId` is the RedraftRoster id — the id the tanking flags and the week's saved lineups use.
+/// Code ships ahead of migration 20261107120000_lineup_lock_snapshots: reads return nothing and the
+/// writer skips while the table is absent, so applying it only turns the score on.
+model LineupLockSnapshot {
+  id               String    @id @default(cuid())
+  leagueId         String    @map("league_id")
+  rosterId         String    @map("roster_id")
+  season           Int
+  week             Int
+  /// `{ [playerId]: { name, position, proj, status, bye, team, frozenAt } }` — see lineupLockSnapshots.ts.
+  players          Json
+  /// The league's starting seats when captured: `[{ slot, eligible[] }]`.
+  slots            Json
+  /// Filled when the week is scored (lib/integrity/lineupIntegrityScore.ts). Null until then.
+  startedProj      Float?    @map("started_proj")
+  optimalProj      Float?    @map("optimal_proj")
+  ratio            Float?
+  startedTopCount  Int?      @map("started_top_count")
+  starterCount     Int?      @map("starter_count")
+  excludedIds      String[]  @default([]) @map("excluded_ids")
+  /// Why a week was not scored (`thin_projections`, `no_lineup`, …). A skipped week neither counts nor breaks a run.
+  skipReason       String?   @map("skip_reason")
+  scoredAt         DateTime? @map("scored_at")
+  algorithmVersion String?   @map("algorithm_version")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([leagueId, rosterId, season, week])
+  @@index([leagueId, season, week])
+  @@map("lineup_lock_snapshots")
+}
+
+/// Every completed trade's value AS PRICED WHEN IT HAPPENED, one row per trade (2026-11-07).
+///
+/// 🛑 THE COLLUSION REVIEW RE-PRICED FINISHED TRADES ON TODAY'S VALUES. A deal that was fair in
+/// September could read as a 60% heist in November because one player broke out — hindsight, not
+/// collusion. The three trade engines each keep a partial record (frozen Sleeper originals, a native
+/// proposal snapshot, a redraft snapshot on another value scale), none covering every trade. This
+/// table is the one record the trade audit, the pair check and the review read.
+///
+/// WRITE-ONCE. `basis` says how a row was priced and every surface prints it:
+///   `at_completion` — graded when the trade settled (the post-trade integrity scan);
+///   `trade_date`    — an imported trade's frozen original priced on its own date;
+///   `first_audited` — no trade-time price existed; graded on the day it was first audited.
+///
+/// Sides are the trade review's sides: A is the side the grade is written from. `gapPct` is signed
+/// from side A (+ means A received more). Code ships ahead of migration
+/// 20261107130000_trade_value_audits: reads return nothing and writes skip while the table is absent.
+model TradeValueAudit {
+  id          String    @id @default(cuid())
+  leagueId    String    @map("league_id")
+  /// `af:<AfLeagueTrade.id>` | `redraft:<proposalId>` | `sleeper:<transaction id>`.
+  tradeKey    String    @map("trade_key")
+  source      String
+  sideATeamId String    @map("side_a_team_id")
+  sideBTeamId String    @map("side_b_team_id")
+  sideAName   String    @map("side_a_name")
+  sideBName   String    @map("side_b_name")
+  /// Asset labels each side SENT, for the review list ("Ja'Marr Chase", "2027 1st", "$40 FAAB").
+  sideAGave   Json      @map("side_a_gave")
+  sideBGave   Json      @map("side_b_gave")
+  /// League value of what each side SENT, as priced (see `basis`).
+  sideAValue  Float     @map("side_a_value")
+  sideBValue  Float     @map("side_b_value")
+  gapPct      Float     @map("gap_pct")
+  basis       String
+  completedAt DateTime? @map("completed_at")
+  pricedAt    DateTime  @map("priced_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([leagueId, tradeKey])
+  @@index([leagueId, completedAt])
+  @@map("trade_value_audits")
+}
+
 model LeagueIntegritySettings {
   id                         String    @id @default(cuid())
   leagueId                   String    @unique
@@ -8782,6 +8890,15 @@ model LeagueAuth {
   oauthSecret String?
   espnSwid    String?
   espnS2      String?
+  /// 'ok' | 'needs_reconnect'. NULL = not checked since the column existed; reads as healthy.
+  /// Written by lib/league-import/espn/espnConnectionHealth.ts. Migration:
+  /// prisma/migrations-pending/20261108120000_league_auth_connection_health.
+  connectionStatus    String?
+  lastVerifiedAt      DateTime?
+  lastFailureAt       DateTime?
+  lastFailureCode     String?
+  /// When the user was last told to reconnect — throttles the notification to once per outage.
+  reconnectNotifiedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -15848,6 +15965,30 @@ model PlayerWeeklyScore {
   @@map("player_weekly_scores")
 }
 
+/// A player's position for one scoring week, recorded when that week's weekly score is written and
+/// FROZEN when the week finalizes (lib/bestball/weekPositions.ts). There was no position history
+/// anywhere: `SportsPlayer.position` and the roster rows hold the CURRENT position only, so rescoring
+/// a past best ball week seated a re-listed player at today's position. Best ball reads this before
+/// falling back to the current position. Same ids and sport keys as `PlayerWeeklyScore`.
+model PlayerWeekPosition {
+  playerId   String
+  sport      String
+  season     Int
+  week       Int
+  /// The position the weekly score was computed with; null when the roster row had none.
+  position   String?
+  /// What recorded it, e.g. `weekly_score_sync`.
+  source     String
+  /// Set when the week's weekly scores finalize; a frozen row is never rewritten.
+  frozen     Boolean  @default(false)
+  recordedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@id([playerId, sport, season, week])
+  @@index([sport, season, week])
+  @@map("player_week_positions")
+}
+
 model RedraftPlayoffBracket {
   id        String                @id @default(cuid())
   seasonId  String                @unique
@@ -20272,4 +20413,16 @@ model CommunityReport {
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@map("community_reports")
+}
+
+model SleeperCareerSurvival {
+  userId           String   @map("user_id")
+  platformLeagueId String   @map("platform_league_id")
+  season           Int
+  evidence         Json
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  user             AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, platformLeagueId, season])
+  @@map("sleeper_career_survival")
 }

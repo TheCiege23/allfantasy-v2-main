@@ -19,6 +19,7 @@ import {
   unownedTeamNames,
 } from './commissioner/activity'
 import { readMemberActivityInputs } from './commissioner/memberActivityReads'
+import { buildInactiveLadder, ladderApplies, type LadderEntry, type LadderLeague } from './commissioner/inactiveLadder'
 
 /**
  * Commissioner Hub, all leagues — `/core/commissioner` with no league picked.
@@ -86,6 +87,14 @@ export type CommissionerOverviewData = {
   ownsAny: boolean
   tournament: { count: number; show: boolean }
   partial: boolean
+  /**
+   * The inactive-manager ladder (./commissioner/inactiveLadder.ts): every quiet manager in the
+   * leagues whose activity was read, worst rung first. Built from the activity reads this loader
+   * already makes — no read of its own.
+   */
+  ladder: LadderEntry[]
+  /** How many in-season leagues the ladder covers — the card says "in the N leagues checked". */
+  ladderLeagues: number
 }
 
 const RANK: Record<TaskCard['severity'], number> = { bad: 0, warn: 1, info: 2 }
@@ -338,6 +347,27 @@ export async function getCommissionerOverview(input: {
     }
   })
 
+  /*
+   * ── The inactive-manager ladder ─────────────────────────────────────────
+   * Only leagues whose activity was actually read, and only in season: a quiet manager before the
+   * draft or after the final is normal, and a stale or never-synced league was not read at all.
+   */
+  const ladderInput: LadderLeague[] = shown.flatMap((b, i) => {
+    const members = activity[i]
+    if (!members || !members.available || !ladderApplies(b.row)) return []
+    const id = encodeURIComponent(b.row.id)
+    return [
+      {
+        leagueId: b.row.id,
+        leagueName: b.name,
+        managers: members.data.rows,
+        hubHref: `/core/commissioner?league=${id}`,
+        replaceHref: b.native ? `/league/${id}/orphan-teams` : `/core/commissioner?league=${id}#workflow-replace-manager`,
+      },
+    ]
+  })
+  const ladder = buildInactiveLadder(ladderInput, now)
+
   // ── The queue: every league's cards, ranked across leagues ─────────────────
   const everyLeague = firstPass.map((b) => inCard.get(b.row.id) ?? b)
   const staleLeagues = everyLeague.filter((b) => b.stale || b.neverSynced)
@@ -410,5 +440,7 @@ export async function getCommissionerOverview(input: {
     ownsAny: rows.some((r) => r.userId === userId),
     tournament: { count: tournamentCount, show: tournamentCount > 0 || rows.length >= 3 },
     partial: flags.partial,
+    ladder,
+    ladderLeagues: ladderInput.length,
   }
 }

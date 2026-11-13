@@ -8,6 +8,7 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { createStateFromImportedLeague } from '@/lib/create-league-v2/import-template'
 import { startFromTemplate } from '@/lib/rule-templates/templateService'
 import { CreateLeaguePageClient } from './CreateLeaguePageClient'
+import { parseRequestedFormat } from '@/lib/create-league-v2/requestedFormat'
 import { importedMlbScoring } from '@/lib/league-creation/canonical/importedMlbScoring'
 import { importedMlbRoster } from '@/lib/league-creation/canonical/importedMlbRoster'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
@@ -33,6 +34,9 @@ export default async function CreateLeaguePage(
   const e2eAuth = firstStringParam(sp.e2eAuth)
   const fromLeagueId = firstStringParam(sp.fromLeague)?.trim()
   const templateId = firstStringParam(sp.template)?.trim()
+  const fromDemo = firstStringParam(sp.from) === 'demo'
+  // `?type=<format>` from a format demo: open the wizard on that format.
+  const requestedFormat = parseRequestedFormat(firstStringParam(sp.type))
   const allowE2EBypass = process.env.NODE_ENV !== 'production' && e2eAuth === '1'
 
   const session = (await getServerSession(authOptions as never)) as {
@@ -47,7 +51,9 @@ export default async function CreateLeaguePage(
       ? `/create-league?fromLeague=${encodeURIComponent(fromLeagueId)}`
       : templateId
         ? `/create-league?template=${encodeURIComponent(templateId)}`
-        : '/create-league'
+        : fromDemo || requestedFormat
+          ? `/create-league?${new URLSearchParams({ ...(fromDemo ? { from: 'demo' } : {}), ...(requestedFormat ? { type: requestedFormat } : {}) }).toString()}`
+          : '/create-league'
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
   }
 
@@ -84,7 +90,7 @@ export default async function CreateLeaguePage(
     const imports = candidates
       .filter(league => !isNativePlatform(league.platform))
       .map(league => ({ id: league.id, name: league.name ?? '', sport: String(league.sport) }))
-    return <CreateLeaguePageClient userId={userId} importedLeagues={imports} />
+    return <CreateLeaguePageClient userId={userId} importedLeagues={imports} fromDemo={fromDemo} requestedFormat={requestedFormat ?? undefined} />
   }
 
   const source = await prisma.league.findUnique({

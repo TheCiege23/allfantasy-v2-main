@@ -1,10 +1,11 @@
 'use client'
 
+import { describeSettingsPatch } from '@/lib/tournament/commissionerLabels'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Check, X } from 'lucide-react'
 
-type RequestRow = {
+export type RequestRow = {
   id: string
   leagueId: string
   leagueName: string
@@ -70,8 +71,7 @@ export function TournamentApprovalsCenter({ tournamentId }: { tournamentId: stri
   return (
     <div className="space-y-4" data-testid="tournament-approvals-center">
       <p className="text-sm text-white/55">
-        Co-commissioners propose patches to <span className="text-white/80">league.settings</span>. You approve or reject
-        before changes apply.
+        Co-commissioners propose changes to their league&apos;s settings. Nothing changes until you approve it.
       </p>
       {loading ? (
         <p className="text-sm text-white/45">Loading requests…</p>
@@ -115,9 +115,14 @@ export function TournamentApprovalsCenter({ tournamentId }: { tournamentId: stri
                   </button>
                 </div>
               </div>
-              <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-white/5 bg-black/40 p-2 text-[11px] leading-relaxed text-cyan-100/80">
-                {JSON.stringify(r.proposedPatch, null, 2)}
-              </pre>
+              <dl className="mt-3 space-y-1 rounded-lg border border-white/5 bg-black/40 p-2 text-xs" data-testid={`tournament-approval-changes-${r.id}`}>
+                {describeSettingsPatch(r.proposedPatch).map((c) => (
+                  <div key={c.setting} className="flex flex-wrap justify-between gap-x-3">
+                    <dt className="text-white/55">{c.setting}</dt>
+                    <dd className="font-medium text-cyan-100/90">{c.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </li>
           ))}
         </ul>

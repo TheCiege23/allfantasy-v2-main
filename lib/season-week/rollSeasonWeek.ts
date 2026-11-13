@@ -1,3 +1,4 @@
+import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isNativeTournamentLeague } from '@/lib/bestball/tournamentCalendar'
 /**
  * The week roller: the caller `advance_week` never had.
@@ -392,7 +393,8 @@ export async function rollPostseason(
     const base = { seasonId: season.id, leagueId: season.leagueId, status: season.status }
     if (season.status === REDRAFT_SEASON_STATUS.COMPLETE && season.league?.lifecycleState !== 'completed') continue
 
-    if ((season.league?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto') {
+    // Roto, and a best ball league with no playoffs: no bracket — the season leader is crowned.
+    if ((season.league?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(season.league)) {
       if (options.dryRun) { held++; outcomes.push({...base,step:'held',detail:'dryRun'}); continue }
       try {
         const outcome=await finalizeSeasonAndEnterOffseason({seasonId:season.id,leagueId:season.leagueId,actorUserId:WEEK_ROLLER_ACTOR})

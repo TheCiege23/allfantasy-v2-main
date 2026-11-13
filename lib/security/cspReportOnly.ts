@@ -44,6 +44,40 @@ const GOOGLE_ANALYTICS = [
 
 const META = ['https://connect.facebook.net', 'https://www.facebook.com']
 
+/*
+ * Ad and analytics vendors that Google Tag Manager injects at runtime. Every origin
+ * below was MEASURED, not guessed: they are the top of the production csp-report log
+ * for 2026-11-11 → 11-12 (501 reports), and each matches a vendor named in
+ * docs/play-store/RUNBOOK.md's network capture and in /privacy's Section 5 table.
+ * Listing them turns those reports off so the remaining ones are signal.
+ *
+ * ⚠ DELIBERATELY STILL MISSING, so they keep reporting until someone decides:
+ *   - `eval` (script-src) — a GTM custom template; allowing it is 'unsafe-eval'.
+ *   - `mpc-pilot-*.a.run.app` / `mpc2-prod-*.a.run.app` — an unidentified fetch that
+ *     fires right after the Meta SDK (see the runbook). Its hostname rotates, so a
+ *     single entry would not hold, and an unknown third party should not be waved
+ *     through by an allowlist.
+ */
+const AD_VENDOR_SCRIPTS = [
+  'https://analytics.tiktok.com',
+  'https://www.redditstatic.com',
+  'https://googleads.g.doubleclick.net',
+  'https://static.cloudflareinsights.com',
+]
+
+const AD_VENDOR_CONNECT = [
+  'https://analytics.tiktok.com',
+  'https://analytics-ipv6.tiktokw.us',
+  'https://alb.reddit.com',
+  'https://pixel-config.reddit.com',
+  'https://analytics.google.com',
+  'https://www.google.com',
+  'https://ad.doubleclick.net',
+  'https://stats.g.doubleclick.net',
+  'https://googleads.g.doubleclick.net',
+  'https://cloudflareinsights.com',
+]
+
 export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
   'default-src': ["'self'"],
   'script-src': [
@@ -54,12 +88,14 @@ export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
     'https://js.stripe.com', // /support's buy button
     'https://sdk.scdn.co', // Spotify Web Playback SDK
     'https://platform.twitter.com', // opt-in X posts
+    ...AD_VENDOR_SCRIPTS,
   ],
   'connect-src': [
     "'self'", // also covers same-host ws(s): and PostHog, which is proxied via /ingest
     ...GOOGLE_ANALYTICS,
     ...META,
     ...SENTRY_INGEST,
+    ...AD_VENDOR_CONNECT,
     'https://api.stripe.com',
     'https://syndication.twitter.com',
   ],
@@ -97,6 +133,61 @@ export function serializeCsp(directives: Record<string, string[]>): string {
 }
 
 export const CSP_REPORT_ONLY_POLICY = serializeCsp(CSP_REPORT_ONLY_DIRECTIVES)
+
+// ── Phase 2: ENFORCED ─────────────────────────────────────────────────────────
+//
+// Built from the report-only policy plus what a WEEK of production reports showed it
+// still missed (csp-report log 2026-11-07 → 11-12, 1,503 reports). Every addition
+// below is measured, and each one would otherwise have broken a live tag on the
+// first enforced page view:
+//
+//  - `'unsafe-eval'` (script-src): 98 reports, inline (document-sourced) — a GTM
+//    custom template. Given `'unsafe-inline'` is already required, refusing eval
+//    stops no XSS that inline script cannot already do; it would only break the tag.
+//  - The apex `allfantasy.ai` (script-src): `'self'` names only the host serving the
+//    page, and assets were requested from the apex while the page was on www.
+//  - `connect-src` is `https:` rather than a host list. Google Ads remarketing beacons
+//    to `www.google.<country>` (google.es / .ca / .lk seen) and a GTM tag fetches a
+//    rotating `*.a.run.app` host; neither can be listed exhaustively. This costs
+//    almost nothing: with `img-src https:` (required for player headshots from many
+//    CDNs) any script can already exfiltrate with an image request, so a connect-src
+//    host list was never the barrier.
+//  - `form-action` adds `https://www.facebook.com` (the Meta pixel submits there).
+//  - `frame-src` adds `https://hooks.stripe.com`, Stripe's documented 3-D Secure frame
+//    for the /support buy button — too rare to have appeared in a week of reports,
+//    and the one place a block would cost a payment.
+//
+// What this enforces that nothing did before: scripts load only from the listed
+// origins (an injected <script src="https://evil…"> is refused), frames only from the
+// listed origins, forms post only to us (and Meta), plus no plugins, no <base>
+// hijack, no framing. What it does NOT do: stop an INLINE-script XSS — that needs
+// `'unsafe-inline'` replaced by per-request nonces, which forces every page dynamic
+// and is its own project.
+
+const APEX_AND_WWW = ['https://allfantasy.ai', 'https://www.allfantasy.ai']
+
+export const CSP_ENFORCED_DIRECTIVES: Record<string, string[]> = {
+  ...CSP_REPORT_ONLY_DIRECTIVES,
+  'script-src': [...CSP_REPORT_ONLY_DIRECTIVES['script-src'], "'unsafe-eval'", ...APEX_AND_WWW],
+  'connect-src': ["'self'", 'https:', 'wss:'],
+  'frame-src': [...CSP_REPORT_ONLY_DIRECTIVES['frame-src'], 'https://hooks.stripe.com'],
+  'form-action': ["'self'", 'https://www.facebook.com'],
+  // Only meaningful in an ENFORCED header (browsers ignore it in Report-Only).
+  'frame-ancestors': ["'none'"],
+}
+
+export const CSP_ENFORCED_POLICY = serializeCsp(CSP_ENFORCED_DIRECTIVES)
+
+export type CspMode = 'enforce' | 'report-only'
+
+/**
+ * `CSP_MODE=report-only` is the no-code rollback: setting it on the Railway service
+ * (a variable write redeploys it) puts the site back on the Phase 1 headers while a
+ * breakage is investigated. Anything else — including unset — enforces.
+ */
+export function cspMode(raw: string | undefined = process.env.CSP_MODE): CspMode {
+  return raw?.trim().toLowerCase() === 'report-only' ? 'report-only' : 'enforce'
+}
 
 // ── Report sanitising ──────────────────────────────────────────────────────────
 

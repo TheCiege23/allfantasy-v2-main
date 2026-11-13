@@ -22,6 +22,7 @@ import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
+import { provenPrivilegedEmail } from '@/lib/auth/provenPrivilegedEmail'
 import { TOKEN_ENTRY_TYPES } from '@/lib/tokens/constants'
 import { TokenInsufficientBalanceError, TokenSpendIdempotencyConflictError } from '@/lib/tokens/TokenSpendService'
 
@@ -106,7 +107,7 @@ export class TokenReservationService {
     expiresInMs?: number
     userEmail?: string | null
   }): Promise<ReservationView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return devAdminReservation(input.idempotencyKey, 'reserved') // platform-admin bypass — never touches DB
     }
     const ttlMs = input.expiresInMs ?? DEFAULT_RESERVATION_TTL_MS
@@ -183,7 +184,7 @@ export class TokenReservationService {
     userEmail?: string | null
     description?: string
   }): Promise<ReservationView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return devAdminReservation(input.idempotencyKey, 'finalized')
     }
     return this.db.$transaction(async (tx) => {
@@ -256,7 +257,7 @@ export class TokenReservationService {
     reason: string
     userEmail?: string | null
   }): Promise<ReservationView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return devAdminReservation(input.idempotencyKey, 'released')
     }
     return this.db.$transaction(async (tx) => {

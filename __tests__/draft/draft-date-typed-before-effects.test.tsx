@@ -16,25 +16,27 @@ import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 
 /*
- * The delayed setImmediate, with its own bookkeeping so the file can end cleanly:
- *   - `pending` counts callbacks still waiting, so afterAll can wait for ZERO rather than for a guessed duration
- *   - a callback that fires after jsdom is gone is SKIPPED: it is a React flush with nothing left to render into,
- *     and running it is exactly the CI failure — "ReferenceError: window is not defined" thrown from this wrapper
- *     (stack: Timeout._onTimeout here → scheduler performWorkUntilDeadline → react-dom), an unhandled error that
- *     fails the whole shard while every test passes
- *   - the real setImmediate is put back when the file ends
+ * The delayed setImmediate, with its own bookkeeping so the file can end cleanly. A callback still waiting out its
+ * 30ms when the file ends runs React's scheduler after jsdom is torn down and throws `window is not defined`: an
+ * unhandled error that fails the whole shard while every test passes (`Unit tests (1/4)` went red on main's own
+ * head 2 runs in 6 for exactly that). Three layers, each covering a gap in the others:
+ *   - every pending handle is tracked, so afterAll can wait for ZERO rather than for a guessed duration
+ *   - anything still pending after that bounded wait is cancelled, and the real setImmediate put back
+ *   - a callback that fires after jsdom is gone anyway is SKIPPED: a React flush with nothing left to render into
  */
 const flush = vi.hoisted(() => {
   const realSetTimeout = globalThis.setTimeout
-  const realSetImmediate = globalThis.setImmediate
-  const state = { pending: 0, skipped: 0, realSetImmediate }
+  const realSetImmediate = (globalThis as any).setImmediate
+  const pending = new Set<ReturnType<typeof setTimeout>>()
+  const state = { pending, skipped: 0, realSetImmediate }
   ;(globalThis as any).setImmediate = (fn: (...a: unknown[]) => void, ...args: unknown[]) => {
-    state.pending++
-    return realSetTimeout(() => {
-      state.pending--
+    const handle = realSetTimeout(() => {
+      pending.delete(handle)
       if (typeof window === 'undefined') { state.skipped++; return }
       fn(...args)
     }, 30)
+    pending.add(handle)
+    return handle
   }
   return state
 })
@@ -63,11 +65,13 @@ afterEach(() => { vi.unstubAllGlobals(); cleanup() })
  * waited a fixed ~500ms and hoped; a flush queued late on a loaded runner outlived it (a red 1/4 shard reported
  * "window is not defined" from this file once in seven runs on main). Now: wait until nothing is pending — each
  * flush can queue the next, so this loops — bounded so a runaway scheduler cannot hang the file, then restore the
- * real setImmediate. Anything still in flight after that is caught by the `window` guard in the wrapper.
+ * real setImmediate. Anything still pending is then cancelled; anything in flight hits the `window` guard.
  */
 afterAll(async () => {
   const deadline = Date.now() + 5000
-  while (flush.pending > 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 40))
+  while (flush.pending.size > 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 40))
+  for (const handle of flush.pending) clearTimeout(handle)
+  flush.pending.clear()
   ;(globalThis as any).setImmediate = flush.realSetImmediate
 })
 

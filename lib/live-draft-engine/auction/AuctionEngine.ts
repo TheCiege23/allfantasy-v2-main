@@ -31,6 +31,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { recordArchiveEvent, updateSessionWithArchive, json } from '@/lib/draft-archive/events'
 import { isEligibleForPlayerPool, isRookieRestrictedPlayerPool, resolveServerRookieStatus } from '@/lib/live-draft-engine/serverRookieStatus'
 import { recordAuctionBid } from '@/lib/live-draft-engine/auction/auctionBidLog'
+import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
 
 const DEFAULT_BUDGET = 200
 const DEFAULT_MIN_BID = 1
@@ -192,6 +193,11 @@ async function _nominatePlayerCore(
   if (session.draftModeLabel === 'rookie') {
     const available = await loadRookieAuctionAvailability(leagueId)
     if (!available(nomination)) return { success: false, error: 'This player is already on a league roster.' }
+  } else if (!season && session.draftModeLabel !== 'dispersal' && (session as { dispersalPoolConfig?: unknown }).dispersalPoolConfig == null) {
+    // Any other auction in a league whose season rosters already exist (see rosteredPlayerGuard.ts).
+    if (rosteredHolder(await loadLeagueRosteredPlayers(leagueId), nomination)) {
+      return { success: false, error: 'This player is already on a league roster.' }
+    }
   }
   if (isRookieRestrictedPlayerPool(session.playerPool)) {
     const rookie = await resolveServerRookieStatus({ leagueId, playerId: nomination.playerId, playerName: nomination.playerName })
@@ -210,8 +216,15 @@ async function _nominatePlayerCore(
   }
 
   const bidTimerEndAt = computeTimerEndAt(config.bidTimerSeconds)
-  const openingBid = season && options?.autoMinimumBid ? config.minBid : 0
-  if (openingBid && !canPlaceAuctionBid({ budget: getBudgetsFromSession(session)[nominatorRosterId] ?? 0, bid: openingBid, rosterSlotsRemaining: session.rounds - session.picks.filter(p => p.rosterId === nominatorRosterId && p.playerName.trim()).length, minimumBid: config.minBid })) return { success: false, error: 'The automatic nomination cannot reserve a minimum bid.' }
+  /*
+   * Nominating a player is the nominator's opening bid at the league minimum ($1 by default), so a
+   * player nobody else bids on goes to the manager who put them up. A published tournament keeps its
+   * frozen rule: only its automatic nomination opens at the minimum. A nominator who cannot afford
+   * the minimum (or has no roster spot left) still nominates, at no bid.
+   */
+  const nominatorCanOpen = canPlaceAuctionBid({ budget: getBudgetsFromSession(session)[nominatorRosterId] ?? 0, bid: config.minBid, rosterSlotsRemaining: session.rounds - session.picks.filter(p => p.rosterId === nominatorRosterId && p.playerName.trim()).length, minimumBid: config.minBid })
+  if (season && options?.autoMinimumBid && !nominatorCanOpen) return { success: false, error: 'The automatic nomination cannot reserve a minimum bid.' }
+  const openingBid = (season ? Boolean(options?.autoMinimumBid) : nominatorCanOpen) ? config.minBid : 0
   const minNextBid = openingBid ? openingBid + config.minBidIncrement : config.minBid
 
   const newState: AuctionState = {
@@ -255,7 +268,7 @@ async function _nominatePlayerCore(
     }
   }
 
-  // A season auto-nomination opens at the minimum bid on the nominator's behalf: the ladder's first rung.
+  // The nominator's opening bid is the ladder's first rung.
   if (openingBid > 0 && newState.currentNomination) {
     await recordAuctionBid({ draftSessionId: session.id, leagueId, player: newState.currentNomination, rosterId: nominatorRosterId, amount: openingBid })
   }
@@ -371,7 +384,8 @@ async function _placeBidCore(
 
 /**
  * Resolve the current auction: assign player to high bidder, deduct budget, create pick, advance nominator.
- * Called when bid timer expires or commissioner forces sell. If no bids, player is not assigned (pass).
+ * Called when bid timer expires or commissioner forces sell. With no bids the nominator wins at the
+ * minimum; the player passes unsold only when the nominator cannot afford it.
  */
 export interface ResolveAuctionOptions {
   /** Commissioner-forced resolution can bypass timer expiry. */
@@ -444,6 +458,29 @@ async function _resolveAuctionWinCore(
     if (!stillValid) {
       winnerRosterId = null
       amount = 0
+    }
+  }
+
+  /*
+   * Nobody bid: the player goes to the manager who nominated them, at the minimum. Every nomination now
+   * opens with that bid already placed; this covers a lot opened before that, or by a nominator whose
+   * opening bid has since become invalid. Not in a published tournament, whose rules are frozen.
+   */
+  if (!winnerRosterId && !season) {
+    const order = getAuctionNominationOrder(slotOrder, state)
+    const nominator = order[normalizeNominationIndex(state.nominationOrderIndex, order.length)]
+    if (nominator) {
+      const budgets = getBudgetsFromSession(session)
+      const affordable = canPlaceAuctionBid({
+        budget: budgets[nominator.rosterId] ?? 0,
+        bid: config.minBid,
+        rosterSlotsRemaining: getTeamRosterSlotsRemaining(session.picks.filter((pick) => pick.rosterId === nominator.rosterId).length, session.rounds),
+        minimumBid: config.minBid,
+      })
+      if (affordable) {
+        winnerRosterId = nominator.rosterId
+        amount = config.minBid
+      }
     }
   }
 

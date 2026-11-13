@@ -121,6 +121,7 @@ const LEAGUE_TYPE_OPTIONS: { value: LeagueStyleFilter; label: string }[] = [
   { value: "best_ball", label: "Best Ball" },
   { value: "keeper", label: "Keeper" },
   { value: "survivor", label: "Survivor" },
+  { value: "guillotine", label: "Guilly" },
   { value: "bracket", label: "Bracket" },
   { value: "community", label: "Community" },
 ]
@@ -215,6 +216,8 @@ function initialFiltersFrom(searchParams: { get(name: string): string | null } |
     rankBand: (get("rankBand") || "all") as RankBandFilter,
     vibe: (parsed?.vibe ?? (get("vibe") || "all")) as LeagueVibeFilter,
     aiEnabled: get("aiEnabled") === "true",
+    // Public unless the link asks for both: a saved search for "Public & private" reopens as one.
+    visibility: (get("visibility") === "all" ? "all" : "public") as VisibilityFilter,
     teamCountMin: teamCount || get("teamCountMin"),
     teamCountMax: teamCount || get("teamCountMax"),
     searchReadAs:
@@ -241,13 +244,14 @@ export function FindLeagueClient() {
   const [rankBand, setRankBand] = useState<RankBandFilter>(initial.rankBand)
   const [vibe, setVibe] = useState<LeagueVibeFilter>(initial.vibe)
   const [searchReadAs, setSearchReadAs] = useState<string[]>(initial.searchReadAs)
-  const [visibility, setVisibility] = useState<VisibilityFilter>("public")
+  // Public leagues by default — the leagues anyone can join straight away (owner's call, 2026-11-10:
+  // on production 10 of 12 cards were private). "Public & private" adds private leagues as "Ask to
+  // join" cards (lib/public-discovery/privateLeagueRequests.ts).
+  const [visibility, setVisibility] = useState<VisibilityFilter>(initial.visibility)
   const [sort, setSort] = useState<DiscoverySort>("ranking_match")
   const [leagues, setLeagues] = useState<DiscoveryCard[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [viewerTier, setViewerTier] = useState<number | null>(null)
-  const [viewerTierName, setViewerTierName] = useState<string | null>(null)
   const [hiddenByTierPolicy, setHiddenByTierPolicy] = useState(0)
   const [paidHiddenMessage, setPaidHiddenMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -318,8 +322,6 @@ export function FindLeagueClient() {
         setLeagues(d.leagues ?? [])
         setTotal(d.total ?? 0)
         setTotalPages(d.totalPages ?? 1)
-        setViewerTier(typeof d.viewerTier === "number" ? d.viewerTier : null)
-        setViewerTierName(typeof d.viewerTierName === "string" ? d.viewerTierName : null)
         setHiddenByTierPolicy(typeof d.hiddenByTierPolicy === "number" ? d.hiddenByTierPolicy : 0)
         setPaidHiddenMessage(typeof d.paidLeaguesHidden?.message === "string" ? d.paidLeaguesHidden.message : null)
         setLoading(false)
@@ -330,8 +332,6 @@ export function FindLeagueClient() {
         setLeagues([])
         setTotal(0)
         setTotalPages(0)
-        setViewerTier(null)
-        setViewerTierName(null)
         setHiddenByTierPolicy(0)
         setLoading(false)
       })
@@ -404,15 +404,13 @@ export function FindLeagueClient() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-3xl">
             <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--muted)" }}>
-              Rankings effect enabled
+              Find leagues at your Career Level
             </p>
             <p className="mt-1 text-sm" style={{ color: "var(--text)" }}>
-              Discovery prioritizes leagues closest to your current tier so recommendations stay competitive and relevant.
+              Join a fantasy league within three Career Levels. For a bigger gap, you can request commissioner approval.
             </p>
             <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-              {viewerTierName
-                ? `Current tier: ${viewerTier ?? "—"} (${viewerTierName}).`
-                : "Sign in to personalize tier matching even more."}
+              Class Division helps sort NFL matches by competitive fit.
             </p>
           </div>
           {hiddenByTierPolicy > 0 ? (

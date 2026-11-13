@@ -136,6 +136,10 @@ export function ConnectedAccountsSettingsSection({
     } else if (spotifyStatus === "error") {
       setStatusTone("error")
       setStatusMessage(t("settings.connected.spotifyStatus.error"))
+    } else if (spotifyStatus === "not-available") {
+      // Not on the Spotify tester allowlist yet — see lib/spotify/connectAccess.
+      setStatusTone("info")
+      setStatusMessage(t("settings.connected.spotifyStatus.notAvailable"))
     }
   }, [searchParams])
 
@@ -477,28 +481,48 @@ export function ConnectedAccountsSettingsSection({
       <div
         className="space-y-3 rounded-xl border p-4"
         style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
-        /* Not connected, this card is only "Spotify — coming soon": a placeholder, not in the iOS app (2.1). */
-        data-hide-in-ios-app={(profile as any)?.spotifyConnectedAt ? undefined : ""}
+        /* Not connected and not a tester, this card is only "Spotify — coming soon": a placeholder, not in the iOS app (2.1). */
+        data-hide-in-ios-app={(profile as any)?.spotifyConnectedAt || (profile as any)?.spotifyConnectAllowed ? undefined : ""}
       >
         <p className="text-sm font-medium" style={{ color: "var(--muted2)" }}>Spotify</p>
         {!(profile as any)?.spotifyConnectedAt ? (
           <div className="space-y-3">
             {/*
-              ⚠ CONNECT IS DELIBERATELY GATED OFF. The Spotify app is in dev
-              mode: only allowlisted accounts can authorize, so this button sent
-              every real user to Spotify's own 403 "User not registered in the
-              Developer Dashboard" page. Matches the SOON treatment on /login.
-              Re-enable only after extended quota is granted and the playback
-              chain is fixed (scope persistence, isPremium, preview enrichment).
+              ⚠ CONNECT IS GATED TO SPOTIFY'S OWN ALLOWLIST. The Spotify app is in
+              Development Mode: only accounts allowlisted in the Spotify Developer
+              Dashboard can authorize, and everyone else lands on Spotify's own 403
+              "User not registered in the Developer Dashboard" page. So the live
+              button shows only when the server says this account is on
+              SPOTIFY_CONNECT_ALLOWLIST (or SPOTIFY_CONNECT_OPEN=1 once Extended
+              Quota is granted) — see lib/spotify/connectAccess. /api/auth/spotify
+              enforces the same rule. Everyone else keeps the SOON treatment that
+              matches /login.
             */}
             <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.connected.spotifyBlurb")}</p>
-            <span
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium opacity-60"
-              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-              {t("settings.connected.spotifyComingSoon")}
-            </span>
+            {(profile as any)?.spotifyConnectAllowed ? (
+              <>
+                {/* An OAuth redirect route needs a full navigation; <Link> would client-route to it. */}
+                {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- see the line above */}
+                <a
+                  href="/api/auth/spotify"
+                  data-testid="settings-connect-spotify"
+                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium"
+                  style={{ borderColor: "#1DB954", background: "color-mix(in srgb, #1DB954 18%, transparent)", color: "var(--text)" }}
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                  {t("settings.connected.connectSpotify")}
+                </a>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.connected.spotifyTesterNote")}</p>
+              </>
+            ) : (
+              <span
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium opacity-60"
+                style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                {t("settings.connected.spotifyComingSoon")}
+              </span>
+            )}
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">

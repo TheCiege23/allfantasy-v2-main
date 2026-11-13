@@ -6,6 +6,8 @@ import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPl
 import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
+import { checkNewBestBallLeaguePool } from '@/lib/bestball/poolCapacity'
+import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
  */
@@ -101,7 +103,7 @@ export const createLeagueBodySchema = z.object({
   teamCount: z.number().int().min(2).max(256),
   draftType: z.string().min(1).max(32),
   leagueName: z.string().min(1).max(100).trim(),
-  conceptSetup: z.record(z.unknown()).optional().nullable(),
+  conceptSetup: z.record(z.string(), z.unknown()).optional().nullable(),
   soccerPipeline: z.enum(['mls', 'euro']).optional().nullable(),
   timezone: z.string().trim().min(1).max(64).refine(isValidIanaTimeZone, 'Choose a valid IANA timezone').optional(),
   language: z.enum(['en', 'es']).optional(),
@@ -465,6 +467,38 @@ export function validateCreatePayload(
         errors: [{ path: 'conceptSetup.bestBall.playoffTeams', message: 'Playoff teams cannot exceed the number of teams in the league' }],
       }
     }
+  }
+
+  /*
+   * Best ball lineups fill every starter seat for every team from what it drafted, so the league's
+   * seats must fit the sport's player pool (lib/bestball/poolCapacity.ts). Checked against the roster
+   * template bootstrap installs for this league type: `best_ball` for Classic Best Ball, the Guilly
+   * template for a best ball Guilly league. Tight-but-possible is a wizard warning, not a refusal.
+   */
+  const bestBallLeagueType =
+    formatId === 'best_ball' ? 'best_ball' : formatId === 'guillotine' && schedule.guillotineBestBall === true ? 'guillotine' : null
+  if (bestBallLeagueType) {
+    const poolCheck = checkNewBestBallLeaguePool({ sport, leagueType: bestBallLeagueType, teamCount: data.teamCount })
+    if (poolCheck.refusals.length > 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: poolCheck.refusals[0].message,
+        errors: poolCheck.refusals.map((r) => ({ path: 'teamCount', message: r.message, code: 'BEST_BALL_POOL_EXHAUSTED' })),
+      }
+    }
+  }
+
+  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): MLB only. Refused rather
+  // than dropped, so a league is never created on a period length it did not ask for.
+  if (schedule.guillotinePeriodWeeks !== undefined && schedule.guillotinePeriodWeeks !== 1) {
+    const message =
+      schedule.guillotinePeriodWeeks !== 2
+        ? 'An elimination period is one week or two.'
+        : formatId !== 'guillotine' || !supportsTwoWeekPeriods(sport)
+          ? 'Two-week elimination periods are for MLB Guilly leagues.'
+          : null
+    if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.guillotinePeriodWeeks', message }] }
   }
 
   if (formatId === 'survivor' && schedule.survivorTribeSlots !== undefined) {

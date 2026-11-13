@@ -84,6 +84,16 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
    */
   const platform = String((league as { platform?: string | null }).platform ?? '').trim().toLowerCase()
   const nativeBestBall = Boolean(league.bestBallMode) && (platform === '' || platform === 'manual' || platform === 'allfantasy')
+  /*
+   * 🛑 A NATIVE CLASSIC BEST BALL LEAGUE NEVER TRADES, WHATEVER `bbTradesEnabled` SAYS (owner's decision,
+   * 2026-11-07). Best ball scoring does not split a traded player's week (audit 2026-11-06, "Ownership
+   * history"). Deliberately NOT read from any switch, so no saved value can reopen it; the best ball read
+   * model says the same (lib/bestball/bestBallLeagueState.ts: `transactions.trades` is false for
+   * Classic), and every surface that used to offer a trade switch — /api/bestball/settings, the
+   * commissioner panel, creation — now refuses or omits it. A league that
+   * saved `bbTradesEnabled: true` earlier is still refused here. Guilly + Best Ball is not `bestBallMode`
+   * and keeps the guillotine rule below.
+   */
   let tradesAllowed = !league.lockAllMoves && !nativeBestBall
   if (league.guillotineMode) {
     const g = (snap as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean } | undefined
@@ -95,10 +105,6 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     const survivorGuillotine = raw.survivorGuillotine as { tradesEnabled?: boolean } | undefined
     tradesAllowed = tradesAllowed && survivorGuillotine?.tradesEnabled === true
   }
-  if (nativeBestBall && league.bbTradesEnabled === false) {
-    tradesAllowed = false
-  }
-
   /*
    * 🛑 THIS DEFAULTED TO THE DRAFT-PICK SETTING, WHICH DEFAULTS TO FALSE.
    *

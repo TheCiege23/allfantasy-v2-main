@@ -16,8 +16,6 @@ import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
 import { sleeperReadableRosters, rosterIdSpaceOf } from './rosterIdSpace'
 import { isTeamEliminated } from './teamElimination'
-import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
-import { availableFilter, boardFilterOptions, matchesBoardFilter, type BoardFilter, type BoardFilterOption } from './myTeamBoardFilter'
 import { injuryClaimAsOf } from '@/lib/injuries/matchInjuryRows'
 
 /**
@@ -188,11 +186,8 @@ export type MyTeamRow = {
   syncedAt?: string | null
   /** The last sync attempt failed (`League.syncStatus`), so the row may describe an older lineup. */
   syncFailed?: boolean
-  /** `NFL`, `NBA`… — the board's sport filter. */
+  /** `NFL`, `NBA`… — Your week's schedule forecasts and the opponent-exposure read key on it. */
   sport?: string
-  /** The league card's format key (`redraft`, `dynasty`, `guillotine`…) and its label — the format filter. */
-  format?: string
-  formatLabel?: string
 }
 
 /**
@@ -217,15 +212,6 @@ export type MyTeamPulse = {
   needs: MyTeamRow[]
   /** Lineups with nothing wrong we can see, soonest lock first. */
   set: MyTeamRow[]
-  /**
-   * The board's chips, counted over EVERY readable row before any filter or cap — see
-   * `myTeamBoardFilter.ts` for why this cannot be done in the component.
-   */
-  filters?: BoardFilterOption[]
-  /** The chip in force, or null. A requested chip that names nothing on this board is null. */
-  filter?: BoardFilter | null
-  /** Readable rows the chip hides. `needs`/`set` and their totals are AFTER the filter. */
-  filteredOut?: number
   /** Every league in view, uncapped — the weekend record counts them all, not the ten drawn. */
   inViewLeagueIds?: string[]
   /** Totals before the display cap, so a truncated column can say so. */
@@ -334,19 +320,17 @@ export async function getMyTeamPulse(
   userId: string,
   now: Date = new Date(),
   pausedLeagueIds?: ReadonlySet<string>,
-  /** `?format=` / `?sport=` / `?platform=` from the URL; ignored unless it names a chip here. */
-  requestedFilter: BoardFilter | null = null,
   /** Apply a selected league before reads and display caps. */
   focusLeagueId?: string | null,
 ): Promise<MyTeamPulse> {
   const timing = teamLoadTiming('portfolio')
-  try { return await loadMyTeamPulse(userId, now, pausedLeagueIds, requestedFilter, focusLeagueId, timing) }
+  try { return await loadMyTeamPulse(userId, now, pausedLeagueIds, focusLeagueId, timing) }
   finally { timing.finish() }
 }
 
 async function loadMyTeamPulse(
   userId: string, now: Date, pausedLeagueIds: ReadonlySet<string> | undefined,
-  requestedFilter: BoardFilter | null, focusLeagueId: string | null | undefined,
+  focusLeagueId: string | null | undefined,
   timing: ReturnType<typeof teamLoadTiming>,
 ): Promise<MyTeamPulse> {
   /* ── 1. Every team this user has claimed, with its league. ─────────────── */
@@ -370,8 +354,8 @@ async function loadMyTeamPulse(
             platformLeagueId: true,
             season: true,
             status: true, lifecycleState: true, bestBallMode: true, guillotineMode: true, leagueVariant: true,
-            /* The board's format filter, through the same resolver as the league cards. */
-            leagueType: true, isDynasty: true,
+            /* Whether the lineup sets itself (`automaticLineup`). */
+            leagueType: true,
             /* Read only to collapse duplicate copies — see `realLeague.ts`. */
             userId: true,
             updatedAt: true,
@@ -437,8 +421,6 @@ async function loadMyTeamPulse(
     leagueName: string
     platform: string
     sport: string
-    format: string
-    formatLabel: string
     automatic: boolean
     readAt: string | null
     allIds: string[]
@@ -504,26 +486,12 @@ async function loadMyTeamPulse(
 
     const leagueName = leagueDisplayName(l.name)
     const platform = String(l.platform ?? 'manual').toLowerCase()
-    /*
-     * ⚠ THE CANONICAL KEY, NOT A SECOND RULE. The `leagueType` column wins over `isDynasty` in this
-     * resolver, so a league with the flag set but the column left at its `redraft` default reads
-     * Redraft — 4 of 560 in production on 2026-10-03. That is how every league card labels them
-     * too; a filter that disagreed with the card a click away would be the worse bug.
-     */
-    const format = resolveLeagueCardTypeKey({
-      leagueType: l.leagueType, leagueVariant: l.leagueVariant, isDynasty: l.isDynasty,
-      guillotineMode: l.guillotineMode, bestBallMode: l.bestBallMode,
-      settings: l.settings && typeof l.settings === 'object' && !Array.isArray(l.settings) ? (l.settings as Record<string, unknown>) : undefined,
-    })
-
     pending.push({
       bestBall,
       leagueId: l.id,
       leagueName,
       platform,
       sport: String(l.sport ?? 'NFL').toUpperCase(),
-      format,
-      formatLabel: getLeagueTypeMedia(format).label,
       automatic: l.bestBallMode || automaticLineup(l.leagueType, l.settings),
       readAt: l.lastSyncedAt?.toISOString() ?? null,
       allIds: [...new Set([...ids, ...((readablePd && typeof readablePd === 'object' && Array.isArray((readablePd as Record<string, unknown>).players)) ? ((readablePd as Record<string, unknown>).players as unknown[]).map(String).filter(id => id && id !== '0') : [])])],
@@ -541,7 +509,7 @@ async function loadMyTeamPulse(
     })
   }
 
-  const unreadableInventory: MyTeamRow[] = mine.map(c => ({ leagueId: c.leagueId, leagueName: leagueDisplayName(c.league!.name), platform: String(c.league!.platform ?? 'manual'), sport: String(c.league!.sport ?? 'NFL'), format: resolveLeagueCardTypeKey({ ...c.league!, settings: c.league!.settings && typeof c.league!.settings === 'object' && !Array.isArray(c.league!.settings) ? c.league!.settings as Record<string,unknown> : undefined }), formatLabel: getLeagueTypeMedia(resolveLeagueCardTypeKey({ ...c.league!, settings: c.league!.settings && typeof c.league!.settings === 'object' && !Array.isArray(c.league!.settings) ? c.league!.settings as Record<string,unknown> : undefined })).label, automatic: automaticLineup(c.league!.leagueType, c.league!.settings), coverageReason: 'Roster or starting lineup unavailable; not checked.', logoUrl: null, leagueBadge: initialsOf(leagueDisplayName(c.league!.name)), teamName: c.teamName, starters: 0, empty: 0, out: 0, bye: null, questionable: 0, unresolved: 0, lockAt: null, locked: false, season: null, week: null, severity: 0, href: `/core/my-team?league=${encodeURIComponent(c.leagueId)}`, platformLeagueId: c.league!.platformLeagueId, leagueSeason: c.league!.season, teamId: c.externalId == null ? null : String(c.externalId) }))
+  const unreadableInventory: MyTeamRow[] = mine.map(c => ({ leagueId: c.leagueId, leagueName: leagueDisplayName(c.league!.name), platform: String(c.league!.platform ?? 'manual'), sport: String(c.league!.sport ?? 'NFL'), automatic: automaticLineup(c.league!.leagueType, c.league!.settings), coverageReason: 'Roster or starting lineup unavailable; not checked.', logoUrl: null, leagueBadge: initialsOf(leagueDisplayName(c.league!.name)), teamName: c.teamName, starters: 0, empty: 0, out: 0, bye: null, questionable: 0, unresolved: 0, lockAt: null, locked: false, season: null, week: null, severity: 0, href: `/core/my-team?league=${encodeURIComponent(c.leagueId)}`, platformLeagueId: c.league!.platformLeagueId, leagueSeason: c.league!.season, teamId: c.externalId == null ? null : String(c.externalId) }))
 
   if (pending.length === 0) {
     return { ...EMPTY_PULSE, viewerKey: userId, inventory: unreadableInventory, considered: mine.length, paused: mine.filter((c) => pausedLeagueIds?.has(c.leagueId)).length, notChecked }
@@ -761,8 +729,6 @@ async function loadMyTeamPulse(
       syncedAt: p.syncedAt,
       syncFailed: p.syncFailed,
       sport: p.sport,
-      format: p.format,
-      formatLabel: p.formatLabel,
     })
   }
 
@@ -780,10 +746,12 @@ async function loadMyTeamPulse(
     return a.lockAt.localeCompare(b.lockAt)
   }
 
-  /* Chips over everything readable; the filter, then the cap. Never the other way round. */
-  const filters = boardFilterOptions(rows)
-  const filter = availableFilter(requestedFilter, filters)
-  const inView = filter ? rows.filter((r) => matchesBoardFilter(r, filter)) : rows
+  /*
+   * Every readable row is in view. The no-league My team board narrowed this with filter chips
+   * (format / sport / platform); the board and its chips were removed on 2026-11-12, and no caller
+   * of this loader ever passed a filter after that.
+   */
+  const inView = rows
 
   const needsAll = inView
     .filter((r) => r.severity > 0)
@@ -826,9 +794,6 @@ async function loadMyTeamPulse(
     set: setAll.slice(0, SET_CAP),
     needsTotal: needsAll.length,
     setTotal: setAll.length,
-    filters,
-    filter,
-    filteredOut: rows.length - inView.length,
     inViewLeagueIds: inView.map((r) => r.leagueId),
     considered: mine.length,
     checked: rows.length,

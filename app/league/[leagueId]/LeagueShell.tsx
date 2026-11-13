@@ -5,6 +5,8 @@ import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+import { DEVY_TAB, DEVY_TAB_ALIASES, isDevyWorkspaceLeague } from '@/lib/devy/workspaceTab'
+import { DevyHome } from '@/components/devy/DevyHome'
 import { dynastySeasonClock, type DynastySeasonClock } from '@/lib/league-chat/dynastyChatSkin'
 import { dynastySeasonClock as leagueSeasonClock } from '@/lib/league-media/dynastySeasonClock'
 
@@ -15,7 +17,7 @@ import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQu
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
-import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
@@ -82,6 +84,10 @@ import {
   Landmark,
   CarTaxiFront,
   Ticket,
+  Gauge,
+  FileText,
+  Hammer,
+  Gavel,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
@@ -96,12 +102,12 @@ import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/L
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
+import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
 import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
 import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
@@ -176,6 +182,8 @@ import { BigBrotherFirstEntryModal } from '@/components/big-brother/BigBrotherFi
 import { IDPFirstEntryModal } from '@/components/idp/IDPFirstEntryModal'
 import { BigBrotherHome } from '@/components/big-brother/BigBrotherHome'
 import { BigBrotherCommandDashboard } from '@/components/big-brother/BigBrotherCommandDashboard'
+import { SalaryCapHome } from '@/components/salary-cap/SalaryCapHome'
+import { SALARY_CAP_TABS, SALARY_CAP_TAB_ALIASES, isSalaryCapWorkspaceLeague, salaryCapViewForTab } from '@/lib/salary-cap/workspaceTabs'
 import IDPHome from '@/components/idp/IDPHome'
 import { DevyFirstEntryModal } from '@/components/devy/DevyFirstEntryModal'
 import { GuillotineFirstEntryModal } from '@/components/guillotine/GuillotineFirstEntryModal'
@@ -587,6 +595,12 @@ export function LeagueShell({
       const block = [...core, ...command]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
     }
+    // Salary Cap had no tabs at all, so its screens were unreachable (lib/salary-cap/workspaceTabs.ts says why).
+    if (isSalaryCapWorkspaceLeague(league)) {
+      const idx = base.findIndex((t) => t.id === 'redraft')
+      const block: TabDef[] = SALARY_CAP_TABS.map(({ id, label }) => ({ id, label }))
+      base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
+    }
     if (isIdpLeagueVariant(league.leagueVariant)) {
       /*
        * Case-insensitive because production stores `DYNASTY_IDP`, and the exact-match comparison
@@ -611,6 +625,8 @@ export function LeagueShell({
         { id: 'dynasty', label: 'Dynasty' },
         { id: 'dynasty_taxi', label: 'Taxi' },
         { id: 'dynasty_picks', label: 'Picks' },
+        // The Devy home had no tab (lib/devy/workspaceTab.ts says why): a Devy league's pipeline sits with its dynasty tabs.
+        ...(isDevyWorkspaceLeague(league) ? [{ ...DEVY_TAB }] : []),
       ]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...dynastyTabs, ...base.slice(idx + 1)] : [...dynastyTabs, ...base]
     }
@@ -912,6 +928,8 @@ export function LeagueShell({
       bb_history: 'bb_history',
       bb_command: 'bb_command',
       bb_commissioner: 'bb_command',
+      ...SALARY_CAP_TAB_ALIASES,
+      ...DEVY_TAB_ALIASES,
     }
     let target = map[key]
     if (!target) return
@@ -1819,6 +1837,32 @@ export function LeagueShell({
               </Suspense>
             ) : null}
 
+            {/*
+              What's next? for an imported league, on its first tab only: the provider's status in
+              plain English, and a button that opens the host — AllFantasy is read-only here, so the
+              lineup, the draft and renewal all happen there.
+            */}
+            {!nativeWorkspace && activeTab === tabDefs[0]?.id ? (
+              <div className="mb-4">
+                <WhatsNextPanel
+                  league={selectedLeague}
+                  userId={userId}
+                  isCommissioner={isCommissioner}
+                  hasTeam={userTeam != null}
+                  draftDateIso={draftDateIso}
+                  availableTabIds={tabDefs.map((item) => item.id)}
+                  onSelectTab={setActiveTab}
+                  imported={{
+                    platform: String(league.platform ?? ''),
+                    sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null,
+                    season: selectedLeague.season ?? null,
+                    name: league.name ?? null,
+                    status: selectedLeague.status ?? null,
+                  }}
+                />
+              </div>
+            ) : null}
+
             {/* Live scores strip */}
             {!nativeWorkspace && <LeagueLiveStrip sport={String(league.sport)} />}
 
@@ -1897,6 +1941,9 @@ export function LeagueShell({
               draftDateIso={draftDateIso}
               draftSetupSession={draftSetupSession}
               hasActiveRedraftSeason={hasActiveRedraftSeason}
+              viewerUserId={userId}
+              // After the welcome sheet and any format intro, so the walkthrough never stacks on them.
+              autoOpenFormatWalkthrough={isCommissioner && createdFromLeagueCreate && welcomeStage === 'done'}
             />
             )}
           </div>
@@ -2216,6 +2263,8 @@ function LeagueTabRouter({
   hasActiveRedraftSeason,
   importedLeagueCount,
   leagueRail,
+  viewerUserId,
+  autoOpenFormatWalkthrough,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -2246,6 +2295,10 @@ function LeagueTabRouter({
   importedLeagueCount: number
   /** The rail's saved matchup summaries — the chat's pinned score card reads this league's entry. */
   leagueRail?: LeagueRailData | null
+  /** The signed-in viewer, for the format walkthrough's per-user "seen" flag. */
+  viewerUserId: string
+  /** The commissioner just created this league and the post-create welcome has finished. */
+  autoOpenFormatWalkthrough: boolean
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -2422,8 +2475,10 @@ function LeagueTabRouter({
             : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
               : id,
       )
-    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself.
-    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null) || isBestBallGuillotine(selectedLeague)
+    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself. The same
+    // test the lineup saves refuse by (guillotineBestBall.ts `lineupSetsItself`), so no editor is shown for a
+    // save that would be refused.
+    const bestBall = lineupSetsItself(selectedLeague)
     switch (activeTab) {
       case 'matchups':
       case 'matchup':
@@ -2446,11 +2501,28 @@ function LeagueTabRouter({
   }
 
   switch (activeTab) {
-    case 'native_home':
+    case 'native_home': {
+      /*
+       * "What's next?" leads League Home for every format: the phase in plain English, act-or-wait,
+       * who the league is waiting on and the deadline (components/league/whats-next/WhatsNextPanel).
+       */
+      const whatsNext = (
+        <WhatsNextPanel
+          league={selectedLeague}
+          userId={viewerUserId}
+          isCommissioner={isCommissioner}
+          hasTeam={userTeam != null}
+          draftDateIso={draftDateIso}
+          availableTabIds={tabDefs.map((item) => item.id)}
+          onSelectTab={onSelectTab}
+          autoOpenWalkthrough={autoOpenFormatWalkthrough}
+        />
+      )
       if (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor') {
-        return <SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} />
+        return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }
-      return <NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} />
+      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} /></div>
+    }
     case 'home':
       return (
         <NflRedraftLeagueHomeDashboard
@@ -2505,6 +2577,12 @@ function LeagueTabRouter({
     case 'dynasty_taxi':
     case 'dynasty_picks':
       return <DynastyHome leagueId={leagueId} view={activeTab as 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'} />
+    case 'devy':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          <DevyHome leagueId={leagueId} isCommissioner={isCommissioner} />
+        </div>
+      )
     case 'survivor':
       return <SurvivorHome leagueId={leagueId} />
     case 'survivor_tribal':
@@ -2546,6 +2624,18 @@ function LeagueTabRouter({
         <BigBrotherHome leagueId={leagueId} initialView={bbView} isCommissioner={isCommissioner} />
       )
     }
+    case 'salary_cap':
+    case 'cap_dashboard':
+    case 'cap_contracts':
+    case 'cap_team_builder':
+    case 'cap_auction':
+    case 'cap_ai':
+    case 'cap_rules':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          <SalaryCapHome leagueId={leagueId} initialView={salaryCapViewForTab(activeTab)} shellNav />
+        </div>
+      )
     case 'bb_command':
       return isCommissioner ? (
         <BigBrotherCommandDashboard leagueId={leagueId} />
@@ -2780,6 +2870,13 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   bb_twists: Wand2,
   bb_history: ScrollText,
   bb_command: LayoutDashboard,
+  salary_cap: Wallet,
+  cap_dashboard: Gauge,
+  cap_contracts: FileText,
+  cap_team_builder: Hammer,
+  cap_auction: Gavel,
+  cap_ai: Bot,
+  cap_rules: ScrollText,
   idp: ShieldPlus,
   keeper: Lock,
   settings: Settings,
@@ -2925,10 +3022,10 @@ function LeagueHeader({
     capSummary && capSummary.totalCap > 0 ? capSummary.availableCap / capSummary.totalCap : 0
   const capPillClass =
     capPct > 0.3
-      ? 'border-[color:var(--cap-green)]/50 bg-[color:var(--cap-green)]/15 text-emerald-100'
+      ? 'border-cap-green/50 bg-cap-green/15 text-emerald-100'
       : capPct > 0.1
-        ? 'border-[color:var(--cap-amber)]/45 bg-[color:var(--cap-amber)]/15 text-amber-100'
-        : 'border-[color:var(--cap-red)]/45 bg-[color:var(--cap-red)]/15 text-red-100'
+        ? 'border-cap-amber/45 bg-cap-amber/15 text-amber-100'
+        : 'border-cap-red/45 bg-cap-red/15 text-red-100'
   return (
     <div
       className="sticky top-0 z-[45] isolate flex-shrink-0 border-b border-[#ff3d81]/[0.14] bg-[#050814]/95 shadow-[0_12px_34px_rgba(0,0,0,0.46)] backdrop-blur-xl"
@@ -3081,10 +3178,10 @@ function LeagueHeader({
                   className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide ${
                     idpViewMode === m
                       ? m === 'offense'
-                        ? 'bg-[color:var(--idp-offense)]/25 text-blue-100'
+                        ? 'bg-idp-offense/25 text-blue-100'
                         : m === 'defense'
-                          ? 'bg-[color:var(--idp-defense)]/25 text-red-100'
-                          : 'bg-[color:var(--idp-combined)]/25 text-violet-100'
+                          ? 'bg-idp-defense/25 text-red-100'
+                          : 'bg-idp-combined/25 text-violet-100'
                       : 'text-white/45 hover:bg-white/[0.04]'
                   }`}
                   data-testid={`idp-view-${m}`}
@@ -3308,7 +3405,7 @@ function LeagueHeader({
               ['Picks', `/devy/${leagueId}/picks`],
               ['Matchup', `/league/${leagueId}`],
               ['Chat', `/league/${leagueId}`],
-              ['History', `/devy/${leagueId}/history`],
+              ['History', `/league/${leagueId}?view=history`],
               ['Commissioner', '__commish__'],
             ] as const
           ).map(([label, href]) =>

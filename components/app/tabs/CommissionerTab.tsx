@@ -482,7 +482,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
               <Crown className="h-3.5 w-3.5" /> League rankings
             </Link>
             <Link
-              href={premiumActionHref('draft_rankings', `${leagueBase}?tab=Draft`)}
+              href={premiumActionHref('draft_rankings', `${leagueBase}/draft-results`)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-500/20"
               data-testid="commissioner-tab-draft-rankings-link"
             >

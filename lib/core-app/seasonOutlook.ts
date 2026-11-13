@@ -4,7 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { historicalScoringSpread } from './historicalScoringSpread'
 import { readWeeklyHistory } from './weekBoard'
 import { headToHeadRecords } from './headToHeadRecords'
-import { weeklyScopeKey, weeklyFormat, canCertifyWeeklyPlayoffStatus } from './weeklyCapabilities'
+import { weeklyScopeKey, weeklyFormat, canCertifyWeeklyPlayoffStatus, nativeWeeklyLeague } from './weeklyCapabilities'
+import {
+  attachSurvival,
+  isPreseasonStage,
+  notStartedReason,
+  outlookEliminationFormat,
+  type OutlookWithheld,
+} from './seasonOutlookStatusRows'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { getFirstStatedKickoff } from './seasonPhase'
 import {
@@ -261,7 +268,7 @@ export type SeasonOutlook = {
   priorities: Array<{ leagueName: string; reason: string; href: string }>
   basis: string
   /** Leagues excluded, and why — never silently dropped. */
-  withheld: Array<{ leagueName: string; reason: string }>
+  withheld: OutlookWithheld[]
   /**
    * First future kickoff a source STATES is regular season, ISO — null when
    * none is stated. Drives the phase-aware empty state; see
@@ -459,6 +466,8 @@ export type Prepared = {
   expectedWins: Map<string, number>
   seasonsFitted: number[]
   format: ReturnType<typeof readPlayoffFormat>
+  /** Teams rated from the league prior rather than their own weeks — see `priorProfile`. */
+  priorRated?: Set<string>
   missing: string[]
   /** The unscored rows, kept for the swing branch. */
   unscored: OutlookMatchupRow[]
@@ -468,6 +477,23 @@ function fitProfile(values: number[]): SimTeam['profile'] {
   if (values.length < MIN_WEEKS) return null
   const mu = values.reduce((a, b) => a + b, 0) / values.length
   return { mu, sigma: historicalScoringSpread(values), n: values.length }
+}
+
+/**
+ * A team with fewer than `MIN_WEEKS` scored weeks: the league's average, blended with the weeks it
+ * has (each own week weighs as much as one of `MIN_WEEKS` prior weeks), at the league's spread. With
+ * no league prior at all, every team gets the same neutral rating — only differences matter to the
+ * simulation, so equal ratings make the schedule the only thing it plays out. `n` stays the real
+ * sample (the sim floors it at 1), which keeps the re-drawn ranges wide. Exported for the test.
+ */
+export function priorProfile(
+  own: readonly number[],
+  prior: { mu: number; sigma: number } | null,
+): NonNullable<SimTeam['profile']> {
+  const base = prior ?? { mu: 100, sigma: 25 }
+  const sum = own.reduce((a, b) => a + b, 0)
+  const mu = (sum + MIN_WEEKS * base.mu) / (own.length + MIN_WEEKS)
+  return { mu, sigma: base.sigma, n: own.length }
 }
 
 /** All-play: each week, the share of the league a team outscored. Summed over weeks. */
@@ -514,7 +540,7 @@ export type OutlookInputs = {
 export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], identityLeagues: LeagueInput[] = leagues): Promise<OutlookInputs | null> {
   const [history, sports] = await Promise.all([
     readWeeklyHistory(userId, leagues, identityLeagues),
-    prisma.league.findMany({ where: { id: { in: leagues.map(l => l.id) } }, select: { id: true, sport: true, season: true, settings: true, status: true, leagueType: true, platform: true, playoffTeams: true } }),
+    prisma.league.findMany({ where: { id: { in: leagues.map(l => l.id) } }, select: { id: true, sport: true, season: true, settings: true, status: true, leagueType: true, platform: true, playoffTeams: true, guillotineMode: true } }),
   ])
   if (!history) return null
   const rows = history.rows
@@ -531,18 +557,58 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
   const withheld: SeasonOutlook['withheld'] = []
   const prepared: Prepared[] = []
 
+  const eliminationOf = (league: LeagueInput) => {
+    const stored = sports.find(l => l.id === league.id)
+    return outlookEliminationFormat({
+      leagueType: stored?.leagueType ?? league.leagueType,
+      guillotineMode: stored?.guillotineMode,
+      settings: stored?.settings ?? league.settings,
+      platformLeagueId: league.platformLeagueId,
+    })
+  }
+  /*
+   * ⚠ ONE REAL LEAGUE, SEVERAL COPIES, ONE FORMAT. A league every member imported exists once per
+   * importer (see `realLeague.ts`), and the copies do not agree on type: measured 2026-11-11, two
+   * guillotine leagues each had one copy typed `guillotine` and another typed `redraft`, so the same
+   * league printed as "you are still alive" AND as a playoff race with no schedule. Any copy stating an
+   * elimination format settles it for all copies of that provider league.
+   */
+  const eliminationByScope = new Map<string, NonNullable<ReturnType<typeof eliminationOf>>>()
+  for (const league of leagues) {
+    const format = nativeWeeklyLeague(league) ? null : eliminationOf(league)
+    if (format && !eliminationByScope.has(weeklyScopeKey(league))) eliminationByScope.set(weeklyScopeKey(league), format)
+  }
+
   for (const league of leagues) {
     const pid = weeklyScopeKey(league)
     const leagueName = league.name?.trim() || 'League'
     const storedLeague = sports.find(l => l.id === league.id)
-    const formatMode = weeklyFormat({ ...league, leagueType: storedLeague?.leagueType ?? league.leagueType, settings: storedLeague?.settings ?? league.settings })
+    const leagueType = storedLeague?.leagueType ?? league.leagueType
+    const leagueSettings = storedLeague?.settings ?? league.settings
+    const stage = storedLeague?.status ?? null
+    const statusRow = { leagueName, leagueId: league.id, stage, scope: pid }
+    /*
+     * Elimination formats (guillotine, survivor, tournament) get a survival row instead of odds — see
+     * `seasonOutlookStatusRows.ts`. Checked before the scoring format so a tournament round, which
+     * scores head-to-head, is still reported as alive / eliminated rather than as a playoff race.
+     */
+    const elimination = eliminationOf(league) ?? eliminationByScope.get(pid) ?? null
+    if (elimination) {
+      withheld.push({ ...statusRow, kind: 'elimination', format: elimination, reason: 'Elimination format — survival status.' })
+      continue
+    }
+    const formatMode = weeklyFormat({ ...league, leagueType, settings: leagueSettings })
     if (formatMode !== 'head-to-head') {
-      withheld.push({ leagueName, reason: 'This format needs a category, season-table or survival model; head-to-head points playoff odds are unavailable.' })
+      withheld.push({ ...statusRow, kind: 'unavailable', reason: 'This format needs a category, season-table or survival model; head-to-head points playoff odds are unavailable.' })
       continue
     }
     const leagueRows = rowsByLeague.get(pid) ?? []
     if (leagueRows.length === 0) {
-      withheld.push({ leagueName, reason: 'No matchups have been synced for this league.' })
+      withheld.push(
+        isPreseasonStage(stage) || nativeWeeklyLeague(league)
+          ? { ...statusRow, kind: 'not-started', reason: notStartedReason(stage) }
+          : { ...statusRow, kind: 'unavailable', reason: 'No matchups have been synced for this league.' },
+      )
       continue
     }
 
@@ -550,12 +616,16 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     const season = history.periodsByLeague.get(pid)?.season ?? storedLeague?.season ?? leagueRows.reduce((max, r) => Math.max(max, r.seasonYear), 0)
     const seasonRows = leagueRows.filter((r) => r.seasonYear === season)
     if (!seasonRows.length) {
-      withheld.push({ leagueName, reason: `No current-season schedule is on file for ${season}. Historical scoring alone cannot establish this season's playoff path.` })
+      withheld.push(
+        isPreseasonStage(stage)
+          ? { ...statusRow, kind: 'not-started', reason: notStartedReason(stage) }
+          : { ...statusRow, kind: 'unavailable', reason: `No current-season schedule is on file for ${season}. Historical scoring alone cannot establish this season's playoff path.` },
+      )
       continue
     }
     const nativeRule = history.nativeRules.get(pid)
     if (nativeRule?.season === season && nativeRule.medianGame) {
-      withheld.push({ leagueName, reason: 'This native season uses median games. Its additional qualification results are not supported by this playoff model.' })
+      withheld.push({ ...statusRow, kind: 'unavailable', reason: 'This native season uses median games. Its additional qualification results are not supported by this playoff model.' })
       continue
     }
     const progress = leagueWeekProgress(sports.find((l) => l.id === league.id) ?? { settings: league.settings, season })
@@ -610,26 +680,47 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     /* Head-to-head from paired scores, never the stored `win` flag — see `headToHeadRecords`. */
     const h2hRecords = headToHeadRecords(seasonRows.filter(playedRow))
 
+    /*
+     * ⚠ EARLY SEASON: A TEAM WITH FEWER THAN `MIN_WEEKS` IS RATED FROM THE LEAGUE, NOT DROPPED.
+     *
+     * This league used to be withheld outright whenever fewer than two teams had three scored weeks —
+     * so every league in its first fortnight, and every Fantrax league whose history was not
+     * imported, vanished from the page (owner's report, 2026-11-11). Now such a team is rated at the
+     * league's own average, blended with whatever weeks it HAS played (`priorProfile`), and its
+     * parameter uncertainty stays wide because `n` is its real sample. When no week has been scored
+     * anywhere, every team is rated equally and the copy says those are the schedule's odds.
+     *
+     * These teams are reported `modelled: false`, so no clinch/elimination claim and no milestone is
+     * ever made off a prior.
+     */
+    const pooled = [...scores.values()].flat()
+    const leaguePrior = pooled.length >= MIN_WEEKS
+      ? { mu: pooled.reduce((a, b) => a + b, 0) / pooled.length, sigma: historicalScoringSpread(pooled) }
+      : null
+    const priorRated = new Set<string>()
     const simTeams: SimTeam[] = []
     for (const [rosterId, list] of byRoster) {
       const played = list.filter(playedRow)
       const med = medianRecords?.get(rosterId) ?? { wins: 0, losses: 0, ties: 0 }
       const h2h = h2hRecords.get(rosterId) ?? { wins: 0, losses: 0, ties: 0 }
+      const own = scores.get(rosterId) ?? []
+      const fitted = fitProfile(own)
+      if (!fitted) priorRated.add(rosterId)
       simTeams.push({
         rosterId,
         wins: h2h.wins + med.wins,
         losses: h2h.losses + med.losses,
         ties: h2h.ties + med.ties,
         pointsFor: played.reduce((a, x) => a + x.pointsFor, 0),
-        profile: fitProfile(scores.get(rosterId) ?? []),
+        profile: fitted ?? priorProfile(own, leaguePrior),
       })
     }
 
-    const modelled = simTeams.filter((s) => s.profile != null).length
-    if (modelled < 2) {
+    if (simTeams.length < 2) {
       withheld.push({
-        leagueName,
-        reason: `Only ${modelled} of ${simTeams.length} teams have three or more completed weeks on file, in any season — not enough to simulate.`,
+        ...statusRow,
+        kind: 'unavailable',
+        reason: `Only ${simTeams.length} team is on this season's schedule — not enough to simulate.`,
       })
       continue
     }
@@ -681,7 +772,8 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
         const platform = String(league.platform ?? '').trim()
         const who = platform ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase() : 'The platform'
         withheld.push({
-          leagueName,
+          ...statusRow,
+          kind: 'unavailable',
           reason: `The rest of the schedule is not on file — ${who} has sent only the weeks already played (through week ${lastScoredWeek}), so a finished season cannot be told from one still going.`,
         })
         continue
@@ -689,10 +781,12 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     }
 
     const missing: string[] = []
-    const unmodelled = simTeams.filter((t) => !t.profile).length
+    const unmodelled = priorRated.size
     if (unmodelled > 0) {
       missing.push(
-        `${unmodelled} team${unmodelled === 1 ? ' has' : 's have'} fewer than ${MIN_WEEKS} completed weeks, so ${unmodelled === 1 ? 'its games are' : 'their games are'} left unplayed in every run.`,
+        leaguePrior
+          ? `${unmodelled} team${unmodelled === 1 ? ' has' : 's have'} fewer than ${MIN_WEEKS} completed weeks, so ${unmodelled === 1 ? 'it is' : 'they are'} rated at the league average, blended with the weeks ${unmodelled === 1 ? 'it has' : 'they have'} played. Expect these odds to move quickly.`
+          : `No week has been scored yet, so every team is rated equally — these are the schedule's odds, not a read on any roster.`,
       )
     }
     const unnamed = simTeams.filter((t) => !nameByRoster.has(`${pid}:${t.rosterId}`)).length
@@ -724,6 +818,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
       expectedWins: allPlayWins(seasonRows.filter((r) => final(r) && regular(r.week))),
       seasonsFitted: [...seasonsFitted].sort((a, b) => a - b),
       format,
+      priorRated,
       missing,
       unscored,
     })
@@ -817,6 +912,8 @@ export async function getSeasonOutlook(
   const inputs = await loadOutlookInputs(userId, leagues, identityLeagues)
   if (!inputs) return empty
   const { prepared, withheld, nameByRoster, myRosters, sportOf } = inputs
+  /* Elimination leagues: are you still alive? Runs beside the simulations, never blocks the board. */
+  const survivalRead = attachSurvival(userId, withheld).catch(() => undefined)
 
   /*
    * ── Runs: reuse what is stored, compute what is not ───────────────────────
@@ -880,6 +977,8 @@ export async function getSeasonOutlook(
     const n = result.iterations
     const strength = scheduleStrength(p.sim, p.played)
 
+    /* Fitted from the team's own weeks — not rated from the league prior (`priorProfile`). */
+    const ownFit = (s: SimTeam) => s.profile != null && !p.priorRated?.has(s.rosterId)
     const ordered = [...p.sim.teams].sort((a, b) => (b.wins + (b.ties ?? 0) / 2) - (a.wins + (a.ties ?? 0) / 2) || b.pointsFor - a.pointsFor)
     const outlookTeams: OutlookTeam[] = ordered.map((s, i) => {
       const c = result.counts[s.rosterId] ?? { playoff: 0, bye: 0, title: 0 }
@@ -909,10 +1008,10 @@ export async function getSeasonOutlook(
                 title: bandAround(b.title, titlePct),
               }
             : null,
-        status: s.profile ? status : null,
-        modelled: s.profile != null,
+        status: ownFit(s) ? status : null,
+        modelled: ownFit(s),
         weeksFitted: s.profile?.n ?? 0,
-        weeklyMean: s.profile?.mu ?? null,
+        weeklyMean: ownFit(s) ? (s.profile?.mu ?? null) : null,
         expectedWins: p.expectedWins.get(s.rosterId) ?? null,
         schedule: strength[s.rosterId] ?? null,
       }
@@ -920,7 +1019,7 @@ export async function getSeasonOutlook(
 
     const you = outlookTeams.find((t) => t.isYou) ?? null
     const milestones = you && you.modelled ? readMilestones(result, p.sim, you.rosterId) : null
-    const fitted = p.sim.teams.map((t) => t.profile?.n ?? 0).filter((v) => v > 0).sort((a, b) => a - b)
+    const fitted = p.sim.teams.filter(ownFit).map((t) => t.profile?.n ?? 0).filter((v) => v > 0).sort((a, b) => a - b)
 
     out.push({
       leagueId: p.league.id,
@@ -1164,6 +1263,7 @@ export async function getSeasonOutlook(
     .slice(0, 3)
     .map(({ leagueName, reason, href }) => ({ leagueName, reason, href }))
 
+  await survivalRead
   const used = out.map((l) => l.assumptions.iterations)
   return {
     leagues: out,

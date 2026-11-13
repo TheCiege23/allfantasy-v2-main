@@ -17,7 +17,7 @@
  * recommendation — framed by the real `strategy` domain's classification
  * (contender → buy-low framing, retool/rebuild → sell-high framing) —
  * directing the user to the real, authoritative trade surfaces
- * (`/dynasty-trade-analyzer`, `/trade-finder`) rather than inventing
+ * (the Trade Analyzer, `/trade-evaluator`, and the Trades screen's finder) rather than inventing
  * player-level trade math this generator has no safe way to compute.
  * `executionCapability` is honestly `open_provider`/`recommendation_only`
  * for every provider — this generator never claims a trade was evaluated
@@ -63,7 +63,11 @@ export function generateTradeRecommendations(context: UserOsContext, generatedAt
       sourceFreshness: context.syncFreshness,
       // Never claims a trade was evaluated/proposed here — points to the real engines.
       executionCapability: 'recommendation_only',
-      action: { label: 'Open Trade Finder', href: '/trade-finder', payloadType: 'trade_finder_open' },
+      action: {
+        label: 'Open Trade Finder',
+        href: `/core/trades?league=${encodeURIComponent(context.canonicalLeagueId)}#trade-finder`,
+        payloadType: 'trade_finder_open',
+      },
       generatedAt,
     }),
   ]

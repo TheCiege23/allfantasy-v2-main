@@ -4,13 +4,20 @@
  * NULL `seasonType`, identity rows carrying Rolling Insights ids, and rosters in that id space.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import eplFixture from '../../tests/fixtures/fantrax/epl-public-2026.json'
+import ownGoalTimeline from '../../contracts/thesportsdb/fixtures/v1.lookuptimeline.EPL-own-goal.json'
+import { eplGoalKeyForRollingMatch, parseEplGoalReceipt } from '@/lib/sports-data/soccerOwnGoalEvidence'
+import { fantraxSoccerRulesDigest } from '@/lib/league-import/fantrax/soccerPlayerExport'
+import { planNcaafEspnIdentityLinks } from '@/lib/player-identity/ncaafEspnIdentityPlan'
 
 const db = vi.hoisted(() => ({
   projections: [] as Array<{ playerId: string; playerName: string; position: string; season: number; adjustmentFactors: unknown; computedAt?: Date }>,
   // A game with no `season` stands in for every season; one with a season answers only for it.
   games: [] as Array<{ homeTeam: string; awayTeam: string; seasonType: string | null; startTime: Date; season?: number }>,
-  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string }>,
+  identities: [] as Array<{ id: string; rollingInsightsId: string | null; sleeperId: string | null; canonicalName?: string; currentTeam?: string; position?: string; fantraxId?: string; espnId?: string; mflId?: string; fleaflickerId?: string }>,
   rosters: [] as Array<{ playerData: unknown }>,
+  cache: [] as Array<{ cacheKey: string; data: unknown }>,
+  priorNbaStats: [] as Array<{ playerId: string; stats: unknown }>,
   // Soccer's per-match rows (`player_game_stats`), both seasons.
   matchRows: [] as Array<{ playerId: string; season: number; team: string; gameId: string; gameDate: Date; normalizedStatMap: unknown }>,
   // `SportsPlayer` age rows, for a dynasty league's multi-season grade.
@@ -38,7 +45,12 @@ vi.mock('@/lib/prisma', () => ({
     },
     playerIdentityMap: { findMany: vi.fn(async () => db.identities) },
     sportsPlayer: { findMany: vi.fn(async () => db.sportsPlayers) },
+    fantasyStatLine: { findMany: vi.fn(async ({ where }: { where: { playerId: { in: string[] } } }) => db.priorNbaStats.filter((r) => where.playerId.in.includes(r.playerId))) },
     roster: { findMany: vi.fn(async () => db.rosters) },
+    sportsDataCache: {
+      findMany: vi.fn(async () => db.cache),
+      findUnique: vi.fn(async ({ where }: { where: { cacheKey: string } }) => db.cache.find((row) => row.cacheKey === where.cacheKey) ?? null),
+    },
     playerGameStat: {
       findFirst: vi.fn(async () => (db.matchRows.length ? { season: Math.max(...db.matchRows.map((r) => r.season)) } : null)),
       findMany: vi.fn(async ({ where }: { where: { season: number } }) => db.matchRows.filter((r) => r.season === where.season)),
@@ -47,15 +59,17 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { loadSportPointsBase } from '@/lib/decision-os/trade/sportPointsContext'
+import { createSportPointsGrader } from '@/lib/decision-os/trade/sportPointsGrader'
+import { sportPointsBasis } from '@/lib/decision-os/trade/sportPointsValue'
 
 const NOW = new Date('2026-10-20T12:00:00Z')
 
-function nbaPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample = 60) {
+function nbaPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample = 60, sourceSeason = 2025) {
   db.projections.push({
     playerId: id, playerName: name, position, season: 2026,
-    adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason: 2025 },
+    adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason },
   })
-  db.identities.push({ id, rollingInsightsId: `ri-${id}`, sleeperId: null })
+  db.identities.push({ id, canonicalName: name, rollingInsightsId: `ri-${id}`, sleeperId: null })
 }
 
 function schedule(teams: string[], gamesEach: number, seasonType: string | null, season?: number) {
@@ -73,9 +87,118 @@ beforeEach(() => {
   db.rosters = []
   db.matchRows = []
   db.sportsPlayers = []
+  db.priorNbaStats = []
+  db.cache = []
+})
+
+it('links an ESPN college football ID only through unique school, position, and CFBD evidence', () => {
+  const ref = { id: '25', name: 'First Last', position: 'QB', team: 'Michigan' }
+  const row = { id: 'identity', canonicalName: 'First Last', position: 'QB', currentTeam: 'Michigan', cfbdId: '89', espnId: null }
+  expect(planNcaafEspnIdentityLinks([ref], [row])).toEqual([{ id: 'identity', espnId: '25', cfbdId: '89' }])
+  expect(planNcaafEspnIdentityLinks([ref], [row, { ...row, id: 'conflict', cfbdId: '54' }])).toEqual([])
+  expect(planNcaafEspnIdentityLinks([ref], [{ ...row, currentTeam: 'Michigan State' }])).toEqual([])
+  expect(planNcaafEspnIdentityLinks([ref], [{ ...row, cfbdId: null }])).toEqual([])
 })
 
 describe('loadSportPointsBase', () => {
+  it('keeps verified NBA prior-year rates until each current player meets the ten-game trade bar', async () => {
+    nbaPlayer('returner', 'Returning', 'C', { points: 36 }, 7, 2026)
+    nbaPlayer('current', 'Current', 'C', { points: 30 }, 10, 2026)
+    nbaPlayer('rookie', 'Rookie', 'C', { points: 40 }, 4, 2026)
+    nbaPlayer('thin', 'Thin Prior', 'C', { points: 27 }, 8, 2026)
+    schedule(['T1', 'T2'], 40, null)
+    const league = { id: 'L', settings: { scoringSettings: { rules: { points: 1 } } }, leagueType: 'redraft', leagueSize: 2 }
+    const load = () => loadSportPointsBase({ sport: 'NBA', league, now: NOW })
+    expect(await load()).toMatchObject({ ok: false, valuationGap: 'projection_coverage' })
+    const prior = (playerId: string, games_played: number, points: number) => ({ playerId, stats: { regular_season: { games_played, points } } })
+    db.priorNbaStats = [prior('returner', 40, 800), prior('current', 60, 600), prior('thin', 3, 60)]
+    expect(await load()).toMatchObject({ ok: false, valuationGap: 'projection_coverage' })
+    db.priorNbaStats.push(prior('thin', 10, 120))
+    const result = await load()
+    if (!result.ok) throw new Error(result.reason)
+    expect(result.ctx.board).toMatchObject([
+      { id: 'returner', sampleGames: 40, sourceSeason: 2025, perGame: 20 },
+      { id: 'current', sampleGames: 10, sourceSeason: 2026, perGame: 30 },
+      { id: 'rookie', sampleGames: 4, sourceSeason: 2026, perGame: 40 },
+      { id: 'thin', sampleGames: 10, sourceSeason: 2025, perGame: 12 },
+    ])
+  })
+
+  it('reports an assumed team count in the points grade basis', async () => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 30, total_rebounds: 10 })
+    nbaPlayer('b', 'Beta', 'PG', { points: 20, assists: 8 })
+    schedule(['T1', 'T2'], 40, null)
+    const out = await loadSportPointsBase({
+      sport: 'NBA', now: NOW,
+      league: { id: 'L', settings: { scoringSettings: { rules: { points: 1 } } }, leagueType: 'redraft', leagueSize: null },
+    })
+    expect(out.ok).toBe(true)
+    if (out.ok) {
+      expect(out.ctx.teams).toBe(12)
+      expect(sportPointsBasis(out.ctx)).toContain('This league has no verified team count. The grade uses 12 teams.')
+    }
+  })
+
+  it.each([
+    ['espn', 'espnId'],
+    ['mfl', 'mflId'],
+    ['fleaflicker', 'fleaflickerId'],
+    ['fantrax', 'fantraxId'],
+  ] as const)('reads %s roster IDs only from %s', async (platform, column) => {
+    nbaPlayer('p1', 'Alpha', 'C', { points: 40 })
+    nbaPlayer('p2', 'Beta', 'C', { points: 30 })
+    nbaPlayer('900', 'Gamma', 'C', { points: 10 })
+    db.identities[0]![column] = '900'
+    db.identities[1]![column] = '901'
+    db.rosters = [{ playerData: { players: ['900', '901'] } }]
+    schedule(['T1', 'T2'], 10, null)
+    const league = { id: 'L', platform, settings: {}, leagueType: 'redraft', leagueSize: 2 }
+    const grader = createSportPointsGrader({ sport: 'NBA', league }, {
+      loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+    })!
+    const beta = { kind: 'player' as const, rosterPlayerId: '901' }
+    const alpha = { kind: 'player' as const, rosterPlayerId: '900' }
+    expect(await grader.grade([alpha], [beta])).toMatchObject({ graded: true, giveValue: 300, getValue: 200 })
+    expect(await grader.grade([{ ...alpha, rosterPlayerId: 'unknown', playerId: '901' }], [beta]))
+      .toMatchObject({ graded: false, valuationGap: 'unresolved_player' })
+    db.identities.push({ id: 'unprojected', [column]: '900', rollingInsightsId: null, sleeperId: null })
+    const ambiguous = await loadSportPointsBase({ sport: 'NBA', league, now: NOW })
+    if (!ambiguous.ok) throw new Error(ambiguous.reason)
+    expect(ambiguous.ctx.rosterIndex?.has('900')).toBe(false)
+  })
+
+  it.each(['yahoo', 'espn'])('links a %s roster through saved name, team and role, and refuses competing identities', async (platform) => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 40 })
+    nbaPlayer('b', 'Beta', 'C', { points: 30 })
+    nbaPlayer('c', 'Gamma', 'C', { points: 10 })
+    Object.assign(db.identities[0]!, { canonicalName: 'Alpha', position: 'C', currentTeam: 'LAL' })
+    Object.assign(db.identities[1]!, { canonicalName: 'Beta', position: 'C', currentTeam: 'BOS' })
+    db.rosters = [{ playerData: { source_provider: platform, players: ['900', '901'], player_metadata: {
+      '900': { name: 'Alpha', position: 'PF', team: 'Los Angeles Lakers' },
+      '901': { name: 'Beta', position: 'C', team: 'BOS' },
+    } } }]
+    schedule(['T1', 'T2'], 10, null)
+    const league = { id: 'L', platform, settings: {}, leagueType: 'redraft', leagueSize: 2 }
+    const grader = () => createSportPointsGrader({ sport: 'NBA', league }, { loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }) })!
+    const give = [{ kind: 'player' as const, rosterPlayerId: '900' }]
+    const get = [{ kind: 'player' as const, rosterPlayerId: '901' }]
+    expect(await grader().grade(give, get)).toMatchObject({ graded: true, giveValue: 300, getValue: 200 })
+    db.identities.push({ ...db.identities[0]!, id: 'unprojected', rollingInsightsId: 'ri-duplicate' })
+    expect(await grader().grade(give, get)).toMatchObject({ graded: false, valuationGap: 'unresolved_player' })
+  })
+
+  it('does not read a Yahoo roster ID as a projection or Sleeper ID', async () => {
+    nbaPlayer('900', 'Alpha', 'C', { points: 40 })
+    nbaPlayer('901', 'Beta', 'C', { points: 30 })
+    schedule(['T1', 'T2'], 10, null)
+    const league = { id: 'L', platform: 'yahoo', settings: {}, leagueType: 'redraft', leagueSize: 2 }
+    const grader = createSportPointsGrader({ sport: 'NBA', league }, {
+      loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+    })!
+    expect(await grader.grade([{ kind: 'player', rosterPlayerId: '900', name: 'Alpha' }], [{ kind: 'player', rosterPlayerId: '901' }]))
+      .toMatchObject({ graded: false, valuationGap: 'unresolved_player' })
+  })
+
   it('counts upcoming games whose season type is NULL, and leaves out marked preseason games', async () => {
     nbaPlayer('a', 'Alpha', 'C', { points: 30, total_rebounds: 10 })
     nbaPlayer('b', 'Beta', 'PG', { points: 20, assists: 8 })
@@ -141,6 +264,23 @@ describe('loadSportPointsBase', () => {
     expect(redraft.ok && redraft.ctx.dynasty).toBeUndefined()
   })
 
+  it('audit: grades NCAAB on current-season projections and refuses last-season-only rosters', async () => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 40 }, 20)
+    nbaPlayer('b', 'Beta', 'C', { points: 30 }, 20)
+    nbaPlayer('c', 'Gamma', 'C', { points: 10 }, 20)
+    schedule(['T1', 'T2'], 10, null)
+    db.rosters = [{ playerData: { players: ['ri-a'] } }, { playerData: { players: ['ri-b'] } }]
+    const league = { id: 'L1', settings: { scoring_mode: 'points' }, leagueType: 'redraft', leagueSize: 2 }
+    const grade = () => createSportPointsGrader({ sport: 'NCAAB', league }, {
+      loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+    })!.grade([{ kind: 'player', name: 'Alpha', playerId: 'ri-a' }], [{ kind: 'player', name: 'Beta', playerId: 'ri-b' }])
+    expect(await grade()).toMatchObject({ graded: false, reason: expect.stringContaining('College rosters turn over') })
+    for (const p of db.projections) (p.adjustmentFactors as { sourceSeason: number }).sourceSeason = 2026
+    const out = await grade()
+    console.info('AUDIT NCAAB', JSON.stringify(out))
+    expect(out).toMatchObject({ graded: true, giveValue: 300, getValue: 200 })
+  })
+
   describe('soccer', () => {
     const GROUP: Record<string, string> = { Goalkeeper: 'goalkeepers' }
     // One player's matches: `apps` of `clubMatches`, each with the given per-match stats.
@@ -167,6 +307,127 @@ describe('loadSportPointsBase', () => {
       soccerPlayer('wing', 'Forward', 2025, 'ARS', 30, { goals: 0.2 })
       schedule(['ARS', 'CHE'], 30, null)
     }
+
+    it('grades on the published league points without rescoring supported stats', async () => {
+      schedule(['ARS', 'CHE'], 30, null, 2026)
+      const settings = { fantrax_settings: { scoringSystem: { type: 'POINTS_BASED' } } }
+      const league = { id: 'L', platform: 'fantrax', platformLeagueId: 'source-L', leagueType: 'redraft', season: 2026, leagueSize: 2, settings }
+      db.rosters = [{ playerData: { players: ['ace', 'wing'] } }]
+      const exportRow = {
+        source: 'fantrax-player-export', platformLeagueId: 'source-L', season: 2026,
+        rulesDigest: fantraxSoccerRulesDigest(settings), through: '2026-10-19T12:00:00Z', fullPool: true,
+        players: [
+          { fantraxId: 'ace', name: 'Ace', position: 'FWD', fantasyPoints: 240, appearances: 12, clubMatches: 12 },
+          { fantraxId: 'wing', name: 'Wing', position: 'FWD', fantasyPoints: 120, appearances: 10, clubMatches: 12 },
+          ...Array.from({ length: 38 }, (_, i) => ({ fantraxId: 'fx' + i, name: 'Free ' + i, position: 'FWD', fantasyPoints: 60, appearances: 12, clubMatches: 12 })),
+        ],
+      }
+      db.cache = [{ cacheKey: 'fantrax:soccer:player-points:L', data: exportRow }]
+      const grader = createSportPointsGrader({ sport: 'SOCCER', league }, { loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }) })!
+      expect(await grader.grade([{ kind: 'player', rosterPlayerId: 'ace' }], [{ kind: 'player', rosterPlayerId: 'wing' }]))
+        .toMatchObject({ graded: true, giveValue: 450, getValue: 150, basis: expect.stringContaining('published Fantrax fantasy-point totals') })
+      const invalid = await loadSportPointsBase({ sport: 'SOCCER', league: { ...league, platformLeagueId: 'different' }, now: NOW })
+      expect(invalid).toMatchObject({ ok: false, valuationGap: 'missing_projections' })
+      const changed = await loadSportPointsBase({ sport: 'SOCCER', league: { ...league, settings: { fantrax_settings: { scoringSystem: { type: 'POINTS_BASED', rules: ['changed'] } } } }, now: NOW })
+      expect(changed).toMatchObject({ ok: false, valuationGap: 'missing_projections' })
+    })
+
+    it('audit: assigns a real letter to a points trade with match evidence', async () => {
+      soccerBoard()
+      soccerPlayer('other', 'Forward', 2026, 'CHE', 4, { goals: 0.45 })
+      soccerPlayer('other', 'Forward', 2025, 'CHE', 30, { goals: 0.3 })
+      db.rosters = [{ playerData: { players: ['ri-ace'] } }, { playerData: { players: ['ri-other'] } }]
+      const league = { id: 'L1', settings: {}, leagueType: 'redraft', leagueSize: 2 }
+      const grade = await createSportPointsGrader({ sport: 'SOCCER', league }, {
+        loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+      })!.grade([{ kind: 'player', name: 'ace', playerId: 'ri-ace' }], [{ kind: 'player', name: 'other', playerId: 'ri-other' }])
+      expect(grade).toMatchObject({ graded: true, letter: 'F', giveValue: 46, getValue: 25 })
+    })
+
+    it('applies the captured Fantrax own-goal penalty only with complete match receipts', async () => {
+      const gameId = '20260228-19-12'
+      const key = eplGoalKeyForRollingMatch(gameId)!
+      const receipt = parseEplGoalReceipt(ownGoalTimeline.response, { eventId: '2267349', home: 'LIV', away: 'WHU', homeScore: 5, awayScore: 2 })
+      expect(receipt?.ownGoals).toEqual([{ player: 'Axel Disasi', club: 'WHU' }])
+      expect(parseEplGoalReceipt(ownGoalTimeline.response, { eventId: '2267349', home: 'LIV', away: 'WHU', homeScore: 4, awayScore: 2 })).toBeNull()
+
+      soccerPlayer('disasi', 'Defender', 2026, '19', 12, { goals: 1 })
+      soccerPlayer('other', 'Defender', 2026, '12', 12, { goals: 0 })
+      for (const [index, row] of db.matchRows.entries()) {
+        const match = index % 12
+        if (match === 0) {
+          row.season = 2025
+          row.gameDate = new Date('2026-02-28T15:00:00Z')
+        }
+        row.gameId = match === 0 ? gameId : `202609${String(match).padStart(2, '0')}-19-12`
+      }
+      db.identities[0]!.canonicalName = 'Axel Disasi'
+      db.identities[0]!.fantraxId = 'fx-disasi'
+      db.identities[1]!.fantraxId = 'fx-other'
+      db.cache = [{ cacheKey: key, data: receipt }, ...Array.from({ length: 11 }, (_, i) => i + 1).map((n) => ({
+        cacheKey: eplGoalKeyForRollingMatch(`202609${String(n).padStart(2, '0')}-19-12`)!, data: { eventId: String(n), ownGoals: [] },
+      }))]
+      schedule(['LIV', 'WHU'], 30, null)
+      const league = {
+        id: 'L', platform: 'fantrax', leagueType: 'redraft', leagueSize: 2,
+        settings: { fantrax_settings: { scoringSystem: eplFixture.info.scoringSystem } },
+      }
+      const verified = await loadSportPointsBase({ sport: 'SOCCER', league, now: NOW })
+      db.cache.pop()
+      const partial = await loadSportPointsBase({ sport: 'SOCCER', league, now: NOW })
+      if (!verified.ok) throw new Error(verified.reason)
+      if (!partial.ok) throw new Error(partial.reason)
+      expect(verified.ctx.verifiedSoccerOwnGoals).toBe(true)
+      expect(partial.ctx.verifiedSoccerOwnGoals).toBeUndefined()
+      expect(verified.ctx.board[0]!.perGame).toBeCloseTo(partial.ctx.board[0]!.perGame - 3 / 12)
+    })
+
+    it('links a Fantrax Soccer roster from saved club and role evidence without a global ID', async () => {
+      soccerBoard()
+      soccerPlayer('free-agent', 'Forward', 2026, 'ARS', 12, { goals: 0.05 })
+      Object.assign(db.identities.find((p) => p.id === 'ace')!, { position: 'FWD', currentTeam: 'ARS' })
+      Object.assign(db.identities.find((p) => p.id === 'wing')!, { position: 'FWD', currentTeam: 'ARS' })
+      db.rosters = [{ playerData: { source_provider: 'fantrax', players: ['fx-ace', 'fx-wing'], player_metadata: {
+        'fx-ace': { name: 'ace', team: 'Arsenal', position: 'F' },
+        'fx-wing': { name: 'wing', team: 'Arsenal', position: 'F' },
+      } } }]
+      const league = { id: 'L', platform: 'fantrax', leagueType: 'redraft', leagueSize: 2, settings: {} }
+      const out = await loadSportPointsBase({ sport: 'SOCCER', league, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.rosterIndex?.get('fx-ace')?.id).toBe('ace')
+      expect(out.ctx.rosterIndex?.get('fx-wing')?.id).toBe('wing')
+      expect(out.ctx.rosterIndex?.has('ri-ace')).toBe(false)
+      expect(out.ctx.replacementByPosition.get('FWD')?.name).toBe('free-agent')
+      const grader = createSportPointsGrader({ sport: 'SOCCER', league }, { loadBase: async () => out })!
+      expect(await grader.grade([{ kind: 'player', rosterPlayerId: 'fx-ace' }], [{ kind: 'player', rosterPlayerId: 'fx-wing' }]))
+        .toMatchObject({ graded: true })
+    })
+
+    it('rejects ambiguous Fantrax IDs even when the other identity has no match stats', async () => {
+      soccerBoard()
+      db.identities.find((p) => p.id === 'ace')!.fantraxId = 'fx-ace'
+      db.identities.find((p) => p.id === 'wing')!.fantraxId = 'fx-wing'
+      db.identities.push({ id: 'another-ace', rollingInsightsId: 'ri-another-ace', sleeperId: null, fantraxId: 'fx-ace' })
+      const league = { id: 'L1', platform: 'fantrax', settings: {}, leagueType: 'redraft', leagueSize: 2 }
+      const out = await loadSportPointsBase({ sport: 'SOCCER', league, now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      expect(out.ctx.rosterIndex?.get('fx-wing')?.id).toBe('wing')
+      expect(out.ctx.rosterIndex?.has('fx-ace')).toBe(false)
+      expect(out.ctx.rosterIndex?.has('ace')).toBe(false)
+
+      const grader = createSportPointsGrader({ sport: 'SOCCER', league }, {
+        loadBase: (args) => loadSportPointsBase({ ...args, now: NOW }),
+      })!
+      const wing = { kind: 'player' as const, rosterPlayerId: 'fx-wing' }
+      for (const ace of [
+        { rosterPlayerId: 'fx-ace', playerId: 'fx-wing', name: 'ace' },
+        { playerId: 'ace', name: 'ace' },
+        { name: 'ace' },
+      ]) {
+        expect(await grader.grade([{ kind: 'player', ...ace }], [wing]))
+          .toMatchObject({ graded: false, valuationGap: 'unresolved_player', reason: expect.stringContaining('verified Fantrax player ID') })
+      }
+    })
 
     it('grades from both seasons of match rows, on the 2026-27 season, never from stored projections', async () => {
       soccerBoard()

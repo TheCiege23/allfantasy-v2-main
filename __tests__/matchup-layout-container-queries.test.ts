@@ -103,23 +103,7 @@ describe('af-matchup.css keys on the matchup’s own width', () => {
   })
 })
 
-describe('af-matchup-pulse.css keys on the board’s own width', () => {
-  it('🛑 the two-up stacked grid needs a wide BOARD, not a wide window', () => {
-    expect(inAt(PULSE, '.af-mp-cols[data-stack] .af-mp-rows', '@container af-board (min-width: 760px)')?.decls['grid-template-columns']).toBe(
-      'repeat(2, minmax(0, 1fr))',
-    )
-    expect(rules(PULSE, '.af-mp-cols[data-stack] .af-mp-rows').some((r) => r.at.includes('min-width: 781px'))).toBe(false)
-  })
-
-  it('a narrow board stacks its columns and drops the crest', () => {
-    expect(inAt(PULSE, '.af-mp-cols', '@container af-board (max-width: 760px)')?.decls['grid-template-columns']).toBe('minmax(0, 1fr)')
-    expect(inAt(PULSE, '.af-mp-crest', '@container af-board (max-width: 760px)')?.decls.display).toBe('none')
-  })
-
-  it('platform initials are darkened for the light theme', () => {
-    expect(inAt(PULSE, "html[data-mode='light'] .af-core .af-mp-face--none[data-platform='sleeper']", '')?.decls.color).toBe('#5b2fc9')
-  })
-})
+/* af-matchup-pulse.css's board-width rules went with the cross-league board (removed 2026-11-12). */
 
 describe('the Live strip and undefined tokens', () => {
   it('🛑 the leader’s score is chosen by data-side, never by :nth-of-type (which counts every span)', () => {

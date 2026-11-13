@@ -7,7 +7,7 @@ import {
   GUILLOTINE_PAID_RULE_FIELDS,
   RELEASE_OPTIONS,
   RULE_LIMITS,
-  TIEBREAK_OPTIONS,
+  tiebreakLabel,
   type GuillotineRuleField,
   type GuillotineRules,
 } from '@/lib/guillotine/guillotineRules'
@@ -22,6 +22,8 @@ type RulesView = {
   endgameLocked: boolean
   /** The draft has started: best ball is fixed for the season. Absent from an older server = unlocked. */
   bestBallLocked?: boolean
+  /** Two-week elimination periods can be chosen (MLB). Absent from an older server = not offered. */
+  periodWeeksAvailable?: boolean
   canEditPaid: boolean
   aiRecapAvailable: boolean
 }
@@ -145,6 +147,31 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
         </select>
       </Field>
 
+      {/* MLB only (lib/guillotine/eliminationPeriods.ts): two weeks' scores added, one chop per pair. */}
+      {view.periodWeeksAvailable === true && (
+        <Field
+          label="Elimination period"
+          help={
+            view.endgameLocked
+              ? 'Fixed for this season — the first chop has happened.'
+              : rules.periodWeeks === 2
+                ? `Each period is two weeks: both weeks' scores are added and the lowest total is chopped at the end of the second week (weeks ${view.startWeek + 1}, ${view.startWeek + 3}, ${view.startWeek + 5}…).`
+                : 'One chop at the end of every week.'
+          }
+        >
+          <select
+            className={inputClass}
+            value={rules.periodWeeks ?? 1}
+            disabled={view.endgameLocked}
+            onChange={(e) => update({ periodWeeks: Number(e.target.value) === 2 ? 2 : 1 })}
+            data-testid="guillotine-rules-period-weeks"
+          >
+            <option value={1}>One week</option>
+            <option value={2}>Two weeks</option>
+          </select>
+        </Field>
+      )}
+
       <Field label="When chopped players are released" help={releaseHelp}>
         <select
           className={inputClass}
@@ -218,7 +245,7 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
         </label>
       </section>
 
-      <Field label="Teams chopped each week" paid={paidLocked('teamsPerChop')} help="The base number. Special weeks and steps live under Chop rules.">
+      <Field label={rules.periodWeeks === 2 ? 'Teams chopped each period' : 'Teams chopped each week'} paid={paidLocked('teamsPerChop')} help="The base number. Special weeks and steps live under Chop rules.">
         <select
           className={inputClass}
           value={rules.teamsPerChop}
@@ -284,7 +311,7 @@ export function GuillotineRulesEditor({ leagueId, onSaved }: { leagueId: string;
           {rules.tiebreakerOrder.map((step, i) => (
             <li key={step} className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-[13px] text-white/85">
               <span className="w-5 shrink-0 text-white/40">{i + 1}.</span>
-              <span className="min-w-0 flex-1">{TIEBREAK_OPTIONS.find((o) => o.value === step)?.label ?? step}</span>
+              <span className="min-w-0 flex-1">{tiebreakLabel(step, rules.periodWeeks)}</span>
               <button
                 type="button"
                 aria-label="Move up"

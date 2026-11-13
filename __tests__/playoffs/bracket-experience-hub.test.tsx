@@ -60,6 +60,45 @@ describe("approved bracket experience workspace", () => {
     expect(screen.getByText("#2")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: /Review & finalize/ })).toHaveAttribute("href", "/brackets/leagues/mine/entries/entry")
   })
+  it("does not offer an unusable invite when a private-pool member has no invite code", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ challenges: [ownLeague] }), { status: 200 }))
+    getView.mockResolvedValue({ ...ownedView, challenge: { ...ownedView.challenge, inviteCode: "", ownerUserId: "someone-else" } })
+    render(<BracketExperienceHub language="en" season={2026} tournaments={CFP_FIRST} />)
+    await screen.findByTestId("owned-board")
+    expect(screen.queryByRole("button", { name: /Share invite link/i })).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /League dashboard/i })).toBeInTheDocument()
+  })
+  it("distinguishes saved picks from a finalized NBA Cup bracket and explains missing draft entries", async () => {
+    const cup = { ...ownLeague, sport: "nba_cup" }
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ challenges: [cup] }), { status: 200 }))
+    getView.mockResolvedValue({
+      ...ownedView,
+      challenge: { ...ownedView.challenge, sport: "nba_cup" },
+      activeEntry: { ...ownedView.activeEntry, finalizedAt: null, pickCount: 9 },
+      entries: [
+        { ...ownedView.entries[0], finalizedAt: null, pickCount: 9 },
+        { ...ownedView.entries[0], id: "friend", finalizedAt: null, pickCount: 50 },
+      ],
+    })
+    render(<BracketExperienceHub language="en" season={2026} tournaments={CUP_FIRST} />)
+    const status = await screen.findByTestId("bracket-finalization-status")
+    expect(status).toHaveTextContent("Picks saved — bracket not finalized")
+    expect(status).toHaveTextContent("Saved picks alone do not enter the standings")
+    expect(screen.getAllByText(/2 saved bracket\(s\) are not in the standings/).length).toBeGreaterThan(0)
+    expect(status.querySelector("a")).toHaveAttribute("href", "/brackets/leagues/mine/entries/entry")
+  })
+  it("reports NBA Cup finalization only when the entry has a recorded timestamp", async () => {
+    const cup = { ...ownLeague, sport: "nba_cup" }
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ challenges: [cup] }), { status: 200 }))
+    getView.mockResolvedValue({
+      ...ownedView,
+      challenge: { ...ownedView.challenge, sport: "nba_cup" },
+      activeEntry: { ...ownedView.activeEntry, finalizedAt: "2026-10-30T00:00:00Z" },
+    })
+    render(<BracketExperienceHub language="en" season={2026} tournaments={CUP_FIRST} />)
+    expect(await screen.findByTestId("bracket-finalization-status")).toHaveTextContent("Bracket finalized")
+    expect(screen.getByTestId("bracket-finalization-status")).toHaveTextContent("This bracket is finalized for standings")
+  })
   it("exposes a retry when the API fails and never substitutes sample scores", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("{}", { status: 503 }))
     render(<BracketExperienceHub language="en" season={2026} tournaments={CFP_FIRST} />)

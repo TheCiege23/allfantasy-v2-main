@@ -287,7 +287,7 @@ export function IDPPlayerModal({
                 {scoredWeeks.map((w) => (
                   <div
                     key={w.week}
-                    className="flex-1 rounded-sm bg-[color:var(--idp-defense)]/60"
+                    className="flex-1 rounded-sm bg-idp-defense/60"
                     style={{
                       height: `${peakWeek > 0 ? Math.max(6, ((w.points ?? 0) / peakWeek) * 100) : 6}%`,
                     }}
@@ -360,7 +360,7 @@ export function IDPPlayerModal({
           ) : null}
 
           <section className="space-y-2 border-t border-white/[0.06] pt-3" data-testid="idp-player-contract-panel">
-            <h4 className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--cap-contract)]/90">
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-cap-contract/90">
               Contract
             </h4>
             {contract && salaryM != null && yearsRem != null ? (
@@ -400,7 +400,7 @@ export function IDPPlayerModal({
             )}
             <div className="flex flex-wrap gap-1.5">
               {isExpiring ? (
-                <span className="rounded-full border border-[color:var(--cap-amber)]/40 bg-[color:var(--cap-amber)]/10 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
+                <span className="rounded-full border border-cap-amber/40 bg-cap-amber/10 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
                   Expiring Contract
                 </span>
               ) : null}
@@ -535,7 +535,7 @@ export function IDPPlayerModal({
               data-testid="idp-player-ai-analysis"
             >
               {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-amber-200/90" />}
-              AI Analysis (AfSub)
+              AI Analysis (AF Commissioner)
             </button>
           </div>
         </DialogContent>

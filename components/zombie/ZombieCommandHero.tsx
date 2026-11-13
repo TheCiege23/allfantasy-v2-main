@@ -31,11 +31,15 @@ function StatTile({
     whisperer: 'border-fuchsia-500/25 bg-fuchsia-950/25 shadow-[inset_0_0_0_1px_rgba(217,70,239,0.12)]',
     pot: 'border-amber-500/28 bg-amber-500/[0.09] shadow-[0_0_18px_rgba(245,158,11,0.08)]',
   }
+  // The hero art shows through a bare tint — on desktop its sign read "4OSPITAL" beside the Survivors
+  // count (2026-11-07 Zombie audit). A near-opaque base sits under the tint, as .zombie-universe-stat does.
   return (
-    <div className={clsx('rounded-2xl border p-3', tones[tone])}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">{label}</p>
-      <p className="mt-2 text-xl font-black tabular-nums text-white">{value}</p>
-      <p className="mt-0.5 text-[11px] text-white/55">{hint}</p>
+    <div className="zombie-hero-stat rounded-2xl bg-[rgba(3,14,13,0.88)]">
+      <div className={clsx('h-full rounded-2xl border p-3', tones[tone])}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">{label}</p>
+        <p className="mt-2 text-xl font-black tabular-nums text-white">{value}</p>
+        <p className="mt-0.5 text-[11px] text-white/55">{hint}</p>
+      </div>
     </div>
   )
 }
@@ -82,7 +86,7 @@ export function ZombieCommandHero({
 
   return (
     <section className={clsx("zombie-hero-shell border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]", !sceneThemeId && "zombie-league-outbreak-hero")}>
-      {sceneThemeId ? <ZombieSceneBackground themeId={sceneThemeId} /> : <div className="zombie-universe-art" aria-hidden="true" />}
+      {sceneThemeId ? <ZombieSceneBackground themeId={sceneThemeId} stackedBelowLg /> : <div className="zombie-universe-art" aria-hidden="true" />}
       <div className="zombie-hero-fog" aria-hidden />
       {!sceneThemeId && <div className={clsx('pointer-events-none absolute inset-0 opacity-20', preset.overlayClass)} aria-hidden />}
       <div className="zombie-drift-particles opacity-[0.35]" aria-hidden />
@@ -91,7 +95,7 @@ export function ZombieCommandHero({
         <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between lg:gap-10">
           <div className="min-w-0 flex-1 space-y-5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zombie-toxic)]/35 bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--zombie-toxic)] shadow-[var(--zombie-glow-toxic)]">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-zombie-toxic/35 bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--zombie-toxic)] shadow-[var(--zombie-glow-toxic)]">
                 <Radio className="h-3.5 w-3.5" aria-hidden />
                 Outbreak command
               </span>
@@ -112,7 +116,7 @@ export function ZombieCommandHero({
             </div>
 
             <div className="flex flex-wrap items-start gap-4">
-              <div className="zombie-toxic-ring flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--zombie-toxic)]/40 bg-black/50 sm:h-[72px] sm:w-[72px]">
+              <div className="zombie-toxic-ring flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zombie-toxic/40 bg-black/50 sm:h-[72px] sm:w-[72px]">
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- league logos may be arbitrary commissioner URLs
                   <img src={logoUrl} alt="" className="h-full w-full object-cover" />

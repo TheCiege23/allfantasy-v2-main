@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { runWaiverIntelligenceAnalysis } from '@/lib/ai-tools-waiver/waiver-intelligence'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { resolveBestBallLeagueState } from '@/lib/bestball/bestBallLeagueState'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import type { LineupsActionThresholds } from '@/lib/lineup-actions/thresholds'
 
@@ -51,6 +52,12 @@ export async function fetchAiWaiverLineupSignalsForUser(
       sport: true,
       platform: true,
       bestBallMode: true,
+      leagueType: true,
+      leagueVariant: true,
+      guillotineMode: true,
+      settings: true,
+      bbWaiversEnabled: true,
+      bbFaEnabled: true,
     },
     take: 24,
   })
@@ -58,7 +65,12 @@ export async function fetchAiWaiverLineupSignalsForUser(
   const out: LineupActionItem[] = []
 
   for (const lg of leagues.slice(0, maxLeagues)) {
-    if (lg.bestBallMode) continue
+    // Waiver advice is about adds, not lineups, so a best ball league is skipped only when it allows NO
+    // adds: a Classic league with both its waiver and free-agency switches off (the draft-only default).
+    // It used to skip every `bestBallMode` league, even one with waivers on, and to keep a tournament
+    // saved by `leagueType` alone that allows no adds at all.
+    const bb = resolveBestBallLeagueState(lg).transactions
+    if (bb.waivers === false && bb.freeAgency === false) continue
     const res = await runWaiverIntelligenceAnalysis({
       userId,
       sportFilter: 'ALL',

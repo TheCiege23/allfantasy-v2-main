@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server'
 const m = vi.hoisted(() => ({ rows: vi.fn(), report: vi.fn() }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'u1' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/prisma', () => ({ prisma: { keeperEligibility: { findMany: m.rows } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { keeperEligibility: { findMany: m.rows }, keeperSelectionSession: { findFirst: vi.fn(async () => null) } } }))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/lib/keeper/eligibilityEngine', () => ({ computeKeeperEligibility: vi.fn() }))
 vi.mock('@/lib/keeper/keeperValueReport', () => ({ keeperValueReport: m.report }))

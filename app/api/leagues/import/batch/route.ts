@@ -1,3 +1,4 @@
+import { importSleeperSurvival } from '@/lib/league-import/sleeper/importSurvival'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -33,7 +34,10 @@ type SleeperLeagueApi = {
   sport?: string
   name?: string
   total_rosters?: number
+  status?: string
+  scoring_settings?: { rec?: number }
   settings?: {
+    type?: number
     playoff_teams?: number
     num_teams?: number
   }
@@ -262,7 +266,7 @@ export async function POST(req: NextRequest) {
         let losses = hintedLosses
         let ties = hintedTies
         let finalStanding = hintedFinalStanding
-        let madePlayoffs = hintedMadePlayoffs
+        let madePlayoffs: boolean | null = hintedMadePlayoffs
         let wonChampionship = hintedWonChampionship
         let pf = Number.isFinite(hintedPointsFor) ? hintedPointsFor : null
 
@@ -284,7 +288,7 @@ export async function POST(req: NextRequest) {
         const playoffTeams =
           typeof sleeperLeague.settings?.playoff_teams === 'number' && sleeperLeague.settings.playoff_teams >= 1
             ? sleeperLeague.settings.playoff_teams
-            : Math.max(1, Math.ceil(totalTeams / 3))
+            : null
 
         if (mine) {
           const settings = (mine.settings ?? {}) as Record<string, unknown>
@@ -292,7 +296,7 @@ export async function POST(req: NextRequest) {
           losses = toNumber(settings.losses, losses)
           ties = toNumber(settings.ties, ties)
           finalStanding = toIntegerOrNull(settings.final_standing ?? settings.rank) ?? finalStanding
-          madePlayoffs = finalStanding != null ? finalStanding <= playoffTeams : madePlayoffs
+          madePlayoffs = finalStanding != null && playoffTeams != null ? finalStanding <= playoffTeams : null
           wonChampionship = finalStanding === 1
           const fpts = toNumber(settings.fpts, Number.NaN)
           const fptsDecimal = toNumber(settings.fpts_decimal, 0)
@@ -317,6 +321,10 @@ export async function POST(req: NextRequest) {
           name: sleeperLeague.name ?? league.name,
           sport: resolvedLeagueSport,
           leagueSize: totalTeams,
+          status: sleeperLeague.status?.trim() || undefined,
+          scoring: sleeperLeague.scoring_settings?.rec === 1 ? 'ppr' : sleeperLeague.scoring_settings?.rec === 0.5 ? 'half-ppr' : sleeperLeague.scoring_settings ? 'standard' : undefined,
+          isDynasty: sleeperLeague.settings?.type == null ? undefined : sleeperLeague.settings.type === 2,
+          playoffTeams,
           importWins: wins,
           importLosses: losses,
           importTies: ties,
@@ -345,6 +353,7 @@ export async function POST(req: NextRequest) {
             ...(leagueImportData as any),
           } as any,
         })
+        await importSleeperSurvival({ userId, platformLeagueId, season: validatedSeason }, sleeperLeague, rosters, resolvedSleeperUserId)
         return 1
       } catch (e) {
         console.error(`[import/batch] league ${league.platformLeagueId}:`, e)

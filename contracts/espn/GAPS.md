@@ -103,6 +103,35 @@ covers it; neither an empty scoreboard nor the previous season proves a future s
   completed multi-player trade, via `scripts/probe.sh`, from a league the owner chooses (cookies
   if private), committed with the grouping fix.
 
+## NFL fantasy league capture, 2026-11-08
+
+Owner-chosen public league, 10 teams, week 9 of 14, read without cookies; redacted and trimmed into
+`fixtures/fantasy-league.NFL.2026.json` (see `fantasy_nfl` in ENDPOINTS.yaml). Do not re-probe for shape.
+
+- `R-01` FOUND BY THE FIXTURE, FIXED: every team imported with rank 0. `rankCalculatedFinal` is 0
+  until the season ends and `??` took it; the next fallback was `currentProjectedRank`, a projection.
+  Rank now reads a positive final rank, else `playoffSeed`. Pinned by `__tests__/league-import/espn-nfl-fixture.test.ts`.
+- `U-01` FOUND BY THE FIXTURE, FIXED: every unplayed week imported as a 0–0 TIE (`winner: UNDECIDED`
+  carries `totalPoints: 0`; the bootstrap derives 'T' from equal points). Undecided matchups now import
+  their pairing with no points. The live-scoring path is unchanged. Pinned by the same test.
+- `M-01` RECORDED: without cookies `members[]` carries no names, so owner names fall back to team names.
+- `D-01` FIXED WITHOUT A PROBE: a draft pick carries only `playerId`; the 17 of 160 drafted players since
+  dropped have no name or position in this response. The importer now fills them without calling ESPN
+  (`lib/league-import/espn/espnPlayerDirectoryFill.ts`): the 4 team defenses from the id itself
+  (`-16000 - proTeamId`), the rest from `PlayerIdentityMap.espnId` (NFL, unambiguous ids only). Measured
+  2026-11-08 on production: 13 of those 13 ids resolve, but only 928 of 9,567 NFL identity rows carry an
+  `espnId`, so a league drafting deeper players can still leave some unnamed.
+- `T-01` UPDATED: `kona_league_communication` answers **401 `AUTH_COMMUNICATION_NOT_VISIBLE` without
+  cookies even for a public league**. Its shape is still uncaptured.
+- `T-02` STILL OPEN: this league has no trade (`transactionCounter.trades` 0 for every team, and
+  `mTransactions2` returned 8 recent roster moves only). Needs a league with a completed multi-player trade,
+  read with cookies.
+- `K-01` OPEN: keepers — `keeperCount` is 0 here, so keeper fields are unverified.
+- `L-01` STILL OPEN: slot 24 (EDR) has count 0 here.
+- `L-03` OPEN: IDP `defaultPositionId`s have never been seen. Unknown ids now import as N/A and are
+  logged once per import with counts and no names (`[espn-import] unmapped defaultPositionId(s): …`),
+  so the first real IDP import names the ids to add to `ESPN_POSITION_LABELS`.
+
 ## NFL fantasy lineup slots, 2026-10-30 — recorded without probing
 
 - `L-01` UNVERIFIED: ESPN lineup slot `24` (`EDR`, `ESPN_SLOT_LABELS` in
@@ -124,3 +153,28 @@ real teams, dates and venue fields are verified; tournament seeds are not.
 The six-week date-range request returned HTTP 400. Runtime uses individual days.
 The alternate NBA CDN `scheduleLeagueV2.json` returned HTTP 403 through its probe;
 no spoofed headers or bypass retry was attempted. It is not a runtime source.
+
+## Weekly starters for Lineup Integrity, 2026-11-09 — recorded without probing
+
+- `S-01` OPEN, AND WORKED AROUND RATHER THAN PROBED: no request in this repo asks ESPN for a PAST week's
+  lineup. `fetchEspnLeagueJson` sends no query, so neither `scoringPeriodId` nor `matchupPeriodId` is ever
+  set, and `rosterForMatchupPeriod` appears in `fixtures/fantasy-league.NFL.2026.json` only on the CURRENT
+  week's schedule sides. Whether `view=mMatchupScore&scoringPeriodId=N` returns week N's lineup for a past
+  N is unverified. The owner declined the probe on 2026-11-09, so nothing calls it.
+- What runs instead (`lib/integrity/espnLineupSnapshots.ts`, rules in `espnStartersCapture.ts`): ESPN locks a
+  player's slot at his kickoff, so the synced `Roster.playerData.starters` from any fetch AFTER that kickoff,
+  inside the week, is the slot he was played in. Each player is frozen from the first such fetch. No ESPN call.
+  The fetch time is the earlier of `Roster.updatedAt` (advanced on every successful read, changed or not)
+  and `League.lastSyncedAt`.
+  - Measured on production 2026-11-09, read-only: 10 ESPN NFL leagues, 120 rosters, median roster age
+    8 minutes, and 114 of 120 rosters re-read inside the week-9 game window. So the capture has data to work from.
+  - It records nothing while the ESPN sync is off (`FANTASY_OS_EXEC_SYNC_LIVE`). A week with a player who
+    had a game but was never read after kickoff is reported incomplete and must not be scored.
+  - A player on bye has no lock; he keeps the last in-week read.
+  - It cannot recover weeks played before it ran. That needs `S-01` resolved.
+- `S-02` FOUND WHILE BUILDING IT, NOT FIXED HERE: several `SportsGame` sources store NFL preseason games with
+  `seasonType` null and reused week numbers. In 2026 those are `espn` week 2 (Aug 13–16) and `espn_live`
+  weeks 3–4 (Aug 21–29). `buildWeekKickoffMap` (lib/redraft/lineupLock.ts) does not filter on season type,
+  so for those regular-season week numbers a team's "earliest kickoff that week" is an August preseason
+  game. The ESPN writer reads `seasonType: 'regular'` rows only for this reason.
+

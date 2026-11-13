@@ -40,7 +40,7 @@ export type SurvivorPhaseInput = {
   merged: boolean
   jury: readonly unknown[]
   exileLeagueId: string | null
-  council: { phase: string } | null
+  council: { phase: string; closedAt?: string | null; week?: number } | null
   finale?: { open: boolean; closed: boolean } | null
 }
 
@@ -49,7 +49,14 @@ export function survivorPhase(summary: SurvivorPhaseInput | null): SurvivorPhase
   const w = summary.currentWeek
   if (summary.finale?.open || summary.finale?.closed) return { label: 'Finale', mood: 'jury' }
   if (summary.jury.length > 0 && summary.merged) return { label: `Jury · Week ${w}`, mood: 'jury' }
-  if (summary.council?.phase === 'voting_open' || summary.council?.phase === 'votes_tallying') return { label: 'Tribal Council', mood: 'tribal' }
+  /*
+   * ⚠ OPEN MEANS NOT CLOSED, NOT A PHASE VALUE. This read `council.phase === 'voting_open'`, which the
+   * engine never stores — a council's phase is `pre_merge`, `merge` or `revote`
+   * (SurvivorTribalCouncilService) — so the label never appeared, while tests built on a
+   * `voting_open` fixture stayed green. A council from an earlier week is not this week's vote.
+   */
+  const council = summary.council
+  if (council && !council.closedAt && (council.week == null || council.week === w)) return { label: 'Tribal Council', mood: 'tribal' }
   if (summary.merged) return { label: `Merge · Week ${w}`, mood: 'merge' }
   if (summary.exileLeagueId) return { label: `Island · Week ${w}`, mood: 'exile' }
   return { label: `Tribe Phase · Week ${w}`, mood: 'default' }

@@ -16,8 +16,9 @@ const ALLOWED_DEEP_LINK_PREFIXES = [
   "/bracket",
   "/brackets",
   "/af-legacy",
-  // The primary rankings surface; player links from news and sports alerts resolve here
-  // (lib/fantasy-news-aggregator/playerLinkResolver.ts). Without it every such link fell
+  // The primary rankings surface; sports-alert player links resolve here. (News player links
+  // did too until 2026-11-12; they now open /player/<name>, see
+  // lib/fantasy-news-aggregator/playerLinkResolver.ts.) Without it every such link fell
   // through to the product fallback and a "Player X" alert opened /af-legacy instead.
   "/af-rankings",
   "/legacy",

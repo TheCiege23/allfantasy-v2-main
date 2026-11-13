@@ -61,6 +61,23 @@ export async function assertRosterTransactionsAllowed(params: {
   }
 
   const uniq = [...new Set(params.rosterIds.filter(Boolean))]
+
+  /*
+   * 🛑 A CHOPPED GUILLY TEAM WAS ONLY BLOCKED FROM WAIVER CLAIMS (`createClaim`). The Survivor +
+   * Guillotine check above reads `survivorGuillotineChop`, which a native Guilly chop never writes,
+   * so an eliminated team could still make instant free-agent adds and trades through every caller of
+   * this gate. A chop is final for the season (`GuillotineRosterState.choppedAt`); the team keeps its
+   * view access, never its transactions. One indexed count; a league with no chops matches nothing.
+   */
+  if (uniq.length) {
+    const chopped = await prisma.guillotineRosterState.count({
+      where: { leagueId: params.leagueId, rosterId: { in: uniq }, choppedAt: { not: null } },
+    })
+    if (chopped > 0) {
+      return { ok: false, error: 'This team has been eliminated and cannot make transactions.', code: 'ELIMINATED_ROSTER' }
+    }
+  }
+
   for (const rosterId of uniq) {
     if (await isCommissionerRosterLocked(params.leagueId, rosterId)) {
       return { ok: false, error: 'This roster is locked by the commissioner.', code: 'COMMISSIONER_ROSTER_LOCKED' }

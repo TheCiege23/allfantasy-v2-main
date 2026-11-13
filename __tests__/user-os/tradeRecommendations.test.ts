@@ -14,7 +14,7 @@ describe('generateTradeRecommendations', () => {
     })
     const recs = generateTradeRecommendations(context, NOW)
     expect(recs).toHaveLength(1)
-    expect(recs[0].action?.href).toBe('/trade-finder')
+    expect(recs[0].action?.href).toBe(`/core/trades?league=${encodeURIComponent(context.canonicalLeagueId)}#trade-finder`)
     expect(recs[0].executionCapability).toBe('recommendation_only')
   })
 

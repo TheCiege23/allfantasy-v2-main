@@ -11,6 +11,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { loadLeagueForTrade } from '@/lib/trade-value-console/league-loader'
 import { resolveLeagueTradeChart, type LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
+import { prisma } from '@/lib/prisma'
+import { searchOpenMarketDevy } from '@/lib/devy/openMarketDevy'
 
 let fcCache: { players: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>>; at: number } | null = null
 const FC_TTL = 5 * 60 * 1000
@@ -128,6 +130,16 @@ export async function GET(req: NextRequest) {
     }
     if (sportParam === 'NFL') {
       const fc = await searchNflFantasyCalc(q.toLowerCase(), chart)
+      /*
+       * With no league, college prospects come back too — the open analyzer's "college player for a pro
+       * player" (`lib/devy/openMarketDevy.ts`). Their value is on the devy board's own dynasty Superflex
+       * scale; the grade rescales to the chart it grades on. Inside a league the league's devy rights
+       * decide who is tradable, so this stays NFL-only there.
+       */
+      if (!leagueId) {
+        const devy = await searchOpenMarketDevy(prisma, q, { limit: 5 })
+        return NextResponse.json([...fc, ...devy])
+      }
       return NextResponse.json(fc)
     }
 

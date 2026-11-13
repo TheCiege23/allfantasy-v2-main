@@ -26,6 +26,10 @@
  * `V2KZEDYPMM8JP61B` is a 400. Never normalise the case of one.
  */
 
+import { SOCCER_CONFIG } from '@/lib/sportConfig/configs/soccer'
+import { fantraxDisplayName } from './fantraxPlayerName'
+import { isFantraxSoccerScoring } from './fantraxScoring'
+
 export const FANTRAX_FXEA_BASE = 'https://www.fantrax.com/fxea/general'
 
 /**
@@ -67,7 +71,7 @@ export const FANTRAX_ENDPOINTS = [
  * MLB/CFB. A map that fails to load fails soft (the import needs only the league's own sport to
  * load), so a wrong assumption costs NBA/NHL detection and nothing else. contracts/fantrax/GAPS.md.
  */
-export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
+export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'EPL'
 
 export type FantraxFailure = {
   /**
@@ -646,7 +650,8 @@ export function resolveRosters(
       const hit = playerMap[item.id]
       return {
         fantraxId: item.id,
-        name: hit?.name ?? null,
+        // "First Last" whatever order the directory was in: a refresh carries earlier snapshot names forward.
+        name: hit?.name ? fantraxDisplayName(hit.name) : null,
         team: hit?.team ?? null,
         position: item.position,
         primaryPosition: hit?.position ?? null,
@@ -1003,7 +1008,8 @@ export async function fetchFantraxScheduleWithScores(
   const rows = flattenFantraxSchedule(info)
   const position = resolveFantraxSeasonPosition(info, options?.now ?? new Date())
 
-  const maxPeriods = options?.maxPeriods ?? 30
+  const maxPeriods = options?.maxPeriods ??
+    (isFantraxSoccerScoring(info.scoringSystem) ? SOCCER_CONFIG.defaultSeasonWeeks : 30)
   const through = Math.min(position?.scoredThrough ?? 0, maxPeriods)
   if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0, periodScores: [] }
 

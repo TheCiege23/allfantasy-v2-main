@@ -28,7 +28,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 // ── Contract mirrors ────────────────────────────────────────────────────────
-type TradeAsset = { name: string; position: string; estimatedValue: number }
+type TradeAsset = { name: string; position: string; estimatedValue: number | null }
 
 export type CollusionEvidenceLike = {
   tradeTransactionId?: string
@@ -36,9 +36,10 @@ export type CollusionEvidenceLike = {
   team2?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
   assetsTeam1Gave?: TradeAsset[]
   assetsTeam2Gave?: TradeAsset[]
-  team1TotalValue?: number
-  team2TotalValue?: number
-  valueDifferentialPct?: number
+  valuation?: { status: 'priced' } | { status: 'unavailable'; reason: string }
+  team1TotalValue?: number | null
+  team2TotalValue?: number | null
+  valueDifferentialPct?: number | null
   priorTradesBetweenPair?: number
   isPlayoffContender?: { team1?: boolean; team2?: boolean }
   redFlags?: string[]
@@ -70,6 +71,18 @@ export type TankingEvidenceLike = {
   detector?: string
   /** The flagged manager's explanation (lib/integrity/managerReply.ts). */
   managerReply?: { text?: string; submittedAt?: string }
+  rosterId?: string
+  /** The Lineup Integrity score behind the case (lib/integrity/lineupIntegrityScore.ts). */
+  lineupIntegrity?: LineupIntegrityLike
+}
+
+export type LineupIntegrityLike = {
+  weeks?: { week?: number; ratio?: number | null; startedTopCount?: number | null; starterCount?: number | null }[]
+  pattern?: boolean
+  below?: number
+  needed?: number
+  run?: number[]
+  pickNote?: string | null
 }
 
 export type IntegrityFlagRow = {
@@ -232,6 +245,84 @@ function TankingStats({ ev }: { ev: TankingEvidenceLike }) {
   )
 }
 
+/**
+ * The team's Lineup Integrity score, week by week: started projection ÷ best possible, from the
+ * projections it saw at kickoff. Weeks in the low run that made the case are marked. Exported for the
+ * manager's own view of a flag (app/league/[leagueId]/tanking-flag/[flagId]).
+ */
+export function LineupScoreStrip({ li }: { li: LineupIntegrityLike }) {
+  type Week = { week: number; ratio?: number | null; startedTopCount?: number | null; starterCount?: number | null }
+  const weeks = (Array.isArray(li.weeks) ? li.weeks : []).filter((w): w is Week => typeof w?.week === 'number')
+  if (weeks.length === 0) return null
+  const run = new Set(Array.isArray(li.run) ? li.run : [])
+  const line = typeof li.below === 'number' ? Math.round(li.below * 100) : null
+  return (
+    <div className="af-cm-lineup-scores" data-testid="lineup-integrity-strip">
+      <div className="af-label">Lineup Integrity{line != null ? ` · flag line ${line}%` : ''}</div>
+      <div className="af-cm-lineup-chips">
+        {[...weeks]
+          .sort((a, b) => a.week - b.week)
+          .map((w) => {
+            const scored = typeof w.ratio === 'number'
+            return (
+              <span key={w.week} className="af-cm-lineup-chip af-num" data-low={run.has(w.week) ? 'true' : undefined}>
+                <span className="af-cm-lineup-chip-week">Wk {w.week}</span>
+                <span className="af-cm-lineup-chip-val">{scored ? `${Math.round((w.ratio as number) * 100)}%` : '—'}</span>
+                <span className="af-cm-lineup-chip-top">
+                  {!scored
+                    ? 'not scored'
+                    : typeof w.startedTopCount === 'number' && typeof w.starterCount === 'number'
+                      ? `${w.startedTopCount}/${w.starterCount} top`
+                      : ''}
+                </span>
+              </span>
+            )
+          })}
+      </div>
+      <p className="af-cm-lineup-basis">
+        Projected points started, out of the best lineup available, using the projections the manager saw at kickoff. Players who could not play are left out.
+      </p>
+    </div>
+  )
+}
+
+function PostLineupReport({ leagueId, rosterId }: { leagueId: string; rosterId: string }) {
+  const [state, setState] = useState<string>('idle')
+  async function post() {
+    setState('posting')
+    try {
+      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/lineup-integrity/post`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rosterId }),
+      })
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      setState(res.ok ? 'posted' : (body?.error ?? `HTTP ${res.status}`))
+    } catch (e) {
+      setState(String(e))
+    }
+  }
+  return (
+    <div className="af-cm-lineup-post">
+      <button
+        type="button"
+        className="af-btn af-btn--ghost"
+        data-testid="post-lineup-report"
+        disabled={state === 'posting' || state === 'posted'}
+        onClick={() => void post()}
+      >
+        {state === 'posting' ? 'Posting…' : state === 'posted' ? 'Posted to league chat' : 'Post lineup report to league chat'}
+      </button>
+      {state !== 'idle' && state !== 'posting' && state !== 'posted' ? (
+        <span className="af-cm-actions-note" role="alert">
+          {state}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 // ── Card ────────────────────────────────────────────────────────────────────
 
 export function IntegrityFlagCard({
@@ -242,8 +333,11 @@ export function IntegrityFlagCard({
   onSetSeverity,
   busy = false,
   highlighted = false,
+  leagueId,
 }: {
   flag: IntegrityFlagRow
+  /** Enables "Post lineup report to league chat" on a tanking case with a Lineup Integrity score. */
+  leagueId?: string
   onDismiss?: (flag: IntegrityFlagRow) => void
   onEscalate?: (flag: IntegrityFlagRow) => void
   onMessage?: (flag: IntegrityFlagRow) => void
@@ -329,7 +423,8 @@ export function IntegrityFlagCard({
       if (typeof rf === 'string' && rf.trim()) bullets.push(rf.trim())
     }
     const suspicious = Array.isArray(t.illegalOrSuspiciousStarters) ? t.illegalOrSuspiciousStarters.length : 0
-    return { context: bullets, hasDecidableEvidence: suspicious > 0 }
+    // A Lineup Integrity pattern is a case on its own (lib/integrity/TankingDetectionEngine.ts).
+    return { context: bullets, hasDecidableEvidence: suspicious > 0 || t.lineupIntegrity?.pattern === true }
   }, [ev, isCollusion])
 
   const age = ageLabel(flag.createdAt)
@@ -381,6 +476,7 @@ export function IntegrityFlagCard({
   }, [highlighted])
   const detailId = `integrity-flag-detail-${flag.id}`
 
+  const valuation = isCollusion ? (ev as CollusionEvidenceLike).valuation : undefined
   const gapPct = isCollusion ? (ev as CollusionEvidenceLike).valueDifferentialPct : undefined
   const gapLabel =
     typeof gapPct === 'number' && Number.isFinite(gapPct) && Math.round(Math.abs(gapPct)) > 0
@@ -438,11 +534,18 @@ export function IntegrityFlagCard({
 
       <div className="af-cm-flagcard-detail" id={detailId}>
         <h3 className="af-cm-flagcard-lead">{flag.summary}</h3>
+        {valuation?.status === 'unavailable' && <p>Trade valuation unavailable. {valuation.reason}</p>}
 
         {isCollusion ? (
           <TradeSides ev={ev as CollusionEvidenceLike} a={managerA} b={managerB} />
         ) : (
-          <TankingStats ev={ev as TankingEvidenceLike} />
+          <>
+            <TankingStats ev={ev as TankingEvidenceLike} />
+            {(ev as TankingEvidenceLike).lineupIntegrity ? <LineupScoreStrip li={(ev as TankingEvidenceLike).lineupIntegrity!} /> : null}
+            {leagueId && (ev as TankingEvidenceLike).lineupIntegrity && typeof (ev as TankingEvidenceLike).rosterId === 'string' ? (
+              <PostLineupReport leagueId={leagueId} rosterId={(ev as TankingEvidenceLike).rosterId!} />
+            ) : null}
+          </>
         )}
 
         {context.length > 0 ? (

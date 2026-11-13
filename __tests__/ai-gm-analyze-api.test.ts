@@ -12,13 +12,25 @@ vi.mock('@/lib/rate-limit', () => ({
   getClientIp: vi.fn(() => '127.0.0.1'),
 }))
 
+// Origin is CSRF protection only. Identity comes from the shared legacy gate; the caller here is
+// signed in as the account linked to Sleeper user `user1`.
 vi.mock('@/lib/api-auth', () => ({
-  requireAuthOrOrigin: vi.fn(() => ({
-    authenticated: true,
-  })),
   validateRequestOrigin: vi.fn(() => true),
   forbiddenResponse: vi.fn((msg) => new NextResponse(JSON.stringify({ error: msg }), { status: 403 })),
 }))
+
+const gateMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/legacy/requireLegacySleeperIdentity', () => ({
+  requireLegacySleeperIdentity: (...args: unknown[]) => gateMock(...args),
+}))
+const signedInAsUser1 = () => ({
+  ok: true,
+  identity: { sleeperUsername: 'user1', actorId: 'appuser-1', source: 'session' },
+})
+const anonymous = () => ({
+  ok: false,
+  response: NextResponse.json({ error: 'Sign in to use this.' }, { status: 401 }),
+})
 
 vi.mock('@/lib/sleeper-client', () => ({
   getSleeperUser: vi.fn(async (username) => ({
@@ -108,6 +120,7 @@ vi.mock('@/lib/telemetry/usage', () => ({
 describe('ai-gm-analyze API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    gateMock.mockResolvedValue(signedInAsUser1())
   })
 
   describe('GET /api/legacy/ai-gm-analyze', () => {
@@ -136,8 +149,8 @@ describe('ai-gm-analyze API', () => {
       expect(data.lastAnalysisAt).toBeDefined()
     })
 
-    it('requires username parameter', async () => {
-      // Arrange - missing username
+    it('without a username parameter, reads the readiness of the CALLER (never a default to anyone else)', async () => {
+      // Arrange - missing username: identity comes from the session, not the query
       const url = new URL('http://localhost:3000/api/legacy/ai-gm-analyze')
 
       const request = new NextRequest(url, {
@@ -152,8 +165,37 @@ describe('ai-gm-analyze API', () => {
       const data = await response.json()
 
       // Assert
-      expect(response.status).toBe(400)
-      expect(data.error).toContain('Username required')
+      expect(response.status).toBe(200)
+      expect(data.username).toBe('user1')
+      const { runPreAnalysisForUser } = await import('@/lib/ai-gm-intelligence')
+      expect(runPreAnalysisForUser).toHaveBeenCalledWith('user1', '')
+    })
+
+    it('refuses an anonymous caller (Origin alone is not authentication)', async () => {
+      gateMock.mockResolvedValueOnce(anonymous())
+      const { runPreAnalysisForUser } = await import('@/lib/ai-gm-intelligence')
+      const response = await legacyGet(
+        new NextRequest('http://localhost:3000/api/legacy/ai-gm-analyze?username=user1', {
+          method: 'GET',
+          headers: { origin: 'https://allfantasy.ai' },
+        }),
+      )
+      expect(response.status).toBe(401)
+      expect(runPreAnalysisForUser).not.toHaveBeenCalled()
+    })
+
+    it('passes the named username to the gate to COMPARE, and stops on its refusal', async () => {
+      gateMock.mockResolvedValueOnce({
+        ok: false,
+        response: NextResponse.json({ code: 'SLEEPER_USERNAME_MISMATCH' }, { status: 403 }),
+      })
+      const { runPreAnalysisForUser } = await import('@/lib/ai-gm-intelligence')
+      const response = await legacyGet(
+        new NextRequest('http://localhost:3000/api/legacy/ai-gm-analyze?username=victim', { method: 'GET' }),
+      )
+      expect(response.status).toBe(403)
+      expect(gateMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ requestedUsername: 'victim' }))
+      expect(runPreAnalysisForUser).not.toHaveBeenCalled()
     })
   })
 
@@ -230,6 +272,37 @@ describe('ai-gm-analyze API', () => {
       expect(data.error).toContain('leagueId')
     })
 
+    it('refuses an anonymous POST before any model or provider call', async () => {
+      gateMock.mockResolvedValueOnce(anonymous())
+      const { generateAIGMAnalysis } = await import('@/lib/ai-gm-intelligence')
+      const { getSleeperUser } = await import('@/lib/sleeper-client')
+      const response = await legacyPost(
+        new NextRequest('http://localhost:3000/api/legacy/ai-gm-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', origin: 'https://allfantasy.ai' },
+          body: JSON.stringify({ username: 'user1', leagueId: 'league123', trade: { playersGiving: ['111'] } }),
+        }),
+      )
+      expect(response.status).toBe(401)
+      expect(getSleeperUser).not.toHaveBeenCalled()
+      expect(generateAIGMAnalysis).not.toHaveBeenCalled()
+    })
+
+    it('POST spends no model call for a guest and rate-limits per actor', async () => {
+      const response = await legacyPost(
+        new NextRequest('http://localhost:3000/api/legacy/ai-gm-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'user1', leagueId: 'league123', trade: { playersGiving: ['111'] } }),
+        }),
+      )
+      expect(response.status).toBe(200)
+      const opts = gateMock.mock.calls[0]![1] as { allowGuest?: boolean; rateLimit?: unknown; requestedUsername?: string }
+      expect(opts.allowGuest).toBeFalsy()
+      expect(opts.rateLimit).toBeDefined()
+      expect(opts.requestedUsername).toBe('user1')
+    })
+
     it('returns 404 when user not found', async () => {
       // Mock getSleeperUser to return null
       const { getSleeperUser } = await import('@/lib/sleeper-client')
@@ -242,7 +315,7 @@ describe('ai-gm-analyze API', () => {
           'X-API-Key': 'test-key',
         },
         body: JSON.stringify({
-          username: 'nonexistent',
+          username: 'user1',
           leagueId: 'league123',
           trade: {
             playersGiving: ['111'],

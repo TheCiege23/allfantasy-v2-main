@@ -8,6 +8,8 @@ const getGuillotineConfig = vi.fn()
 const upsertGuillotineConfig = vi.fn()
 const hasFirstChopHappened = vi.fn()
 const evaluateUserFeatureAccess = vi.fn()
+// Teams in the league, for the calendar check (lib/guillotine/calendarFit.ts). 0 skips the check.
+const rosterCount = vi.fn(async () => 0)
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/guillotine/weeklyRecap', () => ({ hasGuillotineAiRecapPlan: async () => false }))
@@ -20,6 +22,7 @@ vi.mock('@/lib/prisma', () => {
     prisma: {
       ...tx,
       guillotineLeagueConfig: { findUnique: (...a: unknown[]) => configFindUnique(...a) },
+      roster: { count: (...a: unknown[]) => rosterCount(...(a as [])) },
       $transaction: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     },
   }
@@ -148,6 +151,26 @@ describe('best ball lineups (lib/guillotine/guillotineBestBall.ts)', () => {
     expect(leagueUpdate).not.toHaveBeenCalled()
   })
 
+  /*
+   * Audit 2026-11-06, "League size vs pool": best ball fills every team's seats from what it drafted, so a
+   * 35-team NFL league cannot switch it on with a K seat — the NFL has 32 kickers (lib/bestball/poolCapacity.ts).
+   */
+  const NFL_GUILLY_ROSTER = { roster: { config: { sections: [{ slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 4 } }] } } }
+  it('switching it on is refused when the league is too big for the player pool, and nothing is written', async () => {
+    leagueFindUnique.mockResolvedValue(league({ sport: 'NFL', leagueSize: 35, settings: NFL_GUILLY_ROSTER }))
+    const r = await saveGuillotineRules('L1', 'u1', { bestBall: true })
+    expect(r).toMatchObject({ ok: false, status: 400, field: 'bestBall' })
+    if (!r.ok) expect(r.error).toContain('only about 32 K players')
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('the same switch at 32 teams goes through (tight, not impossible)', async () => {
+    leagueFindUnique.mockResolvedValue(league({ sport: 'NFL', leagueSize: 32, settings: NFL_GUILLY_ROSTER }))
+    const r = await saveGuillotineRules('L1', 'u1', { bestBall: true })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.best_ball).toBe(true)
+  })
+
   it('a locked league can still save its other rules, sending best ball unchanged', async () => {
     leagueFindUnique.mockResolvedValue(league({ status: 'in_season', settings: { best_ball: true } }))
     const r = await saveGuillotineRules('L1', 'u1', { bestBall: true, rosterReleaseTiming: 'immediate' })
@@ -182,6 +205,15 @@ describe('saveGuillotineRules', () => {
     const r = await saveGuillotineRules('L1', 'u1', { teamsPerChop: 2, statCorrectionHours: 12 })
     expect(r.ok).toBe(true)
     expect(upsertGuillotineConfig).toHaveBeenCalledWith('L1', { teamsPerChop: 2, statCorrectionHours: 12 })
+  })
+
+  it('refuses a calendar that cannot reach a champion, naming why, and saves nothing', async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    rosterCount.mockResolvedValueOnce(24)
+    const r = await saveGuillotineRules('L1', 'u1', { eliminationEndWeek: 14 })
+    expect(r).toMatchObject({ ok: false, status: 400, field: 'eliminationEndWeek' })
+    expect((r as { error: string }).error).toMatch(/still has [0-9]+ alive after week 14/)
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
   })
 
   it('writes the endgame where resolveGuillotineEndgame reads it first (settings.guillotineEndgame) and keeps the column in step', async () => {
@@ -243,5 +275,48 @@ describe('saveGuillotineRules', () => {
       statCorrectionHours: 24,
       rosterReleaseTiming: 'immediate',
     }))
+  })
+})
+
+describe('two-week elimination periods (lib/guillotine/eliminationPeriods.ts)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getGuillotineConfig.mockResolvedValue({ ...CONFIG, sport: 'MLB', eliminationStartWeek: 1, eliminationEndWeek: 26 })
+    configFindUnique.mockResolvedValue({ id: 'cfg1' })
+    hasFirstChopHappened.mockResolvedValue(false)
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: false })
+  })
+  const league = (over: Record<string, unknown> = {}) => ({ sport: 'MLB', settings: {}, guillotineEndgame: 'last_team_standing', status: 'pre_draft', lifecycleState: null, ...over })
+
+  it('an MLB commissioner can switch to two weeks (free), stored in League.settings', async () => {
+    leagueFindUnique.mockResolvedValue(league())
+    const r = await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotine_period_weeks).toBe(2)
+    expect(upsertGuillotineConfig).not.toHaveBeenCalled()
+  })
+
+  it('back to one week removes the key, so the league reads exactly as before', async () => {
+    leagueFindUnique.mockResolvedValue(league({ settings: { guillotine_period_weeks: 2 } }))
+    const r = await saveGuillotineRules('L1', 'u1', { periodWeeks: 1 })
+    expect(r.ok).toBe(true)
+    expect(leagueUpdate.mock.calls[0]![0].data.settings).not.toHaveProperty('guillotine_period_weeks')
+  })
+
+  it('refused outside MLB (400) and after the first chop (409); nothing written', async () => {
+    leagueFindUnique.mockResolvedValue(league({ sport: 'NBA' }))
+    expect(await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })).toMatchObject({ ok: false, status: 400, field: 'periodWeeks' })
+    leagueFindUnique.mockResolvedValue(league())
+    hasFirstChopHappened.mockResolvedValue(true)
+    expect(await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })).toMatchObject({ ok: false, status: 409, field: 'periodWeeks' })
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refused when the calendar cannot finish on two-week periods (15 teams, 13 periods)', async () => {
+    leagueFindUnique.mockResolvedValue(league())
+    rosterCount.mockResolvedValueOnce(15)
+    const r = await saveGuillotineRules('L1', 'u1', { periodWeeks: 2 })
+    expect(r).toMatchObject({ ok: false, status: 400, field: 'periodWeeks' })
+    expect(leagueUpdate).not.toHaveBeenCalled()
   })
 })

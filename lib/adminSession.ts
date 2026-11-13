@@ -29,10 +29,23 @@ function adminSessionSecret(): string {
   throw new Error("ADMIN_SESSION_SECRET or ADMIN_PASSWORD must be set for admin sessions");
 }
 
+/**
+ * Server-side lifetime of an admin session, matching the cookie's own `maxAge`.
+ *
+ * 🛑 THE SERVER MUST ENFORCE EXPIRY, NOT JUST THE BROWSER. The password and magic-link
+ * logins signed `{authenticated, role:"admin"}` with no `expiresAt`, and verification
+ * treated a missing `expiresAt` as valid forever — so a copied `admin_session` value
+ * worked until the signing secret was rotated, whatever its cookie maxAge said.
+ */
+export const ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function signAdminSessionCookie(payload: AdminSessionPayload) {
   const secret = adminSessionSecret();
 
-  const payloadJson = JSON.stringify(payload);
+  const payloadJson = JSON.stringify({
+    ...payload,
+    expiresAt: payload.expiresAt ?? Date.now() + ADMIN_SESSION_TTL_MS,
+  });
   const payloadB64 = Buffer.from(payloadJson, "utf8").toString("base64url");
   const sigB64 = crypto.createHmac("sha256", secret).update(payloadB64).digest("base64url");
   return `${payloadB64}.${sigB64}`;
@@ -60,7 +73,8 @@ export function verifyAdminSessionCookie(rawValue: string): AdminSessionPayload 
     const payload = JSON.parse(json) as AdminSessionPayload;
 
     if (!payload?.authenticated) return null;
-    if (payload.expiresAt && Date.now() > payload.expiresAt) return null;
+    // No expiry = a cookie minted before expiry was enforced: refuse it, the admin signs in again.
+    if (typeof payload.expiresAt !== "number" || Date.now() > payload.expiresAt) return null;
 
     return payload;
   } catch {

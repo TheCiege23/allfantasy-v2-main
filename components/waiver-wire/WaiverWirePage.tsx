@@ -1107,7 +1107,7 @@ export default function WaiverWirePage({
             </button>
           ) : (
             <Link
-              href={`/player-compare?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(settings?.sport ?? DEFAULT_SPORT)}`}
+              href={`/player-comparison-lab?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(settings?.sport ?? DEFAULT_SPORT)}`}
               data-testid="waiver-open-player-compare-fallback"
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line2)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs text-[var(--accent)] hover:bg-[var(--accent-soft)] sm:text-sm"
             >
@@ -1255,6 +1255,7 @@ export default function WaiverWirePage({
                       seasonStatsSummary: row.seasonStatsSummary,
                     }}
                     sport={settings?.sport ?? null}
+                    leagueId={leagueId}
                     prospect={isNhlProspectWireRow(p)}
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
                     addMode={immediateAddAllowed && !holdUntil}

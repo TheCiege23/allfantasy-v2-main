@@ -30,13 +30,16 @@ import { toast } from 'sonner'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import IntegrityFlagCard, { type IntegrityFlagRow } from '@/components/commish/IntegrityFlagCard'
 import IntegritySettings, { type IntegritySettingsValue } from '@/components/commish/IntegritySettings'
+import TradeHistoryReview from '@/components/commish/TradeHistoryReview'
 import type { IntegrityCoverage, IntegrityScanStatus } from '@/lib/integrity/coverage'
+import type { CollusionValuation } from '@/lib/integrity/collusionValuationCoverage'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-commish.css'
 
 type IntegrityPayload = {
   canReview?: boolean
   coverage?: IntegrityCoverage
+  collusionValuation?: CollusionValuation | null
   settings?: IntegritySettingsValue
   openFlags?: IntegrityFlagRow[]
   recentDismissed?: IntegrityFlagRow[]
@@ -84,7 +87,7 @@ export default function CommissionerIntegrityPage() {
   const { hasAccess, loading: entLoading, upgradePath } = useEntitlement('commissioner_integrity_monitoring')
   const ok = hasAccess('commissioner_integrity_monitoring')
 
-  const [tab, setTab] = useState<'open' | 'dismissed'>('open')
+  const [tab, setTab] = useState<'open' | 'dismissed' | 'trades'>('open')
   const [payload, setPayload] = useState<IntegrityPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -211,7 +214,7 @@ export default function CommissionerIntegrityPage() {
 
   const openFlags = useMemo(() => rankFlags(payload?.openFlags ?? []), [payload])
   const dismissed = useMemo(() => rankFlags(payload?.recentDismissed ?? []), [payload])
-  const list = tab === 'open' ? openFlags : dismissed
+  const list = tab === 'open' ? openFlags : tab === 'dismissed' ? dismissed : []
 
   const openCollusion = payload?.stats?.openCollusion ?? 0
   const openTanking = payload?.stats?.openTanking ?? 0
@@ -325,6 +328,9 @@ export default function CommissionerIntegrityPage() {
                 </button>
                 <div className="af-cm-coverage-body" data-open={coverageOpen ? 'true' : 'false'}>
                   <p>Collusion: {coverageText('collusion', payload.coverage.collusion.status, payload.coverage.collusion.lastScannedAt)}</p>
+                  {payload.collusionValuation?.status === 'unavailable' && (
+                    <p>Latest trade valuation unavailable. {payload.collusionValuation.reason}</p>
+                  )}
                   <p>Tanking: {coverageText('tanking', payload.coverage.tanking.status, payload.coverage.tanking.lastScannedAt)}</p>
                   {payload.canReview === false && <p>Co-commissioners can view flags and settings. The league owner reviews flags and changes settings.</p>}
                 </div>
@@ -348,9 +354,19 @@ export default function CommissionerIntegrityPage() {
               >
                 Dismissed ({dismissed.length})
               </button>
+              <button
+                type="button"
+                className="af-cm-seg-btn"
+                aria-pressed={tab === 'trades'}
+                onClick={() => setTab('trades')}
+              >
+                Trade history
+              </button>
             </div>
 
-            {loading ? (
+            {tab === 'trades' ? (
+              <TradeHistoryReview leagueId={leagueId} canPost={payload?.canReview !== false} />
+            ) : loading ? (
               <p className="af-cm-sub">Loading flags…</p>
             ) : list.length === 0 ? (
               <p className="af-cm-empty">
@@ -364,6 +380,7 @@ export default function CommissionerIntegrityPage() {
                   <IntegrityFlagCard
                     key={f.id}
                     flag={f}
+                    leagueId={payload?.canReview !== false ? leagueId : undefined}
                     highlighted={f.id === highlightId}
                     busy={busy}
                     onEscalate={tab === 'open' && payload?.canReview !== false ? (flag) => void patchFlag(flag, 'escalated') : undefined}

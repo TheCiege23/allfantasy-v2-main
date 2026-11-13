@@ -33,6 +33,7 @@ const m = vi.hoisted(() => ({
   release: vi.fn(),
   finish: vi.fn(),
   recordReleases: vi.fn(),
+  recordBaseline: vi.fn(),
 }))
 vi.mock('@/lib/guillotine/finishGuillotineSeason', async (orig) => ({
   ...(await orig<typeof import('@/lib/guillotine/finishGuillotineSeason')>()),
@@ -59,6 +60,7 @@ vi.mock('@/lib/redraft/weekFinalizer', () => ({
 vi.mock('@/lib/redraft/scoringEngine', () => ({ scoreRosterForWeek: m.scoreRosterForWeek }))
 vi.mock('@/lib/automation/locks', () => ({ acquireAutomationLock: m.acquire, releaseAutomationLock: m.release }))
 vi.mock('@/lib/guillotine/choppedReleases', () => ({ recordChoppedReleases: m.recordReleases }))
+vi.mock('@/lib/guillotine/statCorrectionHandler', () => ({ recordGuillotineCorrectionBaseline: m.recordBaseline }))
 
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { isPastCorrectionCutoff } from '@/lib/guillotine/GuillotineWeekEvaluator'
@@ -252,6 +254,63 @@ describe('runNativeGuillotineWeek', () => {
     const syncWeekStats = vi.fn(async () => undefined)
     expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
     expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
+  })
+
+  it('🛑 a game missing its box score is backfilled once, and while it stays missing nobody is chopped', async () => {
+    arrange()
+    m.finalizeRedraftWeek.mockResolvedValue({ refusal: 'game_stats_missing', slate: null })
+    const syncWeekStats = vi.fn(async () => undefined)
+    expect(await run(4, { syncWeekStats })).toMatchObject({ outcome: 'waiting', week: 3, reason: 'game_stats_missing' })
+    expect(syncWeekStats).toHaveBeenCalledOnce()
+    expect(m.finalizeRedraftWeek).toHaveBeenCalledTimes(2)
+    expect(m.scoreRosterForWeek).not.toHaveBeenCalled()
+    expect(m.runElimination).not.toHaveBeenCalled()
+  })
+
+  it('records the stat-correction baseline from the chop’s own scores, chopped team included, per player', async () => {
+    arrange()
+    m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({
+      points: POINTS[rosterId],
+      playerPoints: [{ playerId: `${rosterId}-qb`, points: POINTS[rosterId], isStarter: true }],
+    }))
+    await run()
+    expect(m.scoreRosterForWeek.mock.calls[0]![0]).toMatchObject({ includeBench: true, collectPlayerPoints: true })
+    expect(m.recordBaseline).toHaveBeenCalledOnce()
+    const b = m.recordBaseline.mock.calls[0]![0]
+    expect(b).toMatchObject({ seasonId: 's1', leagueId: 'L1', season: 2026, week: 3, capturedAt: NOW })
+    expect(b.teams).toContainEqual({
+      redraftRosterId: 'rr-b',
+      engineRosterId: 'R-b',
+      recordedPoints: 72.5,
+      playerPoints: [{ playerId: 'rr-b-qb', points: 72.5, isStarter: true }],
+    })
+    expect(b.teams).toHaveLength(3)
+    // Recorded before the engine chops, while the chopped roster still holds its players.
+    expect(m.recordBaseline.mock.invocationCallOrder[0]!).toBeLessThan(m.runElimination.mock.invocationCallOrder[0]!)
+  })
+
+  it("a DAILY best ball week's baseline keeps the scorer's per-day inputs; a weekly one carries none", async () => {
+    arrange()
+    const detail = (rosterId: string) => ({
+      days: ['2026-09-21', '2026-09-22'],
+      players: [{ playerId: `${rosterId}-p`, sport: 'NBA', position: 'PG', onRosterDays: ['2026-09-21', '2026-09-22'], pointsByDay: { '2026-09-21': POINTS[rosterId] } }],
+    })
+    m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({
+      points: POINTS[rosterId],
+      playerPoints: [{ playerId: `${rosterId}-p`, points: POINTS[rosterId], isStarter: true }],
+      ...(rosterId === 'rr-c' ? {} : { dailyBestBall: detail(rosterId) }),
+    }))
+    await run()
+    expect(m.scoreRosterForWeek.mock.calls[0]![0]).toMatchObject({ collectDailyBestBallDetail: true })
+    const teams = m.recordBaseline.mock.calls[0]![0].teams
+    expect(teams.find((t: any) => t.redraftRosterId === 'rr-b').dailyWeeks).toEqual([{ week: 3, ...detail('rr-b') }])
+    expect(teams.find((t: any) => t.redraftRosterId === 'rr-c')).not.toHaveProperty('dailyWeeks')
+  })
+
+  it('a baseline that cannot be written never stops the chop', async () => {
+    arrange()
+    m.recordBaseline.mockRejectedValueOnce(new Error('cache down'))
+    expect((await run()).outcome).toBe('chopped')
   })
 
   describe('pre-chop stat refresh (a correction inside the window decides the chop)', () => {

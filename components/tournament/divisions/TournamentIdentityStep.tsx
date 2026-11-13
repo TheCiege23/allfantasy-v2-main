@@ -61,7 +61,7 @@ export function TournamentIdentityStep({ identity, onChange, minConferences = 2,
     : `Conference ${slot.index + 1} · ${identity.conferences[slot.index]?.name || 'unnamed'}`
 
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)]">
       <div className="min-w-0 space-y-5">
         <section className={panel} aria-labelledby="id-presets">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -93,7 +93,7 @@ export function TournamentIdentityStep({ identity, onChange, minConferences = 2,
 
         <section className={panel} aria-labelledby="id-divisions">
           <h2 id="id-divisions" className={label + ' mb-3'}>2 · Divisions</h2>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {identity.divisions.map((d, i) => (
               <div key={i} className="min-w-0 space-y-3 rounded-2xl border bg-[#0e1018] p-4" style={{ borderColor: side(d.sideId).mid + '66' }}>
                 <div className="flex items-center gap-3">
@@ -140,7 +140,7 @@ export function TournamentIdentityStep({ identity, onChange, minConferences = 2,
             </div>
           </div>
           <p className="mb-3 text-sm text-slate-400">Each conference is one league per division. League names read &ldquo;{leagueDisplayName(preview.name || 'Smoke', dA.name || 'Division A')}&rdquo;.</p>
-          <ol className="grid gap-2 md:grid-cols-2">
+          <ol className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {identity.conferences.map((c, i) => (
               <li key={i} className="flex items-center gap-2">
                 <span className="w-6 text-right font-mono text-sm text-slate-500">{i + 1}</span>

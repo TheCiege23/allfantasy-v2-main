@@ -153,6 +153,9 @@ export const FORMAT_ALIASES: ReadonlySet<string> = new Set([
   'royal',
   'king_of_the_hill',
   'koth',
+  // Created from the wizard as a redraft shell (lib/survivor-guillotine/createFit.ts). Read exactly
+  // like a confirmed Survivor Guilly league: concept `guillotine`, variant `survivor_guillotine`.
+  'survivor_guillotine',
 ])
 
 /**
@@ -351,7 +354,9 @@ export function readFormatRules(league: {
    * the league was created, not a statement about it. `find` over the format allowlist asks the
    * question that was always intended: is any of these actually a format?
    */
-  const formatAlias = alias.find((t) => FORMAT_ALIASES.has(t)) ?? null
+  const formatAliasId = alias.find((t) => FORMAT_ALIASES.has(t)) ?? null
+  // The same label mapping a confirmation gets: a `survivor_guillotine` tag reads as `guillotine`.
+  const formatAlias = formatAliasId == null ? null : (CONFIRMED_CONCEPT_READS_AS.get(formatAliasId) ?? formatAliasId)
   /*
    * The confirmed concept, when a human gave one. `resolveLeagueConcept` with no
    * column returns ONLY the confirmation, so a league without one reads exactly
@@ -369,11 +374,15 @@ export function readFormatRules(league: {
    * row that has one is not this function's to reinterpret.
    */
   const confirmedId = resolveLeagueConcept(league.settings, null)
-  const variant: FormatVariant | null =
-    confirmedId === 'survivor_guillotine' ? 'survivor_guillotine' : null
   const confirmed =
     confirmedId == null ? null : (CONFIRMED_CONCEPT_READS_AS.get(confirmedId) ?? confirmedId)
   const confirmedIsBareBase = confirmedId === 'redraft' || confirmedId === 'dynasty'
+  // The variant follows whichever statement wins below: a confirmation, else a format alias.
+  const variant: FormatVariant | null =
+    confirmedId === 'survivor_guillotine' ||
+    (formatAliasId === 'survivor_guillotine' && (confirmedId == null || confirmedIsBareBase))
+      ? 'survivor_guillotine'
+      : null
   const leagueVariant = String(league.leagueVariant ?? '').trim().toLowerCase()
   const raw = (
     leagueVariant === 'salary_cap' || leagueVariant === 'contract_dynasty'

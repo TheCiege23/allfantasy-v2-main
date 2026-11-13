@@ -13,8 +13,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { orchestrateImportPreview } from '@/lib/league-import/importOrchestrator'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
-import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { getSleeperImportPreview } from '@/lib/league-import/sleeper/SleeperImportPreviewService'
+import { buildServerImportReview } from '@/lib/league-import/review/attachImportReview'
 import {
   assertImportCommissioner,
   attestationFromRequestBody,
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   if (!isImportProviderAvailable(provider)) {
     return NextResponse.json(
-      { error: `Import from ${provider} is not yet available.` },
+      { error: importComingSoonMessage(provider), code: 'coming_soon' },
       { status: 400 }
     )
   }
@@ -118,9 +119,18 @@ export async function POST(req: NextRequest) {
         { status: mapImportPreviewErrorStatus(sleeperPreview.code) }
       )
     }
+    const sleeperReview = await buildServerImportReview({
+      provider,
+      userId: auth.userId,
+      sourceLeagueId: sourceId,
+      preview: sleeperPreview.preview,
+      canonical: sleeperPreview.canonical,
+    })
     return NextResponse.json({
       ...sleeperPreview.preview,
       canonical: sleeperPreview.canonical,
+      // Omitted, not null, when there is no review: older clients see the response unchanged.
+      ...(sleeperReview ? { review: sleeperReview } : {}),
     })
   }
 
@@ -136,9 +146,17 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  const review = await buildServerImportReview({
+    provider,
+    userId: auth.userId,
+    sourceLeagueId: sourceId,
+    preview: result.preview,
+    canonical: result.canonicalPreview,
+  })
   return NextResponse.json({
     ...result.preview,
     canonical: result.canonicalPreview,
+    ...(review ? { review } : {}),
     /* A Secret-ID Fantrax member: the screen offers "I'm the commissioner" so the commit can say so. */
     ...(gateAllowsCommissionerConfirm(gate, provider) ? { commissionerConfirmable: true } : {}),
     ...(previewOnly

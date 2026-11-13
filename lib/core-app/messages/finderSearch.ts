@@ -36,8 +36,9 @@ export const finderSearchBoxMessages = defineMessages<SearchBoxCopy>({
     suggestions: 'Suggestions',
     playersToCompare: 'Players to compare',
     noTeam: 'no team on file',
-    noteSignedIn: 'Searches every platform you have connected at once — Sleeper, ESPN and Yahoo.',
-    noteSignedOut: 'One search covers Sleeper, ESPN and Yahoo at once. Connect a league to see your own slots and matchups.',
+    // No platform list: it named Yahoo, which no one can connect yet (provider-ui-config).
+    noteSignedIn: 'Searches every league you have connected at once.',
+    noteSignedOut: 'One search covers every league you connect. Connect a league to see your own slots and matchups.',
   },
   es: {
     searchLabel: 'Buscar cualquier jugador',
@@ -49,8 +50,8 @@ export const finderSearchBoxMessages = defineMessages<SearchBoxCopy>({
     suggestions: 'Sugerencias',
     playersToCompare: 'Jugadores para comparar',
     noTeam: 'sin equipo registrado',
-    noteSignedIn: 'Busca a la vez en todas las plataformas que conectaste: Sleeper, ESPN y Yahoo.',
-    noteSignedOut: 'Una sola búsqueda cubre Sleeper, ESPN y Yahoo a la vez. Conecta una liga para ver tus propios puestos y enfrentamientos.',
+    noteSignedIn: 'Busca a la vez en todas las ligas que conectaste.',
+    noteSignedOut: 'Una sola búsqueda cubre todas las ligas que conectes. Conecta una liga para ver tus propios puestos y enfrentamientos.',
   },
 })
 

@@ -13,10 +13,14 @@ export const waiverEdgeMessages = defineMessages({
     heading: 'Competitive Edge · other managers\' waiver activity',
     basis: (season: number, asOf: string, stale: boolean) =>
       `Counted from winning waiver claims in this league's Sleeper history for the ${season} season${asOf ? `, as of ${asOf} ET` : ''}${stale ? ' — may be out of date' : ''}. Sleeper doesn't publish losing bids, so these are wins only. It shows what they did, not what they'll bid.`,
+    showAllRivals: (n: number) => `Show all ${n} managers`,
+    showFewerRivals: 'Show fewer managers',
   },
   es: {
     aria: WAIVER_EDGE_ES.aria,
     heading: WAIVER_EDGE_ES.heading,
     basis: WAIVER_EDGE_ES.basis,
+    showAllRivals: (n) => `Ver los ${n} mánagers`,
+    showFewerRivals: 'Ver menos mánagers',
   },
 })

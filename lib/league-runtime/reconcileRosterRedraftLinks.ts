@@ -417,3 +417,24 @@ export async function resolveRedraftRosterId(
   })
   return after?.redraftRosterId ?? null
 }
+
+/**
+ * Before a roster move (trade, waiver claim, free-agent add, trade reversal): make sure the league's
+ * rosters are linked to their season rosters, or the move never reaches the roster lineups and scoring
+ * read (`applyRedraftRosterMoves` skips an unlinked team without an error).
+ *
+ * New leagues are linked when their draft finalizes (finalizeDraftToRedraftSeason). This heals the
+ * leagues that drafted before that fix, at their next move. Call it OUTSIDE the move's transaction: it
+ * writes `Roster` rows the move's transaction locks, so inside it would wait on itself. Cheap when every
+ * team is already linked (one read), and it never blocks the move it precedes.
+ */
+export async function ensureSeasonRosterLinksBeforeMove(leagueId: string): Promise<void> {
+  try {
+    await reconcileRosterRedraftLinks(leagueId)
+  } catch (err) {
+    console.warn('[ensureSeasonRosterLinksBeforeMove] roster season links not reconciled', {
+      leagueId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}

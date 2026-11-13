@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import Link from 'next/link';
 import { Loader2, GraduationCap } from 'lucide-react';
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui';
@@ -211,7 +212,7 @@ async function requestLineupOptimizationDefault(input: {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to optimize lineup');
+    throw new Error(readPlanRefusal(res.status, data)?.message ?? (typeof data?.error === 'string' ? data.error : 'Failed to optimize lineup'));
   }
   return data as LineupOptimizationResponse;
 }
@@ -550,7 +551,7 @@ export function CoachAdvicePanel({
               } else if (typeof window !== 'undefined') {
                 const q = new URLSearchParams({ sport: compareSport });
                 if (leagueId) q.set('leagueId', leagueId);
-                window.location.href = `/player-compare?${q.toString()}`;
+                window.location.href = `/player-comparison-lab?${q.toString()}`;
               }
             }}
             className="gap-2 border-white/15 text-white/85"
@@ -560,7 +561,7 @@ export function CoachAdvicePanel({
             Player compare
           </Button>
           <Link
-            href={`/player-compare?sport=${encodeURIComponent(compareSport)}${leagueId ? `&leagueId=${encodeURIComponent(leagueId)}` : ''}`}
+            href={`/player-comparison-lab?sport=${encodeURIComponent(compareSport)}${leagueId ? `&leagueId=${encodeURIComponent(leagueId)}` : ''}`}
             className="text-xs text-cyan-300/85 underline hover:text-cyan-100"
             data-testid="coach-player-compare-full-page"
           >

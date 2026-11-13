@@ -6,6 +6,7 @@ import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
 import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
 import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule } from './missedDeadlineService'
+import { resolveKeeperSourceRoster } from './keeperSourceRoster'
 
 export async function openKeeperSelectionPhase(
   leagueId: string,
@@ -92,9 +93,21 @@ async function submitKeeperSelectionsLocked(
     await db.leagueAuditLog.create({ data: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId, metadata: { rosterId } } })
   }
 
-  const elig = await db.keeperEligibility.findMany({
-    where: { seasonId, rosterId, playerId: { in: playerIds } },
-  })
+  // The window's roster is next season's empty shell; the keepable players and their eligibility rows
+  // are on this owner's roster in the season just played (lib/keeper/keeperSourceRoster.ts). Records
+  // are still written under the window's season and roster: lock, carryover and the next draft read those.
+  const source = await resolveKeeperSourceRoster({ leagueId, seasonId, rosterId }, db)
+  const sourcePlayers = source.mapped
+    ? source.rosterId
+      ? await db.redraftRosterPlayer.findMany({ where: { rosterId: source.rosterId } })
+      : []
+    : roster.players
+
+  const elig = source.rosterId
+    ? await db.keeperEligibility.findMany({
+        where: { seasonId: source.seasonId, rosterId: source.rosterId, playerId: { in: playerIds } },
+      })
+    : []
   const eligMap = new Map(elig.map((e) => [e.playerId, e]))
 
   const valid: SubmitKeeperResult['valid'] = []
@@ -113,7 +126,7 @@ async function submitKeeperSelectionsLocked(
       conflicted.push({ playerIds: [pid], reason: e?.ineligibleReason ?? 'ineligible' })
       continue
     }
-    const onRoster = roster.players.some((p) => p.playerId === pid && !p.droppedAt)
+    const onRoster = sourcePlayers.some((p) => p.playerId === pid && !p.droppedAt)
     if (!onRoster) {
       conflicted.push({ playerIds: [pid], reason: 'not_on_roster' })
       continue
@@ -169,7 +182,7 @@ async function submitKeeperSelectionsLocked(
     const costLabel = spot ? placedKeeperLabel(spot) : e.projectedCost
     if (spot && spot.round !== spot.costRound) warnings.push(`${pid}: ${costLabel}`)
 
-    const player = roster.players.find((p) => p.playerId === pid)!
+    const player = sourcePlayers.find((p) => p.playerId === pid && !p.droppedAt)!
     const rec = await db.keeperRecord.upsert({
       where: {
         seasonId_rosterId_playerId: {

@@ -13,7 +13,7 @@
 
 import type { ImportProvider } from './types';
 
-export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB';
+export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER';
 
 export const IMPORT_PROVIDER_UI_OPTIONS: {
   provider: ImportProvider;
@@ -71,7 +71,7 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * (tests/fixtures/fantrax/*-public-2026.json); rosters, minors and IR remain unproven because
    * those leagues had not drafted — contracts/fantrax/GAPS.md F-04.
    */
-  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'] },
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER'] },
   /*
    * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
    * service, the pipeline entry and the storage column all existed; what did not
@@ -124,10 +124,72 @@ const SHORT_LABEL: Partial<Record<ImportProvider, string>> = { mfl: 'MFL' };
  * MFL and Fleaflicker instead — while Yahoo is unavailable ("Coming soon" on the importer). Every
  * sentence that names platforms reads this, so flipping a platform's `available` updates them all.
  */
-export function availableImportPlatformsPhrase(): string {
+export function availableImportPlatformsPhrase(conjunction: 'or' | 'and' = 'or'): string {
   const names = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available).map((o) => SHORT_LABEL[o.provider] ?? o.label);
   if (names.length <= 1) return names.join('');
-  return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+  return `${names.slice(0, -1).join(', ')} ${conjunction} ${names[names.length - 1]}`;
+}
+
+/**
+ * The status a marketing or onboarding surface shows for a platform.
+ *
+ * ⚠ DERIVED FROM `available`, NOT STORED BESIDE IT. A second field would be a second fact about the
+ * same thing, and the whole point of this file is that there is one. `live` is exactly
+ * `available: true` — the same flag the import API routes refuse on — so a page can never call a
+ * platform live that the backend will turn away.
+ */
+export type ImportPlatformStatus = 'live' | 'coming_soon';
+
+export type ImportPlatform = {
+  provider: ImportProvider;
+  /** Short display name for chips and sentences ("MFL", not "MyFantasyLeague (MFL)"). */
+  name: string;
+  /** Full menu label. */
+  label: string;
+  status: ImportPlatformStatus;
+  supportedSports: readonly ImportSupportedSport[];
+};
+
+/**
+ * Why a coming-soon platform is not live yet, in the user's terms. Only platforms with a reason a
+ * customer should hear are listed; the rest fall back to a plain "coming soon".
+ */
+const COMING_SOON_REASON: Partial<Record<ImportProvider, string>> = {
+  yahoo: "we're waiting on Yahoo to approve our API access",
+};
+
+/** Every platform, in config order, with its status. The list every surface should render from. */
+export function getImportPlatforms(): ImportPlatform[] {
+  return IMPORT_PROVIDER_UI_OPTIONS.map((o) => ({
+    provider: o.provider,
+    name: SHORT_LABEL[o.provider] ?? o.label,
+    label: o.label,
+    status: o.available ? 'live' : 'coming_soon',
+    supportedSports: o.supportedSports,
+  }));
+}
+
+export function getImportPlatformStatus(provider: ImportProvider): ImportPlatformStatus {
+  return isImportProviderAvailable(provider) ? 'live' : 'coming_soon';
+}
+
+/**
+ * The one friendly sentence for "you tried a platform that is not live". Used by the API routes that
+ * refuse a coming-soon provider, so the refusal reads as a status rather than an error.
+ */
+export function importComingSoonMessage(provider: ImportProvider): string {
+  const name = SHORT_LABEL[provider] ?? getImportProviderLabel(provider);
+  const reason = COMING_SOON_REASON[provider];
+  // The refused platform is never in its own "you can import from" list — even if a caller's view of
+  // availability (a test spy, a stale flag) disagrees with the config this list is read from.
+  const others = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available && o.provider !== provider).map(
+    (o) => SHORT_LABEL[o.provider] ?? o.label,
+  );
+  const alternatives =
+    others.length === 0
+      ? ''
+      : ` You can import from ${others.length === 1 ? others[0] : `${others.slice(0, -1).join(', ')} or ${others[others.length - 1]}`} today.`;
+  return reason ? `${name} import is coming soon — ${reason}.${alternatives}` : `${name} import is coming soon.${alternatives}`;
 }
 
 export function getImportProviderLabel(provider: ImportProvider): string {
@@ -164,7 +226,7 @@ export type ImportSportCheck =
  * basketball league with football rules.
  */
 /** Every sport AllFantasy runs leagues for. A league in any other sport has nowhere to go. */
-export const IMPORT_RUNNABLE_SPORTS: readonly ImportSupportedSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'];
+export const IMPORT_RUNNABLE_SPORTS: readonly ImportSupportedSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER'];
 
 /**
  * The looser gate for the live importers that are not held to their `supportedSports` list
@@ -186,6 +248,8 @@ export function checkImportSportRunnable(
       message: `${label} did not say which sport this league is, so it was not imported. Nothing was saved.`,
     };
   }
+  // Soccer imports need a provider-specific mapping. Fantrax has one from its captured scoring groups.
+  if (normalized === 'SOCCER') return checkImportSportSupported(provider, normalized);
   if (!(IMPORT_RUNNABLE_SPORTS as readonly string[]).includes(normalized)) {
     return {
       ok: false,

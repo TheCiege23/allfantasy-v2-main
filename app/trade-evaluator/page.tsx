@@ -11,6 +11,11 @@ import { useSearchParams } from "next/navigation"
 import { TradeSimulationStrip } from "@/components/ai/sim/TradeSimulationStrip"
 import { IdpTradeLineupWarning } from "@/components/idp/IdpTradeLineupWarning"
 import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
+import { GenericTradeAnalyzer } from "@/components/core-app/screens/GenericTradeAnalyzer"
+import { TradeMarketMovers } from "@/components/trade-market/TradeMarketMovers"
+import { TradeShareButton, type ShareAsset } from "@/components/trade-evaluator/TradeShareButton"
+import "@/components/core-app/af-core.css"
+import "@/components/core-app/af-trade-center.css"
 import {
   GradeLeaguePicker,
   gradeLeagueOptions,
@@ -21,6 +26,8 @@ import { usePlayerComparisonUIOptional } from "@/components/player-comparison-ui
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from "@/lib/sport-scope"
 import type { NegotiationToolkit } from "@/lib/trade-engine/types"
 import { liveGradePanel } from "@/lib/decision-os/trade/receiptViews"
+import { c2cDraftSide, type C2CDraftSide } from "@/lib/parsePickLabel"
+import type { TradeDivisionImpact } from "@/lib/decision-os/trade/tradeGrade"
 import {
   KeeperCostNote,
   keeperCostsViewFor,
@@ -74,6 +81,7 @@ interface TradePick {
   id: string
   year: string
   round: string
+  draftSide?: C2CDraftSide
   projectedRange: "early" | "mid" | "late" | "unknown"
 }
 
@@ -122,6 +130,7 @@ interface TradeResult {
   senderGrade: string | null
   receiverGrade: string | null
   gradeWithheld: string | null
+  divisionImpacts: readonly TradeDivisionImpact[]
   valueDelta: number | null
   confidencePct: number | null
   recommendation: string
@@ -236,6 +245,7 @@ interface ApiTradeResponse {
     partnerGrade: string | null
     gradeLabel: string | null
     gradeWithheld: string | null
+    divisionImpacts?: readonly TradeDivisionImpact[]
     percentDiff: number | null
     giveValue: number | null
     getValue: number | null
@@ -352,6 +362,17 @@ function emptyPick(): TradePick {
     round: "1",
     projectedRange: "mid",
   }
+}
+
+/** A side as the share link stores it: named players and labelled picks only. */
+function shareAssetsOf(side: TradeSide): ShareAsset[] {
+  const players = side.players
+    .filter((p) => p.name.trim())
+    .map((p) => ({ id: (p.id || p.name).slice(0, 100), name: p.name.trim().slice(0, 200), type: "player" as const }))
+  const picks = side.picks
+    .filter((k) => k.year && k.round)
+    .map((k) => ({ id: k.id.slice(0, 100), name: `${k.year} Round ${k.round}`, type: "pick" as const }))
+  return [...players, ...picks]
 }
 
 function emptySide(name: string, firstPlayerName = ""): TradeSide {
@@ -487,6 +508,7 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
    * supporting text under the grade — its prompt now leads with the receipt.
    */
   const panel = liveGradePanel(payload.tradeGrade)
+  const divisionImpacts = payload.tradeGrade?.divisionImpacts ?? []
   return {
     ...shared,
     live: true,
@@ -499,9 +521,10 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
     senderGrade: panel.senderGrade,
     receiverGrade: panel.receiverGrade,
     gradeWithheld: panel.gradeWithheld,
+    divisionImpacts,
     valueDelta: panel.totals ? panel.totals.get - panel.totals.send : null,
     confidencePct: null,
-    recommendation: panel.headline,
+    recommendation: divisionImpacts.length ? "Campus and Canton values follow separate standings." : panel.headline,
     aiSummary: payload.evaluation?.explanation?.summary ?? null,
     analysisBullets: (payload.evaluation?.explanation?.leagueContextNotes ?? []).filter(Boolean),
     drivers: [],
@@ -581,10 +604,12 @@ function AssetPanel({
   side,
   onChange,
   onClear,
+  campusToCanton,
 }: {
   label: string
   accent: string
   side: TradeSide
+  campusToCanton: boolean
   onChange: (side: TradeSide) => void
   onClear: () => void
 }) {
@@ -781,6 +806,25 @@ function AssetPanel({
                 <option value="late">Late</option>
                 <option value="unknown">Unknown</option>
               </select>
+              {campusToCanton ? (
+                <label className="flex items-center justify-between gap-2 text-xs text-white/60 sm:col-span-12">
+                  Draft pool
+                  <select
+                    value={pick.draftSide ?? ""}
+                    onChange={(event) => {
+                      const picks = [...side.picks]
+                      picks[index] = { ...pick, draftSide: c2cDraftSide(event.target.value) ?? undefined }
+                      onChange({ ...side, picks })
+                    }}
+                    className="min-h-[44px] rounded-xl border border-white/10 bg-[#101224] px-3 text-base text-white sm:text-sm"
+                  >
+                    <option value="">Choose draft pool</option>
+                    <option value="campus">Campus</option>
+                    <option value="canton">Canton</option>
+                    <option value="combined">Combined</option>
+                  </select>
+                </label>
+              ) : null}
               <button
                 type="button"
                 onClick={() => onChange({ ...side, picks: side.picks.filter((_, rowIndex) => rowIndex !== index) })}
@@ -814,6 +858,15 @@ function TradeHubInner() {
   const previewSender = searchParams?.get("previewSender") ?? ""
   const previewReceiver = searchParams?.get("previewReceiver") ?? ""
   const linkedLeagueIdParam = searchParams?.get("leagueId") ?? ""
+  /*
+   * The open-market grade is the default: it needs no login and no imported league, which is who this
+   * page was failing ("Not graded" without a league). A `?leagueId=` link, or `?mode=league`, opens the
+   * league analysis instead.
+   */
+  const modeParam = searchParams?.get("mode") ?? ""
+  const [mode, setMode] = useState<"market" | "league">(
+    modeParam === "league" || (linkedLeagueIdParam && modeParam !== "market") ? "league" : "market"
+  )
 
   const [sender, setSender] = useState<TradeSide>(() => emptySide("Sender Team", previewSender))
   const [receiver, setReceiver] = useState<TradeSide>(() => emptySide("Receiver Team", previewReceiver))
@@ -827,6 +880,8 @@ function TradeHubInner() {
   const [phase, setPhase] = useState<PhaseKey>("plan")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TradeResult | null>(null)
+  /* The two sides as they were GRADED — what a share link stores, even if the inputs change after. */
+  const [gradedSides, setGradedSides] = useState<{ sender: TradeSide; receiver: TradeSide } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
 
@@ -880,6 +935,7 @@ function TradeHubInner() {
         if (league.hasUnifiedRecord) {
           setLinkedLeagueId(String(league.unifiedLeagueId ?? league.id))
         }
+        setSport(normalizeToSupportedSport(league.sport))
         setFormat(formatFromLinkedLeague(league))
         const leagueScoring = scoringFromLinkedLeague(league)
         if (leagueScoring) setScoring(leagueScoring)
@@ -893,6 +949,8 @@ function TradeHubInner() {
   }, [linkedLeagueIdParam])
 
   const gradeLeagues = useMemo(() => gradeLeagueOptions(leagueRows), [leagueRows])
+  const gradeLeague = leagueRows.find((l) => l.hasUnifiedRecord && String(l.unifiedLeagueId ?? l.id) === linkedLeagueId)
+  const campusToCanton = gradeLeague?.leagueType?.trim().toLowerCase() === "c2c"
 
   /** Choosing a league re-labels format and scoring to its own, and drops a grade taken elsewhere. */
   const chooseGradeLeague = useCallback(
@@ -901,6 +959,7 @@ function TradeHubInner() {
       setResult(null)
       const league = leagueRows.find((l) => l.hasUnifiedRecord && String(l.unifiedLeagueId ?? l.id) === leagueId)
       if (!league) return
+      setSport(normalizeToSupportedSport(league.sport))
       setFormat(formatFromLinkedLeague(league))
       const leagueScoring = scoringFromLinkedLeague(league)
       if (leagueScoring) setScoring(leagueScoring)
@@ -966,6 +1025,7 @@ function TradeHubInner() {
               year: Number(pick.year),
               round: Number(pick.round),
               projected_range: pick.projectedRange,
+              ...(campusToCanton ? { draftSide: pick.draftSide } : {}),
             })),
             gives_faab: sender.faab,
           },
@@ -985,6 +1045,7 @@ function TradeHubInner() {
               year: Number(pick.year),
               round: Number(pick.round),
               projected_range: pick.projectedRange,
+              ...(campusToCanton ? { draftSide: pick.draftSide } : {}),
             })),
             gives_faab: receiver.faab,
           },
@@ -1014,13 +1075,14 @@ function TradeHubInner() {
       }
 
       setResult({ ...mapApiResponse(data, response.headers, asOfDate), gradedLeagueId: linkedLeagueId || null })
+      setGradedSides({ sender, receiver })
     } catch (requestError: unknown) {
       setError(requestError instanceof Error ? requestError.message : "Trade analysis failed.")
     } finally {
       timers.forEach((timer) => window.clearTimeout(timer))
       setLoading(false)
     }
-  }, [asOfDate, canEvaluate, format, linkedLeagueId, qbFormat, receiver, scoring, sender, sport])
+  }, [asOfDate, canEvaluate, campusToCanton, format, linkedLeagueId, qbFormat, receiver, scoring, sender, sport])
 
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
@@ -1069,17 +1131,51 @@ function TradeHubInner() {
 
         <div className="mt-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%),#0a0d1a] p-4 sm:p-8">
           <div className="max-w-3xl">
-            <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Premium Analysis</div>
+            <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">
+              {mode === "market" ? "Free · No import needed" : "League analysis"}
+            </div>
             <h2 className="mt-3 text-2xl font-black leading-tight sm:text-4xl">
               Grade a trade before you send it.
             </h2>
             <p className="mt-4 text-sm leading-6 text-white/60 sm:text-base">
-              Put the players and picks on each side, choose the league it&apos;s in, and see a letter grade for both
-              teams against the current market, with Chimmy&apos;s read on the deal.
+              Put the players, picks and FAAB on each side and get a letter grade for both teams — no league
+              import needed. Values come from the current market, adjusted by what managers actually paid in
+              completed trades across AllFantasy leagues.
             </p>
           </div>
         </div>
 
+        <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="How to grade this trade" data-testid="trade-evaluator-mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "market"}
+            onClick={() => setMode("market")}
+            data-testid="trade-evaluator-mode-market"
+            className={`touch-manipulation min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "market" ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100" : "border-white/10 text-white/60 hover:text-white"}`}
+          >
+            Quick grade — no league needed
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "league"}
+            onClick={() => setMode("league")}
+            data-testid="trade-evaluator-mode-league"
+            className={`touch-manipulation min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "league" ? "border-violet-400/60 bg-violet-500/15 text-violet-100" : "border-white/10 text-white/60 hover:text-white"}`}
+          >
+            Grade in my league
+          </button>
+        </div>
+
+        {mode === "market" ? (
+          <div className="af-core mt-2" data-testid="trade-evaluator-market-mode">
+            <GenericTradeAnalyzer />
+            <TradeMarketMovers limit={6} heading="What real trades say right now" testId="trade-evaluator-market-movers" />
+          </div>
+        ) : null}
+
+        {mode === "league" ? (<>
         <InContextMonetizationCard
           className="mt-6"
           title="Trade Analyzer access"
@@ -1089,8 +1185,8 @@ function TradeHubInner() {
         />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <AssetPanel label="Sender · Giving" accent="#06b6d4" side={sender} onChange={setSender} onClear={() => setSender(emptySide("Sender Team"))} />
-          <AssetPanel label="Receiver · Giving" accent="#a78bfa" side={receiver} onChange={setReceiver} onClear={() => setReceiver(emptySide("Receiver Team"))} />
+          <AssetPanel label="Sender · Giving" accent="#06b6d4" side={sender} campusToCanton={campusToCanton} onChange={setSender} onClear={() => setSender(emptySide("Sender Team"))} />
+          <AssetPanel label="Receiver · Giving" accent="#a78bfa" side={receiver} campusToCanton={campusToCanton} onChange={setReceiver} onClear={() => setReceiver(emptySide("Receiver Team"))} />
         </div>
 
         {miniCompare.ready ? (
@@ -1120,7 +1216,7 @@ function TradeHubInner() {
               </button>
             ) : (
               <Link
-                href={`/player-compare?playerA=${encodeURIComponent(miniCompare.a)}&playerB=${encodeURIComponent(miniCompare.b)}&sport=${encodeURIComponent(sport)}`}
+                href={`/player-comparison-lab?playerA=${encodeURIComponent(miniCompare.a)}&playerB=${encodeURIComponent(miniCompare.b)}&sport=${encodeURIComponent(sport)}`}
                 data-testid="trade-evaluator-mini-compare-fallback"
                 className="inline-flex shrink-0 text-sm font-medium text-cyan-300 underline hover:text-cyan-100"
               >
@@ -1352,29 +1448,48 @@ function TradeHubInner() {
                   </div>
                 )}
 
-                <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Grades</div>
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
-                      <div className="text-3xl font-black text-cyan-200">{result.senderGrade ?? '—'}</div>
-                      <div className="mt-1 text-[11px] uppercase tracking-[0.24em] text-cyan-100/70">Sender</div>
-                    </div>
-                    <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-4 text-center">
-                      <div className="text-3xl font-black text-fuchsia-200">{result.receiverGrade ?? '—'}</div>
-                      <div className="mt-1 text-[11px] uppercase tracking-[0.24em] text-fuchsia-100/70">Receiver</div>
-                    </div>
+                {result.divisionImpacts.length ? (
+                  <div data-testid="trade-division-impacts" className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Division impact</div>
+                    <dl className="mt-3 grid grid-cols-2 gap-3">
+                      {result.divisionImpacts.map(({ division, giveValue, getValue }) => (
+                        <div key={division} className="rounded-xl border border-white/8 p-3">
+                          <dt className="text-sm font-semibold text-white">{division}</dt>
+                          <dd className="mt-1 text-xs text-white/70">
+                            Sender gives {giveValue.toLocaleString("en-US", { maximumFractionDigits: 1 })}
+                            <br />
+                            Sender gets {getValue.toLocaleString("en-US", { maximumFractionDigits: 1 })}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="mt-3 text-xs text-white/60">Each division uses its own scale.</p>
                   </div>
-                  {result.gradeWithheld && (
-                    <div data-testid="trade-grade-withheld" className="mt-3 text-xs text-amber-200/90">
-                      Not graded. {result.gradeWithheld}
-                      {!result.gradedLeagueId ? (
-                        <span data-testid="trade-grade-no-league-hint" className="mt-1 block text-white/60">
-                          {noLeagueGradeHint(gradeLeagues.length)}
-                        </span>
-                      ) : null}
+                ) : (
+                  <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Grades</div>
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center">
+                        <div className="text-3xl font-black text-cyan-200">{result.senderGrade ?? '—'}</div>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.24em] text-cyan-100/70">Sender</div>
+                      </div>
+                      <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-4 text-center">
+                        <div className="text-3xl font-black text-fuchsia-200">{result.receiverGrade ?? '—'}</div>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.24em] text-fuchsia-100/70">Receiver</div>
+                      </div>
                     </div>
-                  )}
-                </div>
+                    {result.gradeWithheld && (
+                      <div data-testid="trade-grade-withheld" className="mt-3 text-xs text-amber-200/90">
+                        Not graded. {result.gradeWithheld}
+                        {!result.gradedLeagueId ? (
+                          <span data-testid="trade-grade-no-league-hint" className="mt-1 block text-white/60">
+                            {noLeagueGradeHint(gradeLeagues.length)}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {result.keeperCosts ? <KeeperCostNote view={result.keeperCosts} /> : null}
 
@@ -1493,6 +1608,23 @@ function TradeHubInner() {
                   </div>
                 ) : null}
 
+                {/*
+                  Share — moved here from the retired /dynasty-trade-analyzer (2026-11-12). Only on a
+                  live league grade: the share page prints THE grade, and a historical (as-of-date)
+                  comparison carries no letter to print.
+                */}
+                {result.live && result.rawPayload.tradeGrade && gradedSides ? (
+                  <TradeShareButton
+                    sideA={shareAssetsOf(gradedSides.sender)}
+                    sideB={shareAssetsOf(gradedSides.receiver)}
+                    grade={result.rawPayload.tradeGrade}
+                    teamAName={gradedSides.sender.teamName}
+                    teamBName={gradedSides.receiver.teamName}
+                    factors={result.analysisBullets}
+                    leagueContext={null}
+                  />
+                ) : null}
+
                 {result.betterAlternatives.length > 0 ? (
                   <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Better Alternatives</div>
@@ -1537,6 +1669,7 @@ function TradeHubInner() {
             </p>
           </div>
         ) : null}
+        </>) : null}
       </div>
     </div>
   )

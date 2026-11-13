@@ -12,6 +12,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { resolveByeWeekMap } from './byeWeekMap'
 import { resolveStatedWeek } from './currentWeek'
 import { buildTeamSplit, type SplitStarter, type TeamSplit } from './teamSplit'
+import { isTranslatedSportLeague, translateSportRosters, type SportCatalogPlayer } from './sportRosterTranslate'
 
 /**
  * "Your shares" — the Player Finder home's second list (Phase 2, 2026-09-27): the players you roster
@@ -25,8 +26,14 @@ import { buildTeamSplit, type SplitStarter, type TeamSplit } from './teamSplit'
  *
  * ⚠ ONLY SLEEPER-ID ROSTERS ARE READ AS THEY ARE (same stance as gameDayTriageLoader.ts). ESPN ids
  * are translated through PlayerIdentityMap and an UNLINKED id is dropped — read raw it would be
- * counted as whoever holds that Sleeper number. Yahoo / MFL / Fantrax / Fleaflicker ids have no link
- * yet, so those leagues are counted as unreadable, never read.
+ * counted as whoever holds that Sleeper number. In NFL, Yahoo / Fantrax ids have no link yet, so those
+ * leagues are counted as unreadable, never read.
+ *
+ * 🛑 EVERY OTHER SPORT IS READ THROUGH `sportRosterTranslate.ts` (2026-11-11). Before, an NBA / NHL /
+ * college league on Fantrax or AF-native was "a platform we can't read yet" and a multi-sport manager's
+ * home was NFL-only. Those rosters now resolve, through PlayerIdentityMap, to catalog players keyed
+ * `SPORT|source|externalId` (sportRosterKey.ts) — so the `sleeperId` field of a row from another sport
+ * holds that key, not a Sleeper id. It is a grouping key everywhere it is read; links use the ref.
  *
  * Best-ball leagues ARE counted: a share is a share, whoever sets the lineup.
  */
@@ -53,6 +60,8 @@ export type PlayerShares = {
   playersHeld: number
   /** Leagues on a platform whose player ids we cannot translate yet. */
   unsupportedLeagues: number
+  /** Roster ids in another sport's leagues that reached no catalog player — dropped, and said. */
+  unidentifiedPlayers?: number
   /** The clubs your starting slots belong to, and the worst bye ahead (teamSplit.ts). Null when nobody starts. */
   teamSplit: TeamSplit | null
 }
@@ -89,21 +98,33 @@ export async function loadPlayerShares(
       .catch(() => [] as Array<{ leagueId: string; platformUserId: string | null; playerData: unknown }>),
   ])
   const platformOf = new Map(leagues.map((l) => [l.id, l.platform]))
+  // Another sport's leagues go through the sport translator below; everything in this block is NFL.
+  const otherSport = new Set(leagues.filter((l) => isTranslatedSportLeague(l)).map((l) => l.id))
+  const nflLeagues = leagues.filter((l) => !otherSport.has(l.id))
   // Fleaflicker / MFL read through the identity bridge when most of the league translates (bridgedRosterIds.ts);
   // an unbridged id is dropped, never read raw. Everything else in another id space stays unsupported.
-  const bridged = await loadBridgedLeagues(leagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other'))
+  const bridged = await loadBridgedLeagues(nflLeagues.filter((l) => rosterIdSpaceOf(l.platform) === 'other'))
   const bridgeMap = (leagueId: string) => (bridged.get(leagueId)?.readable ? bridged.get(leagueId)!.map : null)
-  // A native league of another sport is unsupported too: its Rolling Insights ids are NFL strangers by Sleeper id.
-  const unsupported = new Set(leagues.filter((l) => rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
+  const unsupported = new Set(nflLeagues.filter((l) => rosterIdSpaceOf(l.platform, l.sport) === 'other' && !bridgeMap(l.id)).map((l) => l.id))
 
   // Yours only: the roster whose platformUserId is one of THIS league's candidate ids, one per league.
   const mine = new Map<string, Record<string, unknown>>()
+  const mineOtherSport = new Map<string, unknown>()
   for (const r of rawRosters) {
-    if (mine.has(r.leagueId) || unsupported.has(r.leagueId)) continue
+    if (mine.has(r.leagueId) || mineOtherSport.has(r.leagueId) || unsupported.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
+    if (otherSport.has(r.leagueId)) {
+      mineOtherSport.set(r.leagueId, r.playerData)
+      continue
+    }
     const map = bridgeMap(r.leagueId)
     mine.set(r.leagueId, map ? applyBridge(r.playerData, map) : ((r.playerData ?? {}) as Record<string, unknown>))
   }
+  const translated = await translateSportRosters(
+    leagues.filter((l) => otherSport.has(l.id)),
+    mineOtherSport,
+  ).catch(() => null)
+  for (const id of translated?.unsupported ?? []) unsupported.add(id)
   const espnLeagues = [...mine.keys()].filter((id) => rosterIdSpaceOf(platformOf.get(id)) === 'espn')
   const espnMap = await loadEspnToSleeperMap(collectRosterIds(espnLeagues.map((id) => mine.get(id))))
 
@@ -112,20 +133,28 @@ export async function loadPlayerShares(
     const ids = arr.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== '0')
     return espn ? ids.map((id) => espnMap.get(id) ?? '').filter(Boolean) : ids
   }
-  const rosters: RosterForShares[] = [...mine.entries()].map(([leagueId, pd]) => {
+  const nflRosters: RosterForShares[] = [...mine.entries()].map(([leagueId, pd]) => {
     const espn = rosterIdSpaceOf(platformOf.get(leagueId)) === 'espn'
     return { leagueId, starters: list(pd, 'starters', espn), reserve: list(pd, 'reserve', espn), taxi: list(pd, 'taxi', espn), players: list(pd, 'players', espn) }
   })
+  const sportRosters: RosterForShares[] = [...(translated?.rosters.values() ?? [])]
+  const rosters = [...nflRosters, ...sportRosters]
   const counts = countShares(rosters)
-  const teamSplit = await loadTeamSplit(counts, leagues.filter((l) => mine.has(l.id))).catch(() => null)
-  const base = { leaguesRead: rosters.length, playersHeld: counts.length, unsupportedLeagues: unsupported.size, teamSplit }
+  // The club split and its byes are football's (the NFL schedule); another sport's players stay out of it.
+  const teamSplit = await loadTeamSplit(countShares(nflRosters), leagues.filter((l) => mine.has(l.id))).catch(() => null)
+  const unidentifiedPlayers = sportRosters.length ? [...translated!.rosters.values()].reduce((n, r) => n + r.unidentified, 0) : 0
+  const base = { leaguesRead: rosters.length, playersHeld: counts.length, unsupportedLeagues: unsupported.size, unidentifiedPlayers, teamSplit }
   if (counts.length === 0) return { available: true, data: { rows: [], ...base } }
 
   // Enrich a margin past the limit: a catalog miss drops a row, and the list should still be full.
   const top = counts.slice(0, limit + 10)
+  const sportCatalog = translated?.catalog ?? new Map<string, SportCatalogPlayer>()
+  const nflTop = top.filter((c) => !sportCatalog.has(c.sleeperId))
+  // NFL only: every other sport's key is resolved by the translator, and an unscoped Sleeper-id read
+  // can hand an NFL id a Sleeper NBA row that happens to share the number.
   const players = await prisma.sportsPlayer
     .findMany({
-      where: { sleeperId: { in: top.map((c) => c.sleeperId) } },
+      where: { sport: 'NFL', sleeperId: { in: nflTop.map((c) => c.sleeperId) } },
       select: { sleeperId: true, sport: true, externalId: true, source: true, name: true, position: true, team: true, imageUrl: true },
     })
     .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; source: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
@@ -135,13 +164,27 @@ export async function loadPlayerShares(
     const cur = bySleeper.get(p.sleeperId)
     if (!cur || (!cur.imageUrl && p.imageUrl)) bySleeper.set(p.sleeperId, p)
   }
+  for (const [key, p] of sportCatalog) {
+    bySleeper.set(key, { sleeperId: key, sport: p.sport, externalId: p.externalId, source: p.source, name: p.name, position: p.position, team: p.team, imageUrl: p.imageUrl })
+  }
   const resolved = top.filter((c) => bySleeper.has(c.sleeperId)).slice(0, limit)
-  const sport = bySleeper.get(resolved[0]?.sleeperId ?? '')?.sport ?? 'NFL'
-  const injuries = await readInjuryClaims(sport, resolved.map((c) => bySleeper.get(c.sleeperId)!))
+  /*
+   * ⚠ INJURIES ARE READ PER SPORT. This took the sport of the FIRST resolved row and read every name
+   * against it, so once another sport's players were on the list an NFL starter's injury would be
+   * looked up in the NBA feed and read healthy. One read per sport on the list.
+   */
+  const sportsOnList = [...new Set(resolved.map((c) => bySleeper.get(c.sleeperId)!.sport))]
+  const injuryBySport = new Map(
+    await Promise.all(
+      sportsOnList.map(
+        async (sport) => [sport, await readInjuryClaims(sport, resolved.map((c) => bySleeper.get(c.sleeperId)!).filter((p) => p.sport === sport))] as const,
+      ),
+    ),
+  )
 
   const rows: ShareRow[] = resolved.map((c) => {
     const p = bySleeper.get(c.sleeperId)!
-    const inj = injuries.get(p.name.trim().toLowerCase()) ?? null
+    const inj = injuryBySport.get(p.sport)?.get(p.name.trim().toLowerCase()) ?? null
     const ready = readiness(inj?.status ?? null, Boolean(inj))
     return {
       player: { sport: p.sport, externalId: p.externalId, source: p.source, sleeperId: c.sleeperId, name: p.name, position: p.position, team: p.team, imageUrl: asHeadshotUrl(p.imageUrl) },
@@ -173,7 +216,8 @@ async function loadTeamSplit(
   const stated = resolveStatedWeek([...leagues])
   const [catalog, byes] = await Promise.all([
     prisma.sportsPlayer
-      .findMany({ where: { sleeperId: { in: starting.map((c) => c.sleeperId) } }, select: { sleeperId: true, name: true, position: true, team: true } })
+      // NFL only, like the counts it is handed: an unscoped Sleeper-id read can return another sport's row.
+      .findMany({ where: { sport: 'NFL', sleeperId: { in: starting.map((c) => c.sleeperId) } }, select: { sleeperId: true, name: true, position: true, team: true } })
       .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null; team: string | null }>),
     stated ? resolveByeWeekMap(stated.seasonYear).catch(() => null) : Promise.resolve(null),
   ])

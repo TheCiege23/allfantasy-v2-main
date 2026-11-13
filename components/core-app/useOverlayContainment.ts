@@ -255,7 +255,7 @@ export type OverlayContainmentOptions = {
    *
    * Only needed by an overlay whose opener can VANISH while the overlay is open
    * — which in practice means a breakpoint crossing, not an unmount. The league
-   * tray is the case: its opener (the phone bar's Leagues tab) is `display: none` above
+   * tray is the case: its opener (the phone bar's More button) is `display: none` above
    * 720px, so widening the viewport with the tray open leaves a perfectly
    * attached button that cannot be focused, and focus lands on <body>.
    *
@@ -411,7 +411,7 @@ export function useOverlayContainment({
        * reaches the same <body>.
        *
        * The live case is a breakpoint crossing, not an unmount. The phone tray's
-       * opener (once `.af-rail-handle`, now the bar's Leagues tab) is `display: none` above 720px, so
+       * opener (once `.af-rail-handle`, then a bar tab, now the bar's More button) is `display: none` above 720px, so
        * resizing phone → desktop with the tray open deactivates this overlay,
        * restores to a hidden button, and drops focus off the page entirely.
        * Measured in Chromium: activeElement was BODY, while `.af-rail-toggle` —
