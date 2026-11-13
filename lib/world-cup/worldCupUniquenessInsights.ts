@@ -12,7 +12,7 @@
  */
 import { WORLD_CUP_ROUND_LABELS, type WorldCupRound } from "./types"
 
-export type UniquenessTag =
+type UniquenessTag =
   | "Champion"
   | "Finalist"
   | "Semifinal"
@@ -31,7 +31,7 @@ export type UniquenessInsight = {
   tag: UniquenessTag
 }
 
-export type UniquenessStatus =
+type UniquenessStatus =
   | "ready"
   | "no_entry"
   | "not_enough_pool_data"
@@ -45,10 +45,10 @@ export type UniquenessResult = {
   finalizedEntryCount?: number
 }
 
-export type UniquenessDistributionRow = { teamName: string; count: number }
-export type UniquenessDistribution = UniquenessDistributionRow[]
+type UniquenessDistributionRow = { teamName: string; count: number }
+type UniquenessDistribution = UniquenessDistributionRow[]
 
-export type BuildUniquenessInput = {
+type BuildUniquenessInput = {
   /** User's own champion pick team name. Null if no champion selected. */
   ownChampionTeamName: string | null
   /** User's own picks grouped by round (knockout team names only). */

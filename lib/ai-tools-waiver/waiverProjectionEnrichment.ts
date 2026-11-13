@@ -7,7 +7,7 @@ import type { SupportedSport } from '@/lib/sport-scope'
 import { effectiveFantasyPoints, collectProjectionNotes } from '@/lib/projection-engine'
 import { buildNameIndex, findVerified } from '@/lib/player-match/verifiedNameMatch'
 
-export type WaiverProjectionSlice = {
+type WaiverProjectionSlice = {
   effectiveProjection: number | null
   weatherSummary: string | null
   weatherRiskLevel: string | null

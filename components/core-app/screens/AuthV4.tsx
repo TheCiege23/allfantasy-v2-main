@@ -44,7 +44,7 @@ import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOpti
  * stated, not something implied.
  */
 
-export type AuthMode = 'signin' | 'signup'
+type AuthMode = 'signin' | 'signup'
 
 /** Shared with the landing and pricing navs, so all three public surfaces match. */
 function Shield() {

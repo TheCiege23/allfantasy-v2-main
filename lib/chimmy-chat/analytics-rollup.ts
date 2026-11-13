@@ -32,7 +32,7 @@ export interface ChimmyNormalisedEvent {
   date: string // YYYY-MM-DD (UTC)
 }
 
-export interface ChimmySurfaceKPI {
+interface ChimmySurfaceKPI {
   surface: string
   messages_sent: number
   responses_rendered: number
@@ -42,7 +42,7 @@ export interface ChimmySurfaceKPI {
   unhelpful: number
 }
 
-export interface ChimmyModeKPI {
+interface ChimmyModeKPI {
   mode: string
   messages_sent: number
   responses_rendered: number
@@ -50,14 +50,14 @@ export interface ChimmyModeKPI {
   unhelpful: number
 }
 
-export interface ChimmyTopicKPI {
+interface ChimmyTopicKPI {
   topic: string
   messages_sent: number
   helpful: number
   unhelpful: number
 }
 
-export interface ChimmyDayKPI {
+interface ChimmyDayKPI {
   date: string
   messages_sent: number
   responses_rendered: number
@@ -67,7 +67,7 @@ export interface ChimmyDayKPI {
   unhelpful: number
 }
 
-export interface ChimmyKPIRollup {
+interface ChimmyKPIRollup {
   period: { from: string; to: string }
   totals: {
     messages_sent: number

@@ -5,7 +5,7 @@ function matchesUser(p: { userId?: string; teamName?: string; displayName?: stri
   return isUserParty(p, username, sleeperUserId)
 }
 
-export interface ThreeLensGrade {
+interface ThreeLensGrade {
   market: {
     atTimeGrade: string
     currentGrade: string
@@ -36,14 +36,14 @@ export interface ThreeLensGrade {
   }
 }
 
-export interface SkillRadar {
+interface SkillRadar {
   marketTiming: number
   starterUpgradeEfficiency: number
   riskManagement: number
   negotiationEfficiency: number
 }
 
-export interface AICounterProjection {
+interface AICounterProjection {
   available: boolean
   tradesWithCounters: number
   totalTrades: number
@@ -53,7 +53,7 @@ export interface AICounterProjection {
   message: string
 }
 
-export interface ReportCardResult {
+interface ReportCardResult {
   threeLens: ThreeLensGrade
   skillRadar: SkillRadar
   aiCounterProjection: AICounterProjection
@@ -321,7 +321,7 @@ function computeDecisionQuality(trades: ScoredTrade[], username: string, sleeper
   }
 }
 
-export function computeSkillRadar(trades: ScoredTrade[], username: string, sleeperUserId?: string): SkillRadar {
+function computeSkillRadar(trades: ScoredTrade[], username: string, sleeperUserId?: string): SkillRadar {
   const tradeCount = trades.length
   if (tradeCount === 0) {
     return { marketTiming: 50, starterUpgradeEfficiency: 50, riskManagement: 50, negotiationEfficiency: 50 }
@@ -390,7 +390,7 @@ export function computeSkillRadar(trades: ScoredTrade[], username: string, sleep
   }
 }
 
-export function computeAICounterProjection(trades: ScoredTrade[]): AICounterProjection {
+function computeAICounterProjection(trades: ScoredTrade[]): AICounterProjection {
   let tradesWithCounters = 0
   let actualNetValue = 0
   let projectedNetIfFollowed = 0

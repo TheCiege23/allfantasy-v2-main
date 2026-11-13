@@ -72,7 +72,7 @@ type StateChannelRow = {
   memberUserIds: string[]
 }
 
-export interface SurvivorFoundationState {
+interface SurvivorFoundationState {
   ok: true
   leagueId: string
   phase: string
@@ -155,7 +155,7 @@ export interface SurvivorFoundationState {
   pendingFoundationWarnings: string[]
 }
 
-export type SurvivorFoundationStateResult =
+type SurvivorFoundationStateResult =
   | { ok: true; state: SurvivorFoundationState }
   | { ok: false; status: 403 | 404; error: string }
 

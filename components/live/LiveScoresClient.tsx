@@ -414,7 +414,7 @@ export function FreshnessBadge({
  * real -- they are simply the last ones we received -- and a notice that omitted
  * that would leave the reader unsure whether to believe any of it.
  */
-export function ConnectionNotice({ state }: { state: LiveConnectionState }) {
+function ConnectionNotice({ state }: { state: LiveConnectionState }) {
   const detail = connectionDetail(state)
   if (detail == null) return null
 

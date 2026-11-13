@@ -31,7 +31,7 @@
 import type { FantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 
-export interface FantraxDraftSummary {
+interface FantraxDraftSummary {
   picks: NormalizedDraftPick[]
   /** Slots in the board, filled or not. */
   slotCount: number

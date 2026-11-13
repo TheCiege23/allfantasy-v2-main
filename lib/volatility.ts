@@ -1,6 +1,6 @@
 import { PricedAsset } from './hybrid-valuation';
 
-export interface VolatilityCoefficients {
+interface VolatilityCoefficients {
   [key: string]: number;
 }
 
@@ -25,7 +25,7 @@ const POSITION_VOLATILITY: VolatilityCoefficients = {
   'DEFAULT': 1.0,
 };
 
-export function getAssetVolatility(asset: PricedAsset, age?: number): number {
+function getAssetVolatility(asset: PricedAsset, age?: number): number {
   if (asset.type === 'pick') {
     const round = asset.details?.round ?? 1;
     const tier = asset.details?.tier?.toLowerCase() ?? '';

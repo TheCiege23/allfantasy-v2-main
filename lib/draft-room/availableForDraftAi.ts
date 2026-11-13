@@ -10,7 +10,7 @@ export function normalizeDraftedPlayerName(name: string | null | undefined): str
 /**
  * Exclude players already taken using name set and optional stable pick playerIds from session.
  */
-export function isPlayerAvailableForDraftAi(
+function isPlayerAvailableForDraftAi(
   p: PlayerEntry,
   draftedNames: ReadonlySet<string>,
   draftedPlayerIds?: ReadonlySet<string> | null,

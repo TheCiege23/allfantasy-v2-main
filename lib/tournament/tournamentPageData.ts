@@ -45,7 +45,7 @@ export type SerializedTournamentLeague = {
   advancersCount: number
 }
 
-export type SerializedParticipant = {
+type SerializedParticipant = {
   id: string
   userId: string
   displayName: string
@@ -62,7 +62,7 @@ export type SerializedParticipant = {
   advancementHistory: unknown
 }
 
-export type SerializedAnnouncement = {
+type SerializedAnnouncement = {
   id: string
   type: string
   title: string
@@ -72,7 +72,7 @@ export type SerializedAnnouncement = {
   isPosted: boolean
 }
 
-export type SerializedShell = {
+type SerializedShell = {
   id: string
   name: string
   sport: string
@@ -130,7 +130,7 @@ export type SerializedPendingLeagueSettingRequest = {
 }
 
 /** Hub waitlist (legacy tournaments): enabled in hubSettings; capacity from feeder leagues or participant pool. */
-export type LegacyWaitlistUiPayload = {
+type LegacyWaitlistUiPayload = {
   waitlistEnabled: boolean
   maxWaitlist: number
   /** No open roster slots across feeder leagues, or at participant pool cap when there are no feeders. */

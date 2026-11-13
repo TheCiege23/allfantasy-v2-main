@@ -28,7 +28,7 @@ import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import type { PlayerDraftOutlook } from '@/lib/draft-room/playerDraftOutlook'
 import { PlayerDraftOutlookSection } from './PlayerDraftOutlookSection'
 
-export interface PlayerDetailPlayer {
+interface PlayerDetailPlayer {
   id?: string | null
   name: string
   position?: string | null
@@ -46,7 +46,7 @@ export interface PlayerDetailPlayer {
   jersey?: number | null
 }
 
-export interface LeagueContext {
+interface LeagueContext {
   /** Pick label (e.g. "2.07") if this player has been drafted in this league. */
   draftedPickLabel?: string | null
   /** Display name of the team currently rostering this player, if any. */
@@ -62,7 +62,7 @@ export type DraftAssistantRoomContext = {
   digestPreview?: string | null
 }
 
-export interface PlayerDetailModalProps {
+interface PlayerDetailModalProps {
   open: boolean
   onClose: () => void
   player: PlayerDetailPlayer

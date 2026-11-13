@@ -12,7 +12,7 @@ export type FormatRosterModifierId =
   | 'salary_cap'
   | 'best_ball'
 
-export type FormatRosterDefaults = {
+type FormatRosterDefaults = {
   sport: LeagueSport
   starterSlots: Record<string, number>
   benchSlots: number

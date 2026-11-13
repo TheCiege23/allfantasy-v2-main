@@ -21,7 +21,7 @@ import {
 } from '../adapters/seasonForecast'
 
 /** The four fields the Season Outlook card surfaces trajectories for. */
-export const SEASON_FORECAST_CARD_FIELDS = [
+const SEASON_FORECAST_CARD_FIELDS = [
   'playoffProbability',
   'championshipProbability',
   'expectedWins',

@@ -35,7 +35,7 @@
 /** Sports that can appear in a slug. Mirrors KNOWN_SPORTS in playerRef.ts. */
 const SPORTS = ['nfl', 'ncaaf', 'nba', 'ncaab', 'mlb', 'nhl', 'soccer'] as const
 
-export type PlayerSlugParts = { sport: string; sleeperId: string; source?: never; externalId?: never } |
+type PlayerSlugParts = { sport: string; sleeperId: string; source?: never; externalId?: never } |
   { sport: string; source: string; externalId: string; sleeperId?: never }
 
 /**
@@ -45,7 +45,7 @@ export type PlayerSlugParts = { sport: string; sleeperId: string; source?: never
  * `leroy-sane` and not `leroy-san`. Apostrophes close up ("Ja'Marr" becomes
  * `jamarr`) because `ja-marr` reads as two words to a search engine.
  */
-export function kebabName(name: string): string {
+function kebabName(name: string): string {
   return (
     name
       .normalize('NFD')

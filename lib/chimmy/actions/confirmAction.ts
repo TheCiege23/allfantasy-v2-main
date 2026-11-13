@@ -29,7 +29,7 @@ import type { ChimmyActionConfirmResult } from './types'
  * write (the trade row exists, the response was lost) run a second time and send a second offer.
  */
 
-export const ACTION_CLAIM_PREFIX = 'chimmy-action:'
+const ACTION_CLAIM_PREFIX = 'chimmy-action:'
 /** Kept well past the token's life so a late duplicate still finds the recorded outcome. */
 const CLAIM_RETENTION_MS = 30 * 24 * 3600 * 1000
 

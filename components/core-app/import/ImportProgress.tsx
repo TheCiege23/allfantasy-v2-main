@@ -34,7 +34,7 @@ import { ChimmyNote } from '@/components/core-app/import/ChimmyNote'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-progress.css'
 
-export type ImportStepState = 'done' | 'working' | 'queued' | 'failed'
+type ImportStepState = 'done' | 'working' | 'queued' | 'failed'
 
 export type ImportStep = {
   key: string
@@ -43,7 +43,7 @@ export type ImportStep = {
   state: ImportStepState
 }
 
-export type ImportProgressProps = {
+type ImportProgressProps = {
   /** Provider label + the account or league it is reading, for the subcopy. */
   providerLabel: string
   accountLabel?: string | null

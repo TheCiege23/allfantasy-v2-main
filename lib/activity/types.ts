@@ -16,7 +16,7 @@ export type ActivityFeedItemType =
   | "standings"
 
 /** Which real source produced an item (provenance — never a fabricated value). */
-export type ActivityFeedItemSource = "sleeper" | "native" | "injury"
+type ActivityFeedItemSource = "sleeper" | "native" | "injury"
 
 export type ActivityFeedItem = {
   id: string

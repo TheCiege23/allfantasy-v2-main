@@ -32,7 +32,7 @@
  * naming the platform reads as what it is — a bridge this app has not built.
  */
 
-export type IdentityCoverage = {
+type IdentityCoverage = {
   /**
    * Filled starting slots we attempted.
    *

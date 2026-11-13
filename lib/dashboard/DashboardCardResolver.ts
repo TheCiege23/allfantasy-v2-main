@@ -3,7 +3,7 @@
  * Single source of truth for card id, title, href, product, and display order.
  */
 
-export interface DashboardCardConfig {
+interface DashboardCardConfig {
   id: string
   title: string
   href: string
@@ -13,7 +13,7 @@ export interface DashboardCardConfig {
 }
 
 /** Product launcher cards shown at top of dashboard (Bracket, WebApp, Legacy). */
-export const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
+const PRODUCT_LAUNCHER_CARDS: DashboardCardConfig[] = [
   {
     id: "bracket",
     title: "Bracket",

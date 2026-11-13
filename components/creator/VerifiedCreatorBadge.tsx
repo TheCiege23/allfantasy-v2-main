@@ -3,7 +3,7 @@
 import { BadgeCheck } from "lucide-react"
 import Link from "next/link"
 
-export interface VerifiedCreatorBadgeProps {
+interface VerifiedCreatorBadgeProps {
   handle: string
   displayName?: string | null
   badge?: string | null

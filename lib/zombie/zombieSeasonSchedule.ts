@@ -11,9 +11,9 @@ import { getZombieCreationProfile, ZOMBIE_DEFAULT_MANAGERS } from './creationPol
  * Default lengths follow the shared platform calendar profiles. Review the selected season/competition.
  */
 
-export type ZombieSeasonPhase = 'setup' | 'early' | 'mid' | 'late' | 'endgame' | 'finale' | 'complete'
+type ZombieSeasonPhase = 'setup' | 'early' | 'mid' | 'late' | 'endgame' | 'finale' | 'complete'
 
-export type ZombieSportSchedule = {
+type ZombieSportSchedule = {
   sport: string
   label: string
   totalWeeks: number
@@ -47,7 +47,7 @@ export type ZombieSportSchedule = {
   notes: string[]
 }
 
-export const ZOMBIE_SEASON_SCHEDULES: Record<string, ZombieSportSchedule> = {
+const ZOMBIE_SEASON_SCHEDULES: Record<string, ZombieSportSchedule> = {
   nfl: {
     sport: 'nfl',
     label: 'NFL',

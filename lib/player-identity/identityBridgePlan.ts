@@ -13,16 +13,16 @@
  * cache of player values is not the authority to replace it.
  */
 
-export const BRIDGE_COLUMNS = ['fleaflickerId', 'mflId'] as const
+const BRIDGE_COLUMNS = ['fleaflickerId', 'mflId'] as const
 export type BridgeColumn = (typeof BRIDGE_COLUMNS)[number]
 
 /** One player as the source describes him: his Sleeper id and his id on each bridged platform. */
-export type BridgeSource = { sleeperId: string | null | undefined } & Partial<Record<BridgeColumn, string | null | undefined>>
+type BridgeSource = { sleeperId: string | null | undefined } & Partial<Record<BridgeColumn, string | null | undefined>>
 
 /** A `PlayerIdentityMap` row, as far as the bridge cares. */
-export type BridgeRow = { sleeperId: string | null } & Partial<Record<BridgeColumn, string | null>>
+type BridgeRow = { sleeperId: string | null } & Partial<Record<BridgeColumn, string | null>>
 
-export type BridgeWrite = { sleeperId: string; column: BridgeColumn; value: string }
+type BridgeWrite = { sleeperId: string; column: BridgeColumn; value: string }
 
 export type BridgeColumnStats = {
   /** Pairs the source offered after dropping ambiguous ones. */

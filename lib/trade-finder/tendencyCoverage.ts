@@ -10,9 +10,9 @@
  *
  * This is a pure function so the distinction is testable without standing up a league.
  */
-export type TendencyState = 'ready' | 'warming' | 'unavailable'
+type TendencyState = 'ready' | 'warming' | 'unavailable'
 
-export type TendencyCoverage = {
+type TendencyCoverage = {
   state: TendencyState
   detail: string
   managersWithTendencies: number

@@ -50,7 +50,7 @@ type TestResponse =
     }
   | { ok: false; reason: Exclude<EspnLeagueCheckStatus['k'], 'idle' | 'testing' | 'ok' | 'error'>; message: string }
 
-export type EspnLeagueCheckProps = {
+type EspnLeagueCheckProps = {
   /** What is in the league box right now. */
   leagueInput: string
   /** Re-test when the connection changes (cookies saved / removed). */

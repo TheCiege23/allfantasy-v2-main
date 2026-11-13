@@ -14,7 +14,7 @@
  * ⚠ RANK IS INVERTED. On a rank line, up means better, so #1 plots at the top.
  */
 
-export type TrendDatum = { label: string; value: number | null; display?: string }
+type TrendDatum = { label: string; value: number | null; display?: string }
 
 const W = 240
 const H = 64

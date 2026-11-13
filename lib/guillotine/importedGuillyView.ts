@@ -20,9 +20,9 @@ import { DEFAULT_DANGER_MARGIN_POINTS } from './constants'
  * danger is within the margin of it, everyone else is safe. An imported league has no AllFantasy config, so
  * the margin is the native default.
  */
-export type ImportedDangerTier = 'chop_zone' | 'danger' | 'safe'
+type ImportedDangerTier = 'chop_zone' | 'danger' | 'safe'
 
-export type ImportedGuillyStanding = {
+type ImportedGuillyStanding = {
   rosterId: string
   name: string
   points: number

@@ -17,7 +17,7 @@ import { messagesFor } from '@/lib/i18n/messages'
  * than quoting a second price for the same player.
  */
 
-export type ExplainSideValue = number | null
+type ExplainSideValue = number | null
 
 const ORDINAL = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th']
 

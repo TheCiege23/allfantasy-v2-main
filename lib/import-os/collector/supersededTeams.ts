@@ -19,7 +19,7 @@
  * Pure: no prisma. The caller applies the plan.
  */
 
-export type StaleClaimedTeam = { id: string; externalId: string; platformUserId: string | null; claimedByUserId: string }
+type StaleClaimedTeam = { id: string; externalId: string; platformUserId: string | null; claimedByUserId: string }
 export type LiveTeam = { id: string; externalId: string; platformUserId: string | null; claimedByUserId: string | null }
 
 export type SupersedePlan =

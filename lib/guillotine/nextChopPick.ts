@@ -18,7 +18,7 @@
 
 export type NextChopPick = { pickerRosterId: string; week: number; pickedRosterId: string; at: string }
 
-export type NextChopLeaderRow = {
+type NextChopLeaderRow = {
   rosterId: string
   /** Picks that were right. */
   correct: number

@@ -17,7 +17,7 @@ export const CREATOR_LEAGUE_SPORTS: LeagueSport[] = [
 
 export type CreatorVisibility = 'public' | 'unlisted' | 'private'
 export type CreatorLeagueType = 'FANTASY' | 'BRACKET'
-export type CreatorBadge = 'verified' | 'partner' | 'featured' | 'analyst'
+type CreatorBadge = 'verified' | 'partner' | 'featured' | 'analyst'
 
 export interface CreatorBranding {
   logoUrl?: string | null

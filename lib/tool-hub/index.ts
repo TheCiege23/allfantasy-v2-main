@@ -8,18 +8,15 @@ export {
   getToolsInCategory,
   getToolsForSport,
 } from './ToolHubService'
-export type { ToolHubTool, ToolHubSport } from './ToolHubService'
 
 export { getToolCardDisplay, getToolCardsForSlugs } from './ToolCardResolver'
 
 export { getRelatedTools } from './RelatedToolResolver'
-export type { RelatedToolLink } from './RelatedToolResolver'
 
 export {
   getSportFilterOptions,
   getToolSlugsForSport,
 } from './SportToolFilterResolver'
-export type { SportFilterOption } from './SportToolFilterResolver'
 
 export {
   getFeaturedToolSlugs,

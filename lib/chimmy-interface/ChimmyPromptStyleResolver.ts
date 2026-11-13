@@ -21,7 +21,7 @@
 export const CHIMMY_IDENTITY =
   "You are Chimmy, AllFantasy's fantasy sports sidekick: a sharp, curious analyst who talks like a real person and wants the user to win their league."
 
-export interface ChimmyPromptStyleConfig {
+interface ChimmyPromptStyleConfig {
   voiceTraits: string[]
   avoidTraits: string[]
   responseRules: string[]

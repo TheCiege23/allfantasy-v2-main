@@ -20,7 +20,7 @@ export const PAYOUT_PLAN_KEY = 'payout_plan'
 
 export const MAX_PAYOUT_PLACES = 10
 /** $10,000 a team is far past any real home league; anything bigger is a typo. */
-export const MAX_BUY_IN_CENTS = 1_000_000
+const MAX_BUY_IN_CENTS = 1_000_000
 
 export type PayoutPlan = {
   /** Null: use the league's entry fee. */
@@ -55,7 +55,7 @@ function dollarsToCents(raw: unknown): number | null {
   return Math.round(Number(s) * 100)
 }
 
-export type PayoutPlanParse = { ok: true; value: PayoutPlan } | { ok: false; error: string }
+type PayoutPlanParse = { ok: true; value: PayoutPlan } | { ok: false; error: string }
 
 /**
  * A commissioner's save: `{ buyIn, placePercents }`, buy-in in dollars (empty = the league's entry
@@ -104,8 +104,8 @@ export type PayoutInput = {
   final: boolean
 }
 
-export type PlacePayout = { place: number; percent: number; cents: number; rosterId: string | null }
-export type TeamPayout = { rosterId: string; place: number | null; placeCents: number; weeklyCents: number; totalCents: number }
+type PlacePayout = { place: number; percent: number; cents: number; rosterId: string | null }
+type TeamPayout = { rosterId: string; place: number | null; placeCents: number; weeklyCents: number; totalCents: number }
 
 export type PayoutResult = {
   buyInCents: number

@@ -60,7 +60,7 @@ class MutationAbort extends Error {
   }
 }
 
-export type PhaseGate<TResource> = {
+type PhaseGate<TResource> = {
   /** Reads the current phase off the locked row. */
   readonly of: (resource: TResource) => string
   readonly allowed: readonly string[]
@@ -128,7 +128,7 @@ export type MutationDefinition<TResource, TInput, TOutput> = {
   }) => readonly DomainEventDraft[]
 }
 
-export type MutationOptions = {
+type MutationOptions = {
   /**
    * Optimistic concurrency. The phase the CALLER believed the resource was in
    * when it decided to act — typically rendered into the page the operator
@@ -144,7 +144,7 @@ export type MutationOptions = {
   readonly expectedPhase?: string
 }
 
-export type MutationDeps = {
+type MutationDeps = {
   readonly withTenant: <T>(tenantId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>
   readonly authorize?: Authorize
   readonly writeAudit?: WriteAudit

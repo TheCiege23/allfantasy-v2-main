@@ -12,7 +12,7 @@ import { PickHistory } from './PickHistory'
 import { AvailablePlayerPool } from './AvailablePlayerPool'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 
-export type LiveDraftStatusColumnProps = {
+type LiveDraftStatusColumnProps = {
   session: DraftSessionSnapshot
   queueEntries: QueueEntry[]
   leagueId: string

@@ -54,7 +54,7 @@ export function resolveProjectionAvailability(input: {
 // (lib/decision-os/league-pulse.ts) returns an explicit insufficient-data pulse; the UI
 // renders that state instead of running a second predicate that could disagree.
 
-export type DataFreshness = 'live' | 'recent' | 'stale' | 'unavailable' | 'mixed'
+type DataFreshness = 'live' | 'recent' | 'stale' | 'unavailable' | 'mixed'
 
 /** "Live from X" may only be claimed for genuinely live data; everything else says what it is. */
 export function getSourceLabel(input: { sourceName?: string | null; freshness: DataFreshness }): string {

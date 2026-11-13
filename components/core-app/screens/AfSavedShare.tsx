@@ -16,7 +16,7 @@ import { messagesFor } from '@/lib/i18n/messages'
  * a download where that is unavailable.
  */
 
-export type SavedTip = {
+type SavedTip = {
   recommended: { name: string; points: number }
   instead: { name: string; points: number }
   leagueName: string

@@ -157,7 +157,7 @@ function platformActivityInsight(tradesByYear: { season: number; value: number }
 }
 
 // ── League ────────────────────────────────────────────────────────────────────
-export function deriveLeague(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): LeagueIntelligence {
+function deriveLeague(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): LeagueIntelligence {
   const { leagues } = snapshot
   const byFormat: Distribution[] = distributionBy(leagues, (l) => l.formatType)
   const byStatus: Distribution[] = distributionBy(leagues, (l) => l.status ?? 'unknown')
@@ -214,7 +214,7 @@ export function deriveLeague(snapshot: ExecSnapshot, generatedAt = new Date().to
 }
 
 // ── Commissioner ───────────────────────────────────────────────────────────────
-export function deriveCommissioner(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): CommissionerIntelligence {
+function deriveCommissioner(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): CommissionerIntelligence {
   const { leagues, managers } = snapshot
   const commLeagues = leagues.filter((l) => l.seedRole === 'commissioner')
   const activity = commLeagues.reduce(
@@ -255,7 +255,7 @@ export function deriveCommissioner(snapshot: ExecSnapshot, generatedAt = new Dat
 }
 
 // ── Trade ─────────────────────────────────────────────────────────────────────
-export function deriveTrade(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): TradeIntelligence {
+function deriveTrade(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): TradeIntelligence {
   const { leagues } = snapshot
   const tradesByYear = bySeasonSum(leagues, (l) => l.trades).filter((p) => p.value > 0)
   const last = tradesByYear[tradesByYear.length - 1]
@@ -300,7 +300,7 @@ export function deriveTrade(snapshot: ExecSnapshot, generatedAt = new Date().toI
 }
 
 // ── Waiver ────────────────────────────────────────────────────────────────────
-export function deriveWaiver(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): WaiverIntelligence {
+function deriveWaiver(snapshot: ExecSnapshot, generatedAt = new Date().toISOString()): WaiverIntelligence {
   const { leagues } = snapshot
   const waivers = leagues.reduce((a, l) => a + l.waivers, 0)
   const freeAgents = leagues.reduce((a, l) => a + l.freeAgents, 0)

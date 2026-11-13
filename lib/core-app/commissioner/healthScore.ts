@@ -12,7 +12,7 @@ export interface HubHealthSnapshot {
   confidencePct: number
 }
 
-export type HubHealthScore = SectionState<{ score: number; status: string; summary: string; confidencePct: number }>
+type HubHealthScore = SectionState<{ score: number; status: string; summary: string; confidencePct: number }>
 
 /**
  * Whether the hub shows the canonical league-health score, and if not, why.

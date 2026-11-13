@@ -18,7 +18,7 @@ import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { automationChartLabelText, outcomeSeriesText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
-export interface AutomationCenterViewProps {
+interface AutomationCenterViewProps {
   catalog: AutomationCatalogEntry[]
   /** Fetched server-side for every catalog entry up front — this client component never fetches on its own, matching every other module's drawer/dialog in this program. */
   historyByAutomationId: Record<string, AutomationExecutionEntry[]>

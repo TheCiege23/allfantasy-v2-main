@@ -21,7 +21,7 @@ import {
 
 export type RollingInsightsVendorSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAABB' | 'NCAAFB' | 'SOCCER'
 
-export type RollingInsightsFieldDomain =
+type RollingInsightsFieldDomain =
   | 'profile'
   | 'player_stats'
   | 'live'

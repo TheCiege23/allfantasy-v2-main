@@ -14,7 +14,7 @@
  */
 import type { SalaryCapView } from '@/components/salary-cap/types'
 
-export const SALARY_CAP_VALUE = 'salary_cap'
+const SALARY_CAP_VALUE = 'salary_cap'
 
 export function isSalaryCapWorkspaceLeague(league: { leagueVariant?: string | null; leagueType?: string | null }): boolean {
   return String(league.leagueVariant ?? '').toLowerCase() === SALARY_CAP_VALUE || String(league.leagueType ?? '').toLowerCase() === SALARY_CAP_VALUE

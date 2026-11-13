@@ -12,7 +12,7 @@ const GRAPHIC_ID = 'social-clip-graphic';
 
 export const SOCIAL_CLIP_GRAPHIC_ID = GRAPHIC_ID;
 
-export interface GraphicRendererProps {
+interface GraphicRendererProps {
   payload: ClipPayload;
   clipType?: ClipType;
   className?: string;

@@ -14,7 +14,7 @@
 export const SURVIVOR_MAX_ELIMINATIONS_PER_WEEK = 2
 
 /** The periods between the opening week and the finale, which are the only ones that may vote. */
-export function eliminationPeriods(startWeek: number, endWeek: number): number[] {
+function eliminationPeriods(startWeek: number, endWeek: number): number[] {
   return Array.from({ length: Math.max(0, endWeek - startWeek - 1) }, (_, i) => startWeek + 1 + i)
 }
 

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type KeeperRecommendation = {
+type KeeperRecommendation = {
   playerId: string
   recommendation: 'definite_keep' | 'keep' | 'borderline' | 'let_go'
   surplusValue: number

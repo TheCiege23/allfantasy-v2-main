@@ -13,7 +13,7 @@
  * one bit of information. The full word survives as the title and the aria-label, so nothing is lost
  * for anyone who does not know the shorthand or is using a screen reader.
  */
-export type StatusTone = 'ok' | 'warn' | 'bad' | 'none'
+type StatusTone = 'ok' | 'warn' | 'bad' | 'none'
 
 export function statusShorthand(status: string): { short: string; tone: StatusTone; full: string } {
   const t = status.trim().toLowerCase()

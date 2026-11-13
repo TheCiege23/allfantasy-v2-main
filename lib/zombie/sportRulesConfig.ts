@@ -3,7 +3,7 @@
  * thresholds, weapon/serum logic, and automation tuning. Covers all 7 supported sports.
  */
 
-export type WeaponThresholdConfig = {
+type WeaponThresholdConfig = {
   type: string
   label: string
   /** A points line, when the weapon has one. Earned another way (attacks survived, a win streak) → absent. */
@@ -20,17 +20,17 @@ export type WeaponThresholdConfig = {
  * 100/120 line handed every NBA team a Knife and a Bow every week and a 20-point margin an Axe on 92%
  * of wins. A sport without its own block keeps these NFL defaults.
  */
-export type EngineWeaponThresholds = { knifeScore: number; bowScore: number; axeWinMargin: number }
+type EngineWeaponThresholds = { knifeScore: number; bowScore: number; axeWinMargin: number }
 
 export const DEFAULT_ENGINE_WEAPONS: EngineWeaponThresholds = { knifeScore: 100, bowScore: 120, axeWinMargin: 20 }
 
-export type SerumAwardConfig = {
+type SerumAwardConfig = {
   trigger: string
   label: string
   description: string
 }
 
-export type ZombieSportConfig = {
+type ZombieSportConfig = {
   sport: string
   label: string
   positions: string[]

@@ -7,7 +7,7 @@ import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { roundOneHypeLine } from '@/lib/draft-room/roundOneHypeLine'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
-export type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
+type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
 
 const AUTO_DISMISS_MS = 6200
 /**
@@ -16,7 +16,7 @@ const AUTO_DISMISS_MS = 6200
  */
 const ROUND_ONE_SOUND_SRC: string | null = null
 
-export type DraftRoundOneAnnouncementOverlayProps = {
+type DraftRoundOneAnnouncementOverlayProps = {
   presentationVariant?: 'default' | 'redraft_snake'
   leagueName?: string
   sportLabel?: string

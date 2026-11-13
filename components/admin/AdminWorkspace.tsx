@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 
-export type AdminView = "overview" | "audience" | "revenue" | "operations" | "data"
+type AdminView = "overview" | "audience" | "revenue" | "operations" | "data"
 
 const views: { id: AdminView; label: string; description: string }[] = [
   { id: "overview", label: "Overview", description: "What needs attention right now" },

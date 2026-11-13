@@ -5,7 +5,7 @@
 
 import { getPeakAgeRange, isCollegeDynastySport } from './SportDynastyResolver'
 
-export type Horizon = 'next' | 'three' | 'five'
+type Horizon = 'next' | 'three' | 'five'
 
 /**
  * Multiplier for dynasty value at a given horizon (0–1+). Age and position drive decline.

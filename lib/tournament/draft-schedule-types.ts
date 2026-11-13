@@ -5,7 +5,7 @@
 
 export type DraftPhaseKey = 'startup' | 'redraft_first' | 'redraft_finals'
 
-export type DraftScheduleMode = 'uniform' | 'per_league' | 'grouped'
+type DraftScheduleMode = 'uniform' | 'per_league' | 'grouped'
 
 export type PhaseScheduleFields = {
   scheduledAt: string | null

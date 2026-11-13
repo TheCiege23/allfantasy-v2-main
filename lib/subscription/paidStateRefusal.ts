@@ -29,13 +29,13 @@ import type Stripe from "stripe"
 
 import { restrictedBillingState, type RestrictedBillingState } from "@/lib/geo/billingAddressState"
 
-export interface PaidStateRefusal extends RestrictedBillingState {
+interface PaidStateRefusal extends RestrictedBillingState {
   canceledSubscriptionId: string | null
   refundedPaymentIntentId: string | null
   refundedChargeId: string | null
 }
 
-export interface PaidStateRefusalDeps {
+interface PaidStateRefusalDeps {
   stripe: Stripe
   /**
    * Lock the account (lib/geo/accountGeoLockServer): paid surfaces only, or the
@@ -51,7 +51,7 @@ function idOf(ref: unknown): string | null {
 }
 
 /** The restricted state this checkout's billing address is in, or null. */
-export function restrictedBillingStateOfCheckout(
+function restrictedBillingStateOfCheckout(
   session: Pick<Stripe.Checkout.Session, "customer_details">,
 ): RestrictedBillingState | null {
   return restrictedBillingState(session.customer_details?.address ?? null)

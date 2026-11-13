@@ -31,7 +31,7 @@ const VIEW_LABELS: Record<BigBrotherView, string> = {
   commissioner: 'Commissioner',
 }
 
-export interface BigBrotherHomeProps {
+interface BigBrotherHomeProps {
   leagueId: string
   isCommissioner?: boolean
   /** When set from league shell tabs, opens this lens directly. */

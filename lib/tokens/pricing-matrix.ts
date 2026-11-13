@@ -2,9 +2,9 @@ import type { SubscriptionPlanId } from "@/lib/subscription/types"
 
 export type TokenPricingTier = "low" | "mid" | "high"
 
-export type TokenFeatureComplexity = "simple" | "moderate" | "heavy"
+type TokenFeatureComplexity = "simple" | "moderate" | "heavy"
 
-export type TokenPricingMatrixEntry = {
+type TokenPricingMatrixEntry = {
   code: string
   category: "ai_feature" | "commissioner_function"
   featureLabel: string

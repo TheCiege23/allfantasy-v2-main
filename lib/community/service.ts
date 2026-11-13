@@ -82,7 +82,7 @@ export type PostSummary = {
   idea: IdeaView | null
 }
 
-export type ReplyView = {
+type ReplyView = {
   id: string
   /** Empty when removed — the text of a removed reply is never sent. */
   body: string
@@ -94,7 +94,7 @@ export type ReplyView = {
   canEdit: boolean
 }
 
-export type PostDetail = PostSummary & {
+type PostDetail = PostSummary & {
   body: string
   editedAt: string | null
   removed: boolean
@@ -334,7 +334,7 @@ async function shapePosts(rows: PostListRow[], viewer: CommunityViewer): Promise
 
 // ─── reads ───────────────────────────────────────────────────────────────────
 
-export type PostListPage = { pinned: PostSummary[]; posts: PostSummary[]; nextCursor: string | null }
+type PostListPage = { pinned: PostSummary[]; posts: PostSummary[]; nextCursor: string | null }
 
 /**
  * Pinned posts come first and only on the first page; the rest are ordered by last
@@ -391,7 +391,7 @@ export async function listPosts(args: {
   }
 }
 
-export type ChannelStat = { slug: string; postCount: number; lastActivityAt: string | null }
+type ChannelStat = { slug: string; postCount: number; lastActivityAt: string | null }
 
 export async function getChannelStats(): Promise<ChannelStat[]> {
   const rows = await prisma.communityPost.groupBy({
@@ -737,7 +737,7 @@ export async function createReport(
   }
 }
 
-export type ReportQueueItem = {
+type ReportQueueItem = {
   id: string
   reason: string
   details: string | null
@@ -836,7 +836,7 @@ export async function resolveReport(
 
 // ─── League Lab ideas ────────────────────────────────────────────────────────
 
-export const IDEAS_PER_PAGE = 20
+const IDEAS_PER_PAGE = 20
 
 export type IdeaBoardPage = {
   ideas: PostSummary[]
@@ -982,7 +982,7 @@ export async function setIdeaStatus(
 
 // ─── member profiles ─────────────────────────────────────────────────────────
 
-export type MemberReply = {
+type MemberReply = {
   id: string
   body: string
   createdAt: string
@@ -990,7 +990,7 @@ export type MemberReply = {
   postTitle: string
 }
 
-export type MemberProfile = {
+type MemberProfile = {
   author: CommunityAuthor
   joinedAt: string
   counts: { posts: number; replies: number; ideas: number; shippedIdeas: number; upvotesReceived: number }
@@ -1061,7 +1061,7 @@ export type ChatMessage = {
   mine: boolean
 }
 
-export const CHAT_PAGE = 60
+const CHAT_PAGE = 60
 
 /**
  * Replies at or after `after`, oldest first — what a polling chat appends. With
@@ -1108,9 +1108,9 @@ export async function listRepliesSince(
 
 // ─── home overview ───────────────────────────────────────────────────────────
 
-export type ActiveMember = { author: CommunityAuthor; contributions: number }
+type ActiveMember = { author: CommunityAuthor; contributions: number }
 
-export type ClubhouseOverview = {
+type ClubhouseOverview = {
   stats: { activeMembers: number; postsThisWeek: number; ideas: number; shippedIdeas: number }
   weeklyPrompt: { id: string; title: string; replyCount: number; channel: string } | null
   topIdeas: PostSummary[]

@@ -176,7 +176,7 @@ const STATIC_MAP: Readonly<Record<string, string>> = {
 }
 
 /** Map a tiered DST key (`dst_pa_7_13`, `dst_ya_450_499`) to its engine key, or null. */
-export function bridgeTierKey(uiKey: string): string | null {
+function bridgeTierKey(uiKey: string): string | null {
   const pa = /^dst_pa_(.+)$/.exec(uiKey)
   if (pa) {
     const candidate = `def_pa_${pa[1]}`

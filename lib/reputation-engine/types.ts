@@ -30,7 +30,7 @@ export const DEFAULT_REPUTATION_TIER_THRESHOLDS: Record<ReputationTier, { min: n
 }
 
 /** Evidence types that feed reputation dimensions. */
-export const REPUTATION_EVIDENCE_TYPES = [
+const REPUTATION_EVIDENCE_TYPES = [
   'payment_complete',
   'lineup_consistency',
   'activity_frequency',

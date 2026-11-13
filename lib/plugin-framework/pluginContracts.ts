@@ -6,13 +6,13 @@ import type {
   PluginReadiness,
 } from './pluginTypes'
 
-export type MaybePromise<T> = T | Promise<T>
+type MaybePromise<T> = T | Promise<T>
 
-export type PluginRuleResolver<TResult = unknown, TContext extends PluginContext = PluginContext> = (
+type PluginRuleResolver<TResult = unknown, TContext extends PluginContext = PluginContext> = (
   context: TContext,
 ) => MaybePromise<TResult>
 
-export type PluginValidator<TContext extends PluginContext = PluginContext> = (
+type PluginValidator<TContext extends PluginContext = PluginContext> = (
   context: TContext,
 ) => MaybePromise<{ ok: true; metadata?: Record<string, unknown> } | { ok: false; code: string; message: string }>
 

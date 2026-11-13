@@ -29,7 +29,7 @@
  * rookie deal is in the real NFL. Nothing that prices a player alone can see it.
  */
 
-export type CapLegality = {
+type CapLegality = {
   /** Space after the deal. Negative means the trade cannot be made. */
   spaceAfter: number
   legal: boolean
@@ -102,7 +102,7 @@ export function capLegality(args: {
   }
 }
 
-export type ContractSurplus = {
+type ContractSurplus = {
   playerValue: number
   /** Total remaining cost across the contract. */
   totalCost: number

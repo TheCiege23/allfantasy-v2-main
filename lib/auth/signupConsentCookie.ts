@@ -23,7 +23,7 @@
 export const SIGNUP_CONSENT_COOKIE = "af_signup_consent"
 
 /** Ten minutes — long enough for a provider round trip, short enough not to linger. */
-export const SIGNUP_CONSENT_MAX_AGE_SECONDS = 600
+const SIGNUP_CONSENT_MAX_AGE_SECONDS = 600
 
 /** The only value treated as consent. Anything else reads as absent. */
 const CONSENT_VALUE = "1"

@@ -14,7 +14,7 @@ import { RecapShareButton } from '@/components/core-app/comms/RecapShareButton'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { survivorIdolArt } from '@/lib/survivor/survivorIdolTypes'
 
-export type LeagueChatMessage = {
+type LeagueChatMessage = {
   id: string
   authorId: string
   author_display_name: string
@@ -63,7 +63,7 @@ function readBbChannelFromMessage(meta: Record<string, unknown> | null | undefin
   return 'main'
 }
 
-export function formatChatTime(d: Date | string): string {
+function formatChatTime(d: Date | string): string {
   const date = typeof d === 'string' ? new Date(d) : d
   const diff = Date.now() - date.getTime()
   if (diff < 60_000) return 'just now'

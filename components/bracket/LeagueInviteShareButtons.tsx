@@ -6,7 +6,7 @@ import { buildInviteShareUrl } from "@/lib/league-invite/buildInviteShareUrl"
 
 const DEFAULT_MESSAGE = "Join my bracket pool on AllFantasy!"
 
-export interface LeagueInviteShareButtonsProps {
+interface LeagueInviteShareButtonsProps {
   inviteUrl: string
   message?: string
   className?: string

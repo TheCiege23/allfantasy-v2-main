@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 
-export interface AIResultCardProps {
+interface AIResultCardProps {
   children: ReactNode
   /** Optional title above content */
   title?: string

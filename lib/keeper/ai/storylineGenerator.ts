@@ -1,4 +1,4 @@
-export type DynastyStoryline = {
+type DynastyStoryline = {
   type: string
   title: string
   body: string

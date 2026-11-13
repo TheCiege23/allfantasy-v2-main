@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type SurvivalStandings = {
+type SurvivalStandings = {
   active: {
     rosterId: string
     teamName: string | null

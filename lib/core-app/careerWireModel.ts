@@ -18,7 +18,7 @@ import type { BriefStanding, StandingSnap } from './sinceLastVisit'
 
 export const IMPORT_PLATFORMS = ['sleeper', 'espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker'] as const
 
-export const PLATFORM_LABEL: Record<string, string> = {
+const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
   espn: 'ESPN',
   yahoo: 'Yahoo',
@@ -35,7 +35,7 @@ export function isNativePlatform(platform: string | null | undefined, platformLe
   return !p || p === 'allfantasy' || p === 'manual' || p === 'native' || !platformLeagueId
 }
 
-export function platformKey(platform: string | null | undefined, platformLeagueId: string | null | undefined): string {
+function platformKey(platform: string | null | undefined, platformLeagueId: string | null | undefined): string {
   return isNativePlatform(platform, platformLeagueId) ? 'allfantasy' : String(platform).toLowerCase()
 }
 

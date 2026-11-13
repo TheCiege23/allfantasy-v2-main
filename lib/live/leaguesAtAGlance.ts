@@ -14,7 +14,7 @@ import type { RailMatchup } from '@/lib/core-app/railMatchups'
 
 export type LeagueRef = { id: string; name: string; sport: string }
 
-export type GlanceStatus =
+type GlanceStatus =
   | 'ahead'
   | 'behind'
   | 'level'

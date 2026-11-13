@@ -62,7 +62,7 @@ export function isPrivateListingOpen(args: {
   return !status || status === "pre_draft"
 }
 
-export type ApprovedRequestResolution =
+type ApprovedRequestResolution =
   | { ok: true; leagueId: string; alreadyMember: boolean }
   | { ok: false; status: number; error: string; code: string }
 

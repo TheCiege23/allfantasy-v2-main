@@ -9,7 +9,7 @@ import { getScheduleTemplate } from '@/lib/sport-defaults/ScheduleTemplateResolv
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
 import { DEFAULT_EVICTION_END_WEEK_BY_SPORT } from './constants'
 
-export interface BigBrotherSportCalendarContext {
+interface BigBrotherSportCalendarContext {
   /** Sport for this league. */
   sport: LeagueSport | string
   /** Number of regular-season scoring weeks from the sport's schedule template. */

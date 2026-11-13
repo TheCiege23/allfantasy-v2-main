@@ -11,7 +11,7 @@
 import type { DraftResultsPayload, PickScoreEntry } from './types'
 
 /** Below this many spots either side of ADP a pick counts as "on ADP". */
-export const REPORT_CARD_EVEN_BAND = 3
+const REPORT_CARD_EVEN_BAND = 3
 
 export interface ReportCardPick {
   playerName: string
@@ -24,7 +24,7 @@ export interface ReportCardPick {
   delta: number
 }
 
-export interface ReportCardPosition {
+interface ReportCardPosition {
   position: string
   count: number
   /** Sum of value across this position's ADP-matched picks, one decimal. */

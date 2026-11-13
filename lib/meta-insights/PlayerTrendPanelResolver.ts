@@ -6,9 +6,9 @@
 import { getHottestPlayers, getRisingPlayers, getFallers } from '@/lib/player-trend'
 import { resolveSportForMetaUI } from './SportMetaUIResolver'
 
-export type TrendListType = 'hottest' | 'rising' | 'fallers'
+type TrendListType = 'hottest' | 'rising' | 'fallers'
 
-export interface PlayerTrendPanelPayload {
+interface PlayerTrendPanelPayload {
   list: TrendListType
   sport: string
   limit: number

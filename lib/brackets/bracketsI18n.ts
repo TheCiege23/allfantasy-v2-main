@@ -57,7 +57,7 @@
  *  - Never imports browser APIs (window, document, navigator, etc.) and
  *    never imports the Google Translate batch script.
  */
-export type BracketsLocale = "en" | "es" | "zh" | "fil" | "vi"
+type BracketsLocale = "en" | "es" | "zh" | "fil" | "vi"
 
 export const BRACKETS_SUPPORTED_LOCALES: BracketsLocale[] = [
   "en",

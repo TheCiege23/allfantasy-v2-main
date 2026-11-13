@@ -39,7 +39,7 @@ function detectEspnDynasty(raw: EspnImportPayload): boolean {
   return (espnKeeperCount(raw) ?? 0) > 0
 }
 
-export function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
+function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
   const scoringType = raw.settings?.scoringType?.trim().toUpperCase() ?? ''
   if (scoringType.includes('TOTAL_POINTS')) return 'total_points'
   if (scoringType.includes('ROTO')) return 'rotisserie'

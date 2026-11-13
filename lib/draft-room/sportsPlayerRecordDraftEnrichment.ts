@@ -35,7 +35,7 @@ export type SportsPlayerRecordDraftAugment = {
   rookieHint: boolean | null
 }
 
-export type NbaDraftSeasonRates = {
+type NbaDraftSeasonRates = {
   assistsPerGame?: number | null
   stealsPerGame?: number | null
   blocksPerGame?: number | null
@@ -334,7 +334,7 @@ export type SportsPlayerRecordDraftMaps = {
   loose: Map<string, SportsPlayerRecordDraftAugment>
 }
 
-export type SprLookupMeta = {
+type SprLookupMeta = {
   matchType: IdentityMatchType
   confidence: number
   reason: string
@@ -343,7 +343,7 @@ export type SprLookupMeta = {
   strictHitAfterIdMiss: boolean
 }
 
-export type SprLookupResult = {
+type SprLookupResult = {
   augment: SportsPlayerRecordDraftAugment | null
   meta: SprLookupMeta
 }

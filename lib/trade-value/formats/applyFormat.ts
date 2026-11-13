@@ -36,7 +36,7 @@ import type { LeagueShape } from '../leagueShape'
  * opinion, which a consumer must render differently from a multiplier of 1.0 meaning "looked, no
  * change".
  */
-export interface FormatFit {
+interface FormatFit {
   /**
    * Which model spoke. Null when the league's format has no VALUE model — every canonical format
    * except the Four Horsemen fixture today.
@@ -53,7 +53,7 @@ export interface FormatFit {
   legality: TradeLegality | null
 }
 
-export interface ApplyFormatFitInput {
+interface ApplyFormatFitInput {
   /** The league's format id — `TradeValueContext.leagueType`, or a league-specific id. */
   formatId: string | null | undefined
   /**

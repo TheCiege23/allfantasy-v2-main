@@ -24,7 +24,7 @@ export const LEAGUE_FIRST_PARAM = 'leagueFirst'
 /** `/core?view=all` keeps the cross-league home reachable while league-first is on. */
 export const LEAGUE_FIRST_ALL_VIEW = 'all'
 
-export const LEAGUE_FIRST_DEFAULT_RULE: RolloutRule = {
+const LEAGUE_FIRST_DEFAULT_RULE: RolloutRule = {
   enabled: true,
   percentage: 0,
   note: 'Phase 1 of the league-first phone shell. Opt in per browser with /core?leagueFirst=on.',

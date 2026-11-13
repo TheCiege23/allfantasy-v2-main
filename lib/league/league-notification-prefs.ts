@@ -3,7 +3,7 @@
  * User account categories still apply; this gates league-scoped fanouts when the league opts out.
  */
 
-export type LeagueNotificationPrefs = {
+type LeagueNotificationPrefs = {
   tradeAlerts?: boolean
   waiverResults?: boolean
   lineupLockReminders?: boolean

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 
-export interface InvitePreviewCardProps {
+interface InvitePreviewCardProps {
   title: string
   description?: string | null
   targetName?: string | null

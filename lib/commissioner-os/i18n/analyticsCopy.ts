@@ -427,7 +427,7 @@ export function analyticsCopy(language: string | null | undefined): AnalyticsCop
 
 /* ── Reports ──────────────────────────────────────────────────────────────── */
 
-export interface ReportsCopy {
+interface ReportsCopy {
   status: Record<'queued' | 'generating' | 'ready' | 'failed', string>
   category: Record<'season_recap' | 'engagement' | 'transactions' | 'commissioner_digest', string>
   frequency: Record<'weekly' | 'monthly' | 'manual', string>
@@ -649,7 +649,7 @@ export function reportText(text: string | null | undefined, language: string | n
 
 type TaskStatus = 'open' | 'in_progress' | 'waiting_on_manager' | 'waiting_on_league_vote' | 'completed' | 'archived'
 
-export interface WorkspaceCopy {
+interface WorkspaceCopy {
   status: Record<TaskStatus, string>
   nextAction: Record<TaskStatus, string>
   // A task's priority badge is `taskPriorityLabelText` in cardsCopy, beside the masculine severity

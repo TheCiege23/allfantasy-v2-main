@@ -4,7 +4,7 @@ import { calculateWeatherImpact, type WeatherImpactResult } from '@/lib/weather/
 import type { NormalizedWeather } from '@/lib/weather/weatherService'
 import type { NormalizedFantasyProjection } from '@/lib/sports-data-normalization/types'
 
-export type WeatherProjectionAugment = {
+type WeatherProjectionAugment = {
   weatherAdjustedProjection: number | null
   weatherRiskLevel: 'none' | 'low' | 'moderate' | 'high' | 'extreme' | null
   weatherSummary: string | null

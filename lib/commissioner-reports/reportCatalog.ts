@@ -23,7 +23,7 @@ import type { AnalyticsDataWindow } from '@/lib/commissioner-ui/analytics/decisi
  * a figure, and nothing reads these artifacts back to answer a question about the league.
  */
 
-export type ReportTemplateId =
+type ReportTemplateId =
   | 'weekly-commissioner-digest'
   | 'season-recap'
   | 'manager-engagement'

@@ -31,7 +31,7 @@ const SPORT_AND_SEASON_SCOPED_PROVIDERS = new Set(['fleaflicker'])
 /** Sports `parseFleaflickerSourceId` recognises as a leading segment. */
 const FLEAFLICKER_SPORTS = new Set(['NFL', 'MLB', 'NBA', 'NHL'])
 
-export interface ProviderSourceRefInput {
+interface ProviderSourceRefInput {
   provider: string
   externalLeagueId: string
   sport?: string | null
@@ -98,7 +98,7 @@ export function buildProviderSourceRef(input: ProviderSourceRefInput): string {
   return raw
 }
 
-export interface ScopeAssertionInput {
+interface ScopeAssertionInput {
   provider: string
   /** What the refresh asked for. */
   requested: { sport?: string | null; season?: number | string | null }
@@ -106,7 +106,7 @@ export interface ScopeAssertionInput {
   returned: { sport?: string | null; season?: number | string | null }
 }
 
-export interface ScopeMismatch {
+interface ScopeMismatch {
   field: 'sport' | 'season'
   requested: string
   returned: string

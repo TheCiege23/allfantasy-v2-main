@@ -5,7 +5,7 @@ import { Shield, Trash2, Plus } from 'lucide-react'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 
-export type KeeperPanelProps = {
+type KeeperPanelProps = {
   leagueId: string
   isCommissioner: boolean
   slotOrder: SlotOrderEntry[]
@@ -26,7 +26,7 @@ type KeeperApiState = {
   currentUserRosterId: string | undefined
 }
 
-export function KeeperPanel({
+function KeeperPanel({
   leagueId,
   isCommissioner,
   slotOrder,

@@ -188,7 +188,7 @@ export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?
  * Position colour, the same assignment the league Trades tab uses for its
  * trade-block cards, so a WR reads the same colour on every trade surface.
  */
-export const POSITION_TONE: Record<string, string> = {
+const POSITION_TONE: Record<string, string> = {
   QB: 'qb',
   RB: 'rb',
   WR: 'wr',

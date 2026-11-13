@@ -13,7 +13,7 @@ import {
 import type { ToolCategoryId } from './types'
 import { getToolsByCategory } from './FeaturedToolResolver'
 
-export type ToolHubTool = {
+type ToolHubTool = {
   slug: ToolSlug
   headline: string
   description: string
@@ -24,7 +24,7 @@ export type ToolHubTool = {
   badge?: string
 }
 
-export type ToolHubSport = {
+type ToolHubSport = {
   slug: SportSlug
   headline: string
   leagueSport: string

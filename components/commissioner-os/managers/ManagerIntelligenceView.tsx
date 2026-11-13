@@ -10,7 +10,7 @@ import { Users } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy, cosLoaderText, managerNameText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface ManagerIntelligenceViewProps {
+interface ManagerIntelligenceViewProps {
   managers: ManagerDnaProfile[]
   dataMode: CommissionerDataMode
 }

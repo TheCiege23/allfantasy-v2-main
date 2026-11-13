@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronUp, Database } from 'lucide-react'
 
-export interface DeterministicEvidenceCardProps {
+interface DeterministicEvidenceCardProps {
   /** Key-value pairs or list of evidence strings from deterministic payload */
   evidence?: Record<string, unknown> | string[]
   /** Optional title override */

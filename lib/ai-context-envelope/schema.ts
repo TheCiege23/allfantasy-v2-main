@@ -19,7 +19,7 @@ export const AI_TOOL_IDS = [
 ] as const
 
 /** Single evidence item: source, label, value. No AI-invented values. */
-export const EvidenceItemSchema = z.object({
+const EvidenceItemSchema = z.object({
   /** Source of the fact (e.g. "trade_engine", "rankings_engine", "waiver_engine"). */
   source: z.string(),
   /** Human-readable label (e.g. "Fairness score", "VORP delta"). */
@@ -34,7 +34,7 @@ export const EvidenceItemSchema = z.object({
 export type EvidenceItem = z.infer<typeof EvidenceItemSchema>
 
 /** Evidence block: list of facts for display and for AI context. */
-export const EvidenceBlockSchema = z.object({
+const EvidenceBlockSchema = z.object({
   /** Tool or feature that produced these facts. */
   toolId: z.string(),
   /** Ordered list of evidence items. */
@@ -45,7 +45,7 @@ export const EvidenceBlockSchema = z.object({
 export type EvidenceBlock = z.infer<typeof EvidenceBlockSchema>
 
 /** Confidence: must reflect data strength; capped when data is incomplete. */
-export const ConfidenceSchema = z.object({
+const ConfidenceSchema = z.object({
   /** 0–100; must not be overstated when uncertainty or missing data present. */
   scorePct: z.number().min(0).max(100),
   /** low | medium | high. */
@@ -60,7 +60,7 @@ export const ConfidenceSchema = z.object({
 export type Confidence = z.infer<typeof ConfidenceSchema>
 
 /** Single uncertainty: what is uncertain and its impact. */
-export const UncertaintyItemSchema = z.object({
+const UncertaintyItemSchema = z.object({
   /** What is uncertain (e.g. "Future pick value", "Injury timeline"). */
   what: z.string(),
   /** Impact on recommendation: high | medium | low. */
@@ -71,7 +71,7 @@ export const UncertaintyItemSchema = z.object({
 export type UncertaintyItem = z.infer<typeof UncertaintyItemSchema>
 
 /** Uncertainty block: explicit uncertainties when data is incomplete. */
-export const UncertaintyBlockSchema = z.object({
+const UncertaintyBlockSchema = z.object({
   items: z.array(UncertaintyItemSchema),
   /** Optional summary for AI. */
   summaryForAI: z.string().optional(),
@@ -79,7 +79,7 @@ export const UncertaintyBlockSchema = z.object({
 export type UncertaintyBlock = z.infer<typeof UncertaintyBlockSchema>
 
 /** Single missing-data entry: not silently ignored. */
-export const MissingDataItemSchema = z.object({
+const MissingDataItemSchema = z.object({
   /** What is missing (e.g. "Market valuation for Player X"). */
   what: z.string(),
   /** Impact: high | medium | low. */
@@ -90,7 +90,7 @@ export const MissingDataItemSchema = z.object({
 export type MissingDataItem = z.infer<typeof MissingDataItemSchema>
 
 /** Missing-data block: must be surfaced to AI and optionally to user. */
-export const MissingDataBlockSchema = z.object({
+const MissingDataBlockSchema = z.object({
   items: z.array(MissingDataItemSchema),
   summaryForAI: z.string().optional(),
 })

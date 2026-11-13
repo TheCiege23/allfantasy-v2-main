@@ -201,7 +201,7 @@ export function NoLeaguesYet({ what, language = 'en' }: { what: string; language
 
 /* ── league crest ────────────────────────────────────────────────────────── */
 
-export type CrestSize = 'md' | 'sm' | 'xs'
+type CrestSize = 'md' | 'sm' | 'xs'
 
 const CREST_PX: Record<CrestSize, number> = { md: 36, sm: 28, xs: 22 }
 

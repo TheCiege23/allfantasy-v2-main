@@ -17,7 +17,7 @@
  */
 
 /** The verdicts a chip can show. The label is fixed per key — the wire never carries display text. */
-export type ChimmyVerdictKey =
+type ChimmyVerdictKey =
   | 'yes' | 'no' | 'hold' | 'counter' | 'counter_hold' | 'start' | 'start_both' | 'sit_both' | 'bid'
   /* A guillotine week that is already DECIDED (`lib/core-app/eliminationSettle.ts`). Never a margin. */
   | 'safe' | 'out'
@@ -26,10 +26,10 @@ export type ChimmyVerdictKey =
  * go = act / good news, stop = do not / bad news, wait = hold off / renegotiate. Colour AND text
  * carry it. SAFE is `go` and OUT is `stop` — the same good / bad the Week board's SAFE / OUT badge uses.
  */
-export type ChimmyVerdictTone = 'go' | 'stop' | 'wait'
+type ChimmyVerdictTone = 'go' | 'stop' | 'wait'
 
 /** Which engine decided — shown as the chip's title so "who says so" is one hover away. */
-export type ChimmyVerdictSource = 'trade_engine' | 'lineup_engine' | 'faab_plan' | 'elimination_settle'
+type ChimmyVerdictSource = 'trade_engine' | 'lineup_engine' | 'faab_plan' | 'elimination_settle'
 
 export type ChimmyVerdict = {
   key: ChimmyVerdictKey
@@ -79,7 +79,7 @@ export function readChimmyVerdict(value: unknown): ChimmyVerdict | null {
 /** How many bids the card lists — the same cap as the model's text (`FAAB_TEXT_MAX_BIDS`). */
 export const FAAB_CARD_MAX_BIDS = 8
 
-export type ChimmyFaabCardBid = {
+type ChimmyFaabCardBid = {
   name: string
   position: string | null
   /** Dollars to bid up to; null outside an elimination league or with no remaining FAAB on file. */

@@ -19,7 +19,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type WarRoomContext = {
+type WarRoomContext = {
   draftId: string
   leagueName: string
   sport: string
@@ -55,12 +55,12 @@ export type WarRoomContext = {
   }>
 }
 
-export type WarRoomProviderData = {
+type WarRoomProviderData = {
   liveAdpUpdates: Array<{ playerId: string; currentAdp: number; trend: "rising" | "falling" | "stable" }>
   injuryUpdates: Array<{ playerId: string; status: string; severity: "out" | "questionable" | "probable" }>
 }
 
-export type WarRoomInsights = {
+type WarRoomInsights = {
   topRecommendations: Array<{
     playerId: string
     playerName: string

@@ -42,7 +42,7 @@ function snakePickSalary(pickIndex: number): { salaryM: number; years: number } 
   return { salaryM, years }
 }
 
-export type IDPDraftFiltersProps = {
+type IDPDraftFiltersProps = {
   /** Current pick index in draft (0-based) for snake salary preview. */
   pickIndex?: number
 }

@@ -4,7 +4,7 @@ import { Globe, Share2, Users } from 'lucide-react'
 import { VerifiedCreatorBadge } from '@/components/creator/VerifiedCreatorBadge'
 import type { CreatorProfileDto } from '@/lib/creator-system/types'
 
-export interface CreatorProfileHeaderProps {
+interface CreatorProfileHeaderProps {
   creator: CreatorProfileDto
   isOwner?: boolean
   onFollow?: () => void

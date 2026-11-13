@@ -9,7 +9,7 @@ import type { SuggestionPresence } from './playerSuggest'
  * out of the count, and when nothing else can be said the chip is absent
  * rather than "unchecked".
  */
-export type SuggestionChip = { text: string; tone: 'accent' | 'warn' | 'good' }
+type SuggestionChip = { text: string; tone: 'accent' | 'warn' | 'good' }
 
 /**
  * The one fact a chip states, before it is put into words — so the English below and the Spanish in

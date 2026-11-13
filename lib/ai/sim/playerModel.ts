@@ -11,7 +11,7 @@ export function createRng(seed: number): () => number {
   }
 }
 
-export function effectiveVariance(p: SimPlayerInput): number {
+function effectiveVariance(p: SimPlayerInput): number {
   const base = Math.max(0.5, p.variance ?? 6)
   const cons = p.consistency ?? 0.5
   const inj = p.injuryRisk ?? 0
@@ -19,7 +19,7 @@ export function effectiveVariance(p: SimPlayerInput): number {
   return Math.max(0.25, v)
 }
 
-export function effectiveProjection(p: SimPlayerInput): number {
+function effectiveProjection(p: SimPlayerInput): number {
   const t = p.usageTrend ?? 0
   return p.projection * (1 + t * 0.08)
 }
@@ -27,7 +27,7 @@ export function effectiveProjection(p: SimPlayerInput): number {
 /**
  * Single simulated weekly score for a player (projection + noise).
  */
-export function sampleWeeklyScore(player: SimPlayerInput, rng: () => number): number {
+function sampleWeeklyScore(player: SimPlayerInput, rng: () => number): number {
   return sampleNormalScore(effectiveProjection(player), effectiveVariance(player), rng)
 }
 

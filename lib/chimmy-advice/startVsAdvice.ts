@@ -28,7 +28,7 @@ import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolut
  * the Sleeper sync writes, so advice anywhere else could never get a receipt.
  */
 
-export type StartVsAdviceOutcome =
+type StartVsAdviceOutcome =
   | 'recorded'
   | 'unavailable'
   | 'invalid'

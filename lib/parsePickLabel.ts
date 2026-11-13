@@ -40,7 +40,7 @@ export function c2cDraftSide(value: unknown): C2CDraftSide | undefined {
   return value === 'campus' || value === 'canton' || value === 'combined' ? value : undefined
 }
 
-export type ParsedPick = {
+type ParsedPick = {
   year: number;
   /**
    * 1-indexed draft round, 1..MAX_PARSEABLE_ROUND.

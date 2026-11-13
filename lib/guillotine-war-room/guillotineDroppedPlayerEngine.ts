@@ -10,7 +10,7 @@
 import { evaluateRosterRisk } from './guillotineRosterRiskEngine'
 import type { GuillotineWarRoomContext } from './types'
 
-export interface GuillotineDroppedRanking {
+interface GuillotineDroppedRanking {
   playerId: string
   playerName: string
   position: string

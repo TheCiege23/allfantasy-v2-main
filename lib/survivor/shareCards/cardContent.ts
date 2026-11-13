@@ -5,9 +5,9 @@
  */
 import type { ShareCardFormat, ShareMomentPayload, ShareMomentType } from './types'
 
-export type ShareMood = 'day' | 'dusk' | 'night' | 'exile'
+type ShareMood = 'day' | 'dusk' | 'night' | 'exile'
 
-export interface ShareCardTheme {
+interface ShareCardTheme {
   accent: string
   head: string
   glow: string
@@ -74,13 +74,13 @@ export function shareBackgroundPath(mood: ShareMood, sport: string | null | unde
   return `/survivor/backgrounds/${mood}-${scene}.svg`
 }
 
-export function shareSportLabel(sport: string | null | undefined): string {
+function shareSportLabel(sport: string | null | undefined): string {
   const code = String(sport ?? '').toUpperCase()
   if (code === 'SOCCER') return 'Soccer'
   return code || 'NFL'
 }
 
-export function shareHeroPath(type: ShareMomentType, payload: Pick<ShareMomentPayload, 'idolId'>): string {
+function shareHeroPath(type: ShareMomentType, payload: Pick<ShareMomentPayload, 'idolId'>): string {
   return type === 'idol' ? `/survivor/idols/${safeIdolId(payload.idolId)}.svg` : HERO[type]
 }
 
@@ -95,7 +95,7 @@ export function ordinal(n: number): string {
   return `${v}${suffix}`
 }
 
-export function formatPoints(points: number): string {
+function formatPoints(points: number): string {
   return points.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 

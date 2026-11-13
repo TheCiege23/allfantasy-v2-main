@@ -74,13 +74,13 @@ export interface SyncFreshness {
   lastSyncedAt: string | null
 }
 
-export interface LeagueHubTeamRecord {
+interface LeagueHubTeamRecord {
   wins: number
   losses: number
   ties: number
 }
 
-export interface LeagueHubUserTeam {
+interface LeagueHubUserTeam {
   /** `LeagueTeam.id` (canonical) — null when the viewer has no claimed team on this league row. */
   id: string | null
   name: string | null
@@ -89,9 +89,9 @@ export interface LeagueHubUserTeam {
   standingsPosition: number | null
 }
 
-export type CommissionerVerificationMethod = 'api' | 'attestation' | 'membership-only' | null
+type CommissionerVerificationMethod = 'api' | 'attestation' | 'membership-only' | null
 
-export interface LeagueHubCommissionerStatus {
+interface LeagueHubCommissionerStatus {
   isCommissioner: boolean
   /** How that status was established — mirrors `League.settings.commissionerVerification.method`. */
   verificationMethod: CommissionerVerificationMethod
@@ -136,7 +136,7 @@ export type RecommendationExecutionCapability =
 
 export type RecommendationStatus = 'new' | 'viewed' | 'accepted' | 'dismissed' | 'completed' | 'expired'
 
-export interface RecommendationAction {
+interface RecommendationAction {
   label: string
   href?: string
   payloadType?: string

@@ -1,7 +1,7 @@
 import type { DraftTypeId } from '@/lib/league-creation-wizard/types'
 import { resolveDraftIntroStemFromWizardId, resolveDraftSelectionVideoUrl } from '@/lib/draft/draft-intro-video'
 
-export type DraftTypeMedia = {
+type DraftTypeMedia = {
   selectionVideo: string
   thumbnail: string
   thumbnailFallback: string
@@ -99,7 +99,7 @@ const DRAFT_TYPE_MEDIA_MAP: Record<string, Omit<DraftTypeMedia, 'selectionVideo'
 }
 
 /** Ordered thumbnail URL tries for Segmented / hero poster — first shipped wins at runtime via img onError elsewhere. */
-export function getDraftThumbnailCandidates(id: DraftTypeId): readonly string[] {
+function getDraftThumbnailCandidates(id: DraftTypeId): readonly string[] {
   const stem = resolveDraftIntroStemFromWizardId(id)
   const ordered: string[] = []
   const seen = new Set<string>()

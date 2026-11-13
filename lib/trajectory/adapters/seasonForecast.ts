@@ -25,7 +25,7 @@ export type SeasonForecastMetricField =
   | 'expectedFinalSeed'
   | 'eliminationRisk'
 
-export const SEASON_FORECAST_METRIC_IDS: Record<SeasonForecastMetricField, string> = {
+const SEASON_FORECAST_METRIC_IDS: Record<SeasonForecastMetricField, string> = {
   playoffProbability: 'season.playoffProbability',
   championshipProbability: 'season.championshipProbability',
   firstPlaceProbability: 'season.firstPlaceProbability',

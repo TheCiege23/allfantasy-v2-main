@@ -14,7 +14,7 @@ type SeriesMatchup = {
 }
 
 /** The best-of length of a bracket matchup's round; 1 when series mode is off. Lower-bracket rounds play their title round's length. */
-export function bestOfForMatchup(seriesLengths: readonly number[] | null | undefined, matchup: Pick<SeriesMatchup, 'roundNumber'>): number {
+function bestOfForMatchup(seriesLengths: readonly number[] | null | undefined, matchup: Pick<SeriesMatchup, 'roundNumber'>): number {
   const round = matchup.roundNumber >= CONSOLATION_ROUND_OFFSET ? matchup.roundNumber - CONSOLATION_ROUND_OFFSET : matchup.roundNumber
   return seriesLengthForRound(seriesLengths, round)
 }

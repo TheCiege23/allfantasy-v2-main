@@ -24,10 +24,10 @@ import { coreLang } from './messages/coreLocale'
  * PURE, client- and server-safe (CommissionerHub is a server component).
  */
 
-export type CoreDepthLockLang = 'en' | 'es'
+type CoreDepthLockLang = 'en' | 'es'
 
 /** Anything that is not Spanish reads English — the same rule every /core copy module uses. */
-export function lockLang(language: string | null | undefined): CoreDepthLockLang {
+function lockLang(language: string | null | undefined): CoreDepthLockLang {
   return coreLang(language)
 }
 

@@ -1,4 +1,4 @@
-export type EspnCollegeBoxPlayer = { espnId: string; teamId: string; didNotPlay: boolean; stats: Record<string, number> | null }
+type EspnCollegeBoxPlayer = { espnId: string; teamId: string; didNotPlay: boolean; stats: Record<string, number> | null }
 export type EspnCollegeBoxScore = { eventId: string; status: 'scheduled' | 'live' | 'final' | 'unknown'; players: EspnCollegeBoxPlayer[]; rejected: number; complete: boolean }
 const obj = (v: unknown): Record<string, any> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {}
 const number = (v: unknown): number | null => typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null

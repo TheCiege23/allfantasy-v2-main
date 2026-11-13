@@ -17,7 +17,7 @@ import { isRosterAiControlled } from './CommissionerAiDraftManagerService'
 
 export { CHIMMY_PICK_DELAY_MS, chimmyThinkingTimeElapsed } from './chimmyPickTiming'
 
-export type ChimmyPickEligibility =
+type ChimmyPickEligibility =
   | { eligible: true }
   | { eligible: false; reason: 'ai_manager_disabled' | 'not_orphan' | 'not_assigned' }
 

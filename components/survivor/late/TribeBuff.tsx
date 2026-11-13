@@ -3,7 +3,7 @@
 import { useId, useMemo } from 'react'
 import { buffSvg, MERGE_BUFF_COLORS } from '@/lib/survivor/buffSvg'
 
-export interface TribeBuffProps {
+interface TribeBuffProps {
   primary?: string | null
   secondary?: string | null
   /** Gold merge buff (buff-merge colours). */

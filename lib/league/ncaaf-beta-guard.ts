@@ -5,7 +5,7 @@
 
 import type { UserLeague } from '@/app/dashboard/types'
 
-export type NcaafBetaStatus =
+type NcaafBetaStatus =
   | 'devy'       // NCAAF devy — college player pool not yet fully imported
   | 'c2c'        // NCAAF college-to-pro — mixed pool not yet ready
   | 'ncaaf'      // Plain NCAAF redraft — schedule/standings partially available

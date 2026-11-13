@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-export type WarRoomManagerIntelProps = {
+type WarRoomManagerIntelProps = {
   leagueId: string
   className?: string
 }

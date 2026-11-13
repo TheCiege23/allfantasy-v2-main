@@ -20,7 +20,7 @@ export type CommissionerRecommendationStatus =
   | 'deferred'
   | 'resolved'
 
-export type CommissionerRecommendationCategory =
+type CommissionerRecommendationCategory =
   | 'health_and_risk'
   | 'engagement'
   | 'competitive_integrity'

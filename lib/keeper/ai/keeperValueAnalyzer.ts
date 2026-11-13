@@ -1,4 +1,4 @@
-export type LeagueKeeperAnalysis = {
+type LeagueKeeperAnalysis = {
   teams: { rosterId: string; strongest: string[]; weakest: string[]; narrative: string }[]
   leagueNarrative: string
 }

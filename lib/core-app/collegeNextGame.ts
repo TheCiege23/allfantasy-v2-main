@@ -23,7 +23,7 @@ import { buildNextGameMap, type FixtureRow, type NextGameCandidate } from './nex
  * teams claim ("San Diego" vs "San Diego State"), and this inherits that: a player whose
  * school cannot be named keeps a null fixture rather than borrowing a stranger's game.
  */
-export type CollegeFixture = NextGameCandidate & {
+type CollegeFixture = NextGameCandidate & {
   /** The player's team as the directory names it — the left side of `gameContext`. */
   team: string
 }

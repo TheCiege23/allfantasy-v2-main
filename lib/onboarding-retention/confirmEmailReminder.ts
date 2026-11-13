@@ -57,7 +57,7 @@ function esc(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export type ConfirmEmailReminderEmail = { subject: string; html: string }
+type ConfirmEmailReminderEmail = { subject: string; html: string }
 
 export function renderConfirmEmailReminder(
   n: 1 | 2,

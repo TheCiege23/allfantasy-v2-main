@@ -7,7 +7,7 @@
  * withheld, but the two must never share a label.
  */
 
-export const TRADE_GRADING_POLICY_VERSION = 'trade-policy-2.1' as const
+const TRADE_GRADING_POLICY_VERSION = 'trade-policy-2.1' as const
 
 export type SupportedTradeFormat =
   | 'redraft'
@@ -21,8 +21,8 @@ export type SupportedTradeFormat =
   | 'king_of_the_hill'
   | 'pirate'
   | 'best_ball'
-export type TradeEligibility = 'enabled' | 'disabled' | 'unknown'
-export type EvidenceState = 'available' | 'missing' | 'not_applicable'
+type TradeEligibility = 'enabled' | 'disabled' | 'unknown'
+type EvidenceState = 'available' | 'missing' | 'not_applicable'
 
 export type TradeGradingPolicy = {
   version: typeof TRADE_GRADING_POLICY_VERSION
@@ -85,7 +85,7 @@ export type TradeEvidenceKey =
 
 export type TradeEvidence = Partial<Record<TradeEvidenceKey, EvidenceState>>
 
-export type TradeGradeDimension = {
+type TradeGradeDimension = {
   id: string
   label: string
   description: string

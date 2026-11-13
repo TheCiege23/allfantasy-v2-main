@@ -12,7 +12,7 @@ export function draftOrder(raw: unknown): SlotOrderEntry[] {
   })
 }
 
-export function draftTrades(raw: unknown): TradedPickRecord[] {
+function draftTrades(raw: unknown): TradedPickRecord[] {
   if (!Array.isArray(raw)) return []
   return raw.flatMap((entry) => {
     if (!entry || typeof entry !== 'object' || !Number.isInteger(entry.round) || entry.round < 1 ||

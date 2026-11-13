@@ -17,9 +17,9 @@ export type { WaiverRosterPlayer, ScoredWaiverTarget, WaiverAIEngineInput, UserG
  * future grader. Format-specific "War Room" engines are a legitimate separate family (per-format
  * tuning), not duplicates, and are out of scope here — see the README.
  */
-export type LegacyWaiverGraderId = 'waiver_recommendation_service'
+type LegacyWaiverGraderId = 'waiver_recommendation_service'
 
-export interface WaiverGraderDivergence {
+interface WaiverGraderDivergence {
   graderId: LegacyWaiverGraderId
   legacyTopAddPlayerId: string | null
   legacyTopAddPlayerName: string | null
@@ -40,13 +40,13 @@ export interface WaiverGraderDivergence {
  * the Fantasy Knowledge Graph (Phase 3's getManagerBehaviorProfile), gated by
  * its own privacy cohort check. Never fabricates tendency data it doesn't have.
  */
-export interface ManagerTendencyContext {
+interface ManagerTendencyContext {
   status: 'ok' | 'gated' | 'unavailable'
   reason: string | null
   profile: ManagerBehaviorProfile | null
 }
 
-export type WaiverUrgency = 'critical' | 'high' | 'medium' | 'low' | 'none'
+type WaiverUrgency = 'critical' | 'high' | 'medium' | 'low' | 'none'
 
 export interface WaiverEvaluation {
   evaluationId: string

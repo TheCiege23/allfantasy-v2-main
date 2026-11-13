@@ -14,7 +14,7 @@
  * reader may skip the database.
  */
 
-export type FreshnessTier = 'static' | 'slow' | 'daily' | 'gameday' | 'live'
+type FreshnessTier = 'static' | 'slow' | 'daily' | 'gameday' | 'live'
 
 export type DataClass =
   | 'fantasy_league'
@@ -32,7 +32,7 @@ export type DataClass =
   | 'live_scores'
   | 'play_by_play'
 
-export type FreshnessRule = {
+type FreshnessRule = {
   tier: FreshnessTier
   /** How old a row may be before a reader should treat it as stale. */
   maxAgeSeconds: number
@@ -45,7 +45,7 @@ const MIN = 60
 const HOUR = 60 * MIN
 const DAY = 24 * HOUR
 
-export const FRESHNESS: Record<DataClass, FreshnessRule> = {
+const FRESHNESS: Record<DataClass, FreshnessRule> = {
   fantasy_league: { tier: 'gameday', maxAgeSeconds: HOUR, provider: 'none',
     why: 'Mutable fantasy rosters and transactions must be collected within one hour; the active lane refreshes them every five minutes.' },
   // ── Static: ingest once, refresh occasionally to pick up corrections ──

@@ -11,7 +11,7 @@ export function getCommandPaletteShortcut(): string {
 }
 
 /** Check if event is the command palette shortcut. */
-export function isCommandPaletteShortcut(e: KeyboardEvent): boolean {
+function isCommandPaletteShortcut(e: KeyboardEvent): boolean {
   return (MAC ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === COMMAND_PALETTE_KEY
 }
 

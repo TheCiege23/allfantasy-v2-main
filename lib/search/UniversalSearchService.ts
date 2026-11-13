@@ -15,7 +15,7 @@ import {
 } from "./SearchResultResolver"
 import { resolveSportFilter, type SportFilterValue } from "./SportSearchFilterResolver"
 
-export interface UniversalSearchPayload {
+interface UniversalSearchPayload {
   query: string
   quickActions: ReturnType<typeof filterQuickActionsByQuery>
   staticResults: SearchResultItem[]
@@ -23,13 +23,13 @@ export interface UniversalSearchPayload {
   suggestLiveSearch: boolean
 }
 
-export interface UniversalLiveResults {
+interface UniversalLiveResults {
   leagues: SearchResultItem[]
   players: SearchResultItem[]
   hasError?: boolean
 }
 
-export interface UniversalLiveSearchOptions {
+interface UniversalLiveSearchOptions {
   sportFilter?: SportFilterValue
   limit?: number
   signal?: AbortSignal
@@ -55,11 +55,11 @@ export function getGroupedStaticResults(staticResults: SearchResultItem[]) {
   return groupResultsByCategory(staticResults)
 }
 
-export function normalizeSearchQuery(query: string): string {
+function normalizeSearchQuery(query: string): string {
   return query.trim().slice(0, 100)
 }
 
-export function shouldRunLiveSearch(query: string): boolean {
+function shouldRunLiveSearch(query: string): boolean {
   return normalizeSearchQuery(query).length >= 2
 }
 

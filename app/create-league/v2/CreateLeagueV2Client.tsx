@@ -26,7 +26,7 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { applyRequestedFormat, type RequestableFormat } from '@/lib/create-league-v2/requestedFormat'
 
-export interface CreateLeagueV2ClientProps {
+interface CreateLeagueV2ClientProps {
   userId: string
   /** Opened from the demo league: offer "Create a test league" pre-selected. */
   fromDemo?: boolean

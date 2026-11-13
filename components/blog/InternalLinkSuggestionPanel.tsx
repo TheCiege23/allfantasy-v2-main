@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ExternalLink, Loader2 } from "lucide-react";
 import type { InternalLinkSuggestion } from "@/lib/automated-blog/types";
 
-export interface InternalLinkSuggestionPanelProps {
+interface InternalLinkSuggestionPanelProps {
   articleId: string;
   className?: string;
 }

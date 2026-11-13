@@ -36,7 +36,7 @@ export type DynastySeasonInput = {
   championTeamId: string | null
 }
 
-export type DynastyChampionshipInput = { season: number; championUserId: string; teamName: string | null }
+type DynastyChampionshipInput = { season: number; championUserId: string; teamName: string | null }
 
 export type DynastyTeamInput = {
   id: string
@@ -47,7 +47,7 @@ export type DynastyTeamInput = {
   ownerName: string | null
 }
 
-export type DynastyStandingFactInput = {
+type DynastyStandingFactInput = {
   season: number
   /** The provider's team key — `LeagueTeam.externalId` (see `loadSeasonHistory` in leagueStandings.ts). */
   teamId: string
@@ -391,7 +391,7 @@ export function buildDynastyStandingsHistory(input: {
 }
 
 /** Titles, then all-time win %, then wins, then name — the order the table opens in. */
-export function compareFranchises(a: DynastyFranchiseRow, b: DynastyFranchiseRow): number {
+function compareFranchises(a: DynastyFranchiseRow, b: DynastyFranchiseRow): number {
   return (
     b.titles - a.titles ||
     (b.winPct ?? -1) - (a.winPct ?? -1) ||

@@ -458,10 +458,10 @@ export function answerSurvivorRules(topic: SurvivorRulesTopic, ctx: SurvivorRule
 export type SurvivorRulesSection = { topic: SurvivorRulesTopic; title: string; lines: string[] }
 
 /** The rulebook order: how a manager meets each part of the season. */
-export const SURVIVOR_RULEBOOK_TOPICS: readonly SurvivorRulesTopic[] = ['overview', 'immunity', 'voting', 'ties', 'idols', 'challenges', 'merge', 'exile', 'jury', 'schedule']
+const SURVIVOR_RULEBOOK_TOPICS: readonly SurvivorRulesTopic[] = ['overview', 'immunity', 'voting', 'ties', 'idols', 'challenges', 'merge', 'exile', 'jury', 'schedule']
 
 /** One answer as a titled list: "**Title**\n• a\n• b" becomes { title, lines }. */
-export function survivorRulesSection(topic: SurvivorRulesTopic, ctx: SurvivorRulesContext): SurvivorRulesSection {
+function survivorRulesSection(topic: SurvivorRulesTopic, ctx: SurvivorRulesContext): SurvivorRulesSection {
   const [head, ...rest] = answerSurvivorRules(topic, ctx).split('\n')
   return {
     topic,
@@ -471,7 +471,7 @@ export function survivorRulesSection(topic: SurvivorRulesTopic, ctx: SurvivorRul
 }
 
 /** The side-game sections a rulebook carries: only those the commissioner switched on. */
-export function sideGameRulebookTopics(sideGames: SurvivorSideGameSettings | null | undefined, exileOn: boolean): SurvivorRulesTopic[] {
+function sideGameRulebookTopics(sideGames: SurvivorSideGameSettings | null | undefined, exileOn: boolean): SurvivorRulesTopic[] {
   if (!sideGames) return []
   return [
     ...(exileOn && sideGames.tokenPoolEnabled ? ['token_pool' as const] : []),
@@ -481,7 +481,7 @@ export function sideGameRulebookTopics(sideGames: SurvivorSideGameSettings | nul
 }
 
 /** The governance sections a league's rulebook carries: conduct always, the rest when switched on. */
-export function governanceRulebookTopics(governance: SurvivorGovernanceSettings | null | undefined): SurvivorRulesTopic[] {
+function governanceRulebookTopics(governance: SurvivorGovernanceSettings | null | undefined): SurvivorRulesTopic[] {
   if (!governance) return []
   return [
     ...(governance.tradeRulesEnabled ? ['trades' as const] : []),

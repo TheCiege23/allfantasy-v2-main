@@ -11,7 +11,7 @@ export interface LeagueSelectorOption {
   name: string
 }
 
-export interface LeagueSelectorProps {
+interface LeagueSelectorProps {
   leagues: LeagueSelectorOption[]
   activeLeagueId: string | null
 }

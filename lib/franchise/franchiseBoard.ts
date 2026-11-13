@@ -36,7 +36,7 @@ import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
  * Returns null when the lineup or roster cannot be read, so the caller reports
  * absence rather than a confident need for a roster it cannot see.
  */
-export async function loadProNeed(linkId: string): Promise<RosterNeed | null> {
+async function loadProNeed(linkId: string): Promise<RosterNeed | null> {
   const member = await prisma.franchiseLeagueMember.findFirst({
     where: { linkId, role: 'pro' },
     select: { leagueId: true, teamExternalId: true },
@@ -74,7 +74,7 @@ export async function loadProNeed(linkId: string): Promise<RosterNeed | null> {
   return computeRosterNeed({ requirements, rostered })
 }
 
-export type CollegeAssetForFranchise = {
+type CollegeAssetForFranchise = {
   name: string
   position: string | null
   /** Devy points before this franchise's own shape is considered. */

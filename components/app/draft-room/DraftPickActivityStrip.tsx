@@ -2,7 +2,7 @@
 
 import type { DraftPickSnapshot } from '@/lib/live-draft-engine/types'
 
-export type DraftPickActivityStripProps = {
+type DraftPickActivityStripProps = {
   picks: DraftPickSnapshot[]
   slotOrder: Array<{ rosterId: string; displayName: string }>
   limit?: number

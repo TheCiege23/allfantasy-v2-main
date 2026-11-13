@@ -13,7 +13,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type MlbContext = {
+type MlbContext = {
   leagueId: string
   leagueName: string
   scoringType: "roto" | "h2h_categories" | "h2h_points"
@@ -30,12 +30,12 @@ export type MlbContext = {
   standings: Array<{ rank: number; teamName: string; wins: number; losses: number }>
 }
 
-export type MlbProviderData = {
+type MlbProviderData = {
   hitterMatchups: Array<{ playerId: string; wrcPlusLast7: number; platoonAdvantage: boolean; parkFactor: number }>
   pitcherMatchups: Array<{ playerId: string; kRate: number; opponentWrcPlus: number; parkFactor: number; isHome: boolean }>
 }
 
-export type MlbInsights = {
+type MlbInsights = {
   spStreamingTargets: Array<{
     playerName: string
     streamScore: number // kRate × (100 / opponentWrcPlus) × parkFactor × (isHome ? 1.05 : 1.0)

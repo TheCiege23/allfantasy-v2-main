@@ -160,7 +160,7 @@ export interface CommissionerSuggestion {
 /* Discovery rails                                                            */
 /* -------------------------------------------------------------------------- */
 
-export type DiscoveryRailKind =
+type DiscoveryRailKind =
   | "best_fit_for_you"
   | "high_competition"
   | "commissioner_verified"
@@ -181,7 +181,7 @@ export interface DiscoveryRail {
 /* Telemetry                                                                  */
 /* -------------------------------------------------------------------------- */
 
-export type MatchmakingTelemetryKind =
+type MatchmakingTelemetryKind =
   | "recommendation_viewed"
   | "recommendation_ignored"
   | "league_join_accepted"
@@ -190,7 +190,7 @@ export type MatchmakingTelemetryKind =
   | "compatibility_success"
 
 /** Tracking-friendly event. No PII. */
-export interface MatchmakingTelemetryEvent {
+interface MatchmakingTelemetryEvent {
   kind: MatchmakingTelemetryKind
   /** Hashed user id / opaque correlation id. Never raw email. */
   actorId: string

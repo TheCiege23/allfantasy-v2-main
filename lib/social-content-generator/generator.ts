@@ -14,7 +14,7 @@ import type {
   PowerRankingsContext,
 } from './types'
 
-export function generateCaption(context: SocialContentContext): string {
+function generateCaption(context: SocialContentContext): string {
   return getCaptionForType(context.type, context.data)
 }
 

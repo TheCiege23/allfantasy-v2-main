@@ -3,7 +3,7 @@
  * cross-tribe intel that normal commissioners see. Driven by league JSON from create wizard.
  */
 
-export type SurvivorCommissionerRoleSetting = 'commissioner_only' | 'player_commissioner' | string | null | undefined
+type SurvivorCommissionerRoleSetting = 'commissioner_only' | 'player_commissioner' | string | null | undefined
 
 export function parseSurvivorFairPlayFromLeagueSettings(
   settings: Record<string, unknown> | null | undefined,

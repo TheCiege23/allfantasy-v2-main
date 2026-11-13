@@ -29,7 +29,7 @@ import {
   SPORT_BLEND_WEIGHT,
 } from "@/lib/ranking/snapshot/weights"
 
-export type SnapshotInput = {
+type SnapshotInput = {
   userId: string
   /** History grouped by source (Sleeper, Yahoo, …). Empty allowed. */
   importedHistory: ImportedHistoryScore[]

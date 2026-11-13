@@ -16,7 +16,7 @@ export type OrchestrationMode =
 /** Which model(s) to use. */
 export type AIModelRole = "openai" | "deepseek" | "grok" | "anthropic"
 /** Assistant routing target (non-core 3-model orchestration surfaces). */
-export type AIAssistantRole =
+type AIAssistantRole =
   | "chimmy"
   | "openclaw_dev_assistant"
   | "openclaw_growth_marketing_assistant"

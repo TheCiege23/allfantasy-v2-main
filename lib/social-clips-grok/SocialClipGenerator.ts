@@ -8,11 +8,11 @@ import type { SocialPromptBuildInput, GrokSocialOutput, SocialAssetType } from '
 import { SOCIAL_ASSET_TYPES } from './types';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 
-export interface GenerateClipInput extends SocialPromptBuildInput {
+interface GenerateClipInput extends SocialPromptBuildInput {
   assetType: SocialAssetType;
 }
 
-export interface GeneratedClipResult {
+interface GeneratedClipResult {
   title: string;
   contentBody: string;
   output: GrokSocialOutput;

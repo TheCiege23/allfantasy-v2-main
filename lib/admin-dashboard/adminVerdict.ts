@@ -22,9 +22,9 @@ import type { AdminProviderHealthStatus } from './AdminProviderHealthService'
  * not exist.
  */
 
-export type AdminIssueSeverity = 'critical' | 'warn'
+type AdminIssueSeverity = 'critical' | 'warn'
 
-export type AdminIssue = {
+type AdminIssue = {
   id: string
   severity: AdminIssueSeverity
   /** What is wrong, in one line an operator can act on. */
@@ -35,7 +35,7 @@ export type AdminIssue = {
   anchor: string
 }
 
-export type AdminVerdict = {
+type AdminVerdict = {
   ok: boolean
   headline: string
   issues: AdminIssue[]

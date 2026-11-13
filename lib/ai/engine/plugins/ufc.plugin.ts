@@ -13,7 +13,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type UfcContext = {
+type UfcContext = {
   poolId: string
   poolName: string
   eventName: string
@@ -30,7 +30,7 @@ export type UfcContext = {
   leaderboard: Array<{ rank: number; displayName: string; entryName: string; totalScore: number }>
 }
 
-export type UfcProviderData = {
+type UfcProviderData = {
   fightResults: Array<{
     fightId: string
     winner: string
@@ -41,7 +41,7 @@ export type UfcProviderData = {
   }>
 }
 
-export type UfcInsights = {
+type UfcInsights = {
   topPoolSwingFight: {
     fight: string
     fighter1Picks: number

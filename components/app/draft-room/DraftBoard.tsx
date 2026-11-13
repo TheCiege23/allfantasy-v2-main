@@ -24,7 +24,7 @@ const BOARD_COLUMN = 'minmax(84px, var(--af-board-col-max, 1fr))'
 /** Narrow round-label column: Sleeper shows the snake direction on the tiles themselves. */
 const ROUND_COLUMN = '28px'
 
-export type DraftBoardProps = {
+type DraftBoardProps = {
   picks: DraftPickSnapshot[]
   slotOrder: SlotOrderEntry[]
   tradedPicks?: TradedPickRecord[]

@@ -2,7 +2,7 @@
  * Rolling Insights soccer — schedule `status` and live `game_status` normalization.
  */
 
-export type RollingInsightsSoccerNormalizedStatus =
+type RollingInsightsSoccerNormalizedStatus =
   | 'scheduled'
   | 'delayed'
   | 'postponed'

@@ -24,7 +24,7 @@ import type { HealthFlag, HealthFlagAction } from './health'
 const K = 'commishHub.dynHealth.'
 
 /** `t()` for a server builder: the reader's language, then English, then the key. */
-export function dynText(language: string | undefined, key: string, vars: Record<string, string | number> = {}): string {
+function dynText(language: string | undefined, key: string, vars: Record<string, string | number> = {}): string {
   const lang = language && translations[language] ? language : 'en'
   const raw = translations[lang]?.[K + key] ?? translations.en[K + key] ?? K + key
   return interpolateTemplate(raw, vars)
@@ -142,7 +142,7 @@ export function taxiOverLimitFlag(
 
 // ── Rookie draft order ─────────────────────────────────────────────────────
 
-export type RookieOrderInput =
+type RookieOrderInput =
   /** An imported league: its platform orders the rookie draft. */
   | { kind: 'imported'; platformLabel: string }
   /** A native league; `rollover` is null when it has no finished season on file. */

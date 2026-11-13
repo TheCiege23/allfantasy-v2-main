@@ -14,7 +14,7 @@ export type HistoricalPlayerState = {
   id: string; rosterId: string; playerId: string; sport: string; position: string
   team: string | null; slotType: string; droppedAt: string | null; playerName?: string
 }
-export type HistoricalContribution = { player: HistoricalPlayerState; stats: Record<string, number>; gameId: string; gameStartsAt?: number }
+type HistoricalContribution = { player: HistoricalPlayerState; stats: Record<string, number>; gameId: string; gameStartsAt?: number }
 export type HistoricalPeriod = {
   contributions: HistoricalContribution[]; eligible: HistoricalPlayerState[]; missingPlayerIds: string[]
   slateFinal: boolean; correctionsReady: boolean; end: Date

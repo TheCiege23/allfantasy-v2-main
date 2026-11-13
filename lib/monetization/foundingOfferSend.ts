@@ -7,7 +7,7 @@
 import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 import { isFoundingMemberAccount } from '@/lib/monetization/foundingMember'
 
-export const FOUNDING_TEST_DOMAINS = ['@example.com', '@example.org', '@example.net', '@allfantasy.local', '@test.com']
+const FOUNDING_TEST_DOMAINS = ['@example.com', '@example.org', '@example.net', '@allfantasy.local', '@test.com']
 
 export type CouponCheck = {
   keyMode: 'LIVE' | 'TEST' | 'UNSET' | 'UNKNOWN'
@@ -36,7 +36,7 @@ export function foundingSendBlockers(args: { coupon: CouponCheck; now: Date; sta
   return out
 }
 
-export type FoundingCandidate = { id: string; email: string | null; emailVerified: Date | null; createdAt: Date }
+type FoundingCandidate = { id: string; email: string | null; emailVerified: Date | null; createdAt: Date }
 
 export function selectFoundingRecipients(args: {
   users: readonly FoundingCandidate[]

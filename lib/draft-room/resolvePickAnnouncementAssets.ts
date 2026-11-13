@@ -5,7 +5,7 @@
 import type { DraftPickSnapshot } from '@/lib/live-draft-engine/types'
 import type { PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 
-export type PickAnnouncementAssets = {
+type PickAnnouncementAssets = {
   headshotUrl: string | null
   teamLogoUrl: string | null
 }

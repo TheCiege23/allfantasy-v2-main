@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Settings, ShieldCheck, Sparkles } from 'lucide-react'
 import { AppModal } from '@/components/ui/AppModal'
 
-export type SettingsTabId = 'league' | 'commissioner' | 'format'
+type SettingsTabId = 'league' | 'commissioner' | 'format'
 
 interface LeagueSettingsShellProps {
   open: boolean

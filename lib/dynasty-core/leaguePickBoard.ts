@@ -17,9 +17,9 @@ export type BoardPickInput = { season: number; round: number; ownerRosterId: str
  * `complete`: every pick in the upcoming drafts is listed.
  * `traded_only`: the league's rookie-draft size is unknown, so only picks that changed hands are.
  */
-export type PickBoardCoverage = 'complete' | 'traded_only'
+type PickBoardCoverage = 'complete' | 'traded_only'
 
-export type BoardPick = {
+type BoardPick = {
   season: number
   round: number
   label: string

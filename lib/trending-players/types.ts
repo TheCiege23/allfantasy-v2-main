@@ -131,7 +131,7 @@ export type TrendingDashboardResult = {
   sourceFlags: TrendingSourceFlags
 }
 
-export type TrendingDashboardError = {
+type TrendingDashboardError = {
   ok: false
   error: string
   code?: LeagueToolAccessErrorCode | 'VALIDATION'

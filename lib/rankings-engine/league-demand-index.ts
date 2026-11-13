@@ -1,14 +1,14 @@
 import { prisma } from '@/lib/prisma'
 import { pickValue } from '@/lib/pick-valuation'
 
-export interface PositionDemandEntry {
+interface PositionDemandEntry {
   ldi: number
   meanPremiumPct: number
   sample: number
   stdPremiumPct?: number
 }
 
-export interface PositionDemand {
+interface PositionDemand {
   position: string
   demandScore: number
   avgOverpayPct: number
@@ -16,14 +16,14 @@ export interface PositionDemand {
   premiumPlayers: string[]
 }
 
-export interface PickDemand {
+interface PickDemand {
   round: number
   avgClearingValue: number
   premiumPct: number
   tradeCount: number
 }
 
-export interface PlayerDemand {
+interface PlayerDemand {
   playerName: string
   position: string
   demandScore: number
@@ -122,7 +122,7 @@ function ldiScore(meanPremiumPct: number, scale: number = LDI_SCALE): number {
   return Math.max(0, Math.min(100, Math.round(s)))
 }
 
-export function trimmedMean(values: number[]): number {
+function trimmedMean(values: number[]): number {
   if (values.length === 0) return 0
   if (values.length <= 4) {
     return values.reduce((s, v) => s + v, 0) / values.length
@@ -477,14 +477,14 @@ export async function computeLeagueDemandIndex(
   }
 }
 
-export interface ManagerPositionLDI {
+interface ManagerPositionLDI {
   position: string
   meanPremiumPct: number
   ldi: number
   sample: number
 }
 
-export interface ManagerTendency {
+interface ManagerTendency {
   managerName: string
   totalTrades: number
   positions: ManagerPositionLDI[]

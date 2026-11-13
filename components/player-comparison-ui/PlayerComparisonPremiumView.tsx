@@ -103,7 +103,7 @@ function ConfidenceRing({ pct }: { pct: number }) {
   )
 }
 
-export type PlayerComparisonPremiumViewProps = {
+type PlayerComparisonPremiumViewProps = {
   data: PlayerComparisonPremiumSnapshot
   leagueId?: string | null
   className?: string

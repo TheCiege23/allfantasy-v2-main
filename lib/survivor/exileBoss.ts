@@ -10,7 +10,7 @@
 
 import type { SurvivorExileBossMode } from './lateSeasonSettings'
 
-export interface ExileBossConfig {
+interface ExileBossConfig {
   mode: Exclude<SurvivorExileBossMode, 'chimmy_roster'>
   fixedScore?: number | null
   topN?: number
@@ -34,10 +34,10 @@ export function computeExileBossScore(config: ExileBossConfig, activeScores: Rea
   return round2(asc.length % 2 ? asc[mid]! : (asc[mid - 1]! + asc[mid]!) / 2)
 }
 
-export type ExileBoardLiveStatus = 'ahead' | 'behind'
+type ExileBoardLiveStatus = 'ahead' | 'behind'
 export type ExileBoardFinalStatus = 'won_week' | 'safe' | 'wiped'
 
-export interface ExileBoardInputRow {
+interface ExileBoardInputRow {
   userId: string
   displayName: string
   score: number

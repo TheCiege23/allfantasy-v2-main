@@ -3,16 +3,16 @@ import type { TokenSpendRuleCode } from "@/lib/tokens/constants"
 import { getTokenSpendRuleMatrixEntry } from "@/lib/tokens/pricing-matrix"
 import { upgradePathForPlan } from "@/lib/monetization/upgradeDestination"
 
-export type MonetizationAccessType = "free" | "subscription_only" | "subscription_or_tokens"
+type MonetizationAccessType = "free" | "subscription_only" | "subscription_or_tokens"
 
-export type MonetizationUnavailableBehavior = "show" | "disable_with_fallback" | "hide"
+type MonetizationUnavailableBehavior = "show" | "disable_with_fallback" | "hide"
 
-export type MonetizationSurfaceHints = {
+type MonetizationSurfaceHints = {
   routes: string[]
   components: string[]
 }
 
-export type PremiumFeatureMonetizationEntry = {
+type PremiumFeatureMonetizationEntry = {
   key: SubscriptionFeatureId
   title: string
   accessType: Exclude<MonetizationAccessType, "free">
@@ -25,7 +25,7 @@ export type PremiumFeatureMonetizationEntry = {
   surfaceHints: MonetizationSurfaceHints
 }
 
-export type FreeFeatureMonetizationEntry = {
+type FreeFeatureMonetizationEntry = {
   key: string
   title: string
   accessType: "free"
@@ -38,7 +38,7 @@ export type FreeFeatureMonetizationEntry = {
   surfaceHints: MonetizationSurfaceHints
 }
 
-export type FeatureMonetizationEntry =
+type FeatureMonetizationEntry =
   | PremiumFeatureMonetizationEntry
   | FreeFeatureMonetizationEntry
 
@@ -841,7 +841,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX_BY_KEY: Record<
   PREMIUM_FEATURE_MONETIZATION_MATRIX.map((entry) => [entry.key, entry])
 ) as Record<SubscriptionFeatureId, PremiumFeatureMonetizationEntry>
 
-export const FEATURE_MONETIZATION_MATRIX: readonly FeatureMonetizationEntry[] = [
+const FEATURE_MONETIZATION_MATRIX: readonly FeatureMonetizationEntry[] = [
   ...FREE_FEATURE_MONETIZATION_MATRIX,
   ...PREMIUM_FEATURE_MONETIZATION_MATRIX,
 ]
@@ -863,7 +863,7 @@ export function getPremiumMonetizationForFeature(
   return PREMIUM_FEATURE_MONETIZATION_MATRIX_BY_KEY[featureId] ?? null
 }
 
-export function getFeatureTokenFallbackRuleFromMatrix(
+function getFeatureTokenFallbackRuleFromMatrix(
   featureId: SubscriptionFeatureId
 ): TokenSpendRuleCode | null {
   return getPremiumMonetizationForFeature(featureId)?.tokenRuleCode ?? null

@@ -17,7 +17,7 @@ import { DivisionCrest } from './DivisionArt'
 
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
-export function ShareCardFace({ card, view, size, showPath, showStats }: { card: ShareCard; view: HubView; size: ShareSize; showPath: boolean; showStats: boolean }) {
+function ShareCardFace({ card, view, size, showPath, showStats }: { card: ShareCard; view: HubView; size: ShareSize; showPath: boolean; showStats: boolean }) {
   const { width, height } = SHARE_SIZES[size]
   const division = view.identity.divisions[card.divisionIndex]
   const conference = view.identity.conferences[card.conferenceIndex] ?? view.identity.conferences[0]!
@@ -61,7 +61,7 @@ export function ShareCardFace({ card, view, size, showPath, showStats }: { card:
   )
 }
 
-export type ChatShareTarget = { tournamentId: string; entryId: string }
+type ChatShareTarget = { tournamentId: string; entryId: string }
 
 export function ChampionShareStudio({ card, view, shareUrl, chatShare }: { card: ShareCard; view: HubView; shareUrl: string; chatShare?: ChatShareTarget | null }) {
   const [size, setSize] = useState<ShareSize>('story')

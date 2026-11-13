@@ -8,7 +8,7 @@
 
 import { createHash } from 'node:crypto'
 
-export type SurvivorStonesDraw = {
+type SurvivorStonesDraw = {
   seedLabel: string
   candidates: string[]
   eliminatedUserId: string

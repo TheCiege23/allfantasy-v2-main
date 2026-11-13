@@ -26,7 +26,7 @@ export type CommissionerTaskStatus =
  * nothing that already imports `CommissionerTaskRelatedLink` needs to
  * change.
  */
-export type CommissionerTaskRelatedLink = CommissionerRelatedLink
+type CommissionerTaskRelatedLink = CommissionerRelatedLink
 
 export interface CommissionerTask {
   id: string

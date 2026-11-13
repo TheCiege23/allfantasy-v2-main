@@ -55,7 +55,7 @@ export function signChimmyActionToken(input: {
   return { token: `${encoded}.${sign(encoded, key)}`, payload }
 }
 
-export type VerifiedActionToken =
+type VerifiedActionToken =
   | { ok: true; payload: ChimmyActionTokenPayload }
   | { ok: false; reason: 'malformed' | 'bad_signature' | 'expired' | 'no_secret' }
 

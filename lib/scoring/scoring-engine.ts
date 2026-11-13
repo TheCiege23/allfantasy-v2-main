@@ -52,7 +52,7 @@ function resolveFormatType(leagueVariant: string | null, settings: JsonRecord): 
   return formatId || undefined
 }
 
-export type LeagueWeekScoreResult = {
+type LeagueWeekScoreResult = {
   leagueId: string
   season: number
   weekOrRound: number

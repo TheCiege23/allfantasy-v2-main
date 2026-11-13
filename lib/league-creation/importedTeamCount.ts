@@ -15,10 +15,10 @@
  * today's lists until each is confirmed to handle other sizes.
  */
 
-export const IMPORT_FLEXIBLE_TEAM_COUNT_TYPES: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
+const IMPORT_FLEXIBLE_TEAM_COUNT_TYPES: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
 
 /** Same ceiling as redraft's 2-32 catalog range. */
-export const IMPORTED_TEAM_COUNT_MAX = 32
+const IMPORTED_TEAM_COUNT_MAX = 32
 
 /** True when `teamCount` may be used for `leagueType` in an import carryover. */
 export function isImportedTeamCountAllowed(

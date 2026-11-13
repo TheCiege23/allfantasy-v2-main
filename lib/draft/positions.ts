@@ -1,4 +1,4 @@
-export type RosterSlot = {
+type RosterSlot = {
   label: string
   positions: string[]
   count: number

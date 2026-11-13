@@ -24,7 +24,7 @@ import type { TenantRole } from './roles'
 
 // ─── Plan limits ─────────────────────────────────────────────────────────────
 
-export type PlanLimits = {
+type PlanLimits = {
   readonly maxLeagues: number | null
   readonly maxSeats: number | null
   /** Requests per minute. T-114 enforces it centrally. */
@@ -96,7 +96,7 @@ export function checkLeagueLimit(
  * So it is worth validating carefully at the one moment it can still be
  * changed, which is before it exists.
  */
-export const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{1,38}[a-z0-9])$/
+const SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{1,38}[a-z0-9])$/
 
 /**
  * Reserved because they collide with routes or read as us rather than as an
@@ -127,7 +127,7 @@ export function validateSlug(slug: string): Result<string, DomainError> {
 
 // ─── Provisioning ────────────────────────────────────────────────────────────
 
-export type ProvisionTenantInput = {
+type ProvisionTenantInput = {
   readonly tenantId: string
   readonly slug: string
   readonly name: string
@@ -139,7 +139,7 @@ export type ProvisionTenantInput = {
   }
 }
 
-export type ProvisionedTenant = {
+type ProvisionedTenant = {
   readonly tenantId: string
   readonly slug: string
   readonly planKey: string
@@ -203,7 +203,7 @@ export function planProvision(
   ]
 }
 
-export type ProvisionDeps = {
+type ProvisionDeps = {
   /**
    * Runs `fn` in a transaction scoped to the NEW tenant.
    *

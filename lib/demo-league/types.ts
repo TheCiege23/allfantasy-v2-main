@@ -29,7 +29,7 @@ export type DemoStandingRow = {
   pointsAgainst: number
 }
 
-export type DemoMatchupSide = { slot: number; points: number }
+type DemoMatchupSide = { slot: number; points: number }
 
 export type DemoMatchup = {
   home: DemoMatchupSide
@@ -60,7 +60,7 @@ export type DemoTrade = {
   sides: Array<{ slot: number; received: DemoTradeAsset[] }>
 }
 
-export type DemoHealth = {
+type DemoHealth = {
   score: number
   status: string
   summary: string
@@ -70,7 +70,7 @@ export type DemoHealth = {
 
 export type DemoAlert = { kind: 'health' | 'commissioner' | 'roster'; text: string }
 
-export type DemoLeagueSettings = {
+type DemoLeagueSettings = {
   sport: string
   season: number
   scoringLabel: string | null

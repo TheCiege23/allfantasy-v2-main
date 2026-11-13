@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-export type MentionType = '@global' | '@chimmy' | '@all' | '@username' | '#player' | '#league'
+type MentionType = '@global' | '@chimmy' | '@all' | '@username' | '#player' | '#league'
 
 /**
  * WHICH SIGIL OPENED THE LIST.
@@ -13,7 +13,7 @@ export type MentionType = '@global' | '@chimmy' | '@all' | '@username' | '#playe
  * and quietly find nobody. `#` means "a thing in the league" — a player or one
  * of your leagues — and inserts a plain name that notifies no one.
  */
-export type MentionTrigger = '@' | '#'
+type MentionTrigger = '@' | '#'
 
 export type MentionSuggestion = {
   type: MentionType
@@ -24,7 +24,7 @@ export type MentionSuggestion = {
 }
 
 /** A league the writer belongs to, for the `#` list. Matched on the client. */
-export type AutocompleteLeague = { id: string; name: string }
+type AutocompleteLeague = { id: string; name: string }
 
 export function useMentionAutocomplete({
   text,

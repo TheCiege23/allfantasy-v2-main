@@ -28,35 +28,35 @@ type WarehouseSimulationWriteClient = Pick<
 
 type WarehouseBundleWriteClient = WarehouseIngestionWriteClient & WarehouseSimulationWriteClient
 
-export interface StorePlayerStatsInput extends Omit<PlayerGameFactInput, 'sport'> {
+interface StorePlayerStatsInput extends Omit<PlayerGameFactInput, 'sport'> {
   sport: string
 }
 
-export interface StoreTeamGameStatsInput extends Omit<TeamGameFactInput, 'sport'> {
+interface StoreTeamGameStatsInput extends Omit<TeamGameFactInput, 'sport'> {
   sport: string
 }
 
-export interface StoreRosterSnapshotInput extends Omit<RosterSnapshotInput, 'sport'> {
+interface StoreRosterSnapshotInput extends Omit<RosterSnapshotInput, 'sport'> {
   sport: string
 }
 
-export interface StoreLeagueResultMatchupInput extends Omit<MatchupFactInput, 'sport'> {
+interface StoreLeagueResultMatchupInput extends Omit<MatchupFactInput, 'sport'> {
   sport: string
 }
 
-export interface StoreLeagueResultStandingInput extends Omit<SeasonStandingFactInput, 'sport'> {
+interface StoreLeagueResultStandingInput extends Omit<SeasonStandingFactInput, 'sport'> {
   sport: string
 }
 
-export interface StoreDraftLogInput extends Omit<DraftFactInput, 'sport'> {
+interface StoreDraftLogInput extends Omit<DraftFactInput, 'sport'> {
   sport: string
 }
 
-export interface StoreTradeLogInput extends Omit<TransactionFactInput, 'sport'> {
+interface StoreTradeLogInput extends Omit<TransactionFactInput, 'sport'> {
   sport: string
 }
 
-export interface StoreMatchupSimulationInput {
+interface StoreMatchupSimulationInput {
   sport: string
   leagueId: string | null
   weekOrPeriod: number
@@ -71,7 +71,7 @@ export interface StoreMatchupSimulationInput {
   iterations?: number
 }
 
-export interface StoreSeasonSimulationInput {
+interface StoreSeasonSimulationInput {
   sport: string
   leagueId: string
   teamId: string
@@ -84,7 +84,7 @@ export interface StoreSeasonSimulationInput {
   simulationsRun?: number
 }
 
-export interface StoreWarehouseBundleInput {
+interface StoreWarehouseBundleInput {
   playerStats?: StorePlayerStatsInput[]
   teamGameStats?: StoreTeamGameStatsInput[]
   rosterSnapshots?: StoreRosterSnapshotInput[]
@@ -100,7 +100,7 @@ export interface StoreWarehouseBundleInput {
   }
 }
 
-export interface WarehouseStoreIds {
+interface WarehouseStoreIds {
   playerStats: string[]
   teamGameStats: string[]
   rosterSnapshots: string[]
@@ -112,7 +112,7 @@ export interface WarehouseStoreIds {
   seasonSimulations: string[]
 }
 
-export interface WarehouseStoreBundleResult {
+interface WarehouseStoreBundleResult {
   counts: WarehouseDatasetCounts
   totalRecords: number
   ids: WarehouseStoreIds
@@ -254,39 +254,39 @@ async function persistSeasonSimulationOutput(
 
 const ingestion = new WarehouseIngestionService()
 
-export async function storePlayerStats(input: StorePlayerStatsInput): Promise<string> {
+async function storePlayerStats(input: StorePlayerStatsInput): Promise<string> {
   return ingestion.ingestPlayerGameFact(normalizePlayerStatsInput(input))
 }
 
-export async function storePlayerStatsBatch(inputs: StorePlayerStatsInput[]): Promise<string[]> {
+async function storePlayerStatsBatch(inputs: StorePlayerStatsInput[]): Promise<string[]> {
   return Promise.all(inputs.map((input) => storePlayerStats(input)))
 }
 
-export async function storeTeamGameStats(input: StoreTeamGameStatsInput): Promise<string> {
+async function storeTeamGameStats(input: StoreTeamGameStatsInput): Promise<string> {
   return ingestion.ingestTeamGameFact(normalizeTeamGameStatsInput(input))
 }
 
-export async function storeTeamGameStatsBatch(inputs: StoreTeamGameStatsInput[]): Promise<string[]> {
+async function storeTeamGameStatsBatch(inputs: StoreTeamGameStatsInput[]): Promise<string[]> {
   return Promise.all(inputs.map((input) => storeTeamGameStats(input)))
 }
 
-export async function storeRosterSnapshot(input: StoreRosterSnapshotInput): Promise<string> {
+async function storeRosterSnapshot(input: StoreRosterSnapshotInput): Promise<string> {
   return ingestion.ingestRosterSnapshot(normalizeRosterSnapshotInput(input))
 }
 
-export async function storeRosterSnapshotsBatch(inputs: StoreRosterSnapshotInput[]): Promise<string[]> {
+async function storeRosterSnapshotsBatch(inputs: StoreRosterSnapshotInput[]): Promise<string[]> {
   return Promise.all(inputs.map((input) => storeRosterSnapshot(input)))
 }
 
-export async function storeLeagueResultMatchup(input: StoreLeagueResultMatchupInput): Promise<string> {
+async function storeLeagueResultMatchup(input: StoreLeagueResultMatchupInput): Promise<string> {
   return ingestion.ingestMatchupFact(normalizeMatchupInput(input))
 }
 
-export async function storeLeagueResultStanding(input: StoreLeagueResultStandingInput): Promise<string> {
+async function storeLeagueResultStanding(input: StoreLeagueResultStandingInput): Promise<string> {
   return ingestion.ingestSeasonStandingFact(normalizeStandingInput(input))
 }
 
-export async function storeLeagueResults(opts: {
+async function storeLeagueResults(opts: {
   matchups?: StoreLeagueResultMatchupInput[]
   standings?: StoreLeagueResultStandingInput[]
 }): Promise<{ matchupIds: string[]; standingIds: string[] }> {
@@ -302,31 +302,31 @@ export async function storeLeagueResults(opts: {
   return { matchupIds, standingIds }
 }
 
-export async function storeDraftLog(input: StoreDraftLogInput): Promise<string> {
+async function storeDraftLog(input: StoreDraftLogInput): Promise<string> {
   return ingestion.ingestDraftFact(normalizeDraftInput(input))
 }
 
-export async function storeDraftLogsBatch(inputs: StoreDraftLogInput[]): Promise<string[]> {
+async function storeDraftLogsBatch(inputs: StoreDraftLogInput[]): Promise<string[]> {
   return Promise.all(inputs.map((input) => storeDraftLog(input)))
 }
 
-export async function storeTradeLog(input: StoreTradeLogInput): Promise<string> {
+async function storeTradeLog(input: StoreTradeLogInput): Promise<string> {
   return ingestion.ingestTransactionFact(normalizeTransactionInput(input))
 }
 
-export async function storeTradeLogsBatch(inputs: StoreTradeLogInput[]): Promise<string[]> {
+async function storeTradeLogsBatch(inputs: StoreTradeLogInput[]): Promise<string[]> {
   return Promise.all(inputs.map((input) => storeTradeLog(input)))
 }
 
-export async function storeMatchupSimulationOutput(input: StoreMatchupSimulationInput): Promise<string> {
+async function storeMatchupSimulationOutput(input: StoreMatchupSimulationInput): Promise<string> {
   return persistMatchupSimulationOutput(prisma, input)
 }
 
-export async function storeSeasonSimulationOutput(input: StoreSeasonSimulationInput): Promise<string> {
+async function storeSeasonSimulationOutput(input: StoreSeasonSimulationInput): Promise<string> {
   return persistSeasonSimulationOutput(prisma, input)
 }
 
-export async function storeSimulationOutputs(opts: {
+async function storeSimulationOutputs(opts: {
   matchup?: StoreMatchupSimulationInput
   seasonResults?: StoreSeasonSimulationInput[]
 }): Promise<{ matchupId?: string; seasonResultIds: string[] }> {
@@ -338,7 +338,7 @@ export async function storeSimulationOutputs(opts: {
   return { matchupId, seasonResultIds }
 }
 
-export async function storeWarehouseBundle(
+async function storeWarehouseBundle(
   input: StoreWarehouseBundleInput
 ): Promise<WarehouseStoreBundleResult> {
   return prisma.$transaction(async (tx) => {

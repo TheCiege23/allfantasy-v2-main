@@ -58,7 +58,7 @@ export type FranchiseView = {
   basis: string
 }
 
-export const FRANCHISE_GAPS = {
+const FRANCHISE_GAPS = {
   missingRole: (role: FranchiseRole) =>
     `no ${role} league is linked to this franchise, so the combined view is one-sided`,
   missingLeague: (role: FranchiseRole, platform: string) =>
@@ -141,7 +141,7 @@ export type TradeLeg = {
   basis?: string | null
 }
 
-export type SettlementStatus = 'pending' | 'settled' | 'partial' | 'contradicted'
+type SettlementStatus = 'pending' | 'settled' | 'partial' | 'contradicted'
 
 export type Settlement = {
   status: SettlementStatus

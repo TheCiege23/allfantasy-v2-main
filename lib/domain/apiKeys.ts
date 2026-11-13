@@ -30,7 +30,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { type DomainError, forbidden } from './errors'
 import { type Result, err, ok } from './result'
 
-export type ApiKeyEnvironment = 'live' | 'test'
+type ApiKeyEnvironment = 'live' | 'test'
 
 /** `cos_live_` / `cos_test_`. */
 export const KEY_PREFIX_TAG: Record<ApiKeyEnvironment, string> = {
@@ -39,13 +39,13 @@ export const KEY_PREFIX_TAG: Record<ApiKeyEnvironment, string> = {
 }
 
 /** Hex characters of randomness in the prefix's own segment. */
-export const PREFIX_RANDOM_HEX = 8
+const PREFIX_RANDOM_HEX = 8
 /** Bytes of secret. 32 bytes = 256 bits — nothing to guess. */
-export const SECRET_BYTES = 32
+const SECRET_BYTES = 32
 /** tenancy.prisma: "~17 chars". `cos_live_` (9) + 8 = 17. */
 export const MIN_PREFIX_LENGTH = 17
 
-export type GeneratedApiKey = {
+type GeneratedApiKey = {
   /** Shown EXACTLY ONCE, at creation. Never stored, never logged. */
   readonly plaintext: string
   /** Stored, indexed, unique, safe to display. */
@@ -100,7 +100,7 @@ export type StoredApiKey = {
   readonly lastUsedAt?: Date | null
 }
 
-export type VerifiedApiKey = {
+type VerifiedApiKey = {
   readonly tenantId: string
   readonly keyId: string
   readonly scopes: readonly string[]

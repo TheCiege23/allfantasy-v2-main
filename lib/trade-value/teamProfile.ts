@@ -27,7 +27,7 @@ import type { TeamProfile, TeamStance } from './types'
 export const STARTER_NEEDS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1 }
 const CORE_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
 
-export interface TeamProfileInput {
+interface TeamProfileInput {
   rosterId: string
   wins: number
   losses: number

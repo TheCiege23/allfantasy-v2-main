@@ -6,7 +6,7 @@
 
 import { isAiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
 
-export type ProviderErrorCategory =
+type ProviderErrorCategory =
   | 'billing'        // credits exhausted, payment required
   | 'rate_limit'     // 429 / quota exceeded
   | 'overload'       // 529 or server-side throttle
@@ -18,7 +18,7 @@ export type ProviderErrorCategory =
   | 'auth'           // invalid API key (provider-level)
   | 'unknown'
 
-export type NormalizedProviderError = {
+type NormalizedProviderError = {
   category: ProviderErrorCategory
   status: number | null
   message: string

@@ -1,6 +1,6 @@
 export type NotificationChannel = 'private_dm' | 'league_chat' | 'commissioner_alerts'
 
-export type PrivateDmCoachingPayload = {
+type PrivateDmCoachingPayload = {
   channel: 'private_dm'
   notification_type: 'ai_trade_coaching' | 'ai_waiver_coaching'
   user_id: string
@@ -9,7 +9,7 @@ export type PrivateDmCoachingPayload = {
   priority: 'low' | 'medium' | 'high'
 }
 
-export type LeagueChatPayload = {
+type LeagueChatPayload = {
   channel: 'league_chat'
   notification_type: 'trade_processed' | 'waiver_processed'
   league_id: string
@@ -17,7 +17,7 @@ export type LeagueChatPayload = {
   body: string
 }
 
-export type CommissionerAlertPayload = {
+type CommissionerAlertPayload = {
   channel: 'commissioner_alerts'
   notification_type: 'fairness_review'
   league_id: string

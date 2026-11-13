@@ -23,7 +23,7 @@ import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 
 // ─── Context type ─────────────────────────────────────────────────────────────
 
-export type NflContext = {
+type NflContext = {
   leagueId: string
   leagueName: string
   scoringFormat: "ppr" | "half_ppr" | "standard" | string
@@ -65,7 +65,7 @@ export type NflContext = {
 
 // ─── Provider data — from NFL stats/injury API ────────────────────────────────
 
-export type NflProviderData = {
+type NflProviderData = {
   weeklyProjections: Array<{
     playerId: string
     playerName: string
@@ -92,7 +92,7 @@ export type NflProviderData = {
 
 // ─── Insights — all deterministic calculations ────────────────────────────────
 
-export type NflInsights = {
+type NflInsights = {
   startSitRecommendations: Array<{
     playerId: string
     playerName: string

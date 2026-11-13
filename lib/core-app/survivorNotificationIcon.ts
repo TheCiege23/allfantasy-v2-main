@@ -27,7 +27,7 @@ export type SurvivorNotificationIcon =
   | 'raid'
   | 'alert'
 
-export const SURVIVOR_NOTIFICATION_TYPE_PREFIX = 'survivor:'
+const SURVIVOR_NOTIFICATION_TYPE_PREFIX = 'survivor:'
 
 /** Exact kinds, from the writers named above. Anything else Survivor falls back by family below. */
 const ICON_BY_KIND: Readonly<Record<string, SurvivorNotificationIcon>> = {

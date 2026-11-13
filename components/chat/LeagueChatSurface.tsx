@@ -38,7 +38,7 @@ import type { PinnedMatchupInput } from '@/lib/league-chat/redraftChatEvents'
 import './redraft-chat.css'
 import type { DynastySeasonClock } from '@/lib/league-chat/dynastyChatSkin'
 
-export type LeagueChatSurfaceProps = {
+type LeagueChatSurfaceProps = {
   leagueId: string
   leagueName: string
   dynastyBackground?: boolean

@@ -10,7 +10,7 @@
  * new normalizer/backtest-executor pair, never a schema migration.
  */
 
-export type ReplayDecisionType = 'trade' | 'waiver' | 'draft' | 'lineup' | 'commissioner_action' | 'roster_move'
+type ReplayDecisionType = 'trade' | 'waiver' | 'draft' | 'lineup' | 'commissioner_action' | 'roster_move'
 
 export interface ReplayImportInput {
   provider: string
@@ -129,7 +129,7 @@ export interface TradeRealOutcome {
  * the real, deterministic optimal lineup for the points that actually came
  * in that week.
  */
-export interface LineupReplayPlayer {
+interface LineupReplayPlayer {
   /** Real, stable provider player ID — same convention as `TradeReplayRosterAsset.providerAssetId` (Phase 9). */
   providerAssetId: string
   name: string
@@ -156,7 +156,7 @@ export interface LineupReplayPayload {
  * synthetic index — matching the Phase 9 lesson from Trade Replay about ID
  * consistency across arrays that describe the same real player.
  */
-export interface LineupMistakeDetail {
+interface LineupMistakeDetail {
   providerAssetId: string
   name: string
   actualPoints: number

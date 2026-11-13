@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import type { AutomationTrigger } from '@/lib/specialty-automation/types'
 import { resolveSpecialtyConceptKey, isSpecialtyConcept } from '@/lib/specialty-automation/types'
 
-export type AutomationValidation = { ok: true } | { ok: false; reason: string }
+type AutomationValidation = { ok: true } | { ok: false; reason: string }
 
 /**
  * Ensure `conceptRules` shape is safe before handlers read `extensions` and other keys.

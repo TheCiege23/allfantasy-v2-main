@@ -93,7 +93,7 @@ export type RosterProjectionPlayer = {
   isStarter: boolean
 }
 
-export type RosterProjectionSummary = {
+type RosterProjectionSummary = {
   projectedTotal: number
   /** Floor projection — `null` until formulas land. */
   floor: number | null
@@ -145,7 +145,7 @@ export function summarizeRosterProjection(args: {
   }
 }
 
-export type MatchupProjectionInput = {
+type MatchupProjectionInput = {
   yourTeamId: string | null
   opponentTeamId: string | null
   yourActualPoints: number | null
@@ -156,7 +156,7 @@ export type MatchupProjectionInput = {
   status: "scheduled" | "in_progress" | "final" | "unknown"
 }
 
-export type MatchupProjectionOutput = {
+type MatchupProjectionOutput = {
   /** Projected margin = yourProjected - opponentProjected (rounded). */
   projectedMargin: number | null
   /** Actual margin so far when both sides have actuals. */

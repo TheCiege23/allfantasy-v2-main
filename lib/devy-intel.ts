@@ -1,6 +1,6 @@
 import type { DevyPlayer } from '@prisma/client'
 
-export interface DevyIntelMetrics {
+interface DevyIntelMetrics {
   /** Null when no recruiting evidence exists — never the bare 0.75 default. */
   recruitingComposite: number | null
   productionIndex: number
@@ -27,7 +27,7 @@ export interface DevyIntelMetrics {
   transferRisk: number
 }
 
-export interface DevyFinalScore {
+interface DevyFinalScore {
   finalScore: number
   draftProjectionComponent: number
   adpMarketComponent: number
@@ -48,7 +48,7 @@ const DRAFT_CAPITAL_MULTIPLIERS: Record<number, number> = {
 
 const DRAFT_CAPITAL_UDFA = 0.10
 
-export function computeRecruitingComposite(player: DevyPlayer): number {
+function computeRecruitingComposite(player: DevyPlayer): number {
   if (player.recruitingComposite != null && player.recruitingComposite > 0) {
     return player.recruitingComposite
   }
@@ -69,7 +69,7 @@ export function computeRecruitingComposite(player: DevyPlayer): number {
   return 0.75
 }
 
-export function computeProductionIndex(player: DevyPlayer): number {
+function computeProductionIndex(player: DevyPlayer): number {
   const pos = player.position
   let score = 0
 
@@ -102,7 +102,7 @@ export function computeProductionIndex(player: DevyPlayer): number {
   return Math.round(Math.min(100, Math.max(0, score)) * 100) / 100
 }
 
-export function computePPABoost(player: DevyPlayer): number {
+function computePPABoost(player: DevyPlayer): number {
   const ppa = (player as any).ppaTotal as number | null | undefined
   if (ppa == null) return 50
 
@@ -115,7 +115,7 @@ export function computePPABoost(player: DevyPlayer): number {
   return 25
 }
 
-export function computeUsageBoost(player: DevyPlayer): number {
+function computeUsageBoost(player: DevyPlayer): number {
   const usage = (player as any).usageOverall as number | null | undefined
   if (usage == null) return 50
 
@@ -128,7 +128,7 @@ export function computeUsageBoost(player: DevyPlayer): number {
   return 25
 }
 
-export function computeWEPAScore(player: DevyPlayer): number {
+function computeWEPAScore(player: DevyPlayer): number {
   const wepa = (player as any).wepaTotal as number | null | undefined
   if (wepa == null) return 50
 
@@ -141,7 +141,7 @@ export function computeWEPAScore(player: DevyPlayer): number {
   return 20
 }
 
-export function computeTeamContextBoost(player: DevyPlayer): number {
+function computeTeamContextBoost(player: DevyPlayer): number {
   let boost = 0
 
   const spRating = (player as any).teamSpRating as number | null | undefined
@@ -162,7 +162,7 @@ export function computeTeamContextBoost(player: DevyPlayer): number {
   return boost
 }
 
-export function computeTransferRisk(player: DevyPlayer): number {
+function computeTransferRisk(player: DevyPlayer): number {
   if (!player.transferStatus) return 0
 
   let risk = 15
@@ -187,7 +187,7 @@ export function computeTransferRisk(player: DevyPlayer): number {
   return Math.max(0, Math.min(40, risk))
 }
 
-export function computeBreakoutAge(player: DevyPlayer): number | null {
+function computeBreakoutAge(player: DevyPlayer): number | null {
   if (player.breakoutAge != null) return player.breakoutAge
   if (!player.classYear || !player.statSeason) return null
 
@@ -208,7 +208,7 @@ export function computeBreakoutAge(player: DevyPlayer): number | null {
   return estimatedAge
 }
 
-export function breakoutAgeToScore(breakoutAge: number | null): number {
+function breakoutAgeToScore(breakoutAge: number | null): number {
   if (breakoutAge === null) return 50
   if (breakoutAge <= 19.5) return 95
   if (breakoutAge <= 20) return 90
@@ -219,7 +219,7 @@ export function breakoutAgeToScore(breakoutAge: number | null): number {
   return Math.max(20, 55 - (breakoutAge - 22) * 15)
 }
 
-export function computeAthleticProfileScore(player: DevyPlayer): number {
+function computeAthleticProfileScore(player: DevyPlayer): number {
   if (player.athleticProfileScore != null) return player.athleticProfileScore
 
   let score = 50
@@ -248,13 +248,13 @@ export function computeAthleticProfileScore(player: DevyPlayer): number {
   return Math.round(Math.min(100, Math.max(10, score)) * 100) / 100
 }
 
-export function computeDraftCapitalScore(projectedRound: number | null): number {
+function computeDraftCapitalScore(projectedRound: number | null): number {
   if (!projectedRound || projectedRound < 1) return 30
   const multiplier = DRAFT_CAPITAL_MULTIPLIERS[projectedRound] ?? DRAFT_CAPITAL_UDFA
   return Math.round(multiplier * 100)
 }
 
-export function estimateProjectedDraftRound(player: DevyPlayer): number {
+function estimateProjectedDraftRound(player: DevyPlayer): number {
   if (player.projectedDraftRound != null && player.projectedDraftRound > 0) return player.projectedDraftRound
 
   const recruiting = computeRecruitingComposite(player)
@@ -277,13 +277,13 @@ export function estimateProjectedDraftRound(player: DevyPlayer): number {
   return 7
 }
 
-export function estimateProjectedDraftPick(round: number): number {
+function estimateProjectedDraftPick(round: number): number {
   if (round === 1) return 16
   if (round === 2) return 48
   return round * 32 - 16
 }
 
-export function computeNilImpactScore(player: DevyPlayer): number {
+function computeNilImpactScore(player: DevyPlayer): number {
   if (player.nilImpactScore != null) return player.nilImpactScore
 
   let impact = 0
@@ -304,7 +304,7 @@ export function computeNilImpactScore(player: DevyPlayer): number {
   return Math.round(Math.min(100, Math.max(-20, impact)) * 100) / 100
 }
 
-export function computeInjurySeverityScore(player: DevyPlayer): number {
+function computeInjurySeverityScore(player: DevyPlayer): number {
   if (player.injurySeverityScore != null) return player.injurySeverityScore
 
   let score = 0
@@ -320,7 +320,7 @@ export function computeInjurySeverityScore(player: DevyPlayer): number {
   return Math.round(Math.min(100, Math.max(0, score)))
 }
 
-export function computeVolatilityScore(player: DevyPlayer): number {
+function computeVolatilityScore(player: DevyPlayer): number {
   if (player.volatilityScore != null) return player.volatilityScore
 
   let volatility = 30
@@ -387,7 +387,7 @@ export function computeDraftProjectionScore(player: DevyPlayer): number {
 // toward average nor quietly count as evidence.
 // ──────────────────────────────────────────────────────────────────
 
-export type DevySignalKey =
+type DevySignalKey =
   | 'recruiting'
   | 'production'
   | 'breakout'
@@ -416,12 +416,12 @@ export function hasProductionEvidence(player: DevyPlayer): boolean {
   ].some((v) => num(v) && v > 0)
 }
 
-export function hasAthleticEvidence(player: DevyPlayer): boolean {
+function hasAthleticEvidence(player: DevyPlayer): boolean {
   const p = player as any
   return num(p.athleticProfileScore) || (num(p.heightInches) && num(p.weightLbs))
 }
 
-export function hasTeamContextEvidence(player: DevyPlayer): boolean {
+function hasTeamContextEvidence(player: DevyPlayer): boolean {
   const p = player as any
   return num(p.teamSpRating) || num(p.returningProdPct)
 }
@@ -430,7 +430,7 @@ export function hasTeamContextEvidence(player: DevyPlayer): boolean {
  * Draft capital is derived from the projected round, which is itself derived
  * from recruiting and production. With neither of those it rests on nothing.
  */
-export function hasDraftCapitalEvidence(player: DevyPlayer): boolean {
+function hasDraftCapitalEvidence(player: DevyPlayer): boolean {
   const p = player as any
   if (num(p.projectedDraftRound) && p.projectedDraftRound > 0) return true
   return hasRecruitingEvidence(player) || hasProductionEvidence(player)
@@ -457,7 +457,7 @@ const DEVY_SIGNAL_WEIGHTS: { key: DevySignalKey; weight: number }[] = [
   { key: 'teamContext', weight: 0.05 },
 ]
 
-export type DevyProjection = {
+type DevyProjection = {
   /** 0-100, or null when not one signal was available. */
   score: number | null
   confidence: 'high' | 'moderate' | 'low' | null

@@ -117,7 +117,7 @@ function SlotSplit({ row }: { row: ExposureRow }) {
   )
 }
 
-export function ExposureTable({
+function ExposureTable({
   rows,
   connectedLeagueCount,
   filter,

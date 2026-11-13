@@ -13,7 +13,7 @@ function clampLimit(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
 }
 
-export interface LeaderboardEntry {
+interface LeaderboardEntry {
   rank: number
   managerId: string
   displayName: string | null
@@ -21,7 +21,7 @@ export interface LeaderboardEntry {
   extra?: { count?: number; grade?: string }
 }
 
-export interface LeaderboardResult {
+interface LeaderboardResult {
   entries: LeaderboardEntry[]
   total: number
   generatedAt: string

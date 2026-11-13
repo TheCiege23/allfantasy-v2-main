@@ -27,7 +27,7 @@ export interface InventoryItemRow {
   count: number
 }
 
-export interface ResolvedCosmeticRow {
+interface ResolvedCosmeticRow {
   category: string
   itemId: string | null
   itemName: string | null

@@ -34,7 +34,7 @@ async function copyText(value: string): Promise<boolean> {
   }
 }
 
-export interface CopyLinkActionProps {
+interface CopyLinkActionProps {
   payload: SharePayload;
   onCopy?: () => void;
   className?: string;

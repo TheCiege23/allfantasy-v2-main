@@ -3,8 +3,8 @@
  */
 
 export const POLL_MAX_OPTIONS = 6
-export const POLL_QUESTION_MAX_LENGTH = 200
-export const POLL_OPTION_MAX_LENGTH = 100
+const POLL_QUESTION_MAX_LENGTH = 200
+const POLL_OPTION_MAX_LENGTH = 100
 
 export type PollPayload = {
   question: string

@@ -21,7 +21,7 @@ import { buildChimmyFeedbackEvent, type ChimmyFeedbackValue } from '@/lib/chimmy
  * lost event costs a data point, never the answer — the sender swallows its own failures.
  */
 
-export type ChimmyAnswerRatingProps = {
+type ChimmyAnswerRatingProps = {
   answerId: string
   rating: ChimmyFeedbackValue | null
   leagueId: string | null

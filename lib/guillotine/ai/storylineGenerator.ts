@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type DynastyStoryline = { headline: string; body: string; tags?: string[] }
+type DynastyStoryline = { headline: string; body: string; tags?: string[] }
 
 export async function generateWeeklyGuillotineRecap(seasonId: string, scoringPeriod: number): Promise<DynastyStoryline> {
   const [season, eliminations, dangerLogs] = await Promise.all([

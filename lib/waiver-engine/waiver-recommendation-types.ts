@@ -11,7 +11,7 @@ import { z } from 'zod'
 // Recommendation Type Classification
 // ---------------------------------------------------------------------------
 
-export const RecommendationTypeEnum = z.enum([
+const RecommendationTypeEnum = z.enum([
   'Immediate Starter',
   'Short-Term Streamer',
   'Injury Fill-In',
@@ -30,7 +30,7 @@ export type RecommendationType = z.infer<typeof RecommendationTypeEnum>
 // Timing
 // ---------------------------------------------------------------------------
 
-export const TimingRecommendationEnum = z.enum([
+const TimingRecommendationEnum = z.enum([
   'Add now',
   'Bid tonight',
   'Wait and monitor',
@@ -41,13 +41,13 @@ export const TimingRecommendationEnum = z.enum([
 // Drop Confidence
 // ---------------------------------------------------------------------------
 
-export const DropConfidenceEnum = z.enum(['safe', 'medium', 'risky'])
+const DropConfidenceEnum = z.enum(['safe', 'medium', 'risky'])
 
 // ---------------------------------------------------------------------------
 // Factual Evidence
 // ---------------------------------------------------------------------------
 
-export const FactualEvidenceSchema = z.object({
+const FactualEvidenceSchema = z.object({
   source: z.enum(['league', 'roster', 'news', 'model', 'waiver_pool', 'schedule']),
   metric: z.string(),
   value: z.string(),
@@ -59,7 +59,7 @@ export type FactualEvidence = z.infer<typeof FactualEvidenceSchema>
 // Suggestion Schema
 // ---------------------------------------------------------------------------
 
-export const WaiverSuggestionV2Schema = z.object({
+const WaiverSuggestionV2Schema = z.object({
   playerName: z.string(),
   position: z.string(),
   team: z.string().nullable(),
@@ -94,7 +94,7 @@ export const WaiverSuggestionV2Schema = z.object({
 // Team Diagnosis
 // ---------------------------------------------------------------------------
 
-export const TeamDiagnosisSchema = z.object({
+const TeamDiagnosisSchema = z.object({
   teamDirection: z.string(),
   biggestNeeds: z.array(z.string()),
   benchProblems: z.array(z.string()),
@@ -105,7 +105,7 @@ export const TeamDiagnosisSchema = z.object({
 // Strategy Notes
 // ---------------------------------------------------------------------------
 
-export const StrategyNotesV2Schema = z.object({
+const StrategyNotesV2Schema = z.object({
   faabPlan: z.string(),
   claimApproach: z.string(),
   stashVsPointsGuidance: z.string(),
@@ -115,7 +115,7 @@ export const StrategyNotesV2Schema = z.object({
 // Callouts
 // ---------------------------------------------------------------------------
 
-export const CalloutsSchema = z.object({
+const CalloutsSchema = z.object({
   bestAddForPoints: z.string().nullable(),
   bestAddForUpside: z.string().nullable(),
   safestAdd: z.string().nullable(),

@@ -5,7 +5,7 @@
 
 import type { InvariantResult } from '@/lib/engine-testing/hardening/engineInvariants'
 
-export function isEngineInvariantRuntimeChecksEnabled(): boolean {
+function isEngineInvariantRuntimeChecksEnabled(): boolean {
   const v = process.env.ENGINE_INVARIANT_CHECKS?.trim().toLowerCase()
   return v === '1' || v === 'true' || v === 'yes'
 }

@@ -30,7 +30,7 @@ import {
  * error on the grade.
  */
 
-export type TradeKeeperCostLine = {
+type TradeKeeperCostLine = {
   name: string
   costRound: number
   keptThisSeason: boolean
@@ -53,7 +53,7 @@ export type TradeKeeperCosts =
       note: string | null
     }
 
-export type TradeKeeperPlayer = {
+type TradeKeeperPlayer = {
   name: string
   /** His market value in the ONE grade's receipt — the chart the letter used. Null when the grade has none. */
   value: number | null

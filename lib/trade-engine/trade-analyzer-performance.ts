@@ -33,14 +33,14 @@ export interface FastTradeResult {
   cached: boolean
 }
 
-export interface TimingBreakdown {
+interface TimingBreakdown {
   precomputeMs: number
   deterministicMs: number
   aiMs: number | null
   totalMs: number
 }
 
-export interface PrecomputedValues {
+interface PrecomputedValues {
   /** Player market values by name (normalized) */
   playerValues: Map<string, number>
   /** Risk scores by player name */
@@ -56,7 +56,7 @@ export interface PrecomputedValues {
 const PRECOMPUTE_TTL_MS = 15 * 60 * 1000
 const PRECOMPUTE_CACHE_KEY = 'trade:precomputed'
 
-export function setPrecomputedValues(values: PrecomputedValues): void {
+function setPrecomputedValues(values: PrecomputedValues): void {
   cacheSet(PRECOMPUTE_CACHE_KEY, values, PRECOMPUTE_TTL_MS)
 }
 

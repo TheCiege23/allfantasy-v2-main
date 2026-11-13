@@ -12,7 +12,7 @@ import { getFinalNomineeRosterIds } from './BigBrotherNominationEngine'
 import { getEligibleVoterRosterIds } from './BigBrotherVoteEngine'
 import { getJuryMembers } from './BigBrotherJuryEngine'
 
-export interface BigBrotherEligibility {
+interface BigBrotherEligibility {
   /** Can compete in HOH this week */
   canCompeteHOH: string[]
   /** Can be nominated (not HOH, not evicted) */

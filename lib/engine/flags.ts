@@ -13,7 +13,7 @@ export const ENGINE_FLAGS = {
   enableMLAcceptance: false,
 } as const
 
-export type EngineFlagKey = keyof typeof ENGINE_FLAGS
+type EngineFlagKey = keyof typeof ENGINE_FLAGS
 
 export function isEnabled(flag: EngineFlagKey): boolean {
   return ENGINE_FLAGS[flag] === true
@@ -34,7 +34,7 @@ export const ITERATION_LIMITS = {
   },
 } as const
 
-export const CACHE_TTL = {
+const CACHE_TTL = {
   rankings: 15 * 60 * 1000,
   trade: 5 * 60 * 1000,
   simulation: 30 * 60 * 1000,

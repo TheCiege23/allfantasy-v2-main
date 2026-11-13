@@ -93,7 +93,7 @@ export interface NotificationPanelState {
   refresh: () => Promise<void> | void
 }
 
-export interface NotificationPanelViewProps {
+interface NotificationPanelViewProps {
   state: NotificationPanelState
   onClose?: () => void
   showFooter?: boolean

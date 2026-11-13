@@ -81,7 +81,7 @@ function coerceSocialHandles(value: unknown): CreatorSocialHandles | null {
   return Object.values(socialHandles).some(Boolean) ? socialHandles : null
 }
 
-export function coerceCreatorBranding(value: unknown): CreatorBranding | null {
+function coerceCreatorBranding(value: unknown): CreatorBranding | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const input = value as Record<string, unknown>
   const branding: CreatorBranding = {
@@ -110,7 +110,7 @@ export function normalizeCreatorHandle(raw: string | null | undefined): string {
   return normalized || 'creator'
 }
 
-export function normalizeCreatorSlug(raw: string | null | undefined): string {
+function normalizeCreatorSlug(raw: string | null | undefined): string {
   return normalizeCreatorHandle(raw)
 }
 

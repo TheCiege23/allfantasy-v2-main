@@ -35,7 +35,7 @@ export type Fresh<T> = {
 }
 
 /** A `Fresh<T>` with the derived fields a renderer actually wants. */
-export type FreshnessView<T> = Fresh<T> & {
+type FreshnessView<T> = Fresh<T> & {
   ageMs: number
   isStale: boolean
   /** Short label for the UI: "just now", "4m ago", "2h ago", "3d ago". */
@@ -60,7 +60,7 @@ export function emptyFreshness(staleAfterMs: number | null = null): Fresh<null> 
   return { data: null, fetchedAt: 0, source: 'none', staleAfterMs }
 }
 
-export function ageMs(entry: Pick<Fresh<unknown>, 'fetchedAt'>, nowMs: number = Date.now()): number {
+function ageMs(entry: Pick<Fresh<unknown>, 'fetchedAt'>, nowMs: number = Date.now()): number {
   if (!Number.isFinite(entry.fetchedAt) || entry.fetchedAt <= 0) return Number.POSITIVE_INFINITY
   return Math.max(0, nowMs - entry.fetchedAt)
 }

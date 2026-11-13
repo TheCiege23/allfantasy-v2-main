@@ -3,7 +3,7 @@ import { getLeagueDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import type { SportType } from '@/lib/sport-defaults/types'
 
 export const ZOMBIE_DEFAULT_MANAGERS = 20
-export const ZOMBIE_MIN_MANAGERS = 4
+const ZOMBIE_MIN_MANAGERS = 4
 export const ZOMBIE_MAX_UNIVERSE_LEAGUES = 6
 
 export function getZombieCreationProfile(sport: string) {

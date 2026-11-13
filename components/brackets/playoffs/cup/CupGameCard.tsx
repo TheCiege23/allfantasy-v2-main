@@ -9,7 +9,7 @@ import { cupGameDetail, cupGameProgress, cupGameState, cupLiveClock, cupTeamCode
 import { countdown, timeOnly, tipoffLabel } from "./cupFormat"
 import { useClientTime } from "./useClientTime"
 
-export type CupGameCardProps = {
+type CupGameCardProps = {
   scoringExcludedReason?: "draft" | "late" | null
   series: PlayoffSeriesView
   sport: string

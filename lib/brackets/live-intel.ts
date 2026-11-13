@@ -17,12 +17,12 @@ export type LiveGameSummary = {
   momentumScore: number | null
 }
 
-export type LeaderboardSnapshot = {
+type LeaderboardSnapshot = {
   currentRank: number
   totalEntries: number
 }
 
-export type SurvivalSummary = {
+type SurvivalSummary = {
   survivalProbability: number
   alivePct: number
   championAlive: boolean
@@ -30,12 +30,12 @@ export type SurvivalSummary = {
   currentPoints: number
 }
 
-export type ChampionPathNode = {
+type ChampionPathNode = {
   round: number
   opponentName: string | null
 }
 
-export type LiveBracketIntel = {
+type LiveBracketIntel = {
   entryId: string
   tournamentId: string
   liveGames: LiveGameSummary[]

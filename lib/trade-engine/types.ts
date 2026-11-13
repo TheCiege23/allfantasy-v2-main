@@ -1,13 +1,13 @@
 // lib/trade-engine/types.ts
 
-export type Sport = 'nfl' | 'nba'
+type Sport = 'nfl' | 'nba'
 
-export type AssetType = 'PLAYER' | 'PICK' | 'FAAB'
+type AssetType = 'PLAYER' | 'PICK' | 'FAAB'
 export type PickProjected = 'early' | 'mid' | 'late' | 'unknown'
-export type RosterSlot = 'Starter' | 'Bench' | 'IR' | 'Taxi'
+type RosterSlot = 'Starter' | 'Bench' | 'IR' | 'Taxi'
 
 // NEW (non-breaking)
-export type SurplusGrade = 'core' | 'soft_surplus' | 'hard_surplus'
+type SurplusGrade = 'core' | 'soft_surplus' | 'hard_surplus'
 
 export type Asset = {
   id: string
@@ -71,7 +71,7 @@ export type Asset = {
   tags?: string[]
 }
 
-export type LeagueContext = {
+type LeagueContext = {
   leagueId?: string
   leagueName: string
   scoringType: 'PPR' | 'Half PPR' | 'Standard' | string
@@ -89,9 +89,9 @@ export type LeagueContext = {
 }
 
 export type ContenderTier = 'champion' | 'contender' | 'middle' | 'rebuild'
-export type TradeAggression = 'low' | 'medium' | 'high'
-export type RiskTolerance = 'low' | 'medium' | 'high'
-export type ReputationTag = 'Shark' | 'Gambler' | 'Fair Dealer' | 'Taco'
+type TradeAggression = 'low' | 'medium' | 'high'
+type RiskTolerance = 'low' | 'medium' | 'high'
+type ReputationTag = 'Shark' | 'Gambler' | 'Fair Dealer' | 'Taco'
 
 export type ManagerProfile = {
   rosterId: number
@@ -179,7 +179,7 @@ export const DEFAULT_CONSTRAINTS: Constraints = {
 }
 
 export type AcceptanceLabel = 'Strong' | 'Aggressive' | 'Speculative' | 'Long Shot'
-export type VetoLikelihood = 'Low' | 'Medium' | 'High'
+type VetoLikelihood = 'Low' | 'Medium' | 'High'
 
 export type TradeCandidate = {
   id: string
@@ -329,7 +329,7 @@ export type HardRuleResult = {
 }
 
 export type NegotiationTheme = 'NEED_FIT' | 'MARKET' | 'MANAGER_BIAS' | 'LINEUP_UPGRADE' | 'RISK_SWAP'
-export type SweetenerType = 'PICK' | 'PLAYER' | 'FAAB'
+type SweetenerType = 'PICK' | 'PLAYER' | 'FAAB'
 export type SweetenerTarget = 'SMALL' | 'MEDIUM' | 'LARGE'
 
 export type NegotiationToolkit = {

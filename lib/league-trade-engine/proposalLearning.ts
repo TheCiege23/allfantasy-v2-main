@@ -1,6 +1,6 @@
 import type { PartnerBehaviorProfile } from '@/lib/league-trade-engine/proposalSuggestions'
 
-export type HistoricalProposal = {
+type HistoricalProposal = {
   proposerRosterId: string
   receiverRosterId: string
   status: string

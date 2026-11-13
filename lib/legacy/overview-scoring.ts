@@ -1,4 +1,4 @@
-export type LeagueClass = 'dynasty' | 'redraft' | 'specialty'
+type LeagueClass = 'dynasty' | 'redraft' | 'specialty'
 
 export interface LeagueRecord {
   league_id: string

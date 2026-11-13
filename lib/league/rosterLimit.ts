@@ -32,7 +32,7 @@ import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { isInjuredReserveRosterSlot, isReserveRosterSlot, resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 
-export type RosterLimit = {
+type RosterLimit = {
   limit: number
   /**
    * 'active': IR / taxi / devy players are not counted. 'all': every player but the taxi squad counts
@@ -106,7 +106,7 @@ export function taxiPlayerIds(playerData: unknown): Set<string> {
 }
 
 /** Players on IR — `lineup_sections.ir`, the flat `reserve` / `ir` arrays — never taxi or devy. */
-export function irPlayerIds(playerData: unknown): Set<string> {
+function irPlayerIds(playerData: unknown): Set<string> {
   return idsInSlots(playerData, isInjuredReserveRosterSlot)
 }
 

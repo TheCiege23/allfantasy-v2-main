@@ -6,7 +6,7 @@
 import { resolveMetaUIData } from './MetaUIDataResolver'
 import { resolveSportForMetaUI } from './SportMetaUIResolver'
 
-export interface DashboardLoadOptions {
+interface DashboardLoadOptions {
   sport: string
   leagueFormat?: string
   timeframe?: string

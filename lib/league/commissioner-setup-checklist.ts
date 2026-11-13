@@ -1,6 +1,6 @@
 import { countAssignedManagers } from './setup-readiness'
 
-export type SetupStep = {
+type SetupStep = {
   id: string
   label: string
   detail: string

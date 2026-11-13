@@ -4,7 +4,7 @@ import { FeedList } from "./FeedList"
 import type { FeedItemType } from "@/lib/content-feed"
 import type { ContentFeedItem } from "@/lib/content-feed"
 
-export interface ForYouFeedProps {
+interface ForYouFeedProps {
   sport: string | null
   contentType: FeedItemType | null
   onFollowCreator?: (creatorHandle: string) => void

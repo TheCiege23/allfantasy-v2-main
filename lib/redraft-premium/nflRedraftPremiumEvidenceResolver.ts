@@ -25,13 +25,13 @@ export type NflRedraftPremiumEvidenceCounts = {
   byType: Record<string, number>
 }
 
-export type NflRedraftPremiumEvidenceResolverResult = {
+type NflRedraftPremiumEvidenceResolverResult = {
   evidencePackets: NflRedraftProviderEvidencePacket[]
   resolverStatus: NflRedraftPremiumEvidenceResolverStatus
   evidenceCounts: NflRedraftPremiumEvidenceCounts
 }
 
-export type NflRedraftPremiumEvidenceResolverInput = {
+type NflRedraftPremiumEvidenceResolverInput = {
   serviceId: NflRedraftPremiumServiceId
   serviceVariant?: NflRedraftPremiumServiceVariant
   canonicalIds: NflRedraftPremiumApiCanonicalIds

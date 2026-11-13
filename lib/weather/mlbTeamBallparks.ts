@@ -1,5 +1,5 @@
 /** Home ballpark coordinates (approximate stadium location) for weather forecasts. */
-export type MlbBallpark = { lat: number; lng: number; dome: boolean; label: string }
+type MlbBallpark = { lat: number; lng: number; dome: boolean; label: string }
 
 export const MLB_TEAM_BALLPARK: Record<string, MlbBallpark> = {
   AZ: { lat: 33.4453, lng: -112.0667, dome: true, label: 'Chase Field' },

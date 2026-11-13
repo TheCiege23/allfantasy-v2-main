@@ -1,4 +1,4 @@
 export { getAvatarPresetEmoji, AVATAR_PRESET_EMOJI } from "./AvatarCatalogResolver"
-export { uploadProfileImage, type UploadResult } from "./ProfileImageUploadService"
+export { uploadProfileImage } from "./ProfileImageUploadService"
 export { setProfileAvatarUrl } from "./UserImagePersistenceService"
-export { getAvatarCatalog, type AvatarCatalogEntry } from "./AvatarPickerService"
+export { getAvatarCatalog } from "./AvatarPickerService"

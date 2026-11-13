@@ -19,7 +19,7 @@ import {
   weekNoteText,
 } from '@/lib/commissioner-os/i18n/toolsCopy'
 
-export interface LeagueSettingsViewProps {
+interface LeagueSettingsViewProps {
   snapshot: LeagueSettingsSnapshot | null
   dataMode: CommissionerDataMode
   errorMessage?: string | null

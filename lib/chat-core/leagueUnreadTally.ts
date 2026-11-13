@@ -7,9 +7,9 @@
  * league instead of being thrown away — so the rail and the bubble can never disagree.
  */
 
-export type LeagueUnreadRow = { leagueId: string; createdAt: Date; mentionedUserIds: string[] }
+type LeagueUnreadRow = { leagueId: string; createdAt: Date; mentionedUserIds: string[] }
 
-export type LeagueUnreadTally = { count: number; mentions: number; byLeague: Record<string, number> }
+type LeagueUnreadTally = { count: number; mentions: number; byLeague: Record<string, number> }
 
 export function tallyLeagueUnread(
   rows: readonly LeagueUnreadRow[],

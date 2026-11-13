@@ -26,7 +26,7 @@ export type LockState = {
   clock: string
 }
 
-export const SOON_MINUTES = 120
+const SOON_MINUTES = 120
 export const LOCK_ZONE = 'America/New_York'
 
 /** "Sun 1:00p ET" — the kickoff on a schedule reader's clock. */

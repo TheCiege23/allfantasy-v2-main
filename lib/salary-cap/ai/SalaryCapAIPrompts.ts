@@ -42,7 +42,7 @@ function contextSummary(ctx: SalaryCapAIDeterministicContext): string {
   return lines.join(' ')
 }
 
-export function buildStartupAuctionPrompt(
+function buildStartupAuctionPrompt(
   ctx: SalaryCapAIDeterministicContext
 ): { system: string; user: string } {
   const sport = sportLabel(ctx.sport)
@@ -61,7 +61,7 @@ Give startup auction strategy: (1) how to allocate cap across positions, (2) nom
   return { system, user }
 }
 
-export function buildCapHealthPrompt(
+function buildCapHealthPrompt(
   ctx: SalaryCapAIDeterministicContext
 ): { system: string; user: string } {
   const system = `You are AllFantasy's Salary Cap League cap health advisor. Your role is EXPLANATION and RECOMMENDATION only.
@@ -81,7 +81,7 @@ Provide: (1) cap health summary, (2) main risks (dead money, expirations), (3) e
   return { system, user }
 }
 
-export function buildExtensionTagPrompt(
+function buildExtensionTagPrompt(
   ctx: SalaryCapAIDeterministicContext
 ): { system: string; user: string } {
   const system = `You are AllFantasy's Salary Cap League extension and franchise tag advisor. Your role is RECOMMENDATION and EXPLANATION only.
@@ -101,7 +101,7 @@ Provide: (1) extension recommendations (who to extend, ballpark fair price), (2)
   return { system, user }
 }
 
-export function buildTradeCapPrompt(
+function buildTradeCapPrompt(
   ctx: SalaryCapAIDeterministicContext
 ): { system: string; user: string } {
   const system = `You are AllFantasy's Salary Cap League trade and strategy advisor. Your role is EXPLANATION and FRAMING only.
@@ -118,7 +118,7 @@ Provide: (1) how to think about trade cap impact (both sides), (2) contender vs 
   return { system, user }
 }
 
-export function buildBestballPrompt(
+function buildBestballPrompt(
   ctx: SalaryCapAIDeterministicContext
 ): { system: string; user: string } {
   const sport = sportLabel(ctx.sport)
@@ -136,7 +136,7 @@ Provide: (1) roster construction strengths and weaknesses for best ball, (2) spi
   return { system, user }
 }
 
-export function buildOffseasonPlanningPrompt(
+function buildOffseasonPlanningPrompt(
   ctx: SalaryCapAIDeterministicContext
 ): { system: string; user: string } {
   const system = `You are AllFantasy's Salary Cap League long-range planning advisor. Your role is STRATEGY and EXPLANATION only.
@@ -156,7 +156,7 @@ Provide: (1) 2–5 year cap and roster planning, (2) title window analysis, (3) 
   return { system, user }
 }
 
-export function buildOrphanTakeoverPrompt(
+function buildOrphanTakeoverPrompt(
   ctx: SalaryCapAIDeterministicContext
 ): { system: string; user: string } {
   const system = `You are AllFantasy's Salary Cap League orphan team advisor. Your role is RECOMMENDATION and EXPLANATION only.

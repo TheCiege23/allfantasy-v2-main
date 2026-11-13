@@ -54,7 +54,7 @@ const ROW_SELECT = {
   fetchedAt: true,
 } as const
 
-export interface StartVsDisplayPlayer {
+interface StartVsDisplayPlayer {
   name: string
   team: string | null
   position?: string | null

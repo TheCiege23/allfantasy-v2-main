@@ -10,7 +10,7 @@ import { MLB_ALL_SCORING_CATEGORIES } from '@/lib/mlb-scoring/MlbScoringCategori
 import { NHL_ALL_SCORING_CATEGORIES } from '@/lib/nhl-scoring/NhlScoringCategories'
 import { SOCCER_SCORING_CATEGORIES } from '@/lib/soccer-scoring/SoccerScoringCategories'
 
-export type ScoringStatDisplayMeta = {
+type ScoringStatDisplayMeta = {
   label: string
   categoryOrder: number
   categoryTitle: string
@@ -59,7 +59,7 @@ const NHL_MAP = flattenCategories(NHL_ALL_SCORING_CATEGORIES as CatLike[])
 const SOCCER_MAP = flattenCategories(SOCCER_SCORING_CATEGORIES as CatLike[])
 
 /** Registry / template key → key used in commissioner category tables (for label lookup). */
-export const SCORING_STAT_KEY_ALIASES: Record<string, Record<string, string>> = {
+const SCORING_STAT_KEY_ALIASES: Record<string, Record<string, string>> = {
   NFL: {
     interception: 'interception_thrown',
     receptions: 'reception',

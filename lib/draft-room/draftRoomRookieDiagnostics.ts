@@ -10,7 +10,7 @@ import {
   type DraftRoomRookiePlayerLike,
 } from '@/lib/draft-room/draftPlayerRookie'
 
-export type RookieSignalDiagnosticsSampleRow = {
+type RookieSignalDiagnosticsSampleRow = {
   playerId: string | null
   name: string
   position: string
@@ -25,7 +25,7 @@ export type RookieSignalDiagnosticsSampleRow = {
   rookieSource?: string
 }
 
-export type RookieSignalDiagnostics = {
+type RookieSignalDiagnostics = {
   totalPlayers: number
   sport: string
   seasonYear: number

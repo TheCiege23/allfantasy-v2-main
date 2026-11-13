@@ -19,7 +19,7 @@ import type { IdpPlayerCardPayload } from '@/lib/idp-projections/idpPlayerCard'
 import type { IdpSalaryRecordJson } from '@/app/idp/hooks/useIdpTeamCap'
 import type { DefenderEvaluation } from '@/lib/idp/ai/idpCapChimmy'
 
-export type IDPPlayerModalProps = {
+type IDPPlayerModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   leagueId: string

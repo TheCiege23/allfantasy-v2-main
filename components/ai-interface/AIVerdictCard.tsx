@@ -3,7 +3,7 @@
 import React from 'react'
 import { MessageSquare } from 'lucide-react'
 
-export interface AIVerdictCardProps {
+interface AIVerdictCardProps {
   /** Primary AI synthesis text */
   primaryAnswer: string
   /** Optional short verdict label */

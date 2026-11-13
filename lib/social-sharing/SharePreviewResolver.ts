@@ -6,7 +6,7 @@ import { getAchievementShareUrl, getCopyLinkPayload, getTwitterShareUrl, getFace
 import type { AchievementShareType, AchievementShareContext } from './types';
 import type { GrokShareCopyOutput } from './GrokShareCopyService';
 
-export interface SharePreviewPayload {
+interface SharePreviewPayload {
   shareUrl: string;
   title: string;
   caption: string;

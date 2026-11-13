@@ -19,8 +19,8 @@ export const DIVISION_NAME_MAX = 16
 export const CONFERENCE_NAME_MAX = 14
 export const CONFERENCE_COUNT_OPTIONS = [2, 4, 6, 8, 10] as const
 
-export const IDENTITY_ART_BASE = '/artwork/tournaments/identity'
-export const BLACK_GOLD_BASE = '/artwork/tournaments/black-gold'
+const IDENTITY_ART_BASE = '/artwork/tournaments/identity'
+const BLACK_GOLD_BASE = '/artwork/tournaments/black-gold'
 
 /** Overlay geometry, in percent of the art's box (division-identity README). */
 export const CREST_GEOMETRY = {
@@ -34,35 +34,35 @@ export const CREST_GEOMETRY = {
 } as const
 export const RING_GEOMETRY = { emblem: { left: 19.3, top: 19.3, width: 61.3 } } as const
 
-export type SideId = (typeof seasonArtSides)[number]
-export type Side = (typeof seasonArtCatalog.sides)[SideId]
+type SideId = (typeof seasonArtSides)[number]
+type Side = (typeof seasonArtCatalog.sides)[SideId]
 
 export function side(sideId: string): Side {
   return seasonArtCatalog.sides[sideId as SideId] ?? seasonArtCatalog.sides.gold
 }
 
 export const libraryImages: readonly string[] = seasonArtEmblems
-export const isLibraryImage = (id: string) => libraryImages.includes(id)
-export const isSide = (id: string) => (seasonArtSides as readonly string[]).includes(id)
+const isLibraryImage = (id: string) => libraryImages.includes(id)
+const isSide = (id: string) => (seasonArtSides as readonly string[]).includes(id)
 
-export const framePath = (sideId: string) => `${IDENTITY_ART_BASE}/frames/${isSide(sideId) ? sideId : 'gold'}.svg`
-export const ringPath = (sideId: string) => `${IDENTITY_ART_BASE}/rings/${isSide(sideId) ? sideId : 'gold'}.svg`
+const framePath = (sideId: string) => `${IDENTITY_ART_BASE}/frames/${isSide(sideId) ? sideId : 'gold'}.svg`
+const ringPath = (sideId: string) => `${IDENTITY_ART_BASE}/rings/${isSide(sideId) ? sideId : 'gold'}.svg`
 export const medallionPath = (sideId: string) => `${IDENTITY_ART_BASE}/medallions/${isSide(sideId) ? sideId : 'gold'}.svg`
 export const libraryPath = (id: string) => `${IDENTITY_ART_BASE}/library/${isLibraryImage(id) ? id : 'shieldstar'}.svg`
 /** The side's own emblem id, e.g. `angelic` → `angel`. */
-export const defaultEmblem = (sideId: string) => side(sideId).icon.replace('library/', '').replace('.svg', '')
+const defaultEmblem = (sideId: string) => side(sideId).icon.replace('library/', '').replace('.svg', '')
 
 // ── presets ──────────────────────────────────────────────────────────────────
 
-export type Preset = { id: string; a: SideId; b: SideId; label: string }
+type Preset = { id: string; a: SideId; b: SideId; label: string }
 export const PRESETS: Preset[] = seasonArtCatalog.pairs.map(p => ({
   id: `${p.a}-${p.b}`, a: p.a as SideId, b: p.b as SideId, label: `${side(p.a).name} vs ${side(p.b).name}`,
 }))
 export const BLACK_GOLD_PRESET_ID = 'black-gold'
 
 /** The ten conference mascots that also have Black & Gold pack art. */
-export const KB_CONFERENCES = ['beast', 'goat', 'grizz', 'kings', 'rebels', 'smoke', 'stealth', 'swamp', 'thunder', 'warrior'] as const
-export type KbConference = (typeof KB_CONFERENCES)[number]
+const KB_CONFERENCES = ['beast', 'goat', 'grizz', 'kings', 'rebels', 'smoke', 'stealth', 'swamp', 'thunder', 'warrior'] as const
+type KbConference = (typeof KB_CONFERENCES)[number]
 
 // ── stored shape ─────────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ const conferenceSchema = z.object({
   image: z.string().refine(isLibraryImage, 'Choose a conference image from the library.'),
 })
 
-export const divisionIdentitySchema = z.object({
+const divisionIdentitySchema = z.object({
   version: z.literal(1).default(1),
   presetId: z.string().nullable(),
   divisions: z.tuple([divisionSchema, divisionSchema]),
@@ -159,13 +159,13 @@ export function imageFor(conference: string, division: string): string | null {
   return `${BLACK_GOLD_BASE}/crests/${c}-${d}.svg`
 }
 
-export function bannerFor(conference: string, division: string): string | null {
+function bannerFor(conference: string, division: string): string | null {
   const c = slug(conference), d = slug(division)
   if (!KB_CONFERENCES.includes(c as KbConference) || !['black', 'gold'].includes(d)) return null
   return `${BLACK_GOLD_BASE}/banners/${c}-${d}.svg`
 }
 
-export type BlackGoldMark = 'kbi' | 'black-buffalo' | 'gold-buffalo' | 'region-north' | 'region-east' | 'region-south' | 'region-west' | 'conference-finals' | 'wildcard-bubble' | 'championship'
+type BlackGoldMark = 'kbi' | 'black-buffalo' | 'gold-buffalo' | 'region-north' | 'region-east' | 'region-south' | 'region-west' | 'conference-finals' | 'wildcard-bubble' | 'championship'
 export const markPath = (mark: BlackGoldMark) => `${BLACK_GOLD_BASE}/marks/${mark}.svg`
 
 export type CrestArt =

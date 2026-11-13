@@ -14,7 +14,7 @@
  *    at render time, so the page cannot call Yahoo importable while it is coming soon.
  */
 
-export type CommissionerFeature = {
+type CommissionerFeature = {
   /** Anchor id, also the heading id the section is labelled by. */
   id: string
   eyebrow: string

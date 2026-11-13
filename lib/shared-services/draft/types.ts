@@ -17,7 +17,7 @@ export type { RecommendationInput, RecommendationPlayer, RecommendationResult }
  * already-defined 'balanced_builder' archetype (lib/ai/opponents/botProfiles.ts)
  * as a neutral baseline — never a fabricated or invented personality.
  */
-export type LegacyDraftGraderId = 'ai_opponent_draft'
+type LegacyDraftGraderId = 'ai_opponent_draft'
 
 export interface LegacyDraftGraderResult {
   graderId: LegacyDraftGraderId

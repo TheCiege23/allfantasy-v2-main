@@ -12,7 +12,7 @@ import {
 } from '../HistoricalFactGenerator'
 import { normalizeSportForWarehouse } from '../types'
 
-export interface GameStatsPipelineResult {
+interface GameStatsPipelineResult {
   sport: string
   season: number
   weekOrRound: number
@@ -44,7 +44,7 @@ export async function runGameStatsIngestionPipeline(
   }
 }
 
-export interface MatchupScoringPipelineResult {
+interface MatchupScoringPipelineResult {
   leagueId: string
   season: number
   week: number
@@ -63,7 +63,7 @@ export async function runMatchupScoringPipeline(
   return { leagueId, season, week, matchupCount }
 }
 
-export interface RosterSnapshotPipelineResult {
+interface RosterSnapshotPipelineResult {
   leagueId: string
   weekOrPeriod: number
   season?: number
@@ -82,7 +82,7 @@ export async function runRosterSnapshotPipeline(
   return { leagueId, weekOrPeriod, season, snapshotCount }
 }
 
-export interface StandingsPipelineResult {
+interface StandingsPipelineResult {
   leagueId: string
   season: number
   standingCount: number
@@ -99,12 +99,12 @@ export async function runStandingsIngestionPipeline(
   return { leagueId, season, standingCount }
 }
 
-export interface TransactionPipelineResult {
+interface TransactionPipelineResult {
   leagueId: string
   transactionCount: number
 }
 
-export interface DraftPipelineResult {
+interface DraftPipelineResult {
   leagueId: string
   draftFactCount: number
 }

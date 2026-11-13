@@ -31,7 +31,7 @@ import {
  * board and make the pick numbers skip.
  */
 
-export type LivePick = {
+type LivePick = {
   /** Sport of this draft, so the card and club crest use the right league. */
   sport?: string
   overall: number

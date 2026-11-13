@@ -107,7 +107,7 @@ import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
  * carry exactly these counts; the band's art is the league's own format loop.
  */
 
-export type CommissionerHubProps = {
+type CommissionerHubProps = {
   data: CommissionerHubResult
   /**
    * This week's lineups, projected — AllFantasy's engine (AF) beside the provider's (API) — for

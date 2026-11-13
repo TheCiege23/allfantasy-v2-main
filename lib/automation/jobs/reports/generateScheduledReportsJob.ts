@@ -22,7 +22,7 @@ import type { AutomationResult } from '@/lib/automation/types'
 import { generateReport, readLastRunByTemplate, templatesDue } from '@/lib/commissioner-reports/reportStore'
 import { isLiveReady } from '@/lib/commissioner-ui/liveReadiness'
 
-export const REPORTS_JOB_TYPE = 'reports.generateScheduled'
+const REPORTS_JOB_TYPE = 'reports.generateScheduled'
 
 /**
  * One key per league per ISO week.
@@ -41,11 +41,11 @@ function isoWeekBucket(d: Date): string {
   return `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
 }
 
-export function buildReportsIdempotencyKey(leagueId: string, at: Date): string {
+function buildReportsIdempotencyKey(leagueId: string, at: Date): string {
   return hashIdempotencyKey(buildIdempotencyKey([REPORTS_JOB_TYPE, leagueId, isoWeekBucket(at)]))
 }
 
-export async function generateScheduledReportsForLeague(input: {
+async function generateScheduledReportsForLeague(input: {
   leagueId: string
   scheduledFor?: Date
   trigger?: 'scheduled' | 'manual' | 'admin'
@@ -138,7 +138,7 @@ export async function generateScheduledReportsForLeague(input: {
   )
 }
 
-export interface GenerateScheduledReportsBatchResult {
+interface GenerateScheduledReportsBatchResult {
   enabled: boolean
   discovered: number
   completed: number

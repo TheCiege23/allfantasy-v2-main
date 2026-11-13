@@ -1,7 +1,7 @@
 // lib/trade-engine/surplusDetection.ts
 import type { Asset, LeagueIntelligence } from "./types";
 
-export type SurplusDetectionResult = {
+type SurplusDetectionResult = {
   rosterId: number;
   needs?: any;
   surplus: Asset[];

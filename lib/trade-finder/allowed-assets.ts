@@ -1,6 +1,6 @@
 import type { Position } from "@/lib/league-decision-context";
 
-export type AssetKind = "PLAYER" | "PICK";
+type AssetKind = "PLAYER" | "PICK";
 
 export type AllowedPricedAsset = {
   id: string;
@@ -22,7 +22,7 @@ export type TeamProfileLite = {
   surpluses: Position[];
 };
 
-export type AllowedAssetsResult = {
+type AllowedAssetsResult = {
   userAssetsAllowed: Array<{ id: string; label: string; kind: AssetKind }>;
   partnerAssetsAllowed: Array<{ id: string; label: string; kind: AssetKind }>;
   userPicksAllowed: Array<{ id: string; label: string }>;

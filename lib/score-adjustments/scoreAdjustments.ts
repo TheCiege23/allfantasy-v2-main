@@ -77,7 +77,7 @@ export const STAT_CORRECTION_ACTOR = 'system:stat-corrections'
  * automatic extended correction (recorded under STAT_CORRECTION_ACTOR). Both paths count both, so a
  * correction landed one way is never added again the other way.
  */
-export function isStatCorrectionAdjustment(a: ScoreAdjustment): boolean {
+function isStatCorrectionAdjustment(a: ScoreAdjustment): boolean {
   return a.source === 'stat_correction' || a.byUserId === STAT_CORRECTION_ACTOR
 }
 

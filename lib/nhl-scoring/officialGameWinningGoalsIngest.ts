@@ -64,7 +64,7 @@ async function readBoxes(date: string) {
     gameDate: true, team: true, opponent: true, normalizedStatMap: true, updatedAt: true } })
 }
 
-export type OfficialNhlEnrichmentReport = {
+type OfficialNhlEnrichmentReport = {
   requestedDates: number; selectedDates: string[]; deferredDates: string[]
   cacheHits: number; fetchedDates: number; matched: number; alreadyPresent: number
   wouldWrite: number; corrected: number; written: number; stale: number; missing: number; ambiguous: number

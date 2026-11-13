@@ -34,7 +34,7 @@ export type XNewsKind =
   | 'depth_chart'   // role and snap-share changes
   | 'general'       // catch-all player/team chatter
 
-export type XNewsCitation = { label: string; url: string }
+type XNewsCitation = { label: string; url: string }
 
 export type XNewsResult =
   | {

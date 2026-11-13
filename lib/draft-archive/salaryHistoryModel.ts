@@ -1,7 +1,7 @@
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const id=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=64;
 const money=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
-export type SalaryHistoryTeam={rosterId:string;capYear:number;capSpace:number;totalCapHit:number;deadMoneyHit:number;contracts:number;expiring:number;recordedSalary:number;matchesLedger:boolean};
+type SalaryHistoryTeam={rosterId:string;capYear:number;capSpace:number;totalCapHit:number;deadMoneyHit:number;contracts:number;expiring:number;recordedSalary:number;matchesLedger:boolean};
 export type SalaryHistory={state:'ready'|'partial'|'unavailable';teams:SalaryHistoryTeam[]};
 /** Read only frozen terms. Never infer historical contracts from current records or pick prices. */
 export function salaryHistory(specialty:unknown,start:string|null,season:number|null):SalaryHistory{

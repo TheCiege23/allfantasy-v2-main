@@ -1,7 +1,7 @@
 import type { DraftFormatKind } from './types'
 import { resolveNextPickOrder } from './format-adapters'
 
-export interface NextPickPredictionRow {
+interface NextPickPredictionRow {
   manager: string
   predictedPlayer: string
   predictedPosition: string

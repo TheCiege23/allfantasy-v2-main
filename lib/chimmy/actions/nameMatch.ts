@@ -12,7 +12,7 @@ import { nameVariants } from '@/lib/chimmy/leagueRosterIndex'
  * asked about, because a confident move on the wrong one is indistinguishable from a right one.
  */
 
-export type NamedPlayer = { playerId: string; name: string | null }
+type NamedPlayer = { playerId: string; name: string | null }
 
 export function indexByName<T extends NamedPlayer>(players: Iterable<T>): Map<string, T[]> {
   const out = new Map<string, T[]>()

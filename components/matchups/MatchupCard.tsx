@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { Trophy } from 'lucide-react'
 import TeamScoreBreakdown from '@/components/matchups/TeamScoreBreakdown'
 
-export type MatchupSide = {
+type MatchupSide = {
   rosterId: string
   teamName: string
   totalPoints: number

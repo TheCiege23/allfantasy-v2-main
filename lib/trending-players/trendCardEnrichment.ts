@@ -81,7 +81,7 @@ function relevanceForPlayer(
   return 'likely_available'
 }
 
-export function inferActionRecommendation(args: {
+function inferActionRecommendation(args: {
   direction: 'up' | 'down'
   leagueRelevance: TrendLeagueRelevance
   trendType: TrendTypeId
@@ -111,7 +111,7 @@ export function inferActionRecommendation(args: {
   return 'watch'
 }
 
-export function integrationHints(args: {
+function integrationHints(args: {
   action: TrendActionRecommendation
   leagueRelevance: TrendLeagueRelevance
   injuryStatus: string | null
@@ -137,7 +137,7 @@ function profileByName(
 /**
  * Structured lines for UI + downstream tools — only facts from sources already on the card.
  */
-export function buildStructuredWhy(
+function buildStructuredWhy(
   card: TrendPlayerCard,
   profile: NormalizedPlayerSportsProfile | undefined,
   proj: number | null,

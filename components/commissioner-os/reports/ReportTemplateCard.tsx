@@ -8,7 +8,7 @@ import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { reportsCopy, reportText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
-export interface ReportTemplateCardProps {
+interface ReportTemplateCardProps {
   template: ReportTemplate
   onGenerate: () => void
   disabled?: boolean

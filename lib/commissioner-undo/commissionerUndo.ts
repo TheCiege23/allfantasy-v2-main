@@ -21,12 +21,12 @@
 export const UNDO_WINDOW_MS = 24 * 60 * 60 * 1000
 export const UNDO_ACTION_TYPE = 'commissioner_undo'
 
-export const UNDOABLE_ACTION_TYPES = [
+const UNDOABLE_ACTION_TYPES = [
   'commissioner_edit_faab',
   'commissioner_edit_waiver_priority',
   'commissioner_edit_standings',
 ] as const
-export type UndoableActionType = (typeof UNDOABLE_ACTION_TYPES)[number]
+type UndoableActionType = (typeof UNDOABLE_ACTION_TYPES)[number]
 
 export function isUndoableActionType(t: string): t is UndoableActionType {
   return (UNDOABLE_ACTION_TYPES as readonly string[]).includes(t)

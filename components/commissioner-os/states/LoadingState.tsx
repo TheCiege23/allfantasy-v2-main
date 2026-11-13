@@ -1,6 +1,6 @@
 import { Skeleton } from '@/components/ui/skeleton'
 
-export interface LoadingStateProps {
+interface LoadingStateProps {
   /** Number of skeleton rows — matches the final content's approximate shape, never a generic spinner (Design Language §17). */
   rows?: number
 }

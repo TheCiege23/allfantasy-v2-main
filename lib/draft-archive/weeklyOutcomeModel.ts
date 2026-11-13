@@ -3,7 +3,7 @@ import type {AnalysisSelection} from './analysisModel'
 // 32 teams × 100 rostered players × 18 regular-season weeks.
 export const MAX_WEEKLY_ROSTER_PLAYERS = 57600
 export type WeeklyRosterEvidence={week:number;rosterId:string;players:Array<{playerId:string;position:string|null;points:number|null;starter:boolean;finalized:boolean}>;slots:Array<{slot:string;playerId:string|null}>}
-export type WeeklyReplacement={playerId:string;rosterId:string;week:number;state:'ready'|'unavailable';replacementPlayerId:string|null;replacementPoints:number|null;difference:number|null}
+type WeeklyReplacement={playerId:string;rosterId:string;week:number;state:'ready'|'unavailable';replacementPlayerId:string|null;replacementPoints:number|null;difference:number|null}
 /** Retrospective same-roster bench substitution, never hypothetical waiver availability. */
 export function weeklyOutcomes(picks:AnalysisSelection[],expectedWeeks:number[],teams:string[],evidence:WeeklyRosterEvidence[]){
  const empty={finalizedWeeks:[] as number[],replacements:[] as WeeklyReplacement[]}

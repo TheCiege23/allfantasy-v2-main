@@ -17,7 +17,7 @@
  * the league shape only, and says so rather than pretending to handle both.
  */
 
-export type ViewerPollOption = {
+type ViewerPollOption = {
   id: string
   text: string
   count: number
@@ -60,7 +60,7 @@ export type ViewerPoll = {
   prediction: ViewerPrediction | null
 }
 
-export type ViewerPrediction = {
+type ViewerPrediction = {
   week: number
   resolved: boolean
   /** null while unresolved, and on a tie. */
@@ -208,7 +208,7 @@ export function votePollLocally(poll: ViewerPoll, optionId: string): ViewerPoll 
  *
  * `now` is the server's clock: the deadline is the server's to judge, as in the vote route.
  */
-export function redactHiddenPollResults(
+function redactHiddenPollResults(
   metadata: unknown,
   viewerUserId: string | null | undefined,
   now: number = Date.now(),

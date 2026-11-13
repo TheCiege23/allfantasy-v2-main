@@ -3,7 +3,7 @@
  * Used by message list to render broadcast, stats_bot, pin distinctly from normal messages.
  */
 
-export const LEAGUE_SYSTEM_MESSAGE_TYPES = [
+const LEAGUE_SYSTEM_MESSAGE_TYPES = [
   "broadcast",
   "stats_bot",
   "pin",
@@ -22,7 +22,7 @@ export const LEAGUE_SYSTEM_MESSAGE_TYPES = [
   "champion_announcement",
   "chat_message",
 ] as const
-export type LeagueSystemMessageType = (typeof LEAGUE_SYSTEM_MESSAGE_TYPES)[number]
+type LeagueSystemMessageType = (typeof LEAGUE_SYSTEM_MESSAGE_TYPES)[number]
 
 export function isLeagueSystemNotice(messageType: string): messageType is LeagueSystemMessageType {
   return LEAGUE_SYSTEM_MESSAGE_TYPES.includes(messageType as LeagueSystemMessageType)

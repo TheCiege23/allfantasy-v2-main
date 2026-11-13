@@ -5,9 +5,9 @@
 
 import type { AIContextEnvelope, ModelOutput } from "./types"
 
-export type ConfidenceLabel = "low" | "medium" | "high"
+type ConfidenceLabel = "low" | "medium" | "high"
 
-export interface ConfidenceResult {
+interface ConfidenceResult {
   label: ConfidenceLabel
   scorePct: number
   reason?: string

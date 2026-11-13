@@ -2,7 +2,7 @@ import type { DeterministicStatComparisonRow } from '@/lib/player-comparison-lab
 import type { AiPlayerComparisonStrategyMode } from './types'
 
 /** Must match `METRICS` order in `lib/player-comparison-lab/PlayerComparisonEngine.ts`. */
-export const ENGINE_METRIC_IDS = [
+const ENGINE_METRIC_IDS = [
   'dynasty_value',
   'overall_rank',
   'trend_30_day',

@@ -19,7 +19,7 @@ import type { PlayerDetail } from './playerFinder'
  * unchecked, and it never counts against either player.
  */
 
-export type CompareCell = {
+type CompareCell = {
   /** STARTER / BENCH / IR SLOT / TAXI when yours, NOT YOURS when someone else's, null when on no roster we read. */
   slot: string | null
   isYours: boolean
@@ -30,7 +30,7 @@ export type CompareCell = {
   unchecked: boolean
 }
 
-export type CompareRow = {
+type CompareRow = {
   leagueId: string
   leagueName: string
   platform: string
@@ -45,13 +45,13 @@ export type CompareRow = {
 }
 
 /** `start`: start this side over the other. `held`: this side is another manager's here. */
-export type CompareNoteParts = { kind: 'start'; side: 'a' | 'b' } | { kind: 'held'; side: 'a' | 'b'; ownerName: string }
+type CompareNoteParts = { kind: 'start'; side: 'a' | 'b' } | { kind: 'held'; side: 'a' | 'b'; ownerName: string }
 
 /**
  * What `headline` says, before it is put into words — the English is written from these below, and
  * finderSearchCopy.ts writes the Spanish from the same values, so the verdict cannot differ by language.
  */
-export type CompareHeadlineParts = {
+type CompareHeadlineParts = {
   /** Last names, as the headline names them. */
   a: string
   b: string

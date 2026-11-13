@@ -9,7 +9,7 @@
  * - When host messages are sent
  */
 
-export interface SportScheduleConfig {
+interface SportScheduleConfig {
   sport: string
   /** Primary game days (0=Sun, 1=Mon, ..., 6=Sat) */
   primaryGameDays: number[]
@@ -43,7 +43,7 @@ export interface SportScheduleConfig {
   scheduleNote: string
 }
 
-export const SPORT_SCHEDULES: Record<string, SportScheduleConfig> = {
+const SPORT_SCHEDULES: Record<string, SportScheduleConfig> = {
   NFL: {
     sport: 'NFL',
     primaryGameDays: [0, 1, 4], // Sun, Mon, Thu

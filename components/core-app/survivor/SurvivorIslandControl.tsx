@@ -97,7 +97,7 @@ export function SurvivorIslandControl({ leagueId }: { leagueId: string }) {
 }
 
 /** A bamboo torch: burning, guttering, or out with a wisp of smoke. */
-export function Torch({ state }: { state: TorchState }) {
+function Torch({ state }: { state: TorchState }) {
   return (
     <svg className="sv-torch" viewBox="0 0 30 64" width="30" height="64" aria-hidden="true">
       {state === 'lit' ? (

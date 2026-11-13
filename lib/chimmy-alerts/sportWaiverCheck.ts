@@ -46,7 +46,7 @@ const easternFmt = new Intl.DateTimeFormat('en-US', {
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export type EasternClock = {
+type EasternClock = {
   /** `YYYY-MM-DD`, the Eastern calendar day. */
   day: string
   year: number
@@ -229,7 +229,7 @@ export function recentSportWaiverClaimKeys(
   return out
 }
 
-export function sportWaiverCheckHref(p: SportWaiverPick, from: ProactiveFrom = 'waiver_check'): string {
+function sportWaiverCheckHref(p: SportWaiverPick, from: ProactiveFrom = 'waiver_check'): string {
   return chimmyChatHref({ prompt: waiverCheckPrompt(p), leagueId: p.leagueId, from, sport: p.sport })
 }
 
@@ -259,19 +259,19 @@ function joinAnd(items: string[]): string {
 }
 
 /** What the per-game figure was priced on, briefly. */
-export function sportBasisPhrase(p: Pick<SportWaiverPick, 'sport' | 'basis'>): string {
+function sportBasisPhrase(p: Pick<SportWaiverPick, 'sport' | 'basis'>): string {
   return p.basis === 'season_per_game_league'
     ? "under this league's scoring"
     : `on AllFantasy's default ${sportInSentence(p.sport)} scoring`
 }
 
 /** "add X (C, BOS), drop Y — +4.3 pts per game · $57 FAAB left." */
-export function describeSportPick(p: SportWaiverPick): string {
+function describeSportPick(p: SportWaiverPick): string {
   const faab = p.faabRemaining != null ? ` · $${p.faabRemaining} FAAB left` : ''
   return `add ${who(p.add)}, drop ${p.drop.name} — +${fmt(p.netGain)} pts per game${faab}.`
 }
 
-export type SportWaiverCheckMessage = {
+type SportWaiverCheckMessage = {
   title: string
   body: string
   actionHref: string

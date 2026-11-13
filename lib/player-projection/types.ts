@@ -1,6 +1,6 @@
 export type SportCode = 'NFL' | 'NBA' | 'MLB' | string
 
-export interface PlayerHistoryPoint {
+interface PlayerHistoryPoint {
   season: number
   age: number | null
   gamesPlayed: number | null

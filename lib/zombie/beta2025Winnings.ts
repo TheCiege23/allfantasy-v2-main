@@ -1,7 +1,7 @@
 import type { NativeWeekResult } from './ZombieInfectionEngine'
 
 export const BETA_2025_WINNINGS_SOURCE = 'weekly_settlement_2025'
-export const BETA_2025_WINNINGS_POLICY = 'beta_2025' as const
+const BETA_2025_WINNINGS_POLICY = 'beta_2025' as const
 export type Beta2025WinningsContext = {
   policy: typeof BETA_2025_WINNINGS_POLICY
   thresholds?: { bashingThreshold: number; maulingThreshold: number }

@@ -11,8 +11,8 @@
 import type { BigBrotherSummary } from '@/components/big-brother/types'
 import type { SurvivorSummary } from '@/components/survivor/types'
 
-export type StakesTone = 'danger' | 'good' | 'neutral'
-export type StakesLine = { label: string; value: string; tone?: StakesTone }
+type StakesTone = 'danger' | 'good' | 'neutral'
+type StakesLine = { label: string; value: string; tone?: StakesTone }
 
 export type FormatStakes = {
   format: 'survivor' | 'big_brother' | 'guillotine'
@@ -32,10 +32,10 @@ export type FormatStakes = {
 
 // ── Survivor ─────────────────────────────────────────────────────────────────────────────────
 
-export type SurvivorPhase = { label: string; mood: 'default' | 'jury' | 'tribal' | 'merge' | 'exile' }
+type SurvivorPhase = { label: string; mood: 'default' | 'jury' | 'tribal' | 'merge' | 'exile' }
 
 /** Only the fields the phase reads, so the hero's narrower local summary type fits too. */
-export type SurvivorPhaseInput = {
+type SurvivorPhaseInput = {
   currentWeek: number
   merged: boolean
   jury: readonly unknown[]

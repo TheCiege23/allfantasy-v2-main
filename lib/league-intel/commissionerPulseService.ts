@@ -12,7 +12,7 @@ import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 const MAX_WEEKS = 18
-export const PULSE_STALE_DAYS = 21
+const PULSE_STALE_DAYS = 21
 
 async function j<T>(path: string): Promise<T | null> {
   try {
@@ -46,7 +46,7 @@ export type PulseManager = {
   flagged: boolean
 }
 
-export type CommissionerPulse = {
+type CommissionerPulse = {
   version: 1
   fetchedAt: string
   flaggedCount: number

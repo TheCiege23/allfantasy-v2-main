@@ -1,6 +1,6 @@
 import type { EngineCapabilities, EngineContext, ConfidenceState } from './types'
 
-export interface FeatureFlags {
+interface FeatureFlags {
   enableSimulation: boolean
   enableCounterBuilder: boolean
   enablePortfolio: boolean

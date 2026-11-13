@@ -20,7 +20,7 @@ export const SIGN_IN_PUSH_ASK_SESSION_KEY = 'af-signin-push-ask-session'
 export const MAX_ASKS = 3
 export const ASK_GAP_MS = 20 * 60 * 60 * 1000
 
-export type SignInPushAskState = { asks: number; lastAskAt: number | null }
+type SignInPushAskState = { asks: number; lastAskAt: number | null }
 
 const SKIP_PATHS = [
   '/login',

@@ -41,7 +41,7 @@ export const SHARE_TRACK_EVENTS = [
   "share_fallback",
 ] as const;
 
-export type ShareTargetAction = "copy" | "external" | "manual_copy";
+type ShareTargetAction = "copy" | "external" | "manual_copy";
 
 export interface SharePayload {
   kind: ShareableKind;

@@ -20,7 +20,7 @@ export function isSupportedPrestigeSport(sport: string | null | undefined): spor
   return isSupportedSport(sport)
 }
 
-export const PRESTIGE_SPORT_LABELS: Record<string, string> = {
+const PRESTIGE_SPORT_LABELS: Record<string, string> = {
   NFL: 'NFL',
   NHL: 'NHL',
   NBA: 'NBA',

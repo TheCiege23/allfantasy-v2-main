@@ -82,7 +82,7 @@ export function emptyMatchupOddsSweepCounts(): MatchupOddsSweepCounts {
   }
 }
 
-export interface MatchupOddsSweepDeps {
+interface MatchupOddsSweepDeps {
   prisma?: typeof defaultPrisma
   budget: RunBudget
   leagueCap?: number

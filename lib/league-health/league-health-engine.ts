@@ -18,7 +18,7 @@ import { computeActivityScore } from './activityScore'
 // ---------------------------------------------------------------------------
 
 export type OverallStatus = 'excellent' | 'healthy' | 'watch' | 'at_risk' | 'critical'
-export type HealthTrend = 'improving' | 'stable' | 'declining'
+type HealthTrend = 'improving' | 'stable' | 'declining'
 
 export const LeagueHealthInputSchema = z.object({
   sport: z.string().default('NFL'),

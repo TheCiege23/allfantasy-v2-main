@@ -1,6 +1,6 @@
 'use client';
 
-export type CreationMode = 'create' | 'import';
+type CreationMode = 'create' | 'import';
 
 export interface LeagueCreationImportSelectorProps {
   value: CreationMode;

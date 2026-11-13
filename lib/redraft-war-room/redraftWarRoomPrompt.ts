@@ -13,7 +13,7 @@ import type { LineupResult } from './redraftLineupEngine'
 import type { WaiverResult } from './redraftWaiverEngine'
 import type { TradeAnalysis, TradeFinderResult } from './redraftTradeEngine'
 
-export interface RedraftWarRoomPromptInputs {
+interface RedraftWarRoomPromptInputs {
   context: RedraftWarRoomContext
   needs?: TeamNeedsResult | null
   lineup?: LineupResult | null

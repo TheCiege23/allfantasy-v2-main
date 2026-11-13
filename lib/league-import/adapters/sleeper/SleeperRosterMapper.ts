@@ -4,7 +4,7 @@ import type { SleeperImportPayload } from './types'
 import { sleeperPointsAgainst } from './SleeperPointsAgainst'
 
 /** Sleeper's marker for a starting slot nobody filled. Kept in `starter_ids` so slots stay aligned. */
-export const EMPTY_STARTER_SLOT = '0'
+const EMPTY_STARTER_SLOT = '0'
 
 export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = {
   map(source) {

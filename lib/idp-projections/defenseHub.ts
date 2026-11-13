@@ -89,7 +89,7 @@ export interface DefenseHubDefender {
   lastWeek: ActualWeekOutcome | null
 }
 
-export interface DefenseHubSnap {
+interface DefenseHubSnap {
   sleeperId: string
   name: string
   share: number | null
@@ -106,14 +106,14 @@ export interface DefenseHubSnap {
   reason: string | null
 }
 
-export interface DefenseHubRoleCard {
+interface DefenseHubRoleCard {
   sleeperId: string
   name: string
   lines: DefenderRoleLine[]
   games: number
 }
 
-export interface DefenseHubTendencyCard {
+interface DefenseHubTendencyCard {
   team: string
   tendency: TeamDefenseTendency
 }
@@ -133,7 +133,7 @@ export interface DefenseHubTendencyCard {
  * invite a manager to compare two kickers on numbers that do not predict anything, which is
  * the exact impression the flat value exists to prevent.
  */
-export interface DefenseHubKicker {
+interface DefenseHubKicker {
   sleeperId: string
   name: string
   team: string | null
@@ -210,7 +210,7 @@ function extractScoring(settings: unknown): Record<string, unknown> | null {
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
 }
 
-export interface LoadDefenseHubArgs {
+interface LoadDefenseHubArgs {
   prisma: PrismaClient
   /** Either id space — `League.id` uuid or the platform's own league id. */
   leagueId: string

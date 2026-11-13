@@ -10,7 +10,7 @@ import { getPeakAgeRange } from '@/lib/dynasty-engine/SportDynastyResolver'
 import { catalogSport, dynastyAdpCutoff, NFL_DYNASTY_ADP_CUTOFF } from './dynastySportCatalog'
 import type { DynastyPlayerFact } from './types'
 
-export type DynastyValueSource = 'value' | 'adp' | 'projection' | 'none'
+type DynastyValueSource = 'value' | 'adp' | 'projection' | 'none'
 
 /**
  * Map an average overall dynasty ADP (lower = better) onto a positive value scale (0–26).

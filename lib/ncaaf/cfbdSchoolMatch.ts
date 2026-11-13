@@ -51,7 +51,7 @@ const SCHOOL_TO_RI_EXTERNAL_ID: Record<string, string> = {
   Louisiana: '247', // UL Lafayette — University of Louisiana at Lafayette
 }
 
-export type RiTeamIndex = {
+type RiTeamIndex = {
   byNorm: Map<string, RiTeam>
   byShort: Map<string, RiTeam>
   byExtId: Map<string, RiTeam>

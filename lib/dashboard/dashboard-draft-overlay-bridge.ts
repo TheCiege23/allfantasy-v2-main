@@ -4,7 +4,7 @@
 
 export const DASHBOARD_OPEN_DRAFT_MESSAGE_TYPE = 'af-dashboard-open-draft' as const
 
-export type DashboardDraftOverlayBridgePayload = {
+type DashboardDraftOverlayBridgePayload = {
   type: typeof DASHBOARD_OPEN_DRAFT_MESSAGE_TYPE
   leagueId: string
   /** Live draft session id — omit to let parent resolve via GET /api/leagues/.../draft/session */
@@ -25,7 +25,7 @@ export function isOpenDraftOverlayMessage(data: unknown): data is DashboardDraft
   return true
 }
 
-export type BuildDashboardDraftOverlayUrlInput = {
+type BuildDashboardDraftOverlayUrlInput = {
   leagueId: string
   draftId?: string
   dispersalDraftId?: string
@@ -43,7 +43,7 @@ export function buildDashboardDraftOverlayUrl(input: BuildDashboardDraftOverlayU
   return `/dashboard?${q.toString()}`
 }
 
-export type PostOpenDraftOverlayMessageInput = {
+type PostOpenDraftOverlayMessageInput = {
   leagueId: string
   draftId?: string
   dispersalDraftId?: string
@@ -75,7 +75,7 @@ export async function fetchLiveDraftSessionIdForLeague(leagueId: string): Promis
   }
 }
 
-export type ParsedLeagueDraftNavIntent =
+type ParsedLeagueDraftNavIntent =
   | { kind: 'live'; leagueId: string }
   | { kind: 'dispersal'; leagueId: string; dispersalDraftId: string }
 
@@ -93,7 +93,7 @@ export function parseLeagueDraftNavigationIntent(href: string): ParsedLeagueDraf
   }
 }
 
-export type OpenDraftFromEmbeddedLeagueInput = PostOpenDraftOverlayMessageInput & {
+type OpenDraftFromEmbeddedLeagueInput = PostOpenDraftOverlayMessageInput & {
   /** When false, caller should use normal router navigation */
   dashboardEmbed: boolean
 }
@@ -121,7 +121,7 @@ export async function openDraftFromEmbeddedLeague(input: OpenDraftFromEmbeddedLe
 
 type RouterLike = { replace: (href: string, opts?: { scroll?: boolean }) => void }
 
-export type OpenDraftOverlayInParentInput = BuildDashboardDraftOverlayUrlInput & {
+type OpenDraftOverlayInParentInput = BuildDashboardDraftOverlayUrlInput & {
   router: RouterLike
 }
 

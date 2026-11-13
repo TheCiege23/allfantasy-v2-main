@@ -26,7 +26,7 @@ import { RedraftDraftBoard } from '@/components/league/native/redraft/RedraftDra
 import { RedraftDraftGrades } from '@/components/league/native/redraft/RedraftDraftGrades'
 import '@/components/league/native/redraft-home.css'
 
-export type DraftTabProps = {
+type DraftTabProps = {
   league: UserLeague
   teams: UserLeagueTeam[]
   isOwner: boolean

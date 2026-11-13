@@ -16,11 +16,11 @@ import { NFL_DYNASTY_TEAM_COUNTS } from '@/lib/league-creation-wizard/sport-team
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 
-export const DEFAULT_MOCK_TEAM_COUNT = 12
+const DEFAULT_MOCK_TEAM_COUNT = 12
 
-export type MockTeamCountLeagueType = 'redraft' | 'dynasty'
+type MockTeamCountLeagueType = 'redraft' | 'dynasty'
 
-export function mockTeamCountLeagueType(leagueType: unknown): MockTeamCountLeagueType {
+function mockTeamCountLeagueType(leagueType: unknown): MockTeamCountLeagueType {
   return String(leagueType ?? '').toLowerCase() === 'dynasty' ? 'dynasty' : 'redraft'
 }
 

@@ -30,7 +30,7 @@ export type LineupMember = {
   value: number | null
 }
 
-export type LineupGain = {
+type LineupGain = {
   /** Best-lineup value with him, minus without. Never negative: you can always leave him benched. */
   gain: number
   /** Who leaves the starting lineup to make room, or null when he fills an otherwise empty seat. */

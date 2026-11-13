@@ -15,7 +15,7 @@ import { logTournamentAudit } from './TournamentAuditService'
 import { getRoundWindow } from './tournament-sport-cutoffs'
 import type { TournamentSettings } from './types'
 
-export interface CondenseRoundResult {
+interface CondenseRoundResult {
   leagueIds: string[]
   advanced: number
   eliminated: number
@@ -416,7 +416,7 @@ export async function condenseRound(
  * Record bracket progression nodes for visualization after each advancement round.
  * Stores a snapshot of who advanced from which leagues into which new leagues.
  */
-export async function recordBracketProgression(
+async function recordBracketProgression(
   tournamentId: string,
   roundIndex: number,
   payload: Record<string, unknown>

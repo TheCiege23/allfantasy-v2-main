@@ -9,10 +9,10 @@ import type { IntelligencePlatformHealth } from '@/lib/intelligence/types'
 import type { AllFantasyLearningLayersPayload } from '@/lib/ai-learning-system/types'
 import type { StrategicCoachingSnapshot } from '@/lib/long-term-coaching/types'
 
-export type AiPayloadMode = 'global' | 'league'
+type AiPayloadMode = 'global' | 'league'
 
 /** Tool identity + routing — no invented IDs. */
-export type AllFantasyAiContextBlock = {
+type AllFantasyAiContextBlock = {
   userId: string
   sport: string
   tool: string
@@ -23,10 +23,10 @@ export type AllFantasyAiContextBlock = {
  * Time context is the existing `AiTimeContextPayload` (server UTC, user TZ, locks, waiver, freshness).
  * @see buildAiTimeContextPayload
  */
-export type AllFantasyAiTimeContextBlock = AiTimeContextPayload
+type AllFantasyAiTimeContextBlock = AiTimeContextPayload
 
 /** Full normalized league rules (scoring, roster, waiver, trade, playoff). */
-export type AllFantasyAiLeagueContextBlock = NormalizedLeagueContext | null
+type AllFantasyAiLeagueContextBlock = NormalizedLeagueContext | null
 
 export type AiRosterPlayerRef = {
   playerId: string
@@ -54,7 +54,7 @@ export type AiTeamContextPayload = {
 }
 
 /** Aggregated freshness for prompts (subset also lives on timeContext). */
-export type AllFantasyAiDataFreshnessBlock = {
+type AllFantasyAiDataFreshnessBlock = {
   timestamps: DataFreshnessTimestamps
   leagueLastSyncedAt: string | null
   importMappingOk: boolean | null
@@ -62,7 +62,7 @@ export type AllFantasyAiDataFreshnessBlock = {
 }
 
 /** Hints for orchestration layers (optional; does not change deterministic data). */
-export type AiProviderRoutingHints = {
+type AiProviderRoutingHints = {
   openai?: string
   deepseek?: string
   grok?: string

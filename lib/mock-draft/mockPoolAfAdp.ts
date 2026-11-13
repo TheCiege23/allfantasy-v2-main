@@ -15,14 +15,14 @@ import { buildPlayerKey, type DraftContext } from '@/lib/adp/computeAllFantasyAd
 import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import type { AdpCorpusSplit } from '@/lib/adp/loadAdpBoard'
 
-export interface MockAfAdpFields {
+interface MockAfAdpFields {
   afAdp: number | null
   afAdpContributions?: { market: number; imported: number; af: number }
   afAdpImportedSampleSize?: number | null
   afAdpOwnSampleSize?: number | null
 }
 
-export interface MockAfAdpContextInput {
+interface MockAfAdpContextInput {
   sport: string
   season?: string | null
   scoring?: string | null

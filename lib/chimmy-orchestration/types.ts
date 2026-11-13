@@ -95,7 +95,7 @@ export type ChimmyDeterministicLayer = {
   completenessPct: number
 }
 
-export type ChimmyRoutingTask = {
+type ChimmyRoutingTask = {
   model: AIModelRole
   purpose: 'analysis' | 'trends' | 'final_synthesis'
   instruction: string

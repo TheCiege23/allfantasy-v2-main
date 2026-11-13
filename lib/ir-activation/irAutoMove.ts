@@ -25,7 +25,7 @@ import { isIrEligibleStatus, type IrRules } from '@/lib/roster-lineup-engine/irE
 
 export const IR_AUTO_MOVE_KEY = 'ir_auto_move'
 
-export type IrAutoMoveRule = { enabled: boolean }
+type IrAutoMoveRule = { enabled: boolean }
 
 export function readIrAutoMoveEnabled(settings: unknown): boolean {
   const raw = settings && typeof settings === 'object' ? (settings as Record<string, unknown>)[IR_AUTO_MOVE_KEY] : null

@@ -28,7 +28,7 @@ import { isAdminRole, isAdminEmailAllowed } from '@/lib/adminAuth'
 import { isDevAdminUserId } from '@/lib/dev-admin/access'
 import type { EntitlementStatus } from '@/lib/subscription/types'
 
-export type FantasyOsAccessInput = {
+type FantasyOsAccessInput = {
   userId?: string | null
   email?: string | null
   /** NextAuth session role, when available (e.g. "admin"). */
@@ -36,7 +36,7 @@ export type FantasyOsAccessInput = {
 }
 
 /** Reason an access decision was reached — useful for the launch-card variant + debugging. */
-export type FantasyOsAccessReason = 'admin' | 'owner' | 'enterprise' | 'none'
+type FantasyOsAccessReason = 'admin' | 'owner' | 'enterprise' | 'none'
 
 const ACTIVE_STATUSES: ReadonlySet<EntitlementStatus> = new Set<EntitlementStatus>(['active', 'grace'])
 

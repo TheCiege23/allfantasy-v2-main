@@ -28,7 +28,7 @@ import {
 export type TradeObjective = 'WIN_NOW' | 'REBUILD' | 'BALANCED'
 export type FinderMode = 'FAST' | 'DEEP'
 
-export type TradeArchetype =
+type TradeArchetype =
   | 'POSITIONAL_SWAP'
   | 'CONSOLIDATION'
   | 'PICK_FOR_PLAYER'
@@ -71,7 +71,7 @@ export interface TradeCandidate {
   }
 }
 
-export interface CandidateGeneratorInput {
+interface CandidateGeneratorInput {
   userTeamId: string
   leagueDecisionContext: LeagueDecisionContext
   pricedAssets: Record<string, PricedAsset[]>
@@ -79,7 +79,7 @@ export interface CandidateGeneratorInput {
   mode: FinderMode
 }
 
-export type OpportunityType = 'NEED_FIT' | 'CONSOLIDATION' | 'VOLATILITY_SWAP' | 'PICK_ARBITRAGE' | 'MONITOR'
+type OpportunityType = 'NEED_FIT' | 'CONSOLIDATION' | 'VOLATILITY_SWAP' | 'PICK_ARBITRAGE' | 'MONITOR'
 
 export interface TradeOpportunity {
   type: OpportunityType
@@ -93,7 +93,7 @@ export interface TradeOpportunity {
   actionable: boolean
 }
 
-export interface CandidateGeneratorOutput {
+interface CandidateGeneratorOutput {
   candidates: TradeCandidate[]
   opportunities: TradeOpportunity[]
   partnersEvaluated: number

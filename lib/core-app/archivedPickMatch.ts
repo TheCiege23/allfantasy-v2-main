@@ -12,7 +12,7 @@
  * drafted players is right, and so is every total and letter graded from it.
  */
 
-export type LedgerPick = { season?: unknown; round?: unknown; resolved?: { name?: unknown; playerId?: unknown } | null }
+type LedgerPick = { season?: unknown; round?: unknown; resolved?: { name?: unknown; playerId?: unknown } | null }
 export type LedgerTradeSide = { rosterId?: unknown; picksIn?: unknown; picksOut?: unknown }
 
 type RowPick = { season: string | number | null; round: number | null }

@@ -146,7 +146,7 @@ If your analysis never says "this is unrealistic" or "this won't work", you lose
  * (fixed 2026-10-11, when that class had played two). A constant also froze "Today's date" at process start.
  * Built per call from the clock now, with no player list to go stale (`lib/legacy/promptSeason.ts`).
  */
-export function currentDateContext(now: Date = new Date()): string {
+function currentDateContext(now: Date = new Date()): string {
   return `
 ## CURRENT DATE & NFL CONTEXT
 

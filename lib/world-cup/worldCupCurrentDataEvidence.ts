@@ -15,7 +15,7 @@ export type WorldCupCurrentDataKey =
   | "lineups"
   | "odds"
 
-export type WorldCupCurrentDataEvidenceRow = Record<string, unknown>
+type WorldCupCurrentDataEvidenceRow = Record<string, unknown>
 
 export type WorldCupCurrentDataEvidenceSnapshot = Record<
   WorldCupCurrentDataKey,

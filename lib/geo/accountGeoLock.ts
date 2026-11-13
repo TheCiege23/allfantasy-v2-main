@@ -108,7 +108,7 @@ function remember(userId: string, lock: AccountGeoLock, now: number): void {
  * refused. The only person an outage could wrongly lock is someone whose VPN
  * happens to exit in Washington during the outage — and support can undo that.
  */
-export async function fullBlockStateOfNormalConnection(headers: Headers): Promise<string | null> {
+async function fullBlockStateOfNormalConnection(headers: Headers): Promise<string | null> {
   const edge = resolveEdgeGeo(headers)
   if (edge.country !== "US" || !edge.regionCode || !isFullyBlocked(edge.regionCode)) return null
   if (isTorExit(headers)) return null

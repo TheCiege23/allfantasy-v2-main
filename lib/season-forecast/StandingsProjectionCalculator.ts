@@ -13,7 +13,7 @@ function randomNormal(mean: number, stdDev: number): number {
   return mean + stdDev * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
 }
 
-export interface ProjectionInput {
+interface ProjectionInput {
   standings: Map<string, { wins: number; losses: number; ties: number; pointsFor: number }>
   teamProjections: Map<string, { mean: number; stdDev: number }>
   remainingSchedule: Array<[string, string][]>

@@ -5,7 +5,7 @@
 
 export type FleaflickerSport = 'NFL' | 'MLB' | 'NBA' | 'NHL'
 
-export type FleaflickerProPlayer = {
+type FleaflickerProPlayer = {
   id: number
   nameFull?: string
   position?: string
@@ -21,11 +21,11 @@ export type FleaflickerProPlayer = {
   externalIds?: Array<{ id?: string | null; type?: string | null }>
 }
 
-export type FleaflickerRosterPlayer = {
+type FleaflickerRosterPlayer = {
   proPlayer: FleaflickerProPlayer
 }
 
-export type FleaflickerTeamStub = {
+type FleaflickerTeamStub = {
   id: number
   name: string
   logoUrl?: string | null
@@ -60,7 +60,7 @@ export type FleaflickerTeamStub = {
   initials?: string
 }
 
-export type FleaflickerLeagueCore = {
+type FleaflickerLeagueCore = {
   id: number
   name: string
   logoUrl?: string | null
@@ -137,7 +137,7 @@ export type FleaflickerImportPayload = {
  *     so "no group" means bench and must never be read as "unknown, skip".
  * An EMPTY slot has no `leaguePlayer` (the captured team started week 1 with its QB slot empty).
  */
-export type FleaflickerRosterGroupName = 'START' | 'INJURED' | 'TAXI' | 'BENCH'
+type FleaflickerRosterGroupName = 'START' | 'INJURED' | 'TAXI' | 'BENCH'
 
 export type FleaflickerRosterResponse = {
   groups?: Array<{
@@ -150,7 +150,7 @@ export type FleaflickerRosterResponse = {
   lineupPeriod?: { ordinal?: number; low?: { season?: number } }
 }
 
-export type FleaflickerActivityTradeType =
+type FleaflickerActivityTradeType =
   | 'TRADE_ACCEPTED'
   | 'TRADE_ACCEPTED_FINAL'
   | 'TRADE_CANCELLED'
@@ -163,7 +163,7 @@ export type FleaflickerActivityTradeType =
   | 'TRADE_TO_REVIEW'
   | 'TRADE_VETOED'
 
-export type FleaflickerActivityItem = {
+type FleaflickerActivityItem = {
   timeEpochMilli?: string | number | null
   trade?: {
     tradeId?: number | null
@@ -204,7 +204,7 @@ export type FleaflickerDraftBoardResponse = {
 }
 
 /** One selection. Identical in both envelopes. */
-export type FleaflickerDraftCellRaw = {
+type FleaflickerDraftCellRaw = {
   team?: { id?: number | null; name?: string | null } | null
   player?: { proPlayer?: FleaflickerProPlayer | null } | null
   /** ⚠ `slot.slot` is the pick WITHIN the round; `slot.overall` is the overall one. */
@@ -230,7 +230,7 @@ export type FleaflickerDraftCellRaw = {
  * not-final. `true` is the literal type on purpose — it makes `=== false` a
  * compile error rather than a silent dead branch.
  */
-export type FleaflickerScoreboardTeam = {
+type FleaflickerScoreboardTeam = {
   id: number
   name?: string
 }
@@ -253,7 +253,7 @@ export type FleaflickerScoreboardGame = {
   isThirdPlaceGame?: true
 }
 
-export type FleaflickerSchedulePeriod = {
+type FleaflickerSchedulePeriod = {
   ordinal?: number
   value?: number
   low?: {
@@ -292,7 +292,7 @@ export type FleaflickerScoreboardResponse = {
  * scoreboard does the same with `games` and with every false boolean. Every
  * optional marker below is measured, not defensive guessing.
  */
-export type FleaflickerScoringCategory = {
+type FleaflickerScoringCategory = {
   id: number
   abbreviation?: string
   nameSingular?: string
@@ -329,14 +329,14 @@ export type FleaflickerScoringRule = {
   rangeType?: string
 }
 
-export type FleaflickerScoringGroup = {
+type FleaflickerScoringGroup = {
   label?: string
   allCategories?: FleaflickerScoringCategory[]
   /** ⚠ ABSENT, not empty, when the group has no rules. */
   scoringRules?: FleaflickerScoringRule[]
 }
 
-export type FleaflickerRosterPosition = {
+type FleaflickerRosterPosition = {
   label?: string
   group?: string
   eligibility?: string[]

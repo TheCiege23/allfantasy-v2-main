@@ -112,7 +112,7 @@ type Transaction = {
   isDefensiveDrop?: boolean
 }
 
-export type WaiverWireActiveTab = "available" | "trending" | "claimed" | "dropped" | "pending" | "history"
+type WaiverWireActiveTab = "available" | "trending" | "claimed" | "dropped" | "pending" | "history"
 
 type WaiverWirePageProps = {
   leagueId: string

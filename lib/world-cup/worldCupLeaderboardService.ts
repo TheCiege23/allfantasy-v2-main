@@ -12,7 +12,7 @@ export function getWorldCupPossiblePointsRemaining(
   return Math.max(0, Math.round((maxPossibleScore ?? 0) - (totalScore ?? 0)))
 }
 
-export type WorldCupRankMovement = "up" | "down" | "same" | "new" | "unknown"
+type WorldCupRankMovement = "up" | "down" | "same" | "new" | "unknown"
 
 export function getWorldCupRankMovement(
   previousRank: number | null | undefined,
@@ -24,7 +24,7 @@ export function getWorldCupRankMovement(
   return currentRank < previousRank ? "up" : "down"
 }
 
-export type WorldCupRoundBreakdownRow = {
+type WorldCupRoundBreakdownRow = {
   round: WorldCupRound | string
   label: string
   pointsEarned: number

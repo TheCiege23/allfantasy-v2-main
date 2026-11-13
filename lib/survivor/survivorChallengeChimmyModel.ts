@@ -21,7 +21,7 @@
 
 import { challengeInputKind, type ChallengeBuilderConfig, type ChallengeSubmission } from './survivorChallengeBuilderModel'
 
-export const CHIMMY_TYPICAL_TOTAL: Record<string, number> = { NFL: 44, NCAAF: 52, NBA: 226, NCAAB: 142, NHL: 6, MLB: 9, SOCCER: 3 }
+const CHIMMY_TYPICAL_TOTAL: Record<string, number> = { NFL: 44, NCAAF: 52, NBA: 226, NCAAB: 142, NHL: 6, MLB: 9, SOCCER: 3 }
 
 export type ChimmyChallengeFacts = {
   /** Stored wins/losses this season, keyed by team abbreviation. */

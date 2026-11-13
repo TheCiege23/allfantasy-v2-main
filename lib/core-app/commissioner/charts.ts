@@ -29,7 +29,7 @@ import { messagesFor } from '@/lib/i18n/messages'
 import { commissionerBuildersMessages } from '../messages/commissionerBuilders'
 import { coreLocale } from '../messages/coreLocale'
 
-export type ChartBar = {
+type ChartBar = {
   label: string
   value: number
   display: string
@@ -86,7 +86,7 @@ function shortDate(d: Date, language = 'en'): string {
   return d.toLocaleDateString(coreLocale(language).usLocale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
-export function weeklyBuckets(rows: ActivityRow[], now: Date, weeks: number): Array<{ start: Date; rows: ActivityRow[] }> {
+function weeklyBuckets(rows: ActivityRow[], now: Date, weeks: number): Array<{ start: Date; rows: ActivityRow[] }> {
   const newest = fantasyWeekStart(now)
   const buckets = Array.from({ length: weeks }, (_, i) => ({
     start: new Date(newest.getTime() - (weeks - 1 - i) * 7 * DAY_MS),
@@ -197,7 +197,7 @@ function stdDev(values: number[]): number {
   return Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length)
 }
 
-export type BalanceTeam = { name: string; wins: number; losses: number; ties: number; pointsFor: number }
+type BalanceTeam = { name: string; wins: number; losses: number; ties: number; pointsFor: number }
 
 /**
  * Competitive balance from the standings.
@@ -235,10 +235,10 @@ export function balanceChart(teams: BalanceTeam[], language = 'en'): HubChart | 
   }
 }
 
-export type ScoringRow = { week: number; pointsFor: number; pointsAgainst: number; matchupId: number | null }
+type ScoringRow = { week: number; pointsFor: number; pointsAgainst: number; matchupId: number | null }
 
 /** A 0–0 row is a scheduled week nobody has played — never a real score. */
-export function isPlayed(r: { pointsFor: number; pointsAgainst: number }): boolean {
+function isPlayed(r: { pointsFor: number; pointsAgainst: number }): boolean {
   return r.pointsFor > 0 || r.pointsAgainst > 0
 }
 

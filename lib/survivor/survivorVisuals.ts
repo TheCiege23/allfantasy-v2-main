@@ -11,9 +11,9 @@ export const SURVIVOR_BACKGROUND_THEME_IDS = [
   'monsoon-canopy',
 ] as const
 
-export type SurvivorBackgroundThemeId = (typeof SURVIVOR_BACKGROUND_THEME_IDS)[number]
+type SurvivorBackgroundThemeId = (typeof SURVIVOR_BACKGROUND_THEME_IDS)[number]
 
-export type SurvivorBackgroundTheme = {
+type SurvivorBackgroundTheme = {
   id: SurvivorBackgroundThemeId
   name: string
   backgroundClass: string
@@ -21,7 +21,7 @@ export type SurvivorBackgroundTheme = {
   accent: string
 }
 
-export const SURVIVOR_BACKGROUND_THEMES: Record<SurvivorBackgroundThemeId, SurvivorBackgroundTheme> = {
+const SURVIVOR_BACKGROUND_THEMES: Record<SurvivorBackgroundThemeId, SurvivorBackgroundTheme> = {
   'island-dawn': {
     id: 'island-dawn',
     name: 'Island Dawn',
@@ -102,7 +102,7 @@ export const SURVIVOR_TRIBE_ICON_CHOICES = [
   '👑','💀','📜','🕯️','🥥','🍍','🦴','🐚','🪙','⭐',
 ] as const
 
-export function getRandomSurvivorThemeId(): SurvivorBackgroundThemeId {
+function getRandomSurvivorThemeId(): SurvivorBackgroundThemeId {
   return SURVIVOR_BACKGROUND_THEME_IDS[Math.floor(Math.random() * SURVIVOR_BACKGROUND_THEME_IDS.length)]
 }
 

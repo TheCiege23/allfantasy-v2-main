@@ -63,7 +63,7 @@ export type FeatureKey =
 export type UserRole = "owner" | "commissioner" | "admin" | "member" | "guest"
 
 /** Maps to ProviderProfile in providerRouter — "standard" is the router default. */
-export type AiProfile = "cheap" | "standard" | "premium" | "deterministic"
+type AiProfile = "cheap" | "standard" | "premium" | "deterministic"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data freshness — matches DataSourceDisclosure tier in chimmyGroundingPacket

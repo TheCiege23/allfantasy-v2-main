@@ -53,7 +53,7 @@ export const REPLAY_INSIGHT_VERSION = 'replay-insight-v1'
  * constants: if a future phase re-measures on a larger corpus, this bumps to
  * a V2 baseline set rather than silently changing.
  */
-export const REPLAY_VALIDATED_BASELINES_V1 = {
+const REPLAY_VALIDATED_BASELINES_V1 = {
   /** Matched-window lineup-efficiency delta for starter-impact trades: +1.4 percentage points. */
   starterImpactEfficiencyDeltaPts: 1.4,
   /** Matched-window lineup-efficiency delta for bench-depth trades: -1.1 percentage points. */
@@ -67,7 +67,7 @@ export const REPLAY_VALIDATED_BASELINES_V1 = {
   validationSource: 'Phase 16 Decision Replay Correlation (matched-window)',
 } as const
 
-export type ReplayInsightScope = 'manager' | 'league' | 'platform'
+type ReplayInsightScope = 'manager' | 'league' | 'platform'
 
 export type ReplayInsightCategory =
   | 'starter_impact_trades'
@@ -75,10 +75,10 @@ export type ReplayInsightCategory =
   | 'wasted_acquisitions'
   | 'lineup_efficiency_impact'
 
-export type ReplayInsightSentiment = 'positive' | 'neutral' | 'caution'
+type ReplayInsightSentiment = 'positive' | 'neutral' | 'caution'
 
 /** Same four-level shape as `contracts.ts`'s `trendConfidence` — driven by real backing sample size. */
-export type ReplayInsightConfidence = 'high' | 'moderate' | 'low' | 'insufficient'
+type ReplayInsightConfidence = 'high' | 'moderate' | 'low' | 'insufficient'
 
 /**
  * A single user-safe replay-backed insight.

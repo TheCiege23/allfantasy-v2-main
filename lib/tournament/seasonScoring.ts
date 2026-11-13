@@ -50,7 +50,7 @@ function canonicalValue(sport: 'NFL' | 'NBA', key: string, stats: Record<string,
   return stats[NFL_KEYS[key]!] ?? 0
 }
 
-export function scoreSeasonContributions(
+function scoreSeasonContributions(
   sport: 'NFL' | 'NBA', rules: SeasonRules, week: number, rosterIds: string[], period: HistoricalPeriod,
 ) {
   const totals = new Map(rosterIds.map(id => [id, 0]))
@@ -76,7 +76,7 @@ export function scoreSeasonContributions(
   return new Map([...totals].map(([id, points]) => [id, Math.round(points * 10_000) / 10_000]))
 }
 
-export type SeasonStatsReader = typeof loadHistoricalPeriod
+type SeasonStatsReader = typeof loadHistoricalPeriod
 async function fetchFinalNflStats(season: number, week: number, players: HistoricalPlayerState[]) {
   const provider = new NflLiveStatsProvider(prisma as unknown as PrismaClient)
   return provider.fetchPlayerStatsForGames({

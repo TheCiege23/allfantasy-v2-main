@@ -6,9 +6,9 @@ import type {
 import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
-export type DraftRuntimeStatus = 'pre_draft' | 'in_progress' | 'paused' | 'completed'
-export type DraftRuntimeType = 'snake' | 'linear' | 'auction'
-export type DraftRuntimePickSource =
+type DraftRuntimeStatus = 'pre_draft' | 'in_progress' | 'paused' | 'completed'
+type DraftRuntimeType = 'snake' | 'linear' | 'auction'
+type DraftRuntimePickSource =
   | 'user'
   | 'auto'
   | 'substitute_manager'
@@ -37,7 +37,7 @@ export type DraftRuntimePick = {
   createdAtIso?: string | null
 }
 
-export type DraftRuntimeManagerState = {
+type DraftRuntimeManagerState = {
   rosterId: string
   userId?: string | null
   displayName?: string | null
@@ -48,7 +48,7 @@ export type DraftRuntimeManagerState = {
   lastSeenAtIso?: string | null
 }
 
-export type DraftRuntimeQueueEntry = {
+type DraftRuntimeQueueEntry = {
   playerId?: string | null
   playerName: string
   position: string
@@ -99,14 +99,14 @@ export type CanonicalDraftRuntimeSessionInput = {
   updatedAtIso?: string | null
 }
 
-export type DraftRuntimeClockState = {
+type DraftRuntimeClockState = {
   status: 'scheduled' | 'running' | 'paused' | 'expired' | 'complete' | 'none'
   timerSeconds: number | null
   timerEndAtIso: string | null
   remainingSeconds: number | null
 }
 
-export type DraftRuntimeCurrentPick = {
+type DraftRuntimeCurrentPick = {
   overall: number
   round: number
   slot: number
@@ -137,7 +137,7 @@ export type CanonicalDraftRuntimeState = {
   rulesVersion: CanonicalLeagueRules['version']
 }
 
-export type DraftPickValidationInput = {
+type DraftPickValidationInput = {
   rules: CanonicalLeagueRules
   state: CanonicalDraftRuntimeState
   rosterId: string
@@ -147,7 +147,7 @@ export type DraftPickValidationInput = {
   entitledFeatures?: SubscriptionFeatureId[]
 }
 
-export type DraftPickValidationResult = {
+type DraftPickValidationResult = {
   ok: boolean
   code:
     | 'OK'
@@ -163,7 +163,7 @@ export type DraftPickValidationResult = {
   evidence: string[]
 }
 
-export type SmartDraftRecommendation = {
+type SmartDraftRecommendation = {
   player: DraftRuntimePlayer
   explanation: string
   evidence: string[]
@@ -629,7 +629,7 @@ export function buildSmartDraftRecommendations(input: {
   }
 }
 
-export function detectDraftFlowSignals(
+function detectDraftFlowSignals(
   rules: CanonicalLeagueRules,
   state: CanonicalDraftRuntimeState,
   availablePlayers: DraftRuntimePlayer[],

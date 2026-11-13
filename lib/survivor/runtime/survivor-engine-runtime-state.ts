@@ -6,7 +6,7 @@
 import { prisma } from '@/lib/prisma'
 import { parseSurvivorEngineSpecV2, type SurvivorEngineSpecV2 } from '@/lib/survivor/survivor-engine-spec-v2'
 
-export type SurvivorConfessionalEntry = {
+type SurvivorConfessionalEntry = {
   id: string
   rosterId: string
   userId: string
@@ -17,28 +17,28 @@ export type SurvivorConfessionalEntry = {
   visibility: 'host_only' | 'league_after_episode'
 }
 
-export type SurvivorClueChainProgress = {
+type SurvivorClueChainProgress = {
   chainId: string
   idolTemplateKey: string
   stepIndex: number
   lastRevealedAt: string | null
 }
 
-export type SurvivorEngineRuntimeV2 = {
+type SurvivorEngineRuntimeV2 = {
   version: 2
   confessionals: SurvivorConfessionalEntry[]
   clueChains: SurvivorClueChainProgress[]
   storyBeats: { week: number; key: string; summary: string; createdAt: string }[]
 }
 
-export const EMPTY_SURVIVOR_ENGINE_RUNTIME_V2: SurvivorEngineRuntimeV2 = {
+const EMPTY_SURVIVOR_ENGINE_RUNTIME_V2: SurvivorEngineRuntimeV2 = {
   version: 2,
   confessionals: [],
   clueChains: [],
   storyBeats: [],
 }
 
-export function parseSurvivorEngineRuntimeV2(raw: unknown): SurvivorEngineRuntimeV2 {
+function parseSurvivorEngineRuntimeV2(raw: unknown): SurvivorEngineRuntimeV2 {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return EMPTY_SURVIVOR_ENGINE_RUNTIME_V2
   const o = raw as Partial<SurvivorEngineRuntimeV2>
   if (o.version !== 2) return EMPTY_SURVIVOR_ENGINE_RUNTIME_V2
@@ -58,7 +58,7 @@ export async function getSurvivorEngineRuntimeState(leagueId: string): Promise<S
   return parseSurvivorEngineRuntimeV2(gs?.engineRuntimeV2 ?? null)
 }
 
-export async function upsertSurvivorEngineRuntimeState(
+async function upsertSurvivorEngineRuntimeState(
   leagueId: string,
   next: SurvivorEngineRuntimeV2
 ): Promise<void> {

@@ -1,6 +1,6 @@
 import crypto from "crypto"
 
-export function normalizeIdempotencyPart(value: unknown): string {
+function normalizeIdempotencyPart(value: unknown): string {
   if (value === null || value === undefined) return "none"
   if (value instanceof Date) return value.toISOString()
   return String(value)

@@ -20,7 +20,7 @@ import type { EdgeFact } from './tradeEdge'
 /** Drafts a manager must have picked in before any pattern is shown. */
 export const DRAFT_FLOOR = 2
 /** "Early" means these rounds. */
-export const EARLY_ROUNDS = 3
+const EARLY_ROUNDS = 3
 
 export type EdgeDraftPick = {
   season: number
@@ -30,14 +30,14 @@ export type EdgeDraftPick = {
   ownerSleeperId: string
 }
 
-export type EdgeDraftManager = {
+type EdgeDraftManager = {
   /** `LeagueTeam.platformUserId` — the manager's Sleeper user id. */
   ownerSleeperId: string
   name: string
   teamExternalId: string
 }
 
-export type DraftEdgeRival = {
+type DraftEdgeRival = {
   manager: { name: string; teamExternalId: string }
   drafts: number
   picks: number

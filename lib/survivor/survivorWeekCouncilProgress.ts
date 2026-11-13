@@ -5,9 +5,9 @@ import { eliminationsInWeek, weekCouncilState, type CouncilWeekPosition, type We
 import { readSurvivorFullSeasonPlan } from './survivorFullSeasonPlan'
 
 /** Audit actions that close out a planned elimination: a vote-out, or the final-three skip. */
-export const PLANNED_ELIMINATION_ACTIONS = ['player_eliminated', 'planned_elimination_skipped_final_three'] as const
+const PLANNED_ELIMINATION_ACTIONS = ['player_eliminated', 'planned_elimination_skipped_final_three'] as const
 
-export interface WeekCouncilProgress extends WeekCouncilCounts, WeekCouncilState {
+interface WeekCouncilProgress extends WeekCouncilCounts, WeekCouncilState {
   /** Tribes that already attended a council this week, so a second council can send another. */
   attendedTribeIds: string[]
 }

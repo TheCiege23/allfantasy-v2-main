@@ -3,13 +3,13 @@
  * No I/O — deterministic and unit-testable.
  */
 
-export type ThresholdBonus = {
+type ThresholdBonus = {
   statKey: string
   threshold: number
   bonusPoints: number
 }
 
-export type MatchupTiebreakerMode = 'none' | 'bench_points'
+type MatchupTiebreakerMode = 'none' | 'bench_points'
 
 export type StandingsTiebreakerKey = 'wins' | 'pointsFor' | 'pointsAgainst' | 'rosterId'
 
@@ -59,7 +59,7 @@ export function applyThresholdBonuses(
   return Math.round((basePoints + extra) * 100) / 100
 }
 
-export function getIdpStatAllowlist(scoringSettings: Record<string, unknown> | null | undefined): string[] | null {
+function getIdpStatAllowlist(scoringSettings: Record<string, unknown> | null | undefined): string[] | null {
   if (!scoringSettings || typeof scoringSettings !== 'object') return null
   const rules = scoringSettings.rules
   if (!rules || typeof rules !== 'object') return null

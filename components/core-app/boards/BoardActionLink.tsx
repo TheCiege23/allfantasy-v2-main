@@ -43,7 +43,7 @@ import { useTransition, type ReactNode } from 'react'
  * three. `onClick` bails on any modifier or non-primary button and lets the
  * browser do what it was going to do.
  */
-export function BoardActionLink({
+function BoardActionLink({
   href,
   className,
   children,

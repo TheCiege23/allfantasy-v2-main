@@ -65,14 +65,14 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type ConceptPresetResolutionOk = {
+type ConceptPresetResolutionOk = {
   ok: true
   preset: ConceptPresetSeed
   settingsSnapshot: Record<string, unknown>
   presetKey: string
 }
 
-export type ConceptPresetResolutionFail = {
+type ConceptPresetResolutionFail = {
   ok: false
   message: string
   code: string

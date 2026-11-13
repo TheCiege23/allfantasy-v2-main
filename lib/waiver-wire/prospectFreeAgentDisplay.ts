@@ -8,7 +8,7 @@
  * instead. Sorting by name, position or team is a lookup rather than a ranking, and there they mix in.
  */
 
-export type ProspectAware = { id: string; prospectSource?: string | null }
+type ProspectAware = { id: string; prospectSource?: string | null }
 
 export type NhlProspectListMeta = { total: number; listed: number }
 

@@ -21,7 +21,7 @@
  */
 import { MAX_CHOPS_PER_WEEK, scheduledChops, type GuillotineAdvanced } from './chopSchedule'
 
-export type CalendarFitInput = {
+type CalendarFitInput = {
   teamCount: number
   startWeek: number
   endWeek: number
@@ -35,7 +35,7 @@ export type CalendarFitInput = {
   periodWeeks?: number
 }
 
-export type CalendarFit = {
+type CalendarFit = {
   fits: boolean
   /** Teams still alive at `endWeek` if the schedule runs out first; `threshold` when it fits. */
   survivorsAtEnd: number

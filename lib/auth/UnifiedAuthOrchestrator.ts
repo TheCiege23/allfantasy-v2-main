@@ -5,7 +5,7 @@ import {
   resolvePostAuthIntentDestination,
 } from "@/lib/auth/PostAuthIntentRouter"
 
-export interface UnifiedAuthOrchestratorInput {
+interface UnifiedAuthOrchestratorInput {
   callbackUrl?: string | null
   next?: string | null
   returnTo?: string | null

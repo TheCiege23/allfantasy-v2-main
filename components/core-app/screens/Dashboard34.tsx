@@ -29,7 +29,7 @@ import '@/components/core-app/af-dash34.css'
  * The 76px rail and 62px top bar belong to AfCoreShell and are not re-rendered.
  */
 
-export type Dash34Platform = 'sleeper' | 'espn' | 'yahoo' | 'allfantasy' | string
+type Dash34Platform = 'sleeper' | 'espn' | 'yahoo' | 'allfantasy' | string
 
 export type Dash34StateChip = {
   label: string

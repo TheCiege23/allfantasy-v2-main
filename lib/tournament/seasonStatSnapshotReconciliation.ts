@@ -3,7 +3,7 @@ import { seasonStatBatchSchema, type SeasonStatBatch } from './seasonStatAdapter
 
 type Game = SeasonStatBatch['games'][number]
 type Row = Game['rows'][number]
-export type SeasonStatReconciliation = {
+type SeasonStatReconciliation = {
   version: 1
   previousSnapshotDigest: string | null
   snapshotDigest: string

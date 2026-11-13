@@ -13,7 +13,7 @@ import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import type { SurvivorAIType } from '@/lib/survivor/ai/SurvivorAIContext'
 
-export type SurvivorAiActionId =
+type SurvivorAiActionId =
   | 'vote_risk_quick'
   | 'idol_advice_simple'
   | 'minigame_recommendation_one'
@@ -37,7 +37,7 @@ export type SurvivorAiActionId =
   | 'host_weekly_recap_generator'
   | 'host_story_mode_pack'
 
-export type SurvivorAiActionMeta = {
+type SurvivorAiActionMeta = {
   id: SurvivorAiActionId
   label: string
   /** The matrix's base cost for `ruleCode`. Null only if the rule is missing from the matrix. */
@@ -97,7 +97,7 @@ export const SURVIVOR_AI_TYPE_RULE_CODE = {
   weekly_plan: 'survivor_ai_weekly_advice_pack',
 } as const satisfies Partial<Record<SurvivorAIType, TokenSpendRuleCode>>
 
-export type SurvivorPaidAiType = keyof typeof SURVIVOR_AI_TYPE_RULE_CODE
+type SurvivorPaidAiType = keyof typeof SURVIVOR_AI_TYPE_RULE_CODE
 
 /** What each paid request does, in the words a manager would use. */
 const SURVIVOR_PAID_AI_LABELS: Record<SurvivorPaidAiType, string> = {
@@ -114,7 +114,7 @@ const SURVIVOR_PAID_AI_LABELS: Record<SurvivorPaidAiType, string> = {
   host_jury: 'Jury and finale narration',
 }
 
-export type SurvivorSoldAiAction = { aiType: SurvivorPaidAiType; label: string; lane: 'player' | 'host'; tokenCost: number | null; ruleCode: TokenSpendRuleCode }
+type SurvivorSoldAiAction = { aiType: SurvivorPaidAiType; label: string; lane: 'player' | 'host'; tokenCost: number | null; ruleCode: TokenSpendRuleCode }
 
 /** The paid Survivor AI actions that exist, with the price their rule charges. */
 export const SURVIVOR_SOLD_AI_ACTIONS: readonly SurvivorSoldAiAction[] = (Object.keys(SURVIVOR_AI_TYPE_RULE_CODE) as SurvivorPaidAiType[]).map((aiType) => {

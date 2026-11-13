@@ -1,6 +1,6 @@
 import { type SocialPlatform } from "./types"
 
-export interface SocialPublishPlatformHealth {
+interface SocialPublishPlatformHealth {
   platform: SocialPlatform
   providerId: string | null
   adapterAvailable: boolean

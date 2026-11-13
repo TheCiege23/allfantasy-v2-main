@@ -42,7 +42,7 @@ export type TradeTargetLineup =
     }
   | { status: 'unavailable'; detail: string }
 
-export type TradeTargetOfferAsset = { name: string; position: string | null; value: number | null }
+type TradeTargetOfferAsset = { name: string; position: string | null; value: number | null }
 
 export type TradeTargetFacts = {
   leagueName: string

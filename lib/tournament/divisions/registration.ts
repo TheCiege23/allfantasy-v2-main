@@ -24,7 +24,7 @@ export function joinState(input: { phase: string; capacity: number; registered: 
   return 'open'
 }
 
-export type QueueEntry = { id: string; queuedAt: Date | string }
+type QueueEntry = { id: string; queuedAt: Date | string }
 
 /** Strict first in, first out. Ties on the timestamp fall back to id so the order is total. */
 export function waitlistOrder<T extends QueueEntry>(entries: T[]): T[] {
@@ -54,7 +54,7 @@ export type PlacementEntrant = {
   invitedBy: string | null
 }
 
-export type PlacementInput = {
+type PlacementInput = {
   entrants: PlacementEntrant[]
   conferences: number
   teamsPerConference: number
@@ -63,14 +63,14 @@ export type PlacementInput = {
   seed: number
 }
 
-export type Placement = {
+type Placement = {
   /** entrant id → { division, conference } (0-based). */
   assignments: Record<string, { division: 0 | 1; conference: number }>
   leagues: Array<{ division: 0 | 1; conference: number; members: string[] }>
   log: { seed: number; preferenceHonoured: number; preferenceOverflow: number; groupsKept: number; groupsSplit: number }
 }
 
-export function mulberry32(seed: number) {
+function mulberry32(seed: number) {
   let a = seed >>> 0
   return () => {
     a = (a + 0x6d2b79f5) >>> 0
@@ -91,7 +91,7 @@ function shuffle<T>(items: T[], rand: () => number): T[] {
 }
 
 /** Split n as evenly as possible into k buckets. */
-export const evenSizes = (n: number, k: number) => Array.from({ length: k }, (_, i) => Math.floor(n / k) + (i < n % k ? 1 : 0))
+const evenSizes = (n: number, k: number) => Array.from({ length: k }, (_, i) => Math.floor(n / k) + (i < n % k ? 1 : 0))
 
 /**
  * 1. Divisions are balanced (sizes differ by at most one).

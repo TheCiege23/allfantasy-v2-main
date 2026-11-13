@@ -8,11 +8,11 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { clampSurvivorCastSize } from '@/lib/league-creation-wizard/sport-team-limits'
 import type { ZombieUniverseTierId } from '@/lib/zombie/zombie-universe-tier'
 
-export type TournamentLeagueNamingMode = 'commissioner_custom' | 'app_generated' | 'ai_themed'
+type TournamentLeagueNamingMode = 'commissioner_custom' | 'app_generated' | 'ai_themed'
 
-export type SurvivorTribeNameMode = 'auto' | 'custom'
-export type SurvivorCommissionerRole = 'commissioner_only' | 'player_commissioner'
-export type SurvivorEntryFeeMode = 'free' | 'paid'
+type SurvivorTribeNameMode = 'auto' | 'custom'
+type SurvivorCommissionerRole = 'commissioner_only' | 'player_commissioner'
+type SurvivorEntryFeeMode = 'free' | 'paid'
 
 export interface WizardFormatOptions {
   /** Fantasy tournament (multi-league hub) — uses POST /api/tournament/create */
@@ -135,7 +135,7 @@ export function clampSurvivorTeamCount(_sport: string, n: number): number {
 }
 
 /** Tribe count from team count: max 4 tribes, at least 2. */
-export function suggestedSurvivorTribeCount(teamCount: number): number {
+function suggestedSurvivorTribeCount(teamCount: number): number {
   if (teamCount <= 8) return 2
   if (teamCount <= 16) return 3
   return 4

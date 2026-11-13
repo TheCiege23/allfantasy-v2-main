@@ -197,7 +197,7 @@ function startersInFixtures(
   return { playing, unknownTeam }
 }
 
-export interface MyStartersPlayingInput {
+interface MyStartersPlayingInput {
   userId: string
   /** 'tonight' narrows to kickoffs from 5pm ET; 'today' takes the whole ET day. */
   window: 'today' | 'tonight'

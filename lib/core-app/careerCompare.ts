@@ -18,7 +18,7 @@ import { buildCareerData, NO_CAREER_FILTER, type CareerData, type CareerFilter, 
  * so a hand-edited URL cannot build a side the picker could not.
  */
 
-export type CompareKind = 'all' | 'platform' | 'league' | 'season' | 'sport'
+type CompareKind = 'all' | 'platform' | 'league' | 'season' | 'sport'
 
 export type CompareOption = {
   spec: string
@@ -26,13 +26,13 @@ export type CompareOption = {
   group: 'Career' | 'Platforms' | 'Leagues' | 'Seasons' | 'Sports'
 }
 
-export type CompareSide = {
+type CompareSide = {
   spec: string
   label: string
   data: CareerData
 }
 
-export type CompareRow = {
+type CompareRow = {
   key: string
   label: string
   a: string

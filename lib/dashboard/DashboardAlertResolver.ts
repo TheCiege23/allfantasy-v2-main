@@ -2,9 +2,9 @@
  * DashboardAlertResolver — setup and notification alerts for dashboard.
  */
 
-export type AlertSeverity = "info" | "warning" | "success"
+type AlertSeverity = "info" | "warning" | "success"
 
-export interface DashboardAlertConfig {
+interface DashboardAlertConfig {
   id: string
   severity: AlertSeverity
   title: string
@@ -13,7 +13,7 @@ export interface DashboardAlertConfig {
   actionHref?: string
 }
 
-export interface DashboardAlertsInput {
+interface DashboardAlertsInput {
   isVerified?: boolean
   isAgeConfirmed?: boolean
   profileComplete?: boolean

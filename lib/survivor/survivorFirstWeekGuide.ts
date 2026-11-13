@@ -17,7 +17,7 @@ export type FirstWeekGuideRules = {
   finaleWeek: number | null
 }
 
-export type FirstWeekGuideStep = { id: string; title: string; body: string }
+type FirstWeekGuideStep = { id: string; title: string; body: string }
 
 export function firstWeekGuideSteps(rules: FirstWeekGuideRules): FirstWeekGuideStep[] {
   const tribe = rules.tribeName ? `You are on Tribe ${rules.tribeName}.` : 'You are on a tribe.'

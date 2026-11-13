@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { ChevronDown, ChevronUp, FileQuestion } from 'lucide-react'
 import type { MissingDataItem } from '@/lib/ai-context-envelope'
 
-export interface MissingDataBlockProps {
+interface MissingDataBlockProps {
   /** Missing data items — never silently ignored. */
   items: MissingDataItem[]
   /** Optional title. */

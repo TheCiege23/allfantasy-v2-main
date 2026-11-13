@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { redis } from '@/lib/queues/bullmq'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
-export type MemoryEntryType =
+type MemoryEntryType =
   | 'user-message'
   | 'ai-response'
   | 'tool-call'
@@ -31,7 +31,7 @@ export interface WorkingMemory {
   entries: MemoryEntry[]
 }
 
-export interface WorkingMemoryPrompt {
+interface WorkingMemoryPrompt {
   systemBlock: string
   contextBlock: string
   tokenCount: number

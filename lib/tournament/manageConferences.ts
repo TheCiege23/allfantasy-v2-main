@@ -14,7 +14,7 @@ export type ConferencePlanItem = {
   leagueIds: string[]
 }
 
-export type ConferencePlanOutcome =
+type ConferencePlanOutcome =
   | {
       ok: true
       movedLeagues: number

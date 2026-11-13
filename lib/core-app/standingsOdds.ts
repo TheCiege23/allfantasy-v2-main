@@ -17,7 +17,7 @@ import type { OutlookLeague, SwingMatchup } from './seasonOutlook'
  * `formatOdds`), and the simulation contributes percentages alone.
  */
 
-export type StandingsOddsTeam = {
+type StandingsOddsTeam = {
   playoffPct: number
   byePct: number
   /** False when the team has too few completed weeks to model — its percentage is a prior, not a read. */
@@ -28,7 +28,7 @@ export type StandingsOddsTeam = {
   sosOpponentMu: number | null
 }
 
-export type StandingsStakesGame = {
+type StandingsStakesGame = {
   a: { id: string; name: string | null }
   b: { id: string; name: string | null }
   ifA: number
@@ -36,7 +36,7 @@ export type StandingsStakesGame = {
   rootFor: string
 }
 
-export type StandingsStakes = {
+type StandingsStakes = {
   week: number
   opponentName: string | null
   ifWin: number

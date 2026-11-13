@@ -130,7 +130,7 @@ export type NotificationsCenterData = {
  */
 const PUSH_SLOTS = 3
 
-export type PushNotification = {
+type PushNotification = {
   id: string
   /** League name always leads — a reason with no league is unactionable. */
   leagueName: string | null
@@ -166,7 +166,7 @@ export type PushSelection = {
  * Returns a number where higher wins. Deliberately a pure function of the issue
  * so the same input always produces the same slate.
  */
-export function priorityOf(issue: CoreIssue, now: Date): number {
+function priorityOf(issue: CoreIssue, now: Date): number {
   let score = 0
 
   if (issue.deadline) {

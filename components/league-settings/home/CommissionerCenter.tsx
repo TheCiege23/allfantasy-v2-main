@@ -94,13 +94,13 @@ const TOOLS: ReadonlyArray<{ id: string; key: string; target: SettingsSubPageId;
 ]
 
 /** The section's one-line summary key, from the same copy the nav uses. */
-export function navSubKey(id: SettingsSubPageId): string | null {
+function navSubKey(id: SettingsSubPageId): string | null {
   for (const group of NAV_GROUPS) for (const item of group.items) if (item.id === id) return `lsh.cc.sub.${item.key}`
   return null
 }
 
 /** Ids the viewer can open: every row target the builder handed back. */
-export function editableSubPages(sections: readonly SettingsHomeSection[]): Set<SettingsSubPageId> {
+function editableSubPages(sections: readonly SettingsHomeSection[]): Set<SettingsSubPageId> {
   const out = new Set<SettingsSubPageId>()
   for (const section of sections) for (const row of section.rows) if (row.target) out.add(row.target)
   return out

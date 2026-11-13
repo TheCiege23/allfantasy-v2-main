@@ -30,8 +30,8 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 
 type Db = Pick<typeof defaultPrisma, "statIngestionJob" | "sportsGame">
 
-export type CfbdAthlete = { id?: unknown; name?: unknown; stat?: unknown }
-export type CfbdGame = {
+type CfbdAthlete = { id?: unknown; name?: unknown; stat?: unknown }
+type CfbdGame = {
   id?: unknown
   teams?: Array<{
     team?: unknown
@@ -70,7 +70,7 @@ function splitPair(raw: unknown): [number, number] | null {
 }
 
 /** One game id namespace for CFBD rows, so they can never collide with another provider's ids. */
-export function cfbdGameId(id: unknown): string | null {
+function cfbdGameId(id: unknown): string | null {
   const s = id == null ? '' : String(id).trim()
   return s ? `cfbd:${s}` : null
 }

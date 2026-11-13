@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const PickRecommendationSchema = z.object({
+const PickRecommendationSchema = z.object({
   playerName: z.string(),
   position: z.string(),
   team: z.string(),
@@ -22,7 +22,7 @@ export const PickRecommendationSchema = z.object({
   waitOrTakeNow: z.enum(['take_now', 'safe_to_wait', 'unlikely_to_return']),
 })
 
-export const NextPickPredictionSchema = z.object({
+const NextPickPredictionSchema = z.object({
   manager: z.string(),
   predictedPlayer: z.string(),
   predictedPosition: z.string(),
@@ -39,7 +39,7 @@ export const PostDraftGradeSchema = z.object({
   summary: z.string(),
 })
 
-export const CombinedAdpDataSchema = z.object({
+const CombinedAdpDataSchema = z.object({
   playerKey: z.string(),
   playerName: z.string(),
   externalAdp: z.number().nullable(),

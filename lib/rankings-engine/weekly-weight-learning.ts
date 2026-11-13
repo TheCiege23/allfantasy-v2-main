@@ -2,9 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { TradeOutcome } from '@prisma/client'
 import { getBaselineWeights, type ComponentWeights } from './adaptive-weight-learning'
 
-export type WeightStatus = 'APPLIED' | 'REJECTED' | 'INSUFFICIENT_DATA' | 'ROLLED_BACK'
+type WeightStatus = 'APPLIED' | 'REJECTED' | 'INSUFFICIENT_DATA' | 'ROLLED_BACK'
 
-export const SEGMENT_KEYS = ['DYN_SF', 'DYN_1QB', 'RED_SF', 'RED_1QB', 'SPC'] as const
+const SEGMENT_KEYS = ['DYN_SF', 'DYN_1QB', 'RED_SF', 'RED_1QB', 'SPC'] as const
 export type SegmentKey = (typeof SEGMENT_KEYS)[number]
 
 const MIN_SAMPLES = 200
@@ -36,7 +36,7 @@ interface QualityMetrics {
   eceMid: number
 }
 
-export interface WeeklyLearningResult {
+interface WeeklyLearningResult {
   segmentKey: string
   weekStart: Date
   status: WeightStatus

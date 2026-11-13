@@ -72,7 +72,7 @@ type MatchupResult = {
   deterministicSeed?: number | null
 }
 
-export interface MatchupSimulationPageProps {
+interface MatchupSimulationPageProps {
   teamAName?: string
   teamBName?: string
   leagueId?: string

@@ -17,7 +17,7 @@ const MEDIA_ENDPOINTS: Record<MediaType, string> = {
   social: '/api/media/social',
 }
 
-export interface MediaGenerationPanelProps {
+interface MediaGenerationPanelProps {
   type: MediaType
   /** Optional initial payload (sport, leagueName, etc.). */
   initialPayload?: Record<string, unknown>

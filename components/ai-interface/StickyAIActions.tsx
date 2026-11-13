@@ -5,7 +5,7 @@ import { Copy, MessageCircle, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { getChimmyChatHrefWithPrompt, getPrimaryChimmyEntry } from '@/lib/ai-product-layer'
 
-export interface StickyAIActionsProps {
+interface StickyAIActionsProps {
   /** Text to copy (e.g. primaryAnswer) */
   copyText?: string
   /** Prompt to prefill in Chimmy when "Open in Chimmy" is clicked */

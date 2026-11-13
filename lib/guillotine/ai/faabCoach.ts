@@ -1,4 +1,4 @@
-export type FaabRecommendation = {
+type FaabRecommendation = {
   playerId: string
   playerName: string
   recommendedBid: number

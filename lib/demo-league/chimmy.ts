@@ -39,7 +39,7 @@ export function takeDemoChimmyBudget(now = new Date()): boolean {
 }
 
 /** Plain-text league brief built only from anonymized fields. */
-export function demoLeagueBrief(view: DemoLeagueView): string {
+function demoLeagueBrief(view: DemoLeagueView): string {
   const name = new Map(view.teams.map((t) => [t.slot, `${t.teamName} (manager ${t.managerName})`]))
   const short = new Map(view.teams.map((t) => [t.slot, t.teamName]))
   const lines: string[] = []

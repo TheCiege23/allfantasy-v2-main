@@ -1,6 +1,6 @@
 import type { SubscriptionPlanId } from "@/lib/subscription/types"
 
-export type WorldCupEntitlementInput = {
+type WorldCupEntitlementInput = {
   isOwner?: boolean | null
   isAdmin?: boolean | null
   hasBracketBrainAi?: boolean | null
@@ -18,7 +18,7 @@ function hasPlan(input: WorldCupEntitlementInput, plans: SubscriptionPlanId[]) {
   return owned.some((plan) => plans.includes(plan))
 }
 
-export function hasWorldCupAllAccess(input: WorldCupEntitlementInput) {
+function hasWorldCupAllAccess(input: WorldCupEntitlementInput) {
   return Boolean(input.isAdmin || input.allFantasyTestAccess || hasPlan(input, ["supreme"]))
 }
 

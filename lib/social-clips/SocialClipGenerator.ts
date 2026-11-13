@@ -17,7 +17,7 @@ const DEFAULT_SUBTITLES: Record<ClipType, string> = {
   top_scoring_team: 'Highest score this week',
 }
 
-export interface GenerateOptions {
+interface GenerateOptions {
   title?: string
   subtitle?: string
   stats?: string[]

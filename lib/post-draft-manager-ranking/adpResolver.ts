@@ -14,7 +14,7 @@ function normalize(s: string | null | undefined): string {
 }
 
 /** Build a stable key for matching draft pick to ADP entry. */
-export function playerKey(name: string, position: string, team: string | null): string {
+function playerKey(name: string, position: string, team: string | null): string {
   return `${normalize(name)}|${normalize(position)}|${normalize(team ?? '')}`
 }
 

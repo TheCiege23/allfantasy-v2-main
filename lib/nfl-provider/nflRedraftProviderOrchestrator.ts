@@ -1,6 +1,6 @@
 import type { NflRedraftProviderId } from '@/lib/nfl-provider/nflRedraftProviderFoundation'
 
-export const NFL_REDRAFT_PROVIDER_ORCHESTRATOR_MODEL_VERSION = 'nfl-redraft-provider-orchestrator-v1' as const
+const NFL_REDRAFT_PROVIDER_ORCHESTRATOR_MODEL_VERSION = 'nfl-redraft-provider-orchestrator-v1' as const
 
 export type NflRedraftProviderOrchestratorCapability =
   | 'fantasy_valuations'
@@ -22,7 +22,7 @@ export type NflRedraftProviderLifecycleState =
   | 'FAILED'
   | 'UNKNOWN'
 
-export type NflRedraftProviderSubscriptionType =
+type NflRedraftProviderSubscriptionType =
   | 'backbone'
   | 'cache'
   | 'free'
@@ -39,7 +39,7 @@ export type NflRedraftProviderNodeId =
   | 'internal_historical_model'
   | 'runtime'
 
-export type NflRedraftProviderUnavailableBehavior =
+type NflRedraftProviderUnavailableBehavior =
   | 'hide_optional_field'
   | 'preserve_runtime_without_field'
   | 'show_default_media'
@@ -71,7 +71,7 @@ export type NflRedraftProviderCapabilityPolicy = {
   userFacing: boolean
 }
 
-export type NflRedraftProviderHealthSummary = {
+type NflRedraftProviderHealthSummary = {
   providerId: NflRedraftProviderNodeId
   displayName: string
   status: NflRedraftProviderLifecycleState
@@ -85,7 +85,7 @@ export type NflRedraftProviderHealthSummary = {
   subscriptionType: NflRedraftProviderSubscriptionType
 }
 
-export type NflRedraftProviderSelectionResult = {
+type NflRedraftProviderSelectionResult = {
   modelVersion: typeof NFL_REDRAFT_PROVIDER_ORCHESTRATOR_MODEL_VERSION
   capability: NflRedraftProviderOrchestratorCapability
   selectedProvider: NflRedraftProviderNodeId | null
@@ -106,14 +106,14 @@ export type NflRedraftProviderSelectionResult = {
   providerIdsExposedToCanonicalData: false
 }
 
-export type NflRedraftCanonicalProviderResult = {
+type NflRedraftCanonicalProviderResult = {
   providerId: NflRedraftProviderNodeId
   canonicalData: Record<string, unknown> | null
   updatedAtIso?: string | null
   confidence?: number | null
 }
 
-export type NflRedraftProviderMergeResult = {
+type NflRedraftProviderMergeResult = {
   modelVersion: typeof NFL_REDRAFT_PROVIDER_ORCHESTRATOR_MODEL_VERSION
   capability: NflRedraftProviderOrchestratorCapability
   canonicalData: Record<string, unknown>

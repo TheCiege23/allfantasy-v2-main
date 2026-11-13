@@ -147,7 +147,7 @@ export type DraftRoomProviderSources = {
   experience?: string | null
 }
 
-export type BoardPickDisplayMerge = {
+type BoardPickDisplayMerge = {
   playerImageUrl?: string | null
   injuryStatus?: string | null
   experienceBadge?: string | null

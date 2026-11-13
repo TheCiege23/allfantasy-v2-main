@@ -25,7 +25,7 @@ export const MATCHUP_UNSUPPORTED = {
   inferredPlayoffAdvancement: 'unavailable',
 } as const
 
-export type CertifiedMatchupGameState = {
+type CertifiedMatchupGameState = {
   canonicalGameId: string
   homeTeamId: string
   awayTeamId: string

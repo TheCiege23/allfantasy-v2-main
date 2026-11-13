@@ -29,7 +29,7 @@ function getOpenAIClient(): OpenAI | null {
 const MAX_BATCH = 15;
 const SUMMARIZE_PROMPT = `You are a fantasy sports editor. For each news headline below, output a very short summarized headline (one line, under 80 chars) that keeps the fantasy-relevant takeaway. Keep player/team names and key facts. Output only the summarized headlines, one per line, in the same order as the input. No numbering or bullets.`;
 
-export interface ItemForSummary {
+interface ItemForSummary {
   id: string;
   title: string;
 }

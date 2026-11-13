@@ -1,7 +1,7 @@
 import { campusStarterIds, collegePlayerIds } from '@/lib/c2c/campusLineup'
 import type { CurrentCollegeAthlete } from '@/lib/devy/ncaabRosterEvidence'
 
-export type NbaCampusWeekPlayer = { id: string; espnId: string; teamId: string; position: string; observedAt: string; selectedAt: string }
+type NbaCampusWeekPlayer = { id: string; espnId: string; teamId: string; position: string; observedAt: string; selectedAt: string }
 export type NbaCampusWeekSnapshot = { season: number; week: number; savedAt: string; players: NbaCampusWeekPlayer[] }
 
 /** Preserve a selected player's school for this week even when a later roster refresh observes a transfer. */

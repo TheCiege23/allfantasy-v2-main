@@ -75,7 +75,7 @@ function getTeamGrade(picks: MockDraftPick[], manager: string) {
   }
 }
 
-export interface MockDraftRecapProps {
+interface MockDraftRecapProps {
   /** All picks in order */
   results: MockDraftPick[]
   /** Optional config for header */

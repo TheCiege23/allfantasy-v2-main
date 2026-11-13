@@ -44,9 +44,9 @@ import type { CareerFilter } from '@/lib/core-app/careerModel'
  */
 
 /** Fewer other managers than this and a cohort is not a comparison. */
-export const MIN_PEERS = 2
+const MIN_PEERS = 2
 
-export type PeerMetric = {
+type PeerMetric = {
   key: 'overall' | 'winRate' | 'titles' | 'playoffs' | 'scoring'
   label: string
   you: number | null
@@ -57,7 +57,7 @@ export type PeerMetric = {
   ahead: boolean | null
 }
 
-export type PeerCohort = {
+type PeerCohort = {
   key: string
   label: string
   /** Your league-seasons with results in this cohort. */
@@ -126,7 +126,7 @@ function metricsFor(you: ManagerScore, peers: ManagerScore[]): PeerMetric[] {
 }
 
 /** The cohorts worth comparing in: your most common league type and scoring, and both together. */
-export function pickCohorts(rows: CareerLedgerRow[]): Array<{ key: string; label: string; filters: RankingFilters }> {
+function pickCohorts(rows: CareerLedgerRow[]): Array<{ key: string; label: string; filters: RankingFilters }> {
   const results = rows.filter((r) => r.gamesPlayed > 0)
   const count = <K extends string>(get: (r: CareerLedgerRow) => K | null) => {
     const m = new Map<K, number>()

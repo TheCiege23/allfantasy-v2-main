@@ -8,7 +8,7 @@ import {
   type SupportedSport,
 } from '@/lib/sport-scope'
 
-export const DYNASTY_SPORTS: readonly SupportedSport[] = [...SUPPORTED_SPORTS]
+const DYNASTY_SPORTS: readonly SupportedSport[] = [...SUPPORTED_SPORTS]
 
 export type DynastySport = SupportedSport
 

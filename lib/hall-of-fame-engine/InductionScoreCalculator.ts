@@ -5,7 +5,7 @@
 
 import type { HallOfFameEntityType, HallOfFameCategory } from './types'
 
-export interface InductionMetrics {
+interface InductionMetrics {
   championships?: number
   seasonsPlayed?: number
   dominance?: number

@@ -8,7 +8,7 @@ import type { CPUDrafterInput, DrafterPickResult, OrphanDrafterMode } from './ty
 import { getProviderStatus } from '@/lib/provider-config'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export interface AIDrafterOptions {
+interface AIDrafterOptions {
   /** If true, attempt AI provider; otherwise use CPU only. */
   useAIProvider?: boolean
 }

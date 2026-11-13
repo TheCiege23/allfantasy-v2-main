@@ -10,6 +10,3 @@ export { default as EmptyStateRenderer, EmptyStateGrid } from "./EmptyStateRende
 export { default as LoadingStateRenderer, SkeletonRowsRenderer } from "./LoadingStateRenderer"
 export { default as ErrorStateRenderer, StaleDataNotice } from "./ErrorStateRenderer"
 
-export type { EmptyStateAction, EmptyStateRendererProps } from "./EmptyStateRenderer"
-export type { LoadingStateRendererProps } from "./LoadingStateRenderer"
-export type { ErrorStateAction, ErrorStateRendererProps } from "./ErrorStateRenderer"

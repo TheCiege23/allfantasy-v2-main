@@ -37,7 +37,7 @@ export type SwapRosterPlayer = {
   marketValue?: number | null
 }
 
-export type LineupSwap = {
+type LineupSwap = {
   addId: string
   /** What the add does to your best starting lineup. Always > 0 — a non-starter is not a swap. */
   gain: number
@@ -56,14 +56,14 @@ export type LineupSwap = {
   ranked: RankedAdd[]
 }
 
-export type RankedAdd = {
+type RankedAdd = {
   id: string
   gain: number
   /** The starter this add would take the place of; null when he fills an empty slot. */
   displacesId: string | null
 }
 
-export type PickLineupSwapArgs = {
+type PickLineupSwapArgs = {
   /** Every player on your roster who can be seated or cut this week — never IR or taxi. */
   roster: readonly SwapRosterPlayer[]
   /** The league's declared starters — never offered as the drop. */

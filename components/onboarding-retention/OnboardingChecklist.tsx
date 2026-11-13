@@ -11,7 +11,7 @@ const MILESTONE_BY_TASK: Record<string, string> = {
   referral_share: "onboarding_referral_share",
 }
 
-export interface OnboardingChecklistProps {
+interface OnboardingChecklistProps {
   initialState?: OnboardingChecklistState | null
   onTaskClick?: (taskId: string, href: string) => void
   className?: string

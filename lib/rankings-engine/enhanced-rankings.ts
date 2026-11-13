@@ -23,7 +23,7 @@ import {
 
 export type EnhancedView = 'this_year' | 'dynasty_horizon' | 'overall'
 
-export interface EnhancedPlayerRank extends AdaptivePlayerRank {
+interface EnhancedPlayerRank extends AdaptivePlayerRank {
   leagueRankScore: number
   teamFitScore: number
   goalAlignmentScore: number
@@ -35,7 +35,7 @@ export interface EnhancedPlayerRank extends AdaptivePlayerRank {
   riskDetails: RiskFitScore
 }
 
-export interface EnhancedRankingsOutput {
+interface EnhancedRankingsOutput {
   view: EnhancedView
   goal: 'win-now' | 'balanced' | 'rebuild'
   players: EnhancedPlayerRank[]

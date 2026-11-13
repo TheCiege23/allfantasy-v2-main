@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
-export type FinanceAuditInput = {
+type FinanceAuditInput = {
   leagueId: string
   actorUserId?: string | null
   eventType: string

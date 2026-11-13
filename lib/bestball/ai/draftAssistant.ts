@@ -30,9 +30,9 @@ import { validateBestBallRoster } from '../rosterValidator'
 export type DraftedPlayer = { playerId: string; name: string; pos: string; team?: string }
 export type DraftPlayer = { playerId: string; name: string; pos: string; adp?: number; team?: string }
 
-export type RecommendedPick = { playerId: string; name: string; position: string; reasoning: string }
+type RecommendedPick = { playerId: string; name: string; position: string; reasoning: string }
 
-export type DraftRecommendation = {
+type DraftRecommendation = {
   /** Null only when no usable player was sent. */
   bestPick: RecommendedPick | null
   safePick: RecommendedPick | null
@@ -44,7 +44,7 @@ export type DraftRecommendation = {
 }
 
 /** How far roster need can move a player, in picks. One round of a 12-team draft. */
-export const NEED_WINDOW = 12
+const NEED_WINDOW = 12
 
 /** Leverage never suggests reaching more than this many picks ahead of ADP. */
 const LEVERAGE_REACH = NEED_WINDOW

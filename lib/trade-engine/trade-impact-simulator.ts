@@ -12,7 +12,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export interface PlayerProjection {
+interface PlayerProjection {
   playerId: string
   name: string
   position: string
@@ -26,7 +26,7 @@ export interface PlayerProjection {
   age: number | null
 }
 
-export interface TeamSimProfile {
+interface TeamSimProfile {
   teamId: string
   name: string
   /** All rostered players with projections */
@@ -40,7 +40,7 @@ export interface TeamSimProfile {
   weeklyStdDev: number
 }
 
-export interface ScheduleMatchup {
+interface ScheduleMatchup {
   opponentId: string
   week: number
   /** Matchup strength modifier (-0.15 to +0.15) — positive = harder */
@@ -69,7 +69,7 @@ export interface TradeImpactSimInput {
   iterations?: number
 }
 
-export type TradeImpactClassification =
+type TradeImpactClassification =
   | 'major_win'      // +5%
   | 'strong_win'     // +2% to +5%
   | 'minor_edge'     // 0% to +2%
@@ -107,7 +107,7 @@ export interface TradeImpactResult {
   weeklyProjection: WeeklyProjectionSample[]
 }
 
-export interface WeeklyProjectionSample {
+interface WeeklyProjectionSample {
   week: number
   /** Projected score percentiles after trade */
   p10: number

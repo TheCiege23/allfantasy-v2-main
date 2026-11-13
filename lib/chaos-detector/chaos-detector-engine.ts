@@ -13,12 +13,12 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export const ChaosModeEnum = z.enum([
+const ChaosModeEnum = z.enum([
   'matchup_watch', 'leaguewide_scan', 'favorite_fragility', 'underdog_paths',
   'playoff_chaos', 'player_volatility', 'weather_chaos', 'dfs_chaos',
 ])
 
-export interface ChaosPlayer {
+interface ChaosPlayer {
   playerId: string
   playerName: string
   position: string
@@ -30,7 +30,7 @@ export interface ChaosPlayer {
   weatherImpact: number // 0-1 (1 = no impact)
 }
 
-export interface ChaosMatchup {
+interface ChaosMatchup {
   teamAName: string
   teamBName: string
   teamAProjection: number
@@ -62,9 +62,9 @@ export const ChaosDetectorInputSchema = z.object({
     isPlayoff: z.boolean().default(false),
   })).default([]),
 })
-export type ChaosDetectorInput = z.infer<typeof ChaosDetectorInputSchema>
+type ChaosDetectorInput = z.infer<typeof ChaosDetectorInputSchema>
 
-export interface UpsetSpot {
+interface UpsetSpot {
   label: string
   upsetScore: number
   whyItMatters: string
@@ -72,7 +72,7 @@ export interface UpsetSpot {
   strategyImplication: string
 }
 
-export interface ChaosDetectorResult {
+interface ChaosDetectorResult {
   chaosMode: string
   confidencePct: number
   chaosSummary: string

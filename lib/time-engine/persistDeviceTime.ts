@@ -8,7 +8,7 @@ import { normalizeToUTC } from '@/lib/time-engine/normalize'
 import { isValidIanaTimeZone } from '@/lib/timezone'
 import { resolveUserTimezone } from '@/lib/time-engine/resolveTimezone'
 
-export type PersistDeviceTimeInput = {
+type PersistDeviceTimeInput = {
   userId: string
   deviceTimezone: string
   deviceLocalIso: string

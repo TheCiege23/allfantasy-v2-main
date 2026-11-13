@@ -3,7 +3,7 @@ import type { ScheduleGame } from '@/lib/sports-data/riScheduleCache'
 import type { EspnCollegeBoxScore } from '@/lib/espn/espnNcaabBoxScore'
 
 export type EspnCampusPlayer = { id: string; espnId: string; espnTeamId: string; riTeamId: string; position: string }
-export type EspnCampusScore = { playerId: string; points: number; missing: boolean; allFinal: boolean }
+type EspnCampusScore = { playerId: string; points: number; missing: boolean; allFinal: boolean }
 
 /** Score provider-ID matched ESPN boxes against the verified RI schedule in the NBA week. */
 export function scoreEspnCampusEvidence(input: {

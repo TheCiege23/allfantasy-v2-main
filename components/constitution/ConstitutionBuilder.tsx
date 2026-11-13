@@ -314,7 +314,7 @@ function Editor({ t, busy, sections, onCancel, onPublish }: { t: Copy; busy: boo
   )
 }
 
-export function AmendmentRow({
+function AmendmentRow({
   a,
   t,
   es,

@@ -12,14 +12,14 @@
  */
 
 /** `League.settings` keys. */
-export const CLASS_EXCEPTIONS_KEY = 'classExceptions'
-export const CLASS_REQUESTS_KEY = 'classJoinRequests'
+const CLASS_EXCEPTIONS_KEY = 'classExceptions'
+const CLASS_REQUESTS_KEY = 'classJoinRequests'
 
 /** Bounds the JSON so a flood of requests cannot grow `League.settings` without limit. */
 export const MAX_CLASS_REQUESTS = 50
-export const MAX_CLASS_EXCEPTIONS = 100
+const MAX_CLASS_EXCEPTIONS = 100
 
-export type ClassException = {
+type ClassException = {
   userId: string
   grantedBy: string
   grantedAt: string
@@ -29,7 +29,7 @@ export type ClassException = {
   divisionAtGrant: number | null
 }
 
-export type ClassJoinRequest = {
+type ClassJoinRequest = {
   userId: string
   requestedAt: string
   /** The manager's Class division when they asked; null when unrated. */

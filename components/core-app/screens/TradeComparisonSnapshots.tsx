@@ -6,7 +6,7 @@ import { useTradeVisualCopy } from "./useTradeVisualCopy"
 import { useEffect, useRef, useState } from 'react'
 import { genericComparisonSchema, parseGenericComparisons, type GenericComparison } from '@/lib/trade-value/genericComparison'
 
-export type TradeSnapshot = {
+type TradeSnapshot = {
   id: string
   scope: string
   sport: string

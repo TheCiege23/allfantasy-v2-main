@@ -1,4 +1,4 @@
-export type DynastyStoryline = { headline: string; body: string; tags?: string[] }
+type DynastyStoryline = { headline: string; body: string; tags?: string[] }
 
 export async function generateBestBallWeeklyRecap(
   leagueId: string,

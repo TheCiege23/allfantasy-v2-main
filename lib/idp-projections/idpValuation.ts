@@ -25,7 +25,7 @@
 import { idpPositionGroup } from '@/lib/core-app/scoringNotes'
 
 /** The three groups Sleeper actually rosters defenders as. */
-export type IdpGroup = 'LB' | 'DL' | 'DB'
+type IdpGroup = 'LB' | 'DL' | 'DB'
 
 /**
  * Which groups can fill a given roster slot.
@@ -50,14 +50,14 @@ const SLOT_ELIGIBILITY: Record<string, readonly IdpGroup[]> = {
   IDP_FLEX: ['LB', 'DL', 'DB'],
 }
 
-export interface IdpValuationPlayer {
+interface IdpValuationPlayer {
   playerId: string
   position: string | null | undefined
   /** Points per game under THIS league's scoring. Null means unprojected, not zero. */
   projectedPoints: number | null
 }
 
-export interface IdpReplacementLevel {
+interface IdpReplacementLevel {
   group: IdpGroup
   /** Starting slots this league forces across every team, dedicated plus flex actually used. */
   startersLeagueWide: number
@@ -69,7 +69,7 @@ export interface IdpReplacementLevel {
   pool: number
 }
 
-export interface IdpValuationResult {
+interface IdpValuationResult {
   playerId: string
   group: IdpGroup
   projectedPoints: number
@@ -87,13 +87,13 @@ export interface IdpValuationResult {
   isStarter: boolean
 }
 
-export interface IdpValuationRefusal {
+interface IdpValuationRefusal {
   ok: false
   reason: 'not_an_idp_league' | 'no_projected_defenders' | 'no_team_count'
   detail: string
 }
 
-export interface IdpValuationSuccess {
+interface IdpValuationSuccess {
   ok: true
   /** One entry per projected defender, richest first is NOT guaranteed — key by playerId. */
   players: IdpValuationResult[]
@@ -109,7 +109,7 @@ export interface IdpValuationSuccess {
   notes: string[]
 }
 
-export type IdpValuationOutcome = IdpValuationSuccess | IdpValuationRefusal
+type IdpValuationOutcome = IdpValuationSuccess | IdpValuationRefusal
 
 const NO_MARKET_ANCHOR_NOTE =
   'FantasyCalc does not price individual defenders, so this value has no market anchor. It is ' +
@@ -133,7 +133,7 @@ export function parseIdpSlots(rosterSlots: readonly string[] | null | undefined)
   return { dedicated, flex }
 }
 
-export interface BuildIdpValuationsInput {
+interface BuildIdpValuationsInput {
   players: readonly IdpValuationPlayer[]
   /** `roster_positions` from the league, bench slots included or not — both are handled. */
   rosterSlots: readonly string[] | null | undefined

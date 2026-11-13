@@ -33,7 +33,7 @@ export type IdPlayerRow = {
   team?: string
 }
 
-export type DefenderStartSitAnalysis = {
+type DefenderStartSitAnalysis = {
   starters: string[]
   sitters: string[]
   analysis: string
@@ -55,13 +55,13 @@ export type IDPMatchupReport = {
   week: number
 }
 
-export type IDPTradeEval = {
+type IDPTradeEval = {
   fairness_rating: string
   balance_impact: string
   recommendation: string
 }
 
-export type IDPRankingEntry = {
+type IDPRankingEntry = {
   rank: number
   name: string
   position: string
@@ -70,32 +70,32 @@ export type IDPRankingEntry = {
   reasoning: string
 }
 
-export type IDPRankingList = {
+type IDPRankingList = {
   week: number
   positionFilter?: string
   entries: IDPRankingEntry[]
 }
 
-export type SleeperDefender = {
+type SleeperDefender = {
   name: string
   position: string
   team?: string
   reasoning: string
 }
 
-export type SnapShareReport = {
+type SnapShareReport = {
   concerns: Array<{ player: string; snap_share: number; trend: string; note: string }>
   positives: Array<{ player: string; snap_share: number; trend: string; note: string }>
   /** Set when the report is empty because the data source does not exist. */
   note?: string
 }
 
-export type ScarcityReport = {
+type ScarcityReport = {
   summary: string
   byPosition: Record<string, string>
 }
 
-export type PowerRankingsPost = {
+type PowerRankingsPost = {
   week: number
   lines: Array<{ rank: number; teamLabel: string; blurb: string }>
   fullText: string
@@ -121,7 +121,7 @@ function isIdpPosition(pos: string): boolean {
  * not snaps, and no defensive matchup-strength feed is ingested). Anything
  * that used them either dropped the factor or says "no matchup signal".
  */
-export type IdpAiStatProfile = {
+type IdpAiStatProfile = {
   /** Mean league-scored points across every ingested week this season. */
   seasonAvg: number
   /** League-scored points of the last ingested weeks (≤3, oldest → newest). */
@@ -136,7 +136,7 @@ export type IdpAiStatProfile = {
  * ingested stat line are ABSENT from the map — callers must treat absence as
  * "no data", never substitute an invented line.
  */
-export async function resolveIdpAiProfiles(
+async function resolveIdpAiProfiles(
   leagueId: string,
   playerIds: string[],
   week: number,
@@ -163,7 +163,7 @@ export async function resolveIdpAiProfiles(
 }
 
 /** Single-player profile — null when no ingested lines exist for the player. */
-export async function resolveIdpAiProfile(
+async function resolveIdpAiProfile(
   leagueId: string,
   playerId: string,
   week: number,

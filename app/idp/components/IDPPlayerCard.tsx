@@ -22,7 +22,7 @@ export type IdpContractChip =
   | 'DEAD_CAP'
 
 /** A defender's box-score line. Every field optional: absent means unknown, never zero. */
-export type IdpStatLine = {
+type IdpStatLine = {
   soloTackles?: number | null
   assistedTackles?: number | null
   sacks?: number | null
@@ -33,7 +33,7 @@ export type IdpStatLine = {
   defensiveTDs?: number | null
 }
 
-export type IDPPlayerCardProps = {
+type IDPPlayerCardProps = {
   playerId: string
   name: string
   position: string

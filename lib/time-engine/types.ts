@@ -28,7 +28,7 @@ export type UserTimeContext = {
   warnings: string[]
 }
 
-export type FantasyDayWindowBlock = {
+type FantasyDayWindowBlock = {
   startUTC: string
   endUTC: string
   calendarDateUserTz: string
@@ -42,14 +42,14 @@ export type DataFreshnessTimestamps = {
   liveScoresLastUpdatedAt: string | null
 }
 
-export type RelativeCalendarHints = {
+type RelativeCalendarHints = {
   todayInUserTz: string
   tomorrowDateInUserTz: string
   tonightWindowLabel: string
   thisWeekLabel: string
 }
 
-export type SportWindowHint = {
+type SportWindowHint = {
   likelyActive: boolean
   note: string
   sportUsed: string

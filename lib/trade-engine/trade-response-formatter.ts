@@ -3,16 +3,16 @@ import type { DisagreementBlock } from './trade-analysis-schema'
 import type { ConditionalRecommendation } from './quality-gate'
 
 /** 'N/A' = refused: zero valued assets — see verdictHasNoSignal(). Never a letter. */
-export type FairnessGrade = 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F' | 'N/A'
+type FairnessGrade = 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F' | 'N/A'
 
-export type DeterministicDriver = {
+type DeterministicDriver = {
   label: string
   value: string
   impact: 'positive' | 'negative' | 'neutral'
   category: 'value' | 'roster' | 'timing' | 'risk' | 'viability'
 }
 
-export type DeterministicVerdict = {
+type DeterministicVerdict = {
   winner: 'A' | 'B' | 'Even'
   winnerLabel: string
   fairnessGrade: FairnessGrade
@@ -33,7 +33,7 @@ export type DeterministicVerdict = {
   source: 'deterministic-engine'
 }
 
-export type ValueVerdict = {
+type ValueVerdict = {
   fairnessGrade: FairnessGrade
   edge: string
   edgeSide: 'A' | 'B' | 'Even'
@@ -70,7 +70,7 @@ export type ValueVerdict = {
   disagreement: DisagreementBlock
 }
 
-export type RankingsImpact = {
+type RankingsImpact = {
   sideARankDelta: number
   sideBRankDelta: number
   sideAProjectedTier: string
@@ -79,7 +79,7 @@ export type RankingsImpact = {
   details: string[]
 }
 
-export type InjuryAdjustedValue = {
+type InjuryAdjustedValue = {
   sideAHealthyValue: number
   sideBHealthyValue: number
   sideAAdjustedValue: number
@@ -90,7 +90,7 @@ export type InjuryAdjustedValue = {
   details: string[]
 }
 
-export type StarterBenchDelta = {
+type StarterBenchDelta = {
   sideAStarterImpact: number
   sideBStarterImpact: number
   sideABenchValue: number
@@ -100,7 +100,7 @@ export type StarterBenchDelta = {
   details: string[]
 }
 
-export type ViabilityVerdict = {
+type ViabilityVerdict = {
   acceptanceLikelihood: 'Very Likely' | 'Likely' | 'Uncertain' | 'Unlikely' | 'Very Unlikely'
   acceptanceScore: number
   partnerFit: {
@@ -126,7 +126,7 @@ export type ViabilityVerdict = {
   }
 }
 
-export type ActionPlan = {
+type ActionPlan = {
   bestOffer: {
     assessment: string
     sendAsIs: boolean
@@ -163,7 +163,7 @@ function computeFairnessGrade(pctDiff: number): FairnessGrade {
  * of data. "We could not price this trade" and "this trade is fair" are
  * opposite claims; only one of them is true.
  */
-export function verdictHasNoSignal(ctx: TradeDecisionContextV1): boolean {
+function verdictHasNoSignal(ctx: TradeDecisionContextV1): boolean {
   return (
     ctx.dataQuality.assetsCovered === 0 ||
     (ctx.sideA.totalValue <= 0 && ctx.sideB.totalValue <= 0)

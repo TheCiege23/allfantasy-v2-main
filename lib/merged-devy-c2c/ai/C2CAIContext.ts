@@ -17,7 +17,7 @@ import { C2C_LIFECYCLE_STATE } from '../types'
 const PROMOTION_ELIGIBLE_STATES = [DEVY_LIFECYCLE_STATE.PROMOTION_ELIGIBLE, C2C_LIFECYCLE_STATE.PROMOTION_ELIGIBLE] as const
 const isPromotionEligibleState = (s: string) => (PROMOTION_ELIGIBLE_STATES as readonly string[]).includes(s)
 
-export interface C2CAIContextBase {
+interface C2CAIContextBase {
   leagueId: string
   sport: string
   userId?: string

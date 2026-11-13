@@ -42,7 +42,7 @@ type SleeperUser = {
   metadata?: { team_name?: string | null } | null
 }
 
-export type ProjectedStandingRow = {
+type ProjectedStandingRow = {
   rosterId: number
   ownerId: string | null
   name: string

@@ -9,16 +9,16 @@
  */
 import type { DiscoveredLeague } from '../types'
 
-export type SyncAction = 'import' | 'skip-immutable' | 'refresh-current'
+type SyncAction = 'import' | 'skip-immutable' | 'refresh-current'
 
-export type SyncDecision = {
+type SyncDecision = {
   leagueReference: string
   season: string
   action: SyncAction
   reason: string
 }
 
-export type SyncPlan = {
+type SyncPlan = {
   decisions: SyncDecision[]
   toImport: DiscoveredLeague[]
   skippedCount: number

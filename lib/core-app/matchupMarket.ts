@@ -73,7 +73,7 @@ export function pickMarketForTeams(
 }
 
 /** A starter the panel can ask about: named, with a club, actually in a slot. */
-export type MarketStarter = { key: string; name: string; team: string }
+type MarketStarter = { key: string; name: string; team: string }
 
 /**
  * Your starters, in board order. Empty slots, unresolved ids and club-less players are left out —

@@ -17,7 +17,7 @@
  */
 import { isInSeason, resolveSeasonState } from '@/lib/import-os/season'
 
-export const PRIORITY_IN_SEASON_SPORT = 'NFL'
+const PRIORITY_IN_SEASON_SPORT = 'NFL'
 
 export function projectionSportOrder(rotated: readonly string[], now: Date = new Date()): string[] {
   const nflSeason = isInSeason(resolveSeasonState({ sport: PRIORITY_IN_SEASON_SPORT, now }).state)

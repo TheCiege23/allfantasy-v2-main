@@ -29,7 +29,7 @@
  * the Decision OS canonical world and the app surfaces cannot drift apart.
  */
 
-export type RosterIdentityRow = {
+type RosterIdentityRow = {
   id?: string | null
   platformUserId: string | null
   playerData: unknown

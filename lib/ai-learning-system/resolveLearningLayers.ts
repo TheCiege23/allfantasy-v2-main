@@ -30,7 +30,7 @@ function rowFromDb(
   }
 }
 
-export type ResolveLearningLayersArgs = {
+type ResolveLearningLayersArgs = {
   userId: string
   sport: string
   leagueId?: string | null

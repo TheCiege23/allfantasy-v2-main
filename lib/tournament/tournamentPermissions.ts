@@ -23,10 +23,10 @@
  * TOURNAMENT — and must not be reached for to answer the league one.
  */
 
-export type TournamentCapability = 'view' | 'broadcast' | 'advance' | 'editSettings' | 'grantAccess'
+type TournamentCapability = 'view' | 'broadcast' | 'advance' | 'editSettings' | 'grantAccess'
 
 /** A stored grant. Shaped to match the parked table, one field per column. */
-export type TournamentGrantLike = {
+type TournamentGrantLike = {
   userId: string
   canBroadcast: boolean
   canAdvance: boolean

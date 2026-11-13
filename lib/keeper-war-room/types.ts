@@ -33,7 +33,7 @@ export interface KeeperDataAvailability {
   freeAgentPool: DataState
 }
 
-export interface KeeperFreshness {
+interface KeeperFreshness {
   generatedAt: string
   statsAsOf: string | null
   projectionsAsOf: string | null

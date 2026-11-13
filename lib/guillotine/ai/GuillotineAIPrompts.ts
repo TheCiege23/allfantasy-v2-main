@@ -20,7 +20,7 @@ function sportLabel(sport: string): string {
   return SPORT_LABELS[sport] ?? sport
 }
 
-export function buildDraftStrategyPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
+function buildDraftStrategyPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
   const sport = sportLabel(ctx.sport)
   const system = `You are AllFantasy's Guilly League draft advisor. Your role is STRATEGY and EXPLANATION only.
 
@@ -42,7 +42,7 @@ Give guillotine-specific draft strategy: (1) value stability over hype, (2) surv
   return { system, user }
 }
 
-export function buildSurvivalPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
+function buildSurvivalPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
   const sport = sportLabel(ctx.sport)
   const chopZone = ctx.dangerTiers.filter((d) => d.tier === 'chop_zone')
   const danger = ctx.dangerTiers.filter((d) => d.tier === 'danger')
@@ -71,7 +71,7 @@ Provide: (1) chop-risk analysis based on the tiers above, (2) survival-priority 
   return { system, user }
 }
 
-export function buildWaiverAftermathPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
+function buildWaiverAftermathPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
   const sport = sportLabel(ctx.sport)
   const system = `You are AllFantasy's Guilly League waiver advisor. Your role is STRATEGY and EXPLANATION only.
 
@@ -94,7 +94,7 @@ Provide: (1) how to prioritize released players by survival impact, (2) FAAB str
   return { system, user }
 }
 
-export function buildRecapPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
+function buildRecapPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
   const sport = sportLabel(ctx.sport)
   const system = `You are AllFantasy's Guilly League storyteller. Your role is NARRATIVE and RECAP only.
 
@@ -116,7 +116,7 @@ Write a brief weekly chop recap: who got chopped, who's living dangerously, who 
   return { system, user }
 }
 
-export function buildOrphanPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
+function buildOrphanPrompt(ctx: GuillotineAIDeterministicContext): { system: string; user: string } {
   const sport = sportLabel(ctx.sport)
   const system = `You are AllFantasy's Guilly League orphan-team advisor. When an AI or empty manager runs a Guilly team, strategy must bias toward WEEKLY SURVIVAL, not dynasty upside.
 

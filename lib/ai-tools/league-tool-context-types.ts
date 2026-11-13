@@ -18,7 +18,7 @@ export type LeagueToolAccessErrorCode =
   | 'IMPORT_MAPPING_MISSING'
   | 'DATA_LOAD_FAILED'
 
-export type LeagueToolContextPayload = {
+type LeagueToolContextPayload = {
   leagueId: string
   leagueName: string | null
   sport: string

@@ -17,7 +17,7 @@ import type { NextResponse } from "next/server"
 export const BETA_ADMISSION_COOKIE = "af_beta_admission"
 
 /** 30 minutes: long enough to complete signup incl. an OAuth round-trip, short enough to not linger. */
-export const BETA_ADMISSION_TTL_SECONDS = 30 * 60
+const BETA_ADMISSION_TTL_SECONDS = 30 * 60
 
 type MutableCookies = {
   set(name: string, value: string, options: Record<string, unknown>): void

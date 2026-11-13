@@ -10,7 +10,7 @@
 import { prisma } from '@/lib/prisma'
 import type { TeamSeasonForecast } from './types'
 
-export interface ForecastSnapshotForWarehouse {
+interface ForecastSnapshotForWarehouse {
   leagueId: string
   season: number
   week: number

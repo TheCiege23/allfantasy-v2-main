@@ -9,7 +9,7 @@ import type {
   TimerMode,
 } from '@/lib/draft-defaults/DraftUISettingsResolver'
 
-export type DraftRoomSettingsModalProps = {
+type DraftRoomSettingsModalProps = {
   open: boolean
   onClose: () => void
   leagueId: string

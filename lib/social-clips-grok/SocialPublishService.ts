@@ -15,9 +15,9 @@ const DUPLICATE_PENDING_WINDOW_MS = 60_000;
 const DUPLICATE_SUCCESS_WINDOW_MS = 120_000;
 const MAX_PUBLISH_TEXT_LENGTH = 280;
 
-export type PublishStatus = SocialPublishStatus;
+type PublishStatus = SocialPublishStatus;
 
-export interface PublishResult {
+interface PublishResult {
   platform: string;
   status: PublishStatus;
   logId: string;

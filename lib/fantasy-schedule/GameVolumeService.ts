@@ -9,7 +9,7 @@ import type { DayClassification, DayVolume, WeekVolumeProfile, ScheduleSport, Sp
 import { getDefaultScheduleConfig } from './types'
 
 /** Classify a day by its game count. */
-export function classifyDay(
+function classifyDay(
   gameCount: number,
   thresholdHeavy: number,
   thresholdModerate: number

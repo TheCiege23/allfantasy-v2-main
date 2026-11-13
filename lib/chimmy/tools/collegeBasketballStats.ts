@@ -71,7 +71,7 @@ function pctOf(made: number | null, att: number | null): string | null {
   return made == null || att == null || att <= 0 ? null : `${((made / att) * 100).toFixed(1)}%`
 }
 
-export function renderNcaabTotals(t: Totals): string {
+function renderNcaabTotals(t: Totals): string {
   const g = t.games
   const v = (k: SumKey) => num(t[k])
   const withPer = (label: string, k: SumKey) => {
@@ -156,7 +156,7 @@ export async function buildNcaabSeasonStatsContext(
 
 type LeaderSpec = { label: string; key: SumKey; perGame?: boolean }
 
-export const NCAAB_LEADER_STATS: Record<string, LeaderSpec> = {
+const NCAAB_LEADER_STATS: Record<string, LeaderSpec> = {
   points: { label: 'points', key: 'points' },
   rebounds: { label: 'rebounds', key: 'total_rebounds' },
   assists: { label: 'assists', key: 'assists' },

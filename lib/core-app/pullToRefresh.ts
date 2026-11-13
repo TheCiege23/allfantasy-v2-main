@@ -8,9 +8,9 @@
  */
 
 /** The indicator moves half as far as the finger: rubber-band resistance, like every native list. */
-export const PULL_RESISTANCE = 0.5
+const PULL_RESISTANCE = 0.5
 /** How far the INDICATOR must travel (finger: twice this) before letting go refreshes. */
-export const PULL_THRESHOLD_PX = 64
+const PULL_THRESHOLD_PX = 64
 /** The indicator never travels further than this, however far the finger goes. */
 export const PULL_MAX_PX = 96
 

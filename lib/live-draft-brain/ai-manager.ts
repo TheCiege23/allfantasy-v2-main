@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const MAX_AI_MANAGERS_PER_DRAFT = 4
 
-export const AiDraftStyleSchema = z.enum([
+const AiDraftStyleSchema = z.enum([
   'BPA',
   'NEEDS',
   'BALANCED',
@@ -12,10 +12,10 @@ export const AiDraftStyleSchema = z.enum([
   'YOUTH',
 ])
 
-export const TradeAggressionSchema = z.enum(['none', 'low', 'medium', 'high'])
+const TradeAggressionSchema = z.enum(['none', 'low', 'medium', 'high'])
 
-export type AiDraftStyle = z.infer<typeof AiDraftStyleSchema>
-export type TradeAggression = z.infer<typeof TradeAggressionSchema>
+type AiDraftStyle = z.infer<typeof AiDraftStyleSchema>
+type TradeAggression = z.infer<typeof TradeAggressionSchema>
 
 export interface CommissionerAiTeamAssignment {
   teamId: string

@@ -34,7 +34,7 @@ export function parseSpotifyAllowlist(raw: string | undefined | null): Set<strin
   )
 }
 
-export function isSpotifyConnectOpen(env: NodeJS.ProcessEnv = process.env): boolean {
+function isSpotifyConnectOpen(env: NodeJS.ProcessEnv = process.env): boolean {
   const v = (env.SPOTIFY_CONNECT_OPEN ?? '').trim().toLowerCase()
   return v === '1' || v === 'true'
 }

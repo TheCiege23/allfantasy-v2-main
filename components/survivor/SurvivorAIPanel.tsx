@@ -72,7 +72,7 @@ function subscriptionFeatureForSurvivorAiType(t: SurvivorAIPanelType): Subscript
   return 'ai_chat'
 }
 
-export interface SurvivorAIPanelProps {
+interface SurvivorAIPanelProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>

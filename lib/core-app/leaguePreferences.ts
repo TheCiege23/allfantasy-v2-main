@@ -14,7 +14,7 @@
  */
 
 /** Cap per list. Far beyond any real account (the largest measured had 557 rows incl. history). */
-export const LEAGUE_PREFERENCE_LIMIT = 600
+const LEAGUE_PREFERENCE_LIMIT = 600
 
 export type LeaguePreferences = {
   /** Null = never saved on this account; the caller falls back to the old per-device cookie. */

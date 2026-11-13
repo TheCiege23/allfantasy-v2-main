@@ -5,7 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export interface HeadToHeadMatchup {
+interface HeadToHeadMatchup {
   season: number
   weekOrPeriod: number
   teamAId: string
@@ -15,7 +15,7 @@ export interface HeadToHeadMatchup {
   winnerTeamId: string | null
 }
 
-export interface HeadToHeadSummary {
+interface HeadToHeadSummary {
   managerAId: string
   managerBId: string
   totalMatchups: number

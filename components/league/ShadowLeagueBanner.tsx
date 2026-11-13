@@ -3,7 +3,7 @@
 import { isShadowLeague, sourcePlatformLabel } from '@/lib/league/write-authority'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
-export type ShadowLeagueBannerProps = {
+type ShadowLeagueBannerProps = {
   /** `League.platform`. Native/absent values render nothing. */
   platform: string | null | undefined
   className?: string

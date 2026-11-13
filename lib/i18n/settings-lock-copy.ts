@@ -97,7 +97,7 @@ export const LOCK_COPY = {
   },
 } as const satisfies Record<string, Record<LockLang, string>>
 
-export type LockCopyKey = keyof typeof LOCK_COPY
+type LockCopyKey = keyof typeof LOCK_COPY
 
 export function lockCopy(lang: LockLang, key: LockCopyKey, vars: Record<string, string | number> = {}): string {
   return LOCK_COPY[key][lang].replace(/\{\{(\w+)\}\}/g, (_, k: string) => (k in vars ? String(vars[k]) : ''))

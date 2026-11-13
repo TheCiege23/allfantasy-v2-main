@@ -66,7 +66,7 @@ export interface FaabCandidate {
   displacedName?: string | null
 }
 
-export interface FaabBid {
+interface FaabBid {
   id: string
   name: string
   position: string | null
@@ -79,7 +79,7 @@ export interface FaabBid {
   reason: string
 }
 
-export interface FaabAllocation {
+interface FaabAllocation {
   bids: FaabBid[]
   /** Total marginal value on offer this week, counting upgrades only. */
   supplyValue: number

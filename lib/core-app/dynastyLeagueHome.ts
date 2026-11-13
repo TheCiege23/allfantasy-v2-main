@@ -20,7 +20,7 @@ import { dynastySeasonClock, type DynastySeasonClockSource } from '@/lib/league-
 import { dynastyYearOf } from '@/lib/dynasty-core/dynastyDetails'
 import { isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
 
-export type DynastyDeckPickSeason = {
+type DynastyDeckPickSeason = {
   season: number
   picks: Array<{ round: number; label: string; via: string | null }>
 }

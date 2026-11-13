@@ -14,7 +14,7 @@
  *   ["quarter_final", "semi_final", "final"]
  */
 
-export type BracketPathNode = {
+type BracketPathNode = {
   round: string
   matchId: string | null
   requiredOpponent: string | null

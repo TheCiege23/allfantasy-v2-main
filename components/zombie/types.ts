@@ -6,7 +6,7 @@ import type { ZombieMatchupView } from '@/lib/zombie/zombieMatchupBoard'
 
 export type { ZombieBoardEntry, ZombieTurnMoment, ZombieMatchupView }
 
-export interface ZombieSummaryConfig {
+interface ZombieSummaryConfig {
   whispererSelection: string
   infectionLossToWhisperer: boolean
   infectionLossToZombie: boolean

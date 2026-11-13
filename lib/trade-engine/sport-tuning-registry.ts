@@ -12,7 +12,7 @@ import { DAILY_SPORT_SEASON_SHAPE } from '@/lib/sportConfig/dailySportSeasonShap
 // Types
 // ---------------------------------------------------------------------------
 
-export type SupportedSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAAF' | 'NCAAB' | 'SOCCER'
+type SupportedSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 
 export interface PositionScarcity {
   position: string
@@ -42,7 +42,7 @@ export interface VolatilityProfile {
   consistencyWeight: number
 }
 
-export interface ScoringNormalization {
+interface ScoringNormalization {
   /** Name of the scoring format */
   format: string
   /** Position multipliers applied to base values */
@@ -51,7 +51,7 @@ export interface ScoringNormalization {
   scaleFactor: number
 }
 
-export interface SportTuning {
+interface SportTuning {
   sport: SupportedSport
   /** Display name */
   displayName: string
@@ -426,7 +426,7 @@ const SPORT_REGISTRY: Record<SupportedSport, SportTuning> = {
 /**
  * Get tuning config for a sport. Falls back to NFL if unknown.
  */
-export function getSportTuning(sport: string): SportTuning {
+function getSportTuning(sport: string): SportTuning {
   const key = sport.toUpperCase() as SupportedSport
   return SPORT_REGISTRY[key] ?? SPORT_REGISTRY.NFL
 }

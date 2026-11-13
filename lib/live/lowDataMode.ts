@@ -10,7 +10,7 @@
  * `connectionState.ts`.
  */
 
-export type LowDataSource =
+type LowDataSource =
   /** The reader turned it on or off themselves. */
   | 'user'
   /** The browser told us the connection is metered or slow. */
@@ -30,7 +30,7 @@ export type LowDataDecision = { lowData: boolean; source: LowDataSource }
  * the ONLY way in, and a feature that silently does nothing on iOS would be worse
  * than not claiming to have it.
  */
-export type ConnectionSignals = {
+type ConnectionSignals = {
   /** `navigator.connection.saveData` — the reader's OS-level "Data Saver". */
   saveData: boolean | null
   /** `navigator.connection.effectiveType` — '4g', '3g', '2g', 'slow-2g'. */

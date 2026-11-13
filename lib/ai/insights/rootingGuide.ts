@@ -13,7 +13,7 @@
  */
 import type { InsightPool } from "./types"
 
-export type RootingNeed = {
+type RootingNeed = {
   matchId: string
   matchDescription: string
   round: string
@@ -29,7 +29,7 @@ export type RootingNeed = {
   urgency: "critical" | "high" | "moderate" | "low"
 }
 
-export type RootingGuideResult = {
+type RootingGuideResult = {
   entryId: string
   displayName: string
   currentRank: number

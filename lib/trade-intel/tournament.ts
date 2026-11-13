@@ -25,7 +25,7 @@
  * expensive misreading available in this format.
  */
 
-export type TradingPolicy = {
+type TradingPolicy = {
   permitted: boolean
   basis: string
 }
@@ -59,7 +59,7 @@ export function tradingPolicy(args: { tradesEnabled: boolean | null }): TradingP
   }
 }
 
-export type RosterHorizon = {
+type RosterHorizon = {
   weeksOfUse: number
   basis: string
 }
@@ -92,7 +92,7 @@ export function rosterHorizon(args: {
   }
 }
 
-export type BracketHorizon = {
+type BracketHorizon = {
   roundsRemaining: number
   /** Expected games you still play, under even odds. */
   expectedGames: number

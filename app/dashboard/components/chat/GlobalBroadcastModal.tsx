@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { PollComposer } from './PollComposer'
 import type { PollDraft } from './AttachmentPreview'
 
-export type GlobalBroadcastPayload = {
+type GlobalBroadcastPayload = {
   messageType: 'text' | 'event' | 'poll'
   text: string
   gifUrl?: string

@@ -4,7 +4,7 @@ import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export type PlayerImageSource = Pick<NormalizedDraftRoomPlayer, 'imageUrl' | 'name' | 'id'>
+type PlayerImageSource = Pick<NormalizedDraftRoomPlayer, 'imageUrl' | 'name' | 'id'>
 
 /**
  * Preferred headshot URL for UI, or null to trigger letter/initial fallback.

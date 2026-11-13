@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from "react"
 
-export interface XPProfileRow {
+interface XPProfileRow {
   profileId: string
   managerId: string
   totalXP: number

@@ -8,7 +8,7 @@
 
 // ── Tiers ─────────────────────────────────────────────────────────────────────
 
-export const LEAGUE_PRESTIGE_TIERS = [
+const LEAGUE_PRESTIGE_TIERS = [
   'legendary',
   'elite',
   'established',
@@ -18,7 +18,7 @@ export const LEAGUE_PRESTIGE_TIERS = [
 ] as const
 export type LeaguePrestigeTier = (typeof LEAGUE_PRESTIGE_TIERS)[number]
 
-export const COMMISSIONER_PRESTIGE_TIERS = [
+const COMMISSIONER_PRESTIGE_TIERS = [
   'legendary',
   'elite',
   'trusted',

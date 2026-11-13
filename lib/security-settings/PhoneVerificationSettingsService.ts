@@ -4,13 +4,13 @@
  */
 import { normalizePhoneE164 } from "@/lib/phone/e164"
 
-export interface StartPhoneVerificationResult {
+interface StartPhoneVerificationResult {
   ok: boolean
   error?: string
   rateLimited?: boolean
 }
 
-export interface CheckPhoneCodeResult {
+interface CheckPhoneCodeResult {
   ok: boolean
   error?: "INVALID_CODE" | "RATE_LIMITED" | string
 }

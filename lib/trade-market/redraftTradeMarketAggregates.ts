@@ -5,7 +5,7 @@
  * returned) so no market claim is made.
  */
 
-export const MARKET_MIN_SAMPLE = 3
+const MARKET_MIN_SAMPLE = 3
 
 export interface MarketEventInput {
   eventType: string
@@ -17,7 +17,7 @@ export interface MarketEventInput {
   createdAt: string | Date
 }
 
-export interface MarketSummary {
+interface MarketSummary {
   sampleSize: number
   acceptedCount: number
   rejectedCount: number
@@ -32,7 +32,7 @@ export interface MarketSummary {
   lastEventAt: string | null
 }
 
-export interface AssetActivity {
+interface AssetActivity {
   playerDemandCounts: Record<string, number>
   playerAcceptedCounts: Record<string, number>
   playerVetoedCounts: Record<string, number>
@@ -43,7 +43,7 @@ export interface AssetActivity {
   totalFaabMoved: number
 }
 
-export interface GradeDistribution {
+interface GradeDistribution {
   aRange: number
   bRange: number
   cRange: number
@@ -51,7 +51,7 @@ export interface GradeDistribution {
   unknown: number
 }
 
-export interface ReviewDistribution {
+interface ReviewDistribution {
   lopsidedCount: number
   lowConfidenceCount: number
   highValueDeltaCount: number
@@ -59,7 +59,7 @@ export interface ReviewDistribution {
   reviewRecommendedCount: number | null
 }
 
-export interface MarketAggregates {
+interface MarketAggregates {
   sampleStatus: 'ok' | 'insufficient' | 'empty'
   summary: MarketSummary
   assetActivity: AssetActivity

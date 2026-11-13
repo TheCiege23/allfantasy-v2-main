@@ -2,7 +2,7 @@ import type { EngineManagerProfile, ArchetypeId, TeamPhase } from './types'
 import type { PositionalScarcity } from './scarcity'
 import { archetypeAcceptanceModifier } from './archetypes'
 
-export interface LDIAcceptInput {
+interface LDIAcceptInput {
   sender: EngineManagerProfile
   receiver: EngineManagerProfile
   senderArchetype: ArchetypeId
@@ -20,7 +20,7 @@ export interface LDIAcceptResult {
   explanation: string
 }
 
-export interface AcceptDriver {
+interface AcceptDriver {
   id: string
   label: string
   impact: number

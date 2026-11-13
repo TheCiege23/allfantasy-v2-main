@@ -10,7 +10,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { taskText, workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
 import { taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface TaskListItemProps {
+interface TaskListItemProps {
   task: CommissionerTask
   onOpen: () => void
 }

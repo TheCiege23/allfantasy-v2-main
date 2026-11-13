@@ -4,7 +4,7 @@ import { rateLimitManager } from '@/lib/workers/rate-limit-manager'
 
 const BASE_URL = 'https://v3.football.api-sports.io'
 
-export interface ProviderCallDiagnostic {
+interface ProviderCallDiagnostic {
   provider: 'api_football'
   endpoint: string
   params: Record<string, string>
@@ -78,14 +78,14 @@ function getFootballApiKey(): string {
   return apiKey
 }
 
-export function getCurrentSoccerSeasonForAPIFootball(): string {
+function getCurrentSoccerSeasonForAPIFootball(): string {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth() + 1
   return month >= 7 ? String(year) : String(year - 1)
 }
 
-export function getDefaultSoccerLeagueForAPIFootball(): string {
+function getDefaultSoccerLeagueForAPIFootball(): string {
   return process.env.API_FOOTBALL_DEFAULT_LEAGUE || process.env.THESPORTSDB_SOCCER_LEAGUE_ID || '39'
 }
 
@@ -209,7 +209,7 @@ async function apiFootballFetchEnvelope<T>(endpoint: string, params?: Record<str
   })
 }
 
-export interface APIFootballTeam {
+interface APIFootballTeam {
   team: {
     id: number
     name: string
@@ -222,7 +222,7 @@ export interface APIFootballTeam {
   }
 }
 
-export interface APIFootballFixture {
+interface APIFootballFixture {
   fixture: {
     id: number
     date?: string | null
@@ -250,7 +250,7 @@ export interface APIFootballFixture {
   }
 }
 
-export interface APIFootballStanding {
+interface APIFootballStanding {
   rank: number
   points: number
   team: {
@@ -271,7 +271,7 @@ export interface APIFootballStanding {
   group?: string | null
 }
 
-export interface APIFootballPlayerRecord {
+interface APIFootballPlayerRecord {
   player: {
     id: number
     name: string
@@ -290,15 +290,15 @@ export interface APIFootballPlayerRecord {
   }>
 }
 
-export async function fetchAPIFootballTeams(league: string, season: string): Promise<APIFootballTeam[]> {
+async function fetchAPIFootballTeams(league: string, season: string): Promise<APIFootballTeam[]> {
   return apiFootballFetch<APIFootballTeam>('teams', { league, season })
 }
 
-export async function fetchAPIFootballFixtures(league: string, season: string): Promise<APIFootballFixture[]> {
+async function fetchAPIFootballFixtures(league: string, season: string): Promise<APIFootballFixture[]> {
   return apiFootballFetch<APIFootballFixture>('fixtures', { league, season })
 }
 
-export async function fetchAPIFootballStandings(league: string, season: string): Promise<APIFootballStanding[]> {
+async function fetchAPIFootballStandings(league: string, season: string): Promise<APIFootballStanding[]> {
   const response = await apiFootballFetch<{ league?: { standings?: APIFootballStanding[][] } }>('standings', {
     league,
     season,
@@ -316,7 +316,7 @@ export async function fetchAPIFootballStandings(league: string, season: string):
   return out
 }
 
-export async function fetchAPIFootballPlayersByTeam(teamId: string, season: string, maxPages = 2): Promise<APIFootballPlayerRecord[]> {
+async function fetchAPIFootballPlayersByTeam(teamId: string, season: string, maxPages = 2): Promise<APIFootballPlayerRecord[]> {
   const out: APIFootballPlayerRecord[] = []
   let page = 1
 

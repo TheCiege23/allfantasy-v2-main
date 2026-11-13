@@ -11,7 +11,7 @@ export type MatchupData = {
   sportsGameId: string | null
 }
 
-export type WinProbability = {
+type WinProbability = {
   teamA: number
   teamB: number
 }
@@ -24,7 +24,7 @@ export type PickDistribution = {
   publicPctB: number
 }
 
-export type SleeperScore = {
+type SleeperScore = {
   team: string
   score: number
   label: "high_upset" | "moderate_upset" | "slight_edge" | "none"
@@ -35,14 +35,14 @@ export type SleeperScore = {
   }
 }
 
-export type LeverageScore = {
+type LeverageScore = {
   nodeId: string
   score: number
   teamA: { name: string; leverage: number }
   teamB: { name: string; leverage: number }
 }
 
-export type UniquenessScore = {
+type UniquenessScore = {
   score: number
   percentile: number
   pickContributions: Array<{
@@ -339,7 +339,7 @@ export async function computeHealthScore(
   }
 }
 
-export type MonteCarloResult = {
+type MonteCarloResult = {
   userId: string
   entryId: string
   winRate: number

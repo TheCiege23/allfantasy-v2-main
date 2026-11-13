@@ -26,9 +26,9 @@ export type WatchCouncilRow = RevealStateRow & {
   isTie: boolean
   tiePhase: string | null
 }
-export type WatchTribeRow = { id: string; name: string; isMerged: boolean; crestUrl: string | null; color: string | null }
+type WatchTribeRow = { id: string; name: string; isMerged: boolean; crestUrl: string | null; color: string | null }
 
-export type WatchCastaway = { name: string; out: boolean; outWeek: number | null }
+type WatchCastaway = { name: string; out: boolean; outWeek: number | null }
 export type WatchTribe = { name: string; crestUrl: string | null; color: string | null; total: number | null; castaways: WatchCastaway[] }
 export type WatchCouncil =
   | { state: 'voting'; week: number; tribeName: string | null; voteDeadlineAt: string }

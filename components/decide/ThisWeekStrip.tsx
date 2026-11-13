@@ -45,7 +45,7 @@ export function countdown(ms: number): string {
 }
 
 /** An instant in the viewer's own zone: "Sun 1:00 PM", or with the date when it is a week or more out. */
-export function when(ms: number, nowMs: number, language: string): string {
+function when(ms: number, nowMs: number, language: string): string {
   const locale = language === 'es' ? 'es-US' : 'en-US'
   const far = ms - nowMs >= 6 * DAY
   return new Intl.DateTimeFormat(locale, {

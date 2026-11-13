@@ -26,7 +26,7 @@ import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerT
 import { messagesFor } from '@/lib/i18n/messages'
 
 /** The last three are dynasty leagues only (./dynastyHealthFlags.ts). */
-export type HealthFlagKey = 'abandoned' | 'lineups' | 'schedule' | 'dues' | 'votes' | 'picks' | 'rookie_order' | 'taxi'
+type HealthFlagKey = 'abandoned' | 'lineups' | 'schedule' | 'dues' | 'votes' | 'picks' | 'rookie_order' | 'taxi'
 
 export type HealthFlagAction = { label: string; href: string; external: boolean }
 
@@ -231,7 +231,7 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
 
 // ── Missing lineups ─────────────────────────────────────────────────────────
 
-export type LineupsInput = {
+type LineupsInput = {
   platform: string
   /** Only an in-season league has a lineup anyone is expected to have set. */
   inSeason: boolean
@@ -334,7 +334,7 @@ export function missingLineupsFlag(input: LineupsInput): HealthFlag {
 
 // ── Unequal schedules ───────────────────────────────────────────────────────
 
-export type ScheduleInput = {
+type ScheduleInput = {
   /** WeeklyMatchup rows for the current season. */
   games: Array<{ rosterId: string; week: number; matchupId: number | null }>
   /** Every roster id in the league, so a team with no games at all is still seen. */
@@ -411,7 +411,7 @@ export function unequalSchedulesFlag(input: ScheduleInput): HealthFlag {
 
 // ── Unpaid dues ─────────────────────────────────────────────────────────────
 
-export type DuesTracker = {
+type DuesTracker = {
   enabled: boolean
   amount: number | null
   currency: string
@@ -449,7 +449,7 @@ export function readDuesTracker(settings: unknown): DuesTracker | null {
   }
 }
 
-export type DuesInput = {
+type DuesInput = {
   tracker: DuesTracker | null
   /** `LeagueTeam.id` + display name — the dues entries key on the team row id. */
   teams: Array<{ id: string; name: string }>
@@ -513,7 +513,7 @@ export function formatMoney(amount: number, currency: string): string {
 
 export type LeaguePoll = ViewerPoll & { id: string; postedAt: string }
 
-export type VotesInput = {
+type VotesInput = {
   polls: LeaguePoll[] | null
   now: Date
   action: HealthFlagAction | null

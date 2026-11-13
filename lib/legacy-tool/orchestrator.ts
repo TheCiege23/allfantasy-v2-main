@@ -16,7 +16,7 @@ function includesAny(text: string, keywords: string[]): boolean {
   return keywords.some((k) => text.includes(k))
 }
 
-export function inferTaskTypesFromText(input?: string | null): LegacyTaskType[] {
+function inferTaskTypesFromText(input?: string | null): LegacyTaskType[] {
   const text = (input || '').toLowerCase()
   const matches = KEYWORD_TASK_MAP.filter((row) => includesAny(text, row.keywords)).map((row) => row.task)
   if (matches.length > 0) return [...new Set(matches)]

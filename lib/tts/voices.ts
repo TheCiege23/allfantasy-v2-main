@@ -1,6 +1,6 @@
 /** ElevenLabs voice presets for Chimmy TTS (IDs from ElevenLabs). */
 
-export type ChimmyVoice = {
+type ChimmyVoice = {
   id: string
   name: string
   description: string
@@ -12,7 +12,7 @@ export type ChimmyVoice = {
 }
 
 /** ElevenLabs premade Rachel (same id as `ELEVENLABS_RACHEL_PREMADE` in chimmy voice route). */
-export const ELEVENLABS_RACHEL_PREMADE_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
+const ELEVENLABS_RACHEL_PREMADE_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
 
 export const CHIMMY_VOICES: ChimmyVoice[] = [
   {

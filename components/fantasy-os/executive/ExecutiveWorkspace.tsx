@@ -35,7 +35,7 @@ import {
 } from './primitives'
 import { ExecutiveChartCard, YearBarChart, GroupedYearChart, DistributionBars, ChartLegend } from './charts'
 
-export type ExecutiveWorkspaceData = {
+type ExecutiveWorkspaceData = {
   platform: PlatformIntelligence
   league: LeagueIntelligence
   commissioner: CommissionerIntelligence

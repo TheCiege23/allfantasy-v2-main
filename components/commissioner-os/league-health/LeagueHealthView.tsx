@@ -16,7 +16,7 @@ import { cardsCopy, cosLoaderText, severityLabelText } from '@/lib/commissioner-
 import { allClearText, commissionerSectionName } from '@/lib/commissioner-os/i18n/shellCopy'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
-export interface LeagueHealthViewProps {
+interface LeagueHealthViewProps {
   detail: LeagueHealthDetail
   risks: LeagueHealthRisk[]
   evidence: LeagueHealthEvidencePoint[]

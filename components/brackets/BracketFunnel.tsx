@@ -4,15 +4,15 @@ import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { buildBracketGraph } from "@/lib/playoffs/playoffBracketGraph"
 import "./bracket-funnel.css"
 
-export type FunnelTeam = { seed?: number | string | null; name: string }
-export type FunnelGame = { id: string; teams: [FunnelTeam, FunnelTeam] }
-export type FunnelColumn = { title: string; points?: number | null; games: FunnelGame[] }
+type FunnelTeam = { seed?: number | string | null; name: string }
+type FunnelGame = { id: string; teams: [FunnelTeam, FunnelTeam] }
+type FunnelColumn = { title: string; points?: number | null; games: FunnelGame[] }
 /**
  * Two halves that narrow toward a championship in the middle. `left` and
  * `right` are each listed OUTER round first, so both halves are described the
  * same way; the component mirrors the right half when it draws it.
  */
-export type FunnelModel = {
+type FunnelModel = {
   leftLabel: string
   rightLabel: string
   left: FunnelColumn[]

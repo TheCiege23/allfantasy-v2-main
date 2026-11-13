@@ -585,7 +585,7 @@ export const FORMAT_GUIDES: Record<WhatsNextFormatId, FormatGuide> = {
 }
 
 /** Formats whose phase comes from their own summary route; the rest use the season lifecycle. */
-export const ENGINE_FORMATS = ['big_brother', 'survivor', 'zombie', 'guillotine', 'pirate'] as const
+const ENGINE_FORMATS = ['big_brother', 'survivor', 'zombie', 'guillotine', 'pirate'] as const
 export type EngineFormat = (typeof ENGINE_FORMATS)[number]
 
 export function isEngineFormat(format: WhatsNextFormatId): format is EngineFormat {

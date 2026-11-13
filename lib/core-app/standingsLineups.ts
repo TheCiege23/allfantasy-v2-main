@@ -19,7 +19,7 @@ import type { LeagueContextRow } from './leagueContext'
  * projection of the coming week. The screen labels it as one and never ranks the table by it.
  */
 
-export type StandingsLineupRow = {
+type StandingsLineupRow = {
   /** `LeagueTeam.externalId` — the same key the standings rows carry as `rosterId`. */
   rosterId: string
   name: string | null

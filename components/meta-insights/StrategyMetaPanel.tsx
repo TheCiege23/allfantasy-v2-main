@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 
-export interface StrategyMetaRow {
+interface StrategyMetaRow {
   strategyType: string
   strategyLabel?: string
   sport: string

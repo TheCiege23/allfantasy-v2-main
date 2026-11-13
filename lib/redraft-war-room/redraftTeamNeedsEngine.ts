@@ -9,7 +9,7 @@
 import { playerValue as sharedPlayerValue } from './playerValue'
 import type { RedraftPlayerFact, RedraftTeamSummary, RedraftWarRoomContext } from './types'
 
-export interface TeamNeed {
+interface TeamNeed {
   position: string
   severity: 'critical' | 'high' | 'moderate'
   reason: string

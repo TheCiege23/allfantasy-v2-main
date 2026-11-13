@@ -4,7 +4,7 @@ import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Responsi
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface ManagerFingerprint {
+interface ManagerFingerprint {
   managerName: string
   aggression: number
   activity: number
@@ -14,14 +14,14 @@ export interface ManagerFingerprint {
 }
 
 /** The highest each measure reaches platform-wide — the ring, per axis. See the read layer. */
-export interface FingerprintAxisMax {
+interface FingerprintAxisMax {
   aggression: number
   activity: number
   tradeFrequency: number
   riskTolerance: number
 }
 
-export interface ManagerFingerprintRadarProps {
+interface ManagerFingerprintRadarProps {
   managers: ManagerFingerprint[]
   axisMax: FingerprintAxisMax
   ariaLabel: string

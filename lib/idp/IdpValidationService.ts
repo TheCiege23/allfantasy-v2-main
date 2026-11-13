@@ -11,7 +11,7 @@ import type { IdpLeagueConfigLoaded, IdpPositionMode, IdpRosterPreset, IdpSlotOv
 
 const IDP_SLOT_KEYS = ['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'DB', 'IDP_FLEX']
 
-export interface RosterImpactPreview {
+interface RosterImpactPreview {
   totalIdpSlots: number
   slotCounts: Record<string, number>
   warnings: string[]

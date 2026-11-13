@@ -1,9 +1,9 @@
 // lib/trade-engine/ai-assist-orchestrator.ts
 import type { TradeCandidate } from "./types";
 
-export type AiProviderMode = "off" | "openai" | "grok" | "both";
+type AiProviderMode = "off" | "openai" | "grok" | "both";
 
-export type AssistSnapshotLike = {
+type AssistSnapshotLike = {
   league?: any;
   profilesByRosterId?: Record<number, any>;
   [k: string]: any;

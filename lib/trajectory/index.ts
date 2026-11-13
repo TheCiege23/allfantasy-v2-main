@@ -15,13 +15,12 @@ export type {
   TrajectoryAdapter,
 } from './types'
 
-export { computeDelta, deriveTrajectoryCore, DEFAULT_FLAT_EPSILON } from './delta'
+export { computeDelta, deriveTrajectoryCore } from './delta'
 export type { DeltaOptions } from './delta'
 
 export { resolveWhyChanged } from './explain'
 
 export { getTrajectory } from './service'
-export type { GetTrajectoryOptions } from './service'
 
 export { summarizeTrajectory } from './summarize'
 export type { TrajectorySummary } from './summarize'
@@ -30,7 +29,6 @@ export type { TrajectorySummary } from './summarize'
 export {
   createSeasonForecastAdapter,
   mapSeasonForecastPoints,
-  SEASON_FORECAST_METRIC_IDS,
 } from './adapters/seasonForecast'
 export type {
   SeasonForecastMetricField,
@@ -42,19 +40,12 @@ export type {
 export {
   createLeagueEngagementAdapter,
   mapLeagueEngagementPoints,
-  LEAGUE_ENGAGEMENT_METRIC_IDS,
-} from './adapters/leagueEngagement'
-export type {
-  LeagueEngagementMetricField,
-  LeagueEngagementTrajectoryParams,
 } from './adapters/leagueEngagement'
 
 export { createCurrentStateAdapter } from './adapters/currentState'
-export type { CurrentStateParams } from './adapters/currentState'
 
 // Consumer composition
 export {
   buildTeamForecastTrajectory,
-  SEASON_FORECAST_CARD_FIELDS,
 } from './consumers/seasonForecast'
 export type { TeamForecastTrajectory } from './consumers/seasonForecast'

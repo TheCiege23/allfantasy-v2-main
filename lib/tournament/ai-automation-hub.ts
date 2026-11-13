@@ -1,6 +1,6 @@
 /** Stored at `LegacyTournament.hubSettings.aiAutomationV1` — commissioner AI toggles. */
 
-export const AI_AUTOMATION_KEYS = [
+const AI_AUTOMATION_KEYS = [
   'balance',
   'standings',
   'transitions',
@@ -9,7 +9,7 @@ export const AI_AUTOMATION_KEYS = [
   'tank',
 ] as const
 
-export type AiAutomationKey = (typeof AI_AUTOMATION_KEYS)[number]
+type AiAutomationKey = (typeof AI_AUTOMATION_KEYS)[number]
 
 export type AiAutomationV1State = Record<AiAutomationKey, boolean>
 

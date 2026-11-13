@@ -7,22 +7,22 @@ import { SPORT_DISPLAY_NAMES, SPORT_EMOJI } from './sport-types'
 import { getPositionsForSport as getPositionsFromRosterDefaults } from '@/lib/roster-defaults/PositionEligibilityResolver'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 
-export const NFL_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
+const NFL_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
 /** NFL + IDP positions; DL/DB/IDP_FLEX are slot names; DE, DT, LB, CB, S are player positions. */
 export const NFL_IDP_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST', 'DE', 'DT', 'LB', 'CB', 'S'] as const
 /** Slot-only names for IDP flex (not player positions). */
 export const NFL_IDP_FLEX_SLOTS = ['DL', 'DB', 'IDP_FLEX'] as const
-export const NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL'] as const
-export const MLB_POSITIONS = ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'UTIL'] as const
-export const NHL_POSITIONS = ['C', 'LW', 'RW', 'D', 'G', 'UTIL'] as const
-export const NCAAF_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST', 'SUPERFLEX'] as const
-export const NCAAB_POSITIONS = ['G', 'F', 'C', 'UTIL'] as const
+const NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL'] as const
+const MLB_POSITIONS = ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'UTIL'] as const
+const NHL_POSITIONS = ['C', 'LW', 'RW', 'D', 'G', 'UTIL'] as const
+const NCAAF_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST', 'SUPERFLEX'] as const
+const NCAAB_POSITIONS = ['G', 'F', 'C', 'UTIL'] as const
 /** GKP = Goalkeeper (GK is common display alias). */
-export const SOCCER_POSITIONS = ['GKP', 'DEF', 'MID', 'FWD', 'UTIL'] as const
+const SOCCER_POSITIONS = ['GKP', 'DEF', 'MID', 'FWD', 'UTIL'] as const
 
-export type SportPositionsMap = Record<SportType, readonly string[]>
+type SportPositionsMap = Record<SportType, readonly string[]>
 
-export const SPORT_POSITIONS: SportPositionsMap = {
+const SPORT_POSITIONS: SportPositionsMap = {
   NFL: NFL_POSITIONS,
   NBA: NBA_POSITIONS,
   MLB: MLB_POSITIONS,
@@ -33,7 +33,7 @@ export const SPORT_POSITIONS: SportPositionsMap = {
 }
 
 /** App-wide default scoring/roster format per sport. League creation loads these as standard defaults. */
-export const DEFAULT_FORMAT_BY_SPORT: Record<SportType, string> = {
+const DEFAULT_FORMAT_BY_SPORT: Record<SportType, string> = {
   NFL: 'standard',
   NBA: 'points',
   MLB: 'standard',

@@ -233,7 +233,7 @@ type CfbdStatRow = {
   stat?: string | number
 }
 
-export type CfbdStatSyncResult = {
+type CfbdStatSyncResult = {
   season: number
   fetched: number
   players: number

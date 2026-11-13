@@ -13,7 +13,7 @@ import { Fragment, type ReactNode } from 'react'
  * before it becomes an `<a>`. A bare `www.` link is sent to `https://`.
  */
 
-export type MessageTextToken =
+type MessageTextToken =
   | { kind: 'text'; text: string }
   | { kind: 'mention'; text: string }
   | { kind: 'link'; text: string; href: string }
@@ -40,7 +40,7 @@ function count(text: string, ch: string): number {
  * "(see https://x.com/a_(b))." keeps the balanced `)` inside the link and gives back the rest.
  * A closer is trimmed only when the link holds more of it than of its opener.
  */
-export function trimTrailingPunctuation(candidate: string): string {
+function trimTrailingPunctuation(candidate: string): string {
   let out = candidate
   for (;;) {
     const last = out.charAt(out.length - 1)
@@ -59,7 +59,7 @@ export function trimTrailingPunctuation(candidate: string): string {
 }
 
 /** The href for a candidate, or null when it is not a safe web link. */
-export function safeLinkHref(candidate: string): string | null {
+function safeLinkHref(candidate: string): string | null {
   const withScheme = /^www\./i.test(candidate) ? `https://${candidate}` : candidate
   if (!/^https?:\/\//i.test(withScheme)) return null
   let parsed: URL
@@ -91,7 +91,7 @@ function pushText(out: MessageTextToken[], text: string) {
 }
 
 /** Splits a message into text, @mention and link pieces. Pure, so it can be tested without a DOM. */
-export function tokenizeMessageText(text: string): MessageTextToken[] {
+function tokenizeMessageText(text: string): MessageTextToken[] {
   const out: MessageTextToken[] = []
   let cursor = 0
   URL_CANDIDATE.lastIndex = 0

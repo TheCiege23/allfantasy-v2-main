@@ -33,7 +33,7 @@
  */
 import { ORIGIN_AUTH_HEADER, secretsMatch } from "@/lib/http/originLock"
 
-export interface EdgeTrustEnv {
+interface EdgeTrustEnv {
   RAILWAY_ENVIRONMENT_NAME?: string
   RAILWAY_DEPLOYMENT_ID?: string
   RAILWAY_SERVICE_NAME?: string
@@ -56,7 +56,7 @@ function onRailway(env: EdgeTrustEnv): boolean {
 }
 
 /** True when the request proves it came through our Cloudflare (the same proof the origin lock checks). */
-export function hasCloudflareProof(headers: { get(name: string): string | null }, env: EdgeTrustEnv = readEnv()): boolean {
+function hasCloudflareProof(headers: { get(name: string): string | null }, env: EdgeTrustEnv = readEnv()): boolean {
   const secret = env.CF_ORIGIN_AUTH_SECRET?.trim()
   const presented = headers.get(ORIGIN_AUTH_HEADER)
   return Boolean(secret && presented && secretsMatch(secret, presented))

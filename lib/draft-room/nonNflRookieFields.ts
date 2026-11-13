@@ -41,7 +41,7 @@ export function mergeKnownYearsExp(values: ReadonlyArray<unknown>): number | nul
   return found
 }
 
-export type NonNflRookieFields = {
+type NonNflRookieFields = {
   yearsExp?: number
   rookieYearsExpSource?: NflRookieYearsExpProvenance
   isRookie?: true

@@ -8,7 +8,7 @@ const TABS: { value: FeedMode; label: string }[] = [
   { value: "trending", label: "Trending" },
 ]
 
-export interface FeedTabsProps {
+interface FeedTabsProps {
   activeTab: FeedMode
   onTabChange: (tab: FeedMode) => void
   className?: string

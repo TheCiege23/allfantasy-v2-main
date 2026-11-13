@@ -63,7 +63,7 @@ export function pointsForRound(round: number, roundPoints?: Record<number, numbe
   }
 }
 
-export function edgePointsForRound(round: number, roundPoints?: Record<number, number>): number {
+function edgePointsForRound(round: number, roundPoints?: Record<number, number>): number {
   if (roundPoints && Number.isFinite(roundPoints[round])) {
     return Math.max(0, Number(roundPoints[round]))
   }
@@ -178,7 +178,7 @@ export function scoreFanCredEdge(
   return { total, breakdown }
 }
 
-export function scoreMomentum(
+function scoreMomentum(
   picks: PickResult[],
   roundPoints?: Record<number, number>
 ): {
@@ -214,7 +214,7 @@ export function scoreMomentum(
   return { total, breakdown }
 }
 
-export function scoreAccuracyBoldness(
+function scoreAccuracyBoldness(
   picks: PickResult[],
   leagueDistribution: LeaguePickDistribution,
   roundPoints?: Record<number, number>
@@ -258,7 +258,7 @@ export function scoreAccuracyBoldness(
   return { total, breakdown }
 }
 
-export function scoreStreakSurvival(
+function scoreStreakSurvival(
   picks: PickResult[],
   roundPoints?: Record<number, number>
 ): {

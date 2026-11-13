@@ -21,7 +21,7 @@ export interface ManagerDNA {
   rosterCounts: Record<string, number>
 }
 
-export interface ManagerDNAInput {
+interface ManagerDNAInput {
   teamName: string
   ownerName: string
   teamIdx: number
@@ -36,7 +36,7 @@ export interface ManagerDNAInput {
   leagueSize: number
 }
 
-export function computeManagerDNA(
+function computeManagerDNA(
   input: ManagerDNAInput,
   adpPool: ADPEntry[],
   allInputs: ManagerDNAInput[]

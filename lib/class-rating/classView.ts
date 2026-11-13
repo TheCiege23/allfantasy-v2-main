@@ -33,7 +33,7 @@ export { getDivisionsForUsers } from '@/lib/class-rating/reads'
 const LOG_ROW_CAP = 400
 const BOARD_LIMIT = 200
 
-export type ClassBoardRow = {
+type ClassBoardRow = {
   userId: string
   rank: number
   handle: string
@@ -73,7 +73,7 @@ export type ClassLogRow = {
   ratingAfter: number
 }
 
-export type ClassYou = {
+type ClassYou = {
   status: 'established' | 'provisional'
   rating: number
   rd: number

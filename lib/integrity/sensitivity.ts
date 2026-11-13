@@ -52,7 +52,7 @@ export function normalizeSensitivity(value: unknown): IntegritySensitivity {
  */
 type ReviewSeverityLike = 'low' | 'medium' | 'high'
 
-export const COLLUSION_MIN_SEVERITY: Record<IntegritySensitivity, ReviewSeverityLike> = {
+const COLLUSION_MIN_SEVERITY: Record<IntegritySensitivity, ReviewSeverityLike> = {
   low: 'high',
   medium: 'medium',
   high: 'low',

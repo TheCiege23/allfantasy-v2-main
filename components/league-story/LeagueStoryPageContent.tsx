@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { LeagueStoryCard } from './LeagueStoryCard'
 import type { LeagueStoryPayload } from '@/lib/league-story-engine/types'
 
-export interface LeagueStoryPageContentProps {
+interface LeagueStoryPageContentProps {
   payload: LeagueStoryPayload
 }
 

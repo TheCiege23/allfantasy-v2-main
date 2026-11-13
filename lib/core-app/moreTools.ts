@@ -14,7 +14,7 @@
  */
 export type MoreToolsScreen = 'trades' | 'draft' | 'rankings' | 'players'
 
-export type MoreToolLink = {
+type MoreToolLink = {
   /** Key into moreToolsMessages for the label; `${key}Desc` is the one-line description. */
   key:
     | 'tradeAnalyzer'

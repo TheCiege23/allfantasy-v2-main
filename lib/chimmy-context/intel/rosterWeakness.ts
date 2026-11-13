@@ -20,7 +20,7 @@ import {
   resolveProjectedPoints,
 } from "@/lib/chimmy-context/intel/projection"
 
-export type TeamIdentityHint =
+type TeamIdentityHint =
   | "contender"
   | "rebuild"
   | "boom_bust"
@@ -41,7 +41,7 @@ export type RosterIntelPlayer = {
   byeWeek?: number | null
 }
 
-export type RosterIntelInput = {
+type RosterIntelInput = {
   players: RosterIntelPlayer[]
   /** Currently active fantasy week, used for bye-conflict detection. */
   currentWeek?: number | null
@@ -52,7 +52,7 @@ export type RosterIntelInput = {
   rosterVolatility?: number | null
 }
 
-export type RosterIntelOutput = {
+type RosterIntelOutput = {
   starterProjectedTotal: number
   /** Per-position starter projected totals (rounded to 2 decimals). */
   byPosition: Record<string, number>
@@ -81,7 +81,7 @@ export type RosterIntelOutput = {
  * All thresholds live here so future tuning is one edit. Values are
  * intentionally conservative scaffolds — NOT final.
  */
-export const WEAKNESS_TUNABLES = {
+const WEAKNESS_TUNABLES = {
   /** Minimum bench depth per position before we flag `shallow_depth`. */
   minBenchByPosition: {
     QB: 1,
@@ -122,7 +122,7 @@ export const WEAKNESS_TUNABLES = {
  * signal/feature to points contributed to that identity. The final hint is
  * the identity with the highest score above `minConfidence`.
  */
-export const IDENTITY_TUNABLES = {
+const IDENTITY_TUNABLES = {
   minConfidence: 30,
   /** Starter projected total threshold for the contender bonus. */
   contenderProjectionThreshold: 110,

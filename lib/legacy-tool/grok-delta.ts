@@ -1,15 +1,15 @@
 import { prisma } from '@/lib/prisma'
 
-export type GrokSignalSentiment = 'bullish' | 'bearish' | 'neutral' | 'injury_concern'
+type GrokSignalSentiment = 'bullish' | 'bearish' | 'neutral' | 'injury_concern'
 
-export type GrokSignalInput = {
+type GrokSignalInput = {
   playerName: string
   sentiment: GrokSignalSentiment | string
   news: string[]
   buzz: string
 }
 
-export type GrokNormalizedDeltaEvent = {
+type GrokNormalizedDeltaEvent = {
   status: 'ok'
   event: {
     event_id: string

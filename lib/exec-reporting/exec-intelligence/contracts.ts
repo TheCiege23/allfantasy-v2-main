@@ -8,7 +8,7 @@
 import type { SourceEnvelope } from './truth'
 import type { Explanation } from './explanation'
 
-export type YearlyPoint = { season: number; value: number }
+type YearlyPoint = { season: number; value: number }
 export type YearlySeries = { key: string; label: string; unit: string; points: YearlyPoint[] }
 export type StackedYearlyPoint = { season: number } & Record<string, number>
 export type Distribution = { bucket: string; count: number }
@@ -20,7 +20,7 @@ export type RankedLeague = {
   detail?: string
 }
 
-export type ContractBase = SourceEnvelope & {
+type ContractBase = SourceEnvelope & {
   insights: Explanation[]
   limitations: string[]
 }
@@ -56,7 +56,7 @@ export type PlatformIntelligence = ContractBase & {
 }
 
 // ── League ────────────────────────────────────────────────────────────────────
-export type LeagueOperationalStatus = 'active' | 'quiet' | 'dormant'
+type LeagueOperationalStatus = 'active' | 'quiet' | 'dormant'
 export type LeagueIntelligence = ContractBase & {
   kind: 'league'
   leagueSeasons: number

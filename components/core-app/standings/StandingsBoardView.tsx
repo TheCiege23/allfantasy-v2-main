@@ -69,7 +69,7 @@ export type EliminationZones = {
   /** Roster ids in this week's bottom three; null when the week cannot be ranked yet. */
   bubble: readonly string[] | null
 }
-export type EliminationStatus = 'safe' | 'bubble' | 'eliminated'
+type EliminationStatus = 'safe' | 'bubble' | 'eliminated'
 
 export function eliminationStatusOf(rosterId: string, zones: EliminationZones): EliminationStatus | null {
   if (zones.eliminated.includes(rosterId)) return 'eliminated'

@@ -17,7 +17,7 @@ export type MatchmakingGoal =
   | 'rebuild'
   | 'target_player'
 
-export interface MatchmakingInput {
+interface MatchmakingInput {
   userRosterId: number
   goal: MatchmakingGoal
   targetPlayerName?: string
@@ -28,7 +28,7 @@ export interface MatchmakingInput {
   maxResults?: number
 }
 
-export interface OfferAsset {
+interface OfferAsset {
   assetId: string
   name: string
   value: number
@@ -36,13 +36,13 @@ export interface OfferAsset {
   isPick: boolean
 }
 
-export interface OfferSkeleton {
+interface OfferSkeleton {
   userGives: OfferAsset[]
   partnerGives: OfferAsset[]
   fairnessPct: number
 }
 
-export interface PartnerMatch {
+interface PartnerMatch {
   rosterId: number
   displayName: string
   avatar?: string
@@ -62,7 +62,7 @@ export interface PartnerMatch {
   tendencyInsights: string[]
 }
 
-export interface MatchmakingOutput {
+interface MatchmakingOutput {
   goal: MatchmakingGoal
   goalDescription: string
   targetPlayer?: string

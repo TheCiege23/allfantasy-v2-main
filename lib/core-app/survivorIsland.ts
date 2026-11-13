@@ -8,7 +8,7 @@ import { SURVIVOR_ISLAND_SCENES, type SurvivorIslandScene } from '@/lib/survivor
 
 export type IslandScene = SurvivorIslandScene
 
-export type IslandMoment =
+type IslandMoment =
   | { kind: 'pre_draft' }
   | { kind: 'finale_open' }
   | { kind: 'crowned'; winnerName: string | null }
@@ -18,9 +18,9 @@ export type IslandMoment =
   | { kind: 'merged' }
   | { kind: 'camp' }
 
-export type IslandClock = { at: string; label: 'council' | 'challenge' | 'jury' }
+type IslandClock = { at: string; label: 'council' | 'challenge' | 'jury' }
 
-export type IslandView = {
+type IslandView = {
   scene: IslandScene
   moment: IslandMoment
   clock: IslandClock | null

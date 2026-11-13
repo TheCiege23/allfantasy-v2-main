@@ -1,7 +1,7 @@
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { AiAdpLeagueType } from './types'
 
-export interface AiAdpSegmentContext {
+interface AiAdpSegmentContext {
   sport: string
   leagueType: AiAdpLeagueType
   formatKey: string

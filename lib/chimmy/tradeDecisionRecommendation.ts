@@ -6,7 +6,7 @@ import type { ReadyTradeScenario } from './tradeScenarioTypes'
  * ⚠ ONE DECISION, TWO READINGS. The verdict chip (`answerPolishBuild.ts`) and the sentence below
  * both come from `decideTrade`, so the chip can never say YES over an answer that opens COUNTER.
  */
-export type TradeDecisionAction = 'withheld' | 'accept' | 'decline' | 'hold' | 'counter' | 'counter_hold'
+type TradeDecisionAction = 'withheld' | 'accept' | 'decline' | 'hold' | 'counter' | 'counter_hold'
 
 function decideTrade(s: ReadyTradeScenario): { action: TradeDecisionAction; text: string } {
   if (!s.recommendation) return { action: 'withheld', text: 'Recommendation withheld: league valuation is incomplete.' }

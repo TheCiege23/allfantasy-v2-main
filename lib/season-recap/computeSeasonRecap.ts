@@ -19,7 +19,7 @@
 
 export const SEASON_RECAP_VERSION = 1
 
-export type RecapTeam = {
+type RecapTeam = {
   rosterId: string
   name: string
   ownerId: string | null
@@ -31,9 +31,9 @@ export type RecapTeam = {
   playoffSeed: number | null
 }
 
-export type RecapGame = { week: number; homeRosterId: string; awayRosterId: string; homeScore: number; awayScore: number }
+type RecapGame = { week: number; homeRosterId: string; awayRosterId: string; homeScore: number; awayScore: number }
 
-export type RecapLowerBracketFinal = { mode: 'consolation' | 'toilet_bowl'; winnerRosterId: string; loserRosterId: string }
+type RecapLowerBracketFinal = { mode: 'consolation' | 'toilet_bowl'; winnerRosterId: string; loserRosterId: string }
 
 /** One executed trade, with each side's frozen value in and out. */
 export type RecapTrade = {
@@ -86,7 +86,7 @@ export type SeasonRecapInput = {
   computedAt: string
 }
 
-export type TeamRef = { rosterId: string; name: string }
+type TeamRef = { rosterId: string; name: string }
 
 export type RecapGameAward = {
   week: number

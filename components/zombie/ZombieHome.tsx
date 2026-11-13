@@ -29,7 +29,7 @@ import { ZombieSeasonOperations } from './ZombieSeasonOperations'
  * universe map, and Infection night as the signature moment.
  */
 
-export interface ZombieHomeProps {
+interface ZombieHomeProps {
   leagueId: string
 }
 

@@ -1,4 +1,4 @@
-export const MANAGER_COLORS = [
+const MANAGER_COLORS = [
   { bg: 'bg-blue-900/40', border: 'border-blue-500', text: 'text-blue-300' },
   { bg: 'bg-emerald-900/40', border: 'border-emerald-500', text: 'text-emerald-300' },
   { bg: 'bg-violet-900/40', border: 'border-violet-500', text: 'text-violet-300' },

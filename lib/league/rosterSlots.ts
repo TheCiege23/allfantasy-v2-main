@@ -2,7 +2,7 @@
  * Map Sleeper `roster_positions` to starter slot metadata and display labels.
  */
 
-export type RosterSlotMeta = {
+type RosterSlotMeta = {
   slot: string
   idx: number
   isStarter: boolean

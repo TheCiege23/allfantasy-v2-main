@@ -1,7 +1,7 @@
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 
 export type CombatRole = 'Survivor' | 'Zombie' | 'Whisperer'
-export type CombatKind = 'survivor_bash' | 'whisperer_bash' | 'whisperer_maul'
+type CombatKind = 'survivor_bash' | 'whisperer_bash' | 'whisperer_maul'
 export const INITIAL_WHISPERER_OFFER_HOURS = 24
 export const BETA_AMBUSH_LIMIT = 2
 
@@ -23,7 +23,7 @@ export function betaCombatKind(winner: CombatRole, loser: CombatRole, margin: nu
 }
 
 export type AmbushPair = { homeRosterId: string; awayRosterId: string }
-export type AmbushMatchup = AmbushPair & { id: string }
+type AmbushMatchup = AmbushPair & { id: string }
 
 /** A remap is a complete permutation of the current field; unchanged locked pairs stay intact. */
 export function planBetaAmbush(current: AmbushMatchup[], proposed: AmbushPair[], locked: Set<string>) {

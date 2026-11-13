@@ -20,8 +20,8 @@
  * back after setting it, and confirm the effect in `pg_stat_statements` (the old per-row
  * statements reappear when a writer is switched off).
  */
-export const CHANGE_AWARE_WRITERS = ['weekly-scores', 'team-performances', 'rosters', 'matchups'] as const
-export type ChangeAwareWriter = (typeof CHANGE_AWARE_WRITERS)[number]
+const CHANGE_AWARE_WRITERS = ['weekly-scores', 'team-performances', 'rosters', 'matchups'] as const
+type ChangeAwareWriter = (typeof CHANGE_AWARE_WRITERS)[number]
 
 export function changeAwareWritesEnabled(
   writer: ChangeAwareWriter,

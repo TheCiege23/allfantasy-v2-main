@@ -26,7 +26,7 @@ const SPORT_ALIASES: Record<string, string[]> = {
   NCAAF: ['NCAAF', 'NCAAFB'],
 }
 
-export type BaselineRow = { name: string; position: string | null; perGame: number }
+type BaselineRow = { name: string; position: string | null; perGame: number }
 
 export type BaselineIndex = {
   sport: string

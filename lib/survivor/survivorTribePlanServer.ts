@@ -67,13 +67,13 @@ export async function loadTribePlanParticipants(
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
 }
 
-export function tribeNameForSlot(slots: readonly SurvivorTribeSlot[], slot: number): string {
+function tribeNameForSlot(slots: readonly SurvivorTribeSlot[], slot: number): string {
   const name = SURVIVOR_TRIBE_CATALOG.find(t => t.id === slots[slot]?.catalogId)?.name
   return name ? `Tribe ${name}` : `Tribe ${slot + 1}`
 }
 
-export type LockedTribeSummary = { id: string; slotIndex: number; name: string; memberCount: number }
-export type LockOutcome =
+type LockedTribeSummary = { id: string; slotIndex: number; name: string; memberCount: number }
+type LockOutcome =
   | { ok: true; plan: StoredTribePlan; announced: boolean; tribes: LockedTribeSummary[] }
   | { ok: false; status: 409 | 422; error: string }
 

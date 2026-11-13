@@ -12,20 +12,20 @@ export function defaultNflGameTime(reference: Date = new Date()): Date {
 }
 
 /** Saturday afternoon ET — common NCAAF window. */
-export function defaultNcaafGameTime(reference: Date = new Date()): Date {
+function defaultNcaafGameTime(reference: Date = new Date()): Date {
   const sun = nextSunday(reference)
   const sat = new Date(sun.getTime() - 24 * 60 * 60 * 1000)
   const ymd = formatInTimeZone(sat, NY, 'yyyy-MM-dd')
   return fromZonedTime(`${ymd}T15:30:00.000`, NY)
 }
 
-export function defaultMlbGameTime(reference: Date = new Date()): Date {
+function defaultMlbGameTime(reference: Date = new Date()): Date {
   const sun = nextSunday(reference)
   const ymd = formatInTimeZone(sun, NY, 'yyyy-MM-dd')
   return fromZonedTime(`${ymd}T16:10:00.000`, NY)
 }
 
-export function defaultSoccerGameTime(reference: Date = new Date()): Date {
+function defaultSoccerGameTime(reference: Date = new Date()): Date {
   const sun = nextSunday(reference)
   const ymd = formatInTimeZone(sun, NY, 'yyyy-MM-dd')
   return fromZonedTime(`${ymd}T14:00:00.000`, NY)

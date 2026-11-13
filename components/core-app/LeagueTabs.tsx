@@ -37,7 +37,7 @@ import '@/components/core-app/af-league-tabs.css'
  * fixtures and saved rule dates; Moves groups the available trade/waiver flows.
  */
 
-export type LeagueTabsProps = {
+type LeagueTabsProps = {
   leagueId: string
   leagueName: string
   /** The active /core segment, e.g. 'standings'. */

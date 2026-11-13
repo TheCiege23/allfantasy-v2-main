@@ -25,7 +25,7 @@ const BIG_BROTHER_TIPS = [
   'Fantasy scoring still drives HOH and Veto — set your lineup every week.',
 ]
 
-export interface BigBrotherFirstEntryModalProps {
+interface BigBrotherFirstEntryModalProps {
   leagueId: string
   userId: string
   enabled: boolean

@@ -3,10 +3,10 @@
  * Safe to import from client components: no prisma, no node built-ins.
  */
 
-export const SHARE_MOMENT_TYPES = ['immunity', 'out', 'idol', 'exile', 'champ', 'recap'] as const
+const SHARE_MOMENT_TYPES = ['immunity', 'out', 'idol', 'exile', 'champ', 'recap'] as const
 export type ShareMomentType = (typeof SHARE_MOMENT_TYPES)[number]
 
-export const SHARE_CARD_FORMATS = ['post', 'story', 'link'] as const
+const SHARE_CARD_FORMATS = ['post', 'story', 'link'] as const
 export type ShareCardFormat = (typeof SHARE_CARD_FORMATS)[number]
 
 /** Exact export sizes from the handoff README. */

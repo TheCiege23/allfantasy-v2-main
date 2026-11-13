@@ -28,7 +28,7 @@ export type FantasyValueSnapshot = {
   confidence: number
 }
 
-export type FantasyValueSnapshotInput = {
+type FantasyValueSnapshotInput = {
   sport: string
   playerId?: string | null
   playerName: string
@@ -54,7 +54,7 @@ export type FantasyValueSnapshotInput = {
   source?: string | null
 }
 
-export type FantasyValueSnapshotRequest = {
+type FantasyValueSnapshotRequest = {
   season?: number
   sport: string
   playerId?: string | null

@@ -14,16 +14,16 @@
  */
 import type { SurvivorScrollRevealStep, SurvivorSummary } from '@/components/survivor/types'
 
-export type VoteReadingStatus = SurvivorScrollRevealStep['status']
+type VoteReadingStatus = SurvivorScrollRevealStep['status']
 
-export interface VoteReadingTallyRow {
+interface VoteReadingTallyRow {
   name: string
   count: number
   /** Holds the most counted votes so far (ties all lead; nobody leads at 0). */
   leading: boolean
 }
 
-export interface VoteReadingBallot {
+interface VoteReadingBallot {
   /** 1-based position in the read. */
   position: number
   /** null when the ballot had no eligible target. */
@@ -33,12 +33,12 @@ export interface VoteReadingBallot {
   isExtraVote: boolean
 }
 
-export type VoteReadingVerdict =
+type VoteReadingVerdict =
   | { kind: 'out'; name: string; votes: number; nextBest: number }
   | { kind: 'tie' }
   | { kind: 'none' }
 
-export interface VoteReadingView {
+interface VoteReadingView {
   councilId: string
   week: number
   tribeName: string | null
@@ -54,7 +54,7 @@ export interface VoteReadingView {
 }
 
 /** Ballots that add a vote. Everything else (idol, late, stolen, Shot in the Dark, safe) adds 0. */
-export function ballotCounts(status: VoteReadingStatus): boolean {
+function ballotCounts(status: VoteReadingStatus): boolean {
   return status === 'counts'
 }
 

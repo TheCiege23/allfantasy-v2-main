@@ -19,7 +19,7 @@
  * the board has no "P" badge, so "Q" would overstate it. Anything unrecognised is healthy too — a
  * missing badge is a gap, a wrong one is a false statement on the player's row.
  */
-export type RosterBadgeStatus = 'healthy' | 'q' | 'out' | 'ir'
+type RosterBadgeStatus = 'healthy' | 'q' | 'out' | 'ir'
 
 /** Upper-case, every run of non-alphanumerics → one space. "Day-To-Day" == "DAY_TO_DAY". */
 function normalizeStatusText(raw: unknown): string {

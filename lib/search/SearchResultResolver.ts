@@ -244,7 +244,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   },
 ]
 
-export function getStaticSearchItems(): SearchResultItem[] {
+function getStaticSearchItems(): SearchResultItem[] {
   return [...STATIC_PAGES, ...STATIC_TOOLS]
 }
 

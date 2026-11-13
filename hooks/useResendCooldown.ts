@@ -23,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * "you may try", never "the server will accept" — the screens still handle a 429
  * coming back.
  */
-export type ResendCooldown = {
+type ResendCooldown = {
   /** Whole seconds left, 0 when clear. */
   secondsLeft: number
   /** True while the countdown is running. */
@@ -36,7 +36,7 @@ export type ResendCooldown = {
   reset: () => void
 }
 
-export function formatCooldown(totalSeconds: number): string {
+function formatCooldown(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds))
   const minutes = Math.floor(safe / 60)
   const seconds = safe % 60

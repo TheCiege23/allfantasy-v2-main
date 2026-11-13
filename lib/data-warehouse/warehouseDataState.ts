@@ -8,9 +8,9 @@
 
 import { prisma } from '@/lib/prisma'
 
-export type WarehouseDataStatus = 'AVAILABLE' | 'PARTIAL' | 'PENDING_IMPORT' | 'UNAVAILABLE'
+type WarehouseDataStatus = 'AVAILABLE' | 'PARTIAL' | 'PENDING_IMPORT' | 'UNAVAILABLE'
 
-export interface WarehouseCoverage {
+interface WarehouseCoverage {
   sourcePlayerGameStats: number
   generatedPlayerFacts: number
   sourceWeeks: number
@@ -19,7 +19,7 @@ export interface WarehouseCoverage {
   latestSeason: number | null
 }
 
-export interface WarehouseDataState {
+interface WarehouseDataState {
   status: WarehouseDataStatus
   coverage: WarehouseCoverage
   warnings: string[]
@@ -83,7 +83,7 @@ export async function computeWarehouseDataState(
   return { status, coverage, warnings }
 }
 
-export interface SportsWarehouseHealth {
+interface SportsWarehouseHealth {
   status: 'HEALTHY' | 'DEGRADED' | 'CRITICAL'
   playerGameStats: number
   playerGameFacts: number

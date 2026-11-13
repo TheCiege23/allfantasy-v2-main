@@ -108,7 +108,7 @@ function PickSummaryChip({
   )
 }
 
-export type DraftPickTradePanelRootProps = {
+type DraftPickTradePanelRootProps = {
   className: string
   presentationVariant?: 'default' | 'redraft_snake'
   leagueName?: string

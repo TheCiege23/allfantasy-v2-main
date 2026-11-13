@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type ReverseMaxPfRow = {
+type ReverseMaxPfRow = {
   slot: number
   ownerId: string
   ownerName: string

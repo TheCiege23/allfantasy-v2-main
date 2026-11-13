@@ -7,7 +7,7 @@ import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 export type AICardShareChannel = 'x' | 'twitter' | 'reddit' | 'instagram' | 'discord'
 
-export interface AICardShareOptions {
+interface AICardShareOptions {
   /** Card title (e.g. "Trade Grade") */
   title: string
   /** AI insight or verdict (short) */

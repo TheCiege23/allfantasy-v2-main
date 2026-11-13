@@ -11,7 +11,7 @@ import { composeUnifiedBrain } from "./UnifiedBrainComposer"
 import { resolveConfidence } from "./AIConfidenceResolver"
 import { applyFactGuardToAnswer } from "./AIFactGuard"
 
-export type OrchestratorInput = {
+type OrchestratorInput = {
   envelope: AIContextEnvelope
   /** Pre-run model outputs (caller runs APIs and passes results). */
   modelOutputs: ModelOutput[]

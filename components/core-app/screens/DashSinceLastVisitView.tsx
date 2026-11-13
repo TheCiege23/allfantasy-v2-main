@@ -21,7 +21,7 @@ import { dashSinceLastVisitMessages } from '@/lib/core-app/messages/dashSinceLas
 /** A span of time the server measured: "5h", "3d". */
 export type BriefSpan = { n: number; unit: 'm' | 'h' | 'd' }
 
-export type SinceLastVisitViewProps = {
+type SinceLastVisitViewProps = {
   /** "last 7 days" (a first visit, or a capped window) or "since <span> ago". */
   when: { kind: 'week' } | { kind: 'since'; span: BriefSpan }
   /** How much further back the trade line reaches than the header, when it does. */

@@ -21,7 +21,7 @@ export type ZombiePaymentTrackerPrefs = {
   entries: ZombiePaymentTrackerEntry[]
 }
 
-export function emptyPaymentTrackerPrefs(): ZombiePaymentTrackerPrefs {
+function emptyPaymentTrackerPrefs(): ZombiePaymentTrackerPrefs {
   return { dueDate: null, entries: [] }
 }
 

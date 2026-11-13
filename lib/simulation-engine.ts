@@ -19,7 +19,7 @@ export interface SimulationScenario {
   weatherImpact?: string
 }
 
-export interface SimulationResult {
+interface SimulationResult {
   iterations: number
   winProbability: { before: number; after: number; change: number }
   playoffProbability: { before: number; after: number; change: number }
@@ -39,7 +39,7 @@ export interface SimulationResult {
   reportCard: ReportCard
 }
 
-export interface ReportCard {
+interface ReportCard {
   overallGrade: string
   categories: {
     name: string

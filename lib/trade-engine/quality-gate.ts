@@ -3,7 +3,7 @@ import { computeDataCoverageTier, type DataCoverageResult } from './trade-decisi
 import type { PeerReviewConsensus } from './trade-analysis-schema'
 import { buildDeterministicIntelligence, type DeterministicIntelligence } from './deterministic-intelligence'
 
-export type QualityViolation = {
+type QualityViolation = {
   rule: string
   severity: 'hard' | 'soft'
   detail: string
@@ -16,7 +16,7 @@ export type ConditionalRecommendation = {
   label: string
 }
 
-export type QualityGateResult = {
+type QualityGateResult = {
   passed: boolean
   violations: QualityViolation[]
   adjustedConfidence: number

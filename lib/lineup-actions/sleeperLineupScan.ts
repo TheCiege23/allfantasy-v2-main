@@ -101,7 +101,7 @@ async function loadSleeperPlayersForSport(
   return by
 }
 
-export type SleeperLineupScanArgs = {
+type SleeperLineupScanArgs = {
   leagueId: string
   leagueName: string
   platformLeagueId: string
@@ -109,7 +109,7 @@ export type SleeperLineupScanArgs = {
   thresholds: LineupsActionThresholds
 }
 
-export type SleeperLineupScanResult = {
+type SleeperLineupScanResult = {
   actions: LineupActionItem[]
   scanIncomplete: boolean
   skippedBestBall: boolean

@@ -38,7 +38,7 @@ type MetricDef = {
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 
-export function buildProgressMetrics(seasons: CareerSeasonRow[], rank: RankPoint[] | null): MetricDef[] {
+function buildProgressMetrics(seasons: CareerSeasonRow[], rank: RankPoint[] | null): MetricDef[] {
   const rankBy = new Map((rank ?? []).map((r) => [r.season, r]))
   const title = (s: CareerSeasonRow) => s.championships > 0
   return [

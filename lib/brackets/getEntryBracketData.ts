@@ -6,7 +6,7 @@ import { normalizeTeamAbbrev } from "@/lib/team-abbrev"
 
 export type { BracketTeamNewsLine }
 
-export type BracketNodeWithGame = {
+type BracketNodeWithGame = {
   id: string
   slot: string
   round: number

@@ -26,15 +26,15 @@ export type TeamContextId =
   | 'bottom'
 
 /** Rank tertile — data-derived from standings position, not marketing tiers. */
-export type RankThirdLabel = 'upper_third' | 'middle_third' | 'lower_third'
+type RankThirdLabel = 'upper_third' | 'middle_third' | 'lower_third'
 
-export type PlayoffFieldStatus = 'inside' | 'bubble' | 'outside' | 'unknown'
+type PlayoffFieldStatus = 'inside' | 'bubble' | 'outside' | 'unknown'
 
-export type ContenderSignal = 'firm' | 'bubble' | 'longshot'
+type ContenderSignal = 'firm' | 'bubble' | 'longshot'
 
-export type ProjectionTruthSource = 'sleeper_engine' | 'af_normalized' | 'standings_only'
+type ProjectionTruthSource = 'sleeper_engine' | 'af_normalized' | 'standings_only'
 
-export type EnrichedTeamRow = PowerRankingTeam & {
+type EnrichedTeamRow = PowerRankingTeam & {
   teamName: string
   avatarUrl: string | null
   externalId: string | null
@@ -56,14 +56,14 @@ export type EnrichedTeamRow = PowerRankingTeam & {
   rowConfidence: number
 }
 
-export type PowerRankingsScoringSummary = {
+type PowerRankingsScoringSummary = {
   scoringModel: string
   receptionFormat: string | null
   superflex: boolean | null
 }
 
 /** Provider-health flags for UI chips — mirrors other AI tools. */
-export type PowerRankingsSourceFlags = {
+type PowerRankingsSourceFlags = {
   /** Standings (W/L/PF/PA) resolved from DB or Sleeper */
   standingsReady: boolean
   /** Rosters resolved for roster-strength blend */
@@ -81,7 +81,7 @@ export type PowerRankingsSourceFlags = {
 }
 
 /** Per-team factors that drive contender/pretender classification — all data-derived. */
-export type ContenderFactors = {
+type ContenderFactors = {
   /** Win% vs expected from PF distribution (1.0 = in-line, >1 = overperforming, <1 = underperforming). */
   luckFactor: number | null
   /** Strength of remaining schedule (0–1, higher = tougher). Null when SOS not computed. */

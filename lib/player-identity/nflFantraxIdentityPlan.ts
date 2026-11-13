@@ -25,7 +25,7 @@ import { deriveFantasyEligibility, normalizeProviderPosition, REFERENCE_NFL_BUCK
  * Pure: the registry read and the guarded write live in `linkNflFantraxIdentities.ts`.
  */
 
-export type NflIdentityRow = {
+type NflIdentityRow = {
   id: string
   canonicalName: string
   currentTeam: string | null

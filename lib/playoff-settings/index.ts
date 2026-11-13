@@ -14,5 +14,4 @@ export { getPlayoffConfig, savePlayoffConfig, stageEditorPlayoffStartWeek } from
 export {
   resolvePlayoffStartWeek,
   readChosenPlayoffStartWeek,
-  sportDefaultPlayoffStartWeek,
 } from './resolvePlayoffStartWeek'

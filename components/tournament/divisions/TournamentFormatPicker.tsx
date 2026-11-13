@@ -9,7 +9,7 @@ import { DivisionBadge } from './DivisionArt'
 
 export type TournamentFormatId = 'points_race' | 'divisions'
 export type PointsRaceChoice = { sport: 'NFL' | 'NBA'; participants: number }
-export const POINTS_FIELD_SIZES = [64, 96, 128, 160] as const
+const POINTS_FIELD_SIZES = [64, 96, 128, 160] as const
 
 const card = 'rounded-2xl border border-white/10 bg-[#0b0d14]'
 

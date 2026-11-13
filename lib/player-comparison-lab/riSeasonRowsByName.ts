@@ -32,7 +32,7 @@ import { prisma } from '@/lib/prisma'
 import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
-export interface RiSeasonRow {
+interface RiSeasonRow {
   playerId: string
   season: string
   seasonType?: string | null
@@ -44,9 +44,9 @@ export interface RiSeasonRow {
   stats: unknown
 }
 
-export type RiSeasonResolution = 'unique_id' | 'verified' | 'ambiguous' | 'not_found'
+type RiSeasonResolution = 'unique_id' | 'verified' | 'ambiguous' | 'not_found'
 
-export interface RiSeasonRowsResult {
+interface RiSeasonRowsResult {
   rows: RiSeasonRow[]
   rollingInsightsPlayerId: string | null
   position: string | null

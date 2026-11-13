@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 
-export type AutomationHealthSummary = {
+type AutomationHealthSummary = {
   pendingJobs: number
   runningJobs: number
   failedJobsLast24h: number

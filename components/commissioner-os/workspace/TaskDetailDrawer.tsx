@@ -13,7 +13,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cosLinkText, taskText, workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
 import { taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface TaskDetailDrawerProps {
+interface TaskDetailDrawerProps {
   task: CommissionerTask | null
   onOpenChange: (open: boolean) => void
 }

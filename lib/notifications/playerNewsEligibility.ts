@@ -58,9 +58,9 @@ import { stripReleaseOfInformation } from '@/lib/news/releaseOfInformationPatter
  */
 export const PLAYER_NEWS_POLICY_VERSION = 2
 
-export type NewsImpact = 'high' | 'medium' | 'low' | string
+type NewsImpact = 'high' | 'medium' | 'low' | string
 
-export type EligibilityDecision =
+type EligibilityDecision =
   | { eligible: true; reason: 'material-roster-event' | 'confirmed-trade' | 'high-impact' }
   | {
       eligible: false

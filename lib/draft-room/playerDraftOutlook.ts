@@ -77,7 +77,7 @@ export function buildPlayerDraftOutlook(input: {
   }
 }
 
-export type YoureUpSuggestion<P> = { player: P; source: 'queue' | 'best_available' }
+type YoureUpSuggestion<P> = { player: P; source: 'queue' | 'best_available' }
 
 /**
  * The player the "you're up" alert offers. `queue` is in queue order and

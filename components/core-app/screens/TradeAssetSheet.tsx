@@ -9,7 +9,7 @@ import { useOverlayContainment } from '@/components/core-app/useOverlayContainme
  * width the CSS stacks the builder at — a sheet at 721px beside a two-column builder would be a
  * modal nobody needed.
  */
-export const PHONE_QUERY = '(max-width: 720px)'
+const PHONE_QUERY = '(max-width: 720px)'
 
 function subscribe(onChange: () => void): () => void {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {}

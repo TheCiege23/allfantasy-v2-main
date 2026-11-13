@@ -21,7 +21,7 @@
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
-export interface PlayerNewsRowFields {
+interface PlayerNewsRowFields {
   playerName?: string | null
   playerNames?: readonly string[] | null
   team?: string | null

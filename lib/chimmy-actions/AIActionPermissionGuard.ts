@@ -8,15 +8,15 @@
 import type { AIAction, AIActionContext, AIActionPermission } from './AIActionModel'
 import { isActionValidForSport } from './AIActionSportAdapter'
 
-export interface PermissionCheckResult {
+interface PermissionCheckResult {
   allowed: boolean
   /** Human-readable reason when blocked, null when allowed */
   reason: string | null
 }
 
-export type AIActionClass = 'safe_immediate' | 'confirmed_user' | 'restricted'
+type AIActionClass = 'safe_immediate' | 'confirmed_user' | 'restricted'
 
-export type AIActionDecisionStatus = 'allowed' | 'allowed_with_confirmation' | 'blocked'
+type AIActionDecisionStatus = 'allowed' | 'allowed_with_confirmation' | 'blocked'
 
 type BlockedBy =
   | 'permissions'
@@ -26,7 +26,7 @@ type BlockedBy =
   | 'sport_rules'
   | 'transaction_legality'
 
-export interface AIActionDecision {
+interface AIActionDecision {
   actionClass: AIActionClass
   status: AIActionDecisionStatus
   requiresConfirmation: boolean
@@ -100,7 +100,7 @@ function roleCoversPermission(
  * Check whether the user has the permissions required by the action.
  * Returns { allowed: true } or { allowed: false, reason: '...' }.
  */
-export function validateAIActionPermissions(
+function validateAIActionPermissions(
   action: AIAction,
   context: AIActionContext,
 ): PermissionCheckResult {
@@ -161,7 +161,7 @@ export function validateAIActionPermissions(
 /**
  * Check whether league state (lockouts, deadlines, draft status) blocks the action.
  */
-export function checkLeagueStateConstraints(
+function checkLeagueStateConstraints(
   action: AIAction,
   context: AIActionContext,
 ): PermissionCheckResult {

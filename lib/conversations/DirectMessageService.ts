@@ -2,7 +2,7 @@
  * DirectMessageService — create or get DM thread, payloads for API.
  */
 
-export const CONVERSATION_TYPE_DIRECT = "dm"
+const CONVERSATION_TYPE_DIRECT = "dm"
 
 export function getCreateDMPayload(otherUserId: string): { threadType: string; memberUserIds: string[] } {
   return {

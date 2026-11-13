@@ -32,7 +32,7 @@ export interface CertifiedMatchupEvidenceInput {
   allGamesFinal: boolean
 }
 
-export interface NormalizeMatchupStateInput {
+interface NormalizeMatchupStateInput {
   matchup: MatchupCenterPayload | null
   fetchedAt: string
   unavailableReason: string | null

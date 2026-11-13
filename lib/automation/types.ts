@@ -18,7 +18,7 @@ export type AutomationJobStatus =
   | "skipped"
 
 /** Known job kinds — extend as new automation surfaces ship. */
-export type AutomationJobType =
+type AutomationJobType =
   | "waivers.processLeague"
   | "draft.tick"
   | "draft.autoPick"

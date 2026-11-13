@@ -1,20 +1,20 @@
 import type { ZombieSettlementSnapshotV1 } from '@/lib/zombie/weeklySettlementSnapshot'
 
-export type ReplayWeekResult = {
+type ReplayWeekResult = {
   matchupId: string
   homeRosterId: string
   awayRosterId: string
   homeScore: number
   awayScore: number
 }
-export type ReplayInfection = {
+type ReplayInfection = {
   matchupId: string
   victimRosterId: string
   infectorRosterId: string
   victimScore: number
   infectorScore: number
 }
-export type OutcomeReplayPlan = {
+type OutcomeReplayPlan = {
   infections: ReplayInfection[]
   spentItemIds: string[]
   serumAwards: Array<{ rosterId: string; reason: string }>

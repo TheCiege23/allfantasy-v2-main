@@ -5,7 +5,7 @@ import { getMinigameDef } from '@/lib/survivor/SurvivorMiniGameRegistry'
 import type { SurvivorSummary, SurvivorSummaryChallenge } from './types'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 
-export interface SurvivorChallengeCenterProps {
+interface SurvivorChallengeCenterProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>

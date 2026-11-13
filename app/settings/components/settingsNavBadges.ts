@@ -28,7 +28,7 @@ import type { SettingsProfile } from './sections/settings-types'
  * it summarises.
  */
 
-export type SettingsNavBadge = {
+type SettingsNavBadge = {
   text: string
   /** `warn` is for a state the user probably did not intend to be in. */
   tone: 'warn' | 'count'

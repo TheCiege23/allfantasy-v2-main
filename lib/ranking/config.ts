@@ -1,4 +1,4 @@
-export type Tier = {
+type Tier = {
   tier: number;
   name: string;
   minLevel: number;

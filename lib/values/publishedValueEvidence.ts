@@ -18,7 +18,7 @@
 /** When these were measured, and against what. */
 export const EVIDENCE_MEASURED_ON = '2026-08-29'
 
-export interface SeasonPair {
+interface SeasonPair {
   label: string
   rho: number
 }

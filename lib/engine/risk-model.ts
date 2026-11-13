@@ -45,7 +45,7 @@ export interface RiskInput {
   newsSentiment?: number // -100 to +100 (negative = bad news)
 }
 
-export interface RiskResult {
+interface RiskResult {
   totalRisk: number // 0–1 scale
   factors: {
     injury: number // 0–1

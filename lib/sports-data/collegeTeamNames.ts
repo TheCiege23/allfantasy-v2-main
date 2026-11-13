@@ -72,7 +72,7 @@ export const COLLEGE_NAME_ALIASES: Record<string, string> = {
  * so no team that already has a crest can be moved by an entry here. Each value is a row name read
  * off the test DB on 2026-10-01 and checked against that row's city — never a guess.
  */
-export const COLLEGE_LOGO_NAME_ALIASES: Record<string, readonly string[]> = {
+const COLLEGE_LOGO_NAME_ALIASES: Record<string, readonly string[]> = {
   'university of north carolina at greensboro': ['UNC Greensboro'],
   'university of north carolina at asheville': ['UNC Asheville'],
   'university of north carolina at wilmington': ['UNC Wilmington'],

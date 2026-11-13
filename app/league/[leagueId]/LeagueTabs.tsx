@@ -116,7 +116,7 @@ const TAB_ALIASES: Record<string, string> = {
   MLS: 'SOCCER',
 }
 
-export function getLeagueTabs(sport: string): TabDef[] {
+function getLeagueTabs(sport: string): TabDef[] {
   const key = sport.trim().toUpperCase()
   const resolved = TAB_ALIASES[key] ?? key
   const tabs = SPORT_TABS[resolved]

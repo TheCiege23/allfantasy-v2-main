@@ -23,7 +23,7 @@ const CHANNELS: { id: DraftShareChannel; label: string }[] = [
   { id: 'discord', label: 'Discord' },
 ]
 
-export interface DraftShareBarProps {
+interface DraftShareBarProps {
   payload: DraftShareCardPayload
   shareUrl: string
   /** Optional capture id if different from default */

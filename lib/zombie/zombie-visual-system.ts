@@ -4,7 +4,7 @@
  */
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
-export type ZombieUniverseTier = 'gamma' | 'beta' | 'alpha' | 'unknown'
+type ZombieUniverseTier = 'gamma' | 'beta' | 'alpha' | 'unknown'
 
 export type ZombieItemKind = 'serum' | 'weapon' | 'bomb' | 'ambush'
 
@@ -47,7 +47,7 @@ export function zombieTierBadgeClasses(tier: ZombieUniverseTier): string {
   }
 }
 
-export type ZombieSportHeroPreset = {
+type ZombieSportHeroPreset = {
   sport: SupportedSport
   label: string
   tagline: string

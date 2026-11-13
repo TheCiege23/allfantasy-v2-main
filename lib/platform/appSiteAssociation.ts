@@ -13,7 +13,7 @@
  * links out of Safari for everyone with the app installed — a separate decision, not a side effect.
  */
 
-export const IOS_APP_BUNDLE_ID = 'ai.allfantasy.app'
+const IOS_APP_BUNDLE_ID = 'ai.allfantasy.app'
 
 /** The paths that open the app. `*` matches any suffix, including the query string. */
 export const IOS_APP_LINK_PATHS = ['/verify/email*'] as const

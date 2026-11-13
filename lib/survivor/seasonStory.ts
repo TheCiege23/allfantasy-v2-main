@@ -15,7 +15,7 @@
  *  - Jurors and the merge are public the moment they happen.
  */
 
-export type SeasonStoryMomentType = 'immunity' | 'out' | 'idol' | 'exile' | 'champ'
+type SeasonStoryMomentType = 'immunity' | 'out' | 'idol' | 'exile' | 'champ'
 
 export interface SeasonStoryMoment {
   id: string
@@ -34,8 +34,8 @@ export interface SeasonStoryMoment {
   idolName?: string | null
 }
 
-export interface SeasonStorySwap { week: number; revealedAt: Date | string | null }
-export interface SeasonStoryJuror { votedOutWeek: number; displayName: string }
+interface SeasonStorySwap { week: number; revealedAt: Date | string | null }
+interface SeasonStoryJuror { votedOutWeek: number; displayName: string }
 
 export interface SeasonStoryInput {
   season: number
@@ -54,7 +54,7 @@ export interface SeasonStoryInput {
   now?: Date
 }
 
-export type SeasonNodeKind = 'draft' | 'voted_out' | 'idol' | 'swap' | 'exile_return' | 'merge' | 'juror' | 'champion' | 'quiet' | 'upcoming'
+type SeasonNodeKind = 'draft' | 'voted_out' | 'idol' | 'swap' | 'exile_return' | 'merge' | 'juror' | 'champion' | 'quiet' | 'upcoming'
 
 export interface SeasonTimelineNode {
   key: string
@@ -67,7 +67,7 @@ export interface SeasonTimelineNode {
   card: SeasonEventCard | null
 }
 
-export interface SeasonEventCard {
+interface SeasonEventCard {
   kicker: string
   headline: string
   sub: string
@@ -99,7 +99,7 @@ function toMs(value: Date | string | null | undefined): number | null {
 }
 
 /** "Open Team 8" → "O8"; "TheCiege26" → "TheCiege26" trimmed to fit under a node. */
-export function shortName(name: string): string {
+function shortName(name: string): string {
   const clean = name.trim() || 'A manager'
   const team = /^open team\s+(\d+)$/i.exec(clean)
   if (team) return `O${team[1]}`

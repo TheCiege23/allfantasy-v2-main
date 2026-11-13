@@ -13,7 +13,7 @@
 // LAYER 1: REDRAFT TIERS (Weekly Impact Tiers)
 // ============================================================================
 
-export type RedraftTier = 'A' | 'B' | 'C' | 'D' | 'F';
+type RedraftTier = 'A' | 'B' | 'C' | 'D' | 'F';
 
 export interface RedraftTierInfo {
   tier: RedraftTier;
@@ -21,7 +21,7 @@ export interface RedraftTierInfo {
   description: string;
 }
 
-export function getRedraftTierFromPAR(par: number): RedraftTier {
+function getRedraftTierFromPAR(par: number): RedraftTier {
   if (par >= 6.0) return 'A';
   if (par >= 3.0) return 'B';
   if (par >= 1.0) return 'C';
@@ -33,11 +33,11 @@ export function getRedraftTierFromPAR(par: number): RedraftTier {
 // LAYER 2: POSITIONAL REPLACEMENT VALUE (Redraft's Secret Sauce)
 // ============================================================================
 
-export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
-export type LeagueSize = 8 | 10 | 12 | 14 | 16;
-export type ScoringFormat = 'standard' | 'half_ppr' | 'ppr' | 'superflex';
+type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF';
+type LeagueSize = 8 | 10 | 12 | 14 | 16;
+type ScoringFormat = 'standard' | 'half_ppr' | 'ppr' | 'superflex';
 
-export interface ReplacementBaselines {
+interface ReplacementBaselines {
   QB: number;
   RB: number;
   WR: number;
@@ -63,7 +63,7 @@ const SCORING_ADJUSTMENTS: Record<ScoringFormat, Partial<ReplacementBaselines>> 
   superflex: { QB: 2 }, // QBs way more valuable
 };
 
-export function getReplacementBaseline(
+function getReplacementBaseline(
   position: Position,
   leagueSize: LeagueSize = 12,
   scoring: ScoringFormat = 'half_ppr'
@@ -77,13 +77,13 @@ export function getReplacementBaseline(
 // LAYER 3: MARKET PLAUSIBILITY (Redraft Edition)
 // ============================================================================
 
-export type RedraftWindowStatus = 
+type RedraftWindowStatus = 
   | 'MUST_WIN_NOW'      // Poor record, needs weekly ceiling
   | 'PLAYOFF_LOCK'      // Can stash upside for playoffs
   | 'BUBBLE_TEAM'       // Optimize starters + floor
   | 'ELIMINATED';       // Future spoiler
 
-export interface TeamContext {
+interface TeamContext {
   wins: number;
   losses: number;
   playoffSpots: number; // typically 4-6
@@ -116,7 +116,7 @@ export function determineWindowStatus(ctx: TeamContext): RedraftWindowStatus {
   return 'BUBBLE_TEAM';
 }
 
-export interface PlausibilityResult {
+interface PlausibilityResult {
   isPlausible: boolean;
   reason: string;
   warning?: string;
@@ -162,7 +162,7 @@ export function checkRedraftPlausibility(
 // LAYER 4: TIMELINE CONSISTENCY (Playoff Schedule)
 // ============================================================================
 
-export function getPlayoffMultiplier(avgDifficultyRank: number): number {
+function getPlayoffMultiplier(avgDifficultyRank: number): number {
   // Top 8 easiest = boost, bottom 8 hardest = penalty
   if (avgDifficultyRank <= 8) return 1.10;
   if (avgDifficultyRank <= 16) return 1.05;
@@ -171,13 +171,13 @@ export function getPlayoffMultiplier(avgDifficultyRank: number): number {
 }
 
 // Risk factors
-export interface RiskProfile {
+interface RiskProfile {
   injuryRisk: number; // 0-1 (0 = healthy, 1 = IR)
   roleVolatility: number; // 0-1 (0 = locked in, 1 = committee/uncertain)
   byeWeekRemaining: boolean;
 }
 
-export function getRiskFactor(risk: RiskProfile): number {
+function getRiskFactor(risk: RiskProfile): number {
   let factor = 0;
   factor += risk.injuryRisk * 0.15;
   factor += risk.roleVolatility * 0.08;
@@ -189,7 +189,7 @@ export function getRiskFactor(risk: RiskProfile): number {
 // COMPLETE VALUE FORMULA
 // ============================================================================
 
-export interface RedraftPlayerInput {
+interface RedraftPlayerInput {
   name: string;
   position: Position;
   weeklyProjection: number; // PPG ROS
@@ -199,7 +199,7 @@ export interface RedraftPlayerInput {
   riskProfile?: RiskProfile;
 }
 
-export interface RedraftPlayerValue {
+interface RedraftPlayerValue {
   name: string;
   position: Position;
   baseROSPoints: number;
@@ -276,7 +276,7 @@ export interface RedraftTradeInput {
   scoring?: ScoringFormat;
 }
 
-export type RedraftGrade = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
+type RedraftGrade = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
 
 export interface RedraftTradeResult {
   senderValues: RedraftPlayerValue[];

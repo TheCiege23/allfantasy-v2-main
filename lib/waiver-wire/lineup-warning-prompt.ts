@@ -4,7 +4,7 @@
  * asks the manager, and a "go ahead" re-sends the same request with `confirmLineupWarning: true`.
  * Client-safe: no server imports.
  */
-export const LINEUP_WARNING_RESPONSE_CODE = 'LINEUP_WARNING'
+const LINEUP_WARNING_RESPONSE_CODE = 'LINEUP_WARNING'
 
 export function isLineupWarningResponse(json: unknown): json is { code: 'LINEUP_WARNING'; warning?: { unfilledSlots?: unknown } } {
   return Boolean(json && typeof json === 'object' && (json as { code?: unknown }).code === LINEUP_WARNING_RESPONSE_CODE)

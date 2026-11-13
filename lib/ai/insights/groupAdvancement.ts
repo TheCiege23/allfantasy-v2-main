@@ -8,7 +8,7 @@
  * The advancingPerGroup param adapts to the format (2 for classic WC, 3 for WC 2026).
  */
 
-export type GroupTeamStanding = {
+type GroupTeamStanding = {
   teamName: string
   played: number
   wins: number
@@ -20,7 +20,7 @@ export type GroupTeamStanding = {
   points: number
 }
 
-export type GroupAdvancementStatus = {
+type GroupAdvancementStatus = {
   teamName: string
   standing: GroupTeamStanding
   currentPosition: number

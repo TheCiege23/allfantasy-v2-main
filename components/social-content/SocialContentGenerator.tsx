@@ -28,7 +28,7 @@ const CAPTURE_IDS: Record<string, string> = {
   weekly_recap: SOCIAL_POST_CARD_ID,
 }
 
-export interface SocialContentGeneratorProps {
+interface SocialContentGeneratorProps {
   /** Pre-filled context per type; if not provided, user can fill form */
   initialContext?: Partial<Record<SocialContentType, unknown>>
   onCopy?: () => void

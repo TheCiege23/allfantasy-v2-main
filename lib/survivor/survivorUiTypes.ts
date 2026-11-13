@@ -11,7 +11,7 @@ export type SurvivorUiPlayerState =
   | 'jury'
   | 'finalist'
 
-export type SurvivorSeasonTribeMember = {
+type SurvivorSeasonTribeMember = {
   rosterId?: string
   userId?: string | null
 }
@@ -47,7 +47,7 @@ export type SurvivorSeasonPlayer = {
   canAccessFinaleChat?: boolean
 }
 
-export type SurvivorSeasonCouncil = {
+type SurvivorSeasonCouncil = {
   isRevealed?: boolean
   eliminatedName?: string | null
   isTie?: boolean
@@ -66,7 +66,7 @@ export type SurvivorSeasonCouncil = {
   voteDeadlineAt?: string | null
 }
 
-export type SurvivorSeasonChallenge = {
+type SurvivorSeasonChallenge = {
   id: string
   week: number
   status?: string

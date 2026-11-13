@@ -32,7 +32,7 @@ export function normalizePicks(input: unknown): string[] | null {
   return out
 }
 
-export type LeagueScope = {
+type LeagueScope = {
   /** The leagues the finder reads, in the caller's order. */
   leagueIds: string[]
   /** True when the account's pick is in force (fewer than all). */

@@ -225,7 +225,7 @@ export function storeSavedByPerson(raw: unknown): boolean {
 }
 
 /** Panel rules -> engine category points, for one sport. Non-numeric values are dropped. */
-export function bridgeUiRulesForSport(sport: string, rules: Record<string, unknown>): Record<string, number> {
+function bridgeUiRulesForSport(sport: string, rules: Record<string, unknown>): Record<string, number> {
   const store = UI_SCORING_STORES[sport]
   if (!store) return {}
   const out: Record<string, number> = {}

@@ -9,7 +9,7 @@ import type { DraftChatPlayerContext } from '@/lib/draft-room/draft-chat-player-
 import { redactPollForViewer } from '@/lib/chat-core/messagePolls'
 import { isSameSiteRelativePath } from '@/lib/rich-message/safeMedia'
 
-export type DraftChatMessageCategory =
+type DraftChatMessageCategory =
   | 'USER_MESSAGE'
   | 'SYSTEM_PICK_NOTIFICATION'
   | 'COMMISSIONER_SYSTEM_MESSAGE'
@@ -18,9 +18,9 @@ export type DraftChatMessageCategory =
   | 'POLL_MESSAGE'
 
 /** Semantic origin for UI / analytics (not necessarily DB `source`). */
-export type DraftChatSourceContext = 'draft_room' | 'league_chat' | 'chimmy' | 'system' | 'unknown'
+type DraftChatSourceContext = 'draft_room' | 'league_chat' | 'chimmy' | 'system' | 'unknown'
 
-export type DraftChatReactionWire = {
+type DraftChatReactionWire = {
   emoji: string
   count: number
   userIds: string[]
@@ -44,7 +44,7 @@ export type DraftPickMetaWire = {
   aiManager?: boolean | null
 }
 
-export type DraftChatAiMetadataWire = {
+type DraftChatAiMetadataWire = {
   aiRecommendationType?: string | null
   confidence?: number | null
   rationale?: string | null

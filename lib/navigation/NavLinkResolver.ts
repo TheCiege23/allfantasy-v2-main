@@ -52,7 +52,7 @@ export interface NavGroup {
   items: NavLinkItem[]
 }
 
-export const PRIMARY_NAV_GROUPS: NavGroup[] = [
+const PRIMARY_NAV_GROUPS: NavGroup[] = [
   { id: "home", label: "Home", items: [{ href: "/dashboard", label: "Home" }] },
   {
     id: "play",

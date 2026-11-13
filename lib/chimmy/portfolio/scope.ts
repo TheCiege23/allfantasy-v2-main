@@ -1,6 +1,6 @@
 import { readPortfolioState, type PortfolioHorizon, type PortfolioIntent, type PortfolioState } from './types'
 
-export type PortfolioRequest = {
+type PortfolioRequest = {
   intent: PortfolioIntent
   horizon: PortfolioHorizon
   across: boolean

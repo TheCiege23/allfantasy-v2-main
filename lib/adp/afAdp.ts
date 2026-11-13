@@ -27,7 +27,7 @@ export const AF_ADP_WEIGHTS: BlendWeights = normalizeBlendWeights({
   custom: 0,
 })
 
-export interface AfAdpResult {
+interface AfAdpResult {
   afAdp: number
   /** Share each input actually contributed after shrinkage and presence; sums to 1. */
   contributions: { market: number; imported: number; af: number }

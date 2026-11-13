@@ -17,7 +17,7 @@ export type LeagueEngineSubsystem =
   | 'matchup'
   | 'api'
 
-export type LeagueEngineLogEvent = {
+type LeagueEngineLogEvent = {
   subsystem: LeagueEngineSubsystem
   action: string
   leagueId?: string

@@ -89,7 +89,7 @@ const STASH_SLOTS = new Set(['TAXI', 'DEVY', 'PROSPECT', 'CAMPUS', 'RIGHTS'])
 const SLOT_KEY = /^[A-Z][A-Z0-9_+/]{0,23}$/
 
 /** "FLEX_WR_RB" -> "FLEX (WR/RB)", "IL_PLUS" -> "IL+". Position abbreviations read the same in both languages. */
-export function slotLabel(key: string): string {
+function slotLabel(key: string): string {
   const k = key.toUpperCase()
   if (k.endsWith('_PLUS')) return `${k.slice(0, -5)}+`
   if (k.startsWith('FLEX_') && k.length > 5) return `FLEX (${k.slice(5).split('_').join('/')})`
@@ -136,7 +136,7 @@ const isOvernightPause = (v: unknown): v is OvernightPause =>
  * read "lower score last week is chopped" while the rules page said "last period" — the tiebreak compares
  * the previous PERIOD there (lib/guillotine/eliminationPeriods.ts). Absent: one-week wording.
  */
-export type ChangeContext = Pick<RuleSnapshot, 'sport'> & Partial<Pick<RuleSnapshot, 'chopPeriodWeeks'>>
+type ChangeContext = Pick<RuleSnapshot, 'sport'> & Partial<Pick<RuleSnapshot, 'chopPeriodWeeks'>>
 
 /** The copy key for one tiebreak step: the previous-period step says "last period" in a two-week league. */
 function tiebreakKey(step: string, chopPeriodWeeks: number | null | undefined): string {

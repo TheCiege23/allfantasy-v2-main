@@ -60,16 +60,16 @@ import '@/components/core-app/af-comms.css'
  *             membership — league chat's route excludes those channels by design.
  */
 
-export type ConversationLeague = {
+type ConversationLeague = {
   id: string
   name: string
   isCommissioner?: boolean
   teamCount?: number | null
 }
 
-export type LeagueConversationSurface = 'drawer' | 'page' | 'draft_room'
+type LeagueConversationSurface = 'drawer' | 'page' | 'draft_room'
 
-export type LeagueConversationProps = {
+type LeagueConversationProps = {
   reviewedDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
   leagueId: string
   leagueName?: string | null

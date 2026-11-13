@@ -3,7 +3,7 @@
  * Used to populate ChimmyResponseStructure when the model follows the public contract.
  */
 
-export type ParsedOrchestrationSections = {
+type ParsedOrchestrationSections = {
   direct: string
   why?: string
   tool?: string

@@ -14,11 +14,11 @@ import path from 'node:path'
 import opentype, { type Font, type GlyphPoint } from 'opentype.js'
 import catalog from './tribeCatalog.json'
 
-export type TribeFrame = 'shield' | 'roundel' | 'hex' | 'pennant'
+type TribeFrame = 'shield' | 'roundel' | 'hex' | 'pennant'
 export type TribeKit = 'football' | 'basketball' | 'baseball' | 'hockey' | 'soccer'
 export type TribeSport = 'nfl' | 'ncaaf' | 'nba' | 'ncaab' | 'mlb' | 'nhl' | 'soccer'
-export type TribeCatalogEntry = { id: string; name: string; mascot: string; primary: string; secondary: string; frame: string }
-export type TribeColors = { primary?: string | null; secondary?: string | null }
+type TribeCatalogEntry = { id: string; name: string; mascot: string; primary: string; secondary: string; frame: string }
+type TribeColors = { primary?: string | null; secondary?: string | null }
 
 export const TRIBE_KITS: readonly TribeKit[] = ['football', 'basketball', 'baseball', 'hockey', 'soccer']
 export const TRIBE_SPORT_KIT: Record<TribeSport, TribeKit> = {
@@ -27,7 +27,7 @@ export const TRIBE_SPORT_KIT: Record<TribeSport, TribeKit> = {
 const COLLEGE = new Set<TribeSport>(['ncaaf', 'ncaab'])
 const INK = '#0b0d14'
 const HEX_RE = /^#[0-9a-f]{6}$/
-export const TRIBE_NAME_MAX = 32
+const TRIBE_NAME_MAX = 32
 
 /** `#rrggbb` (case-insensitive, optional leading #) → lowercase `#rrggbb`, else null. */
 export function normalizeTribeHex(value: unknown): string | null {
@@ -141,7 +141,7 @@ function shade(c: string, l = 0.0, s = 0.0): string {
   return tohex(hlsToRgb(h, Math.max(0, Math.min(1, li + l)), Math.max(0, Math.min(1, sa + s))))
 }
 
-export type TribePalette = Record<string, string>
+type TribePalette = Record<string, string>
 
 /** Port of `palette()` — the derived shades every layer resolves its colour classes against. */
 export function tribePalette(primary: string, secondary: string): TribePalette {
@@ -267,7 +267,7 @@ function drawGlyph(points: GlyphPoint[], pen: SvgPathPen, sc: number, dx: number
 }
 
 /** Port of `text_path()`: outline `txt` centred on `cx`, auto-shrinking to `maxW`. */
-export function tribeTextPath(txt: string, cx: number, baseline: number, size: number, maxW: number, tracking = 0.04): { svg: string; size: number } {
+function tribeTextPath(txt: string, cx: number, baseline: number, size: number, maxW: number, tracking = 0.04): { svg: string; size: number } {
   const font = loadFont()
   const upm = font.unitsPerEm
   const build = (sz: number): [string[], number] => {
@@ -371,7 +371,7 @@ ${pent(0, 0, 0, 1.6)}${pent(0, -44, 180, 1.1)}${pent(42, -14, 180, 1.1)}${pent(2
 }
 
 // ---------- mascot loading ----------
-export const TRIBE_MASCOT_DIR = path.join(process.cwd(), 'lib', 'survivor', 'tribe-art', 'mascots')
+const TRIBE_MASCOT_DIR = path.join(process.cwd(), 'lib', 'survivor', 'tribe-art', 'mascots')
 const mascotCache = new Map<string, Record<string, string>>()
 
 /** Parse `<g id="X">…</g><!-- /X -->` layers. `id` must already be a catalogue id. */
@@ -418,7 +418,7 @@ function mascotMarkup(tribe: TribeCatalogEntry, kit: TribeKit, P: TribePalette):
   return resolveClasses((L[`back-${kit}`] ?? '') + L.body + (L[`front-${kit}`] ?? ''), P)
 }
 
-export type BuildTribeCrestInput = { tribe: TribeCatalogEntry; sport: TribeSport; colors?: TribeColors; name?: string | null }
+type BuildTribeCrestInput = { tribe: TribeCatalogEntry; sport: TribeSport; colors?: TribeColors; name?: string | null }
 
 /** Port of `crest()`. `name` overrides the banner/title (a renamed tribe); defaults to the catalogue name. */
 export function buildTribeCrest({ tribe, sport, colors, name }: BuildTribeCrestInput): string {
@@ -464,7 +464,7 @@ ${varsity}
 </svg>`
 }
 
-export type BuildTribeMarkInput = { tribe: TribeCatalogEntry; kit: TribeKit; colors?: TribeColors; name?: string | null }
+type BuildTribeMarkInput = { tribe: TribeCatalogEntry; kit: TribeKit; colors?: TribeColors; name?: string | null }
 
 /** Port of `mark()`: circular avatar (mascot + kit on field, no banner). */
 export function buildTribeMark({ tribe, kit, colors, name }: BuildTribeMarkInput): string {

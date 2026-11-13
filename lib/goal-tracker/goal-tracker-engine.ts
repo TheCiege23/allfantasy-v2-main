@@ -15,15 +15,15 @@ import { getAgeCurve } from '@/lib/trade-engine/sport-tuning-registry'
 // Types
 // ---------------------------------------------------------------------------
 
-export const GoalTypeEnum = z.enum([
+const GoalTypeEnum = z.enum([
   'win_now', 'sustainable_contender', 'fast_rebuild', 'value_accumulation',
   'youth_movement', 'pick_collection', 'prospect_pipeline', 'c2c_dual_window_balance',
   'devy_pipeline_build', 'risk_control', 'aggressive_upside', 'commissioner_defined_custom_goal',
 ])
 
-export type TrendDirection = 'improving' | 'stable' | 'drifting' | 'off_track'
+type TrendDirection = 'improving' | 'stable' | 'drifting' | 'off_track'
 
-export interface MoveRecord {
+interface MoveRecord {
   type: 'trade' | 'waiver_add' | 'waiver_drop' | 'lineup_change' | 'draft_pick'
   description: string
   assetsGained: string[]
@@ -38,7 +38,7 @@ export interface MoveRecord {
   timestamp: string
 }
 
-export interface GoalTrackerPlayer {
+interface GoalTrackerPlayer {
   name: string
   position: string
   age: number | null
@@ -69,9 +69,9 @@ export const GoalTrackerInputSchema = z.object({
     timestamp: z.string(),
   })).default([]),
 })
-export type GoalTrackerInput = z.infer<typeof GoalTrackerInputSchema>
+type GoalTrackerInput = z.infer<typeof GoalTrackerInputSchema>
 
-export interface GoalTrackerResult {
+interface GoalTrackerResult {
   currentGoal: string
   goalAlignmentScore: number
   trendDirection: TrendDirection

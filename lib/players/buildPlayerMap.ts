@@ -5,7 +5,7 @@ import { toImageUrl } from '@/lib/media/imageUrl'
  * `resolveHeadshotCandidates` — RI headshot first, then official / ESPN / Sleeper.
  */
 
-export type EnrichedPlayer = {
+type EnrichedPlayer = {
   sleeper_id: string
   ri_id?: string
   espn_id?: string
@@ -24,7 +24,7 @@ export type EnrichedPlayer = {
 }
 
 /** Normalize dashboard / league sport strings to headshot routing keys. */
-export function normalizeHeadshotSport(sport: string): string {
+function normalizeHeadshotSport(sport: string): string {
   const u = sport.toUpperCase()
   if (u === 'NCAAF') return 'NCAAFB'
   if (u === 'NCAAB') return 'NCAABB'
@@ -32,7 +32,7 @@ export function normalizeHeadshotSport(sport: string): string {
   return u
 }
 
-export function espnHeadshotUrl(espnId: string, sportUpper: string): string | null {
+function espnHeadshotUrl(espnId: string, sportUpper: string): string | null {
   const s = normalizeHeadshotSport(sportUpper)
   const pathBySport: Record<string, string> = {
     NFL: 'nfl',

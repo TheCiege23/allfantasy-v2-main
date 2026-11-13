@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 
-export type SpecialtyLeagueVariant = 'tournament' | 'survivor' | 'big_brother' | 'guillotine'
+type SpecialtyLeagueVariant = 'tournament' | 'survivor' | 'big_brother' | 'guillotine'
 
-export type SpecialtyLeagueMood =
+type SpecialtyLeagueMood =
   | 'hoh'
   | 'veto'
   | 'eviction'

@@ -22,7 +22,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 const PREFIX = 'af-core-home:'
 
-export function readViewState(key: string): string | null {
+function readViewState(key: string): string | null {
   try {
     return window.sessionStorage.getItem(PREFIX + key)
   } catch {
@@ -30,7 +30,7 @@ export function readViewState(key: string): string | null {
   }
 }
 
-export function writeViewState(key: string, value: string | null): void {
+function writeViewState(key: string, value: string | null): void {
   try {
     if (value == null) window.sessionStorage.removeItem(PREFIX + key)
     else window.sessionStorage.setItem(PREFIX + key, value)

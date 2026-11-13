@@ -1,4 +1,4 @@
-export type TeamRisk = {
+type TeamRisk = {
   rosterId: string
   teamName: string
   elimRisk: number
@@ -6,7 +6,7 @@ export type TeamRisk = {
   riskReason: string
 }
 
-export type EliminationRiskRankings = {
+type EliminationRiskRankings = {
   teams: TeamRisk[]
   mostLikelyEliminated: string | null
   biggestUpsetRisk: string | null

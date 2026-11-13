@@ -45,11 +45,11 @@ import type { ImportCoverage, ImportCoverageKey } from '@/lib/league-import/type
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 
-export type LeagueDataCoverageKey = 'seasons' | 'standings' | 'drafts' | 'trades' | 'transactions' | 'lineups'
+type LeagueDataCoverageKey = 'seasons' | 'standings' | 'drafts' | 'trades' | 'transactions' | 'lineups'
 
 export type LeagueDataCoverageStatus = 'available' | 'importing' | 'not_published' | 'unsupported' | 'none' | 'unknown'
 
-export type LeagueDataCoverageRow = {
+type LeagueDataCoverageRow = {
   key: LeagueDataCoverageKey
   label: string
   status: LeagueDataCoverageStatus
@@ -71,7 +71,7 @@ export type LeagueDataCoverage = {
  * rows are still data. Without it a league whose only trades are undated would read as having
  * none.
  */
-export type SeasonRead = { seasons: number[]; undated: number } | null
+type SeasonRead = { seasons: number[]; undated: number } | null
 
 export type LeagueDataCoverageInput = {
   platform: string | null | undefined

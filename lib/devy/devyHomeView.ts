@@ -6,7 +6,7 @@
  */
 import { DEVY_LIFECYCLE_STATE } from '@/lib/devy/types'
 
-export type DevyStashRightRow = {
+type DevyStashRightRow = {
   id: string
   devyPlayerId: string
   state: string
@@ -14,7 +14,7 @@ export type DevyStashRightRow = {
   promotedProPlayerId?: string | null
 }
 
-export type DevyStashPlayerRow = {
+type DevyStashPlayerRow = {
   id: string
   name: string
   position: string
@@ -61,7 +61,7 @@ const LEAVING_STATES = new Set<string>([
   DEVY_LIFECYCLE_STATE.PROMOTION_ELIGIBLE,
 ])
 
-export function devyClassLabel(classYear: number | null | undefined): string | null {
+function devyClassLabel(classYear: number | null | undefined): string | null {
   if (classYear == null || !Number.isFinite(classYear)) return null
   if (classYear <= 1) return 'Fr'
   if (classYear === 2) return 'So'
@@ -139,7 +139,7 @@ export function devyYearTag(item: Pick<DevyStashItem, 'declared' | 'draftEligibl
   return item.draftEligibleYear != null ? String(item.draftEligibleYear) : 'TBD'
 }
 
-export type DevyFeedEventRow = {
+type DevyFeedEventRow = {
   id: string
   eventType: string
   devyPlayerId: string | null

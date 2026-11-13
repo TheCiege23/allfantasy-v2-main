@@ -40,7 +40,7 @@ import {
 } from './guillotineHomeModel'
 import gl from './guillotine-specialty.module.css'
 
-export interface GuillotineSpecialtySummary {
+interface GuillotineSpecialtySummary {
   weekOrPeriod: number
   dangerTiers?: DangerTierRow[]
   myRosterId?: string | null

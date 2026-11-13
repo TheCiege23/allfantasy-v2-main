@@ -4,4 +4,3 @@ export {
   getHighestWinPctLeaderboard,
   getMostActiveLeaderboard,
 } from './PlatformLeaderboardsService'
-export type { LeaderboardEntry, LeaderboardResult } from './PlatformLeaderboardsService'

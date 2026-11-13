@@ -5,7 +5,7 @@
 
 import type { BotArchetypeId } from "./types"
 
-export type PersonalityTone =
+type PersonalityTone =
   | "calm"
   | "analytical"
   | "cocky"
@@ -15,11 +15,11 @@ export type PersonalityTone =
   | "quiet"
   | "strategic"
 
-export type ConfidenceStyle = "measured" | "bold" | "understated"
-export type ReactionStyle = "minimal" | "balanced" | "expressive"
-export type TradePosture = "patient" | "aggressive" | "value_first"
-export type CelebrationStyle = "subtle" | "energetic" | "dry"
-export type FrustrationStyle = "stoic" | "honest" | "deflecting"
+type ConfidenceStyle = "measured" | "bold" | "understated"
+type ReactionStyle = "minimal" | "balanced" | "expressive"
+type TradePosture = "patient" | "aggressive" | "value_first"
+type CelebrationStyle = "subtle" | "energetic" | "dry"
+type FrustrationStyle = "stoic" | "honest" | "deflecting"
 
 export type BotPersonalityProfile = {
   botId?: string

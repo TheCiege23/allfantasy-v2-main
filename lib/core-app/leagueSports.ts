@@ -47,7 +47,7 @@ export function leagueSportIcon(key: string | null): string {
   return key ? SPORT_ICON[key] ?? '' : ''
 }
 
-export type LeagueSportCount = { key: string | null; count: number }
+type LeagueSportCount = { key: string | null; count: number }
 
 export type LeagueSportSection<T> = { key: string | null; rows: T[] }
 

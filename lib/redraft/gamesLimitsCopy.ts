@@ -4,7 +4,7 @@
  * so the shared translation table is not a merge point for it.
  */
 
-export type GamesLimitsCopy = {
+type GamesLimitsCopy = {
   title: string
   subtitle: string
   needsDaily: string

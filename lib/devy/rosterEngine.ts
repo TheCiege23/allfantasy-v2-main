@@ -2,7 +2,7 @@ import type { DevyLeague, DevyPlayerState, DevyRookieTransition, DevyTaxiSlot, P
 import { prisma } from '@/lib/prisma'
 import { getScoringEligibility } from '@/lib/devy/scoringEligibilityEngine'
 
-export type TaxiEligibilityCheck = { eligible: boolean; reason: string }
+type TaxiEligibilityCheck = { eligible: boolean; reason: string }
 
 function eligibilityString(bucketState: string, playerType: string): string {
   return getScoringEligibility(bucketState, playerType)
@@ -76,7 +76,7 @@ export async function promoteToActive(
   })
 }
 
-export async function validateTaxiEligibility(
+async function validateTaxiEligibility(
   leagueId: string,
   playerId: string,
   season: number,

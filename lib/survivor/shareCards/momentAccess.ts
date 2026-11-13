@@ -12,7 +12,7 @@
  */
 import type { ShareMomentType } from './types'
 
-export interface MomentAccessFacts {
+interface MomentAccessFacts {
   type: ShareMomentType
   subjectUserId: string
   final: boolean
@@ -41,7 +41,7 @@ export function isMomentPublic(moment: MomentAccessFacts, shareCardsEnabled: boo
   return shareCardsEnabled && moment.final && moment.publishedAt != null
 }
 
-export type MomentImageAccess = 'public' | 'private' | 'not_found'
+type MomentImageAccess = 'public' | 'private' | 'not_found'
 
 /**
  * The PNG route's decision. `public` is cacheable forever by anyone; `private` is the subject's

@@ -3,8 +3,6 @@
 import type { ComponentProps } from "react"
 import { MobileNavigationDrawer } from "./MobileNavigationDrawer"
 
-export type { MobileNavigationDrawerProps as MobileNavDrawerProps } from "./MobileNavigationDrawer"
-
 /**
  * Spec-aligned responsive mobile navigation drawer wrapper.
  */

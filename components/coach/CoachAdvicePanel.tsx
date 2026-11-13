@@ -136,7 +136,7 @@ export type LineupOptimizationRequester = (input: {
   rosterSlots?: string[];
 }) => Promise<LineupOptimizationResponse>;
 
-export interface CoachAdvicePanelProps {
+interface CoachAdvicePanelProps {
   leagueId?: string;
   leagueName?: string;
   week?: number;

@@ -20,7 +20,7 @@ const DEFAULT_PARAMS: Record<string, LearnedCompositeParams> = {
   UNK: { injuryInfluence: 0.30, starterBenchSplit: 0.75, luckDampening: 2.0, futureCapitalInfluence: 0.05 },
 }
 
-export function getDefaultCompositeParams(segmentKey: string): LearnedCompositeParams {
+function getDefaultCompositeParams(segmentKey: string): LearnedCompositeParams {
   const key = segmentKey.replace(/_inseason|_offseason|_postDraft|_postSeason/, '')
   return DEFAULT_PARAMS[key] ?? DEFAULT_PARAMS.UNK
 }

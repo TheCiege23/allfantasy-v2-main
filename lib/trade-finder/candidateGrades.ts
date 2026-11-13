@@ -3,7 +3,7 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { PricedAsset, TradeCandidate } from './candidate-generator'
 
 /** THE grade for a finder candidate, from the viewer's side (team A). */
-export type FinderCandidateGrade =
+type FinderCandidateGrade =
   | { graded: true; letter: 'A' | 'B' | 'C' | 'D' | 'F'; partnerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; label: string; giveValue: number; getValue: number }
   | { graded: false; reason: string }
 

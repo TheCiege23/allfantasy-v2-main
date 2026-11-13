@@ -16,7 +16,7 @@ import { NBA_DESIGN_TO_LIVE_KEYS, NFL_DESIGN_TO_LIVE_KEYS, liveRulesForScoringLa
 
 export type CustomOverrides = Record<string, number>
 
-export type CustomScoringField = {
+type CustomScoringField = {
   key: string
   label: string
   /** The starting point's value (Half PPR or Points). */
@@ -27,7 +27,7 @@ export type CustomScoringField = {
 }
 
 /** Values accept at most two decimals (0.04 per passing yard is the finest the presets use). */
-export const CUSTOM_SCORING_STEP = 0.01
+const CUSTOM_SCORING_STEP = 0.01
 
 /** Sane bounds per stat. Gains cannot go negative and penalties cannot go positive. */
 const RANGES: Readonly<Record<LabelSport, Readonly<Record<string, readonly [number, number]>>>> = {

@@ -6,7 +6,7 @@ export type WaiverPlayerRef = {
   tags?: string[];
 };
 
-export type WaiverSuggestionAI = {
+type WaiverSuggestionAI = {
   narrative?: string[];
   messageTemplate?: string;
   tags?: string[];

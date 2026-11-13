@@ -24,7 +24,7 @@ import {
   BillingSettingsSection,
 } from "./sections"
 
-export type SettingsAppProps = {
+type SettingsAppProps = {
   uploadLeagueId: string | null
   accountCreatedAt: string | null
   planLabel: string | null

@@ -27,7 +27,7 @@ import { fingerprint } from './provenance'
 const FIXED_NOW = new Date('2025-01-01T00:00:00.000Z')
 
 /** Narrow read-only port: exposes only the facts the pure composers need, provider-neutral + deterministic. */
-export interface CompositionEvidencePort {
+interface CompositionEvidencePort {
   listLeagueRefs(): string[]
   readLeagueHealth(ref: string): LeagueHealthResult | null
   readLeagueSignals(ref: string): DecisionOsAttentionSignal[]
@@ -104,7 +104,7 @@ export class CorpusEvidencePort implements CompositionEvidencePort {
 
 // ── Composition execution matrix ──────────────────────────────────────────────
 
-export type CompositionStatus =
+type CompositionStatus =
   | 'production-parity-executed'
   | 'pure-derivation-executed'
   | 'compatibility-only'
@@ -112,7 +112,7 @@ export type CompositionStatus =
   | 'blocked-product-state'
   | 'failed'
 
-export type CompositionExecution = {
+type CompositionExecution = {
   subsystem: string
   entryPoint: string
   status: CompositionStatus

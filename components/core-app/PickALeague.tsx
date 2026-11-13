@@ -24,7 +24,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
  * the old empty state wasted the click it asked for.
  */
 
-export type PickALeagueProps = {
+type PickALeagueProps = {
   /** The /core segment this screen renders, e.g. 'waivers'. Rows link back to it. */
   tabKey: string
   title: string

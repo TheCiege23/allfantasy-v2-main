@@ -30,7 +30,7 @@ import {
   type DevyDefaultContract,
 } from '@/lib/league-concepts/devyDefaults'
 
-export type LeagueFoundationDefaultsInput = {
+type LeagueFoundationDefaultsInput = {
   sport: LeagueSport | string
   format: string
   draftType: string
@@ -38,7 +38,7 @@ export type LeagueFoundationDefaultsInput = {
   scoringPreset?: string | null
 }
 
-export type LeagueFoundationDefaults = {
+type LeagueFoundationDefaults = {
   sport: LeagueSport
   format: LeagueFormatId
   draftType: string

@@ -73,7 +73,7 @@ export type WeeklyTeamRoster = {
   players: readonly WeeklyRosterPlayer[]
 }
 
-export type WeeklyMaxPfRow = {
+type WeeklyMaxPfRow = {
   teamId: string
   week: number
   /** The optimal-lineup total. THE metric. */
@@ -90,14 +90,14 @@ export type WeeklyMaxPfRow = {
   optimal: OptimalLineupResult
 }
 
-export type WeeklyMaxPfResult = {
+type WeeklyMaxPfResult = {
   week: number
   rows: WeeklyMaxPfRow[]
   /** Teams that appeared in `slotsForWeek` scope but had no rostered players that week. */
   teamsWithNoRoster: string[]
 }
 
-export type ComputeWeeklyMaxPfInput = {
+type ComputeWeeklyMaxPfInput = {
   week: number
   /** The starting-lineup seats for THIS week. See `slotsForWeek` on the season input. */
   slots: readonly LineupSlotSpec[]
@@ -142,7 +142,7 @@ export function computeWeeklyMaxPf(input: ComputeWeeklyMaxPfInput): WeeklyMaxPfR
   return { week: input.week, rows, teamsWithNoRoster: teamsWithNoRoster.sort() }
 }
 
-export type ComputeSeasonMaxPfInput = {
+type ComputeSeasonMaxPfInput = {
   regularSeasonFinalWeek: number
   /** Rosters per week. Weeks beyond the final week may be supplied; they are ignored. */
   weeks: readonly { week: number; teams: readonly WeeklyTeamRoster[] }[]
@@ -160,7 +160,7 @@ export type ComputeSeasonMaxPfInput = {
   slotsForWeek: (week: number) => readonly LineupSlotSpec[]
 }
 
-export type ComputeSeasonMaxPfResult = {
+type ComputeSeasonMaxPfResult = {
   /** Per-team per-week values, ready for `computeRegularSeasonMaxPf`. */
   weeklyValues: WeeklyTeamValue[]
   weeks: WeeklyMaxPfResult[]

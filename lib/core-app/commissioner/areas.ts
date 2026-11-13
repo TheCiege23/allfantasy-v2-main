@@ -178,7 +178,7 @@ export function buildLeagueAreas(league: HubLeague, language = 'en'): LeagueArea
 
 // ── Guided workflows ────────────────────────────────────────────────────────
 
-export type WorkflowStep = {
+type WorkflowStep = {
   title: string
   body: string
   link: HubLink | null
@@ -394,7 +394,7 @@ export type CommunityChannel = {
   link: HubLink | null
 }
 
-export type CommunitiesInput = {
+type CommunitiesInput = {
   league: HubLeague
   /** The viewer is `League.userId` — the only role the Discord bridge routes accept. */
   viewerIsOwner: boolean

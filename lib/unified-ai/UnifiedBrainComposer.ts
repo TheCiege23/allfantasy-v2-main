@@ -9,7 +9,7 @@ import { resolveConfidence } from "./AIConfidenceResolver"
 import { applyFactGuardToAnswer } from "./AIFactGuard"
 import { deterministicPayloadToContextSummary, type DeterministicSource } from "./DeterministicToAIContextBridge"
 
-export interface UnifiedBrainInput {
+interface UnifiedBrainInput {
   envelope: AIContextEnvelope
   modelOutputs: ModelOutput[]
   deterministicSource?: DeterministicSource

@@ -33,7 +33,7 @@ export interface RedraftDataAvailability {
   tradeValues: DataState
 }
 
-export interface RedraftFreshness {
+interface RedraftFreshness {
   /** ISO timestamp the context was assembled. */
   generatedAt: string
   /** ISO timestamp of newest finalized PlayerWeeklyScore used, if any. */

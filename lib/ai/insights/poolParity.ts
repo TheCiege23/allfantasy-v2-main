@@ -18,7 +18,7 @@
  */
 import type { InsightPool } from "./types"
 
-export type PoolParityResult = {
+type PoolParityResult = {
   /** 0–100 composite parity score. */
   parityScore: number
   parityLabel: "elite" | "competitive" | "moderate" | "runaway"

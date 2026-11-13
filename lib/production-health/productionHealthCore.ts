@@ -61,7 +61,7 @@ export type FreshnessStatus =
   | 'pending'
   | 'unavailable'
 
-export type FreshnessThresholds = {
+type FreshnessThresholds = {
   /** Below this many hours → "fresh". Default 6. */
   freshUnderH?: number
   /** Below this → "recent". At/after the stale threshold → "stale". Default 24. */
@@ -70,7 +70,7 @@ export type FreshnessThresholds = {
   veryStaleAfterH?: number
 }
 
-export type FreshnessReport = {
+type FreshnessReport = {
   status: FreshnessStatus
   ageHours: number | null
   lastSyncedAt: string | null
@@ -78,14 +78,14 @@ export type FreshnessReport = {
   summary: string
 }
 
-export function ageHoursFrom(iso: string | Date | null | undefined, now?: number): number | null {
+function ageHoursFrom(iso: string | Date | null | undefined, now?: number): number | null {
   if (!iso) return null
   const ms = iso instanceof Date ? iso.getTime() : Date.parse(iso)
   if (!Number.isFinite(ms)) return null
   return ((now ?? Date.now()) - ms) / 3_600_000
 }
 
-export function freshnessTrafficLight(status: FreshnessStatus): TrafficLight {
+function freshnessTrafficLight(status: FreshnessStatus): TrafficLight {
   switch (status) {
     case 'fresh':
     case 'recent':
@@ -181,7 +181,7 @@ export type JobRunRecord = {
   durationMs?: number | null
 }
 
-export type NormalizedRunStatus = 'success' | 'failed' | 'partial' | 'running' | 'unknown'
+type NormalizedRunStatus = 'success' | 'failed' | 'partial' | 'running' | 'unknown'
 
 export function normalizeRunStatus(status: string | null | undefined): NormalizedRunStatus {
   const s = String(status ?? '').trim().toLowerCase()
@@ -192,7 +192,7 @@ export function normalizeRunStatus(status: string | null | undefined): Normalize
   return 'unknown'
 }
 
-export type JobHealth = {
+type JobHealth = {
   jobName: string
   label: string
   trafficLight: TrafficLight
@@ -217,7 +217,7 @@ function runTime(run: JobRunRecord): number {
   return Number.isFinite(ms) ? ms : 0
 }
 
-export type ExpectedJob = {
+type ExpectedJob = {
   jobName: string
   label?: string
   /** A successful run older than this many hours is "stale". Default 24. */
@@ -375,7 +375,7 @@ export type CronState =
   | "provider_offline"
   | "cache_stale"
 
-export const CRON_STATE_TRAFFIC_LIGHT: Record<CronState, TrafficLight> = {
+const CRON_STATE_TRAFFIC_LIGHT: Record<CronState, TrafficLight> = {
   healthy: "healthy",
   running: "healthy",
   warning: "warning",
@@ -387,7 +387,7 @@ export const CRON_STATE_TRAFFIC_LIGHT: Record<CronState, TrafficLight> = {
   cache_stale: "warning",
 }
 
-export type ClassifyCronInput = {
+type ClassifyCronInput = {
   /** Whether a route file backs this cron's path. */
   routeExists: boolean
   /** Operator-disabled (kept in vercel.json but intentionally inactive). */
@@ -400,7 +400,7 @@ export type ClassifyCronInput = {
   cacheStale?: boolean
 }
 
-export type CronStateResult = {
+type CronStateResult = {
   state: CronState
   trafficLight: TrafficLight
   message: string
@@ -457,7 +457,7 @@ export function classifyCronState(input: ClassifyCronInput): CronStateResult {
 
 // ───────────────────────────── Provider health ────────────────────────────
 
-export type ProviderSyncRecord = {
+type ProviderSyncRecord = {
   provider: string
   configured?: boolean
   lastSuccessAt?: string | Date | null
@@ -564,14 +564,14 @@ export function computeProviderHealth(
 
 // ───────────────────────────── Cache health ───────────────────────────────
 
-export type CacheScopeSummary = {
+type CacheScopeSummary = {
   name: string
   count: number
   lastUpdatedAt?: string | Date | null
   expiresAt?: string | Date | null
 }
 
-export type CacheDiagnostic = {
+type CacheDiagnostic = {
   name: string
   trafficLight: TrafficLight
   count: number

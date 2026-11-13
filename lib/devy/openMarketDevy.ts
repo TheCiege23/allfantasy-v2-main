@@ -25,7 +25,7 @@ import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-
  * name with a pro would silently be priced as the pro.
  */
 
-export const DEVY_ID_PREFIX = 'devy:'
+const DEVY_ID_PREFIX = 'devy:'
 
 export function devyIdOf(asset: TradeAssetInput): string | null {
   if (asset.kind !== 'player') return null
@@ -104,7 +104,7 @@ export async function loadDevyCandidates(
   }
 }
 
-export type OpenMarketDevySearchRow = {
+type OpenMarketDevySearchRow = {
   playerId: string
   name: string
   position: string | null

@@ -25,7 +25,7 @@
 
 export const TIEBREAKER_ORDER_KEY = 'tiebreaker_order'
 
-export const TIEBREAKER_KEYS = ['head_to_head', 'points_for', 'points_against', 'all_play', 'coin_flip'] as const
+const TIEBREAKER_KEYS = ['head_to_head', 'points_for', 'points_against', 'all_play', 'coin_flip'] as const
 export type TiebreakerKey = (typeof TIEBREAKER_KEYS)[number]
 
 const KNOWN: ReadonlySet<string> = new Set(TIEBREAKER_KEYS)
@@ -48,7 +48,7 @@ export function readTiebreakerOrder(settings: unknown): TiebreakerKey[] | null {
   return parsed.ok ? parsed.value : null
 }
 
-export type TiebreakerOrderInput = { ok: true; value: TiebreakerKey[] | null } | { ok: false; error: string }
+type TiebreakerOrderInput = { ok: true; value: TiebreakerKey[] | null } | { ok: false; error: string }
 
 /**
  * Validate a save: a list of known keys, each at most once, or null / [] to go back to the default.

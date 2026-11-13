@@ -13,7 +13,7 @@ import { CopyLinkAction } from "./CopyLinkAction";
 import { NativeShareAction } from "./NativeShareAction";
 import { PlatformShareActions } from "./PlatformShareActions";
 
-export interface ShareModalProps {
+interface ShareModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   payload: SharePayload;

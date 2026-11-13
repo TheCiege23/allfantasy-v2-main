@@ -27,7 +27,7 @@ export const LANDING_VIEW_DEDUPE_COOKIE = "af_lv_seen"
 /** 30 minutes, in seconds. */
 export const LANDING_VIEW_DEDUPE_WINDOW_SECONDS = 30 * 60
 
-export type LandingViewDecision =
+type LandingViewDecision =
   | { accept: true }
   | { accept: false; reason: "no_anon_id" | "duplicate_in_window" }
 

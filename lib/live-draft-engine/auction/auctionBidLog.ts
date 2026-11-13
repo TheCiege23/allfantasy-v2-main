@@ -52,7 +52,7 @@ type AuctionBidDelegate = {
 }
 
 /** Enough for any real auction (rounds × teams × a few raises each) without an unbounded read. */
-export const MAX_AUCTION_BIDS_READ = 2000
+const MAX_AUCTION_BIDS_READ = 2000
 
 function delegate(): AuctionBidDelegate | null {
   return (prisma as unknown as { auctionBid?: AuctionBidDelegate }).auctionBid ?? null
@@ -74,7 +74,7 @@ function warn(event: string, leagueId: string, error: unknown | null) {
   logStructured('warn', 'auction_bid_log', event, { leagueId, code })
 }
 
-export type RecordAuctionBidInput = {
+type RecordAuctionBidInput = {
   draftSessionId: string
   leagueId: string
   player: { playerId?: string | null; playerName: string }

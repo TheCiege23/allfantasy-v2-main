@@ -37,7 +37,7 @@ function evidenceFlagsFromBundle(bundle: LeagueEvidenceBundle): Partial<Record<E
   return flags
 }
 
-export type PersistOptions = {
+type PersistOptions = {
   seasons: string[]
   currentSeason: string
   sport?: string
@@ -50,7 +50,7 @@ export type PersistOptions = {
   evidenceWeeks?: number
 }
 
-export type PersistResult = {
+type PersistResult = {
   accounts: ValidationAccount[]
   imported: number
   skippedImmutable: number

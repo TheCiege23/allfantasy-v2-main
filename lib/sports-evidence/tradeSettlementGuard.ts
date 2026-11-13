@@ -14,7 +14,7 @@ import { isSportsDataEnabled } from './gates'
 import { CertifiedTradeIntegrationService, extractTradePlayerRefs, type TradeSafety } from './tradeIntegration'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
-export type TradeSettlementSportsDecision = {
+type TradeSettlementSportsDecision = {
   featureGateEnabled: boolean
   leagueId: string
   tradeId: string

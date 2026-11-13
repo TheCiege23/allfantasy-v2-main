@@ -67,7 +67,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  * `DraftHqAllRow.queuedCount`. The copy says which.
  */
 
-export type DraftHqBoardProps = {
+type DraftHqBoardProps = {
   data: DraftHqAllData
   /** Where the footer's "View all" goes — the full picker. */
   allHref: string
@@ -358,7 +358,7 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
   )
 }
 
-export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoardProps) {
+function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoardProps) {
   const rows = [...data.rows]
     .sort((a, b) => urgency(a) - urgency(b) || a.leagueName.localeCompare(b.leagueName))
     .slice(0, 10)

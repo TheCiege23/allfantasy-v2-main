@@ -17,7 +17,7 @@
  * keeps the value bounded.
  */
 
-export type ShrinkageOptions = {
+type ShrinkageOptions = {
   /** The rate assumed before any evidence. */
   priorRate: number
   /** How many pseudo-observations the prior is worth. */

@@ -36,7 +36,7 @@ export type RosterPlayer = {
   unifiedLowConfidence?: boolean
 }
 
-export type RosterState = {
+type RosterState = {
   starters: RosterPlayer[]
   bench: RosterPlayer[]
   ir: RosterPlayer[]
@@ -44,9 +44,9 @@ export type RosterState = {
   devy: RosterPlayer[]
 }
 
-export type SlotLimits = Record<RosterSectionKey, number>
+type SlotLimits = Record<RosterSectionKey, number>
 
-export type AvailablePoolPlayer = {
+type AvailablePoolPlayer = {
   id: string
   name: string
   position: string | null
@@ -86,7 +86,7 @@ export type LineupLockPayload = {
   perPlayerReasons?: Record<string, string>
 }
 
-export type RosterManagerOptions = {
+type RosterManagerOptions = {
   leagueId?: string
 }
 

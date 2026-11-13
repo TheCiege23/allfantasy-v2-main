@@ -11,7 +11,7 @@ export type OfficialNhlSkaterGame = {
   gameWinningGoals: number
 }
 
-export type NhlBoxIdentity = {
+type NhlBoxIdentity = {
   date: string
   team: string
   opponent: string

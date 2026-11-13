@@ -6,12 +6,12 @@
 import { reorderQueueByNeedRespectingLocks } from '@/lib/draft-queue-engine'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 
-export type DraftQueueAiReorderPlanMode =
+type DraftQueueAiReorderPlanMode =
   | 'persist'
   | 'suggestion_af_pro_required'
   | 'suggestion_ai_manage_disabled'
 
-export type DraftQueueAiReorderPlan = {
+type DraftQueueAiReorderPlan = {
   mode: DraftQueueAiReorderPlanMode
   /** Order to persist on `DraftQueue` when mode is `persist`; otherwise null. */
   persistOrder: QueueEntry[] | null

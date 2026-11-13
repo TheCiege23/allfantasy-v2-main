@@ -10,7 +10,7 @@ import { survivorIdolArt } from '@/lib/survivor/survivorIdolTypes'
  * Chimmy DM stays in the thread; this only acknowledges it. Owner-only by construction: the API
  * returns the viewer's own reveals.
  */
-export type IdolReveal = {
+type IdolReveal = {
   messageId: string
   playerName: string | null
   playerImageUrl: string | null

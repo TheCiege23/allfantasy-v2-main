@@ -49,7 +49,7 @@ export function fantraxTeamHash(key: string): number {
   return (hash % MODULUS) + 1
 }
 
-export type FantraxTeamKey = {
+type FantraxTeamKey = {
   /** Fantrax's own team id, when the snapshot carries one. */
   sourceTeamId?: string | null
   /** The team's display name — the only key a CSV-era snapshot has. */

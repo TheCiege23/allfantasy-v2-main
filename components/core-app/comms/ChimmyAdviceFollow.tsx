@@ -21,7 +21,7 @@ export type ChimmyAdviceRef = {
   vote?: ChimmyAdviceVote | null
 }
 
-export type ChimmyAdviceVote = 'did' | 'not'
+type ChimmyAdviceVote = 'did' | 'not'
 
 export function ChimmyAdviceFollow({
   advice,

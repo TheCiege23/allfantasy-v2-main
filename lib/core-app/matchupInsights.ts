@@ -13,7 +13,7 @@ import type { MatchupData, MatchupPlayerCell, MatchupSlot } from '@/lib/core-app
 export type WeekState = 'final' | 'live' | 'upcoming'
 
 /** A position family for the slot chip's tint. Null when the label is not one we know for the sport. */
-export type SlotFamily = 'qb' | 'rb' | 'wr' | 'te' | 'flex' | 'k'
+type SlotFamily = 'qb' | 'rb' | 'wr' | 'te' | 'flex' | 'k'
 
 const NFL: Record<string, SlotFamily> = {
   QB: 'qb',
@@ -135,7 +135,7 @@ function stillToScore(c: MatchupPlayerCell | null): c is MatchupPlayerCell {
   return c != null && !c.empty && !c.unavailable && (c.gameState === 'live' || c.gameState === 'upcoming')
 }
 
-export type SwingGame = {
+type SwingGame = {
   /** "CIN @ BAL" when home is known, "CIN vs BAL" when it is not. */
   label: string
   /** Earliest kickoff among the starters in it, ISO — formatted by the browser. */
@@ -209,7 +209,7 @@ export function swingGame(data: MatchupData, weekState: WeekState): SwingGame | 
   }
 }
 
-export type LineupHole = {
+type LineupHole = {
   slot: string
   name: string | null
   reason: 'empty' | 'bye' | 'out'
@@ -232,7 +232,7 @@ export function lineupHoles(data: MatchupData, weekState: WeekState): LineupHole
   return out
 }
 
-export type ToWin = {
+type ToWin = {
   /** Points you still need to pass their projected final; 0 when you already have. */
   needed: number
   theirProjected: number

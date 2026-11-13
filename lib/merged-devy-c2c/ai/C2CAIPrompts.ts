@@ -20,7 +20,7 @@ function jsonBlock(obj: unknown): string {
   return JSON.stringify(obj, null, 2)
 }
 
-export function buildC2CPipelineAdvisorPrompt(ctx: C2CPipelineAdvisorContext): { system: string; user: string } {
+function buildC2CPipelineAdvisorPrompt(ctx: C2CPipelineAdvisorContext): { system: string; user: string } {
   const system = `You are the Pipeline Advisor for College-to-Canton (C2C) leagues. You explain whether a team's college-to-pro pipeline is healthy.
 
 ${AI_RULE}
@@ -45,7 +45,7 @@ Explain whether this team's college-to-pro pipeline is healthy. Address short/mi
   return { system, user }
 }
 
-export function buildC2CCollegeVsRookiePrompt(ctx: C2CCollegeVsRookieContext): { system: string; user: string } {
+function buildC2CCollegeVsRookiePrompt(ctx: C2CCollegeVsRookieContext): { system: string; user: string } {
   const system = `You are the College vs Rookie Decision Assistant for C2C. You compare incoming pro rookies, current college assets, future college/rookie picks, and explain timeline-to-impact and risk.
 
 ${AI_RULE}
@@ -71,7 +71,7 @@ League: ${ctx.leagueId}, Sport: ${ctx.sport}. Compare: incoming rookies vs colle
   return { system, user }
 }
 
-export function buildC2CStartupDraftAssistantPrompt(ctx: C2CStartupDraftAssistantContext): { system: string; user: string } {
+function buildC2CStartupDraftAssistantPrompt(ctx: C2CStartupDraftAssistantContext): { system: string; user: string } {
   const system = `You are the C2C Startup Draft Assistant. You support merged or split startup formats and explain whether to prioritize pro production or college upside.
 
 ${AI_RULE}
@@ -96,7 +96,7 @@ Provide on-the-clock advice: pro vs college upside, contender/rebuilder fit, ris
   return { system, user }
 }
 
-export function buildC2CPromotionAdvisorPrompt(ctx: C2CPromotionAdvisorContext): { system: string; user: string } {
+function buildC2CPromotionAdvisorPrompt(ctx: C2CPromotionAdvisorContext): { system: string; user: string } {
   const system = `You are the Promotion Advisor for C2C. You advise whom to promote now vs later when timing is configurable, and explain standings impact on college and pro side.
 
 ${AI_RULE}
@@ -121,7 +121,7 @@ Advise: promote now vs later? Explain standings impact (college and pro) and roo
   return { system, user }
 }
 
-export function buildC2CHybridStrategyPrompt(ctx: C2CHybridStrategyContext): { system: string; user: string } {
+function buildC2CHybridStrategyPrompt(ctx: C2CHybridStrategyContext): { system: string; user: string } {
   const system = `You are the Hybrid Championship Strategy Assistant for C2C. When hybrid mode is enabled, you explain how college and pro scoring mix affects roster construction.
 
 ${AI_RULE}
@@ -145,7 +145,7 @@ League: ${ctx.leagueId}, Sport: ${ctx.sport}. Explain how college/pro mix affect
   return { system, user }
 }
 
-export function buildC2CTradeContextPrompt(ctx: C2CTradeContext): { system: string; user: string } {
+function buildC2CTradeContextPrompt(ctx: C2CTradeContext): { system: string; user: string } {
   const system = `You are the C2C Trade Context layer. You explain long-horizon trades involving college players, rookie picks, and future classes.
 
 ${AI_RULE}

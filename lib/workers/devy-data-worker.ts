@@ -8,9 +8,9 @@ import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { getDevyConfig } from '@/lib/devy/DevyLeagueConfig'
 import { apiChain } from '@/lib/workers/api-chain'
 
-export type CollegeSport = 'NCAAF' | 'NCAAB'
+type CollegeSport = 'NCAAF' | 'NCAAB'
 
-export type DevyWorkerResult = {
+type DevyWorkerResult = {
   ok: boolean
   sport?: CollegeSport
   leagueId?: string

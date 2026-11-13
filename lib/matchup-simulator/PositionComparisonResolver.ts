@@ -5,13 +5,13 @@
 
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
-export type PositionSlot = {
+type PositionSlot = {
   id: string
   label: string
   order: number
 }
 
-export type PositionComparisonRow = {
+type PositionComparisonRow = {
   slotId: string
   slotLabel: string
   teamAScore: number

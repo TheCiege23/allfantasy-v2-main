@@ -45,7 +45,7 @@ const ERROR_COPY: Record<string, [string, string]> = {
   not_open: ['This dispute is already closed.', 'Esta disputa ya está cerrada.'],
 }
 
-export type DisputeDeskProps = { leagueId: string }
+type DisputeDeskProps = { leagueId: string }
 
 export function DisputeDesk({ leagueId }: DisputeDeskProps) {
   const { language } = useOptionalLanguage()

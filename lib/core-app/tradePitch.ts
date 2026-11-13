@@ -48,7 +48,7 @@ export function agoLabel(ms: number): string {
   return `${Math.floor(days / 365)}y ago`
 }
 
-export function moveVerb(kind: MoveKind): string {
+function moveVerb(kind: MoveKind): string {
   if (kind === 'trade') return 'traded'
   if (kind === 'waiver') return 'won a claim'
   return 'moved a player'

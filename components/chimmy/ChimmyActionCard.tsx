@@ -32,7 +32,7 @@ function who(p: { name: string; position: string | null; team: string | null }):
   return bits ? `${p.name} (${bits})` : p.name
 }
 
-export interface ChimmyActionCardProps {
+interface ChimmyActionCardProps {
   card: Card
   onDismiss?: (actionId: string) => void
   /** Injected in tests; the real one posts to /api/chimmy/actions/confirm. */

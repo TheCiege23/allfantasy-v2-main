@@ -9,7 +9,7 @@ import { detectHistoricMoments, toMomentInput } from './HistoricMomentDetector'
 import type { HallOfFameEntryInput, HallOfFameMomentInput } from './types'
 import type { HallOfFameEntityType, HallOfFameCategory } from './types'
 
-export interface CreateEntryResult {
+interface CreateEntryResult {
   id: string
   entityType: string
   entityId: string
@@ -45,7 +45,7 @@ export async function createHallOfFameEntry(
   }
 }
 
-export async function createHallOfFameMoment(
+async function createHallOfFameMoment(
   input: HallOfFameMomentInput
 ): Promise<{ id: string; significanceScore: number } | null> {
   const sport = normalizeSportForHallOfFame(input.sport)

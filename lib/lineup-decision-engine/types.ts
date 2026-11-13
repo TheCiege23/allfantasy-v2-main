@@ -11,9 +11,9 @@ export type LineupDecisionMode =
   | 'Dynasty Development Lineup'
   | 'Injury Contingency Lineup'
 
-export type TeamDirection = 'favorite' | 'underdog' | 'neutral' | 'contender' | 'bubble' | 'rebuild'
+type TeamDirection = 'favorite' | 'underdog' | 'neutral' | 'contender' | 'bubble' | 'rebuild'
 
-export type LeagueFormatHint =
+type LeagueFormatHint =
   | 'redraft'
   | 'dynasty'
   | 'keeper'
@@ -119,7 +119,7 @@ export interface PremiumLineupDecisionInput {
   autoSubEnabled?: boolean
 }
 
-export interface WeeklyStartScoreBreakdown {
+interface WeeklyStartScoreBreakdown {
   projectionScore: number
   matchupScore: number
   usageOpportunityScore: number

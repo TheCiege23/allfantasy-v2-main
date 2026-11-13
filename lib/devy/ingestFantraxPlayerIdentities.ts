@@ -22,7 +22,7 @@ import { prisma } from '@/lib/prisma'
 import { getFantraxPlayerIds, type FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
 import { isTeamEntry, normalizePlayerName, normalizeSchool } from './ingestFantraxDevyAdp'
 
-export type FantraxIdentityIngestResult = {
+type FantraxIdentityIngestResult = {
   /** Ids in Fantrax's CFB map. */
   provided: number
   linked: number

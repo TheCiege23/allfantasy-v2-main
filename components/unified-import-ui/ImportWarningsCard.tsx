@@ -29,7 +29,7 @@ type PersistedWarning = {
   } | null
 }
 
-export interface ImportWarningsCardProps {
+interface ImportWarningsCardProps {
   leagueId: string
   /**
    * Called with the fetched-warning summary the moment the fetch resolves.

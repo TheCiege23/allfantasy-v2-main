@@ -10,7 +10,7 @@ import { TRADE_MODEL_VERSION } from '@/lib/replay-framework/versioning'
 export const DEFAULT_B0 = -1.10
 export const MIN_RECALIBRATION_SAMPLE = 30
 export const MIN_SEGMENT_SAMPLE = 50
-export const MAX_B0_SHIFT = 0.60
+const MAX_B0_SHIFT = 0.60
 export const SHADOW_MATURITY_DAYS = 7
 export const MAX_SHADOW_DIVERGENCE = 0.40
 // Mirrors the cadence guard inside runWeeklyRecalibration() itself
@@ -23,7 +23,7 @@ export function calibrationPromotionAllowed(env: NodeJS.ProcessEnv = process.env
   return env.TRADE_ENGINE_CALIBRATION_PROMOTION_VERSION === TRADE_MODEL_VERSION
 }
 
-export interface ShadowB0Metrics {
+interface ShadowB0Metrics {
   computedB0: number
   currentActiveB0: number
   observedRate: number
@@ -35,7 +35,7 @@ export interface ShadowB0Metrics {
   divergence: number
 }
 
-export interface SegmentB0Entry {
+interface SegmentB0Entry {
   segment: string
   b0: number
   sampleSize: number
@@ -44,12 +44,12 @@ export interface SegmentB0Entry {
   lastUpdated: string
 }
 
-export interface SegmentB0Map {
+interface SegmentB0Map {
   segments: SegmentB0Entry[]
   lastUpdated: string
 }
 
-export interface RecalibrationResult {
+interface RecalibrationResult {
   shadow: {
     computed: boolean
     shadowB0: number | null

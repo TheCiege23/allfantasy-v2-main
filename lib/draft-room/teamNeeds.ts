@@ -41,7 +41,7 @@ export type ByeCluster = {
   positions: string[]
 }
 
-export type ComputeTeamNeedsInput = {
+type ComputeTeamNeedsInput = {
   picks: Array<{ position: string }>
   starterSlots: Record<string, number> | null | undefined
 }

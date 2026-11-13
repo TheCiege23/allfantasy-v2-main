@@ -80,7 +80,7 @@ export const ACTION_KEYS = [
 
 export type ActionKey = (typeof ACTION_KEYS)[number]
 
-export type ActionScope = 'platform' | 'tenant' | 'league'
+type ActionScope = 'platform' | 'tenant' | 'league'
 
 export type ActionRule = {
   /**
@@ -144,7 +144,7 @@ export const API_SCOPES = [
   'sync:read',
 ] as const
 
-export type ApiScope = (typeof API_SCOPES)[number]
+type ApiScope = (typeof API_SCOPES)[number]
 
 const OWNER_ADMIN = ['TENANT_OWNER', 'TENANT_ADMIN'] as const
 const COMMISH = ['COMMISSIONER', 'CO_COMMISSIONER'] as const
@@ -298,7 +298,7 @@ export const PERMISSION_MATRIX: Record<ActionKey, ActionRule> = {
 // ─── The function ────────────────────────────────────────────────────────────
 
 /** Anything carrying a tenant, which is what the cross-tenant check needs. */
-export type TenantOwned = { tenantId?: string | null }
+type TenantOwned = { tenantId?: string | null }
 
 function grants(ctx: ActorContext, rule: ActionRule): boolean {
   // ANY axis is sufficient, and there is no precedence between them — see the

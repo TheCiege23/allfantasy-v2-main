@@ -1,8 +1,4 @@
 export { DraftShareCard, DRAFT_SHARE_CARD_ID } from './DraftShareCard'
-export type { DraftShareCardProps } from './DraftShareCard'
 export { DraftShareBar } from './DraftShareBar'
-export type { DraftShareBarProps } from './DraftShareBar'
 export { DraftShareModal } from './DraftShareModal'
-export type { DraftShareModalProps } from './DraftShareModal'
 export { DraftSharePageContent } from './DraftSharePageContent'
-export type { DraftSharePageContentProps } from './DraftSharePageContent'

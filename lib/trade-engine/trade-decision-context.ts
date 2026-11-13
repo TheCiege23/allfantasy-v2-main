@@ -143,7 +143,7 @@ const DataQualitySchema = z.object({
   warnings: z.array(z.string()),
 }).strict()
 
-export const FreshnessGradeEnum = z.enum(['fresh', 'aging', 'stale', 'expired', 'unavailable'])
+const FreshnessGradeEnum = z.enum(['fresh', 'aging', 'stale', 'expired', 'unavailable'])
 
 const SingleSourceFreshnessSchema = z.object({
   source: z.string(),
@@ -154,7 +154,7 @@ const SingleSourceFreshnessSchema = z.object({
   confidencePenalty: z.number(),
 }).strict()
 
-export const SourceFreshnessSchema = z.object({
+const SourceFreshnessSchema = z.object({
   rosters: SingleSourceFreshnessSchema,
   valuations: SingleSourceFreshnessSchema,
   injuries: SingleSourceFreshnessSchema,
@@ -167,8 +167,8 @@ export const SourceFreshnessSchema = z.object({
   warnings: z.array(z.string()),
 }).strict()
 
-export type FreshnessGrade = z.infer<typeof FreshnessGradeEnum>
-export type SingleSourceFreshness = z.infer<typeof SingleSourceFreshnessSchema>
+type FreshnessGrade = z.infer<typeof FreshnessGradeEnum>
+type SingleSourceFreshness = z.infer<typeof SingleSourceFreshnessSchema>
 export type SourceFreshness = z.infer<typeof SourceFreshnessSchema>
 
 export const TradeDecisionContextV1Schema = z.object({
@@ -233,7 +233,7 @@ const LeagueTeamSnapshotSchema = TeamSnapshotSchema.extend({
   tradeCount: z.number().int(),
 })
 
-export type DataCoverageTier = 'FULL' | 'PARTIAL' | 'MINIMAL'
+type DataCoverageTier = 'FULL' | 'PARTIAL' | 'MINIMAL'
 
 export interface DataCoverageResult {
   tier: DataCoverageTier
@@ -460,7 +460,7 @@ export function computeSourceFreshness(dataSources: {
   }
 }
 
-export const LeagueDecisionContextSchema = z.object({
+const LeagueDecisionContextSchema = z.object({
   version: z.literal(LEAGUE_DECISION_CONTEXT_VERSION),
   assembledAt: z.string(),
   contextId: z.string(),

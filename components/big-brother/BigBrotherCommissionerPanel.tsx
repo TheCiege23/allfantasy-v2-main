@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 
-export interface BigBrotherCommissionerPanelProps {
+interface BigBrotherCommissionerPanelProps {
   leagueId: string
   onAction?: () => void
   nominees?: { id: string; name: string }[]

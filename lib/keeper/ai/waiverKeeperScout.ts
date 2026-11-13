@@ -1,4 +1,4 @@
-export type KeeperWaiverRec = {
+type KeeperWaiverRec = {
   playerId: string
   isKeeperTargetFlag: boolean
   keeperRoundProjection: number | null

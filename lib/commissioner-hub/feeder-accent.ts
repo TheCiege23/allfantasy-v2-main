@@ -9,7 +9,7 @@
 import type { AccentTone } from '@/lib/create-league-v2/theme'
 import { ACCENTS, DEFAULT_ACCENT } from '@/lib/create-league-v2/theme'
 
-export type CommissionerHubKind = 'tournament' | 'zombie'
+type CommissionerHubKind = 'tournament' | 'zombie'
 
 /**
  * Tournament hub is always orange (`ACCENTS.tournament`).

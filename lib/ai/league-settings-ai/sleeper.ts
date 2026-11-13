@@ -1,13 +1,13 @@
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: temporary provider wrapper; migrate consumers to DB-backed settings snapshots
 
-export type SleeperUserRow = {
+type SleeperUserRow = {
   user_id: string
   display_name?: string
   username?: string
   metadata?: { team_name?: string } | null
 }
 
-export type SleeperRosterRow = {
+type SleeperRosterRow = {
   roster_id: number
   owner_id: string | null
   players?: string[]
@@ -23,7 +23,7 @@ export type SleeperRosterRow = {
   }
 }
 
-export async function fetchSleeperJson<T>(url: string): Promise<T> {
+async function fetchSleeperJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { next: { revalidate: 0 } })
   if (!res.ok) {
     throw new Error(`Sleeper request failed (${res.status}): ${url}`)

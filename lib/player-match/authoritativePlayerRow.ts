@@ -35,7 +35,7 @@
 import { normalizeMatchName } from './verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
-export interface PlayerSourceRow {
+interface PlayerSourceRow {
   source?: string | null
   sleeperId?: string | null
   name: string
@@ -102,7 +102,7 @@ function fetchedMs(row: PlayerSourceRow): number {
   return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY
 }
 
-export interface AuthoritativeRowResult<T> {
+interface AuthoritativeRowResult<T> {
   /** The authoritative row with permitted gaps filled. Identity fields are the base row's. */
   row: T
   /** The row the identity comes from — the Sleeper row whenever one exists. */

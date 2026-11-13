@@ -1,6 +1,6 @@
-export type LdiPos = "QB" | "RB" | "WR" | "TE" | "PICK"
+type LdiPos = "QB" | "RB" | "WR" | "TE" | "PICK"
 
-export type PartnerTendency = {
+type PartnerTendency = {
   partnerRosterId?: number | string
   partnerName?: string
   partnerUserId?: string
@@ -16,7 +16,7 @@ export type PartnerTendency = {
   label?: string
 }
 
-export type HardenedPartnerTendenciesResponse = {
+type HardenedPartnerTendenciesResponse = {
   leagueId: string
   leagueName?: string
   season?: number

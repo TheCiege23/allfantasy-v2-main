@@ -5,7 +5,7 @@ import { ArrowUpDown, ChevronDown, ChevronUp, ListOrdered, Trash2 } from "lucide
 import { WAIVER_EMPTY_PENDING_TITLE } from "@/lib/waiver-wire/WaiverWireViewService"
 import { parseOptionalNumber } from "@/lib/waiver-wire/WaiverClaimFlowController"
 
-export type PendingClaimRow = {
+type PendingClaimRow = {
   id: string
   addPlayerId: string
   dropPlayerId: string | null

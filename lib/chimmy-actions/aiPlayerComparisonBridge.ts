@@ -1,6 +1,6 @@
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export type AiPlayerComparisonBridgeParams = {
+type AiPlayerComparisonBridgeParams = {
   sport?: string | null
   leagueId?: string | null
   teamId?: string | null

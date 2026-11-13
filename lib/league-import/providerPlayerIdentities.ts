@@ -14,12 +14,12 @@
  * fake name into a table several surfaces trust.
  */
 
-export type ProviderIdentityInput = {
+type ProviderIdentityInput = {
   providerPlayerId: string
   displayName?: string | null
 }
 
-export type IngestableIdentity = {
+type IngestableIdentity = {
   providerPlayerId: string
   displayName: string
 }

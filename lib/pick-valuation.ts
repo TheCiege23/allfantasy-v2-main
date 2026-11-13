@@ -124,7 +124,7 @@ function pickTier(round: number): number {
   return 5
 }
 
-export interface TradeAsset {
+interface TradeAsset {
   type: 'pick' | 'player'
   round?: number
   year?: number

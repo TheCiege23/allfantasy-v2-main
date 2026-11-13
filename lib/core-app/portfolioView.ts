@@ -142,7 +142,7 @@ function importanceOf(league: PortfolioLeagueFacts, favorites: Set<string>, paid
   return out
 }
 
-export function leagueMatches(
+function leagueMatches(
   league: PortfolioLeagueFacts,
   f: PortfolioFilter,
   favorites: Set<string>,
@@ -182,7 +182,7 @@ export function filterLeagues(
 
 // ── exposure ────────────────────────────────────────────────────────────────────────────────
 
-export type ExposureView = {
+type ExposureView = {
   player: PortfolioPlayer
   /** Rosters of yours (in the filter) holding him. */
   count: number
@@ -227,9 +227,9 @@ export function exposureRows(
 
 // ── risk ────────────────────────────────────────────────────────────────────────────────────
 
-export type RiskLevel = 0 | 1 | 2 | 3
+type RiskLevel = 0 | 1 | 2 | 3
 
-export type RiskCell = {
+type RiskCell = {
   level: RiskLevel
   /** The number printed in the cell — never colour alone. */
   count: number
@@ -238,9 +238,9 @@ export type RiskCell = {
   unknown?: string
 }
 
-export type RiskColumn = { id: string; label: string; factor: 'injury' | 'bye' | 'fragile' | 'stack'; week?: number }
+type RiskColumn = { id: string; label: string; factor: 'injury' | 'bye' | 'fragile' | 'stack'; week?: number }
 
-export type RiskRow = { index: number; cells: RiskCell[]; score: number }
+type RiskRow = { index: number; cells: RiskCell[]; score: number }
 
 export function injuryLevel(out: number, atRisk: number): RiskLevel {
   const score = out * 2 + atRisk
@@ -260,7 +260,7 @@ export function stackLevel(count: number): RiskLevel {
   return count <= 1 ? 0 : count === 2 ? 1 : count === 3 ? 2 : 3
 }
 
-export function riskColumns(insights: Pick<PortfolioInsights, 'byeWeeks'>): RiskColumn[] {
+function riskColumns(insights: Pick<PortfolioInsights, 'byeWeeks'>): RiskColumn[] {
   return [
     { id: 'injury', label: 'Injuries', factor: 'injury' },
     ...insights.byeWeeks.map((week) => ({ id: `bye-${week}`, label: `Wk ${week} bye`, factor: 'bye' as const, week })),
@@ -319,7 +319,7 @@ export function riskRows(
 
 export type DistributionDimension = 'platform' | 'family' | 'scoring' | 'sport' | 'status' | 'stage'
 
-export type DistributionBucket = { key: string; count: number; indexes: number[] }
+type DistributionBucket = { key: string; count: number; indexes: number[] }
 
 export function distribution(
   insights: Pick<PortfolioInsights, 'leagues'>,
@@ -353,7 +353,7 @@ export function distribution(
 
 // ── diversification ─────────────────────────────────────────────────────────────────────────
 
-export type ExposureEvent = {
+type ExposureEvent = {
   kind: 'player' | 'team' | 'bye'
   key: string
   label: string
@@ -365,7 +365,7 @@ export type ExposureEvent = {
   players: string[]
 }
 
-export type DiversificationView = {
+type DiversificationView = {
   /** Leagues in the filter with a starting lineup we could read. */
   lineups: number
   /** Starting slots filled across them. */
@@ -483,7 +483,7 @@ export function diversification(
 
 // ── value movement ──────────────────────────────────────────────────────────────────────────
 
-export type ValuePoint = {
+type ValuePoint = {
   date: string
   total: number | null
   /** True when this day is today's roster priced at that day's values, not a stored day. */
@@ -539,7 +539,7 @@ export function valueTotals(
   })
 }
 
-export type LeagueDayMove = {
+type LeagueDayMove = {
   index: number
   value: number
   previous: number | null
@@ -590,7 +590,7 @@ export function leagueMovesOn(
   return out.sort((a, b) => Math.abs(b.delta ?? 0) - Math.abs(a.delta ?? 0) || b.value - a.value)
 }
 
-export type LeagueValueChange = {
+type LeagueValueChange = {
   index: number
   first: number | null
   last: number | null
@@ -629,9 +629,9 @@ export type ActionKind = 'lineup' | 'waiver' | 'trade' | 'draft'
 /** Now-facts the home loader already holds; passed per request, never cached with the insights. */
 export type LineupSignal = { empty: number; hurt: number; drafting: boolean }
 
-export type ActionReason = { kind: ActionKind; text: string; weight: number }
+type ActionReason = { kind: ActionKind; text: string; weight: number }
 
-export type ActionItem = {
+type ActionItem = {
   index: number
   score: number
   primary: ActionKind
@@ -646,7 +646,7 @@ const ACTION_SCREEN: Record<ActionKind, string> = {
   draft: 'draft-hq',
 }
 
-export function actionHref(kind: ActionKind, leagueId: string): string {
+function actionHref(kind: ActionKind, leagueId: string): string {
   return `/core/${ACTION_SCREEN[kind]}?league=${encodeURIComponent(leagueId)}`
 }
 
@@ -658,7 +658,7 @@ export const KEY_PLAYER_VALUE = 1500
 export const KEY_FALL = 0.15
 
 /** Thin-spot checks only mean something once the draft is done — a half-drafted roster is thin everywhere. */
-export function rosterSettled(stage: PortfolioStage): boolean {
+function rosterSettled(stage: PortfolioStage): boolean {
   return stage === 'in_season' || stage === 'unknown'
 }
 

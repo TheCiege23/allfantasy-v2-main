@@ -11,7 +11,7 @@ import {
 import { isDraftPickRowEmpty } from "@/lib/live-draft-engine/draftPickEmpty";
 
 /** Separate exact-context cohort; never borrow the legacy table's standard-roster defaults. */
-export interface PreparationSample {
+interface PreparationSample {
   playerId?: string | null;
   team?: string | null;
   playerName: string;

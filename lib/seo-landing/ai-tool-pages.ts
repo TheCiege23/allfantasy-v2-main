@@ -245,7 +245,7 @@ export const AI_TOOL_PAGES = {
   },
 } as const satisfies Record<string, AIToolSeoConfig>
 
-export type AIToolPageSlug = keyof typeof AI_TOOL_PAGES
+type AIToolPageSlug = keyof typeof AI_TOOL_PAGES
 
 const BASE = 'https://allfantasy.ai'
 

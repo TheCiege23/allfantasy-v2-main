@@ -26,7 +26,7 @@ export const DEPTH_CHART_MAX_AGE_DAYS = 21
 /** Players besides him whose presence is read per league — each costs one roster read. */
 export const BACKUP_CAP = 3
 
-export type DepthRaw = { id: string; name: string }
+type DepthRaw = { id: string; name: string }
 
 export function parseDepthPlayers(value: unknown): DepthRaw[] {
   if (!Array.isArray(value)) return []
@@ -74,7 +74,7 @@ export type DepthEntry = {
   isHim: boolean
 }
 
-export type BackupState = 'yours' | 'other' | 'free' | 'unknown'
+type BackupState = 'yours' | 'other' | 'free' | 'unknown'
 
 export type BackupCell = {
   leagueId: string

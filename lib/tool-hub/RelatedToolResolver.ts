@@ -4,7 +4,7 @@
 
 import { TOOL_CONFIG, type ToolSlug } from '@/lib/seo-landing/config'
 
-export type RelatedToolLink = {
+type RelatedToolLink = {
   slug: ToolSlug
   headline: string
   href: string

@@ -13,7 +13,7 @@
 type Asset = { name?: string }
 type Side = { teamName?: string }
 
-export type IntegrityAlertInput = {
+type IntegrityAlertInput = {
   flagType: "collusion" | "tanking"
   /** Manager names in flag order, already resolved. May be empty. */
   managers: string[]

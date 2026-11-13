@@ -16,7 +16,7 @@ const POWER_COPY: Record<string, { title: string; action: string; needsTarget: b
 /**
  * Owner-only council idol play panel. Roster raid powers have their own vault flow.
  */
-export function SurvivorIdolPlayPanel({
+function SurvivorIdolPlayPanel({
   idols,
   windowOpen,
   busy,

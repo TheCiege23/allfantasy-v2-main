@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
  * and never shared across accounts on one browser.
  */
 
-export const CORE_ANSWER_MODES = [
+const CORE_ANSWER_MODES = [
   { id: 'fast_take', label: 'Summary', hint: 'A useful free summary. Keep your included detailed answers.' },
   { id: 'deep_analysis', label: 'Deep', hint: 'The full breakdown, with the reasoning.' },
 ] as const
@@ -30,9 +30,9 @@ export type CoreAnswerMode = (typeof CORE_ANSWER_MODES)[number]['id']
  * Fast used to be the default and cut every reply to its first paragraph, at most 280 characters —
  * which threw away most of what the model wrote. Fast stays one tap away for anyone who wants it.
  */
-export const DEFAULT_CORE_ANSWER_MODE: CoreAnswerMode = 'deep_analysis'
+const DEFAULT_CORE_ANSWER_MODE: CoreAnswerMode = 'deep_analysis'
 
-export function isCoreAnswerMode(value: unknown): value is CoreAnswerMode {
+function isCoreAnswerMode(value: unknown): value is CoreAnswerMode {
   return CORE_ANSWER_MODES.some((m) => m.id === value)
 }
 

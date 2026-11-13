@@ -49,7 +49,7 @@ export interface LegacyAssetInput {
   comparablePlayers?: string | null
 }
 
-export interface UnifiedContextInput {
+interface UnifiedContextInput {
   legacyContext: LegacyLeagueDecisionContext | null
   sideATeamId?: string
   sideBTeamId?: string

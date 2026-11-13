@@ -30,7 +30,7 @@ import { dailySportWeekForInstant, resolveDailySportSeasonStart, resolveDailySpo
 export const POST_DRAFT_ROSTER_LOCK_CODE = 'roster_locked_post_draft' as const
 
 /** HTTP status for the refusal — 423 Locked, the same status the league lock uses. */
-export const POST_DRAFT_ROSTER_LOCK_STATUS = 423
+const POST_DRAFT_ROSTER_LOCK_STATUS = 423
 
 /** The kinds of roster move the policy distinguishes. */
 export type RosterMoveKind = 'add_drop' | 'free_agent_pickup' | 'trade' | 'waiver_claim' | 'lineup'
@@ -48,14 +48,14 @@ export const POST_DRAFT_LOCK_POLICY: Readonly<Record<RosterMoveKind, 'refused' |
   lineup: 'allowed',
 }
 
-export function isMoveRefusedDuringPostDraftLock(kind: RosterMoveKind): boolean {
+function isMoveRefusedDuringPostDraftLock(kind: RosterMoveKind): boolean {
   return POST_DRAFT_LOCK_POLICY[kind] === 'refused'
 }
 
 /** Sports this lock is wired for. Others never lock (and never derive a phase change). */
 export const POST_DRAFT_LOCK_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NBA', 'NHL', 'MLB'])
 
-export type PostDraftRosterLockInput = {
+type PostDraftRosterLockInput = {
   /** Stored `League.lifecycleState`. */
   storedState: LeagueLifecycleState | string | null | undefined
   /** `DraftSession.completedAt` of the league's current session; null when there is none. */
@@ -140,7 +140,7 @@ const MOVE_LABEL: Record<RosterMoveKind, string> = {
 }
 
 /** The human message for a refused move, naming when it unlocks. */
-export function postDraftRosterLockMessage(
+function postDraftRosterLockMessage(
   kind: RosterMoveKind,
   unlocksAt: Date | null,
   timeZone?: string | null,
@@ -216,7 +216,7 @@ export function resolveDailySportWeek1Start(
   return resolveDailySportWeekWindow(sport, season, current + 1)?.start ?? null
 }
 
-export type NflScheduleRow = { week: number | null; seasonType: string | null; startTime: Date | null }
+type NflScheduleRow = { week: number | null; seasonType: string | null; startTime: Date | null }
 
 /**
  * NFL: from `SportsGame` rows for the season, the earliest kickoff of the first REGULAR-season week

@@ -35,7 +35,7 @@ import type { LeagueRole } from '@/lib/league/permissions'
 
 export type { MissionControlSnapshot, LeagueAnalyticsSnapshot, DecisionOsAttentionSignal, PowerRankingsOutput }
 
-export interface SourceAttribution {
+interface SourceAttribution {
   source: string
   fetchedAt: string
   providerTimestamp: string | null
@@ -45,7 +45,7 @@ export interface SourceAttribution {
 }
 
 /** Formats with a confirmed real, live ranking engine vs a confirmed stub — never silently produce misleading output for the latter. */
-export type SpecialtyFormatSupport = 'supported' | 'specialty_adapter_required'
+type SpecialtyFormatSupport = 'supported' | 'specialty_adapter_required'
 
 export interface FormatAwareness {
   leagueVariant: string | null
@@ -73,9 +73,9 @@ export interface ManagerTendencyContext {
   profile: ManagerBehaviorProfile | null
 }
 
-export type PulseDimensionState = 'good' | 'watch' | 'attention_required' | 'unavailable'
+type PulseDimensionState = 'good' | 'watch' | 'attention_required' | 'unavailable'
 
-export interface PulseDimension {
+interface PulseDimension {
   dimension: 'competition' | 'participation' | 'activity' | 'lineup_health' | 'transaction_activity' | 'commissioner_attention' | 'data_quality'
   state: PulseDimensionState
   explanation: string
@@ -110,7 +110,7 @@ export interface LeagueHealthAssessment {
   sourceAttribution: SourceAttribution
 }
 
-export type CommissionerAttentionReasonCode =
+type CommissionerAttentionReasonCode =
   | 'legacy_signal'
   | 'lineup_attention_carryover'
   | 'stale_import_data'
@@ -167,8 +167,8 @@ export interface CommissionerBrief {
   confidence: number
 }
 
-export type NarrativeTone = 'neutral_professional' | 'playful'
-export type NarrativeFormat = 'concise_chat' | 'full_brief' | 'discord' | 'sleeper' | 'espn_yahoo_copy'
+type NarrativeTone = 'neutral_professional' | 'playful'
+type NarrativeFormat = 'concise_chat' | 'full_brief' | 'discord' | 'sleeper' | 'espn_yahoo_copy'
 
 export interface CommissionerNarrativeOutput {
   format: NarrativeFormat
@@ -180,7 +180,7 @@ export interface CommissionerNarrativeOutput {
   characterLimit: number | null
 }
 
-export type CommissionerDivergenceCategory =
+type CommissionerDivergenceCategory =
   | 'missing_signal'
   | 'severity_mismatch'
   | 'league_health_status_mismatch'

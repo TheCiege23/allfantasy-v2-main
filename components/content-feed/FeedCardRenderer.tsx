@@ -51,7 +51,7 @@ function getSafeHref(rawHref: string | null | undefined): string {
   return "/feed"
 }
 
-export interface FeedCardRendererProps {
+interface FeedCardRendererProps {
   item: ContentFeedItem
   onFollowCreator?: (creatorHandle: string) => void
   onSave?: (item: ContentFeedItem) => void

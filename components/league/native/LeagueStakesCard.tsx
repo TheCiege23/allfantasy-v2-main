@@ -12,7 +12,7 @@ import {
   type GuillotineSummaryLite,
 } from '@/lib/league/format-stakes'
 
-export type StakesFormat = 'survivor' | 'big_brother' | 'guillotine'
+type StakesFormat = 'survivor' | 'big_brother' | 'guillotine'
 
 /** Which specialty format a native league is, for the stakes card; null for every other league. */
 export function stakesFormatFor(league: { leagueVariant?: string | null; guillotineMode?: boolean | null }): StakesFormat | null {
@@ -30,7 +30,7 @@ export function stakesEndpoint(leagueId: string, format: StakesFormat): string {
   return `/api/leagues/${id}/guillotine/summary`
 }
 
-export function stakesFromPayload(format: StakesFormat, payload: unknown): FormatStakes | null {
+function stakesFromPayload(format: StakesFormat, payload: unknown): FormatStakes | null {
   if (!payload || typeof payload !== 'object') return null
   if (format === 'survivor') return survivorStakes(payload as SurvivorSummary)
   if (format === 'big_brother') return bigBrotherStakes(payload as BigBrotherSummary)

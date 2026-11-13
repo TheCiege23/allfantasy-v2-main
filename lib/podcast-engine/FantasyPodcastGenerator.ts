@@ -5,7 +5,7 @@
 import type { GeneratedPodcastScript, PodcastScriptSection } from "./types"
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
 
-export interface GenerateOptions {
+interface GenerateOptions {
   leagueName?: string
   sport?: string
   weekLabel?: string

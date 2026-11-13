@@ -104,7 +104,7 @@ export async function withDeleted<T>(
 
 // ─── The pure core ───────────────────────────────────────────────────────────
 
-export type SoftDeleteArgsParams = {
+type SoftDeleteArgsParams = {
   readonly model: string
   readonly operation: string
   readonly args: Record<string, unknown> | undefined
@@ -167,7 +167,7 @@ export function softDeletableModelsFromDmmf(dmmf: {
   )
 }
 
-export type SoftDeleteExtensionOptions = {
+type SoftDeleteExtensionOptions = {
   /** Models to filter. Usually `softDeletableModelsFromDmmf(Prisma.dmmf)`. */
   readonly softDeletableModels: ReadonlySet<string>
   /**

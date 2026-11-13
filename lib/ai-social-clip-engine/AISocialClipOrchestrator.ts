@@ -167,7 +167,7 @@ function isDeepSeekConfigured(): boolean {
   return isDeepSeekAvailable();
 }
 
-export interface OrchestratorResult {
+interface OrchestratorResult {
   success: boolean;
   result: AIClipResult | null;
   error?: string;

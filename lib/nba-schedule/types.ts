@@ -8,7 +8,7 @@
 export type DayClassification = 'heavy' | 'moderate' | 'light' | 'off'
 
 /** Role a fantasy day plays in a league's weekly cycle. */
-export type FantasyDayRole =
+type FantasyDayRole =
   | 'scoring'        // Normal scoring day (games count)
   | 'ceremony'       // Specialty league ceremony/event day (Survivor tribal, BB eviction)
   | 'admin'          // Admin processing (waiver runs, status updates)

@@ -21,11 +21,11 @@ import { prisma } from "@/lib/prisma"
  * page — each section degrades to empty + a labelled `source`.
  */
 
-export type VisitorWindowKey = "6h" | "12h" | "24h" | "7d" | "1mo" | "6mo" | "12mo"
+type VisitorWindowKey = "6h" | "12h" | "24h" | "7d" | "1mo" | "6mo" | "12mo"
 
-export type VisitorSource = "site_visit" | "analytics_event" | "visitor_location" | "none"
+type VisitorSource = "site_visit" | "analytics_event" | "visitor_location" | "none"
 
-export type WindowSummary = {
+type WindowSummary = {
   key: VisitorWindowKey
   label: string
   totalVisits: number
@@ -33,14 +33,14 @@ export type WindowSummary = {
   newVisitors: number
 }
 
-export type SeriesPoint = {
+type SeriesPoint = {
   bucket: string // ISO timestamp for the bucket start
   label: string // human label for the x-axis
   total: number
   unique: number
 }
 
-export type GlobePoint = {
+type GlobePoint = {
   lat: number
   lng: number
   city: string | null
@@ -49,14 +49,14 @@ export type GlobePoint = {
   visits: number
 }
 
-export type CountryRollup = {
+type CountryRollup = {
   country: string
   countryCode: string | null
   visits: number
   visitors: number
 }
 
-export type VisitorAnalytics = {
+type VisitorAnalytics = {
   generatedAt: string
   summarySource: VisitorSource
   seriesSource: VisitorSource
@@ -84,7 +84,7 @@ const WINDOW_CONFIG: Record<
   "12mo": { label: "12 months", ms: 365 * 86_400_000, granularity: "month", buckets: 12 },
 }
 
-export const VISITOR_WINDOW_KEYS = Object.keys(WINDOW_CONFIG) as VisitorWindowKey[]
+const VISITOR_WINDOW_KEYS = Object.keys(WINDOW_CONFIG) as VisitorWindowKey[]
 
 function isValidWindow(value: string | null | undefined): value is VisitorWindowKey {
   return !!value && (VISITOR_WINDOW_KEYS as string[]).includes(value)

@@ -4,7 +4,7 @@ import { CheckCircle2, Clock3, Info, ShieldAlert, ShieldCheck } from 'lucide-rea
 import { cn } from '@/lib/utils'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 
-export type DecisionOsConfidenceLabel = 'High' | 'Medium' | 'Low'
+type DecisionOsConfidenceLabel = 'High' | 'Medium' | 'Low'
 
 /** Local mirror of `AttentionSignalSeverity` (`lib/decision-os/attentionSignals.ts`) — kept as its own
  * literal union rather than importing that module, so this shared UI-primitives file stays free of any
@@ -12,7 +12,7 @@ export type DecisionOsConfidenceLabel = 'High' | 'Medium' | 'Low'
  * value type-check against this without a cast. Shared here because, as of Phase OS-B4, three separate
  * components (`CommissionerAttentionQueue`, `TodaysBriefCard`, `NotificationCenter`) each needed the
  * exact same severity-to-color mapping — the third occurrence that justifies consolidating it. */
-export type DecisionOsSeverityLabel = 'critical' | 'high' | 'medium' | 'low' | 'informational'
+type DecisionOsSeverityLabel = 'critical' | 'high' | 'medium' | 'low' | 'informational'
 
 export const SEVERITY_DOT_CLASS: Record<DecisionOsSeverityLabel, string> = {
   critical: 'bg-rose-400',
@@ -278,7 +278,7 @@ export function DecisionOsEmptyState({
  * `docs/os/VISUAL_OS_V1_AUDIT.md` Finding 2). All colors route through the app's semantic status
  * tokens (`--status-success`/`--status-warning`/`--status-danger`/`--status-info`), never a hardcoded
  * Tailwind palette color, so every tone automatically respects the active theme. */
-export type DecisionOsTone = 'good' | 'warning' | 'danger' | 'info' | 'neutral'
+type DecisionOsTone = 'good' | 'warning' | 'danger' | 'info' | 'neutral'
 
 const TONE_CLASSES: Record<DecisionOsTone, string> = {
   good: 'border-status-success/25 bg-status-success/10 text-status-success',
@@ -379,7 +379,7 @@ export function decisionOsSeverityToneClasses(severity: DecisionOsSeverityLabel)
  * light-mode contrast risk, the same defect class fixed repeatedly in V1.0–V1.2 — see
  * `docs/os/VISUAL_OS_V1_AUDIT.md`) to a readable, saturated `-600` — a contrast fix, not a semantic
  * change; borders/backgrounds are untouched. */
-export type DecisionOsHealthStatusLabel = 'excellent' | 'healthy' | 'watch' | 'at_risk' | 'critical'
+type DecisionOsHealthStatusLabel = 'excellent' | 'healthy' | 'watch' | 'at_risk' | 'critical'
 
 const HEALTH_STATUS_TONE_CLASS: Record<DecisionOsHealthStatusLabel, string> = {
   excellent: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-600',

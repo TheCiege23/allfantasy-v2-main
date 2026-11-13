@@ -26,8 +26,8 @@
  * is close to an even split, and one in week 13 is nearly certain.
  */
 
-export type PickTier = 'early' | 'mid' | 'late'
-export type TierOdds = Record<PickTier, number>
+type PickTier = 'early' | 'mid' | 'late'
+type TierOdds = Record<PickTier, number>
 
 export type StandingsTeam = {
   /** The provider's team id (`LeagueTeam.externalId`): the id a pick's original owner is known by. */
@@ -73,8 +73,8 @@ export type PickSlotProjection = {
  * Sleeper draft orders, not enough to test.
  */
 /** How far a team's all-play rate is pulled toward .500 for a single game. */
-export const ALL_PLAY_SHRINK = 0.5
-export const PICK_SLOT_SIMULATIONS = 4000
+const ALL_PLAY_SHRINK = 0.5
+const PICK_SLOT_SIMULATIONS = 4000
 /**
  * One week's score varies around a team's true level by about this share of the league's average
  * score. It is what makes four weeks of scoring a noisy read of a team's strength: each simulated season
@@ -82,7 +82,7 @@ export const PICK_SLOT_SIMULATIONS = 4000
  * played`. Fitted, not assumed (above) — it also absorbs what scoring alone cannot see: injuries, trades,
  * a rebuilding team selling.
  */
-export const WEEKLY_SCORE_CV = 0.4
+const WEEKLY_SCORE_CV = 0.4
 
 /*
  * ── WHICH RULE THE LEAGUE USES IS ITSELF UNKNOWN ───────────────────────────────────────────────────
@@ -119,7 +119,7 @@ const played = (t: StandingsTeam) => Math.max(0, t.wins) + Math.max(0, t.losses)
  * Each team's chance of winning one remaining game: its all-play rate among these scoring levels (the
  * share of the league it outscores), pulled toward .500 by `shrink`.
  */
-export function gameWinOdds(levels: ReadonlyArray<{ id: string; v: number }>, shrink = ALL_PLAY_SHRINK): Map<string, number> {
+function gameWinOdds(levels: ReadonlyArray<{ id: string; v: number }>, shrink = ALL_PLAY_SHRINK): Map<string, number> {
   const out = new Map<string, number>()
   const others = Math.max(1, levels.length - 1)
   for (const me of levels) {

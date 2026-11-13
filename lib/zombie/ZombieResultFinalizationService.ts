@@ -11,7 +11,7 @@ import { awardSerum } from './ZombieSerumEngine'
 import { awardWeaponByScore } from './ZombieWeaponEngine'
 import { recordWinnings } from './ZombieWeeklyWinningsLedger'
 
-export interface FinalizeWeekInput {
+interface FinalizeWeekInput {
   leagueId: string
   week: number
   season?: number

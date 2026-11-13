@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 
-export type ChaosMetrics = {
+type ChaosMetrics = {
   tournamentId: string
   totalGamesFinal: number
   upsetCount: number

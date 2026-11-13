@@ -1,4 +1,4 @@
-export type FeedScope = "global" | "league";
+type FeedScope = "global" | "league";
 
 export type GameFinalContext = {
   tournamentId: string;
@@ -21,7 +21,7 @@ export type LeagueImpactContext = {
   top10RankChanges?: number | null;
 };
 
-export type BustedEventDraft = {
+type BustedEventDraft = {
   type:
     | "MASS_BUST"
     | "UPSET_SHOCK"

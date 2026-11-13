@@ -5,7 +5,7 @@ import { Sparkles, Loader2, Wand2 } from "lucide-react"
 import { LeagueDiscoveryCard } from "./LeagueDiscoveryCard"
 import type { DiscoveryCard } from "@/lib/public-discovery/types"
 
-export interface RecommendedLeaguesSectionProps {
+interface RecommendedLeaguesSectionProps {
   sport?: string | null
   limit?: number
 }

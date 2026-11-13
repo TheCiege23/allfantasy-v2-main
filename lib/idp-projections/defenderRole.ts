@@ -19,7 +19,7 @@ export interface DefenderRoleLine {
   basis: string
 }
 
-export interface DefenderRoleResult {
+interface DefenderRoleResult {
   lines: DefenderRoleLine[]
   /** Defensive games that carried a snap count — the sample behind every line above. */
   games: number

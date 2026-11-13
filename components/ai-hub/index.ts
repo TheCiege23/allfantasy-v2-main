@@ -4,10 +4,8 @@
  */
 
 export { default as AIToolCard } from './AIToolCard'
-export type { AIToolCardProps } from './AIToolCard'
 
 export { default as AIQuickActionBar } from './AIQuickActionBar'
-export type { AIQuickActionBarProps } from './AIQuickActionBar'
 
 export { default as AIHubPage } from './AIHubPage'
 export { default as UnifiedAIWorkbench } from './UnifiedAIWorkbench'
@@ -21,10 +19,5 @@ export {
 } from '@/components/ai-interface'
 
 export type {
-  AIResultCardProps,
-  AILoadingSkeletonProps,
-  AIErrorFallbackProps,
-  AIProviderSelectorProps,
-  AIModeSelectorProps,
   AIMode,
 } from '@/components/ai-interface'

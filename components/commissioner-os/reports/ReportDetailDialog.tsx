@@ -12,7 +12,7 @@ import { dateTime } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cosLinkText, reportsCopy, reportText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
-export interface ReportDetailDialogProps {
+interface ReportDetailDialogProps {
   report: GeneratedReport | null
   onOpenChange: (open: boolean) => void
   onToggleShare: (reportId: string) => void

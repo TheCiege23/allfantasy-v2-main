@@ -9,9 +9,9 @@ export type AiPlayerComparisonStrategyMode =
   | 'underdog'
   | 'favored'
 
-export type AiPlayerComparisonLeagueFormat = 'redraft' | 'keeper' | 'dynasty'
+type AiPlayerComparisonLeagueFormat = 'redraft' | 'keeper' | 'dynasty'
 
-export type AiPlayerComparisonLineupSlot =
+type AiPlayerComparisonLineupSlot =
   | 'QB'
   | 'RB'
   | 'WR'
@@ -25,7 +25,7 @@ export type AiPlayerComparisonLineupSlot =
   | 'UTIL'
   | 'OTHER'
 
-export type AiPlayerComparisonLeagueContext = {
+type AiPlayerComparisonLeagueContext = {
   format?: AiPlayerComparisonLeagueFormat | null
   /** e.g. league name for display only */
   leagueName?: string | null

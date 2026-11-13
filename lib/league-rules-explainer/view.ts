@@ -38,7 +38,7 @@ export function readLeagueRulesSeen(entry: unknown): LeagueRulesSeen {
 }
 
 /** A stored `league_events` row (eventType `settings_changed`). */
-export type SettingsEventRow = { id: string; createdAt: Date | string; payload: unknown }
+type SettingsEventRow = { id: string; createdAt: Date | string; payload: unknown }
 
 /**
  * The events that carry before/after values. Rows written before this feature (no `ruleChanges`) are
@@ -91,7 +91,7 @@ export type RulesExplainerView = {
   latestEvent: { id: string; createdAt: string } | null
 }
 
-export const HISTORY_LIMIT = 20
+const HISTORY_LIMIT = 20
 
 export function buildRulesExplainerView(input: {
   snapshot: RuleSnapshot

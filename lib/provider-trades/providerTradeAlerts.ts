@@ -33,7 +33,7 @@ export type ProviderTradeRow = {
   picksReceived: number
 }
 
-export type ProviderTradeSide = { sideId: string; players: string[]; picks: number }
+type ProviderTradeSide = { sideId: string; players: string[]; picks: number }
 
 export type ProviderTrade = {
   /** Stable across sweeps: platform, league, instant and the sorted team pair. */

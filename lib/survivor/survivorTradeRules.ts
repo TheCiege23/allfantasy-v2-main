@@ -31,7 +31,7 @@ export function easternWeekMinute(instant: Date): number {
   return day * 1440 + hour * 60 + minute
 }
 
-export function weekMinuteOf(day: string, hhmm: string): number {
+function weekMinuteOf(day: string, hhmm: string): number {
   const match = /^(\d{2}):(\d{2})$/.exec(hhmm)
   const minutes = match ? Number(match[1]) * 60 + Number(match[2]) : 0
   return (DAY_INDEX[day] ?? 0) * 1440 + minutes
@@ -43,11 +43,11 @@ export function minutesSinceTribal(now: Date, tribalDay: string, tribalTime: str
 }
 
 /** Where a weekly day/time falls in the Survivor week, in minutes after the Torch Ceremony. */
-export function pointInSurvivorWeek(day: string, hhmm: string, tribalDay: string, tribalTime: string): number {
+function pointInSurvivorWeek(day: string, hhmm: string, tribalDay: string, tribalTime: string): number {
   return (weekMinuteOf(day, hhmm) - weekMinuteOf(tribalDay, tribalTime) + WEEK_MINUTES) % WEEK_MINUTES
 }
 
-export interface SurvivorTradeClock {
+interface SurvivorTradeClock {
   tribalDay: string
   tribalTime: string
   now: Date
@@ -77,7 +77,7 @@ function at(now: Date, minutesFromNow: number): Date {
 }
 
 /** A window's [open, close) in minutes after the Torch Ceremony. `open > close` wraps past the next Tribal. */
-export function crossTribeWindowSpan(w: SurvivorCrossTribeWindow, tribalDay: string, tribalTime: string): { open: number; close: number } {
+function crossTribeWindowSpan(w: SurvivorCrossTribeWindow, tribalDay: string, tribalTime: string): { open: number; close: number } {
   const close = pointInSurvivorWeek(w.closeDay, w.closeTime, tribalDay, tribalTime)
   const open = w.opensOn === 'time' && w.openDay && w.openTime ? pointInSurvivorWeek(w.openDay, w.openTime, tribalDay, tribalTime) : 0
   return { open, close }
@@ -92,7 +92,7 @@ function insideSpan(since: number, span: { open: number; close: number }): boole
  * Where the week's cross-tribe windows stand now. A trade is open when ANY window is; when two windows
  * overlap, the one closing latest is the one reported. Pure, minutes after the Torch Ceremony.
  */
-export function crossTribeWindowsNow(windows: readonly SurvivorCrossTribeWindow[], since: number, tribalDay: string, tribalTime: string) {
+function crossTribeWindowsNow(windows: readonly SurvivorCrossTribeWindow[], since: number, tribalDay: string, tribalTime: string) {
   let open: { index: number; closesIn: number; window: SurvivorCrossTribeWindow } | null = null
   let nextOpenIn: number | null = null
   let nextOpensAtTribal = false
@@ -135,7 +135,7 @@ export function survivorTradeWindowStatus(settings: SurvivorGovernanceSettings, 
   }
 }
 
-export interface SurvivorTradePlayer {
+interface SurvivorTradePlayer {
   playerId: string
   playerName?: string | null
   fromRosterId: string
@@ -143,7 +143,7 @@ export interface SurvivorTradePlayer {
   hasPlayed: boolean | null
 }
 
-export interface SurvivorTradeJudgeInput {
+interface SurvivorTradeJudgeInput {
   settings: SurvivorGovernanceSettings
   clock: SurvivorTradeClock
   merged: boolean
@@ -166,7 +166,7 @@ export type SurvivorTradeRefusalCode =
   | 'SURVIVOR_PLAYED_LOCK'
   | 'SURVIVOR_TRIBE_UNKNOWN'
 
-export type SurvivorTradeVerdict =
+type SurvivorTradeVerdict =
   | { ok: true; crossTribe: boolean; bypassed: boolean }
   | { ok: false; code: SurvivorTradeRefusalCode; playerName?: string | null }
 

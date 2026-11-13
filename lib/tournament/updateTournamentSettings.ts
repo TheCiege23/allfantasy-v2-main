@@ -17,7 +17,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 
-export type SettingsPatch = {
+type SettingsPatch = {
   name?: string
   advancersPerLeague?: number
   wildcardCount?: number
@@ -28,7 +28,7 @@ export type SettingsPatch = {
   conferenceNames?: Array<{ id: string; name: string }>
 }
 
-export type SettingsOutcome =
+type SettingsOutcome =
   | {
       ok: true
       /** True when an advancement has already run, so the change is not retroactive. */

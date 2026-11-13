@@ -5,7 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { getZombieLeagueConfig } from './ZombieLeagueConfig'
 
-export interface DangerousDropFlag {
+interface DangerousDropFlag {
   leagueId: string
   rosterId: string
   playerId: string

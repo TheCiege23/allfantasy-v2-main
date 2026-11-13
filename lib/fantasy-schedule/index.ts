@@ -12,7 +12,6 @@ export {
   getBalancedScoringDays,
   getWeekGameCounts,
   getSeasonVolumeProfiles,
-  classifyDay,
 } from './GameVolumeService'
 export {
   getScheduleConfigForLeague,

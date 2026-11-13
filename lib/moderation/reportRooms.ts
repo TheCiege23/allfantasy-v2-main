@@ -13,8 +13,8 @@
  * Client-safe: the chat panels build the same ids the server resolves.
  */
 
-export const DRAFT_ROOM_REPORT_PREFIX = "draftroom:"
-export const MOCK_DRAFT_REPORT_PREFIX = "mockdraft:"
+const DRAFT_ROOM_REPORT_PREFIX = "draftroom:"
+const MOCK_DRAFT_REPORT_PREFIX = "mockdraft:"
 
 export function draftRoomReportThreadId(sessionKey: string): string {
   return `${DRAFT_ROOM_REPORT_PREFIX}${sessionKey}`
@@ -38,7 +38,7 @@ export function draftIdFromMockDraftThread(threadId: string): string | null {
   return id || null
 }
 
-export const WORLD_CUP_REPORT_PREFIX = "worldcup:"
+const WORLD_CUP_REPORT_PREFIX = "worldcup:"
 
 export function worldCupReportThreadId(challengeId: string): string {
   return `${WORLD_CUP_REPORT_PREFIX}${challengeId}`

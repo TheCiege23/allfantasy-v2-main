@@ -67,7 +67,7 @@ export interface SleeperRosterRaw {
   }
 }
 
-export interface SleeperMatchupRaw {
+interface SleeperMatchupRaw {
   roster_id: number
   matchup_id: number
   points: number
@@ -127,7 +127,7 @@ export interface SleeperDraftPickRaw {
  * These are all Sleeper integer roster IDs (1..total_rosters), NOT user IDs.
  * `season` is a string like "2026".
  */
-export interface SleeperTradedPickRaw {
+interface SleeperTradedPickRaw {
   round: number
   season: string
   roster_id: number

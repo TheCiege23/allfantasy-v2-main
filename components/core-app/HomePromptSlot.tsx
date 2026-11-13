@@ -23,7 +23,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
  */
 
 /** Lower shows first. One-time orientation before recurring nudges. */
-export const HOME_PROMPT_PRIORITY = {
+const HOME_PROMPT_PRIORITY = {
   'welcome-tour': 1,
   'team-follow': 2,
   'game-day-alerts': 3,

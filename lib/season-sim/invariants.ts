@@ -23,7 +23,7 @@ type Where = { week: number | null; phase: SimPhase }
 const round2 = (value: number) => Math.round(value * 100) / 100
 const near = (a: number, b: number) => Math.abs(a - b) < 0.011
 
-export type LedgerRow = { wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number }
+type LedgerRow = { wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number }
 export type Ledger = Map<string, LedgerRow>
 
 /** Every player in the universe is on exactly one roster or in the free-agent pool — never both, never neither. */

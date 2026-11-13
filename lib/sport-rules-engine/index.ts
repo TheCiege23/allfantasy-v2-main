@@ -18,8 +18,6 @@ export type {
   RosterRules,
   RosterSlotRule,
   ScoringRules,
-  ScoringFormatOption,
   PlayerPoolRules,
   DraftOptionRules,
-  SportRulesDefaultDraftType,
 } from './types'

@@ -22,7 +22,7 @@ import { useLaunchClock, type LaunchClock } from '@/components/launch/useLaunchC
  * once a second.
  */
 
-export type LaunchCountdownSize = 'lg' | 'md' | 'sm'
+type LaunchCountdownSize = 'lg' | 'md' | 'sm'
 
 export function LaunchCountdownView({
   clock,

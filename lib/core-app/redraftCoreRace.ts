@@ -16,7 +16,7 @@
  */
 import type { Zone } from './standingsModel'
 
-export type RedraftRaceTag = 'clinched-bye' | 'clinched' | 'eliminated'
+type RedraftRaceTag = 'clinched-bye' | 'clinched' | 'eliminated'
 
 export const REDRAFT_RACE_LABEL: Record<RedraftRaceTag, string> = {
   'clinched-bye': 'Clinched bye',

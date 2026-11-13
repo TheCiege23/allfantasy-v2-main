@@ -23,7 +23,7 @@ export const RETIRED_CONCEPT_REASON_CODES = {
   tournament: 'TOURNAMENT_CREATION_DISABLED',
 } as const
 
-export type RetiredConceptReasonCode =
+type RetiredConceptReasonCode =
   (typeof RETIRED_CONCEPT_REASON_CODES)[keyof typeof RETIRED_CONCEPT_REASON_CODES]
 
 /** Format ids that may no longer be created. */
@@ -50,7 +50,7 @@ export class RetiredConceptError extends Error {
   }
 }
 
-export interface RetiredConceptRejection {
+interface RetiredConceptRejection {
   /** Stable code for programmatic handling. */
   code: RetiredConceptReasonCode
   /** User-safe explanation. */

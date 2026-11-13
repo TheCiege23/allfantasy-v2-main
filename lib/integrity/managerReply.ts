@@ -24,11 +24,11 @@ import { resolveTankingTeam } from './tankingPenaltyService'
  */
 
 export const MANAGER_REPLY_MAX = 1000
-export const TANKING_REPLY_ACTION = 'integrity.tanking_manager_reply'
+const TANKING_REPLY_ACTION = 'integrity.tanking_manager_reply'
 
-export type ManagerReply = { userId: string; text: string; submittedAt: string }
+type ManagerReply = { userId: string; text: string; submittedAt: string }
 
-export type ManagerFlagView = {
+type ManagerFlagView = {
   id: string
   status: string
   summary: string
@@ -49,7 +49,7 @@ export type ManagerFlagView = {
   } | null
 }
 
-export type ReplyError = 'not_found' | 'closed' | 'empty' | 'too_long'
+type ReplyError = 'not_found' | 'closed' | 'empty' | 'too_long'
 export const REPLY_ERROR_STATUS: Record<ReplyError, number> = { not_found: 404, closed: 409, empty: 400, too_long: 400 }
 
 type FlagRow = {
@@ -67,7 +67,7 @@ function record(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
-export function readManagerReply(evidence: unknown): ManagerReply | null {
+function readManagerReply(evidence: unknown): ManagerReply | null {
   const r = record(record(evidence).managerReply)
   return typeof r.userId === 'string' && typeof r.text === 'string' && typeof r.submittedAt === 'string'
     ? { userId: r.userId, text: r.text, submittedAt: r.submittedAt }

@@ -15,9 +15,9 @@
  * a source assertion cannot tell you what the sentence says. This can.
  */
 
-export type TestNotificationTone = 'success' | 'info' | 'error'
+type TestNotificationTone = 'success' | 'info' | 'error'
 
-export type TestNotificationOutcome = {
+type TestNotificationOutcome = {
   tone: TestNotificationTone
   /** English sentence — the fallback, and what the tests read. */
   message: string

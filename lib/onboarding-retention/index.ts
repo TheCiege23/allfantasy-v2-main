@@ -3,12 +3,6 @@ export {
   recordMilestone,
 } from "./OnboardingProgressService"
 export {
-  getReturnNudges,
-  getUnfinishedReminders,
-  getRecapCards,
-  getWeeklySummaryNudges,
-  getCreatorLeagueRecommendations,
-  getSportSeasonPrompts,
   getAllRetentionNudges,
 } from "./RetentionRulesService"
 export { getNudges, dismissNudge } from "./PersonalizedNudgeService"

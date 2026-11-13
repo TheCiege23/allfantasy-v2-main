@@ -7,9 +7,9 @@ import {
   type NflRedraftProviderId,
 } from './nflRedraftProviderFoundation'
 
-export const NFL_REDRAFT_PLAYER_IDENTITY_MODEL_VERSION = 'nfl-redraft-player-identity-v1' as const
+const NFL_REDRAFT_PLAYER_IDENTITY_MODEL_VERSION = 'nfl-redraft-player-identity-v1' as const
 
-export const NFL_REDRAFT_PLAYER_IDENTITY_PROVIDERS = [
+const NFL_REDRAFT_PLAYER_IDENTITY_PROVIDERS = [
   'api_sports',
   'clearsports',
   'rolling_insights',
@@ -32,7 +32,7 @@ export type NflRedraftPlayerActiveStatus =
   | 'suspended'
   | 'unknown'
 
-export type NflRedraftProviderPlayerIds = {
+type NflRedraftProviderPlayerIds = {
   allFantasyPlayerId: string
   primaryProviderId: NflRedraftPlayerIdentityProviderId
   providerPlayerId: string | null
@@ -47,7 +47,7 @@ export type NflRedraftProviderPlayerIds = {
   yahooId: string | null
 }
 
-export type NflRedraftProviderTeamIds = {
+type NflRedraftProviderTeamIds = {
   rollingInsightsTeamId: string | null
   sportsDataIoTeamId: string | null
   sleeperTeamId: string | null
@@ -56,7 +56,7 @@ export type NflRedraftProviderTeamIds = {
   clearSportsTeamId: string | null
 }
 
-export type NflRedraftPlayerIdentityCacheMetadata = {
+type NflRedraftPlayerIdentityCacheMetadata = {
   providerId: NflRedraftPlayerIdentityProviderId
   fetchedAtIso: string
   providerTimestampIso: string | null
@@ -91,7 +91,7 @@ export type NflRedraftCanonicalPlayerIdentity = {
   cache: NflRedraftPlayerIdentityCacheMetadata
 }
 
-export type NormalizeNflRedraftPlayerIdentityInput = {
+type NormalizeNflRedraftPlayerIdentityInput = {
   providerId: NflRedraftPlayerIdentityProviderId
   payload: Record<string, unknown>
   fetchedAtIso?: string | null
@@ -465,7 +465,7 @@ export function normalizeNflFantasyPositions(position: string | null, rawFantasy
   return Array.from(new Set(positions))
 }
 
-export function normalizeNflProviderPlayerId(raw: unknown): string | null {
+function normalizeNflProviderPlayerId(raw: unknown): string | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw)
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
@@ -486,11 +486,11 @@ export function normalizeNflHeadshotUrl(raw: unknown): string | null {
   return normalizeUrl(typeof raw === 'string' ? raw : null)
 }
 
-export function normalizeNflTeamLogoUrl(raw: unknown, _team: string | null): string | null {
+function normalizeNflTeamLogoUrl(raw: unknown, _team: string | null): string | null {
   return normalizeUrl(typeof raw === 'string' ? raw : null)
 }
 
-export function normalizeNflProviderTeamIds(
+function normalizeNflProviderTeamIds(
   providerId: NflRedraftPlayerIdentityProviderId,
   payload: Record<string, unknown>,
 ): NflRedraftProviderTeamIds {

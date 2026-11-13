@@ -11,7 +11,7 @@
 /** The board's name, in one place so a rename is one edit. */
 export const CLUBHOUSE_NAME = 'Clubhouse'
 
-export type CommunityChannel = {
+type CommunityChannel = {
   slug: string
   label: string
   emoji: string

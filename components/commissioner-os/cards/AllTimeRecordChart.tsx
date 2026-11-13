@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface AllTimeRecord {
+interface AllTimeRecord {
   teamName: string
   wins: number
   losses: number
@@ -12,7 +12,7 @@ export interface AllTimeRecord {
   titles: number
 }
 
-export interface AllTimeRecordChartProps {
+interface AllTimeRecordChartProps {
   records: AllTimeRecord[]
   height?: number
   ariaLabel: string

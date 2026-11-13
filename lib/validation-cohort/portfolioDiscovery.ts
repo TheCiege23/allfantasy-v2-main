@@ -25,7 +25,7 @@ type RawLeague = {
 }
 type RawLeagueUser = { user_id: string; is_owner?: boolean }
 
-export type DiscoveryOptions = {
+type DiscoveryOptions = {
   /** Explicit, bounded list of seasons to check, e.g. ['2024','2023','2022']. Required (no open range). */
   seasons: string[]
   sport?: string

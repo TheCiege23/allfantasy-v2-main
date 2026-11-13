@@ -1,24 +1,24 @@
 import type { BestBallSportTemplate } from '@prisma/client'
 
-export type RosterPlayerLite = {
+type RosterPlayerLite = {
   position: string
   playerId?: string
 }
 
-export type ValidationSeverity = 'warning' | 'info'
+type ValidationSeverity = 'warning' | 'info'
 
-export type ValidationWarning = {
+type ValidationWarning = {
   position: string
   issue: string
   severity: ValidationSeverity
 }
 
-export type CriticalError = {
+type CriticalError = {
   position: string
   issue: string
 }
 
-export type BestBallRosterValidationResult = {
+type BestBallRosterValidationResult = {
   isValid: boolean
   warnings: ValidationWarning[]
   criticalErrors: CriticalError[]

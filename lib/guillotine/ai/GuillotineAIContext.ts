@@ -10,7 +10,7 @@ import { getDraftSlotByRoster } from '../GuillotineWeekEvaluator'
 import { prisma } from '@/lib/prisma'
 import type { LeagueSport } from '@prisma/client'
 
-export type GuillotineAIContextType = 'draft' | 'survival' | 'waiver' | 'recap' | 'orphan'
+type GuillotineAIContextType = 'draft' | 'survival' | 'waiver' | 'recap' | 'orphan'
 
 export interface GuillotineAIDeterministicContext {
   leagueId: string

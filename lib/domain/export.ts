@@ -59,13 +59,13 @@ export const EXPORT_ACTION = 'tenant.export'
  * fails the purpose — GDPR Art. 20 portability is about giving people their
  * data, not a censored summary of it.
  */
-export const EXPORT_REDACTED_FIELDS = new Set(['hash', 'secretRef', 'passwordHash'])
+const EXPORT_REDACTED_FIELDS = new Set(['hash', 'secretRef', 'passwordHash'])
 
 export const EXPORT_REDACTION_MARKER = '[not exported: credential material]'
 
-export type ExportScopeMechanism = 'rls' | 'explicit-filter'
+type ExportScopeMechanism = 'rls' | 'explicit-filter'
 
-export type ExportPlanEntry = {
+type ExportPlanEntry = {
   readonly model: string
   readonly table: string
   readonly fileName: string
@@ -110,14 +110,14 @@ export function redactExportRow(row: Record<string, unknown>): Record<string, un
 
 // ─── Verification ────────────────────────────────────────────────────────────
 
-export type ExportFile = {
+type ExportFile = {
   readonly model: string
   readonly fileName: string
   readonly scopedBy: ExportScopeMechanism
   readonly rows: ReadonlyArray<Record<string, unknown>>
 }
 
-export type ForeignRow = { model: string; index: number; foundTenantId: unknown }
+type ForeignRow = { model: string; index: number; foundTenantId: unknown }
 
 /**
  * Scan produced rows for anything belonging to another tenant.
@@ -148,7 +148,7 @@ export function findForeignRows(
   return foreign
 }
 
-export type ExportManifest = {
+type ExportManifest = {
   readonly tenantId: string
   readonly files: ReadonlyArray<{
     model: string
@@ -180,7 +180,7 @@ export function buildManifest(tenantId: string, files: readonly ExportFile[]): E
 
 // ─── Execution ───────────────────────────────────────────────────────────────
 
-export type ExportDeps = {
+type ExportDeps = {
   readonly withTenant: <T>(tenantId: string, fn: (tx: Tx) => Promise<T>) => Promise<T>
   readonly findMany: (
     tx: Tx,
@@ -191,7 +191,7 @@ export type ExportDeps = {
   readonly writeAudit?: WriteAudit
 }
 
-export type ExportResult = {
+type ExportResult = {
   readonly manifest: ExportManifest
   readonly files: readonly ExportFile[]
 }

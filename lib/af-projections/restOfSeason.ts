@@ -40,7 +40,7 @@ const FIRST_WEEK = 1
 /** Nothing sane asks about a week beyond this; guards against a bad upstream value. */
 const MAX_WEEK = 25
 
-export interface WeeksRemainingInput {
+interface WeeksRemainingInput {
   /** The week about to be played. A projection FOR week 5 means weeks 5..final remain. */
   currentWeek: number | null | undefined
   /** Last week this league scores. Defaults to {@link DEFAULT_FANTASY_FINAL_WEEK}. */

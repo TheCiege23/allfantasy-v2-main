@@ -2,7 +2,7 @@
 
 import type { BroadcastStandingRow } from '@/lib/broadcast-engine/types'
 
-export interface StandingsTickerProps {
+interface StandingsTickerProps {
   standings: BroadcastStandingRow[]
   leagueName: string | null
   sport: string

@@ -3,7 +3,7 @@
  * Actual API calls are in useNotifications; this module documents endpoints and optimistic update behavior.
  */
 
-export const NOTIFICATIONS_ENDPOINT = "/api/shared/notifications"
+const NOTIFICATIONS_ENDPOINT = "/api/shared/notifications"
 export const NOTIFICATIONS_READ_ALL_ENDPOINT = `${NOTIFICATIONS_ENDPOINT}/read-all`
 
 export function getNotificationsEndpoint(limit: number, options?: { leagueId?: string | null }): string {

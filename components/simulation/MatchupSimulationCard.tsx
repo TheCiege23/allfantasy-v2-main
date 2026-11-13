@@ -35,7 +35,7 @@ export type MatchupSimulationResult = {
   prediction?: MatchupPredictionEngineOutput | null
 }
 
-export type MatchupSimulationCardProps = {
+type MatchupSimulationCardProps = {
   teamAName: string
   teamBName: string
   /** Precomputed result; if not provided, will POST to /api/simulation/matchup when projections are set */

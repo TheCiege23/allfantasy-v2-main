@@ -84,15 +84,15 @@ export function firstIssueMessage(error: z.ZodError): string {
  * Counted from the database rather than the in-process limiter, so it holds across
  * replicas and restarts — the in-process limiter is only a burst brake.
  */
-export const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000
+const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000
 export const NEW_ACCOUNT_DAILY_POSTS = 3
 export const NEW_ACCOUNT_DAILY_REPLIES = 15
 
-export function newAccountLimitFor(kind: 'post' | 'reply'): number {
+function newAccountLimitFor(kind: 'post' | 'reply'): number {
   return kind === 'post' ? NEW_ACCOUNT_DAILY_POSTS : NEW_ACCOUNT_DAILY_REPLIES
 }
 
-export function isNewAccount(accountCreatedAt: Date, now: Date = new Date()): boolean {
+function isNewAccount(accountCreatedAt: Date, now: Date = new Date()): boolean {
   return now.getTime() - accountCreatedAt.getTime() < NEW_ACCOUNT_WINDOW_MS
 }
 

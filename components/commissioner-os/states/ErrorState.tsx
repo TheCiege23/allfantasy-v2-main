@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 
-export interface ErrorStateProps {
+interface ErrorStateProps {
   message?: string
   onRetry?: () => void
 }

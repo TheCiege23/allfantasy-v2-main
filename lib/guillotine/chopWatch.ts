@@ -17,7 +17,7 @@
 import type { ChopPreview } from './chopPreview'
 import type { GuillotineDangerRow } from './types'
 
-export type ChopWatchTier = { rosterId: string; displayName: string; tier: 'chop_zone' | 'danger' | 'safe'; pointsFromChopZone: number; immune?: true }
+type ChopWatchTier = { rosterId: string; displayName: string; tier: 'chop_zone' | 'danger' | 'safe'; pointsFromChopZone: number; immune?: true }
 
 export type ChopWatch = {
   week: number

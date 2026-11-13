@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 
-export type SurvivorDeepLinkTabId =
+type SurvivorDeepLinkTabId =
   | 'survivor_tribal'
   | 'survivor_challenges'
   | 'survivor_chimmy'

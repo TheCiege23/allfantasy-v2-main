@@ -38,7 +38,7 @@ import { transitionToFinalStage } from './endgameEngine'
  * spaces is the defect this whole line of work exists to end.
  */
 
-export interface ChoppedTeam {
+interface ChoppedTeam {
   /** A `RedraftRoster.id`. Never a `Roster.id`. */
   redraftRosterId: string
   teamName: string
@@ -48,7 +48,7 @@ export interface ChoppedTeam {
   marginBelowSafe: number
 }
 
-export interface StandingRow {
+interface StandingRow {
   /** A `RedraftRoster.id`. Never a `Roster.id`. */
   redraftRosterId: string
   score: number
@@ -58,7 +58,7 @@ export interface StandingRow {
   wasInDangerZone: boolean
 }
 
-export interface ChopAuditInput {
+interface ChopAuditInput {
   leagueId: string
   season?: number | null
   scoringPeriod: number
@@ -69,7 +69,7 @@ export interface ChopAuditInput {
   wasTiebreaker: boolean
 }
 
-export type ChopAuditResult =
+type ChopAuditResult =
   | { recorded: true; seasonId: string; eliminations: number; survivalRows: number; finalStageReached: boolean }
   | { recorded: false; reason: 'no_guillotine_season' | 'already_recorded' }
 

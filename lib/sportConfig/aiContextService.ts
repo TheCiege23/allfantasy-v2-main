@@ -8,7 +8,7 @@ import {
 } from './index'
 import { prisma } from '@/lib/prisma'
 
-export type LeagueAIContext = {
+type LeagueAIContext = {
   sport: string
   displayName: string
   scoringSystem: string
@@ -43,7 +43,7 @@ function togglesFromBlob(sc: Record<string, unknown>): string[] {
   return t
 }
 
-export function buildContextSummary(
+function buildContextSummary(
   config: SportConfigFull,
   settings: Record<string, unknown>,
   toggles: string[],

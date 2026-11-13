@@ -22,7 +22,7 @@
 import type { Prisma } from '@prisma/client'
 
 export const TAXI_MAX_YEARS_KEY = 'taxi_max_years'
-export const TAXI_MAX_YEARS_DEFAULT = 2
+const TAXI_MAX_YEARS_DEFAULT = 2
 export const TAXI_MAX_YEARS_CHOICES = [1, 2, 3, 4, 5] as const
 
 /** Null: no limit. Unset (or anything unreadable) is the default. */

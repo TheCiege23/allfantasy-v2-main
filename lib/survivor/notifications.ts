@@ -1,8 +1,8 @@
 import type { SurvivorSeasonPayload } from './survivorUiTypes'
 
-export type SurvivorNotificationUrgency = 'critical' | 'high' | 'medium' | 'low'
+type SurvivorNotificationUrgency = 'critical' | 'high' | 'medium' | 'low'
 
-export type SurvivorNotification = {
+type SurvivorNotification = {
   id: string
   urgency: SurvivorNotificationUrgency
   title: string

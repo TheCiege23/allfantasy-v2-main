@@ -68,13 +68,13 @@ export interface TokenPoolPickRecord {
   settledBy: 'auto' | 'commissioner' | null
 }
 
-export interface TokenPoolState {
+interface TokenPoolState {
   picks: TokenPoolPickRecord[]
   /** Streak mode: tokens won and not yet banked. */
   pot: number
 }
 
-export interface PoolPickRecord {
+interface PoolPickRecord {
   week: number
   gameKey: string
   teamKey: string
@@ -83,7 +83,7 @@ export interface PoolPickRecord {
   settledBy: 'auto' | 'commissioner' | null
 }
 
-export interface PoolState {
+interface PoolState {
   entry: PoolEntryState
   picks: PoolPickRecord[]
 }
@@ -96,7 +96,7 @@ export interface AuctionItem {
   prize: SideGamePrize
 }
 
-export type AuctionStatus = 'scheduled' | 'open' | 'closed' | 'settled' | 'cancelled'
+type AuctionStatus = 'scheduled' | 'open' | 'closed' | 'settled' | 'cancelled'
 
 export interface AuctionRecord {
   auctionId: string
@@ -113,7 +113,7 @@ export interface AuctionRecord {
   cashGranted: boolean
 }
 
-export interface ShopPurchaseRecord {
+interface ShopPurchaseRecord {
   purchaseId: string
   userId: string
   rosterId: string | null

@@ -2,7 +2,7 @@ import type { PlayoffChallengeView, PlayoffSeriesView } from "./types"
 import { pointsForSeries } from "./playoffScoring"
 import { nbaCupGroupStandings, cupTeamName } from "./nbaCupProgress"
 
-export type CoachPick = { seriesId: string; pickTeamName: string; confirmedAt?: string | Date | null }
+type CoachPick = { seriesId: string; pickTeamName: string; confirmedAt?: string | Date | null }
 export type CoachRival = { id: string; name: string; totalScore: number; finalizedAt?: string | null; picks: CoachPick[] }
 export type CoachGame = {
   id: string; home: string; away: string; startsAt: string | null; status: string; points: number

@@ -145,7 +145,7 @@ const ARCHETYPE_RULES: ArchetypeRules[] = [
   },
 ]
 
-export function classifyArchetype(manager: EngineManagerProfile): ArchetypeClassification {
+function classifyArchetype(manager: EngineManagerProfile): ArchetypeClassification {
   let best: ArchetypeClassification = {
     archetype: 'unknown',
     confidence: 0,

@@ -1,4 +1,4 @@
-export type WeatherFactor =
+type WeatherFactor =
   | 'wind'
   | 'rain'
   | 'snow'
@@ -10,7 +10,7 @@ export type WeatherFactor =
   | 'precipitation_delay_risk'
   | 'air_density'
 
-export type OutdoorSportMeta = {
+type OutdoorSportMeta = {
   sport: string
   isOutdoor: boolean
   canBeIndoor: boolean
@@ -36,7 +36,7 @@ const NCAAF_META: OutdoorSportMeta = {
     'Same as NFL but lower baseline efficiency so weather impact is slightly amplified.',
 }
 
-export const OUTDOOR_SPORT_METADATA: Record<string, OutdoorSportMeta> = {
+const OUTDOOR_SPORT_METADATA: Record<string, OutdoorSportMeta> = {
   NFL: {
     sport: 'NFL',
     isOutdoor: true,

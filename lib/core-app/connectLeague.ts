@@ -14,7 +14,7 @@
 
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 
-export type ConnectLeagueStep =
+type ConnectLeagueStep =
   /** We know their team. Say nothing. */
   | 'none'
   /** The import refuses an unverified account, so this comes first. */
@@ -56,7 +56,7 @@ export function connectLeagueHref(opts: { sleeperLinked: boolean }): string {
   return opts.sleeperLinked ? '/import?provider=sleeper' : '/import'
 }
 
-export type ConnectLeagueCopy = { title: string; body: string; cta: string }
+type ConnectLeagueCopy = { title: string; body: string; cta: string }
 
 export function connectLeagueCopy(step: Exclude<ConnectLeagueStep, 'none'>): ConnectLeagueCopy {
   switch (step) {

@@ -8,7 +8,7 @@ import { QUEUE_NAMES } from "@/lib/jobs/types"
 import type { IntegrityJobPayload } from "@/lib/jobs/types"
 import { runIntegrityJob } from "@/lib/integrity/runIntegrityJob"
 
-export type IntegrityJobResult = {
+type IntegrityJobResult = {
   ok: boolean
   skipped?: boolean
   jobId?: string

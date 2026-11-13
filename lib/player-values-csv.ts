@@ -18,7 +18,7 @@ export interface CSVPlayerValue {
 
 let cachedPlayers: CSVPlayerValue[] | null = null
 
-export function parsePlayerValuesCSV(): CSVPlayerValue[] {
+function parsePlayerValuesCSV(): CSVPlayerValue[] {
   if (cachedPlayers) {
     return cachedPlayers
   }

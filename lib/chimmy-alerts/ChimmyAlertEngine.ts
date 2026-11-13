@@ -27,13 +27,13 @@ function toSeverity(signal: number): ChimmyAlertSeverity {
   return 'informational'
 }
 
-export function scoreAlertUrgency(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
+function scoreAlertUrgency(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
   const sensitivity = context.userPreferences?.sensitivity ?? 'normal'
   const modifier = sensitivity === 'high' ? 1.08 : sensitivity === 'low' ? 0.9 : 1
   return Math.max(1, Math.min(100, Math.round(candidate.urgencySignal * modifier)))
 }
 
-export function scoreAlertRelevance(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
+function scoreAlertRelevance(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): number {
   let score = candidate.confidenceScore
   if (candidate.roleScope === 'commissioner' && context.role === 'commissioner') score += 4
   if (candidate.roleScope === 'admin' && context.role === 'admin') score += 5
@@ -41,7 +41,7 @@ export function scoreAlertRelevance(candidate: ChimmyAlertCandidate, context: Ch
   return Math.max(1, Math.min(100, score))
 }
 
-export function chooseAlertChannel(severity: ChimmyAlertSeverity, context: ChimmyAlertContext, roleScope: ChimmyAlertCandidate['roleScope']): ChimmyAlertChannel[] {
+function chooseAlertChannel(severity: ChimmyAlertSeverity, context: ChimmyAlertContext, roleScope: ChimmyAlertCandidate['roleScope']): ChimmyAlertChannel[] {
   const override = context.userPreferences?.channelOverrides?.[severity]
   if (override && override.length > 0) return override
 
@@ -62,7 +62,7 @@ export function chooseAlertChannel(severity: ChimmyAlertSeverity, context: Chimm
   return ['dashboard_card']
 }
 
-export function bindAlertActions(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): ChimmyAlert['actions'] {
+function bindAlertActions(candidate: ChimmyAlertCandidate, context: ChimmyAlertContext): ChimmyAlert['actions'] {
   const leagueHref = context.leagueId ? `/leagues/${context.leagueId}` : '/dashboard'
 
   switch (candidate.type) {
@@ -128,7 +128,7 @@ export function renderAlertPayload(candidate: ChimmyAlertCandidate, context: Chi
   }
 }
 
-export async function suppressDuplicateAlerts(
+async function suppressDuplicateAlerts(
   alerts: ChimmyAlert[],
   context: ChimmyAlertContext,
   prefs?: ChimmyAlertUserPreferences,
@@ -178,7 +178,7 @@ export async function suppressDuplicateAlerts(
 /**
  * Strip channels that the user has opted out of in their channel preferences.
  */
-export function applyChannelPrefs(
+function applyChannelPrefs(
   channels: ChimmyAlertChannel[],
   prefs: ChimmyAlertUserPreferences,
 ): ChimmyAlertChannel[] {

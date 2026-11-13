@@ -101,7 +101,7 @@ export function ReactionBar({
 
 // ─── report ──────────────────────────────────────────────────────────────────
 
-export function ReportButton({ targetType, targetId }: { targetType: 'post' | 'reply'; targetId: string }) {
+function ReportButton({ targetType, targetId }: { targetType: 'post' | 'reply'; targetId: string }) {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState<ReportReason>('spam')
   const [details, setDetails] = useState('')

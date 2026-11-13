@@ -23,7 +23,7 @@ import './import-review.css'
 
 type PlayerPick = NonNullable<ImportReviewOverrides['playerMatches']>[string]
 
-export interface ImportReviewPanelProps {
+interface ImportReviewPanelProps {
   review: ImportReview
   provider: string
   /** Set when the league can be previewed but not imported (e.g. public ESPN, no account). */
@@ -57,7 +57,7 @@ function trimmedMap(m: Record<string, string>): Record<string, string> | undefin
   return Object.keys(out).length ? out : undefined
 }
 
-export function buildOverridesFromEdits(edits: {
+function buildOverridesFromEdits(edits: {
   teamNames: Record<string, string>
   ownerNames: Record<string, string>
   playerMatches: Record<string, PlayerPick>

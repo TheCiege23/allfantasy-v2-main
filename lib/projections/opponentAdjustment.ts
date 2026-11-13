@@ -24,12 +24,12 @@
  * caller cannot honestly display.
  */
 
-export type OpponentGame = {
+type OpponentGame = {
   season: number
   fantasyPoints: number
 }
 
-export type OpponentAdjustment = {
+type OpponentAdjustment = {
   /** Points to add to the baseline. Can be negative. */
   points: number
   /** Games actually found against this defense. */

@@ -3,7 +3,7 @@
  * cache-only lookup in `lib/depth-charts.ts` and tests can all share one rule.
  */
 
-export type DepthChartRowLike = {
+type DepthChartRowLike = {
   team: string
   position: string
   players: unknown

@@ -11,7 +11,7 @@
  *
  * Client-safe: the form uses it to refuse before a round trip.
  */
-export const SLEEPER_USERNAME_MAX = 40
+const SLEEPER_USERNAME_MAX = 40
 
 export function normalizeSleeperUsername(raw: unknown): string | null {
   if (typeof raw !== 'string') return null

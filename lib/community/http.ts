@@ -15,7 +15,7 @@ import { firstIssueMessage } from './validation'
  * instance, not a global guarantee). The durable limit for brand-new accounts is the
  * database count in service.ts.
  */
-export const COMMUNITY_RATE_LIMITS = {
+const COMMUNITY_RATE_LIMITS = {
   post_create: { maxRequests: 5, windowMs: 10 * 60 * 1000 },
   reply_create: { maxRequests: 20, windowMs: 60 * 1000 },
   reaction: { maxRequests: 60, windowMs: 60 * 1000 },
@@ -23,7 +23,7 @@ export const COMMUNITY_RATE_LIMITS = {
   edit: { maxRequests: 30, windowMs: 10 * 60 * 1000 },
 } as const
 
-export type CommunityRateLimitedAction = keyof typeof COMMUNITY_RATE_LIMITS
+type CommunityRateLimitedAction = keyof typeof COMMUNITY_RATE_LIMITS
 
 export function communityRateLimitResponse(
   userId: string,

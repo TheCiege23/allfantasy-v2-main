@@ -41,9 +41,9 @@ import {
 
 export type { DailyRedraftSport }
 
-export const DAILY_REDRAFT_DEFAULTS_VERSION = 1
+const DAILY_REDRAFT_DEFAULTS_VERSION = 1
 
-export interface DailyRedraftRosterTemplate {
+interface DailyRedraftRosterTemplate {
   rosterMode: 'redraft'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -93,7 +93,7 @@ export function isDailyRedraftDefaultsSport(sport: unknown): sport is DailyRedra
 }
 
 /** `<sport>_points` unless the caller named a preset that is valid for a redraft league of this sport. */
-export function resolveDailyRedraftScoringPresetId(sport: DailyRedraftSport, presetId?: string | null): string {
+function resolveDailyRedraftScoringPresetId(sport: DailyRedraftSport, presetId?: string | null): string {
   const raw = typeof presetId === 'string' ? presetId.trim() : ''
   if (raw && isScoringPresetValidForContext(raw, { sport, leagueType: 'redraft', idpSelected: false })) return raw
   return `${sport.toLowerCase()}_points`

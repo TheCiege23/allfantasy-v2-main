@@ -3,7 +3,7 @@
  * Does not infer from age or college alone — only explicit stored fields.
  */
 
-export type ExperienceSignalSource =
+type ExperienceSignalSource =
   | 'rolling_insights'
   | 'thesportsdb'
   | 'clearsports'

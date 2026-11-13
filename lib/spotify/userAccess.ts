@@ -19,7 +19,7 @@ type StoredSpotifyPrefs = {
   displayName?: unknown
 }
 
-export type SpotifyAccess =
+type SpotifyAccess =
   | {
       ok: true
       accessToken: string

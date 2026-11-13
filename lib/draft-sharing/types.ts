@@ -11,7 +11,7 @@ export interface DraftGradeRow {
   score: number
 }
 
-export interface DraftSharePayloadBase {
+interface DraftSharePayloadBase {
   leagueId: string
   leagueName: string
   season: string

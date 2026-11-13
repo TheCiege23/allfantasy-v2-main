@@ -5,7 +5,7 @@ import {
   type NavLinkItem,
 } from "@/lib/navigation/NavLinkResolver"
 
-export interface NavItem {
+interface NavItem {
   href: string
   label: string
 }

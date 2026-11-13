@@ -36,7 +36,7 @@ const REQUEST_TIMEOUT_MS = 10_000
 const SUCCESS_TTL_MS = 6 * 60 * 60 * 1000
 const FAILURE_TTL_MS = 15 * 60 * 1000
 
-export type PlayInstallStats = {
+type PlayInstallStats = {
   /** Sum of daily installs across every report month Google has published. */
   installsAllTime: number
   installs28Days: number
@@ -234,7 +234,7 @@ function splitCsvLine(line: string): string[] {
   return out.map((v) => v.trim())
 }
 
-export type ParsedReportRow = { date: string; installs: number; activeDevices: number | null }
+type ParsedReportRow = { date: string; installs: number; activeDevices: number | null }
 
 /** Returns null when the report has no recognisable install column, so a bad parse never reads as zero. */
 export function parseOverviewReport(csv: string): { column: string; rows: ParsedReportRow[] } | null {

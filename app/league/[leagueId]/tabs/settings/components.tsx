@@ -56,7 +56,7 @@ export function SettingsRow({
   )
 }
 
-export function FaqButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+function FaqButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { t } = useLanguage()
   return (
     <button

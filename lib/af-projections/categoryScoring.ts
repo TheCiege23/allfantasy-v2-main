@@ -30,7 +30,7 @@ import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 import type { SeasonAggregate } from './types'
 
 /** Sports this module can score. Anything else must keep refusing rather than be defaulted. */
-export type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
+type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 export function isCategoryScoredSport(sport: string | null | undefined): sport is CategorySport {
   const s = String(sport ?? '').trim().toUpperCase()
@@ -148,7 +148,7 @@ export function getCategoryScoringRules(sport: string | null | undefined): Recor
   return RULES_BY_SPORT[String(sport).trim().toUpperCase() as CategorySport]
 }
 
-export interface CategoryScoringResult {
+interface CategoryScoringResult {
   /** Season total under the rules. Per-game division is the caller's job. */
   points: number
   /** Per-component contribution, so a number on screen can always be taken apart. */

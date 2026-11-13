@@ -16,13 +16,13 @@ import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerPr
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
-export const NFL_REDRAFT_GAME_CONTEXT_MODEL_VERSION = 'nfl-redraft-game-context-v1' as const
+const NFL_REDRAFT_GAME_CONTEXT_MODEL_VERSION = 'nfl-redraft-game-context-v1' as const
 
-export type NflRedraftHomeAway = 'home' | 'away'
-export type NflRedraftVenueRoofType = 'dome' | 'retractable' | 'outdoor' | 'unknown'
-export type NflRedraftPrecipitationType = 'none' | 'rain' | 'snow' | 'mixed' | 'unknown'
+type NflRedraftHomeAway = 'home' | 'away'
+type NflRedraftVenueRoofType = 'dome' | 'retractable' | 'outdoor' | 'unknown'
+type NflRedraftPrecipitationType = 'none' | 'rain' | 'snow' | 'mixed' | 'unknown'
 
-export type NflRedraftStadiumContext = {
+type NflRedraftStadiumContext = {
   name: string | null
   city: string | null
   state: string | null
@@ -61,7 +61,7 @@ export type NflRedraftGameContext = {
   providerFallback: NflRedraftProviderFallbackMetadata
 }
 
-export type NormalizeNflRedraftProviderGameContextOptions = {
+type NormalizeNflRedraftProviderGameContextOptions = {
   now?: Date
   fetchedAtIso?: string | null
   sourceUpdatedAtIso?: string | null

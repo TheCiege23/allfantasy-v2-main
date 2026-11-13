@@ -192,7 +192,7 @@ function FacebookSdkScript({ appId }: { appId: string }) {
   )
 }
 
-export interface SafeGlobalChromeProps {
+interface SafeGlobalChromeProps {
   fbAppId?: string
 }
 

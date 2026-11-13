@@ -83,7 +83,7 @@ function isEmittable(candidate: string, isReserved: (c: string) => boolean): boo
   return true
 }
 
-export interface GenerateUsernameOptions {
+interface GenerateUsernameOptions {
   /** The user's display / full name. */
   name?: string | null
   /** Returns true if the candidate is already taken (case-insensitive DB check in prod). */

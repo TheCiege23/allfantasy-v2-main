@@ -9,7 +9,7 @@ export const SUPPORTED_STRATEGY_SPORTS: readonly SupportedSport[] = [...SUPPORTE
 export type StrategySport = SupportedSport
 
 /** Strategy types to detect (Chunk 2 will implement rules). */
-export const STRATEGY_TYPES = [
+const STRATEGY_TYPES = [
   'ZeroRB',
   'HeroRB',
   'EarlyQB',

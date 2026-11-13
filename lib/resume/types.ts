@@ -28,10 +28,10 @@ import type {
  * Coarse visibility scope. Order matters: `public` > `friends` > `leagues` >
  * `private`. A viewer with privilege `>= required` may see the field.
  */
-export type ResumeVisibility = "public" | "friends" | "leagues" | "private"
+type ResumeVisibility = "public" | "friends" | "leagues" | "private"
 
 /** Per-section visibility map. Missing keys default to `private`. */
-export interface ResumeVisibilityMap {
+interface ResumeVisibilityMap {
   overall?: ResumeVisibility
   trophies?: ResumeVisibility
   importedHistory?: ResumeVisibility
@@ -43,7 +43,7 @@ export interface ResumeVisibilityMap {
 }
 
 /** Anonymous mode toggle. When true, identity fields strip to handle only. */
-export interface ResumeAnonymityMode {
+interface ResumeAnonymityMode {
   enabled: boolean
   /** Hide username too (synthesizes a stable opaque alias). */
   hideUsername?: boolean
@@ -54,7 +54,7 @@ export interface ResumeAnonymityMode {
 /* -------------------------------------------------------------------------- */
 
 /** How a piece of resume data was confirmed. */
-export type VerificationStatus =
+type VerificationStatus =
   | "verified_platform" // earned natively on AllFantasy
   | "verified_import" // import passed checks (provider, championship row, etc.)
   | "unverified" // user-claimed or low-signal import
@@ -65,7 +65,7 @@ export type VerificationStatus =
 export type ProviderTrust = Readonly<Record<RankingSource, number>>
 
 /** Why a row was flagged. Stable enum for downstream UI/QA filters. */
-export type SuspiciousFlag =
+type SuspiciousFlag =
   | "duplicate_championship"
   | "duplicate_league_import"
   | "season_overlap_conflict"
@@ -73,7 +73,7 @@ export type SuspiciousFlag =
   | "impossible_record"
   | "unverified_high_value"
 
-export interface CredibilitySignal {
+interface CredibilitySignal {
   /** 0..1. 1 = fully trusted, 0 = unusable. */
   confidence: number
   /** Underlying provider weight contributions. */
@@ -85,7 +85,7 @@ export interface CredibilitySignal {
 /* 3. Core resume records                                                     */
 /* -------------------------------------------------------------------------- */
 
-export interface TrophyRecord {
+interface TrophyRecord {
   /** Stable id e.g. `champ:${leagueId}:${season}`. */
   id: string
   kind: "championship" | "playoff_appearance" | "survivor_win" | "tournament_win"
@@ -98,7 +98,7 @@ export interface TrophyRecord {
   source: RankingSource | null
 }
 
-export interface CommissionerRecord {
+interface CommissionerRecord {
   leaguesAsCommish: number
   /** Total seasons-as-commish across all leagues. */
   seasonsAsCommish: number
@@ -107,7 +107,7 @@ export interface CommissionerRecord {
   status: VerificationStatus
 }
 
-export interface DynastyRecord {
+interface DynastyRecord {
   leagues: number
   championships: number
   /** Average finish across dynasty seasons, 1 = first. null when unknown. */
@@ -115,14 +115,14 @@ export interface DynastyRecord {
   status: VerificationStatus
 }
 
-export interface SurvivorRecord {
+interface SurvivorRecord {
   attempts: number
   wins: number
   longestSurvivalWeeks: number
   status: VerificationStatus
 }
 
-export interface SportResumeSlice {
+interface SportResumeSlice {
   sport: RankingSport
   wins: number
   losses: number
@@ -141,7 +141,7 @@ export interface SportResumeSlice {
 /* 4. Aggregate AF Resume                                                     */
 /* -------------------------------------------------------------------------- */
 
-export interface ResumeArchetype {
+interface ResumeArchetype {
   /** AI-derived later. Today we expose a slot but never auto-populate. */
   label: string | null
   confidence: number | null

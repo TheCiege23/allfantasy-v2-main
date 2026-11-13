@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TeamFormResult = {
+type TeamFormResult = {
   opponent: string
   result: "W" | "D" | "L"
   score: string
@@ -11,7 +11,7 @@ export type TeamFormResult = {
   startsAt: string | null
 }
 
-export type TeamGroupStanding = {
+type TeamGroupStanding = {
   groupName: string
   rank: number | null
   played: number

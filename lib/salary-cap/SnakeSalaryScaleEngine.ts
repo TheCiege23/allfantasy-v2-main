@@ -12,7 +12,7 @@
  * - Total cap for scale calculation
  */
 
-export type SalaryCurveType = 'linear' | 'steep' | 'exponential' | 'flat' | 'custom'
+type SalaryCurveType = 'linear' | 'steep' | 'exponential' | 'flat' | 'custom'
 
 export type SnakeSalaryScaleConfig = {
   /** Total salary cap */
@@ -33,7 +33,7 @@ export type SnakeSalaryScaleConfig = {
   customScale?: Record<number, number>
 }
 
-export type PickSalaryAssignment = {
+type PickSalaryAssignment = {
   overall: number
   round: number
   pick: number

@@ -43,7 +43,7 @@ function noOpponent(name: string): boolean {
   return /^no opponent$/i.test(name.trim())
 }
 
-export type ScoreBugSide = {
+type ScoreBugSide = {
   name: string
   record: string | null
   points: number
@@ -105,9 +105,9 @@ export function buildScoreBug(payload: MatchupCenterPayload | null | undefined):
   }
 }
 
-export type PlayoffRaceTeam = { id: string; teamName: string; wins: number; losses: number; ties: number }
+type PlayoffRaceTeam = { id: string; teamName: string; wins: number; losses: number; ties: number }
 
-export type PlayoffRaceRow = { id: string; rank: number; teamName: string; record: string; isYou: boolean; inField: boolean }
+type PlayoffRaceRow = { id: string; rank: number; teamName: string; record: string; isYou: boolean; inField: boolean }
 
 export type PlayoffRace = {
   /** How many teams make it, from the league's own settings. */
@@ -201,7 +201,7 @@ export function buildLastWeekRecap(week: number, rows: readonly WeekResultRow[] 
   }
 }
 
-export type DraftCountdown = { days: number; hours: number; mins: number; label: string }
+type DraftCountdown = { days: number; hours: number; mins: number; label: string }
 
 /** Time to the draft, or null when there is no valid future draft time. */
 export function draftCountdown(draftIso: string | null | undefined, nowMs: number): DraftCountdown | null {

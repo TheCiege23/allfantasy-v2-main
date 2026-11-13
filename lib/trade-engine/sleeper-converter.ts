@@ -22,7 +22,7 @@ import {
 // INPUT TYPES (from Sleeper API)
 // ============================================
 
-export interface SleeperPlayer {
+interface SleeperPlayer {
   id: string
   name: string
   pos: string
@@ -32,7 +32,7 @@ export interface SleeperPlayer {
   age?: number
 }
 
-export interface SleeperDraftPick {
+interface SleeperDraftPick {
   season: string
   round: number
   originalOwnerId: string
@@ -40,7 +40,7 @@ export interface SleeperDraftPick {
   displayName: string
 }
 
-export interface SleeperRoster {
+interface SleeperRoster {
   rosterId: number
   userId: string
   username: string
@@ -53,7 +53,7 @@ export interface SleeperRoster {
   faabRemaining?: number
 }
 
-export interface FantasyCalcPlayerValue {
+interface FantasyCalcPlayerValue {
   name: string
   value: number
   overallRank?: number
@@ -86,7 +86,7 @@ function parseRoundFromDisplayName(displayName: string): number | undefined {
 // MAIN CONVERTER
 // ============================================
 
-export interface ConvertSleeperInput {
+interface ConvertSleeperInput {
   settings: LeagueSettings
   rosters: SleeperRoster[]
   fantasyCalcValues: Record<string, FantasyCalcPlayerValue>
@@ -94,7 +94,7 @@ export interface ConvertSleeperInput {
   teamRankByRosterId?: Record<number, number>
 }
 
-export interface ConvertSleeperOutput {
+interface ConvertSleeperOutput {
   assetsByRosterId: Record<number, Asset[]>
   assetsByManagerId: Record<string, Asset[]>
   allAssets: Asset[]

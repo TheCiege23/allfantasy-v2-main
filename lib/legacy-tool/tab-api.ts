@@ -7,9 +7,9 @@ import { evaluateCommissionerAlert } from '@/lib/legacy-tool/fairness'
 import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
 import { normalizeGrokSignalsToDeltaEvents, persistGrokDeltaEvents } from '@/lib/legacy-tool/grok-delta'
 
-export type LegacyApiStatus = 'ok' | 'insufficient_data' | 'error'
+type LegacyApiStatus = 'ok' | 'insufficient_data' | 'error'
 
-export type LegacyScreen =
+type LegacyScreen =
   | 'offseason_dashboard'
   | 'draft_war_room'
   | 'trade_command_center'
@@ -18,7 +18,7 @@ export type LegacyScreen =
   | 'team_direction_refresh'
   | 'market_refresh'
 
-export interface LegacyApiMeta {
+interface LegacyApiMeta {
   confidence: number
   usedLiveNewsOverlay: boolean
   usedSimulation: boolean
@@ -33,13 +33,13 @@ export interface LegacyApiMeta {
   missingFields?: string[]
 }
 
-export interface LegacyApiError {
+interface LegacyApiError {
   code: string
   message: string
   field?: string
 }
 
-export interface LegacyApiResponse<T> {
+interface LegacyApiResponse<T> {
   status: LegacyApiStatus
   screen: LegacyScreen
   data: T | null
@@ -47,7 +47,7 @@ export interface LegacyApiResponse<T> {
   errors: LegacyApiError[]
 }
 
-export interface LeagueContext {
+interface LeagueContext {
   leagueId: string
   sport: 'NFL'
   format:
@@ -69,7 +69,7 @@ export interface LeagueContext {
   playoffWeeks?: number[]
 }
 
-export type AssetType = 'player' | 'pick'
+type AssetType = 'player' | 'pick'
 
 export interface TradeAsset {
   assetType: AssetType
@@ -82,14 +82,14 @@ export interface TradeAsset {
   originalOwnerTeamId?: string
 }
 
-export interface LegacyPlayerRef {
+interface LegacyPlayerRef {
   playerId: string
   name: string
   position: string
   nflTeam: string | null
 }
 
-export interface PlayerScoreCard extends LegacyPlayerRef {
+interface PlayerScoreCard extends LegacyPlayerRef {
   fitScore?: number
   valueScore?: number
   breakoutScore?: number
@@ -99,7 +99,7 @@ export interface PlayerScoreCard extends LegacyPlayerRef {
   reason: string
 }
 
-export type TeamDirectionLabel =
+type TeamDirectionLabel =
   | 'all_in_contender'
   | 'contender'
   | 'retool'

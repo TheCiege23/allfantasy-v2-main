@@ -18,7 +18,7 @@ import "server-only"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import type { SportPlugin, AIEngineInput } from "../types"
 
-export type SurvivorContext = {
+type SurvivorContext = {
   poolId: string
   poolName: string
   sport: string
@@ -41,11 +41,11 @@ export type SurvivorContext = {
   }>
 }
 
-export type SurvivorProviderData = {
+type SurvivorProviderData = {
   weeklyWinProbabilities: Array<{ teamName: string; winProbability: number; spread: number }>
 }
 
-export type SurvivorInsights = {
+type SurvivorInsights = {
   weeklyRecommendation: {
     safePick: string | null // highest win probability + most availability
     valueContrarian: string | null // good win prob but used by fewer entries

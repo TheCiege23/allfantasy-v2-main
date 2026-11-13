@@ -15,7 +15,7 @@ import { resolveNbaRosterTemplate, NBA_SLOT_MAP } from '@/lib/nba-roster/NbaRost
 import { resolveNhlRosterTemplate, NHL_SLOT_MAP } from '@/lib/nhl-roster/NhlRosterTemplates'
 import { resolveMlbRosterTemplate, MLB_SLOT_MAP } from '@/lib/mlb-roster/MlbRosterTemplates'
 
-export type BestBallTemplateSeats = { starters: number; bench: number; reserve: number; rounds: number }
+type BestBallTemplateSeats = { starters: number; bench: number; reserve: number; rounds: number }
 
 type SlotCategoryMap = ReadonlyMap<string, { category: string }>
 

@@ -9,10 +9,10 @@ const SPORTS = new Set<string>(SURVIVOR_TRIBE_SPORTS)
 const SPORT_KIT: Record<SurvivorTribeSportKey, string> = { nfl: 'football', ncaaf: 'football', nba: 'basketball', ncaab: 'basketball', mlb: 'baseball', nhl: 'hockey', soccer: 'soccer' }
 const HEX = /^#[0-9a-f]{6}$/i
 /** Bump when the composer's output changes so long-cached emblem URLs refresh. */
-export const TRIBE_EMBLEM_VERSION = '1'
+const TRIBE_EMBLEM_VERSION = '1'
 const LEGACY_CREST = /^\/survivor\/tribes\/crests\/[a-z]+\/([a-z]+)\.svg$/
 
-export type TribeEmblemOptions = { name?: string | null; primaryColor?: string | null; secondaryColor?: string | null }
+type TribeEmblemOptions = { name?: string | null; primaryColor?: string | null; secondaryColor?: string | null }
 
 export function isTribeHex(value: unknown): value is string {
   return typeof value === 'string' && HEX.test(value)
@@ -60,12 +60,12 @@ export function tribeCatalogIdFor(row: { catalogId?: string | null; logoUrl?: st
   return legacy && catalog.some(t => t.id === legacy) ? legacy : null
 }
 
-export type SurvivorTribeEmblemRow = {
+type SurvivorTribeEmblemRow = {
   name: string; logoUrl?: string | null; catalogId?: string | null
   primaryColor?: string | null; secondaryColor?: string | null
 }
 
-export type ResolvedTribeEmblem = { crestUrl: string | null; markUrl: string | null; catalogId: string | null; mascot: string | null }
+type ResolvedTribeEmblem = { crestUrl: string | null; markUrl: string | null; catalogId: string | null; mascot: string | null }
 
 /**
  * The image a tribe row should show: catalogue tribes are composed with their CURRENT name and

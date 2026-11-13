@@ -31,7 +31,7 @@ import { fillLineup } from '@/lib/decision-os/trade/rosterImpact'
 import type { Posture } from './contention'
 import { ELIGIBILITY, readStarterSlots, type PartnerAsset, type SuggestionGrade } from './partnerRanking'
 
-export type RebuildLean = 'rising' | 'flat' | 'declining'
+type RebuildLean = 'rising' | 'flat' | 'declining'
 
 export type RebuildPlayer = {
   id: string
@@ -44,7 +44,7 @@ export type RebuildPlayer = {
   leanRatio?: number | null
 }
 
-export type RebuildPick = {
+type RebuildPick = {
   pickId: string
   label: string
   value: number | null
@@ -63,10 +63,10 @@ export type RebuildRoster = {
 
 export type RebuildTrigger = 'eliminated' | 'strategy'
 
-export type RebuildCall = { asset: PartnerAsset; why: string }
-export type RebuildBuyer = { rosterId: string; ownerName: string | null; why: string }
-export type RebuildSell = RebuildCall & { buyers: RebuildBuyer[] }
-export type RebuildTarget = RebuildCall & { rosterId: string; ownerName: string | null }
+type RebuildCall = { asset: PartnerAsset; why: string }
+type RebuildBuyer = { rosterId: string; ownerName: string | null; why: string }
+type RebuildSell = RebuildCall & { buyers: RebuildBuyer[] }
+type RebuildTarget = RebuildCall & { rosterId: string; ownerName: string | null }
 export type RebuildPackage = {
   rosterId: string
   ownerName: string | null

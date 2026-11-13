@@ -14,15 +14,15 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export const ScoutingModeEnum = z.enum([
+const ScoutingModeEnum = z.enum([
   'standard', 'favored_plan', 'underdog_plan', 'high_risk', 'playoff', 'dynasty_scout',
 ])
-export type ScoutingMode = z.infer<typeof ScoutingModeEnum>
+type ScoutingMode = z.infer<typeof ScoutingModeEnum>
 
-export type ThreatLevel = 'low' | 'moderate' | 'high' | 'elite'
-export type SwingLevel = 'low' | 'medium' | 'high'
+type ThreatLevel = 'low' | 'moderate' | 'high' | 'elite'
+type SwingLevel = 'low' | 'medium' | 'high'
 
-export interface ScoutingPlayer {
+interface ScoutingPlayer {
   playerId: string
   playerName: string
   position: string
@@ -35,7 +35,7 @@ export interface ScoutingPlayer {
   slot: 'starter' | 'bench'
 }
 
-export interface SwingPlayer {
+interface SwingPlayer {
   playerId: string
   playerName: string
   whyImportant: string
@@ -75,9 +75,9 @@ export const OpponentScoutingInputSchema = z.object({
   scoutingMode: ScoutingModeEnum.default('standard'),
   riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).default('moderate'),
 })
-export type OpponentScoutingInput = z.infer<typeof OpponentScoutingInputSchema>
+type OpponentScoutingInput = z.infer<typeof OpponentScoutingInputSchema>
 
-export interface OpponentScoutingResult {
+interface OpponentScoutingResult {
   opponentName: string
   opponentManagerName: string
   matchupSummary: string

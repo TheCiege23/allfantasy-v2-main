@@ -59,7 +59,7 @@ export type SecretStore = {
   resolve(ref: SecretRef): Promise<ResolvedSecret | null>
 }
 
-export type ResolvedSecret = {
+type ResolvedSecret = {
   /** Run `fn` with the credential. The value must not escape the callback. */
   use<T>(fn: (value: string) => Promise<T>): Promise<T>
 }
@@ -104,7 +104,7 @@ export type ProviderPage<T> = {
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
-export type ProviderErrorKind =
+type ProviderErrorKind =
   | 'NOT_FOUND'
   | 'UNAUTHORIZED'
   | 'RATE_LIMITED'
@@ -179,7 +179,7 @@ export type Provider = {
   ): Promise<Result<ProviderPage<ExternalManager>, ProviderError>>
 }
 
-export type ProviderCapabilities = {
+type ProviderCapabilities = {
   /** Can we page, or does every sync pull everything? */
   readonly incremental: boolean
   /** Does connecting need a credential at all? Sleeper's read API does not. */
@@ -212,7 +212,7 @@ export function createProviderRegistry(providers: readonly Provider[]) {
 
 // ─── The stub ────────────────────────────────────────────────────────────────
 
-export type StubProviderOptions = {
+type StubProviderOptions = {
   readonly key?: string
   readonly league?: ExternalLeague
   readonly teams?: readonly ExternalTeam[]

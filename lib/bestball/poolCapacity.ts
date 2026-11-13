@@ -42,7 +42,7 @@ import { resolveNcaabRosterTemplate } from '@/lib/ncaab-roster/NcaabRosterTempla
 import { resolveSoccerRosterTemplate } from '@/lib/soccer-roster/SoccerRosterTemplates'
 
 /** Share of a pool a league may start each week before it is called tight. */
-export const BEST_BALL_POOL_TIGHT_SHARE = 0.75
+const BEST_BALL_POOL_TIGHT_SHARE = 0.75
 
 /**
  * Draftable players per position (normalized tokens, as `buildBestBallSlots` eligibility names them).
@@ -69,7 +69,7 @@ export const BEST_BALL_POSITION_POOL: Readonly<Record<string, Readonly<Record<st
   SOCCER: { GK: 90, DEF: 300, MID: 330, FWD: 180 },
 }
 
-export type BestBallPoolIssue = {
+type BestBallPoolIssue = {
   code: 'pool_exhausted' | 'pool_tight' | 'seat_unfillable'
   severity: 'refuse' | 'warn'
   /** The slot tokens involved (normalized: `FLX`, `SF`, `DEF`). */

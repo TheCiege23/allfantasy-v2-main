@@ -13,7 +13,7 @@ import {
 } from '@/lib/commissioner-os/i18n/toolsCopy'
 import { moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 
-export interface ActivityEventRowProps {
+interface ActivityEventRowProps {
   event: CommissionerActivityEventContract
   isLast: boolean
 }

@@ -10,7 +10,7 @@ export type WindowStatus =
 
 export type TrajectoryDirection = 'rising' | 'flat' | 'falling'
 
-export interface RosterAgeMetrics {
+interface RosterAgeMetrics {
   averageAge: number
   weightedStarterAge: number
   youngCoreScore: number

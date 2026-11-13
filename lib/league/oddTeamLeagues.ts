@@ -13,7 +13,7 @@
  */
 
 /** League types whose odd sizes are an AF Commissioner option. */
-export const ODD_TEAM_COUNT_GATED_LEAGUE_TYPES: ReadonlySet<string> = new Set(['keeper'])
+const ODD_TEAM_COUNT_GATED_LEAGUE_TYPES: ReadonlySet<string> = new Set(['keeper'])
 
 /** League types where an odd size turns league median on by default. */
 export const ODD_TEAM_MEDIAN_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'keeper'])

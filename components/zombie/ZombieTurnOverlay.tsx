@@ -32,7 +32,7 @@ function markSeen(leagueId: string, key: string) {
 
 const fmt = (n: number | null) => (n == null ? '—' : (Math.round(n * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 }))
 
-export type ZombieTurnContext = {
+type ZombieTurnContext = {
   reviveSerums: number
   serums: number
   lossToZombieInfects: boolean

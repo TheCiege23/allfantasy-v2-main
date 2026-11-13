@@ -19,7 +19,7 @@ import type { PlayoffRoundKey, PlayoffSeriesView, PlayoffSport } from "./types"
  */
 
 /** Which half of the draw a column belongs to, reading outward from the final. */
-export type BracketSide = "left" | "right"
+type BracketSide = "left" | "right"
 
 export type BracketNode = {
   series: PlayoffSeriesView
@@ -138,7 +138,7 @@ export function descendantsOf(seriesNumber: number, graph: BracketGraph): Set<nu
   return out
 }
 
-export type SeriesOdds = { home: number; away: number; basis: "live" | "seed" | "unknown" }
+type SeriesOdds = { home: number; away: number; basis: "live" | "seed" | "unknown" }
 
 /**
  * Win probability for a series.
@@ -169,7 +169,7 @@ export function isResolved(series: PlayoffSeriesView, isOfficial: (n: string | n
   return isOfficial(series.homeTeamName) && isOfficial(series.awayTeamName)
 }
 
-export type SeriesStatusKind = "live" | "final" | "scheduled" | "tbd"
+type SeriesStatusKind = "live" | "final" | "scheduled" | "tbd"
 
 export function seriesStatusKind(
   series: PlayoffSeriesView,
@@ -211,10 +211,10 @@ export function abbreviate(name: string | null | undefined): string {
   return words[words.length - 1].slice(0, 3).toUpperCase()
 }
 
-export type SportRoundLabels = Partial<Record<PlayoffRoundKey, string>>
+type SportRoundLabels = Partial<Record<PlayoffRoundKey, string>>
 
 /** Short round labels for the column headers, per sport vocabulary. */
-export const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
+const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
   mlb: {
     wild_card: "Wild Card",
     division_series: "Division",

@@ -35,7 +35,7 @@ import { matchupPulseRefreshMessages } from '@/lib/core-app/messages/matchupPuls
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
 
-export type MatchupPulseRefreshProps = {
+type MatchupPulseRefreshProps = {
   /**
    * A starter on screen has a game in progress right now, so the numbers can move within seconds —
    * the 20s cadence. Not "starters still to play": that held 20s from Thursday to Monday.

@@ -11,7 +11,7 @@ import { getDefaultOgImagePath } from "./SEOPageResolver"
 const SITE_NAME = "AllFantasy"
 const INSTALL_PATH = "/install"
 
-export interface MetadataInput extends SEOPageConfig {
+interface MetadataInput extends SEOPageConfig {
   imagePath?: string
 }
 

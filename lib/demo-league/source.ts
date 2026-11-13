@@ -41,11 +41,11 @@ export type SourceTeam = {
 
 export type SourcePlayer = { name: string; position: string | null; team: string | null; headshotUrl: string | null }
 
-export type SourceRoster = { teamKey: string; starters: SourcePlayer[]; bench: SourcePlayer[]; emptyStarterSlots: number }
+type SourceRoster = { teamKey: string; starters: SourcePlayer[]; bench: SourcePlayer[]; emptyStarterSlots: number }
 
-export type SourceWeekRow = { seasonYear: number; week: number; rosterId: string; matchupId: number | null; pointsFor: number; pointsAgainst: number; win: number }
+type SourceWeekRow = { seasonYear: number; week: number; rosterId: string; matchupId: number | null; pointsFor: number; pointsAgainst: number; win: number }
 
-export type SourceLeague = {
+type SourceLeague = {
   id: string
   name: string | null
   platform: string

@@ -1,4 +1,4 @@
-export const SHARE_VIDEO_FORMATS = [
+const SHARE_VIDEO_FORMATS = [
   { mime: 'video/mp4;codecs=avc1.42E01E', extension: 'mp4' },
   { mime: 'video/mp4', extension: 'mp4' },
   { mime: 'video/webm;codecs=vp9', extension: 'webm' },
@@ -6,7 +6,7 @@ export const SHARE_VIDEO_FORMATS = [
   { mime: 'video/webm', extension: 'webm' },
 ] as const
 
-export type ShareVideoFormat = (typeof SHARE_VIDEO_FORMATS)[number]
+type ShareVideoFormat = (typeof SHARE_VIDEO_FORMATS)[number]
 
 /** Prefer broadly shareable MP4, then the best WebM codec the browser records. */
 export function chooseShareVideoFormat(

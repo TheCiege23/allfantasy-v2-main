@@ -169,7 +169,7 @@ function canonicalNflTeam(raw: string | null | undefined): string | null {
  * be named — and the caller emits nothing for null, the same "no event rather than a guess" this module
  * already applies to the ambiguous `fumbler` role (GAPS.md N-06).
  */
-export function recoveredByOffense(play: Pick<PbpPlay, 'possession' | 'players'>): boolean | null {
+function recoveredByOffense(play: Pick<PbpPlay, 'possession' | 'players'>): boolean | null {
   const recoverer = play.players.find((x) => x.role === 'recoverer')
   if (!recoverer) return null
   const offense = canonicalNflTeam(play.possession)
@@ -196,7 +196,7 @@ const TWO_POINT_MARKER = /TWO-POINT CONVERSION ATTEMPT\.?/i
 /** A try the DEFENCE took back — two points to a team defence, nothing to any player on this feed. */
 const DEFENSIVE_TWO_POINT_MARKER = /DEFENSIVE TWO-POINT ATTEMPT/i
 
-export type TwoPointTry = {
+type TwoPointTry = {
   /** The touchdown's own sentence — empty when the row is the try alone. */
   touchdownText: string
   /** The offence's try, cut before any defensive return. */

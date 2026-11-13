@@ -27,7 +27,7 @@ export type LeagueShellTab =
   | "Commissioner"
   | "Previous Leagues"
 
-export const LEAGUE_SHELL_TABS: LeagueShellTab[] = [
+const LEAGUE_SHELL_TABS: LeagueShellTab[] = [
   "Overview",
   "Team",
   "Matchups",

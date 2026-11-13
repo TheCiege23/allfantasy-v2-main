@@ -63,7 +63,7 @@ export function survivorTwistFoundationPatch(id: SurvivorTwistPresetId, tribeCou
   }
 }
 
-export type SurvivorTwistIdolConfig = { mode: 'random'; count: number; pickedTypeIds: [] } | { mode: 'pick'; count: number; pickedTypeIds: string[] }
+type SurvivorTwistIdolConfig = { mode: 'random'; count: number; pickedTypeIds: [] } | { mode: 'pick'; count: number; pickedTypeIds: string[] }
 
 /** The idol setup a preset saves: Simple picks its idols, Classic and Full draw at random. */
 export function survivorTwistIdolConfig(id: SurvivorTwistPresetId, tribeCount: number): SurvivorTwistIdolConfig {

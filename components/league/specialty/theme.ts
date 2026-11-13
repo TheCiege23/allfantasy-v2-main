@@ -17,7 +17,7 @@ export type SpecialtyFormat =
   /** Dynasty Era (gold on ink). No `/specialty/dynasty/` art package — like `tournament`, theme only. */
   | 'dynasty'
 
-export interface SpecialtyTheme {
+interface SpecialtyTheme {
   acc: string
   acc2: string
   accInk: string

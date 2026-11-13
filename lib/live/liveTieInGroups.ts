@@ -10,7 +10,7 @@
  * Pure so the grouping can be tested without rendering.
  */
 
-export type TieInLike = {
+type TieInLike = {
   leagueId: string
   leagueName: string
   playerId: string

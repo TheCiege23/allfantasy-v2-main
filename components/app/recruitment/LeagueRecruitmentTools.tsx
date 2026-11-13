@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react"
 import { Link2, Copy, RefreshCw, AtSign, Mail, Globe, Loader2, Check, MessageCircle } from "lucide-react"
 import { buildInviteShareUrl } from "@/lib/invite-engine/shareUrls"
 
-export interface LeagueRecruitmentToolsProps {
+interface LeagueRecruitmentToolsProps {
   leagueId: string
   /** Initial invite from parent (joinUrl, inviteCode). */
   initialInvite?: {

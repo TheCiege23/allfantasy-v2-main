@@ -63,7 +63,7 @@ type Step = { n: string; title: string; body: string }
 type Faq = { q: string; a: string; aboutPrice?: true }
 type NetworkCard = { name: string; body: string }
 
-export type LandingCopy = {
+type LandingCopy = {
   /** Value for the document's `lang` attribute and the OpenGraph locale. */
   htmlLang: string
   ogLocale: string

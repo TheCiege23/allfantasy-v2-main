@@ -43,7 +43,7 @@ export async function persistLeagueDemand(
   return ldi
 }
 
-export interface DemandTrend {
+interface DemandTrend {
   position: string
   weeks: { weekStart: string; demandScore: number; tradeVolume: number }[]
 }

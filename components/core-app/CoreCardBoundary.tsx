@@ -22,7 +22,7 @@ import { isNavigationSignal } from '@/components/core-app/CoreScreenErrorBoundar
 type Props = { card: string; resetKey: string; children: ReactNode }
 type State = { failed: boolean; resetKey: string }
 
-export class CoreCardBoundary extends Component<Props, State> {
+class CoreCardBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
     this.state = { failed: false, resetKey: props.resetKey }

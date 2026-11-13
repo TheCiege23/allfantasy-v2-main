@@ -10,14 +10,14 @@
 import { resolveTradeRole, explainPlayerMarketValue, summarizeTradeBlock } from './tradeIntelligenceTools'
 import type { TradeRole } from './types'
 
-export interface TradeIntelligenceContextInput {
+interface TradeIntelligenceContextInput {
   leagueId: string
   userId: string
   playerId?: string | null
   partnerRosterId?: string | null
 }
 
-export interface TradeIntelligenceContext {
+interface TradeIntelligenceContext {
   leagueId: string
   role: TradeRole
   myRosterId: string | null

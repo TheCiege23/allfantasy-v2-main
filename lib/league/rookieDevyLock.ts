@@ -12,7 +12,7 @@
 
 import { prisma } from '@/lib/prisma'
 
-export type DraftLockStatus = {
+type DraftLockStatus = {
   isLocked: boolean
   lockType: 'rookie' | 'devy' | 'rookie_and_devy' | null
   lockedAt: Date | null

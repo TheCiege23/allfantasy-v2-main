@@ -19,7 +19,7 @@ import type { ShareMomentRecord } from './types'
  *  - `{ state: 'public', ... }` → display names, the public scroll, torch counts and three more
  *    public moments from the same league.
  */
-export type MomentPageData =
+type MomentPageData =
   | { state: 'private' }
   | {
     state: 'public'

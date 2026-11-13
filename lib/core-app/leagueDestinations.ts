@@ -13,7 +13,7 @@
  */
 
 /** Rail section ids. `now` and `league` keep their ids so the Survivor theme's renames still apply. */
-export type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'manage'
+type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'manage'
 
 /**
  * The rail's sections, in order. The league-scoped groups come first: with a league held — which
@@ -74,7 +74,7 @@ export const LEAGUE_CHIP_SECTION: NavSectionId = 'now'
  * ⚠ ONLY A MEASURED `false` HIDES. `undefined` and `null` mean "not determined" — no coverage block
  * on file, or a read that failed — and hiding on an unknown would take a working league's views away.
  */
-export type LeagueCapabilities = {
+type LeagueCapabilities = {
   hasScoredWeek?: boolean | null
   trades?: boolean
   draft?: boolean

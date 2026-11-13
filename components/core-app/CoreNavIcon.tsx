@@ -63,7 +63,7 @@ const STROKE = {
  * Bar controls that are not nav destinations: the league-first bar's Chimmy, Play and Me, and the
  * More button. They used unicode marks (✦ ⊕ ◉ ⋯) beside drawn destination icons on the same bar.
  */
-export type ShellIconKey = 'chimmy' | 'play' | 'me' | 'more'
+type ShellIconKey = 'chimmy' | 'play' | 'me' | 'more'
 
 const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
   /* House. */

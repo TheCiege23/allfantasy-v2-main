@@ -19,9 +19,9 @@
 
 export const ADVANCED_KEY = 'guillotine_advanced'
 export const MAX_CHOPS_PER_WEEK = 4
-export const MAX_WEEK = 30
+const MAX_WEEK = 30
 
-export type ImmunityRule = 'off' | 'top_scorer'
+type ImmunityRule = 'off' | 'top_scorer'
 
 export type GuillotineAdvanced = {
   /** From `fromWeek` on, `chops` teams per week (until the next step). Sorted by week. */

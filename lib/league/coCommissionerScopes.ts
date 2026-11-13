@@ -23,7 +23,7 @@ export type CoCommissionerScope = (typeof CO_COMMISSIONER_SCOPES)[number]
 export const CO_COMMISSIONER_SCOPES_KEY = 'co_commissioner_scopes'
 export const MAX_CO_COMMISSIONERS = 2
 
-export const CO_COMMISSIONER_SCOPE_LABELS: Record<CoCommissionerScope, { label: string; help: string }> = {
+const CO_COMMISSIONER_SCOPE_LABELS: Record<CoCommissionerScope, { label: string; help: string }> = {
   scoring: { label: 'Scoring', help: 'Scoring rules and presets' },
   rosters: { label: 'Rosters', help: 'Roster rules, lineups, keepers, taxi, IR and roster moves for any team' },
   trades: { label: 'Trades', help: 'Trade rules, trade review and vetoes' },

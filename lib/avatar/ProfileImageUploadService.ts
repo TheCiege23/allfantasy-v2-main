@@ -18,7 +18,7 @@ import {
 
 const AVATAR_UPLOAD_API = "/api/user/profile/avatar"
 
-export interface UploadResult {
+interface UploadResult {
   ok: boolean
   url?: string
   /** Already human-readable. Render it directly — do not map it again. */

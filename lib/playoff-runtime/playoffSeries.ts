@@ -28,13 +28,13 @@ export const PLAYOFF_SERIES_SETTINGS_KEY = 'playoff_series' as const
 
 /** The series lengths a commissioner can pick. 1 is a single week. */
 export const PLAYOFF_SERIES_LENGTHS = [1, 3, 5, 7] as const
-export type PlayoffSeriesLength = (typeof PLAYOFF_SERIES_LENGTHS)[number]
+type PlayoffSeriesLength = (typeof PLAYOFF_SERIES_LENGTHS)[number]
 
 /** A bracket is at most 16 teams (four rounds); a commissioner bye plan can add rounds. Generous bound. */
-export const MAX_PLAYOFF_SERIES_ROUNDS = 8
+const MAX_PLAYOFF_SERIES_ROUNDS = 8
 
 /** The sports series mode is offered to (native redraft leagues only). */
-export const PLAYOFF_SERIES_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB'])
+const PLAYOFF_SERIES_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB'])
 
 export function playoffSeriesSportSupported(sport: unknown): boolean {
   return PLAYOFF_SERIES_SPORTS.has(String(sport ?? '').trim().toUpperCase())
@@ -65,7 +65,7 @@ export function readPlayoffSeriesLengths(settings: unknown): number[] | null {
   return normalized(lengths)
 }
 
-export type ParsedPlayoffSeriesLengths = { ok: true; value: number[] | null } | { ok: false; error: string }
+type ParsedPlayoffSeriesLengths = { ok: true; value: number[] | null } | { ok: false; error: string }
 
 /** A commissioner's submitted lengths: an array of 1/3/5/7 (null or [] turns series off). */
 export function parsePlayoffSeriesLengths(raw: unknown): ParsedPlayoffSeriesLengths {
@@ -126,15 +126,15 @@ export function seriesWinsNeeded(bestOf: number): number {
   return Math.ceil(Math.max(1, Math.floor(Number(bestOf)) || 1) / 2)
 }
 
-export type SeriesGameInput = { week: number; homePoints: number; awayPoints: number }
+type SeriesGameInput = { week: number; homePoints: number; awayPoints: number }
 
-export type SeriesGame = SeriesGameInput & {
+type SeriesGame = SeriesGameInput & {
   winnerRosterId: string | null
   /** True when the points were equal and the higher seed took the game. */
   decidedBySeed: boolean
 }
 
-export type SeriesResult = {
+type SeriesResult = {
   bestOf: number
   winsNeeded: number
   homeWins: number

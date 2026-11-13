@@ -291,14 +291,14 @@ export interface AIActionEvent {
 // ─── Saved Recommendation ───────────────────────────────────────────────────────
 
 /** Status lifecycle for a unified saved recommendation. */
-export type SavedRecommendationStatus =
+type SavedRecommendationStatus =
   | 'saved'
   | 'acted_on'
   | 'dismissed'
   | 'stale'
 
 /** Category of recommendation, maps to sourceSurface content type. */
-export type RecommendationCategory =
+type RecommendationCategory =
   | 'waiver'
   | 'trade'
   | 'lineup'

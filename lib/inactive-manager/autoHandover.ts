@@ -46,7 +46,7 @@ export function parseAutoHandover(input: unknown, byUserId: string, now: Date = 
   return { ok: true, value: { days: o.days as AutoHandoverDays, to: o.to as AutoHandoverTarget, since: now.toISOString(), byUserId } }
 }
 
-export type HandoverCandidate = { rosterId: string; lastOwnActionAt: Date | null }
+type HandoverCandidate = { rosterId: string; lastOwnActionAt: Date | null }
 
 /**
  * The teams to hand over now: not already managed, and idle — since the later of the owner's last own

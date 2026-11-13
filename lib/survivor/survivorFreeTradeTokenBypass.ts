@@ -17,7 +17,7 @@
 import { prisma } from '@/lib/prisma'
 import { registerSurvivorTradeBypassProvider, registerSurvivorTradeBypassRedeemer, type SurvivorTradeBypassContext } from './survivorTradeRuleBypass'
 
-export const FREE_TRADE_TOKEN_SOURCE = 'free_trade_token'
+const FREE_TRADE_TOKEN_SOURCE = 'free_trade_token'
 
 /** Same-position: two sides, each sends ≥1 player, and the sorted position lists match. Pure. */
 export function isSamePositionTrade(players: ReadonlyArray<{ fromRosterId: string; position: string | null }>): boolean {
@@ -47,7 +47,7 @@ async function positionsFor(leagueId: string, players: NonNullable<SurvivorTrade
   })
 }
 
-export async function freeTradeTokenBypassProvider(ctx: SurvivorTradeBypassContext): Promise<{ bypass: boolean; source?: string } | null> {
+async function freeTradeTokenBypassProvider(ctx: SurvivorTradeBypassContext): Promise<{ bypass: boolean; source?: string } | null> {
   if (ctx.week < 1 || !ctx.rosterIds.length) return null
   const { getSurvivorTradeTokens } = await import('./SurvivorEffectEngine')
   let samePosition: boolean | null = null
@@ -65,7 +65,7 @@ export async function freeTradeTokenBypassProvider(ctx: SurvivorTradeBypassConte
   return null
 }
 
-export async function redeemFreeTradeTokenBypass(args: { leagueId: string; week: number; tradeRef: string; source: string; actorUserId?: string | null }): Promise<void> {
+async function redeemFreeTradeTokenBypass(args: { leagueId: string; week: number; tradeRef: string; source: string; actorUserId?: string | null }): Promise<void> {
   const rosterId = args.source.slice(FREE_TRADE_TOKEN_SOURCE.length + 1)
   if (!rosterId) return
   const { redeemSurvivorTradeToken } = await import('./SurvivorEffectEngine')

@@ -10,9 +10,9 @@ import type { CommissionerPlatformResponse, CommissionerRelatedLink } from '../.
  * source modules — never a duplicated copy of League Health's score
  * history, Analytics' snapshot, or any other module's raw data.
  */
-export type ReportCategory = 'season_recap' | 'engagement' | 'transactions' | 'commissioner_digest'
+type ReportCategory = 'season_recap' | 'engagement' | 'transactions' | 'commissioner_digest'
 
-export type ReportFrequency = 'weekly' | 'monthly' | 'manual'
+type ReportFrequency = 'weekly' | 'monthly' | 'manual'
 
 export type ReportStatus = 'queued' | 'generating' | 'ready' | 'failed'
 
@@ -20,7 +20,7 @@ export type ReportFormat = 'pdf' | 'csv'
 
 export type ReportShareStatus = 'private' | 'shared'
 
-export interface ReportSchedule {
+interface ReportSchedule {
   frequency: ReportFrequency
   /** Only meaningful when `frequency !== 'manual'`. */
   nextRunAt?: string

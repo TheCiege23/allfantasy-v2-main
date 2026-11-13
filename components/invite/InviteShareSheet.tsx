@@ -8,7 +8,7 @@ import { ShareModal } from '@/components/share'
 import { useShareModal } from '@/hooks/useShareModal'
 import type { ShareDestination, ShareableKind, ShareVisibility } from '@/lib/share-engine/types'
 
-export interface InviteShareSheetProps {
+interface InviteShareSheetProps {
   inviteUrl: string
   inviteLinkId?: string
   token?: string

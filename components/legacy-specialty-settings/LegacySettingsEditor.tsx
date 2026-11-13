@@ -35,7 +35,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** ISO / Date → `datetime-local` input value in the viewer's time zone ('' when none). */
-export function toLocalInput(v: unknown): string {
+function toLocalInput(v: unknown): string {
   if (v === null || v === undefined || v === '') return ''
   const d = v instanceof Date ? v : new Date(String(v))
   if (Number.isNaN(d.getTime())) return ''

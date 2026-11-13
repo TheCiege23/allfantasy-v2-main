@@ -39,7 +39,7 @@ import { nflFixtureKey } from '@/lib/sports/teamRef'
  * last rather than winning by accident — a new provider added upstream must not silently outrank
  * the ones whose behaviour is understood.
  */
-export const GAME_SOURCE_PRIORITY = ['espn_live', 'espn', 'rolling_insights', 'thesportsdb'] as const
+const GAME_SOURCE_PRIORITY = ['espn_live', 'espn', 'rolling_insights', 'thesportsdb'] as const
 
 /** Rank for a source; unknown sources sort after every known one. */
 export function gameSourceRank(source: string | null | undefined): number {
@@ -75,7 +75,7 @@ export function isPreseasonGame(row: { seasonType?: string | null }): boolean {
 }
 
 /** The minimum a row needs for this module to key and rank it. */
-export type DedupableGame = {
+type DedupableGame = {
   homeTeam: string | null
   awayTeam: string | null
   startTime: Date | null
@@ -84,7 +84,7 @@ export type DedupableGame = {
   source: string
 }
 
-export type DedupeResult<T> = {
+type DedupeResult<T> = {
   /** One row per fixture, plus every row that could not be keyed. */
   games: T[]
   /** Rows collapsed away — `input.length - games.length`. */

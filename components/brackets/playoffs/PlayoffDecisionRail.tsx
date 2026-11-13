@@ -26,7 +26,7 @@ import { isPlaceholderName } from "@/lib/playoffs/playoffTeamColors"
  * line together.
  */
 
-export type PlayoffDecisionRailProps = {
+type PlayoffDecisionRailProps = {
   view: PlayoffChallengeView
   graph: BracketGraph
   sport: string

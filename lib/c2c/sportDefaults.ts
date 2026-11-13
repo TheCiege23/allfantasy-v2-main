@@ -1,4 +1,4 @@
-export type C2CSlotDef = { slot: string; position: string; side: 'campus' | 'canton' }
+type C2CSlotDef = { slot: string; position: string; side: 'campus' | 'canton' }
 
 export const NFL_CFB_DEFAULTS = {
   campusStarterSlots: [

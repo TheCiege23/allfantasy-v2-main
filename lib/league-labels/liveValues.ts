@@ -63,17 +63,17 @@ export function liveRulesForScoringLabel(label: ScoringLabel): Record<string, nu
 const LIVE_SLOT_TO_DESIGN: Readonly<Record<string, string>> = { DEF: 'DST', SUPERFLEX: 'SFLEX', IDP_FLEX: 'IDP' }
 const RESERVE = new Set(['BN', 'IR', 'IL', 'IL_PLUS', 'TAXI', 'DEVY'])
 
-export type RosterShape = { starters: Record<string, number>; bench: number; injured: number }
+type RosterShape = { starters: Record<string, number>; bench: number; injured: number }
 
 /** A roster label's design counts as a comparable shape. */
-export function rosterLabelShape(label: RosterLabel): RosterShape {
+function rosterLabelShape(label: RosterLabel): RosterShape {
   const starters: Record<string, number> = {}
   for (const p of label.starters) starters[p] = (starters[p] ?? 0) + 1
   return { starters, bench: label.bench, injured: label.injured }
 }
 
 /** A live slot map (NflRosterTemplate.slots, league roster config) as a comparable shape. */
-export function rosterShapeFromSlots(slots: Record<string, number>): RosterShape {
+function rosterShapeFromSlots(slots: Record<string, number>): RosterShape {
   const starters: Record<string, number> = {}
   let bench = 0
   let injured = 0

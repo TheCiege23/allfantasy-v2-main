@@ -139,7 +139,7 @@ const LONG_STATS: Record<string, string> = {
   passing_long: 'pass',
 }
 
-export type DetectOptions = {
+type DetectOptions = {
   /** Yards at or above which a long gain is worth an alert. */
   bigPlayYards?: number
 }

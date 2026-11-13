@@ -23,7 +23,7 @@
  * a database read, no provider call — rewriting only the seasons where someone's slot moved.
  */
 
-export const FORMER_SLEEPER_KEY_PREFIX = 'former:sleeper:'
+const FORMER_SLEEPER_KEY_PREFIX = 'former:sleeper:'
 
 /** A manager who played that season and holds no team in the league now. */
 export function formerSleeperManagerKey(ownerId: string): string {
@@ -35,7 +35,7 @@ export function formerSleeperSlotKey(season: number, rosterId: string): string {
   return `${FORMER_SLEEPER_KEY_PREFIX}slot:${season}:${rosterId}`
 }
 
-export type FormerSleeperKey =
+type FormerSleeperKey =
   | { kind: 'manager'; ownerId: string }
   | { kind: 'slot'; season: number; rosterId: string }
 
@@ -117,7 +117,7 @@ export function canonicalIdsForSeason(args: {
 }
 
 /** The owners a season's rosters had, as stored beside it: `r` roster id, `o` owner, `c` co-owners. */
-export type StoredRosterOwner = { r: string; o: string | null; c?: string[] }
+type StoredRosterOwner = { r: string; o: string | null; c?: string[] }
 
 export function compactRosterOwners(
   rosters: ReadonlyArray<{ roster_id: unknown; owner_id?: unknown; co_owners?: unknown }>,

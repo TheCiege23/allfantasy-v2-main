@@ -21,7 +21,7 @@
 
 export type DraftKind = 'snake' | 'linear'
 
-export type DraftBoardCell = {
+type DraftBoardCell = {
   round: number
   /** 1-based position within the round, in board (left-to-right) terms. */
   column: number
@@ -33,7 +33,7 @@ export type DraftBoardCell = {
   label: string
 }
 
-export type DraftBoardRow = {
+type DraftBoardRow = {
   round: number
   /** True when this round runs right-to-left on the board. */
   reversed: boolean

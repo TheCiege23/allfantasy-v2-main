@@ -4,9 +4,9 @@
 
 import type { PlatformChatThread } from "@/types/platform-shared"
 
-export type ConversationType = "dm" | "group"
+type ConversationType = "dm" | "group"
 
-export function filterThreadsByType(
+function filterThreadsByType(
   threads: PlatformChatThread[],
   type: ConversationType
 ): PlatformChatThread[] {

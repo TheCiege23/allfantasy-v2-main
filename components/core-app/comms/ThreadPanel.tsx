@@ -47,7 +47,7 @@ import { PeoplePicker } from './PeoplePicker'
  * out of date.
  */
 
-export type PlatformThread = {
+type PlatformThread = {
   id: string
   threadType: string
   title: string

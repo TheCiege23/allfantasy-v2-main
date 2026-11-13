@@ -16,8 +16,8 @@
  * literally produces silent data corruption exactly once.
  */
 
-export type Ok<T> = { readonly ok: true; readonly value: T }
-export type Err<E> = { readonly ok: false; readonly error: E }
+type Ok<T> = { readonly ok: true; readonly value: T }
+type Err<E> = { readonly ok: false; readonly error: E }
 
 /**
  * Defaulted to `DomainError` so call sites read `Result<League>` rather than

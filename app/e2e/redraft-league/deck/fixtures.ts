@@ -21,7 +21,7 @@ export const DECK_SPORTS = {
 export type DeckSport = keyof typeof DECK_SPORTS
 export type DeckState = 'season' | 'empty'
 
-export const MANAGERS = [
+const MANAGERS = [
   'Sunday Scaries', 'Taco Tuesday', 'Monday Night Misery', 'Waiver Wire Wizards', 'Bench Mob', 'The Commish',
   'Late Round Legends', 'Trade Deadline Thieves', 'Couch Coaches', 'Fourth & Long', 'Buzzer Beaters', 'Dynasty Dreams',
 ]

@@ -22,7 +22,7 @@ export type FanPredictionState = {
   leaders: Array<{ name: string; correct: number; calls: number }>
 }
 
-export type SubmitFanPredictionResult = { ok: true; myPick: string } | { ok: false; status: 400 | 403 | 404 | 409 | 503; error: string }
+type SubmitFanPredictionResult = { ok: true; myPick: string } | { ok: false; status: 400 | 403 | 404 | 409 | 503; error: string }
 
 const UNAVAILABLE: FanPredictionState = { available: false, open: null, signedIn: false, blocked: null, myPick: null, myRecord: null, leaders: [] }
 

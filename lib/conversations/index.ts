@@ -3,27 +3,23 @@
  */
 
 export {
-  CONVERSATION_TYPE_DIRECT,
   getCreateDMPayload,
   getThreadMessagesUrl,
 } from "./DirectMessageService"
 
 export {
-  CONVERSATION_TYPE_GROUP,
   getCreateGroupPayload,
   GROUP_MIN_MEMBERS,
   GROUP_MAX_MEMBERS,
 } from "./GroupMessageService"
 
 export {
-  filterThreadsByType,
   getDMThreads,
   getGroupThreads,
   sortThreadsByLastMessage,
   getConversationDisplayTitle,
   getConversationPreview,
 } from "./ConversationListResolver"
-export type { ConversationType } from "./ConversationListResolver"
 
 export {
   PARTICIPANT_SEARCH_MIN_QUERY,

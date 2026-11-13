@@ -18,7 +18,7 @@ import type { CareerTradeEvent } from './careerTrades'
  */
 
 export const TIMELINE_KINDS = ['title', 'milestone', 'award', 'draft', 'trade', 'rival', 'league'] as const
-export type TimelineKind = (typeof TIMELINE_KINDS)[number]
+type TimelineKind = (typeof TIMELINE_KINDS)[number]
 
 export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   title: 'Championships',
@@ -30,7 +30,7 @@ export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   league: 'Leagues',
 }
 
-export type TimelineEvent = {
+type TimelineEvent = {
   key: string
   kind: TimelineKind
   season: number
@@ -45,7 +45,7 @@ export type TimelineEvent = {
   more?: number
 }
 
-export type TimelineSeason = {
+type TimelineSeason = {
   season: number
   record: string | null
   titles: number

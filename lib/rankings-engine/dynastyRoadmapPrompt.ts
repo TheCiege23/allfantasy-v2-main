@@ -8,7 +8,7 @@
  * text is exactly the original.
  */
 
-export interface DynastyRoadmapPromptInput {
+interface DynastyRoadmapPromptInput {
   sport?: string | null
   leagueType: string
   isSF: boolean
@@ -36,7 +36,7 @@ const SPORT_LABEL: Record<string, string> = {
 }
 
 /** Upper-cased sport, defaulting to NFL for a missing/blank value. */
-export function normalizeRoadmapSport(sport: string | null | undefined): string {
+function normalizeRoadmapSport(sport: string | null | undefined): string {
   const s = String(sport ?? '').trim().toUpperCase()
   return s || 'NFL'
 }

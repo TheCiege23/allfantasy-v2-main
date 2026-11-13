@@ -37,7 +37,7 @@ export type DailyBestBallCounted = {
   days: number
 }
 
-export type DailyBestBallResult = {
+type DailyBestBallResult = {
   total: number
   days: DailyBestBallDay[]
   counted: DailyBestBallCounted[]

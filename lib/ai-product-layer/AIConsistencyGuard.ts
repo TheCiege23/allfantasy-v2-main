@@ -7,7 +7,7 @@
  * Product-level rules every AI surface should respect.
  * Use in prompts or as a checklist; actual enforcement is in lib/unified-ai/AIFactGuard and orchestration.
  */
-export const AI_PRODUCT_CONSISTENCY_RULES = [
+const AI_PRODUCT_CONSISTENCY_RULES = [
   'Deterministic-first: use engine/output numbers as source of truth; do not override with model opinion.',
   'Fact-grounded: only state what is supported by provided data or deterministic payload.',
   'No invented claims: no fake stats, no made-up fairness scores, no vibes-only advice.',

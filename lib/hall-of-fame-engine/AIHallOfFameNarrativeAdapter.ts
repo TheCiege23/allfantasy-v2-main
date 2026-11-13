@@ -6,7 +6,7 @@
 import type { HallOfFameEntryRow, HallOfFameMomentRow } from './HallOfFameQueryService'
 import { getHallOfFameSportLabel } from './SportHallOfFameResolver'
 
-export interface HallOfFameNarrativeContext {
+interface HallOfFameNarrativeContext {
   type: 'entry' | 'moment'
   id: string
   title: string

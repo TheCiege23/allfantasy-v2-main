@@ -12,7 +12,7 @@
 import { starterSlotIndexOf } from '@/lib/league/lineupSlotPositions'
 import { CAMPUS_SECTION, campusStartersAfterSave } from '@/lib/c2c/campusLineup'
 
-export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
+type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
 function toPlayerId(raw: unknown): string | null {
   if (typeof raw === 'string') return raw.trim() || null

@@ -11,8 +11,8 @@
  * Pass ONE league-season's rows (and only the rows that count, e.g. scored regular-season weeks);
  * the grouping key has no league or season in it. Rosters with no result are absent from the map.
  */
-export type HeadToHeadRow = { week: number; matchupId: number | null; rosterId: string; pointsFor: number }
-export type HeadToHeadRecord = { wins: number; losses: number; ties: number }
+type HeadToHeadRow = { week: number; matchupId: number | null; rosterId: string; pointsFor: number }
+type HeadToHeadRecord = { wins: number; losses: number; ties: number }
 
 export function headToHeadRecords(rows: readonly HeadToHeadRow[]): Map<string, HeadToHeadRecord> {
   const groups = new Map<string, HeadToHeadRow[]>()

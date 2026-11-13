@@ -11,10 +11,10 @@ import { z } from 'zod'
 // Enums
 // ---------------------------------------------------------------------------
 
-export const RoadmapModeEnum = z.enum(['dynasty', 'devy', 'c2c'])
-export type RoadmapMode = z.infer<typeof RoadmapModeEnum>
+const RoadmapModeEnum = z.enum(['dynasty', 'devy', 'c2c'])
+type RoadmapMode = z.infer<typeof RoadmapModeEnum>
 
-export const FranchisePhaseEnum = z.enum([
+const FranchisePhaseEnum = z.enum([
   'contending',
   'retooling',
   'rebuilding',
@@ -25,7 +25,7 @@ export const FranchisePhaseEnum = z.enum([
 ])
 export type FranchisePhase = z.infer<typeof FranchisePhaseEnum>
 
-export const UserGoalEnum = z.enum([
+const UserGoalEnum = z.enum([
   'win_now',
   'sustainable_contender',
   'fast_rebuild',
@@ -36,7 +36,7 @@ export const UserGoalEnum = z.enum([
 ])
 export type UserGoal = z.infer<typeof UserGoalEnum>
 
-export const WindowStrengthEnum = z.enum(['weak', 'moderate', 'strong'])
+const WindowStrengthEnum = z.enum(['weak', 'moderate', 'strong'])
 export type WindowStrength = z.infer<typeof WindowStrengthEnum>
 
 // ---------------------------------------------------------------------------

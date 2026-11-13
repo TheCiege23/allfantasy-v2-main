@@ -27,7 +27,7 @@ import type { TriageSlot } from '@/components/core-app/screens/Dash3ATriage'
  * through `slotText` — the same translators the rest of /core uses. The feed's own description is the
  * provider's sentence and stays as written, as it does on every surface that shows it.
  */
-export type TriageViewLeague = {
+type TriageViewLeague = {
   id: string
   name: string
   platform: string
@@ -236,7 +236,7 @@ function DepthChecks({ alerts, language }: { alerts: TriageViewDepthAlert[]; lan
  * says "In 10 of 81 leagues: starting in 9", so the first rows show the shape and the rest wait one tap
  * away. The "also in" chips stay in view: one short line, and "benched ✓" is the part that reassures.
  */
-export const VISIBLE_FIX_ROWS = 2
+const VISIBLE_FIX_ROWS = 2
 
 export function Dash3ATriageView({
   rows,

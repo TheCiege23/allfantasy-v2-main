@@ -32,7 +32,7 @@ function players(v: unknown): ActionCardPlayer[] {
   return Array.isArray(v) ? v.map(player).filter((p): p is ActionCardPlayer => p !== null).slice(0, 10) : []
 }
 
-export function readActionCard(v: unknown): ChimmyActionCard | null {
+function readActionCard(v: unknown): ChimmyActionCard | null {
   if (!v || typeof v !== 'object') return null
   const o = v as Record<string, unknown>
   const kind = o.kind === 'lineup' || o.kind === 'trade' || o.kind === 'automation' ? o.kind : null

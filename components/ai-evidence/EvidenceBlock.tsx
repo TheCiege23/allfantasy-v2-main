@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { ChevronDown, ChevronUp, Database } from 'lucide-react'
 import type { EvidenceItem } from '@/lib/ai-context-envelope'
 
-export interface EvidenceBlockProps {
+interface EvidenceBlockProps {
   /** Evidence items to display (from deterministic layer only). */
   items: EvidenceItem[]
   /** Optional title. */

@@ -11,8 +11,6 @@ export type {
   ArchetypeId,
   InjuryStatus,
   DepthRole,
-  ScoringFormat,
-  EngineAssetType,
 } from './types'
 
 export { ENGINE_VERSION } from './types'
@@ -30,7 +28,6 @@ export {
   resolveCapabilities,
   resolveConfidence,
   gracefulDowngrade,
-  type FeatureFlags,
 } from './capabilities'
 
 export {
@@ -44,13 +41,11 @@ export {
 } from './scarcity'
 
 export {
-  classifyTeamPhase,
   classifyAllTeams,
   type ContenderClassification,
 } from './contender'
 
 export {
-  classifyArchetype,
   classifyAllArchetypes,
   archetypeAcceptanceModifier,
   type ArchetypeClassification,
@@ -58,29 +53,18 @@ export {
 
 export {
   computeLDIAcceptance,
-  type LDIAcceptInput,
   type LDIAcceptResult,
-  type AcceptDriver,
 } from './ldi-accept'
 
 export { ENGINE_FLAGS, isEnabled, getCacheTTL } from './flags'
 
 export type {
-  TradeConfidenceState,
-  LeagueFormat,
-  QbFormat,
   SportKey,
-  SleeperUserIdentity,
-  LeagueScoringSettings,
-  LeagueRosterSettings,
   TradeLeagueContext,
   TradeAssetUnion,
   Asset,
   TradePlayerAsset,
-  TradePickAsset,
   TeamContext,
-  MarketContext,
-  NflContext,
   TradeEngineRequest,
   TradeEngineResponse,
 } from './trade-types'
@@ -88,9 +72,6 @@ export type {
 export { runTradeAnalysis } from './trade'
 
 export {
-  breakoutAgeScore,
-  draftCapitalScore,
-  adpScore,
   computeDraftProjectionScore as computeEngineDevyDPS,
   enrichDevy,
   devyValueMultiplier,
@@ -122,9 +103,9 @@ import { computeLiquidity, liquidityTier, analyzeLiquidity, type LiquidityResult
 import { acceptanceProbability, extractAcceptanceFeatures } from '@/lib/acceptance-model'
 import { simulatePortfolio, type PortfolioSimResult, type PortfolioAsset } from '@/lib/portfolio-simulator'
 
-export type EngineMode = 'rankings' | 'trade' | 'waiver' | 'simulation'
+type EngineMode = 'rankings' | 'trade' | 'waiver' | 'simulation'
 
-export interface RunEngineOptions {
+interface RunEngineOptions {
   mode: EngineMode
   leagueId: string
   rosterId?: number
@@ -133,14 +114,14 @@ export interface RunEngineOptions {
   tradeDriverData?: any
 }
 
-export interface EngineComputedContext {
+interface EngineComputedContext {
   scoring: ScoringAdjustment
   scarcity: Record<string, PositionalScarcity>
   teamPhases: Record<number, ContenderClassification>
   archetypes: Record<number, ArchetypeClassification>
 }
 
-export interface EngineResult {
+interface EngineResult {
   context: EngineComputedContext
   liquidity: LiquidityResult | null
   acceptance: { probability: number; ldiResult: LDIAcceptResult | null } | null

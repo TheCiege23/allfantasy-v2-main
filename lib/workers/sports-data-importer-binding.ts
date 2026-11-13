@@ -25,7 +25,7 @@ import { normalizePlayerName, normalizePositionForSport } from '@/lib/team-abbre
  * gap; another player's ADP is a false statement.
  */
 
-export type ImporterSeed = {
+type ImporterSeed = {
   id: string
   name: string
   team: string
@@ -34,7 +34,7 @@ export type ImporterSeed = {
   source: string
 }
 
-export type SleeperOwnerLike = { sleeperId: string; name: string; position?: string | null }
+type SleeperOwnerLike = { sleeperId: string; name: string; position?: string | null }
 
 /** The old precedence, unchanged: the first seed, replaced by every later seed not from the identity map. */
 function preferred<T extends ImporterSeed>(current: T | undefined, next: T): T {
@@ -160,7 +160,7 @@ export function countNamesakes(seeds: ReadonlyArray<{ name: string }>): (name: s
   return (name) => counts.get(normalizeMatchName(name)) ?? 0
 }
 
-export type BindableRow = { name: string; team?: string | null; position?: string | null }
+type BindableRow = { name: string; team?: string | null; position?: string | null }
 
 /**
  * Index `rows` once; return `seed → that athlete's rows` (caller's order kept), or `[]`.
@@ -251,7 +251,7 @@ export function createSeedValueBinder<R>(
  * Sort key for `PlayerSeasonStats.season`, a STRING: `"2025"` (NFL, MLB) or `"2024-2025"` (NBA, NHL).
  * The starting year, then the ending year; anything unparseable sorts last.
  */
-export function seasonSortKey(season: string | null | undefined): number {
+function seasonSortKey(season: string | null | undefined): number {
   const years = String(season ?? '').match(/\d{4}/g)
   if (!years?.length) return -1
   const start = Number(years[0])

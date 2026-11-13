@@ -15,7 +15,7 @@ type ProviderStatusLevel = 'up' | 'down' | 'degraded'
 type FreshnessStatus = 'fresh' | 'stale' | 'empty'
 type OverallStatus = 'up' | 'degraded' | 'down'
 
-export interface HealthProviderEntry {
+interface HealthProviderEntry {
   status: ProviderStatusLevel
   lastSeen: string | null
   latencyMs?: number
@@ -26,13 +26,13 @@ export interface HealthProviderEntry {
   details?: string
 }
 
-export interface FreshnessEntry {
+interface FreshnessEntry {
   status: FreshnessStatus
   age: string
   checkedAt: string
 }
 
-export interface SystemHealthSnapshot {
+interface SystemHealthSnapshot {
   timestamp: string
   overall: OverallStatus
   providers: Record<string, HealthProviderEntry>
@@ -174,7 +174,7 @@ async function checkAnthropicHealth(): Promise<HealthProviderEntry> {
  * All three now come from the shared live probe: one max_tokens=1 completion per provider,
  * cached 10 min, key never returned. Anything but "answering" is `down`, with the reason.
  */
-export function aiProbeToHealthEntry(result: AiProviderProbeResult): HealthProviderEntry {
+function aiProbeToHealthEntry(result: AiProviderProbeResult): HealthProviderEntry {
   if (result.state === 'answering') {
     return { status: 'up', lastSeen: result.checkedAt, model: result.model ?? undefined }
   }
@@ -579,7 +579,7 @@ function readDraftDate(settings: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-export async function preloadUpcomingDrafts() {
+async function preloadUpcomingDrafts() {
   const sessions = await prisma.draftSession.findMany({
     where: {
       status: 'pre_draft',

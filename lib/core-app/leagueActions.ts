@@ -20,7 +20,7 @@ import { handoffFor, lineupFixLink, tradeLink, verifiedHandoff, type LinkLeague,
  * Pure, client-safe. The words are built at render (leagueActionsCopy.ts) from `kind` + `platform`.
  */
 
-export type LeagueActionKind = 'start' | 'bench' | 'activate' | 'lineup' | 'open_league' | 'trade_away' | 'trade_for' | 'propose' | 'add' | 'league_home'
+type LeagueActionKind = 'start' | 'bench' | 'activate' | 'lineup' | 'open_league' | 'trade_away' | 'trade_for' | 'propose' | 'add' | 'league_home'
 
 export type LeagueAction = {
   kind: LeagueActionKind

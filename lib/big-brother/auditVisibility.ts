@@ -16,7 +16,7 @@
 const VOTE_KEYS = ['voteCount', 'votesByTarget'] as const
 const PUBLISHED_RESULTS = new Set(['eviction', 'finale_vote'])
 
-export type AuditRowForViewer<T> = { eventType: string; metadata: T }
+type AuditRowForViewer<T> = { eventType: string; metadata: T }
 
 export function redactBigBrotherAuditForViewer<R extends AuditRowForViewer<unknown>>(
   rows: R[],

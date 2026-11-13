@@ -38,7 +38,7 @@ import type { ChimmyAlertUserPreferences } from './types'
  * (remaining FAAB not on file) it names the players and gives no figure at all.
  */
 
-export const CHOP_RELEASE_FLAG = 'CHOP_RELEASE_ALERTS_ENABLED'
+const CHOP_RELEASE_FLAG = 'CHOP_RELEASE_ALERTS_ENABLED'
 
 /** Off unless the variable is exactly `1`. Anything else — unset, `true`, `yes` — is off. */
 export function chopReleaseEnabled(env: Record<string, string | undefined> = process.env): boolean {
@@ -49,7 +49,7 @@ export function chopReleaseEnabled(env: Record<string, string | undefined> = pro
 export const CHOP_RELEASE_ALERT_TYPE = 'chop_release'
 
 /** Bids named in the phone/bell body; the rest are in Chimmy's full plan, one tap away. */
-export const CHOP_RELEASE_MAX_BIDS = 3
+const CHOP_RELEASE_MAX_BIDS = 3
 
 /* ── Detection ────────────────────────────────────────────────────────────────────────────────── */
 
@@ -77,7 +77,7 @@ export type ChopLeagueRows = {
   rosters: ReadonlyArray<{ platformUserId: string; playerData: unknown }>
 }
 
-export type ChopRosterEntry = {
+type ChopRosterEntry = {
   /** `playerData.source_team_id` — stable across the raw→resolved `platformUserId` change. */
   teamKey: string
   playerIds: string[]
@@ -111,7 +111,7 @@ export function pairRosters(rows: ChopLeagueRows): ChopRosterEntry[] {
 /** Each team's player ids as last seen, keyed by the team's stable key. */
 export type ChopRosterSnapshot = { v: 1; rosters: Record<string, string[]> }
 
-export type ChopDetection =
+type ChopDetection =
   | { kind: 'seed' }
   | { kind: 'reset'; emptied: number; wasAlive: number }
   | { kind: 'none' }
@@ -196,13 +196,13 @@ function benches(b: FaabPlanBid): string {
   return b.displacedName ? ` (benches ${b.displacedName})` : ''
 }
 
-export const CHOP_RELEASE_PROMPT = 'A team was just chopped in this league. What should I bid on waivers?'
+const CHOP_RELEASE_PROMPT = 'A team was just chopped in this league. What should I bid on waivers?'
 
-export function chopReleaseHref(leagueId: string, from: ProactiveFrom = 'chop_release'): string {
+function chopReleaseHref(leagueId: string, from: ProactiveFrom = 'chop_release'): string {
   return chimmyChatHref({ prompt: CHOP_RELEASE_PROMPT, leagueId, from })
 }
 
-export type ChopReleaseMessage = {
+type ChopReleaseMessage = {
   title: string
   body: string
   actionHref: string

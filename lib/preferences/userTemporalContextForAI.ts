@@ -6,7 +6,7 @@
 
 import { DEFAULT_TIMEZONE, isValidTimezone } from '@/lib/preferences/TimezonePreferenceService'
 
-export type UserTemporalContextForAI = {
+type UserTemporalContextForAI = {
   userTimezone: string
   userLocalDateTime: string
   userLocalCalendarDate: string

@@ -19,7 +19,7 @@ function parseLeagueSport(raw: string): LeagueSport | null {
 }
 
 /** Normalized team for the internal GraphQL gateway */
-export type SportsDataTeam = {
+type SportsDataTeam = {
   id: string
   name: string
   abbr: string

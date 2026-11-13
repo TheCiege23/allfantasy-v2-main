@@ -21,7 +21,7 @@ import { espnDefenseTeamAbbreviation } from './espnTeamDefenseIds'
 export type EspnPlayerSummary = { name: string | null; position: string | null; team: string | null }
 
 /** An ESPN team-defense id → its summary, or null for any other id. Pure. */
-export function espnDefenseSummary(playerId: string): EspnPlayerSummary | null {
+function espnDefenseSummary(playerId: string): EspnPlayerSummary | null {
   const team = espnDefenseTeamAbbreviation(playerId)
   return team ? { name: `${team} D/ST`, position: 'D/ST', team } : null
 }

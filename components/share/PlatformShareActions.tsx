@@ -68,7 +68,7 @@ async function copyText(value: string): Promise<boolean> {
   }
 }
 
-export interface PlatformShareActionsProps {
+interface PlatformShareActionsProps {
   payload: SharePayload;
   onShareComplete?: (destination: ShareDestination) => void;
   className?: string;

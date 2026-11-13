@@ -37,7 +37,7 @@ const READ_PAGE = 5_000
 /** Write batch size for `createMany`. */
 const CREATE_BATCH = 500
 
-export interface IdentityBackfillResult {
+interface IdentityBackfillResult {
   sport: string
   /** SportsPlayer rows considered (source = rolling_insights). */
   scanned: number

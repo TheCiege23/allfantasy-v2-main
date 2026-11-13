@@ -21,7 +21,7 @@ import type { Tx } from './db'
 
 // ─── Authorization (T-104 supplies the matrix) ───────────────────────────────
 
-export type AuthorizeArgs<TResource> = {
+type AuthorizeArgs<TResource> = {
   readonly ctx: ActorContext
   /** The permission key from the mutation definition. `ActionKey` at T-104. */
   readonly requires: string

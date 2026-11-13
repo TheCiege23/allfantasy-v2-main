@@ -42,7 +42,7 @@ export const PROJECTION_ACCURACY_CACHE_PREFIX = 'projection_accuracy:'
 /** Measurement records outlive the season so history survives the offseason. */
 const ACCURACY_TTL_MS = 400 * 24 * 60 * 60 * 1000
 
-export function projectionAccuracyCacheKey(season: number, week: number): string {
+function projectionAccuracyCacheKey(season: number, week: number): string {
   return `${PROJECTION_ACCURACY_CACHE_PREFIX}${season}:${week}`
 }
 
@@ -54,7 +54,7 @@ export interface AccuracyAggregate {
   bias: number
 }
 
-export interface SourceAccuracy {
+interface SourceAccuracy {
   overall: AccuracyAggregate | null
   byPosition: Record<string, AccuracyAggregate>
   /** How each row's projected value was obtained — stated, not blurred. */
@@ -154,7 +154,7 @@ async function storeRecord(record: ProjectionAccuracyRecord): Promise<void> {
 }
 
 /** Compute one week's accuracy record and persist it. Always stores a labeled status. */
-export async function computeProjectionAccuracyForWeek(
+async function computeProjectionAccuracyForWeek(
   season: number,
   week: number,
 ): Promise<ProjectionAccuracyRecord> {
@@ -339,7 +339,7 @@ export async function computeProjectionAccuracyForWeek(
  * Read one week's stored accuracy record for a future surface. Expiry is deliberately NOT
  * treated as absence — this is a measurement record, not a cache of remote truth.
  */
-export async function readProjectionAccuracy(
+async function readProjectionAccuracy(
   season: number,
   week: number,
 ): Promise<ProjectionAccuracyRecord | null> {
@@ -350,7 +350,7 @@ export async function readProjectionAccuracy(
   return data && data.version === 1 ? (data as unknown as ProjectionAccuracyRecord) : null
 }
 
-export interface AccuracyBackfillReport {
+interface AccuracyBackfillReport {
   attempted: Array<{ week: number; status: ProjectionAccuracyRecord['status']; afPairs: number | null }>
   skippedExisting: number
   budgetExhausted: boolean

@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getSalaryCapConfig } from './SalaryCapLeagueConfig'
 import { processExpirations, decrementContractYears } from './ContractLifecycleService'
 
-export type OffseasonPhase =
+type OffseasonPhase =
   | 'lock'
   | 'expiration'
   | 'rollover'
@@ -25,7 +25,7 @@ export async function getCurrentPhase(leagueId: string): Promise<OffseasonPhase 
   return 'in_season'
 }
 
-export async function setPhase(
+async function setPhase(
   leagueId: string,
   phase: OffseasonPhase,
   endsAt?: Date | null

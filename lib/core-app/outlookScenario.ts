@@ -104,7 +104,7 @@ function slotBreadth(slot: string): number {
   return n
 }
 
-export type LineupResult = {
+type LineupResult = {
   points: number
   starterIds: string[]
   unfilled: string[]
@@ -178,7 +178,7 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 
 // ── Scenario → simulation ──────────────────────────────────────────────
 
-export type ScenarioEffect = {
+type ScenarioEffect = {
   adjustments: SimAdjustment[]
   forced: ForcedResult[]
   /** Plain-language lines, one per change, with the points it is worth. */

@@ -32,7 +32,7 @@ import UniversalMessaging, { type MessagingScope } from '@/components/commish/Un
 import AuditLog, { type AuditEntry } from '@/components/commish/AuditLog'
 import StatTiles, { type StatTile } from '@/components/commish/StatTiles'
 
-export type CommissionerConsoleProps = {
+type CommissionerConsoleProps = {
   leagueId: string
   leagueName: string
   score: HealthScoreCardProps

@@ -3,9 +3,9 @@ import { canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffL
 import type { PlayoffPickView, PlayoffSeriesView } from "./types"
 import { nbaCupLockedReason } from "./nbaCupTournament"
 
-export type PlayoffCompletionMode = "full_bracket_required" | "available_picks_only"
+type PlayoffCompletionMode = "full_bracket_required" | "available_picks_only"
 
-export type PlayoffCompletionContext = {
+type PlayoffCompletionContext = {
   sport?: string
   lockRule: string | null | undefined
   isPoolOwner?: boolean
@@ -14,7 +14,7 @@ export type PlayoffCompletionContext = {
   partialVerificationEnabled?: boolean
 }
 
-export type PlayoffCompletionSummary = {
+type PlayoffCompletionSummary = {
   mode: PlayoffCompletionMode
   isSubmittable: boolean
   requiredPickCount: number
@@ -30,13 +30,13 @@ function hasPickForSeries(picks: PlayoffPickView[], seriesId: string): boolean {
   return picks.some((pick) => pick.seriesId === seriesId)
 }
 
-export function resolvePlayoffCompletionMode(context: PlayoffCompletionContext): PlayoffCompletionMode {
+function resolvePlayoffCompletionMode(context: PlayoffCompletionContext): PlayoffCompletionMode {
   if (context.sport === "nba_cup" && !context.isTestMode) return "available_picks_only"
   if (context.partialVerificationEnabled === true) return "available_picks_only"
   return canUsePlayoffLatePicks(context) ? "available_picks_only" : "full_bracket_required"
 }
 
-export function getRequiredPlayoffSeriesForCompletion(
+function getRequiredPlayoffSeriesForCompletion(
   series: PlayoffSeriesView[],
   picks: PlayoffPickView[],
   context: PlayoffCompletionContext,

@@ -13,7 +13,7 @@ import { CertifiedLineupIntegrationService, type PlayerRef, type CertifiedSchedu
 
 export type { PlayerRef, CertifiedScheduleDescription }
 
-export type WaiverClaimSafety = {
+type WaiverClaimSafety = {
   block: boolean
   reason: string
   freshnessStatus: string

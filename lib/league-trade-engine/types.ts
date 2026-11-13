@@ -27,7 +27,7 @@ export const TRADE_ITEM_TYPES = [
 
 export type TradeItemType = (typeof TRADE_ITEM_TYPES)[number]
 
-export const TRADE_REVIEW_TYPES = ['none', 'instant', 'commissioner', 'league_vote'] as const
+const TRADE_REVIEW_TYPES = ['none', 'instant', 'commissioner', 'league_vote'] as const
 export type TradeReviewType = (typeof TRADE_REVIEW_TYPES)[number]
 
 export type TradeAssetInput = {

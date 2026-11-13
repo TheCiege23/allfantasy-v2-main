@@ -13,18 +13,18 @@
  * Each one is listed with its reason in `GUILLY_UNSUPPORTED` — verified against the engine, not assumed.
  */
 
-export const GUILLY_SPORT = 'NBA' as const
+const GUILLY_SPORT = 'NBA' as const
 /** NBA guillotine season length (lib/guillotine/sportConfig.ts NBA.regularSeasonWeeks). */
-export const GUILLY_NBA_SEASON_WEEKS = 24
+const GUILLY_NBA_SEASON_WEEKS = 24
 
 export const GUILLY_LEAGUE_SIZES = [12, 14, 16, 18, 20] as const
 export const GUILLY_FIRST_CHOP_WEEKS = [1, 2, 3] as const
 export const GUILLY_AUCTION_BUDGETS = [100, 200, 500] as const
 export const GUILLY_FAAB_BUDGETS = [500, 1000, 2000] as const
 
-export type GuillyDraft = 'auction' | 'snake'
-export type GuillyLineups = 'managed' | 'bestball'
-export type GuillyRelease = 'blind_faab' | 'free_agency'
+type GuillyDraft = 'auction' | 'snake'
+type GuillyLineups = 'managed' | 'bestball'
+type GuillyRelease = 'blind_faab' | 'free_agency'
 
 export interface GuillySetupState {
   name: string
@@ -74,11 +74,11 @@ export function isGuillyOptionSupported(option: 'doubleChop' | 'bestball' | 'fre
 }
 
 /** Double-chop weeks: the first chop week takes two heads (one week of the schedule's `overrides`). */
-export function guillyDoubleChopWeeks(s: Pick<GuillySetupState, 'doubleChop' | 'firstChopWeek'>): number[] {
+function guillyDoubleChopWeeks(s: Pick<GuillySetupState, 'doubleChop' | 'firstChopWeek'>): number[] {
   return s.doubleChop ? [s.firstChopWeek] : []
 }
 
-export interface GuillySummary {
+interface GuillySummary {
   chops: number
   firstChopWeek: number
   lastChopWeek: number
@@ -137,7 +137,7 @@ export function buildGuillyCreateBody(s: GuillySetupState) {
   }
 }
 
-export type GuillyFollowUp = { method: 'PATCH' | 'PUT'; url: string; body: Record<string, unknown>; label: string }
+type GuillyFollowUp = { method: 'PATCH' | 'PUT'; url: string; body: Record<string, unknown>; label: string }
 
 /** Requests to run after the league exists. Each one is an existing, permission-checked route. */
 export function buildGuillyFollowUps(leagueId: string, s: GuillySetupState): GuillyFollowUp[] {

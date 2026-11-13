@@ -96,7 +96,7 @@ function declaredTeamCount(leagueSize: unknown, settings: unknown): number | nul
   return null
 }
 
-export interface LoadLeagueKickerValueArgs {
+interface LoadLeagueKickerValueArgs {
   prisma: PrismaClient
   /** Either id space — `League.id` uuid or the platform's own league id. */
   leagueId: string

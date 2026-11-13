@@ -123,7 +123,7 @@ export function rosterIdForFinderPlayer(
   return column ? identity?.[column]?.trim() || null : null
 }
 
-export type FinderBridgeResult = {
+type FinderBridgeResult = {
   resolved: boolean
   slots: LeagueSlot[]
   unmatched: Array<{ leagueId: string; leagueName: string; platform: string }>

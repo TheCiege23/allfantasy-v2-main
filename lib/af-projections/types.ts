@@ -95,7 +95,7 @@ export interface IdpScoringBreakdown {
   usedMeasuredTackleSplit: boolean
 }
 
-export type ConfidenceLevel = 'high' | 'medium' | 'low'
+type ConfidenceLevel = 'high' | 'medium' | 'low'
 
 /** Season-aggregate components for one player, extracted from `FantasyStatLine.stats`. */
 export interface SeasonAggregate {
@@ -168,7 +168,7 @@ export interface ConfidenceResult {
  * A refusal is a first-class outcome, not an error. The brief's rule: refuse to emit a
  * projection rather than emit a low-confidence guess presented as a number.
  */
-export interface ProjectionRefusal {
+interface ProjectionRefusal {
   ok: false
   reason:
     | 'no_games_played'
@@ -177,7 +177,7 @@ export interface ProjectionRefusal {
   detail: string
 }
 
-export interface ProjectionResult {
+interface ProjectionResult {
   ok: true
   /** Points per game in the requested format, before adjustments. */
   baselineProjection: number

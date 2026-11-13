@@ -19,16 +19,16 @@ import { deriveDefenderRole, type DefenderRoleLine } from './defenderRole'
  * as absent rather than filled in.
  */
 
-export type IdpPlayerCardState = 'ok' | 'no-league' | 'no-scoring' | 'no-games'
+type IdpPlayerCardState = 'ok' | 'no-league' | 'no-scoring' | 'no-games'
 
-export interface IdpPlayerCardStat {
+interface IdpPlayerCardStat {
   key: string
   label: string
   total: number
   perGame: number
 }
 
-export interface IdpPlayerCardWeek {
+interface IdpPlayerCardWeek {
   week: number
   /** Null when this league prices nothing in that week's line. */
   points: number | null
@@ -91,7 +91,7 @@ function extractScoring(settings: unknown): Record<string, unknown> | null {
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
 }
 
-export interface LoadIdpPlayerCardArgs {
+interface LoadIdpPlayerCardArgs {
   prisma: PrismaClient
   /** Either id space — `League.id` uuid or the platform's own league id. */
   leagueId: string

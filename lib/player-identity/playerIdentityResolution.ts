@@ -116,7 +116,7 @@ const CRICKET_SPORTS = new Set(['CRICKET'])
 
 const NCAA_SPORTS = new Set(['NCAAF', 'NCAAB'])
 
-export type SportInput = string | null | undefined
+type SportInput = string | null | undefined
 
 function isFaMarkerCompact(u: string): boolean {
   return (
@@ -262,14 +262,14 @@ export function isFreeAgentTeam(team: string | null | undefined, sport?: SportIn
   return normalizeTeamAbbr(team, sport) === ''
 }
 
-export type StrictPlayerKeyParams = {
+type StrictPlayerKeyParams = {
   name: string | null | undefined
   position: string | null | undefined
   team: string | null | undefined
   sport: string | null | undefined
 }
 
-export type LoosePlayerKeyParams = {
+type LoosePlayerKeyParams = {
   name: string | null | undefined
   position: string | null | undefined
   sport: string | null | undefined

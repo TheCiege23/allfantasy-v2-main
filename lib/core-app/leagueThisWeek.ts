@@ -7,7 +7,7 @@ import type { WaiverSchedule } from './waiverRunClock'
  * importing server code.
  */
 
-export type ThisWeekLineup = {
+type ThisWeekLineup = {
   week: number | null
   lockAt: string | null
   locked: boolean

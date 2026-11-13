@@ -1,7 +1,7 @@
 import { canonicalName } from './player-canonical-identity'
 
-export type ObservedAdpIdentityRow = { name: string; adp: number; canonicalPlayerIds?: readonly string[] }
-export type AdpRegistryIdentity = { id: string; sport: string; canonicalName: string; rollingInsightsId: string | null }
+type ObservedAdpIdentityRow = { name: string; adp: number; canonicalPlayerIds?: readonly string[] }
+type AdpRegistryIdentity = { id: string; sport: string; canonicalName: string; rollingInsightsId: string | null }
 export function observedAdpCanonicalId(sport: string, value: string): string | null {
   if (!['NBA', 'NHL', 'MLB'].includes(sport)) return null
   const prefix = sport + ':af:'

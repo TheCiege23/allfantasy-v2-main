@@ -45,7 +45,7 @@ export type PrestigeComponent = {
  * league diversity 15%, playoff appearances 15%, each capped. Caps are the
  * handoff's too (3/10, 9/20, 11/15, 14/30).
  */
-export const PRESTIGE_SPEC = [
+const PRESTIGE_SPEC = [
   { key: 'championships', label: 'Championships', max: 10, weight: 0.3 },
   { key: 'winRate', label: 'Win rate', max: 1, weight: 0.2 },
   { key: 'tenure', label: 'Tenure', max: 20, weight: 0.2 },
@@ -53,7 +53,7 @@ export const PRESTIGE_SPEC = [
   { key: 'playoffs', label: 'Playoffs', max: 30, weight: 0.15 },
 ] as const
 
-export type PrestigeInput = {
+type PrestigeInput = {
   championships: number
   /** Games-weighted, 0..1. `null` when nothing has been played — NOT zero. */
   winRate: number | null
@@ -62,7 +62,7 @@ export type PrestigeInput = {
   playoffAppearances: number
 }
 
-export type Prestige = { total: number; components: PrestigeComponent[] }
+type Prestige = { total: number; components: PrestigeComponent[] }
 
 function pct(n: number): number {
   return Math.round(n * 1000) / 10

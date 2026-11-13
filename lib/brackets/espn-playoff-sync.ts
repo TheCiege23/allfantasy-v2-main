@@ -13,7 +13,7 @@ import {
   linkRoundOneNodesToSportsGames,
 } from '@/lib/brackets/teamImport'
 
-export type PlayoffStandingsTeam = {
+type PlayoffStandingsTeam = {
   seed: number
   abbrev: string
   wins: number
@@ -36,7 +36,7 @@ export function bracketSportToLeagueSport(raw: string | null | undefined): Leagu
 }
 
 /** Matches `buildPlayoffNodes` team count (incl. 16‑team NCAA tournament challenge). */
-export function playoffTeamCapForTournament(tournament: {
+function playoffTeamCapForTournament(tournament: {
   name: string
   sport: string
 }): number {
@@ -86,7 +86,7 @@ function walkEspnStandings(node: unknown, out: Array<{ team: any; stats: any[] }
  * Fetch ESPN standings for a sport and return teams ordered by seed (1 = best).
  * Uses wins/losses and optional rank when present (college polls).
  */
-export async function fetchEspnPlayoffStandings(
+async function fetchEspnPlayoffStandings(
   sport: LeagueSport,
 ): Promise<PlayoffStandingsTeam[]> {
   const path = ESPN_SPORT_SITE_PATH[sport]
@@ -162,7 +162,7 @@ export async function fetchEspnPlayoffStandings(
   }
 }
 
-export type SyncPlayoffBracketResult = {
+type SyncPlayoffBracketResult = {
   ok: boolean
   sport: SupportedSport
   season: number

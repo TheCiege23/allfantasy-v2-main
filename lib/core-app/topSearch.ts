@@ -1,4 +1,4 @@
-export type SearchableLeague = {
+type SearchableLeague = {
   id: string
   name: string
   platform: string

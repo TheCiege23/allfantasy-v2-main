@@ -8,7 +8,7 @@
 import { getHottestPlayers, getRisingPlayers, getFallers } from "@/lib/player-trend"
 import { getStrategyMetaReports } from "@/lib/strategy-meta"
 
-export interface MetaInsightsContext {
+interface MetaInsightsContext {
   sport: string
   /** Top trending player ids and direction (for "fastest rising waiver adds") */
   hottestPlayers: Array<{ playerId: string; trendScore: number; direction: string }>

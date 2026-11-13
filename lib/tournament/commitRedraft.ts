@@ -29,7 +29,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { buildRedraftPlan, type RedraftPlan } from '@/lib/tournament/redraftPlan'
 
-export type CommitOutcome =
+type CommitOutcome =
   | {
       ok: true
       roundNumber: number
@@ -229,7 +229,7 @@ export async function commitRedraftPlan(args: {
   }
 }
 
-export type AttachOutcome =
+type AttachOutcome =
   | { ok: true; tournamentLeagueId: string; leagueName: string; roundNumber: number }
   | { ok: false; error: string; status: 400 | 404 | 409 }
 

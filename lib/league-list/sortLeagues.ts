@@ -23,7 +23,7 @@ export const LEAGUE_SORT_OPTIONS: Array<{ value: LeagueSortMode; label: string }
   { value: 'playoff-odds', label: 'Best playoff opportunity' },
 ]
 
-export type SortableLeague = {
+type SortableLeague = {
   name: string
   sport?: string | null
   leagueType?: string | null

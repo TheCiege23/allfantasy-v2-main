@@ -96,7 +96,7 @@ export type StoredStatCorrectionReview = {
   review: StatCorrectionReview
 }
 
-export type StatCorrectionCheckOutcome =
+type StatCorrectionCheckOutcome =
   | 'not_supported'
   | 'no_sealed_week'
   | 'outside_window'

@@ -34,7 +34,7 @@ export const FORMAT_KEYS = [
 
 export type FormatKey = (typeof FORMAT_KEYS)[number]
 
-export type FormatLeagueRow = {
+type FormatLeagueRow = {
   isDynasty?: boolean | null
   leagueType?: string | null
   leagueVariant?: string | null

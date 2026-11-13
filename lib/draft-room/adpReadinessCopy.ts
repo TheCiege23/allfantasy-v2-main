@@ -2,8 +2,8 @@
  * User-facing ADP / AllFantasy ADP copy — keep system vs internal aggregate clearly labeled.
  */
 
-export const ADP_LABEL_SYSTEM = 'ADP'
-export const ADP_LABEL_AI = 'AI ADP'
+const ADP_LABEL_SYSTEM = 'ADP'
+const ADP_LABEL_AI = 'AI ADP'
 export const ADP_LABEL_AF = 'AF ADP'
 
 /**
@@ -16,10 +16,10 @@ export const AF_BLUE = 'var(--af-blue, #3b82f6)'
 export const TOOLTIP_AF_ADP =
   'AllFantasy ADP — blends market ADP with real completed drafts from imported leagues and from AllFantasy leagues. Each draft source counts more the more drafts stand behind it.'
 
-export const TOOLTIP_SYSTEM_ADP =
+const TOOLTIP_SYSTEM_ADP =
   'Imported / consensus average draft position when available from your data provider. Lower is earlier.'
 
-export const TOOLTIP_AI_ADP =
+const TOOLTIP_AI_ADP =
   'AllFantasy ADP — aggregated from real completed drafts in this app that match this sport and league context. Separate from imported ADP.'
 
 /** When the AI ADP segment has no snapshot rows yet */

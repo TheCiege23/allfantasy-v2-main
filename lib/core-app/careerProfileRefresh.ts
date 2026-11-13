@@ -24,7 +24,7 @@
 
 const pending = new Map<string, { again: boolean }>()
 
-export function careerProfileRefreshDisabled(): boolean {
+function careerProfileRefreshDisabled(): boolean {
   return process.env.CORE_CAREER_PROFILE_DISABLED === '1' || process.env.NODE_ENV === 'test'
 }
 

@@ -10,7 +10,7 @@ import { AIEvidencePresentation } from '@/components/ai-evidence'
 import type { ConfidenceLabel } from './ConfidenceDisplay'
 import type { NormalizedToolOutput } from '@/lib/ai-context-envelope'
 
-export interface UnifiedBrainResultViewProps {
+interface UnifiedBrainResultViewProps {
   primaryAnswer: string
   verdict?: string
   keyEvidence?: string[]

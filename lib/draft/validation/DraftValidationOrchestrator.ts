@@ -16,7 +16,7 @@
 import { prisma } from '@/lib/prisma'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 
-export type ValidationStatus = 'pass' | 'fail' | 'warning'
+type ValidationStatus = 'pass' | 'fail' | 'warning'
 
 export type ValidationResult = {
   key: string

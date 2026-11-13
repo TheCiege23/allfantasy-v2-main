@@ -118,7 +118,7 @@ export function fanOutCopy(group: readonly FanOutAlert[], leagues: readonly FanO
  * MAX_LEAGUES_PER_LINE leagues and then "+N more"; the whole body stops at DIGEST_BODY_MAX so a
  * lock screen shows the first players whole rather than every player cut off.
  */
-export const MAX_LEAGUES_PER_LINE = 3
+const MAX_LEAGUES_PER_LINE = 3
 export const DIGEST_BODY_MAX = 240
 
 export function digestCopy(groups: ReadonlyArray<readonly FanOutAlert[]>): { title: string; body: string } {

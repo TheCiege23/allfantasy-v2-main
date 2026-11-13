@@ -11,13 +11,13 @@
 import type { TribeSnapshot } from './tribeSwapReveal'
 import type { SurvivorScheduledSwap, SurvivorSwapOrder } from './survivorGovernanceSettings'
 
-export const NEW_TRIBE_PREFIX = 'new:'
+const NEW_TRIBE_PREFIX = 'new:'
 
 export function isNewTribeKey(tribeId: string): boolean {
   return tribeId.startsWith(NEW_TRIBE_PREFIX)
 }
 
-export interface SwapPlanInput {
+interface SwapPlanInput {
   /** The active tribes now, in slot order, each with its ACTIVE rosters only. */
   before: ReadonlyArray<TribeSnapshot>
   swap: Pick<SurvivorScheduledSwap, 'mode' | 'tribeCount' | 'pattern' | 'order'>
@@ -29,7 +29,7 @@ export interface SwapPlanInput {
   randomIndex: (exclusiveMax: number) => number
 }
 
-export type SwapPlan =
+type SwapPlan =
   | { ok: true; after: TribeSnapshot[]; retire: string[]; created: number }
   | { ok: false; error: string }
 
@@ -55,7 +55,7 @@ function deal(order: string[], tribeIds: string[]): TribeSnapshot[] {
 }
 
 /** Pattern letter → slot: A = 0 … E = 4. */
-export function patternSlots(pattern: string): number[] {
+function patternSlots(pattern: string): number[] {
   return [...pattern.toUpperCase()].map((ch) => ch.charCodeAt(0) - 65).filter((n) => n >= 0 && n <= 4)
 }
 

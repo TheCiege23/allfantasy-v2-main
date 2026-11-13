@@ -2,7 +2,7 @@
  * GroupMessageService — create group thread, payloads for API.
  */
 
-export const CONVERSATION_TYPE_GROUP = "group"
+const CONVERSATION_TYPE_GROUP = "group"
 
 export function getCreateGroupPayload(memberUserIds: string[], title?: string): {
   threadType: string

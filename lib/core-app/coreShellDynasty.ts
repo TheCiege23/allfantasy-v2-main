@@ -15,7 +15,7 @@
  */
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 
-export type CoreShellDynastyLeague = {
+type CoreShellDynastyLeague = {
   isDynasty?: boolean | null
   leagueType?: string | null
   leagueVariant?: string | null

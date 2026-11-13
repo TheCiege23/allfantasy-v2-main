@@ -21,13 +21,13 @@ import {
 
 export const JURY_QA_EVENT_TYPES = ['jury_question_asked', 'jury_question_answered', 'jury_answer_seen', 'finalist_closing_speech'] as const
 
-export interface JuryQaEvent {
+interface JuryQaEvent {
   eventType: string
   metadata: unknown
   createdAt: Date
 }
 
-export interface JuryQuestion {
+interface JuryQuestion {
   id: string
   jurorRosterId: string
   finalistRosterId: string
@@ -38,7 +38,7 @@ export interface JuryQuestion {
   seenAt: string | null
 }
 
-export interface ClosingSpeech {
+interface ClosingSpeech {
   finalistRosterId: string
   text: string
   postedAt: string

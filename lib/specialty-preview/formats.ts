@@ -18,9 +18,9 @@
  * add a numbered rules list here until the user picks a rule set and an engine exists.
  */
 
-export type SpecialtyPreviewSlug = 'king-of-the-hill' | 'pirate'
+type SpecialtyPreviewSlug = 'king-of-the-hill' | 'pirate'
 
-export type SpecialtyPreviewPoint = {
+type SpecialtyPreviewPoint = {
   /** Public path of a 64px status icon, when the art set has one that fits. */
   icon?: string
   label: string

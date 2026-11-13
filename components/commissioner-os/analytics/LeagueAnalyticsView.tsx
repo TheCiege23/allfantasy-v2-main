@@ -68,7 +68,7 @@ import {
  * no activity", which is a different and much worse claim.
  */
 
-export interface LeagueAnalyticsViewProps {
+interface LeagueAnalyticsViewProps {
   snapshot: LeagueAnalyticsSnapshot | null
   dataMode: CommissionerDataMode
   errorMessage?: string | null

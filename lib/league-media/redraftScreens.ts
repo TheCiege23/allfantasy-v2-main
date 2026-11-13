@@ -19,7 +19,7 @@ import type { RedraftSportTheme } from './redraftIdentity'
  * (NHL), `SF` a small forward (NBA) or a superflex slot (NFL), `DEF` a defence (NFL) or a defender
  * (soccer). redraft-native-screens.css maps each value to an existing /core token.
  */
-export type RedraftPosTone = 'red' | 'green' | 'blue' | 'amber' | 'violet' | 'slate' | 'flex' | 'bench' | 'ir'
+type RedraftPosTone = 'red' | 'green' | 'blue' | 'amber' | 'violet' | 'slate' | 'flex' | 'bench' | 'ir'
 
 const COMMON: Record<string, RedraftPosTone> = { BN: 'bench', BENCH: 'bench', TX: 'bench', TAXI: 'bench', IR: 'ir', IL: 'ir', RES: 'ir' }
 
@@ -190,7 +190,7 @@ export function tradeCardState(status: string | null | undefined): { label: stri
 
 /* ── Standings & playoffs ──────────────────────────────────────────────────────────────────────── */
 
-export type PlayoffRaceStatus = 'champion' | 'clinched' | 'eliminated'
+type PlayoffRaceStatus = 'champion' | 'clinched' | 'eliminated'
 
 /**
  * Clinched / eliminated are only claimed once the bracket is GENERATED: until then the playoff runtime's
@@ -226,8 +226,8 @@ type RuntimeMatchup = {
 }
 type RuntimeRound = { roundId: string; roundNumber: number; roundName: string; status?: string | null; matchups: RuntimeMatchup[] }
 
-export type BracketSlot = { rosterId: string | null; name: string | null; seed: number | null; score: number | null; won: boolean }
-export type BracketGame = { id: string; home: BracketSlot; away: BracketSlot | null; bye: boolean; state: 'final' | 'live' | 'scheduled'; viewer: boolean }
+type BracketSlot = { rosterId: string | null; name: string | null; seed: number | null; score: number | null; won: boolean }
+type BracketGame = { id: string; home: BracketSlot; away: BracketSlot | null; bye: boolean; state: 'final' | 'live' | 'scheduled'; viewer: boolean }
 export type BracketColumn = { id: string; name: string; games: BracketGame[] }
 
 /**
