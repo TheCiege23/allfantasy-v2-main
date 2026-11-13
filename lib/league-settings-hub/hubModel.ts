@@ -12,8 +12,7 @@
 
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import { resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
-import { SCORING_STAT_LABELS } from '@/lib/commissioner-settings/scoringStatLabels'
-import { NFL_STAT_LABELS } from '@/lib/nfl-scoring/NflScoringPresets'
+import { resolveHubSport, scoringCategories, scoringCategoryFor, sportCopy, sportDisplayName, sportFamily, SPORT_SLOT_NAMES, statLabel } from './sportProfile'
 
 export type HubKind =
   | 'redraft'
@@ -244,7 +243,7 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
   const setup: HubRow[] = [
     { key: 'type', label: 'League Type', value: meta.label },
     { key: 'teams', label: 'Teams', value: teamCount != null ? `${teamCount} Teams` : DASH },
-    { key: 'sport', label: 'Sport', value: str(l.sport) },
+    { key: 'sport', label: 'Sport', value: sportDisplayName(str(l.sport)) },
     { key: 'season', label: 'Season', value: num(l.season) != null ? String(l.season) : DASH },
     { key: 'scoring', label: 'Scoring Format', value: str(l.scoring) },
   ]
@@ -482,9 +481,10 @@ const SLOT_ABBR: Record<string, string> = {
 }
 
 /** Solid color for a single position, hard-stop stripes for a flex. */
-export function slotSwatch(key: string, def?: HubSlotDef): string {
+export function slotSwatch(key: string, def?: HubSlotDef, sport?: string | null): string {
   const k = key.toUpperCase()
-  const parts = FLEX_PARTS[k]
+  // Football flex codes only: an NBA small forward is `SF` and a soccer `FLEX` is DEF/MID/FWD.
+  const parts = sportFamily(resolveHubSport(sport)) === 'football' ? FLEX_PARTS[k] : undefined
   if (parts) {
     const n = parts.length
     const stops = parts.flatMap((p, i) => {
@@ -493,14 +493,19 @@ export function slotSwatch(key: string, def?: HubSlotDef): string {
     })
     return `linear-gradient(90deg,${stops.join(',')})`
   }
-  return def?.color || FALLBACK_SLOT_COLORS[k] || '#94a3b8'
+  if (def?.color) return def.color
+  return (sportFamily(resolveHubSport(sport)) === 'football' ? FALLBACK_SLOT_COLORS[k] : undefined) || '#94a3b8'
 }
 
 export function buildRosterItems(
   unified: { rosterConfig?: { sections?: Array<{ key: string; label: string; slots: Record<string, number> }> } } | null | undefined,
   slotDefs: HubSlotDef[] | null | undefined,
+  sport?: string | null,
 ): HubRosterItem[] {
   const defs = new Map((slotDefs ?? []).map((d) => [d.key, d]))
+  const family = sportFamily(resolveHubSport(sport))
+  const names = family === 'football' ? SLOT_NAMES : SPORT_SLOT_NAMES[family]
+  const abbrs = family === 'football' ? SLOT_ABBR : {}
   const out: HubRosterItem[] = []
   for (const section of unified?.rosterConfig?.sections ?? []) {
     for (const [key, count] of Object.entries(section.slots ?? {})) {
@@ -508,10 +513,10 @@ export function buildRosterItems(
       const def = defs.get(key)
       out.push({
         key: `${section.key}:${key}`,
-        name: def?.label ?? SLOT_NAMES[key.toUpperCase()] ?? humanize(key.toLowerCase()),
-        abbr: def?.shortLabel ?? SLOT_ABBR[key.toUpperCase()] ?? key,
+        name: def?.label ?? names[key.toUpperCase()] ?? humanize(key.toLowerCase()),
+        abbr: def?.shortLabel ?? abbrs[key.toUpperCase()] ?? key,
         count,
-        color: slotSwatch(key, def),
+        color: slotSwatch(key, def, sport),
         section: section.label,
       })
     }
@@ -523,33 +528,26 @@ export function buildRosterItems(
 
 export type HubScoringCategory = { key: string; label: string; rows: Array<{ key: string; label: string; value: string; perUnit?: string }> }
 
-const SCORING_CATEGORIES: Array<{ key: string; label: string; test: (k: string) => boolean }> = [
-  // Both vocabularies: provider keys (pass_td, rec_yd) and AF's canonical NFL keys (passing_td, receiving_yards).
-  { key: 'passing', label: 'Passing', test: (k) => /^pass/.test(k) || ['int', 'qb_sack', 'qb_sacked', 'interception', 'interception_thrown', 'pick_6_thrown', 'completion', 'incomplete_pass'].includes(k) },
-  { key: 'rushing', label: 'Rushing', test: (k) => /^rush/.test(k) || ['fum', 'fum_lost', 'fumble', 'fumble_lost'].includes(k) },
-  { key: 'receiving', label: 'Receiving', test: (k) => /^rec/.test(k) || /_rec$/.test(k) || ['te_premium', 'target'].includes(k) },
-  { key: 'kicking', label: 'Kicking', test: (k) => /^(fg|xp|pat|kick)/.test(k) },
-  { key: 'defense', label: 'Team Defense', test: (k) => /^(def|pts_allow|yds_allow|dst|blk)/.test(k) || k === 'sack' || k === 'safe' || k === 'ff' || k === 'fum_rec' },
-  { key: 'special', label: 'Special Teams', test: (k) => /^(st_|kr_|pr_)/.test(k) },
-  { key: 'idp', label: 'IDP', test: (k) => /^idp/.test(k) },
-  { key: 'bonus', label: 'Bonus', test: (k) => /^bonus/.test(k) || /_bonus/.test(k) },
-]
-
 function fmtPoints(n: number): string {
   const r = Math.round(n * 1000) / 1000
   return Number.isInteger(r) ? String(r) : String(r)
 }
 
-/** Groups enabled scoring rules into Sleeper-style category tabs. Zero-point rules are hidden. */
-export function groupScoringRules(rules: HubScoringRule[] | null | undefined): HubScoringCategory[] {
+/**
+ * Groups enabled scoring rules into Sleeper-style category tabs for the league's sport (football
+ * when unknown). Zero-point rules are hidden.
+ */
+export function groupScoringRules(rules: HubScoringRule[] | null | undefined, sportRaw?: string | null): HubScoringCategory[] {
+  const sport = resolveHubSport(sportRaw)
+  const football = sportFamily(sport) === 'football'
   const buckets = new Map<string, HubScoringCategory>()
   const other: HubScoringCategory = { key: 'other', label: 'Other', rows: [] }
   for (const r of rules ?? []) {
     if (!r || !r.enabled || typeof r.pointsValue !== 'number' || r.pointsValue === 0) continue
     const k = r.statKey.toLowerCase()
-    const cat = SCORING_CATEGORIES.find((c) => c.test(k))
-    const isYards = /(_yd|_yds|yards)$/.test(k) && Math.abs(r.pointsValue) < 1
-    const label = NFL_STAT_LABELS[k] ?? SCORING_STAT_LABELS[k] ?? humanize(r.statKey)
+    const cat = scoringCategoryFor(sport, k)
+    const isYards = football && /(_yd|_yds|yards)$/.test(k) && Math.abs(r.pointsValue) < 1
+    const label = statLabel(sport, k) ?? humanize(r.statKey)
     const row = isYards
       ? { key: r.statKey, label, value: `${fmtPoints(r.pointsValue)} / yd`, perUnit: `1 point every ${Math.round(1 / Math.abs(r.pointsValue))} yards` }
       : { key: r.statKey, label, value: fmtPoints(r.pointsValue) }
@@ -560,7 +558,7 @@ export function groupScoringRules(rules: HubScoringRule[] | null | undefined): H
     if (!buckets.has(cat.key)) buckets.set(cat.key, { key: cat.key, label: cat.label, rows: [] })
     buckets.get(cat.key)!.rows.push(row)
   }
-  const ordered = SCORING_CATEGORIES.map((c) => buckets.get(c.key)).filter(Boolean) as HubScoringCategory[]
+  const ordered = scoringCategories(sport).map((c) => buckets.get(c.key)).filter(Boolean) as HubScoringCategory[]
   if (other.rows.length) ordered.push(other)
   return ordered
 }
@@ -570,7 +568,7 @@ export function groupScoringRules(rules: HubScoringRule[] | null | undefined): H
 export type HubNotificationRow = { id: NotificationCategoryId; label: string; description: string }
 export type HubNotificationGroup = { key: string; label: string; rows: HubNotificationRow[] }
 
-export function buildNotificationGroups(kind: HubKind, isCommissioner: boolean): HubNotificationGroup[] {
+export function buildNotificationGroups(kind: HubKind, isCommissioner: boolean, sport?: string | null): HubNotificationGroup[] {
   const meta = HUB_KIND_META[kind]
   const groups: HubNotificationGroup[] = [
     { key: 'general', label: 'General', rows: [
@@ -591,7 +589,7 @@ export function buildNotificationGroups(kind: HubKind, isCommissioner: boolean):
     { key: 'lineups', label: meta.autoLineups ? 'Injuries' : 'Lineups & Injuries', rows: meta.autoLineups
       ? [{ id: 'injury_alerts', label: 'Injury Status Notifications', description: 'Lineups set themselves in this format' }]
       : [
-          { id: 'lineup_reminders', label: 'Lineup Reminders', description: 'Before kickoff if a starter slot is empty' },
+          { id: 'lineup_reminders', label: 'Lineup Reminders', description: sportCopy(sport).lineupReminder },
           { id: 'lineup_alerts', label: 'Inactive Player Notifications', description: 'Alerts when starting an inactive player' },
           { id: 'injury_alerts', label: 'Injury Status Notifications', description: 'Alerts when injury status changes' },
         ] },

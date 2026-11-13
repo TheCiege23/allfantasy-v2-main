@@ -23,6 +23,7 @@ import {
   type HubStandingRow,
 } from '@/lib/league-settings-hub/hubModel'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import { sportCopy, sportDisplayName } from '@/lib/league-settings-hub/sportProfile'
 
 export type HubTabId = 'my' | 'setup' | 'members' | 'record'
 
@@ -135,7 +136,7 @@ export function LeagueSettingsHubView({
           <h1>{data.leagueName}</h1>
           <div className="af-lsh-meta">
             <span className="af-lsh-badge" data-testid="league-settings-hub-type">{meta.label}</span>
-            <span>{[data.season, data.sport, data.teamCount ? `${data.teamCount} teams` : null].filter(Boolean).join(' · ')}</span>
+            <span>{[data.season, sportDisplayName(data.sport), data.teamCount ? `${data.teamCount} teams` : null].filter(Boolean).join(' · ')}</span>
           </div>
         </div>
         <span className="af-lsh-role" data-locked={locked}>
@@ -742,13 +743,9 @@ const STATUS_LEGEND = [
   { tag: 'Q', name: 'Questionable', d: 'About a 50/50 chance to play', bg: '#2a2108', fg: '#fcd34d' },
   { tag: 'D', name: 'Doubtful', d: 'Unlikely to play', bg: '#2b1609', fg: '#fdba74' },
   { tag: 'O', name: 'Out', d: 'Will not play', bg: '#2b0f14', fg: '#fca5a5' },
-  { tag: 'IR', name: 'Injured Reserve', d: 'Eligible for an IR spot', bg: '#2b0f14', fg: '#fca5a5' },
 ]
-const MATCHUP_LEGEND = [
-  { tag: 'vs DAL', name: 'Easy', fg: '#6ee7b7', d: 'A soft defense. Your player is more likely to beat their projection.' },
-  { tag: '@ CLE', name: 'Neutral', fg: '#e6edf7', d: 'An average defense. Expect close to the projection.' },
-  { tag: 'vs BAL', name: 'Tough', fg: '#fca5a5', d: 'A strong defense. Your player is more likely to fall short.' },
-]
+const INJURED_STYLE = { bg: '#2b0f14', fg: '#fca5a5' }
+const MATCHUP_COLORS: Record<string, string> = { Easy: '#6ee7b7', Neutral: '#e6edf7', Tough: '#fca5a5' }
 
 /** Sleeper's week stepper, showing what is actually stored: final or still open, and when rescored. */
 function CorrectionWeeks({ data }: { data: HubViewData['correctionWeeks'] }) {
@@ -791,6 +788,7 @@ function CorrectionWeeks({ data }: { data: HubViewData['correctionWeeks'] }) {
 
 function RecordTab({ data }: { data: HubViewData }) {
   const note = statCorrectionNote(data.kind)
+  const copy = sportCopy(data.sport)
   return (
     <>
       <Card id="history" title="League History" sub="Draft results and every past season">
@@ -894,7 +892,7 @@ function RecordTab({ data }: { data: HubViewData }) {
         <CorrectionWeeks data={data.correctionWeeks} />
         <div className="af-lsh-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, lineHeight: 1.55, color: 'var(--lsh-muted)' }}>
           <span>Our stats feed updates live during games, then posts official corrections over the next few days.</span>
-          <span>Corrections can land through Thursday — most arrive Monday or Tuesday — so a weekly result isn’t final until then.</span>
+          <span>{copy.correctionTiming}</span>
           <span>If the feed pauses or misses a play, it’s corrected to match the official league stats.</span>
           {note ? <span style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--lsh-soft)', color: 'var(--lsh-text)' }}>{note}</span> : null}
         </div>
@@ -905,7 +903,7 @@ function RecordTab({ data }: { data: HubViewData }) {
           <div className="af-lsh-legend">
             <div>
               <strong>Player status</strong>
-              {STATUS_LEGEND.map((s) => (
+              {[...STATUS_LEGEND, { ...copy.injured, ...INJURED_STYLE }].map((s) => (
                 <div className="af-lsh-legend-item" key={s.tag}>
                   <span className="af-lsh-legend-tag" style={{ background: s.bg, color: s.fg }}>{s.tag}</span>
                   <div><b style={{ color: s.fg }}>{s.name}</b><span>{s.d}</span></div>
@@ -913,10 +911,10 @@ function RecordTab({ data }: { data: HubViewData }) {
               ))}
             </div>
             <div>
-              <strong>Defense matchup</strong>
-              {MATCHUP_LEGEND.map((m) => (
+              <strong>{copy.matchupTitle}</strong>
+              {copy.matchup.map((m) => (
                 <div className="af-lsh-legend-item" key={m.tag}>
-                  <div><b style={{ color: m.fg }}>{m.tag} <span style={{ color: 'var(--lsh-muted)', fontWeight: 600 }}>· {m.name}</span></b><span>{m.d}</span></div>
+                  <div><b style={{ color: MATCHUP_COLORS[m.name] }}>{m.tag} <span style={{ color: 'var(--lsh-muted)', fontWeight: 600 }}>· {m.name}</span></b><span>{m.d}</span></div>
                 </div>
               ))}
             </div>

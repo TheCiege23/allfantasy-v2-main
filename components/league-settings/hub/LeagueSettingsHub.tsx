@@ -265,7 +265,8 @@ export function LeagueSettingsHub({
       return t?.teamName || t?.ownerName || null
     }
     const leagueOn = prefs ? prefs.leagues?.[leagueId]?.enabled !== false && prefs.globalEnabled !== false : true
-    const notifGroups = buildNotificationGroups(kind, canEdit)
+    const sport = (p?.league?.sport as string | undefined) ?? league.sport ?? null
+    const notifGroups = buildNotificationGroups(kind, canEdit, sport)
     const notifOn: Partial<Record<NotificationCategoryId, boolean>> = {}
     if (prefs) for (const g of notifGroups) for (const r of g.rows) notifOn[r.id] = isLeagueCategoryOn({ ...prefs, leagues: { ...prefs.leagues, [leagueId]: { ...(prefs.leagues?.[leagueId] ?? {}), enabled: true } } }, leagueId, r.id)
     const noteRaw = snap[COMMISSIONER_NOTES_KEY]
@@ -281,7 +282,7 @@ export function LeagueSettingsHub({
       kind,
       leagueName: (p?.league?.name as string | undefined) ?? league.name ?? 'League',
       leagueAvatarUrl: (p?.league?.logoUrl as string | undefined) ?? league.logoUrl ?? league.avatarUrl ?? null,
-      sport: (p?.league?.sport as string | undefined) ?? league.sport ?? null,
+      sport,
       season: (p?.league?.season as number | undefined) ?? league.season ?? null,
       teamCount,
       leagueArt: null,
@@ -294,8 +295,8 @@ export function LeagueSettingsHub({
       waivers: p ? buildWaiverGroups(p, kind) : p === null ? [] : undefined,
       typeRules: p ? buildTypeRuleGroups(p, kind) : p === null ? [] : undefined,
       commissionerNote: p === undefined ? undefined : typeof noteRaw === 'string' ? noteRaw : null,
-      roster: roster === undefined ? undefined : roster ? buildRosterItems(roster.unifiedConfig as Parameters<typeof buildRosterItems>[0], roster.slotDefs) : null,
-      scoring: p === undefined ? undefined : p?.scoringConfig?.rules?.length ? { preset: preset ? String(preset).replace(/_/g, ' ') : null, categories: groupScoringRules(p.scoringConfig.rules) } : null,
+      roster: roster === undefined ? undefined : roster ? buildRosterItems(roster.unifiedConfig as Parameters<typeof buildRosterItems>[0], roster.slotDefs, sport) : null,
+      scoring: p === undefined ? undefined : p?.scoringConfig?.rules?.length ? { preset: preset ? String(preset).replace(/_/g, ' ') : null, categories: groupScoringRules(p.scoringConfig.rules, sport) } : null,
       draft: p ? buildDraftGroups(p) : p === null ? [] : undefined,
       draftOrder: order,
       members: p === undefined ? undefined : teams.map((t) => ({
