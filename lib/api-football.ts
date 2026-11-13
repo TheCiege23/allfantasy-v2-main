@@ -339,14 +339,6 @@ export async function fetchAPIFootballPlayersByTeam(teamId: string, season: stri
   return out
 }
 
-export async function fetchAPIFootballPlayersBySearch(search: string, league: string, season: string): Promise<APIFootballPlayerRecord[]> {
-  return apiFootballFetch<APIFootballPlayerRecord>('players', {
-    search,
-    league,
-    season,
-  })
-}
-
 function soccerTeamAbbrev(name: string, code?: string | null): string {
   const normalizedCode = normalizeTeamAbbrev(code || '')
   if (normalizedCode) return normalizedCode

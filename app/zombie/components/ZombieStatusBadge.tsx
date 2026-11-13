@@ -89,22 +89,3 @@ export function ZombieStatusBadge({
   )
 }
 
-/** Chat-sized dot with tooltip label via title. */
-export function ZombieStatusDot({ status, titleName }: { status: string; titleName: string }) {
-  const key = normalizeZombieStatus(status)
-  const colors: Record<string, string> = {
-    survivor: 'bg-[var(--zombie-green)]',
-    whisperer: 'bg-[var(--zombie-crimson)]',
-    zombie: 'bg-[var(--zombie-purple)]',
-    revived_survivor: 'bg-[var(--zombie-gold)]',
-    eliminated: 'bg-[var(--zombie-gray)]',
-  }
-  const label = LABEL[key] ?? 'SURVIVOR'
-  return (
-    <span
-      title={`${titleName}'s status: ${label}`}
-      className={clsx('inline-block h-2 w-2 shrink-0 rounded-full ring-2 ring-white/10', colors[key] ?? colors.survivor)}
-      aria-label={`${titleName}'s status: ${label}`}
-    />
-  )
-}

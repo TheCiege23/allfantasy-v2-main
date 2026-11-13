@@ -4,9 +4,6 @@
 
 export const DASHBOARD_OPEN_DRAFT_MESSAGE_TYPE = 'af-dashboard-open-draft' as const
 
-/** @deprecated Use DASHBOARD_OPEN_DRAFT_MESSAGE_TYPE */
-export const DASHBOARD_DRAFT_OVERLAY_MESSAGE = DASHBOARD_OPEN_DRAFT_MESSAGE_TYPE
-
 export type DashboardDraftOverlayBridgePayload = {
   type: typeof DASHBOARD_OPEN_DRAFT_MESSAGE_TYPE
   leagueId: string
@@ -15,10 +12,6 @@ export type DashboardDraftOverlayBridgePayload = {
   /** Dispersal draft id — loads `/league/.../dispersal-draft/...` in overlay iframe */
   dispersalDraftId?: string
   source?: string
-}
-
-export function isDashboardDraftOverlayMessage(data: unknown): data is DashboardDraftOverlayBridgePayload {
-  return isOpenDraftOverlayMessage(data)
 }
 
 export function isOpenDraftOverlayMessage(data: unknown): data is DashboardDraftOverlayBridgePayload {

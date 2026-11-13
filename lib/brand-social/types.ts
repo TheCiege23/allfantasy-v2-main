@@ -17,8 +17,6 @@ export const BRAND_POST_STATUSES = [
   'cancelled',
 ] as const
 
-export type BrandPostStatus = (typeof BRAND_POST_STATUSES)[number]
-
 /** Platform-specific character limits used to constrain AI drafts. */
 export const PLATFORM_CHAR_LIMITS: Record<BrandPlatform, number> = {
   x: 280,

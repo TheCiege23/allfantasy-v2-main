@@ -20,10 +20,6 @@ const ENGINE_KEYS: ReadonlySet<string> = new Set(
   getScoringCategories('NFL', expandSportConfigToggles(['IDP', 'SUPERFLEX', 'TE_PREMIUM'])).map((c) => c.key),
 )
 
-export function isEngineScoringKey(key: string): boolean {
-  return ENGINE_KEYS.has(key)
-}
-
 /** Explicit UI → engine key map (offense, kicking, DST counting, special teams). */
 const STATIC_MAP: Readonly<Record<string, string>> = {
   // Passing

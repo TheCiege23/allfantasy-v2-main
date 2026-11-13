@@ -14,8 +14,6 @@ import {
 import { getCollegeClassBucket, normalizeCollegeClass } from '@/lib/draft-room/collegeClass'
 import { resolveNflRookieSource } from '@/lib/providers/nflRookieSourcePolicy'
 
-export type ProSport = 'NFL' | 'NBA' | 'MLB' | 'NHL'
-
 export type PlayerExperienceStatus = 'rookie' | 'veteran' | 'college' | 'devy' | 'unknown'
 
 export type PlayerExperienceSource =
@@ -308,21 +306,3 @@ export function isVeteran(r: PlayerExperienceResult): boolean {
   return r.veteran === true || r.status === 'veteran'
 }
 
-export function getProYears(r: PlayerExperienceResult): number | null {
-  return r.proYears
-}
-
-export function getExperienceBadge(r: PlayerExperienceResult): string {
-  if (r.status === 'college' && r.collegeClassBucket && r.collegeClassBucket !== 'unknown') {
-    return r.collegeClassBucket
-  }
-  if (r.status === 'rookie' || r.rookie === true) return 'Rookie'
-  if (r.proYears != null && r.proYears === 1) return '2nd Year'
-  if (r.proYears != null && r.proYears === 2) return '3rd Year'
-  if (r.status === 'veteran' || r.veteran === true) return 'Veteran'
-  return '—'
-}
-
-export function getTaxiEligibilityDefault(r: PlayerExperienceResult): boolean {
-  return r.taxiEligibleDefault
-}

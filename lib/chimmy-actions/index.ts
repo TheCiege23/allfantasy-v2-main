@@ -26,9 +26,6 @@ export type {
 export {
   AI_ACTION_REGISTRY,
   getActionMeta,
-  INSTANT_ACTIONS,
-  CONFIRMED_ACTIONS,
-  DESTRUCTIVE_ACTION_TYPES,
 } from './AIActionRegistry'
 export type { ActionMeta } from './AIActionRegistry'
 
@@ -38,7 +35,6 @@ export {
   checkLeagueStateConstraints,
   evaluateAIActionDecision,
   getAIActionClass,
-  getDisabledReason,
   applyAvailabilityToAction,
 } from './AIActionPermissionGuard'
 export type {
@@ -78,7 +74,6 @@ export {
   trackAIActionEvent,
   trackAIActionShown,
   buildLearningSnapshotFromEvents,
-  getChimmyLearningSnapshot,
   getDefaultOutcomeAdapters,
 } from './AIActionAnalytics'
 export type {

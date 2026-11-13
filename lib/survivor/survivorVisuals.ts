@@ -1,5 +1,3 @@
-import { survivorBackgroundSrc } from './survivorMood'
-
 export const SURVIVOR_BACKGROUND_THEME_IDS = [
   'island-dawn',
   'volcanic-tribal',
@@ -121,15 +119,6 @@ export function getSurvivorThemeById(themeId: string | null | undefined, leagueI
     ? (themeId as SurvivorBackgroundThemeId)
     : pickSurvivorThemeIdForLeague(leagueId ?? 'survivor')
   return SURVIVOR_BACKGROUND_THEMES[resolved]
-}
-
-/**
- * Legacy theme-keyed scene. League screens should pick the mood from league state with
- * `resolveSurvivorMood` + `survivorBackgroundSrc` (lib/survivor/survivorMood.ts) instead.
- */
-export function survivorSceneArtwork(sport: string | null | undefined, themeId: SurvivorBackgroundThemeId, phase: 'island' | 'exile' = 'island'): string {
-  const mood = phase === 'exile' ? 'exile' : themeId === 'moonlit-lagoon' || themeId === 'mangrove-night' || themeId === 'storm-beach' ? 'night' : themeId === 'volcanic-tribal' || themeId === 'ember-camp' || themeId === 'canyon-fire' ? 'dusk' : 'day'
-  return survivorBackgroundSrc(mood, sport)
 }
 
 export function extractLeadingTribeIcon(name: string | null | undefined): string | null {

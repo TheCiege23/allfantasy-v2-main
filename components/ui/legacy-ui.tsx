@@ -246,40 +246,6 @@ export function Pill({
   )
 }
 
-export function TabNav({
-  tabs,
-  activeTab,
-  onChange,
-  className,
-}: {
-  tabs: Array<{ id: string; label: string; icon?: string }>
-  activeTab: string
-  onChange: (id: string) => void
-  className?: string
-}) {
-  return (
-    <div className={cx('w-full overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0', className)}>
-      <div className="flex gap-1 sm:gap-2 p-1 bg-black/20 rounded-xl sm:rounded-2xl min-w-max sm:min-w-0">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => onChange(tab.id)}
-            className={cx(
-              'flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap touch-manipulation min-h-[40px] sm:min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50',
-              activeTab === tab.id
-                ? 'bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-white border border-cyan-400/30'
-                : 'text-white/50 hover:text-white/80 hover:bg-white/5'
-            )}
-          >
-            {tab.icon && <span className="text-sm sm:text-base">{tab.icon}</span>}
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export function StatCard({
   label,
   value,
@@ -344,36 +310,6 @@ export function StatCard({
         {value}
       </div>
       {subValue && <div className="mt-1 text-[11px] sm:text-xs text-white/40">{subValue}</div>}
-    </div>
-  )
-}
-
-export function GradeBadge({ grade, size = 'default' }: { grade: string | null; size?: 'sm' | 'default' | 'lg' }) {
-  if (!grade) return null
-  
-  const getColors = (g: string) => {
-    if (g.startsWith('A')) return 'from-emerald-400 to-emerald-600 text-white shadow-emerald-500/30'
-    if (g.startsWith('B')) return 'from-cyan-400 to-cyan-600 text-white shadow-cyan-500/30'
-    if (g.startsWith('C')) return 'from-yellow-400 to-yellow-600 text-black shadow-yellow-500/30'
-    if (g.startsWith('D')) return 'from-orange-400 to-orange-600 text-white shadow-orange-500/30'
-    return 'from-rose-400 to-rose-600 text-white shadow-rose-500/30'
-  }
-  
-  const sizes = {
-    sm: 'w-8 h-8 sm:w-10 sm:h-10 text-sm sm:text-base',
-    default: 'w-12 h-12 sm:w-14 sm:h-14 text-lg sm:text-xl',
-    lg: 'w-16 h-16 sm:w-20 sm:h-20 text-2xl sm:text-3xl',
-  }
-  
-  return (
-    <div
-      className={cx(
-        'flex items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-br font-black shadow-lg',
-        getColors(grade),
-        sizes[size]
-      )}
-    >
-      {grade}
     </div>
   )
 }

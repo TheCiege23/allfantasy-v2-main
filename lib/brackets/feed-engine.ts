@@ -178,21 +178,3 @@ export async function checkPerfectBrackets(tournamentId: string) {
   }
 }
 
-export async function generateLeagueFeedEvents(
-  tournamentId: string,
-  leagueId: string,
-  previousLeader?: string,
-  currentLeader?: string
-) {
-  if (!previousLeader || !currentLeader || previousLeader === currentLeader) return
-  if (await hasCooldown(tournamentId, "LEAD_CHANGE", leagueId)) return
-
-  await createEvent({
-    tournamentId,
-    leagueId,
-    eventType: "LEAD_CHANGE",
-    headline: `${currentLeader} takes the lead from ${previousLeader}!`,
-    detail: `Leaderboard shakeup in this pool. ${currentLeader} moves to #1.`,
-    metadata: { previousLeader, currentLeader },
-  })
-}

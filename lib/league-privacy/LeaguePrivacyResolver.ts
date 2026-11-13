@@ -187,19 +187,3 @@ export function checkLeaguePassword(leagueId: string, password: string, storedHa
   return verifyPassword(password, leagueId, storedHash)
 }
 
-/**
- * Find league id by invite code (from League.settings.inviteCode). Case-insensitive match.
- */
-export async function findLeagueIdByInviteCode(code: string): Promise<string | null> {
-  const normalized = code?.trim()
-  if (!normalized) return null
-  const leagues = await prisma.league.findMany({
-    select: { id: true, settings: true },
-  })
-  const found = leagues.find((l) => {
-    const s = (l.settings as Record<string, unknown>) ?? {}
-    const c = (s.inviteCode as string) ?? ''
-    return c && c.toString().toLowerCase() === normalized.toLowerCase()
-  })
-  return found?.id ?? null
-}

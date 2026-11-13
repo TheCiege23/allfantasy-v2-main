@@ -90,7 +90,6 @@ export type SportTag = (typeof SPORT_TAGS)[number]
  * an open emoji picker is noise. The stored value is the emoji itself.
  */
 export const COMMUNITY_REACTIONS = ['👍', '🔥', '😂', '🧠'] as const
-export type CommunityReactionEmoji = (typeof COMMUNITY_REACTIONS)[number]
 
 export function getChannel(slug: string | null | undefined): CommunityChannel | null {
   if (!slug) return null

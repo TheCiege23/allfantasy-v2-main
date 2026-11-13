@@ -1,7 +1,7 @@
 /**
  * Dynasty playoff presets (4/6/8/10 team). Avoid Week 18 title; 13–14 week regular season.
  */
-import { DYNASTY_PLAYOFF_PRESETS, DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS, isDynastyFootballSport } from './constants'
+import { DYNASTY_PLAYOFF_PRESETS, isDynastyFootballSport } from './constants'
 import type { DynastyPlayoffPresetDto } from './types'
 
 /** NFL: title week 17 so playoff start 15; 14-week regular season default. */
@@ -41,9 +41,3 @@ function getPlayoffWeeks(teamCount: number): number {
   return 4
 }
 
-/**
- * Default regular season weeks for dynasty (avoid Week 18 title).
- */
-export function getDynastyDefaultRegularSeasonWeeks(): number {
-  return DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS
-}

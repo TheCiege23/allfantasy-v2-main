@@ -19,9 +19,7 @@ export { runMatchupSimulation } from './MatchupSimulator'
 export { applyLeagueScoringToMatchupInput } from './applyLeagueScoringToMatchupInput'
 export { runSeasonSimulation } from './SeasonSimulator'
 export {
-  runMatchup,
   runSeason,
-  getScoreDistribution,
   calculatePlayoffOdds,
   type TeamPlayoffOdds,
 } from './SimulationEngine'

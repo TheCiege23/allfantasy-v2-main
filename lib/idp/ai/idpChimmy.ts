@@ -920,7 +920,3 @@ Incorporate contract/salary context in 2-3 sentences when relevant.`,
   return res.ok ? res.text : 'AI unavailable.'
 }
 
-export async function assertCommissionerForPowerRankings(leagueId: string, userId: string): Promise<void> {
-  const ok = await isCommissioner(leagueId, userId)
-  if (!ok) throw new Error('Commissioner only')
-}

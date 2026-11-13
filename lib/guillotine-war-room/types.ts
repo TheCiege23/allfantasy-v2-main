@@ -148,13 +148,3 @@ export interface GuillotineWarRoomContext {
   }
 }
 
-export type GuillotineWarRoomAction =
-  | 'survival-risk'
-  | 'roster-risk'
-  | 'lineup-safety'
-  | 'waivers'
-  | 'faab-plan'
-  | 'dropped-players'
-  | 'trade-analyze'
-  | 'weekly-plan'
-  | 'ask'

@@ -61,20 +61,6 @@ export type AllFantasyAiDataFreshnessBlock = {
   computedAt: string
 }
 
-/**
- * Optional shape for model outputs — tools may parse into this for consistent UI.
- * Values are always produced by models from structured inputs, not invented server-side.
- */
-export type StandardAiToolResponse = {
-  verdict?: string | null
-  explanation?: string | null
-  confidence?: number | null
-  urgency?: 'low' | 'medium' | 'high' | null
-  recommendedAction?: string | null
-  risks?: string[]
-  alternatives?: string[]
-}
-
 /** Hints for orchestration layers (optional; does not change deterministic data). */
 export type AiProviderRoutingHints = {
   openai?: string
@@ -111,19 +97,3 @@ export type AllFantasyStandardAiPayload = {
   strategicCoaching?: StrategicCoachingSnapshot | null
 }
 
-/** JSON-schema description for documentation / structured output tooling. */
-export const STANDARD_AI_TOOL_RESPONSE_JSON_SCHEMA = {
-  type: 'object',
-  properties: {
-    verdict: { type: ['string', 'null'] },
-    explanation: { type: ['string', 'null'] },
-    confidence: { type: ['number', 'null'] },
-    urgency: { type: ['string', 'null'], enum: ['low', 'medium', 'high', null] },
-    recommendedAction: { type: ['string', 'null'] },
-    risks: { type: 'array', items: { type: 'string' } },
-    alternatives: { type: 'array', items: { type: 'string' } },
-  },
-} as const
-
-export const AI_PAYLOAD_SYSTEM_REMINDER =
-  'Use only the provided structured fields (context, timeContext, leagueContext, teamContext, dataFreshness, toolInput, learningLayers and strategicCoaching when present). Do not invent league settings, times, players, injuries, or projections. Treat learningLayers as advisory behavior/market tendencies; official status and rules always win. Treat strategicCoaching as deterministic team strategy context (contend vs rebuild signals); it does not override weekly injuries, locks, or scoring.'

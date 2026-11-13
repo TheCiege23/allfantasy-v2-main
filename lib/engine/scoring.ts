@@ -1,4 +1,4 @@
-import type { EngineLeagueContext, EnginePlayerState } from './types'
+import type { EngineLeagueContext } from './types'
 import type { TradeLeagueContext } from './trade-types'
 
 export interface NormalizedTradeScoring {
@@ -88,21 +88,3 @@ export function computeScoringAdjustments(league: EngineLeagueContext): ScoringA
   }
 }
 
-export function adjustValueForScoring(
-  player: EnginePlayerState,
-  adjustment: ScoringAdjustment
-): number {
-  const pos = player.position
-  const posMult = adjustment.positionMultiplier[pos] ?? 1.0
-  return Math.round(player.value.market * posMult * adjustment.baseMultiplier)
-}
-
-export function scoringFormatLabel(league: EngineLeagueContext): string {
-  const parts: string[] = []
-  parts.push(league.scoring.format)
-  if (league.scoring.isSF) parts.push('SF')
-  if (league.scoring.isTEP) parts.push(`TEP+${league.scoring.tepBonus}`)
-  if (league.roster.idpEnabled) parts.push('IDP')
-  if (league.scoring.passBonus6pt) parts.push('6PT')
-  return parts.join(' | ')
-}

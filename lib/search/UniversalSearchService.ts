@@ -15,8 +15,6 @@ import {
 } from "./SearchResultResolver"
 import { resolveSportFilter, type SportFilterValue } from "./SportSearchFilterResolver"
 
-export type SearchResultGroup = "quick_actions" | "pages" | "tools" | "leagues" | "players"
-
 export interface UniversalSearchPayload {
   query: string
   quickActions: ReturnType<typeof filterQuickActionsByQuery>

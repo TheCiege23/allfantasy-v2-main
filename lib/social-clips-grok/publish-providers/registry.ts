@@ -24,6 +24,3 @@ export function getSocialProviderForPlatform(platform: SocialPlatform): SocialPu
   return getSocialPublishProviders().find((provider) => provider.supports(platform)) ?? null
 }
 
-export function resetSocialPublishProviderRegistryForTests() {
-  cache = null
-}

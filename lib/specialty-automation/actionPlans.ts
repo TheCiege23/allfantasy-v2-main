@@ -31,17 +31,6 @@ export function planEliminateRoster(
   }
 }
 
-export function planAdvancePhase(metadata: Record<string, unknown>): PlannedAction {
-  return { actionType: ActionTypes.advancePhase, metadata }
-}
-
-export function planTransitionPhase(from: string, to: string, metadata?: Record<string, unknown>): PlannedAction {
-  return {
-    actionType: ActionTypes.transitionPhase,
-    metadata: { from, to, ...(metadata ?? {}) },
-  }
-}
-
 export function planReleaseToWaiverPool(rosterId: string, playerId: string, metadata?: Record<string, unknown>): PlannedAction {
   return {
     actionType: ActionTypes.releaseToWaivers,

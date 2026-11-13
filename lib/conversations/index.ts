@@ -5,14 +5,12 @@
 export {
   CONVERSATION_TYPE_DIRECT,
   getCreateDMPayload,
-  getCreateDMUrl,
   getThreadMessagesUrl,
 } from "./DirectMessageService"
 
 export {
   CONVERSATION_TYPE_GROUP,
   getCreateGroupPayload,
-  getCreateGroupUrl,
   GROUP_MIN_MEMBERS,
   GROUP_MAX_MEMBERS,
 } from "./GroupMessageService"
@@ -28,18 +26,8 @@ export {
 export type { ConversationType } from "./ConversationListResolver"
 
 export {
-  validateDMParticipant,
-  getCreateDMPayloadSafe,
-  validateGroupParticipants,
-  getCreateGroupPayloadSafe,
-} from "./ConversationCreationController"
-
-export {
-  getParticipantDisplayName,
   PARTICIPANT_SEARCH_MIN_QUERY,
-  canSearchParticipants,
   parseParticipantUsernames,
-  filterParticipantsByQuery,
 } from "./ParticipantSelectorService"
 
 export {

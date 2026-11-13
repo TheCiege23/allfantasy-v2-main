@@ -39,10 +39,6 @@ function truncateScript(script: string, maxChars: number): string {
   return lastSentence > 0 ? trimmed.slice(0, lastSentence + 1) : trimmed + '...';
 }
 
-export function buildHeyGenTitle(input: { title: string; sport: string; contentType: string }): string {
-  return `[${input.sport}] ${input.title}`.slice(0, 200);
-}
-
 function normalizeSections(input: HeyGenPayloadInput): VideoScriptSection[] {
   if (Array.isArray(input.sections) && input.sections.length > 0) return input.sections;
   return [{ heading: 'Narration', body: input.script }];

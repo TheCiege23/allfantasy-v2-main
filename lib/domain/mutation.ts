@@ -285,4 +285,3 @@ export function createMutationRunner(deps: MutationDeps) {
   }
 }
 
-export type MutationRunner = ReturnType<typeof createMutationRunner>

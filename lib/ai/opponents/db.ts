@@ -4,7 +4,6 @@
 
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
-import { parseMemoryJson, serializeMemory, EMPTY_MEMORY, type BotLeagueMemoryState } from "./botMemory"
 import { getBotProfileById, mergeTendencies } from "./botProfiles"
 
 export async function getAssignmentForTeam(leagueTeamId: string) {
@@ -12,28 +11,6 @@ export async function getAssignmentForTeam(leagueTeamId: string) {
     where: { leagueTeamId },
     include: { profile: true, memory: true },
   })
-}
-
-export async function getAssignmentsForLeague(leagueId: string) {
-  return prisma.aiOpponentTeamAssignment.findMany({
-    where: { leagueId, paused: false },
-    include: { profile: true, memory: true },
-  })
-}
-
-export async function upsertLeagueMemory(assignmentId: string, state: BotLeagueMemoryState) {
-  const json = serializeMemory(state) as Prisma.InputJsonValue
-  return prisma.aiOpponentLeagueMemory.upsert({
-    where: { assignmentId },
-    create: { assignmentId, stateJson: json },
-    update: { stateJson: json },
-  })
-}
-
-export async function loadMemoryState(assignmentId: string, leagueId: string, botId: string): Promise<BotLeagueMemoryState> {
-  const row = await prisma.aiOpponentLeagueMemory.findUnique({ where: { assignmentId } })
-  const parsed = parseMemoryJson(row?.stateJson)
-  return parsed ?? EMPTY_MEMORY(leagueId, botId)
 }
 
 export async function logBotAction(input: {

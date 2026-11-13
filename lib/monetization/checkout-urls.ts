@@ -13,14 +13,3 @@ export function withQueryParam(path: string, key: string, value: string): string
   return `${url.pathname}${url.search}${url.hash}`
 }
 
-export function buildCheckoutReturnUrls(baseUrl: string, returnPath: string): {
-  successUrl: string
-  cancelUrl: string
-} {
-  const successPath = withQueryParam(returnPath, "checkout", "success")
-  const cancelPath = withQueryParam(returnPath, "checkout", "cancelled")
-  return {
-    successUrl: `${baseUrl}${successPath}`,
-    cancelUrl: `${baseUrl}${cancelPath}`,
-  }
-}

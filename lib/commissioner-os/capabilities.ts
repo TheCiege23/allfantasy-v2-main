@@ -206,16 +206,6 @@ export function composeCapabilities(input: {
   return sortCapabilities(out)
 }
 
-/** Capabilities a format implies on its own. Exported for tests and for template validation. */
-export function capabilitiesForFormat(formatId: LeagueFormatId): CommissionerCapabilityId[] {
-  return sortCapabilities(FORMAT_CAPABILITIES[formatId] ?? [])
-}
-
-/** Capabilities a catalog concept implies beyond its base format. */
-export function capabilitiesForConcept(conceptId: string): CommissionerCapabilityId[] {
-  return sortCapabilities(CONCEPT_CAPABILITIES[conceptId] ?? [])
-}
-
 /** True when the league has any capability in a domain, e.g. `hasCapabilityDomain(caps, 'powers')`. */
 export function hasCapabilityDomain(
   capabilityIds: readonly CommissionerCapabilityId[],

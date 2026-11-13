@@ -477,21 +477,6 @@ export async function computeLeagueDemandIndex(
   }
 }
 
-export function computeTradeDemandScore(
-  acquiredPositions: Record<string, number>,
-  acquiredTotal: number,
-  demandJson: Record<string, PositionDemandEntry>,
-): number {
-  if (acquiredTotal <= 0) return 0.5
-  let weightedSum = 0
-  for (const [pos, value] of Object.entries(acquiredPositions)) {
-    const w = value / acquiredTotal
-    const posLdi = demandJson[pos]?.ldi ?? 50
-    weightedSum += w * (posLdi / 100)
-  }
-  return Math.max(0, Math.min(1, weightedSum))
-}
-
 export interface ManagerPositionLDI {
   position: string
   meanPremiumPct: number

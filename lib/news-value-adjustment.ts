@@ -190,15 +190,3 @@ export function formatNewsAdjustmentsForPrompt(adjustments: NewsValueAdjustment[
   return `\n📰 NEWS-ADJUSTED VALUES (applied BEFORE grade calculation):\n${lines.join('\n')}\n\nThese adjustments have ALREADY been applied to the trade balance numbers above. The grade and verdict reflect current real-world situation, not just static market values.`
 }
 
-export function formatNewsForEngineContext(adjustments: NewsValueAdjustment[]): Record<string, { multiplier: number; sentiment: string; reason: string }> {
-  const ctx: Record<string, { multiplier: number; sentiment: string; reason: string }> = {}
-  for (const adj of adjustments) {
-    if (adj.severity === 'none') continue
-    ctx[adj.playerName.toLowerCase()] = {
-      multiplier: adj.multiplier,
-      sentiment: adj.sentiment,
-      reason: adj.reason,
-    }
-  }
-  return ctx
-}

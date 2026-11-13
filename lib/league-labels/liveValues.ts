@@ -6,15 +6,7 @@ import { buildFullNflScoringConfig } from '@/lib/nfl-scoring/NflScoringPresets'
 import { buildFullScoringConfig as buildFullNbaScoringConfig } from '@/lib/nba-scoring/NbaScoringPresets'
 import { NFL_ROSTER_TEMPLATES } from '@/lib/nfl-roster/NflRosterTemplates'
 import { NBA_ROSTER_TEMPLATES } from '@/lib/nba-roster/NbaRosterTemplates'
-import {
-  ROSTER_LABELS,
-  SCORING_LABELS,
-  type LabelSport,
-  type RosterLabel,
-  type RosterLabelId,
-  type ScoringLabel,
-  type ScoringLabelId,
-} from './catalog'
+import { ROSTER_LABELS, type LabelSport, type RosterLabel, type ScoringLabel, type ScoringLabelId } from './catalog'
 
 /** Design value key → the live preset stat key(s) that score it. Every listed key must agree. */
 export const NFL_DESIGN_TO_LIVE_KEYS: Readonly<Record<string, readonly string[]>> = {
@@ -65,17 +57,6 @@ export function liveRulesForScoringLabel(label: ScoringLabel): Record<string, nu
   }
   if (b.kind === 'nba') return buildFullNbaScoringConfig(b.presetKey)
   return null
-}
-
-/** Live value for one design row, or null if its live keys disagree with each other. */
-export function liveValueFor(label: ScoringLabel, designKey: string): number | null {
-  const rules = liveRulesForScoringLabel(label)
-  if (!rules) return null
-  const sport: LabelSport = label.sports.includes('NBA') && !label.sports.includes('NFL') ? 'NBA' : 'NFL'
-  const keys = (sport === 'NBA' ? NBA_DESIGN_TO_LIVE_KEYS : NFL_DESIGN_TO_LIVE_KEYS)[designKey]
-  if (!keys) return null
-  const values = new Set(keys.map((k) => rules[k] ?? 0))
-  return values.size === 1 ? [...values][0]! : null
 }
 
 /** Roster-template slot key → design position code. */
@@ -209,10 +190,3 @@ export function scoringLabelIdForNba(input: {
   return input.presetKey === 'af_default' ? 'pts' : null
 }
 
-export function backedScoringLabels(): ScoringLabel[] {
-  return SCORING_LABELS.filter((s) => s.backing !== null)
-}
-
-export function rosterLabelIds(): RosterLabelId[] {
-  return ROSTER_LABELS.map((r) => r.id)
-}

@@ -26,14 +26,3 @@ export interface CommissionerAiTeamAssignment {
   personalityId?: 'value_discipline' | 'youth_first' | 'positional_run' | 'ceiling_chaser'
 }
 
-export function validateAiAssignments(assignments: CommissionerAiTeamAssignment[]): { ok: boolean; error?: string } {
-  const active = assignments.filter((a) => a.active)
-  if (active.length > MAX_AI_MANAGERS_PER_DRAFT) {
-    return { ok: false, error: `At most ${MAX_AI_MANAGERS_PER_DRAFT} AI-managed teams per draft.` }
-  }
-  const teamIds = new Set(active.map((a) => a.teamId))
-  if (teamIds.size !== active.length) {
-    return { ok: false, error: 'Duplicate AI team assignment.' }
-  }
-  return { ok: true }
-}

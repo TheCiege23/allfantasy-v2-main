@@ -70,9 +70,3 @@ export type DashboardSectionCardType =
   | "ai_activity"
   | "legacy_highlights"
 
-export interface DashboardSectionConfig {
-  id: DashboardSectionCardType
-  title: string
-  viewAllHref?: string
-  visible: boolean
-}

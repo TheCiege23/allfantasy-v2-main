@@ -161,11 +161,4 @@ export function getUniversalAIContext(now: Date = new Date()): string {
   return `${currentDateContext(now)}\n\n${UNIVERSAL_PLAYER_VALUE_RULES}`;
 }
 
-export function getFormatAwareAIContext(format: 'dynasty' | 'keeper' | 'redraft' = 'dynasty'): string {
-  if (format === 'redraft') {
-    return `${currentDateContext()}\n\n${getRedraftAIContext()}`;
-  }
-  return getUniversalAIContext();
-}
-
 export { getRedraftAIContext };

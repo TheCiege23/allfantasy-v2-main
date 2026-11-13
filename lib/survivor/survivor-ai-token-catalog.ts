@@ -77,14 +77,6 @@ export const SURVIVOR_AI_ACTIONS: readonly SurvivorAiActionMeta[] = SURVIVOR_AI_
   tokenCost: getTokenSpendRuleMatrixEntry(row.ruleCode)?.tokenCost ?? null,
 }))
 
-const BY_ID = new Map<SurvivorAiActionId, SurvivorAiActionMeta>(
-  SURVIVOR_AI_ACTIONS.map((a) => [a.id, a]),
-)
-
-export function getSurvivorAiAction(id: SurvivorAiActionId): SurvivorAiActionMeta | undefined {
-  return BY_ID.get(id)
-}
-
 /**
  * 🛑 WHAT IS ACTUALLY SOLD (2026-10-27). The rows above are the pricing catalogue; only these AI
  * request types exist (`POST .../survivor/ai`), and each charges ONE rule. This map is the single

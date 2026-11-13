@@ -18,7 +18,6 @@ import { z } from 'zod'
 export const TradeBuilderModeEnum = z.enum([
   'target_player', 'position_upgrade', 'strategy', 'liquidation', 'consolidation',
 ])
-export type TradeBuilderMode = z.infer<typeof TradeBuilderModeEnum>
 
 export const StrategyGoalEnum = z.enum([
   'win_now', 'sustainable_contender', 'fast_rebuild', 'value_accumulation',

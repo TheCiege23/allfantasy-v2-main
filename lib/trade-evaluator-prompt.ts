@@ -87,7 +87,6 @@ const NegotiationBlockSchema = z.object({
 });
 
 export type NegotiationBlock = z.infer<typeof NegotiationBlockSchema>;
-export type NegotiationDmMessage = z.infer<typeof NegotiationDmMessageSchema>;
 export type NegotiationCounter = z.infer<typeof NegotiationCounterSchema>;
 export type NegotiationSweetener = z.infer<typeof NegotiationSweetenerSchema>;
 
@@ -113,4 +112,3 @@ export const StructuredTradeEvalResponseSchema = z.object({
   negotiation: NegotiationBlockSchema.optional(),
 });
 
-export type StructuredTradeEvalResponse = z.infer<typeof StructuredTradeEvalResponseSchema>;

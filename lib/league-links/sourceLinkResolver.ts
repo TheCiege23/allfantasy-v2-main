@@ -470,9 +470,6 @@ export const PROVIDER_ALLOWED_HOSTS: Readonly<Record<SourcePlatform, readonly st
     ) as Record<SourcePlatform, readonly string[]>,
   )
 
-/** The set of providers with launch-ready direct league linking (vs homepage-only). */
-export const LAUNCH_LEAGUE_LINK_PROVIDERS: readonly SourcePlatform[] = ['sleeper', 'espn', 'yahoo']
-
 export interface SourceScreenLink extends SourceLink {
   screen: SourceScreen
   /** True when `href` is the requested screen; false when it fell back to the league page or homepage. */

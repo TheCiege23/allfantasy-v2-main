@@ -40,11 +40,6 @@ export function setAdmissionCookieOnResponse(res: NextResponse, rawToken: string
   return res
 }
 
-/** Set/clear on a next/headers cookie store (used by the register route + OAuth link). */
-export function setAdmissionCookie(store: MutableCookies, rawToken: string): void {
-  store.set(BETA_ADMISSION_COOKIE, rawToken, baseOptions(BETA_ADMISSION_TTL_SECONDS))
-}
-
 export function clearAdmissionCookie(store: MutableCookies): void {
   try {
     store.delete(BETA_ADMISSION_COOKIE)
@@ -53,14 +48,3 @@ export function clearAdmissionCookie(store: MutableCookies): void {
   }
 }
 
-/** Read the raw token from a raw `Cookie` header (splits on the first `=`). */
-export function readAdmissionTokenFromHeader(header: string | null | undefined): string | null {
-  for (const part of (header ?? "").split(";")) {
-    const trimmed = part.trim()
-    const eq = trimmed.indexOf("=")
-    if (eq > 0 && trimmed.slice(0, eq) === BETA_ADMISSION_COOKIE) {
-      return trimmed.slice(eq + 1) || null
-    }
-  }
-  return null
-}

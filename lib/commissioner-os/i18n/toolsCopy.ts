@@ -612,8 +612,6 @@ const SETTINGS_ES: Record<string, string> = {
   Custom: 'Personalizado',
 }
 
-export const SETTINGS_COPY_KEYS: readonly string[] = Object.keys(SETTINGS_ES)
-
 /** A settings group or entry label, description, note or plain value. Unknown text passes through. */
 export function settingsText(text: string, language: string | null | undefined): string {
   if (!isEs(language)) return text

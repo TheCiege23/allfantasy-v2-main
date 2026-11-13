@@ -41,8 +41,6 @@ export const SHARE_TRACK_EVENTS = [
   "share_fallback",
 ] as const;
 
-export type ShareTrackEvent = (typeof SHARE_TRACK_EVENTS)[number];
-
 export type ShareTargetAction = "copy" | "external" | "manual_copy";
 
 export interface SharePayload {
@@ -91,12 +89,6 @@ export interface ShareTargetDescriptor {
   action: ShareTargetAction;
   helperText: string;
   opensExternal: boolean;
-}
-
-export interface ShareModalOptions {
-  payload: SharePayload;
-  onShareComplete?: (destination: ShareDestination) => void;
-  preferNativeOnMobile?: boolean;
 }
 
 export interface ShareTrackMeta {

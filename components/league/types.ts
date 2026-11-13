@@ -21,12 +21,6 @@ export type LeagueLifecycleSnapshot = {
   allowedActions: string[]
 }
 
-/** Authoritative role flags from GET `/api/leagues/:id/lifecycle` (preferred over SSR `leagueRole` when present). */
-export type LeagueLifecyclePermissions = {
-  isElevatedCommissioner: boolean
-  isHeadCommissioner: boolean
-}
-
 export type LeagueHeaderInfo = {
   id: string
   name: string

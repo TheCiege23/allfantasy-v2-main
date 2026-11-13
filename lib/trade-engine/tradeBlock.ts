@@ -1,9 +1,5 @@
 // lib/trade-engine/tradeBlock.ts
 
-export function makeTradeBlockKey(rosterId: number, assetId: string): string {
-  return `${rosterId}:${assetId}`
-}
-
 export type TradeBlockEntry = {
   rosterId: number
   assetId: string

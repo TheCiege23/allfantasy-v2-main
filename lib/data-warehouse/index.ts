@@ -4,7 +4,7 @@
  */
 
 export * from './types'
-export { normalizeStatPayload, fantasyPointsFromNormalized, type NormalizedStatMap } from './StatNormalizationService'
+export { normalizeStatPayload, type NormalizedStatMap } from './StatNormalizationService'
 export { WarehouseIngestionService } from './WarehouseIngestionService'
 export {
   generateGameFactsFromExistingStats,
@@ -26,7 +26,6 @@ export {
   type LeagueHistorySummary,
 } from './LeagueHistoryAggregator'
 export {
-  warehouseQuery,
   getPlayerFantasyPointsByPeriod,
   getTeamPointsByPeriodForLeague,
   getStandingsBySeasonForLeague,
@@ -35,14 +34,9 @@ export {
   type LeagueHistorySummary as WarehouseLeagueHistorySummary,
 } from './WarehouseQueryService'
 export {
-  getWarehouseSports,
-  resolveSportForWarehouse,
   isSportSupported,
-  mapToWarehouseSport,
 } from './SportWarehouseResolver'
 export {
-  materializePlayerSeasonTrends,
-  materializeLeagueSummaries,
   type MaterializedPlayerTrend,
   type MaterializedLeagueSummary,
 } from './AnalyticsFactMaterializer'
@@ -61,7 +55,6 @@ export {
   type TransactionPipelineResult,
 } from './pipelines'
 export {
-  runWarehouseBackfill,
   type BackfillOptions,
   type BackfillResult,
   type BackfillPipeline,

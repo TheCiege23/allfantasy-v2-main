@@ -101,21 +101,3 @@ export function classifyAllTeams(
   return result
 }
 
-export function phaseValueModifier(phase: TeamPhase): {
-  veteranMultiplier: number
-  youthMultiplier: number
-  pickMultiplier: number
-} {
-  switch (phase) {
-    case 'contender':
-      return { veteranMultiplier: 1.15, youthMultiplier: 0.90, pickMultiplier: 0.85 }
-    case 'competitor':
-      return { veteranMultiplier: 1.05, youthMultiplier: 1.00, pickMultiplier: 0.95 }
-    case 'middle':
-      return { veteranMultiplier: 1.00, youthMultiplier: 1.00, pickMultiplier: 1.00 }
-    case 'rebuild':
-      return { veteranMultiplier: 0.85, youthMultiplier: 1.15, pickMultiplier: 1.20 }
-    default:
-      return { veteranMultiplier: 1.00, youthMultiplier: 1.00, pickMultiplier: 1.00 }
-  }
-}

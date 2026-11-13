@@ -2,13 +2,12 @@
  * ChimmyInterfaceService — single entry for Chimmy UI: suggested chips, voice profile, tool context.
  */
 
-import { getChimmyVoiceStyleProfile } from './ChimmyVoiceStyleProfile'
 import {
   getToolContextForChimmy,
   getChimmyToolDisplayName,
   mapAIContextSourceToToolContextSource,
 } from './ToolContextToChimmyRouter'
-import type { ChimmySuggestedChip, ChimmyVoicePreset } from './types'
+import type { ChimmySuggestedChip } from './types'
 import type { ToolContextSource } from './ToolContextToChimmyRouter'
 
 /**
@@ -135,13 +134,6 @@ export function getDefaultChimmyChips(options?: {
   }
 
   return deduped
-}
-
-/**
- * Get voice style config for TTS (default: calm).
- */
-export function getChimmyVoiceConfig(preset?: ChimmyVoicePreset) {
-  return getChimmyVoiceStyleProfile(preset ?? 'calm')
 }
 
 export interface ChimmyToolDisplayContext {

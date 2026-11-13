@@ -14,7 +14,6 @@
  * basics, scoring and roster only — never a trades, waivers or playoffs line that may not apply to it.
  */
 export const RULES_EXPLAINER_SPORTS = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const
-export type RulesSport = (typeof RULES_EXPLAINER_SPORTS)[number]
 export type RulesFormat = 'redraft' | 'guillotine' | 'keeper' | 'dynasty' | 'best_ball' | 'specialty'
 
 /** The concepts the overview names, beyond the format itself (`overview.concept.*`). */

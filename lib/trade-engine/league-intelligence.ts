@@ -133,23 +133,6 @@ export function inferPickProjection(teamRank: number, numTeams: number): PickPro
   return 'late'
 }
 
-export function computePickProjections(
-  managers: Array<{ odId: string; wins: number; pointsFor: number }>,
-  numTeams: number
-): Record<string, PickProjected> {
-  const sorted = [...managers].sort((a, b) => {
-    const winDiff = b.wins - a.wins
-    if (winDiff !== 0) return winDiff
-    return b.pointsFor - a.pointsFor
-  })
-
-  const projections: Record<string, PickProjected> = {}
-  sorted.forEach((m, idx) => {
-    projections[m.odId] = inferPickProjection(idx + 1, numTeams)
-  })
-  return projections
-}
-
 // ============================================
 // CONTENDER TIER
 // ============================================
@@ -471,7 +454,7 @@ export function buildLeagueIntelligence(
 // LEAGUE INTEL SNAPSHOT (Simplified)
 // ============================================
 
-import { buildTradeBlockIndex, TradeBlockEntry } from './tradeBlock'
+import { buildTradeBlockIndex } from './tradeBlock'
 
 export type ScoringProfile = {
   ppr: number
@@ -487,30 +470,3 @@ export type LeagueIntelSnapshot = {
   tradeBlockIndex: ReturnType<typeof buildTradeBlockIndex>
 }
 
-export async function buildLeagueIntel(params: {
-  rosters: SleeperRosterInput[]
-  fantasyCalcValues: FantasyCalcValueMap
-  settings: LeagueSettings
-  tradeBlockEntries?: TradeBlockEntry[]
-  previousChampionId?: string
-}): Promise<LeagueIntelSnapshot> {
-  const { rosters, fantasyCalcValues, settings, tradeBlockEntries = [], previousChampionId } = params
-
-  const intel = buildLeagueIntelligence(settings, rosters, fantasyCalcValues, previousChampionId)
-
-  const scoringProfile: ScoringProfile = {
-    ppr: settings.ppr ?? 1,
-    tepBonus: settings.tepBonus ?? 0,
-    isSF: settings.isSF,
-    isTEP: settings.isTEP,
-  }
-
-  const tradeBlockIndex = buildTradeBlockIndex(tradeBlockEntries)
-
-  return {
-    assetsByRosterId: intel.assetsByRosterId,
-    managerProfiles: intel.managerProfiles,
-    scoringProfile,
-    tradeBlockIndex,
-  }
-}

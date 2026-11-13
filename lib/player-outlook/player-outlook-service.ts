@@ -309,19 +309,3 @@ export async function getPlayerOutlookBatch(
 // Cache Invalidation
 // ---------------------------------------------------------------------------
 
-export async function invalidateOutlookCache(
-  playerName: string,
-  sport: string,
-): Promise<void> {
-  const cacheParams = { sport: sport.toUpperCase(), name: normalizeName(playerName) }
-  try {
-    // The enrichment cache uses SHA256 keys — we need to delete by reconstructing the key
-    const crypto = await import('crypto')
-    const stable = JSON.stringify(cacheParams)
-    const hash = crypto.createHash('sha256').update(stable).digest('hex').slice(0, 16)
-    const key = `player_outlook:${hash}`
-    await prisma.sportsDataCache.delete({ where: { cacheKey: key } }).catch(() => {})
-  } catch {
-    // Non-fatal
-  }
-}

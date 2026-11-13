@@ -34,32 +34,7 @@ export function err<E>(error: E): Err<E> {
   return { ok: false, error }
 }
 
-/**
- * Narrowing helpers.
- *
- * These exist so `if (isErr(r)) return r` typechecks in a function returning
- * `Result<U>` — `r` narrows to `Err<E>`, which is assignable to any `Result<U, E>`
- * regardless of U. Writing `if (!r.ok)` narrows identically; the helpers are for
- * readability, not capability.
- */
-export function isOk<T, E>(r: Result<T, E>): r is Ok<T> {
-  return r.ok
-}
-
 export function isErr<T, E>(r: Result<T, E>): r is Err<E> {
   return !r.ok
 }
 
-/**
- * Unwrap or fall back. Deliberately NOT `unwrap()`-that-throws: an unwrap which
- * throws reintroduces exactly the control flow this module exists to replace,
- * and it is always the first thing reached for under deadline.
- */
-export function unwrapOr<T, E>(r: Result<T, E>, fallback: T): T {
-  return r.ok ? r.value : fallback
-}
-
-/** Map the success side, leaving an error untouched. */
-export function mapOk<T, U, E>(r: Result<T, E>, f: (value: T) => U): Result<U, E> {
-  return r.ok ? ok(f(r.value)) : r
-}

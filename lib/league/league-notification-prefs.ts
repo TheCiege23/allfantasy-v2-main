@@ -36,21 +36,3 @@ export function leagueFanoutNotificationsAllowed(eventType: string, prefs: Leagu
   return true
 }
 
-/** Gates SMS / critical matchup reminders when league prefs disable lineup or playoff messaging. */
-export function leagueMatchupReminderDispatchAllowed(
-  prefs: LeagueNotificationPrefs,
-  payload: { type: string },
-  opts?: { playoffContext?: boolean },
-): boolean {
-  switch (payload.type) {
-    case 'lineup_lock_soon':
-    case 'lineup_locked':
-    case 'matchup_reminder':
-      return isLeaguePrefEnabled(prefs, 'lineupLockReminders')
-    case 'matchup_result':
-      if (opts?.playoffContext) return isLeaguePrefEnabled(prefs, 'playoffRace')
-      return true
-    default:
-      return true
-  }
-}

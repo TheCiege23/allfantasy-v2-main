@@ -101,7 +101,3 @@ export function getPrimaryNavItems(isAdmin: boolean): NavLinkItem[] {
   return [...PRIMARY_NAV_ITEMS, ADMIN_NAV_ITEM]
 }
 
-/** Resolve product switcher items. */
-export function getProductNavItems(): NavLinkItem[] {
-  return PRODUCT_NAV_ITEMS
-}

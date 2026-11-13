@@ -2,7 +2,6 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizePlayerName, normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 /**
  * PlayerIdentityMap backfill for every sport that is not NFL.
@@ -345,7 +344,3 @@ export async function backfillIdentityMaps(
   return { results, deferred }
 }
 
-/** Sports this backfill covers — every supported sport; NFL converges to a no-op. */
-export function identityBackfillSports(): string[] {
-  return SUPPORTED_SPORTS.map((s) => String(s))
-}

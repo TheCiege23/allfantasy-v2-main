@@ -16,7 +16,6 @@
  */
 export const SMS_PROGRAM_BRAND = "AllFantasy"
 export const SMS_PROGRAM_OPERATOR = "Brown Pig LLC"
-export const SMS_PROGRAM_SUPPORT_EMAIL = "support@allfantasy.ai"
 export const SMS_CONSENT_VERSION = "2026-09-24"
 
 /** Plain-text consent wording, recorded with each opt-in. The checkbox renders the same words with links. */

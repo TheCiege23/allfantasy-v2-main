@@ -27,9 +27,3 @@ export type ToolCardDisplay = {
   badge?: string
 }
 
-export type FeaturedToolEntry = {
-  slug: ToolSlug
-  headline: string
-  openToolHref: string
-  description?: string
-}

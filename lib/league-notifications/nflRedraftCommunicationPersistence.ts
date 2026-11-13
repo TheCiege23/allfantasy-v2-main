@@ -8,12 +8,7 @@ import { createLeagueFeedEvent } from '@/lib/league-feed/createLeagueFeedEvent'
 import type { LeagueFeedCategory } from '@/lib/league-feed/leagueFeedTypes'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
-import {
-  buildNflRedraftCommunicationPlan,
-  communicationDedupeKey,
-  type NflRedraftCommunicationCategory,
-  type NflRedraftCommunicationPlan,
-} from '@/lib/league-notifications/nflRedraftCommunicationRuntime'
+import { buildNflRedraftCommunicationPlan, type NflRedraftCommunicationCategory, type NflRedraftCommunicationPlan } from '@/lib/league-notifications/nflRedraftCommunicationRuntime'
 import { syncNflRedraftCommunicationToDiscord } from '@/lib/league-notifications/nflRedraftDiscordBridge'
 
 export type PersistNflRedraftCommunicationResult =
@@ -293,32 +288,3 @@ export async function createNflRedraftCommissionerAnnouncement(input: {
   })
 }
 
-export async function createNflRedraftChatSystemMessage(input: {
-  leagueId: string
-  actorUserId?: string | null
-  title?: string | null
-  body: string
-  eventType?: string
-  payload?: Record<string, unknown>
-  mirrorToDiscord?: boolean
-}): Promise<PersistNflRedraftCommunicationResult> {
-  const event = toCanonicalLeagueRuntimeEvent({
-    leagueId: input.leagueId,
-    eventType: input.eventType ?? 'league.chat.system_message',
-    actorUserId: input.actorUserId ?? null,
-    payload: {
-      title: input.title ?? 'League chat update',
-      body: input.body,
-      ...(input.payload ?? {}),
-    },
-  })
-  return persistNflRedraftCommunicationForEvent({
-    event,
-    actorUserId: input.actorUserId,
-    mirrorToDiscord: input.mirrorToDiscord,
-  })
-}
-
-export function getNflRedraftCommunicationEventDedupeKey(event: CanonicalLeagueRuntimeEvent): string {
-  return communicationDedupeKey(event)
-}

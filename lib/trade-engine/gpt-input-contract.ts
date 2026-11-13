@@ -107,12 +107,6 @@ export type ValidationResult = {
   violations: string[]
 }
 
-export const AI_OUTPUT_INVALID_FALLBACK = {
-  analysis: [] as string[],
-  error: 'AI_OUTPUT_INVALID' as const,
-  fallback: 'Narrative unavailable due to driver mismatch.',
-}
-
 const REQUIRED_DRIVER_IDS = ['ar_market_mismatch', 'ar_volatility_delta']
 
 export function shouldSkipGpt(contract: GptInputContract): 'ok' | 'INCOMPLETE_DRIVER_SET' {

@@ -26,7 +26,6 @@ export type {
   YearPlan,
   AssetStrategy,
   RoadmapPlayer,
-  RoadmapPick,
   DynastyRoadmapExtension,
   DevyRoadmapExtension,
   C2CRoadmapExtension,

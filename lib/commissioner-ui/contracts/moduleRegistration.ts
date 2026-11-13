@@ -8,14 +8,3 @@ export interface CommissionerModuleRegistration {
   flagKey: CommissionerModuleId
 }
 
-/**
- * A documented convention, not a shared runtime interface — every
- * Commissioner OS infrastructure provider follows this naming pattern
- * (component name / hook name pair), but each provider's actual context
- * value is legitimately different in content, so this isn't enforced as a
- * shared type.
- */
-export interface CommissionerProviderConvention {
-  providerName: string
-  hookName: string
-}

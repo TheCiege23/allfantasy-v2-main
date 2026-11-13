@@ -88,8 +88,6 @@ export const TradePartnerResponseSchema = z.object({
   avoid_teams: z.array(AvoidTeamSchema),
 });
 
-export type TradePartnerResponse = z.infer<typeof TradePartnerResponseSchema>;
-
 export function buildTradePartnerUserPrompt(request: TradePartnerRequest): string {
   const { league, target_team, other_teams } = request;
 

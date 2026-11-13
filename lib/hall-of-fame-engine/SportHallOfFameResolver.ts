@@ -3,10 +3,8 @@
  * Supports NFL, NHL, NBA, MLB, NCAA Basketball, NCAA Football, Soccer.
  */
 
-import { isSupportedSport, normalizeToSupportedSport, SUPPORTED_SPORTS } from '@/lib/sport-scope'
+import { isSupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
-
-export const HOF_SUPPORTED_SPORTS: LeagueSport[] = [...SUPPORTED_SPORTS]
 
 export function normalizeSportForHallOfFame(sport: string | null | undefined): string {
   return normalizeToSupportedSport(sport)

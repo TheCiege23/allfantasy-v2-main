@@ -9,9 +9,7 @@ import { getChimmyVoiceStyleProfile, selectChimmyVoice } from "./ChimmyVoiceStyl
 let currentAudio: HTMLAudioElement | null = null;
 let activeObjectUrl: string | null = null;
 let activeFetchController: AbortController | null = null;
-let activeUtterance: SpeechSynthesisUtterance | null = null;
 let activeSessionId = 0;
-let activeLoading = false;
 
 function canUseServerAudioPlayback() {
   return (
@@ -57,13 +55,11 @@ function cleanupAudioResources() {
     activeFetchController.abort();
     activeFetchController = null;
   }
-  activeLoading = false;
 }
 
 function cleanupSpeechResources() {
   if (typeof window === "undefined" || typeof window.speechSynthesis === "undefined") return;
   window.speechSynthesis.cancel();
-  activeUtterance = null;
 }
 
 function fallbackSpeak(text: string, preset: ChimmyVoicePreset, sessionId: number, options?: SpeakChimmyOptions) {
@@ -98,22 +94,16 @@ function fallbackSpeak(text: string, preset: ChimmyVoicePreset, sessionId: numbe
 
   utt.onend = () => {
     if (activeSessionId !== sessionId) return;
-    activeUtterance = null;
-    activeLoading = false;
     options?.onEnd?.();
   };
 
   utt.onerror = () => {
     if (activeSessionId !== sessionId) return;
-    activeUtterance = null;
-    activeLoading = false;
     options?.onError?.();
     options?.onEnd?.();
   };
 
   cleanupSpeechResources();
-  activeUtterance = utt;
-  activeLoading = false;
   synth.speak(utt);
   return true;
 }
@@ -157,11 +147,9 @@ export function speakChimmy(
   cleanupAudioResources();
   cleanupSpeechResources();
   options?.onStart?.();
-  activeLoading = true;
 
   const clean = cleanTextForTts(text);
   if (!clean) {
-    activeLoading = false;
     options?.onEnd?.();
     return stopChimmyVoice;
   }
@@ -172,7 +160,6 @@ export function speakChimmy(
   if (!hasServerAudioPlayback) {
     const didFallback = fallbackSpeak(text, preset, sessionId, options);
     if (!didFallback) {
-      activeLoading = false;
       options?.onUnavailable?.("Voice playback is unavailable right now.");
       options?.onEnd?.();
     }
@@ -233,7 +220,6 @@ export function speakChimmy(
       audio.volume = vol;
 
       activeObjectUrl = url;
-      activeLoading = false;
 
       audio.onended = () => {
         URL.revokeObjectURL(url);
@@ -301,14 +287,3 @@ export function speakChimmy(
   return stopChimmyVoice;
 }
 
-/**
- * Whether TTS is currently playing (best-effort).
- */
-export function isChimmyVoicePlaying(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    activeLoading ||
-    Boolean(currentAudio && !currentAudio.paused && !currentAudio.ended) ||
-    Boolean(activeUtterance)
-  );
-}

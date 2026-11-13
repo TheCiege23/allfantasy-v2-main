@@ -7,7 +7,7 @@
 import { getWeekVolumeProfile } from './NbaGameVolumeService'
 import { getNbaScheduleConfig } from './NbaScheduleConfigService'
 import { getScheduleAdapter } from './adapters'
-import type { FantasyWeekPlan, NbaScheduleConfig, WeekVolumeProfile } from './types'
+import type { FantasyWeekPlan } from './types'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
 
 /**
@@ -38,22 +38,6 @@ export async function resolveNbaFantasyWeek(options: {
   const adapter = getScheduleAdapter(leagueType)
 
   // Resolve the fantasy week plan through the adapter
-  return adapter.resolveFantasyWeek(volumeProfile, config, context)
-}
-
-/**
- * Resolve fantasy week plan with an explicit config (no DB lookup).
- * Useful for previewing schedule changes in commissioner UI.
- */
-export function resolveNbaFantasyWeekPreview(
-  volumeProfile: WeekVolumeProfile,
-  config: NbaScheduleConfig,
-  leagueFormatId: LeagueFormatId,
-  leagueVariant?: string | null,
-  context?: Record<string, unknown>
-): FantasyWeekPlan {
-  const leagueType = mapVariantToFormatId(leagueFormatId, leagueVariant)
-  const adapter = getScheduleAdapter(leagueType)
   return adapter.resolveFantasyWeek(volumeProfile, config, context)
 }
 

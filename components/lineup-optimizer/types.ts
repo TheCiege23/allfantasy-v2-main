@@ -133,10 +133,3 @@ export interface OptimizeApiResponse {
   } | null
 }
 
-export interface PreferenceProfileApi {
-  profile?: {
-    traitSummary: Record<string, { confidence: number; sampleSize: number; lastReinforcedAt: string | null }>
-    optimizerProfileInput: Record<string, unknown>
-    stats?: { autoSubAllowRate: number; injuryContingencyOverrideRate: number }
-  }
-}

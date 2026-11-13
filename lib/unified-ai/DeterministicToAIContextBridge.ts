@@ -3,8 +3,6 @@
  * Rule: deterministic results go first; AI must not override hard rules or invent data.
  */
 
-import type { AIContextEnvelope } from "./types"
-
 export type DeterministicSource =
   | "trade_engine"      // fairness, acceptance, lineup delta, VORP
   | "rankings_engine"   // ordering, tiers, PPG
@@ -75,14 +73,3 @@ export function deterministicPayloadToContextSummary(
   return lines.join("\n")
 }
 
-/**
- * Build hard constraints list from envelope and source so prompts can say "do not override X".
- */
-export function buildHardConstraintsForPrompt(envelope: AIContextEnvelope): string[] {
-  const out = [...(envelope.hardConstraints ?? [])]
-  if (envelope.deterministicPayload) {
-    out.push("Use only the provided deterministic results; do not invent scores, rankings, or probabilities.")
-    out.push("Explain the math and evidence; do not override or contradict deterministic outputs.")
-  }
-  return out
-}

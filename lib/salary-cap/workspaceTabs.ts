@@ -31,8 +31,6 @@ export const SALARY_CAP_TABS: ReadonlyArray<{ id: string; label: string; view: S
   { id: 'cap_rules', label: 'Cap rules', view: 'rules' },
 ]
 
-export const SALARY_CAP_TAB_IDS: ReadonlySet<string> = new Set(SALARY_CAP_TABS.map((t) => t.id))
-
 export function salaryCapViewForTab(tabId: string): SalaryCapView {
   return SALARY_CAP_TABS.find((t) => t.id === tabId)?.view ?? 'home'
 }

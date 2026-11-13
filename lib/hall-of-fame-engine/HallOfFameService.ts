@@ -5,7 +5,6 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeSportForHallOfFame, isSupportedHallOfFameSport } from './SportHallOfFameResolver'
 import { computeInductionScore } from './InductionScoreCalculator'
-import type { InductionMetrics } from './InductionScoreCalculator'
 import { detectHistoricMoments, toMomentInput } from './HistoricMomentDetector'
 import type { HallOfFameEntryInput, HallOfFameMomentInput } from './types'
 import type { HallOfFameEntityType, HallOfFameCategory } from './types'
@@ -69,63 +68,6 @@ export async function createHallOfFameMoment(
     },
   })
   return { id: moment.id, significanceScore: Number(moment.significanceScore) }
-}
-
-/**
- * Induct a manager from HallOfFameRow + SeasonResult–derived metrics.
- */
-export async function inductManagerFromLeagueHistory(
-  leagueId: string,
-  rosterId: string,
-  sport: string,
-  options?: { season?: string }
-): Promise<CreateEntryResult | null> {
-  const sportNorm = normalizeSportForHallOfFame(sport)
-  if (!isSupportedHallOfFameSport(sportNorm)) return null
-
-  const [hofRow, seasonResults] = await Promise.all([
-    prisma.hallOfFameRow.findUnique({
-      where: { uniq_hof_league_roster: { leagueId, rosterId } },
-    }),
-    prisma.seasonResult.findMany({
-      where: { leagueId, rosterId },
-      orderBy: { season: 'desc' },
-    }),
-  ])
-
-  if (!hofRow && !seasonResults.length) return null
-
-  const championships = hofRow?.championships ?? seasonResults.filter((r) => r.champion).length
-  const seasonsPlayed = hofRow?.seasonsPlayed ?? seasonResults.length
-  const dominance = hofRow ? Number(hofRow.dominance) : 0
-  const longevity = hofRow ? Number(hofRow.longevity) : Math.min(1, seasonsPlayed / 15)
-
-  const metrics: InductionMetrics = {
-    championships,
-    seasonsPlayed,
-    dominance,
-    longevity,
-  }
-  const score = computeInductionScore(
-    metrics,
-    'MANAGER' as HallOfFameEntityType,
-    'all_time_great_managers' as HallOfFameCategory
-  )
-  const title = `Legendary Manager — Roster ${rosterId}`
-  const summary = `${championships} championship(s), ${seasonsPlayed} season(s) in league.`
-
-  return createHallOfFameEntry({
-    entityType: 'MANAGER',
-    entityId: rosterId,
-    sport: sportNorm,
-    leagueId,
-    season: options?.season ?? null,
-    category: 'all_time_great_managers',
-    title,
-    summary,
-    score,
-    metadata: { source: 'league_history', rosterId, championships, seasonsPlayed },
-  })
 }
 
 /**

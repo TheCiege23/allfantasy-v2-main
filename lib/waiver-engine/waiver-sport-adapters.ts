@@ -12,14 +12,6 @@
 
 export type WaiverSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 
-export interface OpportunitySignal {
-  id: string
-  label: string
-  /** 0-100 score */
-  score: number
-  detail: string
-}
-
 export interface SportWaiverAdapter {
   sport: WaiverSport
   /** Position scarcity multipliers (higher = more scarce) */
@@ -191,42 +183,3 @@ export function getWaiverSportAdapter(sport: string): SportWaiverAdapter {
   return ADAPTER_REGISTRY[key] ?? ADAPTER_REGISTRY.NFL
 }
 
-export function getSupportedWaiverSports(): WaiverSport[] {
-  return Object.keys(ADAPTER_REGISTRY) as WaiverSport[]
-}
-
-/**
- * Get position scarcity for a sport. Returns 0.5 for unknown positions.
- */
-export function getWaiverPositionScarcity(sport: string, position: string): number {
-  const adapter = getWaiverSportAdapter(sport)
-  return adapter.positionScarcity[position.toUpperCase()] ?? 0.5
-}
-
-/**
- * Get the projection weight multiplier for a position in a sport.
- */
-export function getProjectionWeight(sport: string, position: string): number {
-  const adapter = getWaiverSportAdapter(sport)
-  return adapter.projectionWeights[position.toUpperCase()] ?? 1.0
-}
-
-/**
- * Format sport-specific context for AI prompt injection.
- */
-export function formatSportContextForPrompt(sport: string): string {
-  const adapter = getWaiverSportAdapter(sport)
-  const lines = [
-    `=== SPORT-SPECIFIC WAIVER SIGNALS (${adapter.sport}) ===`,
-    `Opportunity signals to evaluate: ${adapter.opportunitySignals.join(', ')}`,
-    `Streamer indicators: ${adapter.streamerIndicators.join(', ')}`,
-    `Stash indicators: ${adapter.stashIndicators.join(', ')}`,
-    `Playoff stash positions: ${adapter.playoffStashPositions.join(', ')}`,
-    adapter.hasByeWeeks ? 'Bye weeks: ACTIVE — factor into recommendations' : '',
-    adapter.hasBackToBacks ? 'Back-to-backs: ACTIVE — factor into streaming decisions' : '',
-    adapter.hasScheduleVolume ? 'Schedule volume: ACTIVE — consider games-per-week advantage' : '',
-    `=== END SPORT SIGNALS ===`,
-  ].filter(Boolean)
-
-  return lines.join('\n')
-}

@@ -1,9 +1,5 @@
 import type { AttachmentPreview } from "./MessageAttachmentService"
 
-export function hasAttachmentPreview(preview: AttachmentPreview | null): preview is AttachmentPreview {
-  return preview !== null
-}
-
 export function getAttachmentPreviewLabel(preview: AttachmentPreview | null): string {
   if (!preview) return ""
   if (preview.type === "image") return "Image"

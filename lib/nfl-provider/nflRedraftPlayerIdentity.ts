@@ -681,20 +681,6 @@ export function normalizeTheSportsDbPlayerIdentity(
   return normalizeNflRedraftProviderPlayerIdentity({ ...options, providerId: 'thesportsdb', payload })
 }
 
-export function normalizeApiSportsPlayerIdentity(
-  payload: Record<string, unknown>,
-  options: Omit<NormalizeNflRedraftPlayerIdentityInput, 'providerId' | 'payload'> = {},
-): NflRedraftCanonicalPlayerIdentity {
-  return normalizeNflRedraftProviderPlayerIdentity({ ...options, providerId: 'api_sports', payload })
-}
-
-export function normalizeClearSportsPlayerIdentity(
-  payload: Record<string, unknown>,
-  options: Omit<NormalizeNflRedraftPlayerIdentityInput, 'providerId' | 'payload'> = {},
-): NflRedraftCanonicalPlayerIdentity {
-  return normalizeNflRedraftProviderPlayerIdentity({ ...options, providerId: 'clearsports', payload })
-}
-
 function buildIdentityWarnings(input: {
   playerName: string
   providerIds: NflRedraftProviderPlayerIds

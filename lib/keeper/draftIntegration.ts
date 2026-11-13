@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { AuctionKeeperSlot, DraftOrderWithAdjustments, KeeperDraftPrep } from './types'
+import type { DraftOrderWithAdjustments, KeeperDraftPrep } from './types'
 
 export async function prepareKeeperDraft(
   leagueId: string,
@@ -43,17 +43,3 @@ export async function getKeeperDraftOrder(
   return { rounds }
 }
 
-export async function handleKeeperAuctionNomination(
-  leagueId: string,
-  keeperRecordId: string,
-): Promise<AuctionKeeperSlot> {
-  const kr = await prisma.keeperRecord.findFirst({
-    where: { id: keeperRecordId, leagueId },
-  })
-  if (!kr) throw new Error('Keeper record not found')
-  return {
-    rosterId: kr.rosterId,
-    playerId: kr.playerId,
-    minimumBid: kr.costAuctionValue ?? 1,
-  }
-}

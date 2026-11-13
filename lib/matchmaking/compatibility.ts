@@ -261,22 +261,6 @@ export function scoreLeagueFit(
 }
 
 /**
- * Convenience: score many candidates against one league and return the
- * top `limit` non-rejected results sorted by score desc.
- */
-export function rankCandidatesForLeague(
-  candidates: ReadonlyArray<LeagueFitCandidate>,
-  league: LeagueDescriptor,
-  limit = 10
-): Array<{ candidate: LeagueFitCandidate; score: LeagueFitScore }> {
-  const scored = candidates
-    .map((c) => ({ candidate: c, score: scoreLeagueFit(c, league) }))
-    .filter((r) => !r.score.hardRejected)
-  scored.sort((a, b) => b.score.score - a.score.score)
-  return scored.slice(0, Math.max(1, Math.min(limit, candidates.length)))
-}
-
-/**
  * Score one candidate against many leagues — used by user-facing
  * "Find League" rails.
  */

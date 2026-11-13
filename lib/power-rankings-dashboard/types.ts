@@ -14,19 +14,6 @@ export type RankingModeId =
   | 'momentum'
   | 'all_around'
 
-export const RANKING_MODE_IDS: RankingModeId[] = [
-  'current_power',
-  'weekly_power',
-  'rest_of_season',
-  'playoff_odds',
-  'championship_odds',
-  'dynasty_power',
-  'rebuild_index',
-  'contender_index',
-  'momentum',
-  'all_around',
-]
-
 export type TimeWindowId = 'this_week' | 'last_2' | 'last_4' | 'season' | 'playoff_window' | 'dynasty_long'
 
 export type TeamContextId =
@@ -37,28 +24,6 @@ export type TeamContextId =
   | 'playoff_teams'
   | 'bubble'
   | 'bottom'
-
-export type PowerRankingsDashboardInput = {
-  sportFilter: 'ALL' | string
-  leagueId: string | null
-  userId: string
-  rankingMode: RankingModeId
-  timeWindow: TimeWindowId
-  teamContext: TeamContextId
-  specificTeamExternalId?: string | null
-  week?: number | null
-  toggles: {
-    includeProjections: boolean
-    includeScheduleStrength: boolean
-    includeInjuries: boolean
-    includeTransactionMomentum: boolean
-    includeRookies: boolean
-    includePlayoffHistory: boolean
-    includeRecentForm: boolean
-    includeDynastyWeighting: boolean
-  }
-  skipAi?: boolean
-}
 
 /** Rank tertile — data-derived from standings position, not marketing tiers. */
 export type RankThirdLabel = 'upper_third' | 'middle_third' | 'lower_third'
@@ -158,4 +123,3 @@ export type PowerRankingsDashboardError = {
   userMessage?: string
 }
 
-export type PowerRankingsDashboardOutput = PowerRankingsDashboardResult | PowerRankingsDashboardError

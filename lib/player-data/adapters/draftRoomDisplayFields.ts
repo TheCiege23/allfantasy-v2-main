@@ -96,12 +96,6 @@ export function getDraftRoomDisplayInjury(player: DraftRoomDisplayPlayerLike | n
   return null
 }
 
-export function getDraftRoomDisplayMetadata(
-  player: DraftRoomDisplayPlayerLike | null | undefined,
-): NflRedraftPlayerDisplayMetadata | null {
-  return player?.canonicalPlayerMetadata ?? null
-}
-
 export function getDraftRoomDisplayIntelligence(
   player: DraftRoomDisplayPlayerLike | null | undefined,
 ): NflRedraftPlayerIntelligence | null {
@@ -151,22 +145,6 @@ export type DraftRoomProviderSources = {
   adp?: string | null
   aiAdp?: string | null
   experience?: string | null
-}
-
-export function getDraftRoomDisplayProviderSources(
-  player: DraftRoomDisplayPlayerLike | null | undefined,
-): DraftRoomProviderSources | null {
-  if (!player?.unifiedProductView) return null
-  const u = player.unifiedProductView.unified
-  return {
-    profile: u.profileSource ?? null,
-    stats: u.statsSource ?? null,
-    projections: u.projectionsSource ?? null,
-    image: u.imageSource ?? null,
-    adp: u.adpSource ?? null,
-    aiAdp: u.aiAdpSource ?? null,
-    experience: u.yearsExpSource ?? u.rookieSource ?? null,
-  }
 }
 
 export type BoardPickDisplayMerge = {

@@ -668,15 +668,3 @@ export function getActionMeta(type: AIActionType): ActionMeta {
   return AI_ACTION_REGISTRY[type]
 }
 
-/** All action types grouped by safety class */
-export const INSTANT_ACTIONS = (Object.keys(AI_ACTION_REGISTRY) as AIActionType[]).filter(
-  (t) => AI_ACTION_REGISTRY[t].safetyClass === 'instant',
-)
-
-export const CONFIRMED_ACTIONS = (Object.keys(AI_ACTION_REGISTRY) as AIActionType[]).filter(
-  (t) => AI_ACTION_REGISTRY[t].safetyClass === 'confirmed',
-)
-
-export const DESTRUCTIVE_ACTION_TYPES = (Object.keys(AI_ACTION_REGISTRY) as AIActionType[]).filter(
-  (t) => AI_ACTION_REGISTRY[t].isDestructive,
-)

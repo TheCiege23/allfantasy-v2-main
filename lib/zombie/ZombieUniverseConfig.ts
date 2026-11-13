@@ -4,7 +4,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import type { ZombieUniverseLevelRow, ZombieUniverseLeagueRow } from './types'
 
 export interface ZombieUniverseSettings {
   leagueCount?: number
@@ -13,45 +12,6 @@ export interface ZombieUniverseSettings {
   movementPromoteCount?: number
   movementRelegateCount?: number
   tieBreakers?: string[]
-}
-
-export async function getZombieUniverse(universeId: string) {
-  return prisma.zombieUniverse.findUnique({
-    where: { id: universeId },
-    include: { levels: { orderBy: { rankOrder: 'asc' } }, leagues: { include: { level: true } } },
-  })
-}
-
-export async function getUniverseLevels(universeId: string): Promise<ZombieUniverseLevelRow[]> {
-  const rows = await prisma.zombieUniverseLevel.findMany({
-    where: { universeId },
-    orderBy: { rankOrder: 'asc' },
-  })
-  return rows.map((r) => ({
-    id: r.id,
-    universeId: r.universeId,
-    name: r.name,
-    rankOrder: r.rankOrder,
-    leagueCount: r.leagueCount,
-  }))
-}
-
-export async function getUniverseLeagues(universeId: string): Promise<ZombieUniverseLeagueRow[]> {
-  const rows = await prisma.zombieLeague.findMany({
-    where: { universeId },
-    include: { level: true },
-    orderBy: [{ level: { rankOrder: 'asc' } }, { orderInLevel: 'asc' }],
-  })
-  return rows
-    .filter((r): r is typeof r & { universeId: string; levelId: string } => r.universeId != null && r.levelId != null)
-    .map((r) => ({
-      id: r.id,
-      universeId: r.universeId,
-      levelId: r.levelId,
-      leagueId: r.leagueId,
-      name: r.name,
-      orderInLevel: r.orderInLevel,
-    }))
 }
 
 export async function createZombieUniverse(input: {
@@ -65,12 +25,6 @@ export async function createZombieUniverse(input: {
       sport: input.sport ?? 'NFL',
       settings: (input.settings ?? {}) as object,
     },
-  })
-}
-
-export async function addLevelToUniverse(universeId: string, name: string, rankOrder: number, leagueCount: number) {
-  return prisma.zombieUniverseLevel.create({
-    data: { universeId, name, rankOrder, leagueCount },
   })
 }
 

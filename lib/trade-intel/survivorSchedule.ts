@@ -318,9 +318,6 @@ export function scheduleForLeague(platformLeagueId: string | null | undefined): 
   return make ? make() : null
 }
 
-/** Exported so a test can assert the registry resolves the real ids, not a shape. */
-export const SCHEDULE_REGISTRY_IDS_FOR_TEST = Object.keys(SCHEDULE_BY_PLATFORM_LEAGUE_ID)
-
 export const SURVIVOR_ALL_STARS_2026: SurvivorSchedule = {
   id: 'survivor_all_stars_2026',
   label: 'Survivor All-Stars Guilly (22 teams)',

@@ -15,9 +15,6 @@ export * from './LeagueCreationDefaultsLoader'
 export * from './DefaultPlayoffConfigResolver'
 export * from './DefaultScheduleConfigResolver'
 export * from './LeagueDefaultSettingsService'
-export {
-	resolveSportLeaguePreset,
-} from './SportLeaguePresetResolver'
 export * from './LeagueCreationInitializer'
 export * from './SportFeatureFlagsService'
 export * from './StandardSportDefaultsService'

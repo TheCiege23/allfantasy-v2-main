@@ -106,8 +106,6 @@ export type PlayerValueMover = {
   values: Array<number | null>
 }
 
-export type RiskFactor = 'injury' | 'bye' | 'fragile' | 'stack'
-
 export type LeagueRisk = {
   leagueIndex: number
   /** Starters ruled out / at risk. Player keys. */

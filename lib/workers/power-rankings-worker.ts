@@ -342,9 +342,3 @@ export async function stopPowerRankingsWorker(): Promise<void> {
   powerRankingsWorker = null;
 }
 
-export function getPowerRankingsWorker(): Worker<
-  PowerRankingsJobData,
-  PowerRankingsJobResult
-> | null {
-  return powerRankingsWorker;
-}

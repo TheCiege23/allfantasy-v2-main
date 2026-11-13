@@ -18,10 +18,3 @@ export type FantasyProjectionEngineRow = {
   identityNotes: string[]
 }
 
-export type FantasyProjectionEngineBatch = {
-  schemaVersion: 1
-  sport: string
-  fetchedAt: string
-  rows: FantasyProjectionEngineRow[]
-  batchNotes: string[]
-}

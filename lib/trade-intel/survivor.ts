@@ -32,20 +32,6 @@
  * target, which is a real number rather than an item tier.
  */
 
-/** Idol powers with a directly stated numeric effect. */
-export const IDOL_POINTS = {
-  'points surge': 20,
-  'clutch': 10,
-  'score shield': 10,
-  'convert idol → points': 25,
-} as const
-
-/** Idol powers denominated in FAAB. */
-export const IDOL_FAAB = {
-  'faab bounty': 100,
-  'convert idol → faab': 150,
-} as const
-
 /**
  * The two powers that survive the merge by converting rather than expiring.
  *

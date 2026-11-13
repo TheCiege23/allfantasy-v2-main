@@ -57,21 +57,3 @@ export function evaluateConsensus(input: ConsensusInput): {
   }
 }
 
-/**
- * Merge structured outputs (e.g. keyFactors, confidence) from multiple models into one.
- */
-export function mergeStructuredConsensus(
-  modelOutputs: ModelOutput[]
-): { keyFactors?: string[]; confidenceLabel?: string; confidencePct?: number } {
-  const result: { keyFactors?: string[]; confidenceLabel?: string; confidencePct?: number } = {}
-  for (const o of modelOutputs) {
-    const s = o.structured
-    if (!s || typeof s !== "object") continue
-    if (Array.isArray(s.keyFactors) && s.keyFactors.length) {
-      result.keyFactors = [...(result.keyFactors ?? []), ...s.keyFactors].slice(0, 10)
-    }
-    if (s.confidenceLabel && !result.confidenceLabel) result.confidenceLabel = s.confidenceLabel as string
-    if (typeof s.confidencePct === "number" && result.confidencePct == null) result.confidencePct = s.confidencePct
-  }
-  return result
-}

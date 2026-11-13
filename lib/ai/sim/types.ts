@@ -43,19 +43,6 @@ export type SimScheduleInput = {
   weeks: Array<Array<{ home: string; away: string }>>
 }
 
-export type SimContext = {
-  leagueSettings?: SimLeagueSettings
-  scoringSettings?: SimScoringSettings
-  teams: SimTeamInput[]
-  rosters?: SimRosterInput[]
-  schedule?: SimScheduleInput | null
-  /** If schedule omitted, round-robin / random valid pairings are synthesized. */
-  playerProjections?: Record<string, number>
-  playerVariance?: Record<string, number>
-  injuries?: Record<string, number>
-  userActions?: Record<string, unknown>
-}
-
 export type MonteCarloOptions = {
   iterations: number
   /** Seed for reproducible runs (optional). */

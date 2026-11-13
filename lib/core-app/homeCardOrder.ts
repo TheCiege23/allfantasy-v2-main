@@ -33,7 +33,6 @@ export const HOME_CARD_GROUPS = {
 } as const
 
 export type HomeCardGroup = keyof typeof HOME_CARD_GROUPS
-export type OrderableCard = (typeof HOME_CARD_GROUPS)[HomeCardGroup][number]
 export type HomeCardOrder = { [G in HomeCardGroup]: Array<(typeof HOME_CARD_GROUPS)[G][number]> }
 
 const KNOWN = new Set<string>(Object.values(HOME_CARD_GROUPS).flat())

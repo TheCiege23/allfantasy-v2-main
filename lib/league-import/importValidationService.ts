@@ -1,13 +1,9 @@
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { IMPORT_PROVIDERS, type CanonicalImportBundle, type ImportProvider, type NormalizedImportResult } from '@/lib/league-import/types'
+import { type CanonicalImportBundle, type NormalizedImportResult } from '@/lib/league-import/types'
 
 export type ImportValidationResult =
   | { ok: true }
   | { ok: false; code: string; message: string }
-
-export function isValidImportProvider(value: string | null | undefined): value is ImportProvider {
-  return Boolean(value && (IMPORT_PROVIDERS as readonly string[]).includes(value))
-}
 
 export function validateNormalizedImport(normalized: NormalizedImportResult): ImportValidationResult {
   if (!normalized.source?.source_league_id?.trim()) {

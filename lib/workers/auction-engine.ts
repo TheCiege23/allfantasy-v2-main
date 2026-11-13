@@ -2,13 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { assertLiveDraftContext } from '@/lib/draft/resolve-draft-context'
-import {
-  nominatePlayer as nominateAuctionPlayer,
-  placeBid as placeAuctionBid,
-  resolveAuctionWin,
-  getAuctionStateFromSession,
-  getBudgetsFromSession,
-} from '@/lib/live-draft-engine/auction/AuctionEngine'
+import { nominatePlayer as nominateAuctionPlayer, placeBid as placeAuctionBid, resolveAuctionWin } from '@/lib/live-draft-engine/auction/AuctionEngine'
 import { selectRowForExternalRef } from '@/lib/player-match/authoritativePlayerRow'
 
 export type NominationResult = {
@@ -141,29 +135,3 @@ export async function closeDraftAuction(
   }
 }
 
-export async function getAuctionSnapshot(draftId: string) {
-  const context = await assertLiveDraftContext(draftId)
-  const session = await prisma.draftSession.findUnique({
-    where: { id: context.draftId },
-    select: {
-      auctionBudgetPerTeam: true,
-      auctionBudgets: true,
-      auctionState: true,
-      slotOrder: true,
-      timerEndAt: true,
-      timerSeconds: true,
-    },
-  })
-
-  if (!session) {
-    return null
-  }
-
-  return {
-    budgets: getBudgetsFromSession(session),
-    state: getAuctionStateFromSession(session),
-    slotOrder: session.slotOrder,
-    timerEndAt: session.timerEndAt?.toISOString() ?? null,
-    timerSeconds: session.timerSeconds ?? null,
-  }
-}

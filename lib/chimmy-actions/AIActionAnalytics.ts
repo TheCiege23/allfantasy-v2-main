@@ -1,15 +1,5 @@
 import type { AIAction, AIActionContext, AIActionEvent, AIActionType } from './AIActionModel'
-import { logAIActionEvent, getSavedRecommendations } from './AIActionLogger'
-
-function resolveInternalApiUrl(path: string): string {
-  if (typeof window !== 'undefined') return path
-  const base =
-    process.env.APP_URL?.trim() ||
-    process.env.NEXTAUTH_URL?.trim() ||
-    process.env.APP_BASE_URL?.trim() ||
-    'http://localhost:3000'
-  return `${base.replace(/\/$/, '')}${path}`
-}
+import { logAIActionEvent } from './AIActionLogger'
 
 type TrackedEventType = AIActionEvent['event']
 
@@ -460,52 +450,3 @@ export function buildLearningSnapshotFromEvents(
   }
 }
 
-export async function getChimmyLearningSnapshot(
-  userId: string,
-  options?: {
-    limit?: number
-    includeSavedRecommendations?: boolean
-    outcomeAdapters?: MeasurableOutcomeAdapter[]
-  },
-): Promise<ChimmyLearningSnapshot> {
-  const limit = options?.limit ?? 1000
-
-  void userId
-
-  let data: EventRow[] = []
-  try {
-    const response = await fetch(
-      resolveInternalApiUrl(`/api/ai/actions/events?limit=${encodeURIComponent(String(limit))}`),
-      {
-        method: 'GET',
-        credentials: 'same-origin',
-        cache: 'no-store',
-      }
-    )
-    if (response.ok) {
-      const payload = (await response.json()) as { rows?: EventRow[] }
-      data = Array.isArray(payload.rows) ? payload.rows : []
-    }
-  } catch {
-    data = []
-  }
-
-  if (!data.length) {
-    return buildLearningSnapshotFromEvents([], {
-      outcomeAdapters: options?.outcomeAdapters,
-    })
-  }
-
-  const snapshot = buildLearningSnapshotFromEvents(data, {
-    outcomeAdapters: options?.outcomeAdapters,
-  })
-
-  if (options?.includeSavedRecommendations) {
-    const saved = await getSavedRecommendations(userId, 200)
-    if (saved.length > 0) {
-      snapshot.notes.push(`Saved recommendations in history: ${saved.length}.`)
-    }
-  }
-
-  return snapshot
-}

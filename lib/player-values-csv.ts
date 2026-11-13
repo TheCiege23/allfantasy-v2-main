@@ -115,10 +115,3 @@ export function getPlayerECR(player: CSVPlayerValue, is2QB: boolean = true): num
   return is2QB ? player.ecr2qb : player.ecr1qb
 }
 
-export function getAllCSVPlayers(): CSVPlayerValue[] {
-  return parsePlayerValuesCSV()
-}
-
-export function clearCache(): void {
-  cachedPlayers = null
-}

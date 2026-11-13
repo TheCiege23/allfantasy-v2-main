@@ -269,32 +269,6 @@ export function detectEvents(
 }
 
 /**
- * End-to-end latency budget, from the provider's own stated SLA.
- *
- * ⚠ THE PROVIDER IS ~60s BEHIND REALITY AND THAT DOMINATES EVERYTHING WE DO.
- * Rolling Insights describes itself as a MEDIUM-LATENCY provider, targeting "live
- * data within approximately one minute of the information becoming publicly
- * available — better than some competitors but not as fast as the official feeds."
- *
- *     total user-visible lag  =  ~60s provider  +  0..pollInterval detection
- *
- * So our polling choice moves a ~60s floor by at most a few seconds. Two things
- * follow, and the second matters more than the first:
- *
- *   1. Polling faster than ~15s buys almost nothing. At 12s we add ≤12s to a 60s
- *      floor; at 30s we would add ≤30s, a 50% increase in OUR contribution but
- *      only ~25% end to end. 15s keeps our share small without hammering a feed
- *      that cannot reward it.
- *
- *   2. ⚠ THE UI MUST NOT CALL THIS "LIVE". A user watching the broadcast sees the
- *      touchdown roughly a minute before our notification arrives. Framed as a
- *      live alert, that reads as a broken product; framed as a score update, it
- *      reads as normal. The lag is the provider's, but the disappointment would be
- *      ours to own.
- */
-export const PROVIDER_LATENCY_SECONDS = 60
-
-/**
  * Poll cadence for a game, in seconds.
  *
  * ⚠ COST SCALES WITH CHANGE, NOT FREQUENCY, BECAUSE THE PROVIDER RETURNS 304 WHEN

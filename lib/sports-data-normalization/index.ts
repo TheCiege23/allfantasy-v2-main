@@ -8,7 +8,6 @@ export type { UpstreamSourceTag } from '@/lib/sports-data-normalization/constant
 export type {
   NormalizedActualPerformance,
   NormalizedFantasyProjection,
-  NormalizedFantasyScoringSnapshot,
   NormalizedGameRef,
   NormalizedInjuryNewsProjectionSlice,
   NormalizedInjuryStatus,

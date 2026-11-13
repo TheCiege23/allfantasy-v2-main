@@ -8,7 +8,6 @@ import type { LeagueSport } from '@prisma/client'
 import { getScheduleTemplate } from '@/lib/sport-defaults/ScheduleTemplateResolver'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
 import { DEFAULT_EVICTION_END_WEEK_BY_SPORT } from './constants'
-import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export interface BigBrotherSportCalendarContext {
   /** Sport for this league. */
@@ -63,10 +62,3 @@ export async function getBigBrotherSportCalendarContext(
   }
 }
 
-/**
- * Check if the given sport is supported for Big Brother (has schedule template and is in app scope).
- */
-export function isSportSupportedForBigBrother(sport: LeagueSport | string): boolean {
-  const s = String(sport).toUpperCase()
-  return (SUPPORTED_SPORTS as readonly string[]).includes(s)
-}

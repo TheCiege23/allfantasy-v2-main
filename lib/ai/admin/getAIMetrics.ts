@@ -850,16 +850,6 @@ export async function getRecommendationLogs(
   return { rows: mapped, nextCursor }
 }
 
-/** Merge outcomes into logs for display — optional enrichment */
-export async function getOutcomeByRecommendationIdMap(ids: string[]): Promise<Map<string, { followed: boolean | null; outcomeScore: number | null }>> {
-  if (ids.length === 0) return new Map()
-  const rows = await prisma.aiRecommendationOutcome.findMany({
-    where: { recommendationId: { in: ids } },
-    select: { recommendationId: true, followed: true, outcomeScore: true },
-  })
-  return new Map(rows.map((r) => [r.recommendationId, { followed: r.followed, outcomeScore: r.outcomeScore }]))
-}
-
 export async function getAdminAIMetricsBundle(filters: AIDashboardFilters, timeRange: '7d' | '30d' | 'all') {
   const [
     global,

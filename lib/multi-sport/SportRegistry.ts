@@ -3,7 +3,7 @@
  * Used by SportConfigResolver and template loaders.
  */
 import type { SportType } from './sport-types'
-import { SPORT_TYPES, SPORT_DISPLAY_NAMES, SPORT_EMOJI } from './sport-types'
+import { SPORT_DISPLAY_NAMES, SPORT_EMOJI } from './sport-types'
 import { getPositionsForSport as getPositionsFromRosterDefaults } from '@/lib/roster-defaults/PositionEligibilityResolver'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 
@@ -59,10 +59,6 @@ export function getSportConfig(sportType: SportType): SportConfig {
     positions: SPORT_POSITIONS[sportType] ?? [],
     defaultFormat: DEFAULT_FORMAT_BY_SPORT[sportType] ?? 'standard',
   }
-}
-
-export function getAllSportConfigs(): SportConfig[] {
-  return SPORT_TYPES.map(getSportConfig)
 }
 
 /**

@@ -37,14 +37,11 @@ export const TimingRecommendationEnum = z.enum([
   'Injury contingency add',
 ])
 
-export type TimingRecommendation = z.infer<typeof TimingRecommendationEnum>
-
 // ---------------------------------------------------------------------------
 // Drop Confidence
 // ---------------------------------------------------------------------------
 
 export const DropConfidenceEnum = z.enum(['safe', 'medium', 'risky'])
-export type DropConfidence = z.infer<typeof DropConfidenceEnum>
 
 // ---------------------------------------------------------------------------
 // Factual Evidence
@@ -93,8 +90,6 @@ export const WaiverSuggestionV2Schema = z.object({
   teamFitExplanation: z.string().optional(),
 })
 
-export type WaiverSuggestionV2 = z.infer<typeof WaiverSuggestionV2Schema>
-
 // ---------------------------------------------------------------------------
 // Team Diagnosis
 // ---------------------------------------------------------------------------
@@ -106,8 +101,6 @@ export const TeamDiagnosisSchema = z.object({
   riskSummary: z.array(z.string()),
 })
 
-export type TeamDiagnosis = z.infer<typeof TeamDiagnosisSchema>
-
 // ---------------------------------------------------------------------------
 // Strategy Notes
 // ---------------------------------------------------------------------------
@@ -117,8 +110,6 @@ export const StrategyNotesV2Schema = z.object({
   claimApproach: z.string(),
   stashVsPointsGuidance: z.string(),
 })
-
-export type StrategyNotesV2 = z.infer<typeof StrategyNotesV2Schema>
 
 // ---------------------------------------------------------------------------
 // Callouts
@@ -149,8 +140,6 @@ export const WaiverResponseV2Schema = z.object({
   callouts: CalloutsSchema,
 })
 
-export type WaiverResponseV2 = z.infer<typeof WaiverResponseV2Schema>
-
 // ---------------------------------------------------------------------------
 // WaiverFitScore Composite Formula
 // ---------------------------------------------------------------------------
@@ -165,81 +154,11 @@ export interface WaiverFitScoreInput {
   newsUrgency: number     // 0-100
 }
 
-/**
- * Compute the composite WaiverFitScore using the weighted formula:
- *   NeedFit * 0.30 +
- *   LeagueFit * 0.20 +
- *   OpportunityScore * 0.15 +
- *   ShortTermProjection * 0.10 +
- *   LongTermUpside * 0.10 +
- *   RosterUpgradeDelta * 0.10 +
- *   NewsUrgency * 0.05
- */
-export function computeWaiverFitScore(input: WaiverFitScoreInput): number {
-  const score =
-    input.needFit * 0.30 +
-    input.leagueFit * 0.20 +
-    input.opportunityScore * 0.15 +
-    input.shortTermProjection * 0.10 +
-    input.longTermUpside * 0.10 +
-    input.rosterUpgradeDelta * 0.10 +
-    input.newsUrgency * 0.05
-
-  return Math.round(Math.max(0, Math.min(100, score)))
-}
-
 // ---------------------------------------------------------------------------
 // Recommendation Type Classification Logic
 // ---------------------------------------------------------------------------
-
-export function classifyRecommendationType(input: {
-  needFitScore: number
-  shortTermProjection: number
-  longTermUpside: number
-  isInjuryOpportunity: boolean
-  isByeWeekCover: boolean
-  isHandcuff: boolean
-  isDynastyStash: boolean
-  isScheduleBased: boolean
-  goal: 'win-now' | 'balanced' | 'rebuild'
-  leagueFormat: string
-}): RecommendationType {
-  // Priority order of classification
-  if (input.isInjuryOpportunity && input.shortTermProjection >= 60) return 'Injury Fill-In'
-  if (input.isByeWeekCover) return 'Bye Week Cover'
-  if (input.isHandcuff) return 'Handcuff Protection'
-
-  if (input.needFitScore >= 70 && input.shortTermProjection >= 65) return 'Immediate Starter'
-
-  if (input.isDynastyStash && input.leagueFormat === 'dynasty') return 'Dynasty Stash'
-
-  if (input.isScheduleBased && input.shortTermProjection >= 50) return 'Schedule-Based Pickup'
-
-  if (input.longTermUpside >= 70 && input.shortTermProjection < 50) return 'High-Upside Stash'
-
-  if (input.shortTermProjection >= 55 && input.needFitScore >= 40) return 'Short-Term Streamer'
-
-  if (input.longTermUpside >= 60 && input.goal !== 'win-now') return 'Playoff Stash'
-
-  return 'Speculative Add'
-}
 
 // ---------------------------------------------------------------------------
 // Urgency Score
 // ---------------------------------------------------------------------------
 
-export function computeUrgencyScore(input: {
-  needFitScore: number
-  newsUrgency: number
-  isInjuryOpportunity: boolean
-  timeSensitive: boolean
-  leagueDemand: number
-}): number {
-  let score = 0
-  score += input.needFitScore * 0.35
-  score += input.newsUrgency * 0.25
-  if (input.isInjuryOpportunity) score += 20
-  if (input.timeSensitive) score += 15
-  score += input.leagueDemand * 0.10
-  return Math.round(Math.max(0, Math.min(100, score)))
-}

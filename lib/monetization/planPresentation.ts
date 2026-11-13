@@ -18,8 +18,6 @@ import { getMonetizationCatalog, type MonetizationCatalogItem } from './catalog'
  * describing a product we stopped selling.
  */
 
-export type BillingInterval = 'month' | 'year'
-
 export type PlanPresentation = {
   planFamily: string
   name: string

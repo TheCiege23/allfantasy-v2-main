@@ -42,10 +42,6 @@ function synthOpponents(count: number, weeklyProj: number, seed: number): SimTea
   return out
 }
 
-export function simulateSeasonFull(teams: SimTeamInput[], opts: MonteCarloOptions): SeasonSimResult {
-  return simulateSeason(teams, opts)
-}
-
 export function simulateWaiver(args: {
   roster: SimPlayerInput[]
   dropPlayerId: string

@@ -40,6 +40,4 @@ export function isDomainSupportedForSport(
   return false
 }
 
-export const SUPPORTED_SPORTS_THIS_PHASE: readonly string[] = ['NFL']
-export const SPORT_NEUTRAL_DOMAINS_LIST = SPORT_NEUTRAL_DOMAINS
 export const NFL_ONLY_DOMAINS_LIST = NFL_ONLY_DOMAINS

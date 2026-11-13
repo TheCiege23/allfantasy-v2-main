@@ -25,9 +25,6 @@ export const TOOLTIP_AI_ADP =
 /** When the AI ADP segment has no snapshot rows yet */
 export const AI_ADP_NOT_ENOUGH_DATA = 'Not enough AllFantasy draft data yet'
 
-/** When commissioner enables AI ADP but API returns empty segment */
-export const AI_ADP_UNAVAILABLE_FRIENDLY = AI_ADP_NOT_ENOUGH_DATA
-
 export function formatAiAdpUnavailableBanner(serverMessage: string | null | undefined): string {
   const m = String(serverMessage ?? '').trim()
   if (!m) return AI_ADP_NOT_ENOUGH_DATA

@@ -70,9 +70,3 @@ export function getPlugin(
  */
 export { registerPlugin }
 
-/**
- * List all registered sport keys — useful for admin dashboards and introspection.
- */
-export function getRegisteredSports(): SportKey[] {
-  return [..._registry.keys()]
-}

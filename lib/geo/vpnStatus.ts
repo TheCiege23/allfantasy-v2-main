@@ -38,15 +38,6 @@ export interface VpnStatus {
 
 export type RelayRangesLoader = () => Promise<RelayRangeSet | null>
 
-const ANONYMIZER_KINDS: readonly AnonymizerKind[] = ["tor", "privacy_relay", "vpn", "proxy", "hosting"]
-
-/** A `why=` query value, or anything else from a URL, narrowed to a known kind. */
-export function asAnonymizerKind(value: unknown): AnonymizerKind | null {
-  return typeof value === "string" && (ANONYMIZER_KINDS as readonly string[]).includes(value)
-    ? (value as AnonymizerKind)
-    : null
-}
-
 export async function vpnStatusFromHeaders(
   headers: Headers,
   opts: { fresh?: boolean; relayRanges?: RelayRangesLoader } = {},

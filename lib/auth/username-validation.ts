@@ -52,6 +52,3 @@ export function validateUsername(raw: string): UsernameValidationResult {
   return { ok: true, normalized, lookup: normalized.toLowerCase() }
 }
 
-export function usernamesEqual(a: string | null | undefined, b: string | null | undefined): boolean {
-  return normalizeUsernameLookup(a ?? "") === normalizeUsernameLookup(b ?? "")
-}

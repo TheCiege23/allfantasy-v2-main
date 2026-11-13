@@ -4,7 +4,6 @@
  */
 
 export const NOTIFICATIONS_ENDPOINT = "/api/shared/notifications"
-export const NOTIFICATIONS_READ_ENDPOINT = NOTIFICATIONS_ENDPOINT
 export const NOTIFICATIONS_READ_ALL_ENDPOINT = `${NOTIFICATIONS_ENDPOINT}/read-all`
 
 export function getNotificationsEndpoint(limit: number, options?: { leagueId?: string | null }): string {

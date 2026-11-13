@@ -83,25 +83,3 @@ export const EXECUTIVE_VIZ_TYPOGRAPHY = {
   metaLabel: 'text-[11px] font-bold uppercase tracking-[0.14em] text-muted',
 } as const
 
-/** Motion tokens. Durations/easing live here so every executive chart animates identically, and every
- * consumer pairs them with a `motion-reduce:*` fallback (reduced-motion is honored, never optional). */
-export const EXECUTIVE_VIZ_MOTION = {
-  /** Bar-grow / value-transition duration in seconds (framer-motion). */
-  revealDurationSec: 0.55,
-  /** Per-row stagger for the initial reveal, in seconds. */
-  staggerSec: 0.05,
-  /** Calm, executive easing — no bounce, no overshoot. */
-  ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
-} as const
-
-export function executiveStatusSurface(status: ExecutiveHealthStatus): string {
-  return EXECUTIVE_STATUS_SURFACE[status]
-}
-
-export function executiveStatusBar(status: ExecutiveHealthStatus): string {
-  return EXECUTIVE_STATUS_BAR[status]
-}
-
-export function executiveStatusLabel(status: ExecutiveHealthStatus): string {
-  return EXECUTIVE_STATUS_LABEL[status]
-}

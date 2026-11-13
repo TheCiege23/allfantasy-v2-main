@@ -106,14 +106,6 @@ export type NormalizedTrendUsage = {
   source: UpstreamSourceTag | 'unknown'
 }
 
-export type NormalizedFantasyScoringSnapshot = {
-  /** Echo of relevant league rules when a league context was supplied. */
-  receptionFormat: string | null
-  isSuperflex: boolean | null
-  isTwoQB: boolean | null
-  tePremiumExtra: number | null
-}
-
 export type NormalizedPlayerSportsProfile = {
   schemaVersion: 1
   pipelineId: string

@@ -245,13 +245,6 @@ export function applyRiskDiscount(value: number, riskScore: number): number {
   return Math.round(value - (riskScore * 0.25 * value))
 }
 
-/**
- * Batch compute risk scores.
- */
-export function computeRiskBatch(inputs: RiskInput[]): RiskResult[] {
-  return inputs.map(computeRiskScore)
-}
-
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }

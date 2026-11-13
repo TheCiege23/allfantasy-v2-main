@@ -2,8 +2,6 @@ import type { SupportedSport } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { calculateWeatherImpact, type WeatherImpactResult } from '@/lib/weather/weatherImpactEngine'
 import type { NormalizedWeather } from '@/lib/weather/weatherService'
-import { defaultGameTimeForSport } from '@/lib/weather/defaultGameTimes'
-import { fetchWeatherForTeamHomeWindow } from '@/lib/weather/venueResolver'
 import type { NormalizedFantasyProjection } from '@/lib/sports-data-normalization/types'
 
 export type WeatherProjectionAugment = {
@@ -78,52 +76,6 @@ export function buildWeatherAugmentFromCachedWeather(args: {
     weather: args.weather,
     impact,
   }
-}
-
-/**
- * Applies OpenWeather-backed forecast + `calculateWeatherImpact` to a baseline fantasy point estimate.
- * NBA / NHL / NCAAB: returns null augment (no outdoor weather factor in this engine).
- */
-export async function augmentProjectionWithWeather(args: {
-  sport: SupportedSport
-  position: string | null
-  teamAbbrev: string | null
-  baselinePoints: number | null
-  gameTime?: Date
-}): Promise<WeatherProjectionAugment | null> {
-  if (args.baselinePoints == null || !Number.isFinite(args.baselinePoints) || args.baselinePoints <= 0) {
-    return null
-  }
-  const sport = args.sport
-  if (!isWeatherSensitiveSport(sport)) {
-    return null
-  }
-  if (!process.env.OPENWEATHERMAP_API_KEY?.trim()) {
-    return {
-      weatherAdjustedProjection: null,
-      weatherRiskLevel: null,
-      weatherSummary: null,
-      weatherConfidence: 'unavailable',
-      weatherImpactReason: 'OpenWeatherMap API key not configured server-side.',
-      weather: null,
-      impact: null,
-    }
-  }
-
-  const gameTime = args.gameTime ?? defaultGameTimeForSport(sport)
-  const weather = await fetchWeatherForTeamHomeWindow({
-    sport,
-    teamAbbrev: args.teamAbbrev,
-    gameTime,
-  })
-
-  return buildWeatherAugmentFromCachedWeather({
-    sport,
-    position: args.position,
-    teamAbbrev: args.teamAbbrev,
-    baselinePoints: args.baselinePoints,
-    weather,
-  })
 }
 
 /** Merges weather augment onto an existing normalized projection object (mutates numeric fields). */

@@ -4,4 +4,4 @@ export {
   buildDiscordWebhookPayload,
   postToDiscordWebhook,
 } from './discord'
-export { buildRedditReadyPost, buildRedditSubmitUrl } from './reddit'
+export { buildRedditReadyPost } from './reddit'

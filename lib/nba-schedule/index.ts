@@ -19,7 +19,5 @@ export {
 } from './NbaScheduleConfigService'
 export {
   resolveNbaFantasyWeek,
-  resolveNbaFantasyWeekPreview,
 } from './NbaFantasyWeekResolver'
 export { getScheduleAdapter } from './adapters'
-export { loadNcaabGameDatesForWeek } from './adapters/C2CScheduleAdapter'

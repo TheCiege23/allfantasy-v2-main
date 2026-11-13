@@ -1,13 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
-import { auditDynastyCutdowns, expireOverdueKeeperDeclarations } from '@/lib/league/keeper-engine'
 import { scoreLeagueWeek } from '@/lib/scoring/scoring-engine'
-import {
-  generateDraftRecapArtifact,
-  generateWeeklyLeagueArtifacts,
-} from '@/lib/league/format-artifact-service'
-import { buildWaiverCronIdempotencyKey } from '@/lib/league-engine-performance/idempotencyKeys'
-import { createEngineTimer, logLeagueEngineBatchSummary, logLeagueEngineEvent } from '@/lib/league-engine-performance/observability'
+import { createEngineTimer, logLeagueEngineEvent } from '@/lib/league-engine-performance/observability'
 
 export function resolveSeasonWeek(input?: {
   season?: number | null
@@ -66,80 +59,3 @@ export async function runScoringWorker(options?: {
   }
 }
 
-export async function runWeeklyLeagueAutomation(options?: {
-  season?: number | null
-  weekOrRound?: number | null
-}) {
-  const scoring = await runScoringWorker({
-    season: options?.season,
-    weekOrRound: options?.weekOrRound,
-  })
-  await Promise.all(
-    // A week that was not scored has nothing new to recap.
-    scoring.results.filter((result) => result.status === 'scored').map(async (result) => {
-      await generateWeeklyLeagueArtifacts({
-        leagueId: result.leagueId,
-        season: result.season,
-        week: result.weekOrRound,
-      }).catch(() => null)
-      await generateDraftRecapArtifact(result.leagueId).catch(() => null)
-    })
-  )
-  const keepersExpired = await expireOverdueKeeperDeclarations()
-  const cutdownAudit = await auditDynastyCutdowns()
-
-  return {
-    ...scoring,
-    keepersExpired,
-    cutdownAuditCount: cutdownAudit.length,
-  }
-}
-
-export async function runWaiverProcessingWorker(options?: { leagueIds?: string[] }) {
-  const timer = createEngineTimer()
-  const pending = await prisma.waiverClaim.findMany({
-    where: {
-      status: 'pending',
-      ...(options?.leagueIds?.length ? { leagueId: { in: options.leagueIds } } : {}),
-    },
-    select: {
-      leagueId: true,
-    },
-  })
-
-  const leagueIds = Array.from(new Set(pending.map((claim) => claim.leagueId)))
-  const results = []
-  for (const leagueId of leagueIds) {
-    const idempotencyKey = buildWaiverCronIdempotencyKey(leagueId)
-    const leagueTimer = createEngineTimer()
-    const claims = await processWaiverClaimsForLeague(leagueId, {
-      idempotencyKey,
-      runType: 'scheduled',
-    })
-    logLeagueEngineEvent({
-      subsystem: 'waiver',
-      action: 'process_league_waivers',
-      leagueId,
-      durationMs: leagueTimer.elapsedMs(),
-      idempotencyKey,
-      ok: true,
-      extra: { resultCount: claims.length },
-    })
-    results.push({
-      leagueId,
-      claims,
-    })
-  }
-
-  logLeagueEngineBatchSummary({
-    subsystem: 'waiver',
-    action: 'waiver_processing_worker',
-    processed: leagueIds.length,
-    durationMs: timer.elapsedMs(),
-  })
-
-  return {
-    processedLeagues: leagueIds.length,
-    results,
-  }
-}

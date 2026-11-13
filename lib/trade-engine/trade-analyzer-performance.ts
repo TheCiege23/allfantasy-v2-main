@@ -10,9 +10,9 @@
  *   4. Fast initial result + deferred deep analysis
  */
 
-import { cacheGet, cacheSet } from './caching'
+import { cacheSet } from './caching'
 import type { TradeDecisionContextV1 } from './trade-decision-context'
-import { buildDeterministicIntelligence, type DeterministicIntelligence } from './deterministic-intelligence'
+import { type DeterministicIntelligence } from './deterministic-intelligence'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,10 +55,6 @@ export interface PrecomputedValues {
 
 const PRECOMPUTE_TTL_MS = 15 * 60 * 1000
 const PRECOMPUTE_CACHE_KEY = 'trade:precomputed'
-
-export function getPrecomputedValues(): PrecomputedValues | null {
-  return cacheGet<PrecomputedValues>(PRECOMPUTE_CACHE_KEY)
-}
 
 export function setPrecomputedValues(values: PrecomputedValues): void {
   cacheSet(PRECOMPUTE_CACHE_KEY, values, PRECOMPUTE_TTL_MS)
@@ -119,86 +115,9 @@ export interface ParallelAnalysisInput {
   aiTimeoutMs?: number
 }
 
-/**
- * Run deterministic + AI analysis in parallel.
- * Returns fast deterministic result immediately, AI result when ready.
- *
- * If deterministic confidence > skipAIThreshold, AI is skipped entirely.
- * If AI exceeds aiTimeoutMs, return deterministic result with aiStatus='pending'.
- */
-export async function runParallelAnalysis(
-  input: ParallelAnalysisInput,
-): Promise<FastTradeResult> {
-  const start = Date.now()
-  const skipThreshold = input.skipAIThreshold ?? 85
-  const aiTimeout = input.aiTimeoutMs ?? 8000
-
-  // Phase 1: Precompute (synchronous, <5ms)
-  const preStart = Date.now()
-  precomputeFromContext(input.ctx)
-  const precomputeMs = Date.now() - preStart
-
-  // Phase 2: Deterministic (synchronous, <50ms)
-  const detStart = Date.now()
-  const deterministic = buildDeterministicIntelligence(input.ctx)
-  const deterministicMs = Date.now() - detStart
-
-  // Fast path: if deterministic is high-confidence, skip AI entirely
-  if (deterministic.confidence >= skipThreshold) {
-    return {
-      deterministic,
-      aiStatus: 'skipped',
-      aiAnalysis: null,
-      totalMs: Date.now() - start,
-      timing: {
-        precomputeMs,
-        deterministicMs,
-        aiMs: null,
-        totalMs: Date.now() - start,
-      },
-      cached: false,
-    }
-  }
-
-  // Phase 3: AI (parallel, with timeout)
-  const aiStart = Date.now()
-  let aiAnalysis: unknown = null
-  let aiStatus: FastTradeResult['aiStatus'] = 'pending'
-
-  try {
-    aiAnalysis = await Promise.race([
-      input.runAI(),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), aiTimeout)),
-    ])
-
-    aiStatus = aiAnalysis != null ? 'ready' : 'pending'
-  } catch {
-    aiStatus = 'failed'
-  }
-
-  const aiMs = Date.now() - aiStart
-  const totalMs = Date.now() - start
-
-  return {
-    deterministic,
-    aiStatus,
-    aiAnalysis,
-    totalMs,
-    timing: {
-      precomputeMs,
-      deterministicMs,
-      aiMs,
-      totalMs,
-    },
-    cached: false,
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Result Caching
 // ---------------------------------------------------------------------------
-
-const RESULT_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
 /**
  * Build a stable cache key from trade context.
@@ -225,20 +144,6 @@ function hashString(s: string): string {
   return Math.abs(hash).toString(36)
 }
 
-export function getCachedTradeResult(ctx: TradeDecisionContextV1): FastTradeResult | null {
-  const key = buildTradeResultCacheKey(ctx)
-  const cached = cacheGet<FastTradeResult>(key)
-  if (cached) {
-    return { ...cached, cached: true }
-  }
-  return null
-}
-
-export function cacheTradeResult(ctx: TradeDecisionContextV1, result: FastTradeResult): void {
-  const key = buildTradeResultCacheKey(ctx)
-  cacheSet(key, result, RESULT_CACHE_TTL_MS)
-}
-
 // ---------------------------------------------------------------------------
 // Deferred Deep Analysis
 // ---------------------------------------------------------------------------
@@ -252,31 +157,3 @@ export interface DeferredAnalysisHandle {
   result: unknown | null
 }
 
-/**
- * Start deep analysis in the background.
- * Returns a handle that can be polled or awaited.
- */
-export function startDeferredAnalysis(
-  runDeep: () => Promise<unknown>,
-): DeferredAnalysisHandle {
-  const handle: DeferredAnalysisHandle = {
-    promise: Promise.resolve(null),
-    completed: false,
-    result: null,
-  }
-
-  handle.promise = runDeep()
-    .then((result) => {
-      handle.completed = true
-      handle.result = result
-      return result
-    })
-    .catch((err) => {
-      console.warn('[trade-analyzer] Deferred deep analysis failed:', err?.message || err)
-      handle.completed = true
-      handle.result = null
-      return null
-    })
-
-  return handle
-}

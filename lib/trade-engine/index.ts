@@ -1,10 +1,8 @@
 // lib/trade-engine/index.ts
 export { runTradeEngine } from "./trade-engine";
-export { attachNeedsSurplus } from "./value-context-service";
 export { buildLeagueIntelligence } from "./league-intelligence";
 
-export { detectSurplusAssets, buildTradablePool } from "./surplusDetection";
-export { buildCheapestFairOfferPackages } from "./packageBuilder";
+export { detectSurplusAssets } from "./surplusDetection";
 export { applyParityGuardrailsToCandidates, computeTpiByRosterId } from "./guardrails";
 
 export type {
@@ -31,7 +29,6 @@ export type {
   PlayerValueAdjustment,
   NewsImpactResult,
 } from "./news-impact-engine";
-export { runAssistOrchestrator } from "./ai-assist-orchestrator";
 export type { AiProviderMode, RunAssistOptions, AssistSnapshotLike } from "./ai-assist-orchestrator";
 
 export { computeTeamManagerContext } from "./team-manager-context-engine";
@@ -47,10 +44,6 @@ export type {
   StyleMatchResult,
 } from "./team-manager-context-engine";
 
-export {
-  simulateTradeImpact,
-  clearSimulationCaches,
-} from "./trade-impact-simulator";
 export type {
   PlayerProjection,
   TeamSimProfile,
@@ -62,11 +55,7 @@ export type {
 } from "./trade-impact-simulator";
 
 export {
-  runParallelAnalysis,
   precomputeFromContext,
-  getCachedTradeResult,
-  cacheTradeResult,
-  startDeferredAnalysis,
 } from "./trade-analyzer-performance";
 export type {
   FastTradeResult,
@@ -83,7 +72,6 @@ export {
   computeAgeMultiplier,
   getVolatilityProfile,
   getScoringNormalization,
-  normalizeValueForSport,
 } from "./sport-tuning-registry";
 export type {
   SupportedSport,

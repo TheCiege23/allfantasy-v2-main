@@ -4,7 +4,6 @@
 
 import { prisma } from '@/lib/prisma'
 import { getZombieLeagueConfig } from './ZombieLeagueConfig'
-import { appendZombieAudit } from './ZombieAuditLog'
 
 export interface DangerousDropFlag {
   leagueId: string
@@ -45,17 +44,3 @@ export async function evaluateDangerousDrops(leagueId: string): Promise<Dangerou
   return flags
 }
 
-export async function recordDangerousDropFlags(leagueId: string, flags: DangerousDropFlag[]): Promise<void> {
-  for (const f of flags) {
-    await appendZombieAudit({
-      leagueId,
-      eventType: 'dangerous_drop_flag',
-      metadata: {
-        rosterId: f.rosterId,
-        playerId: f.playerId,
-        estimatedValue: f.estimatedValue,
-        threshold: f.threshold,
-      },
-    })
-  }
-}

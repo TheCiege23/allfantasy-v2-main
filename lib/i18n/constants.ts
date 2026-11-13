@@ -14,7 +14,6 @@ export const LANG_COOKIE_KEY = 'af_lang'
 export const DEFAULT_LANG: LanguageCode = 'en'
 
 export const SUPPORTED_LANGUAGES: LanguageCode[] = ['en', 'es', 'zh', 'fil', 'vi', 'fr', 'ar']
-export const PRODUCTION_LANGUAGE_CODES: LanguageCode[] = ['en']
 export const BETA_LANGUAGE_CODES: LanguageCode[] = ['zh', 'fil', 'vi']
 export const FUTURE_LANGUAGE_CODES: LanguageCode[] = ['fr', 'ar']
 

@@ -3,7 +3,7 @@
  * Tournament Mode — defaults, theme packs, naming sets.
  */
 
-import type { TournamentSettings, TournamentConferenceTheme } from './types'
+import type { TournamentSettings } from './types'
 export { TOURNAMENT_PARTICIPANT_POOL_SIZES, TOURNAMENT_LEAGUE_SIZE_FIXED } from './types'
 
 export const TOURNAMENT_LEAGUE_VARIANT = 'tournament_mode' as const
@@ -26,20 +26,6 @@ export const DEFAULT_TOURNAMENT_SETTINGS: TournamentSettings = {
   universalPageVisibility: 'unlisted',
   forumAnnouncementsEnabled: true,
   eliminationAdvancementPerLeague: 6,
-}
-
-export const BLACK_THEME: TournamentConferenceTheme = {
-  primaryColor: '#1a1a1a',
-  secondaryColor: '#d4af37',
-  iconName: 'shield',
-  label: 'Black',
-}
-
-export const GOLD_THEME: TournamentConferenceTheme = {
-  primaryColor: '#d4af37',
-  secondaryColor: '#1a1a1a',
-  iconName: 'crown',
-  label: 'Gold',
 }
 
 export const BLACK_VS_GOLD_CONFERENCE_NAMES = ['Black', 'Gold'] as const

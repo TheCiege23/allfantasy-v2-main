@@ -9,13 +9,6 @@ export type ScoringMode = 'points' | 'h2h_category' | 'roto'
 
 export const SCORING_MODES = ['points', 'h2h_category', 'roto'] as const
 
-export function isScoringMode(value: unknown): value is ScoringMode {
-  return (
-    typeof value === 'string' &&
-    (SCORING_MODES as readonly string[]).includes(value)
-  )
-}
-
 /**
  * Canonical category-preset id. Extend this union as MLB/NHL presets land.
  * The preset id lives on league settings as `settings.category_preset_id` and

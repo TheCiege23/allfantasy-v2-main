@@ -4,7 +4,7 @@
  */
 
 import type { LeagueSport } from '@prisma/client'
-import { SUPPORTED_SPORTS, isSupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 export type SoccerPipeline = 'mls' | 'euro'
 
@@ -100,19 +100,6 @@ const BASE: Record<
   },
 }
 
-export function getSupportedRedraftSports(): LeagueSport[] {
-  return [...SUPPORTED_SPORTS]
-}
-
-export function getRedraftMaxTeams(sport: string, soccerPipeline?: SoccerPipeline | null): number {
-  const s = normalizeToSupportedSport(sport) ?? 'NFL'
-  const row = BASE[s]
-  if (s === 'SOCCER') {
-    return soccerPipeline === 'mls' ? row.mlsMaxTeams ?? 24 : REDRAFT_SOCCER_EURO_MAX_TEAMS
-  }
-  return row.maxTeams
-}
-
 export function getRedraftSportIntegration(
   sport: string,
   soccerPipeline?: SoccerPipeline | null
@@ -145,6 +132,3 @@ export function getRedraftSportIntegration(
   }
 }
 
-export function assertRedraftSport(sport: string): sport is LeagueSport {
-  return isSupportedSport(sport)
-}

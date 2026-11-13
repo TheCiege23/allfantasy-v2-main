@@ -11,10 +11,6 @@ export function getCreateDMPayload(otherUserId: string): { threadType: string; m
   }
 }
 
-export function getCreateDMUrl(): string {
-  return "/api/shared/chat/threads"
-}
-
 export function getThreadMessagesUrl(threadId: string, limit = 50): string {
   return `/api/shared/chat/threads/${encodeURIComponent(threadId)}/messages?limit=${limit}`
 }

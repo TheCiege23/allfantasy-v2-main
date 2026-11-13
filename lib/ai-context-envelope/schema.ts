@@ -17,7 +17,6 @@ export const AI_TOOL_IDS = [
   'story_creator',
   'content',
 ] as const
-export type AIToolId = (typeof AI_TOOL_IDS)[number]
 
 /** Single evidence item: source, label, value. No AI-invented values. */
 export const EvidenceItemSchema = z.object({
@@ -44,12 +43,6 @@ export const EvidenceBlockSchema = z.object({
   summaryForAI: z.string().optional(),
 })
 export type EvidenceBlock = z.infer<typeof EvidenceBlockSchema>
-
-/** Evidence schema (item + block) for PROMPT 127. */
-export const EvidenceSchema = {
-  item: EvidenceItemSchema,
-  block: EvidenceBlockSchema,
-} as const
 
 /** Confidence: must reflect data strength; capped when data is incomplete. */
 export const ConfidenceSchema = z.object({
@@ -84,12 +77,6 @@ export const UncertaintyBlockSchema = z.object({
   summaryForAI: z.string().optional(),
 })
 export type UncertaintyBlock = z.infer<typeof UncertaintyBlockSchema>
-
-/** Uncertainty schema (item + block) for PROMPT 127. */
-export const UncertaintySchema = {
-  item: UncertaintyItemSchema,
-  block: UncertaintyBlockSchema,
-} as const
 
 /** Single missing-data entry: not silently ignored. */
 export const MissingDataItemSchema = z.object({

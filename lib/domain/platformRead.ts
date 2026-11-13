@@ -91,10 +91,6 @@ export function isPlatformReadScope(): boolean {
   return scopeStore.getStore() !== undefined
 }
 
-export function currentPlatformReadScope(): PlatformReadScope | undefined {
-  return scopeStore.getStore()
-}
-
 // ─── The separate pool ───────────────────────────────────────────────────────
 
 let platformClient: PrismaClient | null = null
@@ -126,11 +122,6 @@ function getPlatformClient(): PrismaClient {
   }
   platformClient = new PrismaClient({ datasources: { db: { url } } })
   return platformClient
-}
-
-export async function disconnectPlatformClient(): Promise<void> {
-  await platformClient?.$disconnect()
-  platformClient = null
 }
 
 // ─── The audited action ──────────────────────────────────────────────────────

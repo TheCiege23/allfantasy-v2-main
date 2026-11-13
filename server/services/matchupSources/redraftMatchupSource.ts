@@ -12,10 +12,9 @@
  * `none` reason, and a missing opponent yields `bye`.
  */
 
-import { prisma } from '@/lib/prisma'
 import { isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
 import { safeTeamDefenseDisplayName } from '@/lib/redraft/teamDefenseIdentity'
-import type { MatchupContextResult, MatchupSideContext, MatchupSourceParams } from '@/server/services/matchupSources/types'
+import type { MatchupContextResult, MatchupSideContext } from '@/server/services/matchupSources/types'
 
 export type RosterPlayerRow = {
   playerId: string
@@ -74,79 +73,6 @@ export function buildRedraftSideContext(
     scoreSeason: scoring?.season,
     scoreWeek: scoring?.week,
   }
-}
-
-const rosterInclude = {
-  players: {
-    where: { droppedAt: null },
-    select: { playerId: true, playerName: true, position: true, team: true, slotType: true },
-  },
-} as const
-
-/**
- * Resolve the redraft matchup context for a viewer, or `null` if this league is
- * not redraft-family (no `RedraftSeason`).
- */
-export async function resolveRedraftMatchupContext(
-  params: MatchupSourceParams,
-): Promise<MatchupContextResult | null> {
-  const rseason = await prisma.redraftSeason.findFirst({
-    where: { leagueId: params.leagueId },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, season: true, currentWeek: true },
-  })
-  if (!rseason) return null
-
-  const week = params.week > 0 ? params.week : Math.max(1, rseason.currentWeek || 1)
-
-  const selectedRoster = (await prisma.redraftRoster.findFirst({
-    where: { seasonId: rseason.id, ownerId: params.viewerUserId },
-    select: {
-      id: true,
-      ownerName: true,
-      teamName: true,
-      avatarUrl: true,
-      wins: true,
-      losses: true,
-      ties: true,
-      ...rosterInclude,
-    },
-  })) as RosterWithPlayers | null
-  if (!selectedRoster) {
-    return { kind: 'none', reason: 'no_redraft_roster_for_viewer' }
-  }
-
-  const matchup = await prisma.redraftMatchup.findFirst({
-    where: {
-      seasonId: rseason.id,
-      week,
-      OR: [{ homeRosterId: selectedRoster.id }, { awayRosterId: selectedRoster.id }],
-    },
-    select: {
-      homeRosterId: true,
-      awayRosterId: true,
-      homeScore: true,
-      awayScore: true,
-      status: true,
-      homeRoster: { select: { id: true, ownerName: true, teamName: true, avatarUrl: true, wins: true, losses: true, ties: true, ...rosterInclude } },
-      awayRoster: { select: { id: true, ownerName: true, teamName: true, avatarUrl: true, wins: true, losses: true, ties: true, ...rosterInclude } },
-    },
-  })
-  if (!matchup) {
-    return { kind: 'none', reason: `no_redraft_matchup_for_week_${week}` }
-  }
-
-  return selectRedraftMatchupContext({
-    selectedRosterId: selectedRoster.id,
-    selectedFallback: selectedRoster,
-    homeRosterId: matchup.homeRosterId,
-    homeRoster: matchup.homeRoster as RosterWithPlayers | null,
-    awayRoster: matchup.awayRoster as RosterWithPlayers | null,
-    homeScore: matchup.homeScore,
-    awayScore: matchup.awayScore,
-    status: matchup.status,
-    scoring: { season: rseason.season, week },
-  })
 }
 
 /**

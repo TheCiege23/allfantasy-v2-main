@@ -85,13 +85,3 @@ export async function lockPlatformRank(
   })
 }
 
-/** Resolve the **AllFantasy** user id from a provider’s stable user id (e.g. Sleeper `user_id`). */
-export async function findAfUserByPlatformId(
-  platform: Platform,
-  platformUserId: string
-): Promise<string | null> {
-  const identity = await prisma.platformIdentity.findFirst({
-    where: { platform, platformUserId }
-  })
-  return identity?.userId ?? null
-}

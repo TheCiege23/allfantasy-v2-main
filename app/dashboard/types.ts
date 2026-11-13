@@ -1,7 +1,3 @@
-/** Legacy pixel hints; desktop shells use ~40% / 35% / 25% for left/center/right — see `app/components/AppShell.tsx`. */
-export const DASHBOARD_LEFT_PANEL_WIDTH = 280
-export const DASHBOARD_RIGHT_PANEL_WIDTH = 200
-
 export type LeagueListStatus = 'pre_draft' | 'drafting' | 'in_season' | 'complete' | string
 
 export interface UserLeague {
@@ -131,12 +127,6 @@ export type RightControlPanelLayoutProps = {
   inlineDashboardSelect?: boolean
 }
 
-export interface DashboardConnectedLeague extends UserLeague {
-  sourceLeagueId: string
-  syncStatus?: string | null
-  platformLeagueId?: string | null
-}
-
 export interface LeagueTeamSlot {
   id: string
   externalId: string
@@ -166,25 +156,6 @@ export interface LeagueTeamSlot {
 /** League team row for tab UIs (draft, league, trades) */
 export type UserLeagueTeam = LeagueTeamSlot
 
-export interface LeagueDetail {
-  id: string
-  name: string
-  sport: string
-  format: string
-  scoring: string
-  teamCount: number
-  season: number | null
-  platform: string
-  isDynasty: boolean
-  settings: Record<string, unknown> | null
-  userRole: string
-  inviteToken: string | null
-  inviteUrl: string | null
-  draftDate: string | null
-  draftStatus: string | null
-  teams: LeagueTeamSlot[]
-}
-
 export interface LeagueChatMessage {
   id: string
   author_display_name: string
@@ -197,15 +168,6 @@ export interface LeagueChatMessage {
   createdAt: string
 }
 
-export interface ChecklistStep {
-  id: string
-  label: string
-  description: string
-  done: boolean
-  ctaHref?: string
-  ctaLabel?: string
-}
-
 export type LeagueTab =
   | 'draft'
   | 'team'
@@ -215,4 +177,3 @@ export type LeagueTab =
   | 'trades'
   | 'scores'
 
-export type AFChatTab = 'chimmy' | 'direct' | 'af_huddle' | 'dms' | 'league'

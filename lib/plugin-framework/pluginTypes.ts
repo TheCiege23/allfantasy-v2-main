@@ -65,6 +65,3 @@ export function okPluginHook(metadata?: Record<string, unknown>): PluginHookResu
   return { ok: true, metadata }
 }
 
-export function blockedPluginHook(code: string, message: string): PluginHookResult {
-  return { ok: false, code, message }
-}

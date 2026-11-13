@@ -146,12 +146,3 @@ export function isSleeperRookieFallbackForNfl(field: string): boolean {
   return field === 'rookie_years_exp'
 }
 
-/**
- * Ordered vendor chain for merging cached/imported rows (first hit wins per merge rules).
- * Does not replace field-specific logic in `resolvePlayerExperience` (e.g. ClearSports stats JSON
- * without experience keys must not imply rookie/veteran).
- */
-export function getProviderFallbackChainForField(sport: string, field: ProviderField | string): SportsDataProvider[] {
-  void field
-  return [...getProviderPriorityForSport(sport)]
-}

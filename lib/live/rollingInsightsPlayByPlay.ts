@@ -21,9 +21,6 @@
 import type { LiveEvent, LiveEventType } from './eventDetector'
 import { getTeamInfo } from '@/lib/team-abbrev'
 
-/** Sports the vendor actually serves play-by-play for. */
-export const PBP_SPORTS = ['MLB', 'NBA', 'NFL'] as const
-
 /** The contract's `event` enum. `not_available` is a real value, not an error. */
 type PlayEvent =
   | 'kickoff' | 'pass' | 'run' | 'sack' | 'interception' | 'incompletion'

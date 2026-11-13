@@ -184,10 +184,3 @@ export interface RedraftWarRoomContext {
   }
 }
 
-export type RedraftWarRoomAction =
-  | 'state'
-  | 'waivers'
-  | 'trade-analyze'
-  | 'trade-find'
-  | 'lineup'
-  | 'ask'

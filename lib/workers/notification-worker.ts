@@ -133,9 +133,3 @@ export async function stopNotificationWorker(): Promise<void> {
   notificationWorker = null;
 }
 
-export function getNotificationWorker(): Worker<
-  NotificationJobPayload,
-  NotificationJobResult
-> | null {
-  return notificationWorker;
-}

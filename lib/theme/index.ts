@@ -9,7 +9,6 @@ export {
   DEFAULT_THEME,
   THEME_IDS,
   THEME_DISPLAY_NAMES,
-  getThemeDisplayName,
   isValidTheme,
   normalizeStoredTheme,
   resolveEffectiveDataMode,

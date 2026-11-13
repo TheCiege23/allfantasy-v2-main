@@ -130,11 +130,3 @@ export type ManagerIntelligence = ContractBase & {
   forbiddenInferences: string[]
 }
 
-export type AnyIntelligence =
-  | PlatformIntelligence
-  | LeagueIntelligence
-  | CommissionerIntelligence
-  | TradeIntelligence
-  | WaiverIntelligence
-  | DraftIntelligence
-  | ManagerIntelligence

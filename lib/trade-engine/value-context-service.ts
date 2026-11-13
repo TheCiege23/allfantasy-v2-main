@@ -4,24 +4,9 @@
 // Single unified module for all AF Legacy features.
 // Trade AI, League Rankings, Waivers, AI Chat all use this.
 
-import {
-  Asset,
-  LeagueSettings,
-  LeagueIntelligence,
-  ManagerProfile,
-  Thresholds,
-  Constraints,
-  DEFAULT_THRESHOLDS,
-  DEFAULT_CONSTRAINTS
-} from './types'
+import { Asset, LeagueSettings, LeagueIntelligence, ManagerProfile, Thresholds, Constraints } from './types'
 
-import {
-  buildLeagueIntelligence,
-  SleeperRosterInput,
-  FantasyCalcValueMap,
-  computeStarterStrengthIndex,
-  computeNeedsSurplus
-} from './league-intelligence'
+import { SleeperRosterInput, FantasyCalcValueMap, computeStarterStrengthIndex } from './league-intelligence'
 
 // ============================================
 // TRADING BLOCK
@@ -461,91 +446,7 @@ export interface ValueContextInput {
   userRosterId?: number
 }
 
-export function buildValueContext(input: ValueContextInput): ValueContextResult {
-  const {
-    settings,
-    rosters,
-    fantasyCalcValues,
-    thresholds = DEFAULT_THRESHOLDS,
-    constraints = DEFAULT_CONSTRAINTS,
-    previousChampionId,
-    sleeperTradingBlocks = {},
-    userAssetFlags = {},
-    tradingBlockConfig = DEFAULT_TRADING_BLOCK_CONFIG,
-    waiverwireAssets,
-    userRosterId
-  } = input
-
-  const intelligence = buildLeagueIntelligence(
-    settings,
-    rosters,
-    fantasyCalcValues,
-    previousChampionId,
-    thresholds,
-    constraints
-  )
-
-  const formatModifiers = computeFormatModifiers(settings)
-
-  const tradingBlockByManager: Record<number, TradingBlockAsset[]> = {}
-  for (const profile of Object.values(intelligence.managerProfiles)) {
-    const sleeperBlock = sleeperTradingBlocks[profile.rosterId] || []
-    const flags = userAssetFlags[profile.rosterId] || {}
-    
-    tradingBlockByManager[profile.rosterId] = buildTradingBlock(
-      profile.assets || [],
-      profile.surplus,
-      sleeperBlock,
-      flags,
-      tradingBlockConfig
-    )
-  }
-
-  const leagueRankings = computeLeagueRankings(intelligence, formatModifiers)
-
-  let waiverContext: WaiverContext | undefined
-  let aiChatContext: AIChatContext | undefined
-
-  if (userRosterId !== undefined) {
-    const userProfile = intelligence.managerProfiles[userRosterId]
-    
-    if (userProfile && waiverwireAssets) {
-      waiverContext = computeWaiverContext(userProfile, formatModifiers, waiverwireAssets)
-    }
-    
-    if (userProfile) {
-      aiChatContext = buildAIChatContext(intelligence, userProfile, formatModifiers)
-    }
-  }
-
-  return {
-    intelligence,
-    formatModifiers,
-    tradingBlockByManager,
-    waiverContext,
-    leagueRankings,
-    aiChatContext
-  }
-}
-
 // ============================================
 // NEEDS/SURPLUS ATTACHMENT (FOR SNAPSHOT)
 // ============================================
 
-export function attachNeedsSurplus(
-  snapshot: { profilesByRosterId: Record<number, any>; league: any },
-  rosters: Array<{ rosterId: number; players: any[] }>
-): void {
-  for (const r of rosters) {
-    const profile = snapshot.profilesByRosterId?.[r.rosterId]
-    if (!profile) continue
-
-    const { needs, surplus } = computeNeedsSurplus(
-      profile.assets || [],
-      snapshot.league || {}
-    )
-
-    profile.needs = needs
-    profile.surplus = surplus
-  }
-}

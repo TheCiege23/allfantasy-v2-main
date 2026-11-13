@@ -111,10 +111,6 @@ export function rosterSpotCredit(args: { givePlayers: number; getPlayers: number
   }
 }
 
-export function rosterSpotLineName(credit: Pick<RosterSpotCredit, 'spots'>): string {
-  return credit.spots === 1 ? 'Open roster spot' : `${credit.spots} open roster spots`
-}
-
 /**
  * The row a surface prints for the credit, under the total it joined. `viewer` frame: 'give' is what "you"
  * send; `teams` frame (the open analyzer): 'give' is what Team A sends, so Team B receives the credit.

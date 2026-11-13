@@ -32,44 +32,9 @@ export { getScheduleConfigForLeague, updateScheduleConfigForLeague } from '@/lib
 
 const SPORT = 'MLB' as const
 
-/** MLB-specific calendar metadata. */
-export const MLB_CALENDAR = {
-  springTrainingStart: { month: 2 },   // Late February / March
-  springTrainingEnd: { month: 3 },
-  regularSeasonStart: { month: 3 },    // Late March / early April
-  regularSeasonEnd: { month: 9 },      // Late September
-  playoffsStart: { month: 10 },        // October
-  worldSeriesEnd: { month: 10 },       // Late October
-  specialPeriods: {
-    allStarBreak: { typical: 'mid-July', duration: '3-4 days' },
-    tradeDeadline: { typical: 'late July / early August' },
-    septemberExpansion: { typical: 'September 1 roster expansion' },
-    regularSeasonGames: 162,
-  },
-  fantasyRegularSeasonWeeks: 26,
-  fantasyPlayoffWeeks: 3,
-  /** MLB-specific: series typically 3-4 games, with travel/off days between series. */
-  seriesStructure: {
-    typicalLength: [3, 4],
-    offDaysBetween: [0, 1],  // Often no off day between home series; 1 between road trips
-  },
-}
-
 // MLB-typed convenience functions
 export const getMlbWeekVolumeProfile = (season: number, week: number, options?: { thresholdHeavy?: number; thresholdModerate?: number }) =>
   _getWeekVolumeProfile(SPORT, season, week, options)
-
-export const getMlbLeastBusyDay = (season: number, week: number) =>
-  _getLeastBusyDay(SPORT, season, week)
-
-export const getMlbMostBusyDay = (season: number, week: number) =>
-  _getMostBusyDay(SPORT, season, week)
-
-export const getMlbBalancedScoringDays = (season: number, week: number, count: number) =>
-  _getBalancedScoringDays(SPORT, season, week, count)
-
-export const getMlbWeekGameCounts = (season: number, week: number) =>
-  _getWeekGameCounts(SPORT, season, week)
 
 export const getMlbSeasonVolumeProfiles = (season: number, startWeek: number, endWeek: number) =>
   _getSeasonVolumeProfiles(SPORT, season, startWeek, endWeek)

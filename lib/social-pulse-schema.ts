@@ -42,6 +42,5 @@ export const SocialPulseResponseSchema = z.object({
   sources: z.array(z.string().min(1)).max(20).optional(),
 })
 
-export type SocialPulseRequest = z.infer<typeof SocialPulseRequestSchema>
 export type SocialPulseResponse = z.infer<typeof SocialPulseResponseSchema>
 export type SocialPulseSignal = z.infer<typeof SocialPulseSignalSchema>

@@ -1,4 +1,3 @@
-import { formatInTimeZone } from 'date-fns-tz'
 import { getServerNowUTC } from '@/lib/time-engine/serverClock'
 import { normalizeToUTC } from '@/lib/time-engine/normalize'
 
@@ -44,16 +43,3 @@ export function detectTimeMismatch(input: {
   return { timezoneMismatch, deviceClockMismatch, clockSkewSeconds }
 }
 
-/**
- * Expected wall time in device TZ if the device clock matched server UTC (for diagnostics only).
- */
-export function expectedDeviceLocalISO(deviceTimezone: string | null, serverNow?: Date): string | null {
-  const tz = deviceTimezone?.trim()
-  if (!tz) return null
-  try {
-    const s = serverNow ?? getServerNowUTC()
-    return formatInTimeZone(s, tz, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
-  } catch {
-    return null
-  }
-}

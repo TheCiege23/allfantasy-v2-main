@@ -118,41 +118,5 @@ export default function PlayerBadge({
   )
 }
 
-interface PlayerBadgeInlineProps {
-  name: string
-  sleeperId?: string
-  position?: string
-  team?: string
-  media?: PlayerMedia | null
-}
-
-export function PlayerBadgeInline({ name, sleeperId, position, team, media }: PlayerBadgeInlineProps) {
-  const [imgError, setImgError] = useState(false)
-  const headshotSrc = resolveHeadshot(media, sleeperId)
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      {headshotSrc && !imgError ? (
-        <Image
-          src={headshotSrc}
-          alt={name}
-          width={18}
-          height={18}
-          className="rounded-full object-cover bg-white/5 inline-block"
-          onError={() => setImgError(true)}
-          unoptimized
-        />
-      ) : null}
-      <span className="text-white">{name}</span>
-      {position && (
-        <span className={`text-[11px] px-1 rounded border font-medium ${POS_COLORS[(position || '').toUpperCase()] || 'bg-white/10 text-white/50 border-white/20'}`}>
-          {position}
-        </span>
-      )}
-      {team && <span className="text-white/40 text-[11px]">{team}</span>}
-    </span>
-  )
-}
-
 export { headshotUrl as getPlayerHeadshotUrl, teamLogoUrl as getTeamLogoUrl } from '@/lib/media-url'
 export { NFL_TEAM_MAP as NFL_TEAM_ABBREV_MAP } from '@/lib/media-url'

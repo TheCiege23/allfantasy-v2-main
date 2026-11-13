@@ -144,13 +144,6 @@ export const DEVY_CREATE_DRAFT_TYPE_IDS: readonly DevyCreateDraftType[] = [
   'auto',
 ] as const
 
-export const DEVY_LIFECYCLE_DRAFT_TYPE_IDS = [
-  'startup_draft',
-  'rookie_draft',
-  'devy_draft',
-  'supplemental_draft',
-] as const
-
 const NFL_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 2, SUPER_FLEX: 1 } as const
 const NCAAF_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 } as const
 

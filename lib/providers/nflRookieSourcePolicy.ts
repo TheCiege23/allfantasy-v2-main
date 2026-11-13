@@ -27,18 +27,6 @@ export type NflRookieSourceResolution = {
   reason: string
 }
 
-export const NFL_ROOKIE_SOURCE_POLICY = {
-  order: [
-    'verified_imported_db_fields',
-    'sleeper_years_exp',
-    'sportsdatacache_sleeper_compact',
-    'unknown',
-  ],
-  sleeperZeroMeansRookie: true,
-  cacheKey: 'sleeper:nfl:yearsexp:compact:v1',
-  note: 'RI NFL doc does not document rookie/draftYear/yearsExperience fields; Sleeper years_exp is fallback.',
-} as const
-
 function num(v: unknown): number | null {
   if (v == null || v === '') return null
   const n = typeof v === 'number' ? v : Number(v)

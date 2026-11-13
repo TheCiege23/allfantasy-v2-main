@@ -292,52 +292,6 @@ export const AI_PROMPTS = {
 // VALIDATION HELPERS
 // ============================================
 
-export function validateAITargetResponse(response: any): AITargetRecommendation[] {
-  if (!response?.recommendations || !Array.isArray(response.recommendations)) {
-    return []
-  }
-
-  return response.recommendations
-    .filter((r: any) => r.managerId && r.managerName && Array.isArray(r.whyTarget))
-    .map((r: any) => ({
-      managerId: r.managerId,
-      managerName: r.managerName,
-      whyTarget: r.whyTarget,
-      bestOffers: r.bestAssetCategories || [],
-      messageTemplate: ''
-    }))
-}
-
-export function validateAIRestructureResponse(response: any): AIRestructuredOffer | null {
-  if (!response?.restructuredOffer) {
-    return null
-  }
-
-  const ro = response.restructuredOffer
-  if (!Array.isArray(ro.userGives) || !Array.isArray(ro.userGets)) {
-    return null
-  }
-
-  return {
-    basedOnOfferId: 'rejected',
-    newOffer: {
-      userGives: ro.userGives,
-      userGets: ro.userGets
-    },
-    whyMoreAcceptable: ro.whyFixed || []
-  }
-}
-
-export function validateAIRiskResponse(response: any, offerId: string): AIRiskAnalysis {
-  return {
-    offerId,
-    riskSummary: response?.riskFactors || [],
-    timingSummary: response?.timingFactors || [],
-    whoBenefitsNow: response?.whoBenefitsNow || 'Unknown',
-    whoBenefitsLater: response?.whoBenefitsLater || 'Unknown'
-  }
-}
-
 // ============================================
 // RUNTIME AI ASSIST (USES OPENAI)
 // ============================================
@@ -447,5 +401,4 @@ Return JSON ONLY:
 
   return params.trades
 }
-
 

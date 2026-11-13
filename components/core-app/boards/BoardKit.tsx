@@ -165,17 +165,6 @@ export function FooterSummary({
 /* ── an honest gap ───────────────────────────────────────────────────────── */
 
 /**
- * "We do not hold this" — never "there is none of this".
- *
- * Used wherever a design asks for a field this product has no table behind
- * (a draft queue, a championship box score). It says which, so the absence
- * reads as a known gap rather than as a broken screen.
- */
-export function BoardNote({ children }: { children: ReactNode }) {
-  return <p className="af-bd-note">{children}</p>
-}
-
-/**
  * What a board says to an account with NO leagues yet — and what to do instead (2026-09-29).
  *
  * 🛑 FOUR BOARDS DEAD-ENDED HERE. Trades, Waivers and Draft HQ (bottom-bar tabs) and Week each
@@ -280,52 +269,6 @@ export { PlayerFace } from './PlayerFace'
 
 export type Sev = 'bad' | 'warn' | 'good' | 'info'
 
-/** `RANK` · `DETAIL`, in the section's tone. The handoff's unfilled badge. */
-export function RowTag({
-  tag,
-  detail,
-  sev,
-}: {
-  tag: string
-  detail?: string | null
-  sev: Sev
-}) {
-  return (
-    <span className="af-bd-tag" data-sev={sev}>
-      {tag}
-      {detail ? <span className="af-bd-tag-detail"> {detail}</span> : null}
-    </span>
-  )
-}
-
-/** The league identity block: name over `PLATFORM · detail`. */
-export function LeagueIdentity({
-  name,
-  platform,
-  detail,
-  wide,
-}: {
-  name: string
-  platform?: string | null
-  detail?: string | null
-  wide?: boolean
-}) {
-  return (
-    <span className={wide ? 'af-bd-league af-bd-league--wide' : 'af-bd-league'}>
-      <span className="af-bd-name">{name}</span>
-      <span className="af-bd-sub">
-        {platform ? (
-          <span className="af-bd-plat" data-platform={platformKey(platform)}>
-            {platform.toUpperCase()}
-          </span>
-        ) : null}
-        {platform && detail ? ' · ' : null}
-        {detail}
-      </span>
-    </span>
-  )
-}
-
 /** A labelled figure — `AF PROJ` over `15.8`. */
 export function StatPair({
   k,
@@ -349,43 +292,6 @@ export function StatPair({
 /** `01`, `02`, … — the handoff pads to two so the column does not jitter. */
 export function rankLabel(i: number): string {
   return String(i + 1).padStart(2, '0')
-}
-
-/**
- * Which rows have actually EARNED a rank numeral.
- *
- * 🛑 A NUMBER BESIDE A ROW CLAIMS THE ROW ABOVE IT BEAT IT AT SOMETHING. When
- * the sort key ties, that claim is false, and the order the reader is looking at
- * is whichever way the database happened to return them.
- *
- * Observed 2026-09-07 on a 94-league account: every one of the ten rows on
- * `/core/my-team` read `2d 8h` and was numbered 01..10. `MyTeamRow.lockAt` is
- * the earliest kickoff among a team's starters, taken from ONE shared per-sport
- * kickoff map — so two leagues whose earliest starter is in the same game carry
- * a byte-identical timestamp. The ties are exact, not a rounding artifact, and
- * `localeCompare` returning 0 leaves a stable sort to preserve query order.
- *
- * ⚠ THE DISPLAY CANNOT BE USED TO DETECT THIS. `formatLockLabel` rounds to the
- * hour past a day (`2d 8h`), so identical labels prove nothing either way — two
- * rows 59 minutes apart look the same, and the ranking between THEM is real.
- * Pass the underlying sort key, never the rendered one.
- *
- * `keys` are the rows' ordering keys in display order, and two rows tie exactly
- * when their comparator returns 0 — so build the key from every field the
- * comparator reads, in the same order. Returns a numeral for the first row of
- * each tier and `null` for every row that ties with the one above it. When the
- * whole board is a single tier nothing is ranked at all, because a list where
- * one row could have been printed anywhere is not a ranking.
- *
- * Nulls group together deliberately: rows whose key is unknown have no order
- * among themselves either.
- */
-export function rankTiers(keys: Array<string | null>): Array<string | null> {
-  if (keys.length === 0) return []
-  const startsTier = keys.map((k, i) => i === 0 || k !== keys[i - 1])
-  /* One tier across the whole board means nothing was ever separated. */
-  if (startsTier.filter(Boolean).length <= 1) return keys.map(() => null)
-  return keys.map((_, i) => (startsTier[i] ? rankLabel(i) : null))
 }
 
 /* ── two-column stacking ─────────────────────────────────────────────────── */

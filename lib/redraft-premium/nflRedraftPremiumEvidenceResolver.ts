@@ -50,10 +50,6 @@ const SURFACE_CONTEXT_BY_SERVICE: Record<NflRedraftPremiumServiceId, NflRedraftE
   draft_prep: ['draft_context'],
 }
 
-function cleanString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
 function uniquePackets(packets: NflRedraftProviderEvidencePacket[]): NflRedraftProviderEvidencePacket[] {
   const seen = new Set<string>()
   const unique: NflRedraftProviderEvidencePacket[] = []
@@ -203,16 +199,3 @@ export function resolveNflRedraftPremiumEvidence(
   }
 }
 
-export function evidenceResolverRequestHash(input: NflRedraftPremiumEvidenceResolverInput): string {
-  return [
-    input.serviceId,
-    input.serviceVariant ?? 'basic',
-    cleanString(input.canonicalIds.leagueId) ?? 'league-none',
-    cleanString(input.canonicalIds.teamId) ?? 'team-none',
-    cleanString(input.canonicalIds.managerId) ?? 'manager-none',
-    cleanString(input.canonicalIds.matchupId) ?? 'matchup-none',
-    cleanString(input.canonicalIds.playerId) ?? 'player-none',
-    input.canonicalIds.week ?? 'week-none',
-    input.canonicalIds.season ?? 'season-none',
-  ].join(':')
-}

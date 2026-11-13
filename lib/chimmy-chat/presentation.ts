@@ -212,6 +212,3 @@ export function buildChimmyVoiceSummary(input: {
   )
 }
 
-export function buildChimmyFullSpeechText(text: string): string {
-  return stripMarkdown(text)
-}

@@ -124,17 +124,3 @@ export async function emitTournamentNotification(options: EmitOptions): Promise<
   })
 }
 
-/**
- * Notify only eliminated users from a round condensation.
- */
-export async function notifyEliminated(
-  tournamentId: string,
-  eliminatedUserIds: string[]
-): Promise<void> {
-  if (eliminatedUserIds.length === 0) return
-  await emitTournamentNotification({
-    tournamentId,
-    event: 'ELIMINATED',
-    userIds: eliminatedUserIds,
-  })
-}

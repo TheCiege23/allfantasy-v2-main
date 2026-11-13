@@ -3,11 +3,7 @@
  * Different sports have different peak ages and dynasty relevance.
  */
 
-import { DYNASTY_SPORTS, normalizeSportForDynasty, type DynastySport } from './types'
-
-export function getDynastySports(): readonly DynastySport[] {
-  return DYNASTY_SPORTS
-}
+import { normalizeSportForDynasty, type DynastySport } from './types'
 
 export function resolveSportForDynasty(sport: string): DynastySport {
   return normalizeSportForDynasty(sport)
@@ -185,8 +181,3 @@ export function getPeakAgeRange(
   return pick(NFL_RANGES[pos] ?? NFL_DEFAULT)
 }
 
-/** Whether the sport/format is typically dynasty-oriented (long-term roster value). */
-export function isDynastyRelevant(sport: string): boolean {
-  const s = normalizeSportForDynasty(sport)
-  return DYNASTY_SPORTS.includes(s)
-}

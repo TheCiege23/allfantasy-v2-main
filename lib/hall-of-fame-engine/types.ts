@@ -6,7 +6,6 @@
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export const HOF_SPORTS = [...SUPPORTED_SPORTS] as const
-export type HallOfFameSport = (typeof HOF_SPORTS)[number]
 
 export const HOF_ENTITY_TYPES = [
   'MANAGER',

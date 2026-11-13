@@ -18,7 +18,6 @@ export const MarketModeEnum = z.enum([
   'all_players', 'watchlist', 'my_roster', 'league_targets', 'trending',
   'buy_low', 'sell_high', 'crash_risk', 'breakout_watch',
 ])
-export type MarketMode = z.infer<typeof MarketModeEnum>
 
 export const TimeHorizonEnum = z.enum([
   'this_week', 'short_term', 'rest_of_season', 'dynasty', 'devy', 'c2c_long_range',

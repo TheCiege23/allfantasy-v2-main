@@ -18,8 +18,3 @@ export type LineupPreferenceTraitId = (typeof LINEUP_PREFERENCE_TRAIT_IDS)[numbe
 /** Auxiliary rows (same table; used for rates / position aggregation). */
 export const AUX_LINEUP_TRAIT_IDS = ['allows_auto_sub', 'injury_contingency_trust', 'position_trust'] as const
 
-export type AuxLineupPreferenceTraitId = (typeof AUX_LINEUP_TRAIT_IDS)[number]
-
-export function isPrimaryTraitId(id: string): id is LineupPreferenceTraitId {
-  return (LINEUP_PREFERENCE_TRAIT_IDS as readonly string[]).includes(id)
-}

@@ -86,12 +86,6 @@ const TAG_LABELS: Record<string, string> = {
   negative_trend: 'Trend',
 }
 
-export function scoreToTrustState(score: number): TrustState {
-  if (score >= 70) return 'high'
-  if (score >= 45) return 'medium'
-  return 'learning'
-}
-
 export function confidenceLevelToTrustState(level: 'high' | 'learning' | 'evolving'): TrustState {
   if (level === 'high') return 'high'
   if (level === 'evolving') return 'medium'

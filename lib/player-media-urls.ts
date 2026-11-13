@@ -19,7 +19,6 @@ const SLEEPER_NFL_HEADSHOT_BASE = 'https://sleepercdn.com/content/nfl/players/th
 const SLEEPER_NBA_HEADSHOT_BASE = 'https://sleepercdn.com/content/nba/players'
 const SLEEPER_MLB_HEADSHOT_BASE = 'https://sleepercdn.com/content/mlb/players'
 const SLEEPER_NHL_HEADSHOT_BASE = 'https://sleepercdn.com/content/nhl/players'
-const ESPN_PLAYER_HEADSHOT_BASE = 'https://a.espncdn.com/i/headshots'
 
 export type SportKey = 'nfl' | 'nba' | 'mlb' | 'nhl' | 'ncaaf' | 'ncaab' | string
 
@@ -59,15 +58,6 @@ export function sleeperHeadshotUrl(playerId: string, sport: SportKey = 'nfl'): s
   // NCAAF / NCAAB: ESPN player headshot (requires espn_id in future; skip for now)
   // Soccer: no reliable free CDN without sport-specific ID mapping
   return null
-}
-
-/** ESPN player headshot URL. Requires ESPN player ID (not Sleeper ID). */
-export function espnPlayerHeadshotUrl(espnPlayerId: string | null | undefined, sport: SportKey = 'nfl'): string | null {
-  if (!espnPlayerId) return null
-  const s = String(sport).toLowerCase()
-  const sportPath = s === 'nfl' ? 'nfl' : s === 'nba' ? 'nba' : s === 'mlb' ? 'mlb' : s === 'nhl' ? 'nhl' : null
-  if (!sportPath) return null
-  return `${ESPN_PLAYER_HEADSHOT_BASE}/${sportPath}/players/full/${espnPlayerId}.png`
 }
 
 export function sleeperTeamLogoUrl(teamAbbr: string, sport: SportKey = 'nfl'): string | null {

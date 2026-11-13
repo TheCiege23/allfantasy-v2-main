@@ -48,13 +48,3 @@ export const mlbAdapter: SportAdapter = {
   },
 }
 
-export function getStartingPitchers(_week: number): string[] {
-  void _week
-  return []
-}
-
-export function getPlatoonSplit(_playerId: string, _oppHand: string): number {
-  void _playerId
-  void _oppHand
-  return 0
-}

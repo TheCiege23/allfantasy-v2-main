@@ -163,8 +163,3 @@ export type LongTermCoachingResult = {
   aiModel: string | null
 }
 
-export type LongTermCoachingError = {
-  ok: false
-  code: string
-  message: string
-}

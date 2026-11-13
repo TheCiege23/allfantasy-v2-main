@@ -16,9 +16,5 @@ export function getCreateGroupPayload(memberUserIds: string[], title?: string): 
   }
 }
 
-export function getCreateGroupUrl(): string {
-  return "/api/shared/chat/threads"
-}
-
 export const GROUP_MIN_MEMBERS = 2
 export const GROUP_MAX_MEMBERS = 20

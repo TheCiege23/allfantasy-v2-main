@@ -104,33 +104,6 @@ async function logDeny(leagueId: string, userId: string, reason: string): Promis
   })
 }
 
-export async function revokeAllTribeAccess(leagueId: string, userId: string): Promise<void> {
-  await prisma.survivorPlayer.updateMany({
-    where: { leagueId, userId },
-    data: { canAccessTribeChat: false, canAccessMergeChat: false },
-  })
-  const channels = await prisma.survivorChatChannel.findMany({
-    where: { leagueId, channelType: { in: ['tribe', 'merge'] } },
-  })
-  for (const ch of channels) {
-    const next = ch.memberUserIds.filter((id) => id !== userId)
-    if (next.length !== ch.memberUserIds.length) {
-      await prisma.survivorChatChannel.update({
-        where: { id: ch.id },
-        data: { memberUserIds: next },
-      })
-    }
-  }
-  await logSurvivorAuditEntry({
-    leagueId,
-    category: 'chat',
-    action: 'TRIBE_ACCESS_REVOKED',
-    targetUserId: userId,
-    data: { userId },
-    isVisibleToCommissioner: true,
-  })
-}
-
 export async function grantExileAccess(leagueId: string, userId: string): Promise<void> {
   await prisma.survivorPlayer.updateMany({
     where: { leagueId, userId },

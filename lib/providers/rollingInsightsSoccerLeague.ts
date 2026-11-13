@@ -10,16 +10,6 @@ function compactKey(s: string): string {
   return s.trim().replace(WS, '_').toUpperCase()
 }
 
-/** True when the string resolves to a documented RI soccer league code. */
-export function isRollingInsightsSoccerLeague(input: unknown): boolean {
-  return normalizeSoccerLeague(input) != null
-}
-
-/** @alias normalizeSoccerLeague */
-export function getRollingInsightsSoccerLeague(input: unknown): RollingInsightsSoccerLeagueCode | null {
-  return normalizeSoccerLeague(input)
-}
-
 /**
  * Normalize UI / doc labels to RI `league` values: EPL | LALIGA | SERIEA.
  */

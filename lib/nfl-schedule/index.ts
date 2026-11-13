@@ -38,57 +38,9 @@ export { getScheduleConfigForLeague, updateScheduleConfigForLeague } from '@/lib
 
 const SPORT = 'NFL' as const
 
-/** NFL-specific calendar metadata. */
-export const NFL_CALENDAR = {
-  preseasonStart: { month: 8 },         // August
-  regularSeasonStart: { month: 9 },     // Early September
-  regularSeasonEnd: { month: 1 },       // January (Week 18)
-  playoffsStart: { month: 1 },          // January (Wild Card)
-  superBowl: { month: 2 },             // February
-  specialPeriods: {
-    byeWeekWindow: { startWeek: 5, endWeek: 14 },
-    thanksgiving: { typical: 'Week 13, Thursday — 3 games' },
-    blackFriday: { typical: 'Week 13, Friday — 1 game (since 2023)' },
-    saturdayGames: { typical: 'Weeks 15-18 — Saturday afternoon/evening' },
-    internationalGames: { typical: 'London (Weeks 1-8), Munich, Mexico City' },
-    fantasyPlayoffDefault: { startWeek: 15, endWeek: 17 },
-    week18Avoidance: 'Most fantasy leagues end Week 17 to avoid rest/benching',
-  },
-  fantasyRegularSeasonWeeks: 14,        // Weeks 1-14 (default)
-  fantasyPlayoffWeeks: 3,               // Weeks 15-17
-  totalNflWeeks: 18,
-  /** NFL kickoff windows. */
-  kickoffWindows: {
-    thursdayNight: '8:20pm ET',
-    sundayEarly: '1:00pm ET',
-    sundayLate: '4:05pm / 4:25pm ET',
-    sundayNight: '8:20pm ET',
-    mondayNight: '8:15pm ET',
-    saturdayGames: '1:00pm / 4:30pm / 8:00pm ET',
-  },
-  /** NFL admin windows (post-game processing). */
-  adminWindows: {
-    postMondayNight: 'Tuesday (scoring finalization, stat corrections)',
-    waiverProcessing: 'Wednesday (standard FAAB/waiver runs)',
-    lineupPrep: 'Wednesday-Saturday (lineup decisions)',
-  },
-}
-
 // NFL-typed convenience functions
 export const getNflWeekVolumeProfile = (season: number, week: number, options?: { thresholdHeavy?: number; thresholdModerate?: number }) =>
   _getWeekVolumeProfile(SPORT, season, week, options)
-
-export const getNflLeastBusyDay = (season: number, week: number) =>
-  _getLeastBusyDay(SPORT, season, week)
-
-export const getNflMostBusyDay = (season: number, week: number) =>
-  _getMostBusyDay(SPORT, season, week)
-
-export const getNflBalancedScoringDays = (season: number, week: number, count: number) =>
-  _getBalancedScoringDays(SPORT, season, week, count)
-
-export const getNflWeekGameCounts = (season: number, week: number) =>
-  _getWeekGameCounts(SPORT, season, week)
 
 export const getNflSeasonVolumeProfiles = (season: number, startWeek: number, endWeek: number) =>
   _getSeasonVolumeProfiles(SPORT, season, startWeek, endWeek)

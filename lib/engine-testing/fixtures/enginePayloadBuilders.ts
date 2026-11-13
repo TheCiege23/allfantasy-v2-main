@@ -90,27 +90,6 @@ export function buildMinimalValidMatchupCenterPayload(
   return base
 }
 
-/** Survivor / high-churn league shell — override `guillotineMode` / lifecycle as needed. */
-export function buildEngineTestLeagueSurvivor(over: Partial<League> = {}): League {
-  return buildEngineTestLeague({
-    leagueType: 'redraft',
-    leagueSize: 14,
-    guillotineMode: false,
-    lifecycleState: 'in_season',
-    ...over,
-  })
-}
-
-/** Salary-cap format: FAAB-style economy hints for waiver/trade tests. */
-export function buildEngineTestLeagueSalaryCap(over: Partial<League> = {}): League {
-  return buildEngineTestLeague({
-    waiverType: 'faab',
-    waiverBudget: 200,
-    leagueType: 'redraft',
-    ...over,
-  })
-}
-
 export function buildEngineTestLeague(over: Partial<League> = {}): League {
   return {
     id: 'l1',

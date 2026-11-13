@@ -160,5 +160,3 @@ export function formatDraftCapital(c: DraftCapital | null): string | null {
     : `${c.draftYear} rd${c.draftRound}`
 }
 
-/** Row count, so a caller or test can assert the artifact actually loaded. */
-export const DRAFT_CAPITAL_ROW_COUNT = ROWS.length

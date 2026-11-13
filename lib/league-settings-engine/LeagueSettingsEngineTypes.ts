@@ -372,19 +372,6 @@ export interface GetLeagueSettingsResponse {
   };
 }
 
-export interface UpdateLeagueSettingsRequest {
-  page: LeagueSettingsPage;
-  data: Partial<UnifiedLeagueSettings>;
-  validateOnly?: boolean;
-}
-
-export interface UpdateLeagueSettingsResponse {
-  success: boolean;
-  settings?: UnifiedLeagueSettings;
-  validation?: LeagueSettingsValidationResult;
-  message?: string;
-}
-
 export interface ValidateLeagueSettingsRequest {
   settings: Partial<UnifiedLeagueSettings>;
   page: LeagueSettingsPage;

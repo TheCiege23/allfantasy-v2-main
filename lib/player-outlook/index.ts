@@ -3,7 +3,6 @@
 export {
   getPlayerOutlook,
   getPlayerOutlookBatch,
-  invalidateOutlookCache,
 } from './player-outlook-service'
 export type { GetPlayerOutlookParams } from './player-outlook-service'
 

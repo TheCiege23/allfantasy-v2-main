@@ -64,12 +64,6 @@ export const BLACK_GOLD_PRESET_ID = 'black-gold'
 export const KB_CONFERENCES = ['beast', 'goat', 'grizz', 'kings', 'rebels', 'smoke', 'stealth', 'swamp', 'thunder', 'warrior'] as const
 export type KbConference = (typeof KB_CONFERENCES)[number]
 
-/** Conference accent colours from the art pack README (eye glow, details, banner glow). */
-export const KB_CONFERENCE_ACCENT: Record<KbConference, string> = {
-  beast: '#e5432f', goat: '#9b6bff', grizz: '#e08a3c', kings: '#3d7dff', rebels: '#e0334f',
-  smoke: '#7fd6d0', stealth: '#b06bff', swamp: '#4fcf6a', thunder: '#ffd23f', warrior: '#ff7a2f',
-}
-
 // ── stored shape ─────────────────────────────────────────────────────────────
 
 const divisionSchema = z.object({

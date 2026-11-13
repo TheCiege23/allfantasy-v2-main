@@ -307,14 +307,3 @@ export async function recalculateWorldCupGroupStageEntryScore(input: { challenge
   })
 }
 
-export async function recalculateWorldCupGroupStageChallengeScores(input: { challengeId: string }) {
-  const entries = await prisma.worldCupBracketEntry.findMany({
-    where: { challengeId: input.challengeId },
-    select: { id: true },
-  })
-  const results = []
-  for (const entry of entries) {
-    results.push(await recalculateWorldCupGroupStageEntryScore({ challengeId: input.challengeId, entryId: entry.id }))
-  }
-  return results
-}

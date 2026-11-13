@@ -124,18 +124,3 @@ export function buildSurvivorNotifications(
   return out
 }
 
-export const SURVIVOR_NOTIFICATION_COPY = {
-  challenge_posted: '⚡ New island challenge — check the deadline in-app.',
-  challenge_closing: '⚡ Challenge closes soon — submit now.',
-  vote_reminder: '🗳 Elimination Council is active — vote by your league deadline.',
-  vote_received: '🗳 Your vote has been received.',
-  idol_received: '🔮 You have received a secret power.',
-  idol_expiring: '🔮 A power may expire at the merge — check @Chimmy.',
-  tribal_tonight: '🔥 Elimination Council requires your attention.',
-  merge_announced: '🌊 The merge is here — drop your buffs.',
-  exile_challenge_live: '🏚 Exile challenge is live — earn tokens.',
-  token_earned: '🪙 Token earned on Exile Island.',
-  token_wiped: '🪙 Token reset — the Boss won this week.',
-  jury_voting_open: '⚖️ Jury voting is open.',
-  winner_revealed: 'The jury has spoken: the season champion has been revealed.',
-} as const

@@ -1,5 +1,3 @@
-import { prisma } from '@/lib/prisma'
-
 /**
  * Snake Draft Salary Scale Engine.
  *
@@ -134,28 +132,6 @@ export function getSalaryForPick(
 }
 
 /**
- * Generate a preview of the salary scale for display in the draft room.
- */
-export function generateSalaryScalePreview(
-  config: SnakeSalaryScaleConfig,
-): Array<{ round: number; avgSalary: number; contractYears: number; pickRange: string }> {
-  const scale = generateSalaryScale(config)
-  const roundMap = new Map<number, number[]>()
-
-  for (const pick of scale) {
-    if (!roundMap.has(pick.round)) roundMap.set(pick.round, [])
-    roundMap.get(pick.round)!.push(pick.salary)
-  }
-
-  return Array.from(roundMap.entries()).map(([round, salaries]) => ({
-    round,
-    avgSalary: Math.round((salaries.reduce((a, b) => a + b, 0) / salaries.length) * 100) / 100,
-    contractYears: config.contractYearsByRound[round] ?? getDefaultContractYears(round, config.draftRounds),
-    pickRange: `$${Math.min(...salaries).toFixed(0)} - $${Math.max(...salaries).toFixed(0)}`,
-  }))
-}
-
-/**
  * Default salary scale configs by sport.
  */
 export function getDefaultSnakeSalaryConfig(sport: string, teamCount: number, draftRounds: number): SnakeSalaryScaleConfig {
@@ -190,97 +166,3 @@ export function getDefaultSnakeSalaryConfig(sport: string, teamCount: number, dr
   }
 }
 
-/**
- * Persist snake salary scale to the database after a draft completes.
- */
-export async function applySnakeSalaryScaleToDraft(
-  leagueId: string,
-  draftSessionId: string,
-  config: SnakeSalaryScaleConfig,
-): Promise<number> {
-  const salaryCapConfig = await prisma.salaryCapLeagueConfig.findUnique({
-    where: { leagueId },
-    select: { id: true },
-  })
-  if (!salaryCapConfig) return 0
-
-  const picks = await prisma.draftPick.findMany({
-    where: { sessionId: draftSessionId },
-    orderBy: { overall: 'asc' },
-  })
-
-  let applied = 0
-  for (const pick of picks) {
-    if (!pick.rosterId || !pick.playerName) continue
-
-    const { salary, contractYears } = getSalaryForPick(pick.overall, config)
-    const playerId = pick.playerId ?? `draft-${pick.id}`
-    const round = pick.round ?? Math.ceil(pick.overall / config.teamCount)
-    const salaryInt = Math.round(salary)
-
-    const existing = await prisma.playerContract.findFirst({
-      where: { leagueId, rosterId: pick.rosterId, playerId },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true },
-    })
-
-    if (existing) {
-      await prisma.playerContract.update({
-        where: { id: existing.id },
-        data: {
-          salary: salaryInt,
-          yearsTotal: contractYears,
-          contractYear: 1,
-          source: 'snake_draft',
-          status: 'active',
-          metadata: {
-            draftSessionId,
-            draftPickOverall: pick.overall,
-            draftRound: round,
-          },
-        },
-      })
-    } else {
-      await prisma.playerContract.create({
-        data: {
-          leagueId,
-          configId: salaryCapConfig.id,
-          rosterId: pick.rosterId,
-          playerId,
-          playerName: pick.playerName,
-          position: pick.position,
-          salary: salaryInt,
-          yearsTotal: contractYears,
-          yearSigned: new Date().getFullYear(),
-          contractYear: 1,
-          source: 'snake_draft',
-          status: 'active',
-          metadata: {
-            draftSessionId,
-            draftPickOverall: pick.overall,
-            draftRound: round,
-          },
-        },
-      })
-    }
-    applied++
-  }
-
-  // Log the event
-  await prisma.salaryCapEventLog.create({
-    data: {
-      leagueId,
-      configId: salaryCapConfig.id,
-      eventType: 'snake_salary_scale_applied',
-      metadata: {
-        message: `Applied snake salary scale to ${applied} draft picks. Curve: ${config.curveType}. Cap: $${config.totalCap}.`,
-        draftSessionId,
-        curveType: config.curveType,
-        totalCap: config.totalCap,
-        picksProcessed: applied,
-      },
-    },
-  }).catch(() => {})
-
-  return applied
-}

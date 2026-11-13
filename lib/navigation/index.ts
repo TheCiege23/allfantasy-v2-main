@@ -6,7 +6,6 @@ export {
   ADMIN_NAV_ITEM,
   getPrimaryNavItems,
   getPrimaryNavGroups,
-  getProductNavItems,
   type NavLinkItem,
   type NavGroup,
 } from "./NavLinkResolver"

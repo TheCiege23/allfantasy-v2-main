@@ -14,26 +14,8 @@ export type DraftAlertType =
   | "paused"
   | "resumed"
 
-export interface DraftAlertPayload {
-  leagueName: string
-  type: DraftAlertType
-  /** e.g. "Round 5, Pick 52" */
-  pickLabel?: string
-  /** e.g. minutes until lock */
-  minutesRemaining?: number
-  /** e.g. player name for auto-pick */
-  playerName?: string
-}
-
 /** Trade alert types. */
 export type TradeAlertType = "proposal" | "accepted" | "rejected"
-
-export interface TradeAlertPayload {
-  leagueName: string
-  type: TradeAlertType
-  /** Optional short detail (e.g. "from Team A") */
-  detail?: string
-}
 
 /** Matchup reminder types. */
 export type MatchupReminderType =
@@ -41,17 +23,6 @@ export type MatchupReminderType =
   | "lineup_locked"
   | "matchup_result"
   | "matchup_reminder"
-
-export interface MatchupReminderPayload {
-  leagueName: string
-  type: MatchupReminderType
-  /** e.g. week number */
-  week?: number
-  /** e.g. minutes until lock */
-  minutesRemaining?: number
-  /** e.g. "You won 124-98" */
-  resultSummary?: string
-}
 
 /** Result of sending one SMS. */
 export interface SmsSendResult {

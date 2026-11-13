@@ -10,7 +10,6 @@ export {
   DELIVERY_LABEL_KEYS,
 } from "./DeliveryMethodResolver"
 export {
-  getNotificationPreferencesFromProfile,
   updateNotificationPreferences,
 } from "./NotificationSettingsService"
 export {

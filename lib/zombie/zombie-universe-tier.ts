@@ -24,10 +24,6 @@ export const ZOMBIE_UNIVERSE_TIER_LABELS: Record<
   },
 }
 
-export function zombieUniverseTierRequiresDashboard(tier: ZombieUniverseTierId): boolean {
-  return tier === 'beta_trio' || tier === 'alpha_hex'
-}
-
 /** Level rows: name, rankOrder (higher = top tier), leagues to spawn in this level. */
 export function getZombieUniverseLevelPlan(tier: ZombieUniverseTierId): {
   name: string

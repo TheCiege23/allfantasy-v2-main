@@ -1897,12 +1897,6 @@ export async function getLeagueActivityView(leagueId: string, userId: string) {
   return buildActivityItems(context)
 }
 
-export async function getLeagueTradesView(leagueId: string, userId: string) {
-  const context = await loadLeagueContext(leagueId, userId)
-  if (!context) return null
-  return buildTradesData(context)
-}
-
 export async function getLeagueHomeData(
   leagueId: string,
   userId: string,

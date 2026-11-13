@@ -68,16 +68,6 @@ function section(title: string, lines: string[]): string {
   return `${title}:\n${lines.map((line) => `- ${line}`).join('\n')}`
 }
 
-export const CHIMMY_CALM_ANALYST_TONE = section(
-  'VOICE & TONE (strict)',
-  CHIMMY_PROMPT_STYLE_CONFIG.voiceTraits
-)
-
-export const CHIMMY_RESPONSE_STYLE_RULES = [
-  section('AVOID', CHIMMY_PROMPT_STYLE_CONFIG.avoidTraits),
-  section('RESPONSE STYLE', CHIMMY_PROMPT_STYLE_CONFIG.responseRules),
-].join('\n\n')
-
 export function buildChimmyPromptStyleBlock(
   config: ChimmyPromptStyleConfig = CHIMMY_PROMPT_STYLE_CONFIG
 ): string {

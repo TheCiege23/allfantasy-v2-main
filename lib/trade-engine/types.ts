@@ -88,27 +88,6 @@ export type LeagueContext = {
   leagueVetoRatePct?: number
 }
 
-export type ManagerRoster = {
-  rosterId: number
-  userId: string
-  username: string
-  displayName: string
-  avatar?: string
-  record: string
-  pointsFor: number
-  players: Array<{
-    id: string
-    name: string
-    pos: string
-    team?: string
-    slot: RosterSlot
-    isIdp?: boolean
-    age?: number
-  }>
-  faab?: number
-  picks?: Array<{ season: string; displayName: string }>
-}
-
 export type ContenderTier = 'champion' | 'contender' | 'middle' | 'rebuild'
 export type TradeAggression = 'low' | 'medium' | 'high'
 export type RiskTolerance = 'low' | 'medium' | 'high'

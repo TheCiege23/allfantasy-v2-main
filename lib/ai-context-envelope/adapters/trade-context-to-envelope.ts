@@ -5,15 +5,7 @@
 
 import type { TradeDecisionContextV1 } from '@/lib/trade-engine/trade-decision-context'
 import { buildDeterministicIntelligence } from '@/lib/trade-engine/deterministic-intelligence'
-import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import type {
-  DeterministicContextEnvelope,
-  EvidenceBlock,
-  EvidenceItem,
-  Confidence,
-  UncertaintyBlock,
-  MissingDataBlock,
-} from '../schema'
+import type { EvidenceBlock, EvidenceItem, Confidence, UncertaintyBlock, MissingDataBlock } from '../schema'
 
 function formatVal(v: number): string {
   if (v >= 1000) return `${(v / 1000).toFixed(1)}k`
@@ -172,35 +164,3 @@ export function buildTradeMissingData(ctx: TradeDecisionContextV1): MissingDataB
   }
 }
 
-/**
- * Build full DeterministicContextEnvelope from TradeDecisionContextV1.
- */
-export function tradeContextToEnvelope(
-  ctx: TradeDecisionContextV1,
-  opts: { leagueId?: string | null; userId?: string | null; sport?: string | null }
-): DeterministicContextEnvelope {
-  const sport = normalizeToSupportedSport(opts.sport ?? undefined)
-  const evidence = buildTradeEvidenceBlock(ctx)
-  const confidence = buildTradeConfidence(ctx)
-  const uncertainty = buildTradeUncertainty(ctx)
-  const missingData = buildTradeMissingData(ctx)
-  const det = buildDeterministicIntelligence(ctx)
-
-  return {
-    toolId: 'trade_analyzer',
-    sport,
-    leagueId: opts.leagueId ?? ctx.leagueConfig?.leagueId ?? null,
-    userId: opts.userId ?? null,
-    evidence,
-    confidence,
-    uncertainty,
-    missingData,
-    deterministicPayload: ctx as unknown as Record<string, unknown>,
-    hardConstraints: [
-      'Do not override or invent fairness score, value delta, or total values.',
-      'Use only the provided asset counts and coverage percentages.',
-    ],
-    envelopeId: `env-${ctx.contextId}`,
-    dataQualitySummary: `Coverage ${ctx.dataQuality.coveragePercent}%; confidence ${det.confidence}%; ${ctx.dataQuality.warnings.length} warnings`,
-  }
-}

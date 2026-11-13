@@ -13,14 +13,12 @@
 export { computeLeaderboardMovement } from "./leaderboardMovement"
 export { computeMaxPossiblePoints } from "./maxPossiblePoints"
 export { computeChampionPickLeverage } from "./championPickLeverage"
-export { computeGroupAdvancement } from "./groupAdvancement"
 export { computeMatchupSwingScores } from "./matchupSwingScore"
 export { computeRootingGuide } from "./rootingGuide"
 export { computeIncompletePicks } from "./incompletePicks"
 export { computeCommissionerRecap } from "./commissionerRecap"
 export { computePoolParity } from "./poolParity"
 export { computeUpsetImpact } from "./upsetImpact"
-export { computeBracketPath } from "./bracketPath"
 
 // ── Result types ───────────────────────────────────────────────────────────────
 export type { RankChange, LeaderboardScenario, LeaderboardShift } from "./leaderboardMovement"

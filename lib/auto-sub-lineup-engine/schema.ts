@@ -24,4 +24,3 @@ export const AutoSubLineupEngineResultSchema = z.object({
   auditLog: z.array(z.any()),
 })
 
-export type AutoSubLineupEngineResultZ = z.infer<typeof AutoSubLineupEngineResultSchema>

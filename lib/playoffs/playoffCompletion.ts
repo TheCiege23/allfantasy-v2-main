@@ -1,5 +1,5 @@
 import { isPlayoffSeriesResolved } from "./playoffBracketProjection"
-import { allowsPlayoffLatePicks, canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
+import { canUsePlayoffLatePicks, getPlayoffSeriesLockedReason } from "./playoffLocking"
 import type { PlayoffPickView, PlayoffSeriesView } from "./types"
 import { nbaCupLockedReason } from "./nbaCupTournament"
 
@@ -89,7 +89,3 @@ export function getPlayoffCompletionSummary(
   }
 }
 
-export function canUsePartialPlayoffVerification(context: PlayoffCompletionContext): boolean {
-  return context.partialVerificationEnabled === true ||
-    (allowsPlayoffLatePicks(context.lockRule) && canUsePlayoffLatePicks(context))
-}

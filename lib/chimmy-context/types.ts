@@ -423,7 +423,6 @@ export type MemoryRef = {
   summary: string
 }
 
-
 /**
  * Devy / college prospect grounding.
  *
@@ -531,7 +530,3 @@ export type ChimmyContextBundle = {
   }
 }
 
-/** Free-form recommendation context — reserved for Phase 2B. */
-export type RecommendationsContextSlice = {
-  hints: string[]
-}

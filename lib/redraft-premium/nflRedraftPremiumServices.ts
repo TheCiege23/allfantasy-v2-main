@@ -113,14 +113,6 @@ type ServiceDefinition = {
   actionCategories: NflRedraftPremiumActionCategory[]
 }
 
-export const NFL_REDRAFT_PREMIUM_SERVICE_TIER_ORDER: readonly NflRedraftPremiumTier[] = [
-  'FREE',
-  'AF_PRO',
-  'AF_COMMISSIONER',
-  'AF_SUPREME',
-  'AF_WAR_ROOM',
-] as const
-
 export const NFL_REDRAFT_PREMIUM_SERVICE_DEFINITIONS: Record<NflRedraftPremiumServiceId, ServiceDefinition> = {
   basic_runtime_facts: {
     serviceId: 'basic_runtime_facts',

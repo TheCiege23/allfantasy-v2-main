@@ -7,7 +7,6 @@
 
 export {
   FOCUS_REFETCH_THROTTLE_MS,
-  REFRESH_TRIGGERS_DOC,
 } from './refresh-triggers'
 
 export {

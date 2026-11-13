@@ -5,7 +5,6 @@
 export {
   EMOJI_CATEGORIES,
   EMOJI_LIST,
-  insertEmojiAtPosition,
   appendEmoji,
   getEmojiCategoryLabel,
 } from "./EmojiPickerService"
@@ -33,7 +32,6 @@ export {
 export type { ImagePreview, GifPreview, FilePreview, AttachmentPreview } from "./MessageAttachmentService"
 
 export {
-  hasAttachmentPreview,
   getAttachmentPreviewLabel,
   canSendComposerMessage,
   clearAttachmentState,

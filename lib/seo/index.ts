@@ -3,7 +3,6 @@
  */
 
 export {
-  resolvePageKeyFromPath,
   getSEOPageConfig,
   getDefaultOgImagePath,
   type PageKey,

@@ -7,20 +7,6 @@ import { getZombieLeagueConfig } from './ZombieLeagueConfig'
 import { getStatus } from './ZombieOwnerStatusService'
 import { appendZombieAudit } from './ZombieAuditLog'
 
-export async function getWeaponBalance(leagueId: string, rosterId: string, resourceKey?: string): Promise<number> {
-  const where: { leagueId: string; rosterId: string; resourceType: 'weapon'; resourceKey?: string } = {
-    leagueId,
-    rosterId,
-    resourceType: 'weapon',
-  }
-  if (resourceKey != null) where.resourceKey = resourceKey
-  const row = await prisma.zombieResourceLedger.findFirst({
-    where,
-    select: { balance: true },
-  })
-  return row?.balance ?? 0
-}
-
 /** Award weapon by score threshold (config.weaponScoreThresholds). */
 export async function awardWeaponByScore(
   leagueId: string,

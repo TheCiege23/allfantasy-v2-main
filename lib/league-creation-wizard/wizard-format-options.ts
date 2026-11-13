@@ -130,11 +130,6 @@ export const DEFAULT_WIZARD_FORMAT_OPTIONS: WizardFormatOptions = {
   c2cCollegeSlots: 6,
 }
 
-/** Survivor cast: 16 / 20 / 24 only (all sports). */
-export function getSurvivorTeamBounds(_sport: string): { min: number; max: number } {
-  return { min: 16, max: 24 }
-}
-
 export function clampSurvivorTeamCount(_sport: string, n: number): number {
   return clampSurvivorCastSize(n)
 }

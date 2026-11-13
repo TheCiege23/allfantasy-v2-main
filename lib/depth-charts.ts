@@ -41,9 +41,3 @@ export async function getTeamDepthChart(team: string, sport: string): Promise<De
   return getDepthCharts(sport, { team })
 }
 
-/** Get the starter for a position on a team. */
-export async function getStarter(team: string, position: string, sport: string): Promise<string | null> {
-  const entries = await getTeamDepthChart(team, sport)
-  const entry = entries.find((e) => e.position.toUpperCase() === position.toUpperCase())
-  return entry?.players[0] ?? null
-}

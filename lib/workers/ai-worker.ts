@@ -121,6 +121,3 @@ export async function stopAiWorker(): Promise<void> {
   aiWorker = null;
 }
 
-export function getAiWorker(): Worker<AiJobPayload, AiJobResult> | null {
-  return aiWorker;
-}

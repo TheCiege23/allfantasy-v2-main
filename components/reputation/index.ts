@@ -13,9 +13,7 @@ export {
 } from "./PrestigeChips"
 export {
   CommissionerPrestigeCard,
-  CommissionerPrestigeCardSkeleton,
 } from "./CommissionerPrestigeCard"
 export {
   LeaguePrestigeCard,
-  LeaguePrestigeCardSkeleton,
 } from "./LeaguePrestigeCard"

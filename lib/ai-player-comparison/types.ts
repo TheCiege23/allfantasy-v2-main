@@ -113,7 +113,3 @@ export type AiPlayerComparisonResponse = {
   }
 }
 
-export type AiPlayerComparisonErrorResponse = {
-  ok: false
-  error: string
-}

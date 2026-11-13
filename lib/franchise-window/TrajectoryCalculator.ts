@@ -6,23 +6,6 @@ export interface StandingsSample {
   size: number
 }
 
-export function computeRecentPerformance(
-  wins: number,
-  losses: number,
-  lastNGames: number,
-  standings: StandingsSample | null,
-): RecentPerformanceMetrics {
-  const total = wins + losses
-  const recentWinPct = total > 0 ? wins / total : 0
-
-  return {
-    recentWinPct,
-    lastNGames,
-    standingsRank: standings?.rank ?? null,
-    standingsSize: standings?.size ?? null,
-  }
-}
-
 export function inferTrajectoryDirection(
   recent: RecentPerformanceMetrics,
   nextYearStrength: number,
