@@ -19,6 +19,8 @@ import {
   NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
+import { messagesFor } from '@/lib/i18n/messages'
+import { tradesGuideMessages } from '@/lib/core-app/messages/tradesGuide'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
@@ -39,6 +41,14 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  */
 
 export type TradesBoardProps = {
+  /**
+   * Under the /core/trades guide (2026-11-13): no second page title (the guide headline is the page's
+   * h1), no Sleeper notice (the "Check a trade" card says it in one line), a plain section heading, and
+   * the grading notes folded behind "How grades work".
+   */
+  embedded?: boolean
+  /** The reader's language, for the embedded headings (this board renders on the server). */
+  language?: string | null
   data: TradesBoardData
   /** Where the footer's "View all" goes — the full picker. */
   allHref: string
@@ -298,7 +308,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           */}
           {t?.letter && t.sharePct != null ? (
             <span className="af-bd-kv">
-              <span className="af-bd-k">Value split</span>
+              <span className="af-bd-k">Who got more value</span>
               <span className="af-bd-sub" style={{ maxWidth: 260 }}>
                 {t.fromName} {Math.round(t.sharePct)}% · {t.toName} {100 - Math.round(t.sharePct)}%
               </span>
@@ -344,7 +354,9 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
   )
 }
 
-export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
+export function TradesBoard({ data, allHref, totalLeagues, embedded = false, language = null }: TradesBoardProps) {
+  // A server component: the catalog is read directly, not through the client hook.
+  const guide = messagesFor(tradesGuideMessages, language)
   const live = data.windows.filter((w) => w.weeksLeft != null && w.weeksLeft >= 0).length
   const anyDeadline = data.windows.some((w) => w.deadlineWeek != null || w.noDeadline)
   /*
@@ -369,18 +381,26 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
   }
 
   return (
-    <div className="af-bd">
-      <BoardHead
-        eyebrow="Core · Trades"
-        title="Trades"
-        blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded."
-      />
+    <div className="af-bd" id={embedded ? 'af-tg-trades' : undefined}>
+      {embedded ? (
+        <div className="af-tg-sec-head">
+          <h2>{guide.tradesTitle}</h2>
+          <p>{guide.tradesSub}</p>
+        </div>
+      ) : (
+        <BoardHead
+          eyebrow="Core · Trades"
+          title="Trades"
+          blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded."
+        />
+      )}
 
       {/*
         Sleeper never shares an offer before it is accepted, so a manager looking here for one they
         were just sent must be told why it is missing and how to grade it (Guap, 2026-09-30).
+        Embedded, the guide's "Check a trade" card says this in one line with the upload link.
       */}
-      {data.windows.some((w) => w.platform === 'sleeper') ? <SleeperOffersNotice className="af-bd-sec" /> : null}
+      {!embedded && data.windows.some((w) => w.platform === 'sleeper') ? <SleeperOffersNotice className="af-bd-sec" /> : null}
 
       {/*
         ⚠ THIS SECTION IS WIRED AND ALMOST ALWAYS EMPTY, AND THAT IS CORRECT.
@@ -458,7 +478,13 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
               is a stated rule the list is not following. Found by rendering it.
             */
             label={
-              anyDeadline
+              embedded
+                ? anyFresh
+                  ? 'Newest trades first'
+                  : anyTrades
+                    ? 'Leagues with trades first'
+                    : 'No trades on file yet'
+                : anyDeadline
                 ? anyFresh
                   ? `Top ${data.windows.length} · newest trades first, then leagues with trades, then deadline`
                   : anyTrades
@@ -492,7 +518,26 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
         board that silently treats those as open-all-season is telling a manager
         their window is safe on no evidence.
       */}
-      {data.deadlineUnknown > 0 ? (
+      {embedded ? (
+        <details className="af-bd-note af-bd-note--plain af-tg-how">
+          <summary>{guide.howGrades}</summary>
+          <p>
+            Grades price both sides on this league&rsquo;s own values. A completed trade keeps the grade it got
+            the first time AllFantasy graded it, so it does not change as values move. A trade whose assets could
+            not all be priced is shown with its reason instead of a letter.
+            {data.deadlineUnknown > 0
+              ? ` ${data.deadlineUnknown} of your leagues have never published a trade deadline; they sort below the ones that have.`
+              : ''}
+          </p>
+        </details>
+      ) : null}
+      {embedded ? (
+        <p className="af-tg-teach">
+          <b>{guide.why}</b> {guide.tradesTeach}
+        </p>
+      ) : null}
+
+      {!embedded && data.deadlineUnknown > 0 ? (
         <p className="af-bd-note">
           <strong>
             {data.deadlineUnknown} of your leagues have never published a trade deadline.
@@ -502,12 +547,14 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
         </p>
       ) : null}
 
+      {embedded ? null : (
       <p className="af-bd-note af-bd-note--plain">
         Grades price both sides on this league&rsquo;s own values. A completed trade keeps the
         grade it got the first time AllFantasy graded it, so it does not change as values move.
         A trade whose assets could not all be priced is shown with its reason instead of a
         letter — a &ldquo;C&rdquo; from no data would read as &ldquo;an average trade&rdquo;.
       </p>
+      )}
 
       <FooterSummary
         hidden={Math.max(0, data.considered - data.windows.length)}

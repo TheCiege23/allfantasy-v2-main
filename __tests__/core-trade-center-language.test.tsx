@@ -13,8 +13,10 @@ afterEach(cleanup)
 describe('Trade Center Spanish orientation', () => {
   it('explains the cross-league starting point', () => {
     render(<TradeCenter league={null} />)
-    expect(screen.getByRole('heading', { name: 'Centro de intercambios' })).toBeTruthy()
-    expect(document.body.textContent).toContain('Elige la liga para intercambiar')
+    // The all-leagues page leads with the trades guide (2026-11-13): what it is for, in Spanish.
+    expect(screen.getByRole('heading', { level: 1, name: 'Intercambios en tus ligas' })).toBeTruthy()
+    expect(document.body.textContent).toContain('Revisa una oferta antes de aceptarla')
+    expect(screen.getByRole('heading', { name: 'Revisa un intercambio' })).toBeTruthy()
   })
 
   it('keeps the calculator, its folds and the trade handoff understandable', () => {
