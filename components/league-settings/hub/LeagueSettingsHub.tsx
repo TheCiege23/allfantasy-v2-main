@@ -12,7 +12,7 @@
  *   GET   /api/leagues/[id]/history                past seasons + all-time standings
  *   GET   /api/leagues/[id]/record-book            highest_score records
  *   GET   /api/leagues/[id]/player-high-scores     biggest starter weeks (this season + last)
- *   GET   /api/leagues/[id]/stat-corrections       per-week final/open + rescored-at
+ *   GET   /api/leagues/[id]/stat-corrections       per-week final/open + rescored-at + player changes
  *   GET   /api/user/profile  · PATCH { notificationPreferences }   per-league alert mutes
  *   POST  /api/leagues/[id]/my-team { teamName }   rename my team
  *   GET/POST /api/leagues/[id]/team-coowners       co-owner invitations
@@ -41,6 +41,7 @@ import type { NotificationCategoryId, NotificationPreferences } from '@/lib/noti
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { hubText } from '@/lib/league-settings-hub/hubI18n'
+import type { CorrectionWeek } from '@/lib/league-settings-hub/recordBookModel'
 import { LeagueSettingsHubView, type HubTabId, type HubViewData } from './LeagueSettingsHubView'
 
 export const COMMISSIONER_NOTES_KEY = 'commissioner_notes'
@@ -120,7 +121,7 @@ export function LeagueSettingsHub({
   const [history, setHistory] = useState<Loadable<{ seasons?: Array<Record<string, unknown>>; allTimeStandings?: Parameters<typeof buildAllTimeStandings>[0] }>>(undefined)
   const [records, setRecords] = useState<Loadable<Array<{ holderId: string; value: number; season: number | null; rank: number }>>>(undefined)
   const [playerHighs, setPlayerHighs] = useState<Loadable<HighScoresPayload>>(undefined)
-  const [corrections, setCorrections] = useState<Loadable<{ season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> }>>(undefined)
+  const [corrections, setCorrections] = useState<Loadable<{ season: number; weeks: CorrectionWeek[] }>>(undefined)
   const [prefs, setPrefs] = useState<Loadable<NotificationPreferences>>(undefined)
   const [invite, setInvite] = useState<Loadable<string>>(undefined)
   const [coOwners, setCoOwners] = useState<Loadable<Array<{ id: string; accepted: boolean; name: string }>>>(undefined)
@@ -146,7 +147,7 @@ export function LeagueSettingsHub({
     void getJson<{ seasons?: Array<Record<string, unknown>>; allTimeStandings?: Parameters<typeof buildAllTimeStandings>[0] }>(`/api/leagues/${id}/history`).then((d) => { if (live) setHistory(d) })
     void getJson<{ records?: Array<{ holderId: string; value: number; season: number | null; rank: number }> }>(`/api/leagues/${id}/record-book?recordType=highest_score&limit=10`).then((d) => { if (live) setRecords(d?.records ?? null) })
     void getJson<HighScoresPayload>(`/api/leagues/${id}/player-high-scores?limit=10`).then((d) => { if (live) setPlayerHighs(d) })
-    void getJson<{ season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> }>(`/api/leagues/${id}/stat-corrections`).then((d) => { if (live) setCorrections(d) })
+    void getJson<{ season: number; weeks: CorrectionWeek[] }>(`/api/leagues/${id}/stat-corrections`).then((d) => { if (live) setCorrections(d) })
     void getJson<{ notificationPreferences?: NotificationPreferences | null }>('/api/user/profile').then((d) => {
       if (!live) return
       const p = (d?.notificationPreferences ?? {}) as NotificationPreferences

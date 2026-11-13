@@ -174,6 +174,10 @@ const ES: Record<string, string> = {
   'Rescored after corrections': 'Recalculada tras correcciones',
   'Each player’s total already includes any correction': 'El total de cada jugador ya incluye cualquier corrección',
   'Not rescored': 'Sin recalcular',
+  'Player changes': 'Cambios por jugador',
+  'Checked against the official stats — no player’s points changed.': 'Comparado con las estadísticas oficiales: ningún jugador cambió de puntos.',
+  Change: 'Cambio',
+  'Show fewer': 'Mostrar menos',
   'Our stats feed updates live during games, then posts official corrections over the next few days.': 'Nuestro feed de estadísticas se actualiza en vivo durante los partidos y publica las correcciones oficiales en los días siguientes.',
   'If the feed pauses or misses a play, it’s corrected to match the official league stats.': 'Si el feed se pausa o se pierde una jugada, se corrige para coincidir con las estadísticas oficiales de la liga.',
   'What the colors and tags mean': 'Qué significan los colores y las etiquetas',
@@ -971,6 +975,7 @@ const PATTERNS: Array<[RegExp, (m: RegExpExecArray, tr: Tr) => string]> = [
   [/^Runner-up (.+)$/, (m) => `Subcampeón ${m[1]}`],
   [/^(.+) Updates$/, (m, tr) => `Novedades de ${tr(m[1]!)}`],
   [/^(.+) seasons$/, (m) => `temporadas ${m[1]}`],
+  [/^Show all (\d+)$/, (m) => `Mostrar los ${m[1]}`],
   [/^Request failed \((\d+)\)$/, (m) => `La solicitud falló (${m[1]})`],
   // Stat names that carry a range.
   [/^FG Miss (.+)$/, (m) => `FG fallado ${m[1]}`],

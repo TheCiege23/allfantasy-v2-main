@@ -9,9 +9,10 @@ export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/leagues/[leagueId]/stat-corrections
- * Per week of the current season: are its scores final, and when was it rescored after stat
- * corrections (league members). Per-player before/after values are NOT stored anywhere yet —
- * see lib/league-settings-hub/recordBookReads.ts.
+ * Per week of the current season: are its scores final, when was it rescored after stat
+ * corrections, and — native leagues in the covered sports — which players changed, before → after
+ * (league members). The per-player part is the stat-correction detector's stored review; see
+ * lib/league-settings-hub/recordBookReads.ts.
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null

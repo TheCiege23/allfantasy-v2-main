@@ -139,7 +139,23 @@ export function HubPreviewClient({ type, role, tab, native = false, sport = 'NFL
         rows: [['J. Allen', 'Late Round Legends', 2025, 14, 56.58], ['J. Gibbs', 'Blitz Brigade', 2026, 6, 54.9], ['J. Chase', 'Ghost Protocol', 2025, 10, 51.2], ['L. Jackson', 'Wizards of Waivers', 2026, 3, 50.36], ['C. McCaffrey', "Don's Dynasty", 2025, 16, 49.1], ['A. St. Brown', 'Night Owls', 2026, 9, 46.2], ['J. Hurts', 'Red Zone Royalty', 2025, 7, 45.8], ['B. Robinson', 'Taco Tuesday', 2026, 2, 44.7]]
           .map(([name, team, season, week, pts], i) => ({ rank: i + 1, name: String(name), team: String(team), season: Number(season), week: Number(week), points: Number(pts).toFixed(2) })),
       },
-      correctionWeeks: { season: 2026, weeks: Array.from({ length: 10 }, (_, i) => ({ week: i + 1, final: i < 9, rescoredAt: i === 4 ? '2026-10-08T14:00:00Z' : null })) },
+      // Week 10 is open with three changed players; week 9 was checked and nothing moved; earlier
+      // weeks were never checked (no `changes`), so all three states of the card are one click apart.
+      correctionWeeks: {
+        season: 2026,
+        weeks: Array.from({ length: 10 }, (_, i) => ({
+          week: i + 1,
+          final: i < 9,
+          rescoredAt: i === 4 ? '2026-10-08T14:00:00Z' : null,
+          ...(i === 9
+            ? { changes: [
+                { player: 'Bijan Robinson', position: 'RB', team: 'Blitz Brigade', before: 18.4, after: 21.4, delta: 3 },
+                { player: 'CeeDee Lamb', position: 'WR', team: 'Gridiron Ghosts', before: 24.1, after: 22.9, delta: -1.2 },
+                { player: 'Sam LaPorta', position: 'TE', team: 'Taco Tuesday', before: 11.6, after: 12.1, delta: 0.5 },
+              ] }
+            : i === 8 ? { changes: [] } : {}),
+        })),
+      },
     }
   }, [kind, commish, muted, leagueOn, co, note, native, sport, sf])
 

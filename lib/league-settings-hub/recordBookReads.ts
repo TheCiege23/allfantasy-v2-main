@@ -9,19 +9,27 @@
  * dropped rather than guessed, finalized weeks only, and player names. Two implementations of that
  * mapping is the bug; reusing it is the fix. Its window is this season and last, so the card says so.
  *
- * STAT CORRECTIONS: no table records a player's points BEFORE a correction — the weekly score rows
- * are overwritten in place and `stat_reprocess_logs` only marks that a week was rescored. So this
- * reports what IS stored: per week, whether its scores are final (past the correction window) and
- * when it was rescored after corrections. A per-player old → new log needs a new table, which is a
- * migration, which is the owner's decision — not something to approximate here.
+ * STAT CORRECTIONS: per week, whether its scores are final (past the correction window), when it
+ * was rescored, and — for native leagues in the sports the check covers — WHICH players changed and
+ * by how much. That last part is the stat-correction detector's own stored review
+ * (lib/stat-corrections/statCorrectionDetector, a `sportsDataCache` row per sealed week holding each
+ * changed starter's before / after points), the same record the commissioner's Apply card reads.
+ *
+ * ⚠ This module once said no per-player before/after record existed and that showing one needed a
+ * migration. That was wrong: the detector had been storing it all along. The weekly score rows are
+ * still overwritten in place — the review is the only "before", which is why it is read here rather
+ * than reconstructed.
  */
 
 import type { PrismaClient } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
 import { loadStoryData } from '@/lib/storyline-studio/loadStoryData'
+import { readStoredReview, STAT_CORRECTION_SPORTS, statCorrectionCacheKeyPrefix } from '@/lib/stat-corrections/statCorrectionDetector'
 import {
+  attachCorrectionChanges,
   summarizeCorrectionWeeks,
+  type CorrectionChange,
   topPlayerScores,
   topTeamScores,
   type CorrectionWeek,
@@ -56,7 +64,7 @@ export async function loadCorrectionWeeks(
 ): Promise<{ season: number; weeks: CorrectionWeek[] } | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { platform: true, platformLeagueId: true, season: true },
+    select: { platform: true, platformLeagueId: true, season: true, sport: true },
   })
   if (!league) return null
   const season = league.season
@@ -68,17 +76,55 @@ export async function loadCorrectionWeeks(
     : league.platformLeagueId
       ? { leagueId: league.platformLeagueId, seasonYear: season }
       : null
-  const [groups, reprocessed] = await Promise.all([
+  const covered = native && STAT_CORRECTION_SPORTS.has(String(league.sport ?? '').toUpperCase())
+  const [groups, reprocessed, reviews] = await Promise.all([
     scoreWhere
       ? prisma.leaguePlayerWeeklyScore.groupBy({ by: ['week', 'isFinalized'], where: scoreWhere, _count: { _all: true } })
       : Promise.resolve([] as Array<{ week: number; isFinalized: boolean; _count: { _all: number } }>),
     prisma.statReprocessLog.findMany({ where: { leagueId, season }, select: { week: true, createdAt: true } }),
+    covered ? loadCorrectionReviews(prisma, leagueId, season) : Promise.resolve([]),
   ])
-  return {
-    season,
-    weeks: summarizeCorrectionWeeks(
-      groups.map((g) => ({ week: g.week, isFinalized: g.isFinalized, count: g._count._all })),
-      reprocessed,
-    ),
-  }
+  const weeks = summarizeCorrectionWeeks(
+    groups.map((g) => ({ week: g.week, isFinalized: g.isFinalized, count: g._count._all })),
+    reprocessed,
+  )
+  return { season, weeks: attachCorrectionChanges(weeks, reviews) }
+}
+
+/**
+ * The detector's stored review for each checked week of this season, with team names. Keyed on the
+ * league's RedraftSeason id exactly as statCorrectionDetector writes it, and filtered to this league
+ * as statCorrectionService.readStatCorrections does — the two readers of one record must agree.
+ */
+async function loadCorrectionReviews(
+  prisma: PrismaClient,
+  leagueId: string,
+  season: number,
+): Promise<Array<{ week: number; changes: CorrectionChange[] }>> {
+  const seasonRow = await prisma.redraftSeason.findFirst({ where: { leagueId, season }, select: { id: true } })
+  if (!seasonRow) return []
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { startsWith: statCorrectionCacheKeyPrefix(seasonRow.id) } },
+    select: { data: true },
+  })
+  const stored = rows
+    .map((r) => readStoredReview(r.data))
+    .filter((r): r is NonNullable<typeof r> => r !== null && r.leagueId === leagueId)
+  if (!stored.length) return []
+  const rosterIds = [...new Set(stored.flatMap((s) => s.review.changes.map((c) => c.rosterId)))]
+  const rosters = rosterIds.length
+    ? await prisma.redraftRoster.findMany({ where: { id: { in: rosterIds }, leagueId }, select: { id: true, teamName: true, ownerName: true } })
+    : []
+  const names = new Map(rosters.map((r) => [r.id, r.teamName?.trim() || r.ownerName || 'Team']))
+  return stored.map((s) => ({
+    week: s.week,
+    changes: s.review.changes.map((c) => ({
+      player: c.playerName,
+      position: c.position,
+      team: names.get(c.rosterId) ?? 'Team',
+      before: c.before,
+      after: c.after,
+      delta: c.delta,
+    })),
+  }))
 }

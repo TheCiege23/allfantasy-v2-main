@@ -93,7 +93,7 @@ function data(kind: HubKind, sport: string, canEdit = true): HubViewData {
     highScores: [{ rank: 1, holder: 'Zed Quill', season: 2025, week: 7, value: '182.35' }],
     highScoresSeasons: [2026, 2025],
     playerHighScores: { seasons: [2026, 2025], rows: [{ rank: 1, name: 'Ivo Pell', team: 'Ghost Protocol', season: 2025, week: 14, points: '56.58' }] },
-    correctionWeeks: { season: 2026, weeks: [{ week: 1, final: true, rescoredAt: '2026-09-12T15:00:00Z' }, { week: 2, final: false, rescoredAt: null }] },
+    correctionWeeks: { season: 2026, weeks: [{ week: 1, final: true, rescoredAt: '2026-09-12T15:00:00Z' }, { week: 2, final: false, rescoredAt: null, changes: Array.from({ length: 9 }, (_, i) => ({ player: 'Ivo Pell', position: 'WR', team: 'Ghost Protocol', before: 10, after: 10 + i, delta: i })) }] },
   }
 }
 

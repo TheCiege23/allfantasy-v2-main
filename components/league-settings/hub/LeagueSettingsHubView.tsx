@@ -25,6 +25,7 @@ import {
   type HubStandingRow,
 } from '@/lib/league-settings-hub/hubModel'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import type { CorrectionWeek } from '@/lib/league-settings-hub/recordBookModel'
 import { sportCopy, sportDisplayName } from '@/lib/league-settings-hub/sportProfile'
 
 export type HubTabId = 'my' | 'setup' | 'members' | 'record'
@@ -82,8 +83,8 @@ export type HubViewData = {
     | { seasons: number[]; rows: Array<{ rank: number; name: string; team: string; season: number; week: number; points: string }> }
     | null
     | undefined
-  /** Per week of `season`: final vs still open to corrections, and when it was rescored. */
-  correctionWeeks: { season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> } | null | undefined
+  /** Per week of `season`: final vs still open, when it was rescored, and (when checked) which players changed. */
+  correctionWeeks: { season: number; weeks: CorrectionWeek[] } | null | undefined
 }
 
 export type HubCallbacks = {
@@ -825,6 +826,49 @@ function CorrectionWeeks({ data }: { data: HubViewData['correctionWeeks'] }) {
           {rescored ? rescored.toLocaleDateString(hubLocale(lang), { month: 'short', day: 'numeric' }) : t('Not rescored')}
         </span>
       </div>
+      {w.changes ? <CorrectionChanges changes={w.changes} /> : null}
+    </div>
+  )
+}
+
+const pts = (n: number) => (Math.round(n * 100) / 100).toFixed(2)
+
+/** The players this week's correction check found changed: before → after, biggest change first. */
+function CorrectionChanges({ changes }: { changes: NonNullable<CorrectionWeek['changes']> }) {
+  const { t } = useT()
+  const [all, setAll] = useState(false)
+  const shown = all ? changes : changes.slice(0, 8)
+  return (
+    <div style={{ paddingTop: 12 }} data-testid="league-settings-hub-correction-changes">
+      <strong style={{ fontSize: 14 }}>{t('Player changes')}</strong>
+      {!changes.length ? (
+        <p className="af-lsh-note" style={{ marginTop: 6 }}>{t('Checked against the official stats — no player’s points changed.')}</p>
+      ) : (
+        <>
+          <div className="af-lsh-table" style={{ marginTop: 8 }}>
+            <div className="af-lsh-tr af-lsh-records" data-head="true"><span /><span>{t('Player')}</span><span className="r">{t('Change')}</span></div>
+            {shown.map((c, i) => (
+              <div className="af-lsh-tr af-lsh-records" key={`${c.player}-${c.team}-${i}`}>
+                <span style={{ color: 'var(--lsh-muted)', fontWeight: 700, fontSize: 11 }}>{c.position ?? ''}</span>
+                <span className="af-lsh-who">
+                  <span>
+                    <strong>{c.player}</strong>
+                    <small style={{ whiteSpace: 'normal' }}>{t(c.team)} · {pts(c.before)} → {pts(c.after)}</small>
+                  </span>
+                </span>
+                <strong className="r" style={{ color: c.delta > 0 ? '#6ee7b7' : c.delta < 0 ? '#fca5a5' : undefined }}>
+                  {c.delta > 0 ? '+' : ''}{pts(c.delta)}
+                </strong>
+              </div>
+            ))}
+          </div>
+          {changes.length > shown.length || all ? (
+            <button type="button" className="af-lsh-btn" data-size="sm" data-variant="ghost" style={{ marginTop: 8 }} onClick={() => setAll((v) => !v)}>
+              {all ? t('Show fewer') : t(`Show all ${changes.length}`)}
+            </button>
+          ) : null}
+        </>
+      )}
     </div>
   )
 }
