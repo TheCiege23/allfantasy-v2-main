@@ -6,7 +6,6 @@ import dynamic from 'next/dynamic'
 // Default SSR stays enabled: the selected screen still arrives as rendered HTML.
 export const MyTeam = dynamic(() => import('./MyTeam'))
 export const Matchup = dynamic(() => import('./Matchup'))
-export const Trades = dynamic(() => import('./Trades'))
 export const Waivers = dynamic(() => import('./Waivers'))
 export const DraftHq = dynamic(() => import('./DraftHq'))
 export const DraftBoard = dynamic(() => import('./DraftBoard'))

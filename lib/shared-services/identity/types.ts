@@ -11,41 +11,9 @@
 
 import type { ImportProvider } from '@/lib/league-import/types'
 
-/** Canonical FantasyUser identifier. Equal to `AppUser.id` today — see FantasyUserResolver. */
-type FantasyUserId = string
-
-export interface FantasyUser {
-  fantasyUserId: FantasyUserId
-  displayName: string | null
-  email: string
-  createdAt: Date
-}
-
-/**
- * How a PlatformIdentity was resolved. Never fabricated: a platform that only
- * stores a credential (not a durable provider-user-id) reports
- * `transient_credential_only`, not a fake `stored` identity.
- */
-type IdentityResolutionMethod =
-  | 'stored'
-  | 'transient_credential_only'
-  | 'not_available'
-
 interface SourceAttribution {
   sourceTable: 'UserProfile' | 'LeagueAuth' | 'FantraxUser' | 'PlayerIdentityMap' | 'derived'
   resolvedAt: Date
-}
-
-export interface PlatformIdentity {
-  fantasyUserId: FantasyUserId
-  platform: ImportProvider
-  /** Null whenever resolutionMethod !== 'stored' — never a guessed or fuzzy-matched value. */
-  providerUserId: string | null
-  displayName: string | null
-  linkedAt: Date | null
-  verifiedAt: Date | null
-  resolutionMethod: IdentityResolutionMethod
-  sourceAttribution: SourceAttribution
 }
 
 /**

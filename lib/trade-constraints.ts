@@ -265,7 +265,7 @@ export function calculateDynamicThresholds(
 // 1. Add Asset shape + value map
 // 2. Run cornerstone classifier
 // 3. Generate candidate trades (2-for-1, 1-for-1, 2-for-2 only)
-// 4. Hard filter (violatesHardRules)
+// 4. Hard filter
 // 5. Compute human fairness
 // 6. Build deterministic explanations
 // 7. (Optional) AI target teams
@@ -358,20 +358,6 @@ interface Constraints {
   banOneForOneCornerstoneForNon: boolean; // true
 }
 
-const DEFAULT_CONSTRAINTS: Constraints = {
-  maxAssetsPerSide: 3,
-  allowFaab: true,
-  faabMaxPercentOfTotal: 0.15,
-  cornerstonePremiumMin: 1.10,
-  cornerstonePremiumMax: 1.25,
-  baseFairnessMin: 0.92,
-  baseFairnessMax: 1.08,
-  rebuildFairnessMin: 0.90,
-  rebuildFairnessMax: 1.10,
-  noFillerMinValue: 1000,
-  banOneForOneCornerstoneForNon: true
-};
-
 // ============================================
 // HARD REJECT VALIDATION
 // ============================================
@@ -388,83 +374,6 @@ interface HardRuleResult {
 
 function sumValue(assets: Asset[]): number {
   return assets.reduce((sum, a) => sum + a.value, 0);
-}
-
-export function violatesHardRules(
-  trade: Trade,
-  league: LeagueSettings,
-  constraints: Constraints = DEFAULT_CONSTRAINTS
-): HardRuleResult {
-  const reasons: string[] = [];
-
-  const aGives = trade.teamA_gives;
-  const aGets = trade.teamA_gets;
-
-  // Max assets per side
-  if (aGives.length > constraints.maxAssetsPerSide) {
-    reasons.push(`Too many assets on Team A side (${aGives.length} > ${constraints.maxAssetsPerSide}).`);
-  }
-  if (aGets.length > constraints.maxAssetsPerSide) {
-    reasons.push(`Too many assets on Team B side (${aGets.length} > ${constraints.maxAssetsPerSide}).`);
-  }
-
-  // FAAB as anchor check
-  const totalA = sumValue(aGives);
-  const faabA = sumValue(aGives.filter(x => x.type === 'FAAB'));
-  if (totalA > 0 && faabA / totalA > constraints.faabMaxPercentOfTotal) {
-    reasons.push('FAAB too large relative to total; FAAB may only balance trades.');
-  }
-
-  // Also check receiving side FAAB
-  const totalB = sumValue(aGets);
-  const faabB = sumValue(aGets.filter(x => x.type === 'FAAB'));
-  if (totalB > 0 && faabB / totalB > constraints.faabMaxPercentOfTotal) {
-    reasons.push('FAAB too large on receiving side; FAAB may only balance trades.');
-  }
-
-  // One-for-one cornerstone swap check
-  const givesCornerstone = aGives.some(x => x.isCornerstone);
-  const getsCornerstone = aGets.some(x => x.isCornerstone);
-
-  if (constraints.banOneForOneCornerstoneForNon) {
-    if (aGives.length === 1 && aGets.length === 1) {
-      const g = aGives[0];
-      const r = aGets[0];
-      if (g.isCornerstone && !r.isCornerstone) {
-        reasons.push('Cornerstone-for-non-cornerstone 1-for-1 is not allowed.');
-      }
-      // Note: !g.isCornerstone && r.isCornerstone is handled by premium check below
-    }
-  }
-
-  // Cornerstone premium requirement (if receiving cornerstone but not giving one)
-  if (getsCornerstone && !givesCornerstone) {
-    const givesTotal = sumValue(aGives);
-    const getsTotal = sumValue(aGets);
-    const ratio = getsTotal / Math.max(givesTotal, 1);
-    
-    if (ratio < constraints.cornerstonePremiumMin) {
-      reasons.push(
-        `Receiving a cornerstone requires premium >= ${constraints.cornerstonePremiumMin.toFixed(2)}x (got ${ratio.toFixed(2)}x).`
-      );
-    }
-    if (ratio > constraints.cornerstonePremiumMax) {
-      reasons.push(
-        `Overpay cap exceeded (${ratio.toFixed(2)}x > ${constraints.cornerstonePremiumMax.toFixed(2)}x) to avoid bad advice.`
-      );
-    }
-  }
-
-  // Filler rule: no tiny assets unless they have purpose
-  const lowValuePlayers = [...aGives, ...aGets].filter(
-    x => x.type === 'PLAYER' && x.value < constraints.noFillerMinValue
-  );
-  if (lowValuePlayers.length > 0) {
-    const names = lowValuePlayers.map(p => p.name || 'Unknown').join(', ');
-    reasons.push(`Contains low-value filler assets (${names}). Trades must be clean and purposeful.`);
-  }
-
-  return { ok: reasons.length === 0, reasons };
 }
 
 // Legacy constants for backwards compatibility
@@ -591,20 +500,6 @@ export function tagAssetCornerstone(
     ...asset,
     isCornerstone,
     cornerstoneReason: reason
-  };
-}
-
-// Convenience: Classify cornerstone and return full Asset (matches user's classifyCornerstone)
-export function classifyCornerstone(
-  asset: Asset,
-  league: LeagueSettings,
-  thresholds: Thresholds = DEFAULT_THRESHOLDS
-): Asset {
-  const { isCornerstone, reason } = computeCornerstone(asset, league, thresholds);
-  return {
-    ...asset,
-    isCornerstone,
-    cornerstoneReason: reason || ''
   };
 }
 

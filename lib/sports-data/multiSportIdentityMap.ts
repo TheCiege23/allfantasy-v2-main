@@ -134,8 +134,8 @@ export async function backfillIdentityMapForSport(
     /*
      * 🛑 CHECKED INSIDE THE PAGE LOOP, NOT AROUND THE CALL — THAT DISTINCTION IS THE WHOLE FIX.
      *
-     * `backfillIdentityMaps` below already gates ENTRY to a sport on `shouldStop`, which bounds
-     * how MANY sports run and not how long one takes. With READ_PAGE at 5,000 and a 20,000-row
+     * Gating only ENTRY to a sport on `shouldStop` bounds how MANY sports run, not how long
+     * one takes. With READ_PAGE at 5,000 and a 20,000-row
      * limit, one sport is four pages of per-row updates: NCAAB (18,209 rows) leads the rotation
      * and, unbounded, consumed the caller's entire window on its own.
      *
@@ -310,37 +310,5 @@ export async function backfillIdentityMapForSport(
   }
 
   return result
-}
-
-/**
- * Backfill several sports in order, stopping cleanly when a caller-supplied budget is spent.
- *
- * The stop is checked BETWEEN sports, so a sport already started runs to completion — same
- * contract as `createRunBudget`, and the reason callers should order the list stale-first.
- */
-export async function backfillIdentityMaps(
-  sports: readonly string[],
-  opts: { dryRun?: boolean; limitPerSport?: number; shouldStop?: () => boolean } = {},
-): Promise<{ results: IdentityBackfillResult[]; deferred: string[] }> {
-  const results: IdentityBackfillResult[] = []
-  const deferred: string[] = []
-
-  for (const sport of sports) {
-    if (opts.shouldStop?.()) {
-      deferred.push(sport)
-      continue
-    }
-    results.push(
-      // Pass the signal DOWN as well as checking it here: gating entry bounds how many sports
-      // run, not how long one takes, and one sport was enough to spend a whole window.
-      await backfillIdentityMapForSport(sport, {
-        dryRun: opts.dryRun,
-        limit: opts.limitPerSport,
-        shouldStop: opts.shouldStop,
-      }),
-    )
-  }
-
-  return { results, deferred }
 }
 

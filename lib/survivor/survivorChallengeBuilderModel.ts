@@ -826,10 +826,7 @@ export function readChallengeBuilderConfig(value: unknown): ChallengeBuilderConf
   }
 }
 
-/** What may change on an edit once answers are in: words, prizes, and a LATER lock. */
-export const CHALLENGE_EDITABLE_WITH_ANSWERS = ['title', 'question', 'prizes', 'deferWeeks', 'locksAt'] as const
-
-/** Null when `next` only changes what `CHALLENGE_EDITABLE_WITH_ANSWERS` allows. */
+/** Null when `next` changes only fields that stay editable once answers are in. */
 export function editAfterAnswersError(prev: ChallengeBuilderConfig, next: ChallengeBuilderConfig, lang: ChallengeLang): ChallengeError | null {
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
   const fixed: (keyof ChallengeBuilderConfig)[] = ['kind', 'scope', 'options', 'game', 'player', 'line', 'missPenalty', 'wager', 'uniqueAnswers', 'sealed', 'allOverRule', 'opensAt', 'props', 'sweepTiered', 'puzzle', 'position']

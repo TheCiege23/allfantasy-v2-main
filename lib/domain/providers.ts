@@ -47,18 +47,6 @@ export function secretRef(handle: string): SecretRef {
   return handle as SecretRef
 }
 
-export type SecretStore = {
-  /**
-   * Resolve a handle to credential material.
-   *
-   * ⚠ THE RETURN IS DELIBERATELY NOT `string`. A caller that wants the value
-   * has to call `use()`, which scopes it to a callback — so there is no
-   * variable holding a token for the rest of a function body, and nothing for a
-   * later `JSON.stringify(this)` to find.
-   */
-  resolve(ref: SecretRef): Promise<ResolvedSecret | null>
-}
-
 type ResolvedSecret = {
   /** Run `fn` with the credential. The value must not escape the callback. */
   use<T>(fn: (value: string) => Promise<T>): Promise<T>
