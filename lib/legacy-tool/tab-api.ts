@@ -106,13 +106,6 @@ type TeamDirectionLabel =
   | 'soft_rebuild'
   | 'full_rebuild'
 
-export interface TeamDirection {
-  label: TeamDirectionLabel
-  score: number
-  confidence: number
-  explanation: string
-}
-
 type LegacySnapshot = {
   username: string
   win_percentage: number

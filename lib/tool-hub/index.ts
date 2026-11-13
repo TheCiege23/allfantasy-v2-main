@@ -9,7 +9,7 @@ export {
   getToolsForSport,
 } from './ToolHubService'
 
-export { getToolCardDisplay, getToolCardsForSlugs } from './ToolCardResolver'
+export { getToolCardDisplay } from './ToolCardResolver'
 
 export { getRelatedTools } from './RelatedToolResolver'
 

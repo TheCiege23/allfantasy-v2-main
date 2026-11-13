@@ -4,10 +4,6 @@
  * Trade/waiver notices: created by backend or cron; this module documents the contract.
  */
 
-export function getMentionsPayload(threadId: string, messageId: string, mentionedUsernames: string[]) {
-  return { threadId, messageId, mentionedUsernames: mentionedUsernames.filter(Boolean) }
-}
-
 export function getTradeAcceptedNoticePayload(params: {
   acceptedByName: string
   teamsSummary: string

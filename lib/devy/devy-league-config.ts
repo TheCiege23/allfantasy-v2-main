@@ -6,10 +6,6 @@
 import type { LeagueSport } from '@prisma/client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
-/** Sports where Devy is a first-class long-term format in production (no MLB/NHL Devy). */
-const DEVY_SUPPORTED_SPORTS = ['NFL', 'NCAAF', 'NBA', 'NCAAB'] as const
-export type DevySupportedSport = (typeof DEVY_SUPPORTED_SPORTS)[number]
-
 type DevyModeId =
   | 'standard_devy'
   | 'campus_to_canton'

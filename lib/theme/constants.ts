@@ -31,13 +31,6 @@ export const DEFAULT_THEME: ThemeId = 'dark'
 
 export const THEME_IDS: ThemeId[] = ['light', 'dark', 'legacy', 'system']
 
-export const THEME_DISPLAY_NAMES: Record<ThemeId, string> = {
-  light: 'Light',
-  dark: 'Dark',
-  legacy: 'AF Legacy',
-  system: 'System',
-}
-
 function systemPrefersLight(): boolean {
   if (typeof window === 'undefined') return false
   try {

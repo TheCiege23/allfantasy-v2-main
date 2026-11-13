@@ -32,14 +32,6 @@ export function getPrivacyUrl(fromSignup?: boolean, next?: string | null): strin
   return q ? `/privacy?${q}` : "/privacy"
 }
 
-export function getDataDeletionUrl(fromSignup?: boolean, next?: string | null): string {
-  const params = new URLSearchParams()
-  if (fromSignup) params.set("from", "signup")
-  if (isSafeInternalPath(next)) params.set("next", next.trim())
-  const q = params.toString()
-  return q ? `/data-deletion?${q}` : "/data-deletion"
-}
-
 export function getNoGamblingPolicyUrl(fromSignup?: boolean, next?: string | null): string {
   const params = new URLSearchParams()
   if (fromSignup) params.set("from", "signup")
@@ -63,10 +55,3 @@ export async function resolveLegalBackLink(
   return { href: getSignupReturnUrl(next), label: "Back to sign up", fromSignup: true }
 }
 
-export function getSmsTermsUrl(): string {
-  return "/sms-terms"
-}
-
-export function getCopyrightPolicyUrl(): string {
-  return "/copyright"
-}

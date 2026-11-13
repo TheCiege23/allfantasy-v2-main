@@ -33,16 +33,3 @@ export interface RosterTemplateDefinition {
   totalDevySlots: number
 }
 
-/** A single roster assignment (player in a slot). */
-export interface RosterAssignment {
-  playerId: string
-  position: string
-  slotName: string
-}
-
-/** Validation result for one slot or the whole roster. */
-export interface RosterValidationResult {
-  valid: boolean
-  errors: string[]
-  slotCounts: Record<string, { assigned: number; max: number }>
-}

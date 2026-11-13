@@ -24,9 +24,6 @@ export type NFLLeagueVariant =
   | 'IDP'
   | 'DYNASTY_IDP'
 
-/** League variant key (sport-agnostic); NFL uses NFLLeagueVariant. */
-export type LeagueVariant = NFLLeagueVariant | 'STANDARD' | string
-
 /** Player pool source for ingestion and draft/waiver. */
 type PlayerPoolSource = 'sports_player' | 'sleeper' | 'external' | 'manual'
 

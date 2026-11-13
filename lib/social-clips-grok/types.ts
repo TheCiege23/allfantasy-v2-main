@@ -2,8 +2,6 @@
  * Grok social clip types (Prompt 116).
  */
 
-import type { SupportedSport } from '@/lib/sport-scope';
-
 export const SOCIAL_ASSET_TYPES = [
   'weekly_league_winners',
   'biggest_upset',
@@ -17,8 +15,6 @@ export const SOCIAL_ASSET_TYPES = [
 ] as const;
 
 export type SocialAssetType = (typeof SOCIAL_ASSET_TYPES)[number];
-
-export type Sport = SupportedSport;
 
 export const SUPPORTED_PLATFORMS = ['x', 'instagram', 'tiktok', 'facebook', 'reddit'] as const;
 export type SocialPlatform = (typeof SUPPORTED_PLATFORMS)[number];

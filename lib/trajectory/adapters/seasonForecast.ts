@@ -3,7 +3,7 @@
  * SUPPORTED source).
  *
  * `SeasonForecastSnapshot` stores exactly one real row per `(leagueId, season,
- * week)` (see `lib/season-forecast/warehouse-integration.ts`), so week-over-week
+ * week), so week-over-week
  * movement in playoff odds, championship odds, expected wins, seed, etc. is
  * GENUINE captured history — not a computed guess. Each team forecast also ships
  * the engine's own `confidenceScore`, which we pass through as the point's

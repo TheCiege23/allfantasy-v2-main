@@ -69,14 +69,3 @@ export async function canAccessFantasyOS(input: FantasyOsAccessInput): Promise<b
   return allowed
 }
 
-/**
- * Smallest client-safe access view for dashboard UI. Carries only allowed + a coarse reason
- * (owner/admin/enterprise/unauthorized) — never raw entitlements, admin flags, plan ids, or
- * internal authorization details. The server resolver remains the authorization source of truth;
- * this is a presentational hint for nav/card visibility + copy variant.
- */
-export type FantasyOsAccessView = {
-  allowed: boolean
-  reason: 'owner' | 'admin' | 'enterprise' | 'unauthorized'
-}
-

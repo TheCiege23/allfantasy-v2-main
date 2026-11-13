@@ -50,7 +50,3 @@ export const nflAdapter: SportAdapter = {
   },
 }
 
-export function getInjuryStatus(_player: { injuryStatus?: string | null }): string | null {
-  return _player.injuryStatus ?? null
-}
-

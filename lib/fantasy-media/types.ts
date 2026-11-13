@@ -81,11 +81,3 @@ export interface HeyGenPayloadMetadata {
   };
 }
 
-export const EPISODE_STATUS = [
-  'draft',
-  'script_ready',
-  'generating',
-  'completed',
-  'failed',
-] as const;
-

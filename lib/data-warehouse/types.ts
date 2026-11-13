@@ -118,8 +118,6 @@ export interface SeasonStandingFactInput {
   rank?: number
 }
 
-export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver_add' | 'waiver_drop' | 'free_agent'
-
 type WarehouseDataset =
   | 'player_stats'
   | 'team_stats'

@@ -15,7 +15,6 @@ export type {
   FranchiseRoadmap,
   FranchiseRoadmapInput,
   FranchisePhase,
-  UserGoal,
   WindowStrength,
   ChampionshipWindow,
   YearPlan,

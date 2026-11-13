@@ -14,11 +14,6 @@ export type ConferenceMode = 'black_vs_gold' | 'random_themed' | 'commissioner_c
 
 export type LeagueNamingMode = 'commissioner_custom' | 'app_generated' | 'ai_themed'
 
-/** Feeder leagues always use 12-team slots; kept for typing / display. */
-export const TOURNAMENT_LEAGUE_SIZE_FIXED = 12 as const
-
-export type TournamentPhase = 'qualification' | 'elimination' | 'elite_eight' | 'championship'
-
 export interface TournamentSettings {
   draftType: TournamentDraftType
   participantPoolSize: number
@@ -55,13 +50,6 @@ interface TournamentHubSettings {
   visibility: 'public' | 'unlisted' | 'private'
   forumAnnouncements: boolean
   bannerTheme?: string
-}
-
-export interface TournamentConferenceTheme {
-  primaryColor: string
-  secondaryColor: string
-  iconName?: string
-  label: string
 }
 
 export interface CreateTournamentInput {

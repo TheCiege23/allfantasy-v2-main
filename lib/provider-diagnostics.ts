@@ -9,6 +9,5 @@ export {
   recordProviderLatency,
   recordDegradedModeActivation,
   logDiagnosticsEvent,
-  getProviderDiagnostics,
   type ProviderId,
 } from '@/lib/admin/provider-status-service'

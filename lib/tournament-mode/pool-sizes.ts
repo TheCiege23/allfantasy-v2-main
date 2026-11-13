@@ -19,4 +19,3 @@ export const TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED = [
   224,
 ] as const
 
-export type TournamentParticipantPoolSizeExtended = (typeof TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED)[number]

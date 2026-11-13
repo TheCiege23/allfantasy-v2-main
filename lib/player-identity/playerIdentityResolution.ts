@@ -307,9 +307,3 @@ export function resolvePlayerIdentityConfidence(matchType: IdentityMatchType): n
   }
 }
 
-export type IdentityMatchMetadata = {
-  matchType: IdentityMatchType
-  confidence: number
-  reason: string
-}
-

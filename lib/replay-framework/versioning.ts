@@ -15,9 +15,6 @@
  */
 export const TRADE_MODEL_VERSION = 'trade-engine-deterministic-v1'
 
-/** Same convention as `TRADE_MODEL_VERSION`, for the Phase 13 Lineup Replay scenario. */
-export const LINEUP_MODEL_VERSION = 'lineup-optimizer-deterministic-v1'
-
 /**
  * Reuses the exact same env-var precedence already established by
  * app/api/af-debug/sha/route.ts for identifying which commit is running —

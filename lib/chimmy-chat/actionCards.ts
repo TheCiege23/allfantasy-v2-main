@@ -110,11 +110,6 @@ export function publishChimmyActionCards(cards: ChimmyActionCard[]): void {
   for (const l of listeners) l(current)
 }
 
-export function dismissChimmyActionCard(actionId: string): void {
-  current = current.filter((c) => c.actionId !== actionId)
-  for (const l of listeners) l(current)
-}
-
 export function subscribeChimmyActionCards(listener: Listener): () => void {
   listeners.add(listener)
   listener(current)

@@ -4,19 +4,6 @@
  */
 import type { PositionDistribution } from './types'
 
-export interface RosterCompositionResult {
-  positionCounts: PositionDistribution
-  positionValues: PositionDistribution
-  totalValue: number
-  /** Top N players' value / total (concentration). */
-  assetConcentration: number
-  /** Rookie vs veteran count (if ages available). */
-  rookieCount?: number
-  veteranCount?: number
-  /** Same-team stacks (e.g. QB+WR). */
-  stacks: Array<{ type: string; description: string; playerIds: string[] }>
-}
-
 /**
  * Extract position counts from roster playerData-like structure (array of { position } or record of ids → position).
  */

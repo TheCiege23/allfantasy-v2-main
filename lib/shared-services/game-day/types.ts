@@ -18,7 +18,7 @@
 import type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload } from '@/lib/matchup-center/types'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import type { RosterIdSpace } from '@/lib/core-app/rosterIdSpace'
-import type { ManagerBehaviorProfile, PlayerExposure as KnowledgeGraphPlayerExposure } from '@/lib/shared-services/knowledge-graph/types'
+import type { PlayerExposure as KnowledgeGraphPlayerExposure } from '@/lib/shared-services/knowledge-graph/types'
 
 export type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload, LineupActionItem }
 /** Re-exported under an unambiguous name — never conflate with this module's own UserPlayerExposure (private, per-user, unrelated persistence/privacy model). See README §"Private user exposure vs Knowledge Graph exposure". */
@@ -127,15 +127,6 @@ export interface UserPlayerExposure {
 
 type GameWindowId = string
 
-export interface GameWindow {
-  id: GameWindowId
-  sport: string
-  label: string
-  startTime: string | null
-  endTime: string | null
-  gameCount: number
-}
-
 export type LineupAttentionReasonCode =
   | 'starter_ruled_out'
   | 'starter_inactive'
@@ -170,30 +161,5 @@ export interface LineupAttentionItem {
   risk: 'low' | 'medium' | 'high'
   actionable: boolean
   providerDeepLink: string | null
-}
-
-export interface ManagerTendencyContext {
-  status: 'ok' | 'gated' | 'unavailable'
-  reason: string | null
-  profile: ManagerBehaviorProfile | null
-}
-
-export interface GameDayDivergenceItem {
-  category:
-    | 'missing_league'
-    | 'missing_roster'
-    | 'missing_player'
-    | 'starter_mismatch'
-    | 'score_mismatch'
-    | 'projection_mismatch'
-    | 'status_mismatch'
-    | 'game_state_mismatch'
-    | 'freshness_mismatch'
-    | 'alert_severity_mismatch'
-  leagueId: string
-  playerId: string | null
-  primaryValue: string | null
-  legacyValue: string | null
-  notes: string[]
 }
 

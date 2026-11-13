@@ -2,7 +2,7 @@
 import { getDateKey } from "@/lib/usage";
 import { MOOD_OPTIONS } from "@/lib/mood-options";
 
-export { MOOD_OPTIONS, getMoodRecommendation } from "@/lib/mood-options";
+export { MOOD_OPTIONS } from "@/lib/mood-options";
 
 type MoodEntry = {
   id: string;

@@ -62,6 +62,3 @@ export function normalizePlayer(p: AnyPlayerLike, sport: SportKey = 'nfl'): Norm
   }
 }
 
-export function normalizePlayers(list: AnyPlayerLike[], sport: SportKey = 'nfl'): NormalizedPlayer[] {
-  return (list || []).map(p => normalizePlayer(p, sport))
-}

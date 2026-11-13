@@ -340,33 +340,6 @@ function computeVolatilityScore(player: DevyPlayer): number {
   return Math.round(Math.min(100, Math.max(0, volatility)))
 }
 
-export function computeDraftProjectionScore(player: DevyPlayer): number {
-  const recruitingRaw = computeRecruitingComposite(player) * 100
-  const productionRaw = computeProductionIndex(player)
-  const breakoutAge = computeBreakoutAge(player)
-  const breakoutScore = breakoutAgeToScore(breakoutAge)
-  const athleticScore = computeAthleticProfileScore(player)
-  const projectedRound = estimateProjectedDraftRound(player)
-  const draftCapital = computeDraftCapitalScore(projectedRound)
-  const ppaScore = computePPABoost(player)
-  const wepaScore = computeWEPAScore(player)
-  const teamCtx = computeTeamContextBoost(player)
-  const transferRisk = computeTransferRisk(player)
-
-  const dps =
-    recruitingRaw * 0.20 +
-    productionRaw * 0.25 +
-    breakoutScore * 0.10 +
-    athleticScore * 0.10 +
-    draftCapital * 0.15 +
-    ppaScore * 0.10 +
-    wepaScore * 0.05 +
-    teamCtx * 0.05 -
-    transferRisk * 0.3
-
-  return Math.round(Math.min(100, Math.max(0, dps)) * 100) / 100
-}
-
 // ──────────────────────────────────────────────────────────────────
 // Evidence layer — what we actually know about a player
 //

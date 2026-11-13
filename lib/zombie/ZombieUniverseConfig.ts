@@ -5,29 +5,6 @@
 
 import { prisma } from '@/lib/prisma'
 
-interface ZombieUniverseSettings {
-  leagueCount?: number
-  levelNames?: string[]
-  teamsPerLeague?: number
-  movementPromoteCount?: number
-  movementRelegateCount?: number
-  tieBreakers?: string[]
-}
-
-export async function createZombieUniverse(input: {
-  name: string
-  sport?: string
-  settings?: ZombieUniverseSettings
-}) {
-  return prisma.zombieUniverse.create({
-    data: {
-      name: input.name,
-      sport: input.sport ?? 'NFL',
-      settings: (input.settings ?? {}) as object,
-    },
-  })
-}
-
 export async function attachLeagueToUniverse(input: {
   universeId: string
   levelId: string

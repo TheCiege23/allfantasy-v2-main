@@ -61,32 +61,13 @@ const DYNASTY_LEAGUE_TYPES: LeagueTypeId[] = ['dynasty', 'devy', 'c2c']
 /** League types that support keeper config. */
 const KEEPER_LEAGUE_TYPES: LeagueTypeId[] = ['keeper', 'dynasty']
 
-/** League types that support devy. */
-const DEVY_LEAGUE_TYPES: LeagueTypeId[] = ['devy', 'dynasty']
-
-/** League types that support C2C. */
-const C2C_LEAGUE_TYPES: LeagueTypeId[] = ['c2c']
-
 export function isDynastyLeagueType(leagueType: LeagueTypeId): boolean {
   return DYNASTY_LEAGUE_TYPES.includes(leagueType)
-}
-
-/** Standard redraft: seasonal league, no carryover rosters. */
-export function isRedraftLeagueType(leagueType: LeagueTypeId): boolean {
-  return leagueType === 'redraft'
 }
 
 /** Keeper or dynasty: supports keeper retention config (max keepers, round cost, etc.). */
 export function isKeeperLeagueType(leagueType: LeagueTypeId): boolean {
   return KEEPER_LEAGUE_TYPES.includes(leagueType)
-}
-
-export function isDevyLeagueType(leagueType: LeagueTypeId): boolean {
-  return DEVY_LEAGUE_TYPES.includes(leagueType)
-}
-
-export function isC2CLeagueType(leagueType: LeagueTypeId): boolean {
-  return C2C_LEAGUE_TYPES.includes(leagueType)
 }
 
 export function getAllowedLeagueTypesForSport(sport: LeagueSport | string): LeagueTypeId[] {
@@ -134,9 +115,3 @@ export function isDraftTypeAllowedForLeagueType(
   return isDraftTypeAllowedForFormat(sport, formatShellFor(leagueType), draftType)
 }
 
-/**
- * All supported sports (from sport-scope).
- */
-export function getSupportedSports(): LeagueSport[] {
-  return [...SUPPORTED_SPORTS]
-}

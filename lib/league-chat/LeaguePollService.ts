@@ -28,10 +28,6 @@ export function createLeaguePollPayload(question: string, options: string[]): {
   return { question: q, options: opts, votes: {} }
 }
 
-export function isPollMessage(messageType: string, metadata?: { question?: string } | null): boolean {
-  return messageType === "poll" || !!(metadata?.question)
-}
-
 export function parseLeaguePollPayload(input: {
   body?: string | null
   metadata?: Record<string, unknown> | null

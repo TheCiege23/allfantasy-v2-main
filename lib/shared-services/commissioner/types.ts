@@ -73,29 +73,6 @@ export interface ManagerTendencyContext {
   profile: ManagerBehaviorProfile | null
 }
 
-type PulseDimensionState = 'good' | 'watch' | 'attention_required' | 'unavailable'
-
-interface PulseDimension {
-  dimension: 'competition' | 'participation' | 'activity' | 'lineup_health' | 'transaction_activity' | 'commissioner_attention' | 'data_quality'
-  state: PulseDimensionState
-  explanation: string
-  evidence: string[]
-  confidence: number
-  freshness: SourceAttribution['freshness']
-  sourceAttribution: SourceAttribution
-  risk: 'low' | 'medium' | 'high'
-  uncertainty: string[]
-}
-
-export interface LeaguePulse {
-  leagueId: string
-  generatedAt: string
-  dimensions: PulseDimension[]
-  /** Explainable composite — never a single unexplained number; always paired with `dimensions`. */
-  compositeScore: number
-  compositeExplanation: string
-}
-
 export type LeagueHealthCategory = 'healthy' | 'watch' | 'attention_required' | 'critical' | 'unavailable'
 
 export interface LeagueHealthAssessment {
@@ -165,32 +142,5 @@ export interface CommissionerBrief {
   sections: CommissionerBriefSection[]
   isHealthy: boolean
   confidence: number
-}
-
-type NarrativeTone = 'neutral_professional' | 'playful'
-type NarrativeFormat = 'concise_chat' | 'full_brief' | 'discord' | 'sleeper' | 'espn_yahoo_copy'
-
-export interface CommissionerNarrativeOutput {
-  format: NarrativeFormat
-  tone: NarrativeTone
-  text: string
-  /** True only when an AI call actually ran and succeeded; false means the deterministic fallback text is shown — never silently upgraded. */
-  aiGenerated: boolean
-  characterCount: number
-  characterLimit: number | null
-}
-
-type CommissionerDivergenceCategory =
-  | 'missing_signal'
-  | 'severity_mismatch'
-  | 'league_health_status_mismatch'
-  | 'stale_data_handling_mismatch'
-
-export interface CommissionerDivergenceItem {
-  category: CommissionerDivergenceCategory
-  leagueId: string
-  primaryValue: string | null
-  legacyValue: string | null
-  notes: string[]
 }
 

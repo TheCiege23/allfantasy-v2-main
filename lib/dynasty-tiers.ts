@@ -3,14 +3,6 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch';
 export type AssetTier = 0 | 1 | 2 | 3 | 4;
 type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
 
-const TIER_TO_SEMANTIC: Record<AssetTier, SemanticTier> = {
-  0: 'elite',
-  1: 'high',
-  2: 'starter',
-  3: 'replaceable',
-  4: 'depth',
-};
-
 interface TieredPlayer {
   name: string;
   tier: AssetTier;
@@ -481,51 +473,6 @@ interface LeagueSettings {
   idpStarterCount: number;
 }
 
-interface TradeEvaluation {
-  senderAssets: EvaluatedAsset[];
-  receiverAssets: EvaluatedAsset[];
-  senderTotalValue: number;
-  receiverTotalValue: number;
-  deltaPct: number;
-  valueRatio: number;
-  tierViolation: boolean;
-  tierViolationReason: string | null;
-  tierParityCheck: {
-    passed: boolean;
-    senderBestTier: SemanticTier | null;
-    receiverBestTier: SemanticTier | null;
-    violation: string | null;
-  };
-  timelineCheck: {
-    senderTimeline: 'contender' | 'rebuild' | 'middle';
-    receiverTimeline: 'contender' | 'rebuild' | 'middle';
-    aligned: boolean;
-    mismatchReason: string | null;
-  };
-  sanityCheck: {
-    wouldMostReject: boolean;
-    rejectReason: string | null;
-    rejectionRate: number;
-    windowMismatch: boolean;
-    windowMismatchYears: number;
-    qbRbVeto: boolean;
-    asymmetricValue: boolean;
-  };
-  windowAnalysis: {
-    senderAvgWindow: number;
-    receiverAvgWindow: number;
-    windowDelta: number;
-    dynastyVerdict: 'LONG_TERM_WIN' | 'SHORT_TERM_WIN' | 'BALANCED' | 'ASYMMETRIC';
-    dynastyLabel: string;
-  };
-  plausibility: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNREALISTIC';
-  maxGrade: string;
-  verdict: 'FAIR' | 'SLIGHT_EDGE' | 'LOPSIDED' | 'VERY_LOPSIDED' | 'UNREALISTIC';
-  warnings: string[];
-  suggestedFix: string | null;
-  consolidationPenaltyApplied: boolean;
-}
-
 function evaluatePickValue(
   pickYear: number,
   pickRound: number,
@@ -620,126 +567,8 @@ export function evaluateAsset(
  * scripts/check-decision-engine-boundary.mjs exists to stop. Same move as pick-valuation's analyzeTrade.
  */
 
-export function formatEvaluationForAI(evaluation: TradeEvaluation): string {
-  const tierParityStatus = evaluation.tierParityCheck.passed 
-    ? 'PASSED' 
-    : `FAILED - ${evaluation.tierParityCheck.violation}`;
-  
-  const timelineStatus = evaluation.timelineCheck.aligned 
-    ? 'ALIGNED' 
-    : `MISALIGNED - ${evaluation.timelineCheck.mismatchReason}`;
-  
-  const sanityStatus = evaluation.sanityCheck.wouldMostReject 
-    ? `FAILED (${evaluation.sanityCheck.rejectionRate}% would reject) - ${evaluation.sanityCheck.rejectReason}` 
-    : `PASSED (${evaluation.sanityCheck.rejectionRate}% rejection estimate)`;
-  
-  const windowStatus = evaluation.sanityCheck.windowMismatch
-    ? `FLAGGED - ${evaluation.windowAnalysis.windowDelta.toFixed(1)} year gap`
-    : `OK - ${evaluation.windowAnalysis.windowDelta.toFixed(1)} year gap`;
-
-  return `
-DETERMINISTIC TRADE EVALUATION RESULTS (AI MUST FOLLOW):
-=========================================================
-Trade Verdict: ${evaluation.verdict}
-Dynasty Verdict: ${evaluation.windowAnalysis.dynastyLabel}
-Maximum Allowed Grade: ${evaluation.maxGrade}
-Market Plausibility: ${evaluation.plausibility}
-
-VETO LAYER CHECKS:
-------------------
-1. Tier Parity: ${tierParityStatus}
-   - Sender best tier: ${evaluation.tierParityCheck.senderBestTier || 'N/A (picks only)'}
-   - Receiver best tier: ${evaluation.tierParityCheck.receiverBestTier || 'N/A (picks only)'}
-
-2. Timeline Alignment: ${timelineStatus}
-   - Sender timeline: ${evaluation.timelineCheck.senderTimeline}
-   - Receiver timeline: ${evaluation.timelineCheck.receiverTimeline}
-
-3. Sanity Check (Would 70%+ reject?): ${sanityStatus}
-   - QB-RB Veto (SF): ${evaluation.sanityCheck.qbRbVeto ? 'TRIGGERED - Premium asset required' : 'OK'}
-   - Asymmetric Value: ${evaluation.sanityCheck.asymmetricValue ? 'TRIGGERED - Single aging RB for cornerstone' : 'OK'}
-
-4. Window Mismatch: ${windowStatus}
-   - Sender avg window: ${evaluation.windowAnalysis.senderAvgWindow.toFixed(1)} years
-   - Receiver avg window: ${evaluation.windowAnalysis.receiverAvgWindow.toFixed(1)} years
-
-VALUE ANALYSIS:
----------------
-- Sender gives total adjusted value: ${evaluation.senderTotalValue} DVP
-- Receiver gives total adjusted value: ${evaluation.receiverTotalValue} DVP
-- Delta percentage: ${evaluation.deltaPct}%
-- Value ratio: ${evaluation.valueRatio.toFixed(2)}
-- Consolidation penalty applied: ${evaluation.consolidationPenaltyApplied ? 'YES (-12%)' : 'NO'}
-
-ASSET BREAKDOWN:
-----------------
-Sender Assets (what sender gives up):
-${evaluation.senderAssets.map(a => {
-  const tierLabel = a.tier !== null ? `Tier ${a.tier} (${TIER_TO_SEMANTIC[a.tier as AssetTier]})` : 'PICK';
-  const window = a.position && a.age ? `~${getExpectedWindow(a.position, a.age).toFixed(1)}yr window` : '';
-  return `  - ${a.name}: ${tierLabel}, ${a.adjustedValue} DVP${window ? ` [${window}]` : ''}${a.isIDP ? ' [IDP]' : ''}${a.isAging ? ' [AGING]' : ''}`;
-}).join('\n')}
-
-Receiver Assets (what receiver gives up):
-${evaluation.receiverAssets.map(a => {
-  const tierLabel = a.tier !== null ? `Tier ${a.tier} (${TIER_TO_SEMANTIC[a.tier as AssetTier]})` : 'PICK';
-  const window = a.position && a.age ? `~${getExpectedWindow(a.position, a.age).toFixed(1)}yr window` : '';
-  return `  - ${a.name}: ${tierLabel}, ${a.adjustedValue} DVP${window ? ` [${window}]` : ''}${a.isIDP ? ' [IDP]' : ''}${a.isAging ? ' [AGING]' : ''}`;
-}).join('\n')}
-
-${evaluation.warnings.length > 0 ? `REQUIRED WARNINGS (MUST MENTION ALL):\n${evaluation.warnings.map(w => `  ⚠️ ${w}`).join('\n')}` : ''}
-
-${evaluation.suggestedFix ? `WHAT IT WOULD TAKE: ${evaluation.suggestedFix}` : ''}
-
-AI INSTRUCTIONS (MANDATORY):
-============================
-1. You may NOT assign a grade higher than ${evaluation.maxGrade}
-2. You MUST explain why the trade is ${evaluation.verdict.toLowerCase().replace(/_/g, ' ')}
-3. You MUST use the dynasty verdict label: "${evaluation.windowAnalysis.dynastyLabel}"
-4. You MUST reference all failed veto checks (tier parity, timeline, sanity, window)
-5. You MUST mention all required warnings above
-6. You may NOT justify an unrealistic trade using "team needs" or "win-now mode" alone
-7. If verdict is UNREALISTIC, firmly state: "This trade would be rejected by most dynasty managers"
-8. If sanity check failed, explain why ${evaluation.sanityCheck.rejectionRate}% would reject
-9. If window mismatch >= 5 years, clearly label as "Long-Term Win" or "Short-Term Win"
-10. Always suggest what would make this trade viable
-11. Elite-tier assets (Tier 0-1) require elite-tier returns - no exceptions
-12. Garbage bundles (3+ low-tier assets for 1 elite) are never acceptable
-13. QB-for-aging-RB in SF leagues requires premium asset added (WR1, early 1st, or QB)
-`.trim();
-}
-
 export function detectSFFromRosterPositions(rosterPositions: string[]): boolean {
   const sfPositions = ['SUPER_FLEX', 'SUPERFLEX', 'SF'];
   return rosterPositions.some(pos => sfPositions.includes(pos.toUpperCase()));
-}
-
-type GradeType = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
-
-export const GRADE_PRIORITY: GradeType[] = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
-
-function shouldShowAsSuggestion(evaluation: TradeEvaluation): boolean {
-  if (evaluation.tierViolation) return false;
-  if (evaluation.valueRatio >= 1.60) return false;
-  if (evaluation.plausibility === 'UNREALISTIC') return false;
-  if (evaluation.verdict === 'UNREALISTIC' || evaluation.verdict === 'VERY_LOPSIDED') return false;
-  
-  const idpOnlyTrade = evaluation.senderAssets.every(a => a.isIDP || a.isPick);
-  const targetingElite = evaluation.receiverAssets.some(a => a.tier !== null && a.tier <= 1);
-  if (idpOnlyTrade && targetingElite) return false;
-  
-  return true;
-}
-
-export function categorizeTradeSuggestion(evaluation: TradeEvaluation): 'VIABLE' | 'AGGRESSIVE' | 'UNREALISTIC' {
-  if (!shouldShowAsSuggestion(evaluation)) {
-    return 'UNREALISTIC';
-  }
-  
-  if (evaluation.plausibility === 'MEDIUM' || evaluation.verdict === 'LOPSIDED') {
-    return 'AGGRESSIVE';
-  }
-  
-  return 'VIABLE';
 }
 

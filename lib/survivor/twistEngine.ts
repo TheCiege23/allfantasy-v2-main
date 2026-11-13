@@ -1,12 +1,5 @@
 import { prisma } from '@/lib/prisma'
 
-export type TwistRecommendation = {
-  twistType: string
-  recommendedWeek: number
-  reason: string
-  priority: 'low' | 'medium' | 'high'
-}
-
 const TRIBE_CHOICE_TYPE = 'tribe_choice'
 const SWAP_TYPE = 'tribe_swap'
 const EXILE_RETURN = 'exile_return'

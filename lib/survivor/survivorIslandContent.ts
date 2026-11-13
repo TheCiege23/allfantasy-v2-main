@@ -34,12 +34,6 @@ export const SURVIVOR_CONDUCT_BULLETS = [
   'Spectator / “ghost” viewers may be allowed by the host — they must not tip active players.',
 ] as const
 
-/** Survivor “pool” (conference / pick-em style) — informational */
-export const SURVIVOR_POOL_RULES = [
-  'Some seasons run a Survivor-style pick pool (e.g. pick a winner from a chosen conference each week).',
-  'Wrong picks may cost advantages; many formats allow a limited number of “revives” before you’re locked out — your commissioner sets the exact rules.',
-].join(' ')
-
 /** Token Pool (parallel path for eliminated players) */
 export const SURVIVOR_TOKEN_POOL_BLURB = [
   'Exiled managers earn tokens from verified results for their separate weekly roster.',

@@ -3,10 +3,6 @@
  */
 
 export {
-  LEAGUE_CHAT_MESSAGES_LIMIT,
-} from "./LeagueChatService"
-
-export {
   validateMessageBody,
   MAX_MESSAGE_LENGTH,
   MIN_MESSAGE_LENGTH,
@@ -26,11 +22,10 @@ export {
   getReferencedMessageIdFromPin,
 } from "./PinnedLeagueMessageResolver"
 
-export { parseMentions, hasMentions, getLeagueMentionRanges } from "./LeagueMentionResolver"
+export { parseMentions, getLeagueMentionRanges } from "./LeagueMentionResolver"
 
 export {
   createLeaguePollPayload,
-  isPollMessage,
   parseLeaguePollPayload,
   getLeaguePollVoteUrl,
   getLeaguePollCloseUrl,
@@ -38,7 +33,6 @@ export {
 export type { LeaguePollPayload } from "./LeaguePollService"
 
 export {
-  getMentionsPayload,
   getTradeAcceptedNoticePayload,
   getWaiverNoticePayload,
 } from "./LeagueChatNotificationBridge"

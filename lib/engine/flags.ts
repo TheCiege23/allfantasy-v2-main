@@ -19,21 +19,6 @@ export function isEnabled(flag: EngineFlagKey): boolean {
   return ENGINE_FLAGS[flag] === true
 }
 
-export const ITERATION_LIMITS = {
-  monteCarlo: {
-    dev: 10000,
-    prod: 2000,
-  },
-  playoff: {
-    dev: 5000,
-    prod: 1500,
-  },
-  season: {
-    dev: 3000,
-    prod: 1000,
-  },
-} as const
-
 const CACHE_TTL = {
   rankings: 15 * 60 * 1000,
   trade: 5 * 60 * 1000,

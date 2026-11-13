@@ -267,8 +267,6 @@ export { PlayerFace } from './PlayerFace'
 
 /* ── row atoms ───────────────────────────────────────────────────────────── */
 
-export type Sev = 'bad' | 'warn' | 'good' | 'info'
-
 /** A labelled figure — `AF PROJ` over `15.8`. */
 export function StatPair({
   k,

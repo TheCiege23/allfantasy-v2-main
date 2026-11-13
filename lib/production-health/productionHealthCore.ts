@@ -347,15 +347,6 @@ export function computeJobHealth(
   }
 }
 
-export type CronStatusReport = {
-  trafficLight: TrafficLight
-  jobs: JobHealth[]
-  failed: string[]
-  stale: string[]
-  healthy: number
-  total: number
-}
-
 // ───────────────────────────── Cron state classification ──────────────────
 
 /**

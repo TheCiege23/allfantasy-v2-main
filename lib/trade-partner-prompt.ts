@@ -31,7 +31,6 @@ Bias:
 JSON only.`;
 
 const LeagueFormatSchema = z.enum(['dynasty', 'keeper', 'redraft']);
-export type LeagueFormat = z.infer<typeof LeagueFormatSchema>;
 
 const TeamRosterSchema = z.object({
   team_id: z.string(),

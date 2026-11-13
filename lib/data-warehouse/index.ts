@@ -26,32 +26,9 @@ export {
   type LeagueHistorySummary,
 } from './LeagueHistoryAggregator'
 export {
-  getPlayerFantasyPointsByPeriod,
-  getTeamPointsByPeriodForLeague,
-  getStandingsBySeasonForLeague,
-  getTransactionVolumeByLeague,
   getLeagueWarehouseSummaryForAI,
   type LeagueHistorySummary as WarehouseLeagueHistorySummary,
 } from './WarehouseQueryService'
-export {
-  isSportSupported,
-} from './SportWarehouseResolver'
-export {
-  type MaterializedPlayerTrend,
-  type MaterializedLeagueSummary,
-} from './AnalyticsFactMaterializer'
-export {
-  runGameStatsIngestionPipeline,
-  runMatchupScoringPipeline,
-  runRosterSnapshotPipeline,
-  runStandingsIngestionPipeline,
-  runDraftIngestionPipeline,
-  runTransactionIngestionPipeline,
-} from './pipelines'
-export {
-  type BackfillOptions,
-  type BackfillResult,
-} from './backfill'
 export {
   buildWarehouseStoreBundleResult,
 } from './FantasyDataWarehouse'

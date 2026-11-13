@@ -9,7 +9,6 @@
  *   - LeagueFitBreakdown / LeagueFitScore: scoring outputs.
  *   - LeagueRecommendation / UserRecommendation / CommissionerSuggestion: DTOs.
  *   - DiscoveryRailKind / DiscoveryRail: rail catalogue.
- *   - MatchmakingTelemetryEvent: tracking contract.
  *
  * Hard rules:
  *   - Types only. No I/O. No serialization. No UI.
@@ -160,34 +159,6 @@ export interface DiscoveryRail {
 /* -------------------------------------------------------------------------- */
 /* Telemetry                                                                  */
 /* -------------------------------------------------------------------------- */
-
-type MatchmakingTelemetryKind =
-  | "recommendation_viewed"
-  | "recommendation_ignored"
-  | "league_join_accepted"
-  | "commissioner_invite_sent"
-  | "commissioner_invite_accepted"
-  | "compatibility_success"
-
-/** Tracking-friendly event. No PII. */
-interface MatchmakingTelemetryEvent {
-  kind: MatchmakingTelemetryKind
-  /** Hashed user id / opaque correlation id. Never raw email. */
-  actorId: string
-  leagueId?: string | null
-  /** Hashed target user id (for commissioner-side events). */
-  targetUserId?: string | null
-  railKind?: DiscoveryRailKind | null
-  /** Fit score at the time of the event, if applicable. */
-  fitScore?: number | null
-  /** UTC ms epoch. */
-  occurredAt: number
-}
-
-/** Recorder contract — implementations live in app/edge code. */
-export interface MatchmakingTelemetryRecorder {
-  record(event: MatchmakingTelemetryEvent): Promise<void> | void
-}
 
 /* -------------------------------------------------------------------------- */
 /* Candidate input                                                            */

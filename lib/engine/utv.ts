@@ -14,20 +14,6 @@ import { pickRoundTable } from '@/lib/pick-curve'
 // Types
 // ---------------------------------------------------------------------------
 
-export interface UTVEntry {
-  playerId: string
-  name: string
-  sport: SportKey
-  position: string
-  utv: number // 0–1000
-  marketValue: number
-  tradeVolume: number // how many times traded in last 90 days
-  lastTradeDate: string | null
-  trend: 'rising' | 'falling' | 'stable'
-  trendDelta: number // change in last 14 days (-100 to +100)
-  updatedAt: string
-}
-
 interface UTVPickEntry {
   sport: SportKey
   year: number
@@ -132,24 +118,6 @@ export function computeUTV(inputs: {
   const normalized = totalWeight > 0 ? blendedValue / totalWeight : marketValue
 
   return normalizeToUTV(normalized, sport, position)
-}
-
-/**
- * Compute trend direction from recent value history.
- */
-export function computeTrend(
-  currentUtv: number,
-  previousUtv: number | null,
-  daysDelta: number = 14,
-): { trend: 'rising' | 'falling' | 'stable'; trendDelta: number } {
-  if (previousUtv == null) return { trend: 'stable', trendDelta: 0 }
-
-  const delta = currentUtv - previousUtv
-  const pctChange = previousUtv > 0 ? (delta / previousUtv) * 100 : 0
-
-  if (pctChange > 3) return { trend: 'rising', trendDelta: Math.round(delta) }
-  if (pctChange < -3) return { trend: 'falling', trendDelta: Math.round(delta) }
-  return { trend: 'stable', trendDelta: Math.round(delta) }
 }
 
 // ---------------------------------------------------------------------------

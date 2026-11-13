@@ -134,8 +134,6 @@ export function shouldProviderFillGap(
   return Boolean(metadata?.staleCurrent || metadata?.lowConfidenceCurrent)
 }
 
-export type MergeFieldPolicy = 'prefer_higher_tier' | 'never_overwrite_nonempty'
-
 function providerTierIndex(provider: ProviderName, domain: DataDomain, sport: string): number {
   const c = getFallbackProvidersForDomain(domain, sport)
   const i = c.indexOf(provider)

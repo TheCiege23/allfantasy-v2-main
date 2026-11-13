@@ -151,22 +151,6 @@ export function getAccent(leagueType: LeagueTypeId | null | undefined): AccentTo
   return ACCENTS[leagueType] ?? DEFAULT_ACCENT
 }
 
-/** Glass surface — frosted panel with layered depth and subtle inner shine. */
-export const GLASS_SURFACE =
-  'rounded-3xl border border-white/[0.08] bg-gradient-to-b from-white/[0.06] to-white/[0.02] backdrop-blur-2xl shadow-[0_24px_80px_-20px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)]'
-
-/** Softer surface for inner sub-panels with subtle depth. */
-export const GLASS_INNER =
-  'rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.015] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
-
-/** Ambient glow overlay — position behind content, tinted by accent hex. */
-export function ambientGlowStyle(hex: string): React.CSSProperties {
-  return {
-    background: `radial-gradient(600px circle at 50% 0%, ${hex}12, transparent 70%)`,
-    pointerEvents: 'none' as const,
-  }
-}
-
 // ── Media registry for videos + posters ─────────────────────────────
 // Every file path below resolves to /public/<file>. Missing files fall back gracefully via onError.
 

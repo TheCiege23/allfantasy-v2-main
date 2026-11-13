@@ -40,5 +40,3 @@ export interface UserLineupPreferenceProfile {
   traitSummary: Record<string, { confidence: number; sampleSize: number; lastReinforcedAt: string | null }>
 }
 
-export type ArchetypeHint = 'veteran' | 'rookie' | 'star' | 'streamer' | 'unknown'
-

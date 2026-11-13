@@ -159,14 +159,6 @@ export function buildRookieSignalDiagnostics(
   }
 }
 
-export type NcaaFootballClassFilterDiagnostics = {
-  totalPlayers: number
-  playersWithClass: number
-  classCounts: Record<string, number>
-  sampleClassValues: string[]
-  sampleMissingClassRows: Array<{ name: string; position: string; team: string | null }>
-}
-
 export function rookieHelperTrueWhenNflDraftYearMatchesSeason(args: {
   sport: string
   seasonYear: number

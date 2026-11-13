@@ -102,62 +102,6 @@ export async function getWeekVolumeProfile(
 }
 
 /**
- * Get the least busy NBA game day for a fantasy week.
- * Returns the date with the fewest games (but > 0). Returns null if no games.
- */
-export async function getLeastBusyDay(season: number, week: number): Promise<DayVolume | null> {
-  const profile = await getWeekVolumeProfile(season, week)
-  return profile.leastBusyDay
-}
-
-/**
- * Get the most busy NBA game day for a fantasy week.
- */
-export async function getMostBusyDay(season: number, week: number): Promise<DayVolume | null> {
-  const profile = await getWeekVolumeProfile(season, week)
-  return profile.mostBusyDay
-}
-
-/**
- * Get a balanced set of scoring days for Survivor-style leagues.
- * Selects the N days with the most even game distribution.
- * If count=0, returns all game days.
- */
-export async function getBalancedScoringDays(
-  season: number,
-  week: number,
-  count: number
-): Promise<DayVolume[]> {
-  const profile = await getWeekVolumeProfile(season, week)
-  const gameDays = profile.days.filter((d) => d.gameCount > 0)
-
-  if (count <= 0 || count >= gameDays.length) return gameDays
-
-  // Sort by how close each day is to the average (most balanced)
-  const avg = profile.averageGamesPerDay
-  const sorted = [...gameDays].sort((a, b) => {
-    const distA = Math.abs(a.gameCount - avg)
-    const distB = Math.abs(b.gameCount - avg)
-    return distA - distB
-  })
-
-  // Take the N most balanced days, then re-sort by date
-  return sorted.slice(0, count).sort((a, b) => a.date.localeCompare(b.date))
-}
-
-/**
- * Get total game counts for each day of a week.
- * Convenience wrapper that returns a simple date→count map.
- */
-export async function getWeekGameCounts(
-  season: number,
-  week: number
-): Promise<Record<string, number>> {
-  const profile = await getWeekVolumeProfile(season, week)
-  return profile.gamesPerDay
-}
-
-/**
  * Get volume profiles for a range of weeks (e.g., full season).
  * Useful for calendar views.
  */

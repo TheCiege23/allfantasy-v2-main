@@ -1,16 +1,5 @@
 import { prisma } from "@/lib/prisma"
 
-export type MatchupData = {
-  nodeId: string
-  round: number
-  region: string | null
-  teamA: string | null
-  teamB: string | null
-  seedA: number | null
-  seedB: number | null
-  sportsGameId: string | null
-}
-
 type WinProbability = {
   teamA: number
   teamB: number

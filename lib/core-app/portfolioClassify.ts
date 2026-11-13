@@ -122,35 +122,6 @@ export function classifyLeagueFormat(league: ClassifiableLeague): LeagueFormatFa
   }
 }
 
-/** Human labels, used by the screen and the tests alike so the two cannot drift. */
-export const FAMILY_LABEL: Record<FormatFamily, string> = {
-  dynasty: 'Dynasty',
-  keeper: 'Keeper',
-  redraft: 'Redraft',
-  other: 'Other formats',
-}
-
-export const SCORING_LABEL: Record<ScoringKind, string> = {
-  ppr: 'PPR',
-  half_ppr: 'Half PPR',
-  standard: 'Standard',
-}
-
-export const STATUS_LABEL: Record<CompetitiveStatus, string> = {
-  contender: 'Contender',
-  middle: 'Middle of the pack',
-  rebuild: 'Rebuilding',
-  unknown: 'Not enough to say',
-}
-
-export const STAGE_LABEL: Record<PortfolioStage, string> = {
-  drafting: 'Drafting',
-  pre_draft: 'Pre-draft',
-  in_season: 'In season',
-  complete: 'Season over',
-  unknown: 'Stage unknown',
-}
-
 type Third = -1 | 0 | 1
 
 /**
@@ -204,9 +175,3 @@ export function competitiveStatus(input: {
   return { status, source }
 }
 
-export const STATUS_SOURCE_LABEL: Record<StatusSource, string> = {
-  you: 'you told Chimmy',
-  standings: 'from the standings',
-  roster_value: 'from roster value',
-  standings_and_value: 'from standings and roster value',
-}

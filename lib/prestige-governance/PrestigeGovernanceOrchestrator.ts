@@ -51,6 +51,5 @@ export {
   getUnifiedManagerSummary,
   getUnifiedTeamSummary,
   getUnifiedManagerSummaries,
-  getUnifiedTeamSummaries,
 } from './UnifiedPrestigeQueryService'
 export { buildAIPrestigeContext } from './AIPrestigeContextResolver'

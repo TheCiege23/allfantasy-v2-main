@@ -156,24 +156,3 @@ export interface LeagueTeamSlot {
 /** League team row for tab UIs (draft, league, trades) */
 export type UserLeagueTeam = LeagueTeamSlot
 
-export interface LeagueChatMessage {
-  id: string
-  author_display_name: string
-  author_avatar: string | null
-  /** Unix ms (Sleeper-style) */
-  created: number
-  text: string
-  messageType: string
-  relativeTime: string
-  createdAt: string
-}
-
-export type LeagueTab =
-  | 'draft'
-  | 'team'
-  | 'league'
-  | 'players'
-  | 'trend'
-  | 'trades'
-  | 'scores'
-

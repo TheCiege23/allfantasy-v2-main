@@ -7,21 +7,6 @@ import { DAILY_SPORT_SEASON_SHAPE, regularSeasonWeeksFor, type DailySeasonSport 
 /** Supported league team sizes for dynasty. */
 export const DYNASTY_SUPPORTED_TEAM_SIZES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32] as const
 
-/** Bench count range by team size band. [min, max] for commissioner guidance. */
-export const DYNASTY_BENCH_BY_TEAM_SIZE: Record<string, [number, number]> = {
-  '4': [8, 12],
-  '6': [8, 12],
-  '8': [8, 12],
-  '10': [12, 16],
-  '12': [12, 16],
-  '14': [16, 22],
-  '16': [16, 22],
-  '18': [20, 28],
-  '20': [20, 30],
-  '24': [20, 30],
-  '32': [20, 30],
-}
-
 /** Default bench for 12-team dynasty (recommended preset). */
 export const DYNASTY_DEFAULT_12_BENCH = 14
 /** Default IR slots for dynasty. */

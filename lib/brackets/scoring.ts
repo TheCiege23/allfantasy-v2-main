@@ -6,18 +6,6 @@ export type BonusFlags = {
   insuranceEnabled?: boolean
 }
 
-export type ScoringRules = {
-  mode: ScoringMode
-  maxEntriesPerUser?: number
-  isPaidLeague?: boolean
-  insuranceEnabled?: boolean
-  insurancePerEntry?: number
-  upsetDeltaEnabled?: boolean
-  leverageBonusEnabled?: boolean
-  allowCopyBracket?: boolean
-  pickVisibility?: "visible" | "hidden_until_lock"
-}
-
 export function scoringConfigKey(mode: ScoringMode, flags: BonusFlags): string {
   const parts: string[] = [mode]
   if (flags.upsetDeltaEnabled) parts.push("upset")

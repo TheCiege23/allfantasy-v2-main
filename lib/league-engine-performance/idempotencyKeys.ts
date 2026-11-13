@@ -10,18 +10,3 @@ export function buildWaiverCronIdempotencyKey(leagueId: string, at: Date = new D
   return `cron:waiver:${leagueId}:${minute}`
 }
 
-/** Scoring batch: one key per league per season-week bucket. */
-export function buildScoringJobIdempotencyKey(
-  leagueId: string,
-  season: number,
-  weekOrRound: number,
-  at: Date = new Date(),
-): string {
-  const minute = at.toISOString().slice(0, 16)
-  return `job:scoring:${leagueId}:${season}:w${weekOrRound}:${minute}`
-}
-
-/** AI matchup / start-sit refresh — throttle duplicate enqueue for same league+week. */
-export function buildAiMatchupRefreshEnqueueKey(leagueId: string, week: number, surface: string): string {
-  return `ai:matchup:${leagueId}:w${week}:${surface}`
-}

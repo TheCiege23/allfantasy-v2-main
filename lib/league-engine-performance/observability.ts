@@ -50,37 +50,6 @@ export function createEngineTimer(): { elapsedMs: () => number } {
   }
 }
 
-/** Summarize a batch (e.g. waiver cron) without logging per league. */
-export function logLeagueEngineBatchSummary(event: {
-  subsystem: LeagueEngineSubsystem
-  action: string
-  processed: number
-  failed?: number
-  durationMs: number
-  extra?: Record<string, unknown>
-}): void {
-  logLeagueEngineEvent({
-    subsystem: event.subsystem,
-    action: event.action,
-    durationMs: event.durationMs,
-    ok: (event.failed ?? 0) === 0,
-    extra: {
-      processed: event.processed,
-      failed: event.failed ?? 0,
-      ...event.extra,
-    },
-  })
-}
-
 /** Default slow-path threshold for API routes (matchup build, import preview, etc.). */
 export const DEFAULT_SLOW_ROUTE_MS = 2500
-
-/** Roll-up summary for batch / cron health dashboards (no PII). */
-export type LeagueEngineFailureSummary = {
-  subsystem: LeagueEngineSubsystem
-  action: string
-  failures: number
-  total: number
-  sampleError?: string
-}
 

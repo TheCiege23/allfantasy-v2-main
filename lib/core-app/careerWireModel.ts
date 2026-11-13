@@ -16,8 +16,6 @@ import type { BriefStanding, StandingSnap } from './sinceLastVisit'
  * every league. It is only the fallback, after both sync-state lanes.
  */
 
-export const IMPORT_PLATFORMS = ['sleeper', 'espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker'] as const
-
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
   espn: 'ESPN',

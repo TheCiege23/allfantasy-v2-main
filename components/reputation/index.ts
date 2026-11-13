@@ -3,11 +3,6 @@
  */
 
 export {
-  CommissionerTierChip,
-  VerifiedCommissionerChip,
-  EliteCommissionerChip,
   LeagueTierChip,
   LongRunningLeagueChip,
-  HighRetentionChip,
-  TrustedRecruitingBadge,
 } from "./PrestigeChips"

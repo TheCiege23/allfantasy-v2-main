@@ -19,10 +19,3 @@ export function inferRiskTolerance(t: ManagerTendency): 'high' | 'medium' | 'low
   return 'medium'
 }
 
-// Simplified tendencies type for pipeline
-export type Tendencies = {
-  tradesSent: number
-  tradesAccepted: number
-  avgOverpayRatio: number
-}
-

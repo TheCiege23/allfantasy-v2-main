@@ -47,8 +47,6 @@ type PlayoffFitOverflow = {
   /** False once a bracket is generated: its rounds are fixed, so the team count no longer moves the final. */
   teamsDecideRounds: boolean
 }
-/** @deprecated Kept for its callers; the check now covers every playoff setting. */
-export type ChampionshipLengthOverflow = PlayoffFitOverflow
 
 type LeagueForFit = {
   id: string

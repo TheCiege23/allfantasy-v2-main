@@ -13,13 +13,3 @@ export function isSupportedGMCareerSport(sport: string | null | undefined): spor
   return isSupportedSport(sport)
 }
 
-export const GM_CAREER_SPORT_LABELS: Record<string, string> = {
-  NFL: 'NFL',
-  NHL: 'NHL',
-  NBA: 'NBA',
-  MLB: 'MLB',
-  NCAAF: 'NCAA Football',
-  NCAAB: 'NCAA Basketball',
-  SOCCER: 'Soccer',
-}
-

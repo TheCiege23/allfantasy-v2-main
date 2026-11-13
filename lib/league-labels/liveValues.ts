@@ -4,8 +4,6 @@
  */
 import { buildFullNflScoringConfig } from '@/lib/nfl-scoring/NflScoringPresets'
 import { buildFullScoringConfig as buildFullNbaScoringConfig } from '@/lib/nba-scoring/NbaScoringPresets'
-import { NFL_ROSTER_TEMPLATES } from '@/lib/nfl-roster/NflRosterTemplates'
-import { NBA_ROSTER_TEMPLATES } from '@/lib/nba-roster/NbaRosterTemplates'
 import { ROSTER_LABELS, type LabelSport, type RosterLabel, type ScoringLabel, type ScoringLabelId } from './catalog'
 
 /** Design value key → the live preset stat key(s) that score it. Every listed key must agree. */
@@ -37,12 +35,6 @@ export const NBA_DESIGN_TO_LIVE_KEYS: Readonly<Record<string, readonly string[]>
   three: ['three_point_made'],
   dd: ['double_double'],
   td: ['triple_double'],
-}
-
-/** Live keys the handoff deliberately leaves to "the AF standard tables" (K, DST, IDP). */
-export function isOutsideLabelScope(sport: LabelSport, liveKey: string): boolean {
-  if (sport !== 'NFL') return false
-  return /^(pat_|fg_|dst_|idp_)/.test(liveKey)
 }
 
 /** The full live rule map behind a scoring label, or null when no preset backs it. */
@@ -88,13 +80,6 @@ function rosterShapeFromSlots(slots: Record<string, number>): RosterShape {
     }
   }
   return { starters, bench, injured }
-}
-
-export function liveSlotsForRosterLabel(label: RosterLabel): Record<string, number> | null {
-  const b = label.backing
-  if (!b) return null
-  const list = b.kind === 'nfl' ? NFL_ROSTER_TEMPLATES : NBA_ROSTER_TEMPLATES
-  return list.find((t) => t.key === b.templateKey)?.slots ?? null
 }
 
 function sameStarters(a: Record<string, number>, b: Record<string, number>): boolean {
