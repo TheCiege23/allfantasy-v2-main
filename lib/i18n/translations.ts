@@ -3433,8 +3433,6 @@ export const translations: Record<string, Record<string, string>> = {
     "dashboard.shell.leagueNotFound": "League not found",
     "dashboard.shell.leagueNotInList": "No league with this id in your connected list.",
     "dashboard.shell.leagueWorkspace": "League workspace",
-    "dashboard.shell.leagueTabsPlaceholder":
-      "Draft, Team, League, Players, Trend, Trades, and Scores tabs will appear here (LEAGUE_PAGE_TASK).",
     "dashboard.shell.openChat": "Open Chimmy & chat",
     "dashboard.shell.openMyLeagues": "Open My Leagues",
     "dashboard.shell.openAfChat": "Open My Leagues",
