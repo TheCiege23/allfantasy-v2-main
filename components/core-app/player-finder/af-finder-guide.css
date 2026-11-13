@@ -1,0 +1,105 @@
+/* Player Finder guide (2026-11-13): components/core-app/screens/PlayerFinder.tsx, GameDayTriage.tsx. */
+
+/* The headline says what the page is for; give it the room a headline needs. */
+.af-core .af-pf-home-sub {
+  max-width: 62ch;
+  line-height: 1.45;
+  color: var(--text2);
+  font-size: 14px;
+}
+
+/* ── The every-league list under its count ─────────────────────────────────── */
+.af-core .af-pfg-leagues {
+  margin: 12px 0 0;
+}
+.af-core .af-pfg-count {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--surface2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.35;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-pfg-count::-webkit-details-marker {
+  display: none;
+}
+.af-core .af-pfg-count-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.af-core .af-pfg-count-caret {
+  flex: none;
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+.af-core .af-pfg-leagues:not([open]) .af-pfg-count-caret {
+  transform: rotate(-90deg);
+}
+.af-core .af-pfg-leagues[open] > .af-pfg-count {
+  margin-bottom: 10px;
+}
+
+/* ── Game day: "53 of 82 lineups read" behind a "?" ────────────────────────── */
+.af-core .af-pfg-why {
+  display: inline-block;
+  position: relative;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.af-core .af-pfg-why > summary {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line2);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-pfg-why > summary::-webkit-details-marker {
+  display: none;
+}
+.af-core .af-pfg-why[open] > summary {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.af-core .af-pfg-why-body {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Your players in a search, marked and listed first. */
+.af-core .af-pfg-yours {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/*
+ * Phones: under the count, every league is a row you scroll DOWN through, not a card you swipe sideways
+ * (2026-11-13 guide). The owner's report: the swipe showed "a few listed leagues" and never said how many.
+ */
+.af-core .af-pfg-leagues .af-pf-cards-list {
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow-x: visible;
+  scroll-snap-type: none;
+}
+.af-core .af-pfg-leagues .af-pf-lcard {
+  flex: none;
+}
+.af-core .af-pfg-leagues .af-pf-cards-hint {
+  display: none;
+}

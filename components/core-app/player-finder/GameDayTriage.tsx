@@ -12,6 +12,8 @@ import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineu
 import { TriageLineupLinks } from '@/components/core-app/player-finder/TriageLineupLinks'
 import { chipDetail, splitRosterAges, type GameDayTriage as Triage } from '@/lib/core-app/gameDayTriage'
 import { gamePlanMessages } from '@/lib/core-app/messages/gamePlan'
+import { finderGuideMessages } from '@/lib/core-app/messages/finderGuide'
+import '@/components/core-app/player-finder/af-finder-guide.css'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { lockState } from '@/lib/core-app/lineupLock'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
@@ -46,6 +48,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
   const m = useMessages(playerFinderMessages)
   /* The stale-league note says exactly what War Room's Game Plan says, in both languages. */
   const gp = useMessages(gamePlanMessages)
+  const g = useMessages(finderGuideMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const [showAll, setShowAll] = useState(false)
   if (!state.available) {
@@ -72,11 +75,23 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
         <h3 className="af-label af-pf-triage-title" id="af-pf-triage-h">
           {m.triageTitle}
         </h3>
+        {/*
+          The week shows; how many lineups were read folds behind a "?" (2026-11-13 guide). "53 of 82
+          lineups read · 4 best ball · …" before a single flagged starter read as the point of the card.
+        */}
         <span className="af-pf-triage-sub af-num">
-          {m.triageRead(leaguesRead, leagueCount)}
-          {bestBall > 0 ? m.triageBestBall(bestBall) : ''}
-          {unsupported > 0 ? m.triageUnsupported(unsupported) : ''}
-          {(state.data.unidentifiedStarters ?? 0) > 0 ? m.triageUnidentified(state.data.unidentifiedStarters ?? 0) : ''} · {weekLabel}
+          {weekLabel}
+          <details className="af-pfg-why">
+            <summary aria-label={g.readWhy} title={g.readWhy}>
+              ?
+            </summary>
+            <span className="af-pfg-why-body">
+              {m.triageRead(leaguesRead, leagueCount)}
+              {bestBall > 0 ? m.triageBestBall(bestBall) : ''}
+              {unsupported > 0 ? m.triageUnsupported(unsupported) : ''}
+              {(state.data.unidentifiedStarters ?? 0) > 0 ? m.triageUnidentified(state.data.unidentifiedStarters ?? 0) : ''}
+            </span>
+          </details>
         </span>
       </header>
       {/*

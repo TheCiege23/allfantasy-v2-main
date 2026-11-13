@@ -354,8 +354,9 @@ describe('Player Finder — core view', () => {
 
   it('says where he is across your leagues, and that someone else has him elsewhere', () => {
     renderCore()
-    expect(screen.getByText(/on 3 of your 6 leagues, across Yahoo, Sleeper and ESPN/)).toBeInTheDocument()
-    expect(screen.getByText(/rostered by others in 1/)).toBeInTheDocument()
+    // One counting line over the every-league list (2026-11-13 guide), open by default.
+    expect(screen.getByText(/^In 3 of your 6 leagues · .* · on Yahoo, Sleeper and ESPN · on someone else's team in 1$/)).toBeInTheDocument()
+    expect(screen.getByTestId('finder-every-league')).toHaveAttribute('open')
     expect(screen.getByText('Ready · Ankle')).toBeInTheDocument()
     // 3 of the 6 leagues the finder reads: half your fantasy life (playerFun.exposureOf, 2026-10-08).
     expect(screen.getByText('50% exposure · Core piece')).toBeInTheDocument()
@@ -389,7 +390,7 @@ describe('Player Finder — core view', () => {
     expect(screen.getAllByRole('row').slice(1)).toHaveLength(10)
     for (const b of screen.getAllByRole('button', { name: 'Show only your leagues' })) expect(b).toHaveAttribute('aria-expanded', 'true')
     // The header still counts them — folding hides rows, not facts.
-    expect(screen.getByText(/rostered by others in 7/)).toBeInTheDocument()
+    expect(screen.getByText(/on someone else's team in 7$/)).toBeInTheDocument()
   })
 
   it('offers "Alert me" on the open card when follows are available, and nothing when they are not', () => {
@@ -653,8 +654,8 @@ describe('Player Finder — game day', () => {
     expect(buttons[0].textContent).toMatch(/^Open (lineup in Yahoo|in Yahoo · League)/)
     // The banner sits above the tiles, at the top of the card — with the phone's league cards right under it (2026-10-08).
     const card = banner.closest('.af-pf-detail') as HTMLElement
-    expect(card.querySelector('.af-pf-gameday + .af-pf-cards')).not.toBeNull()
-    expect(card.querySelector('.af-pf-cards ~ .af-pf-compare-entry')).not.toBeNull()
+    expect(card.querySelector('.af-pf-gameday + .af-pfg-leagues .af-pf-cards')).not.toBeNull()
+    expect(card.querySelector('.af-pfg-leagues ~ .af-pf-compare-entry')).not.toBeNull()
   })
 
   it('offers no Open-lineup button for a best-ball league — the platform sets that lineup itself', () => {
@@ -725,7 +726,9 @@ describe('Player Finder — game-day home', () => {
   it('shows the flagged starters before any search, each row opening his card, with his lock', () => {
     render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={6} signedIn triage={TRIAGE} nowIso={NOW} />)
     const card = screen.getByRole('region', { name: 'Game day · your flagged starters' })
-    expect(within(card).getByText('3 of 6 lineups read · week 12')).toBeInTheDocument()
+    // The week shows; how many lineups were read sits behind a "?" (2026-11-13 guide).
+    expect(within(card).getByText('week 12')).toBeInTheDocument()
+    expect(within(card).getByText('3 of 6 lineups read').closest('details.af-pfg-why')).not.toBeNull()
     const rows = [...card.querySelectorAll('li.af-pf-triage-row')] as HTMLElement[]
     expect(rows).toHaveLength(2)
     const links = within(rows[0]).getAllByRole('link')
@@ -941,7 +944,7 @@ describe('Player Finder — compare', () => {
     expect(screen.getByRole('link', { name: 'Swap' })).toHaveAttribute('href', '/core/players?q=Jake%20Ferguson&player=NFL%3Ari-2&vs=NFL%3Ari-1&league=L-gang')
     expect(screen.getByRole('link', { name: 'Clear' })).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&league=L-gang')
     // The single card's own sections are gone; the compare table has a column per player.
-    expect(screen.queryByText(/on 3 of your 6 leagues/)).toBeNull()
+    expect(screen.queryByText(/on 3 of your 6 leagues|In 3 of your 6 leagues/)).toBeNull()
     const table = screen.getByRole('table', { name: 'Across your leagues' })
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['League', 'Kincaid', 'Ferguson', 'Gap'])
   })
