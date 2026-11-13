@@ -56,7 +56,6 @@ export const REPUTATION_DIMENSIONS = [
   'participationQualityScore',
   'responsivenessScore',
 ] as const
-export type ReputationDimensionKey = (typeof REPUTATION_DIMENSIONS)[number]
 
 export interface ReputationScores {
   overallScore: number

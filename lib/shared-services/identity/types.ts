@@ -48,19 +48,6 @@ export interface PlatformIdentity {
   sourceAttribution: SourceAttribution
 }
 
-export interface PlatformIdentityLinkRequest {
-  fantasyUserId: FantasyUserId
-  platform: ImportProvider
-  /**
-   * Must be a value already obtained from a real provider verification step
-   * (e.g. an OAuth callback, or a confirmed username->id lookup against the
-   * provider's own API). Never a raw, unverified, user-typed value — the
-   * Identity Service performs no fuzzy or inferred matching.
-   */
-  verifiedProviderUserId: string
-  displayName?: string | null
-}
-
 /**
  * Reuses playerIdResolver's existing confidence vocabulary rather than inventing a new one.
  *

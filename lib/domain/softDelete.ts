@@ -60,8 +60,6 @@ export const SOFT_DELETE_FILTERED_OPERATIONS = [
   'updateMany',
 ] as const
 
-export type SoftDeleteFilteredOperation = (typeof SOFT_DELETE_FILTERED_OPERATIONS)[number]
-
 const FILTERED = new Set<string>(SOFT_DELETE_FILTERED_OPERATIONS)
 
 // ─── The read-deleted escape ─────────────────────────────────────────────────

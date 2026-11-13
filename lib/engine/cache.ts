@@ -89,13 +89,3 @@ export async function invalidateCache(
   } catch {}
 }
 
-export async function cleanExpiredSnapshots(): Promise<number> {
-  try {
-    const result = await prisma.engineSnapshot.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
-    })
-    return result.count
-  } catch {
-    return 0
-  }
-}

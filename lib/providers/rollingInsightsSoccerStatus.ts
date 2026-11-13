@@ -49,12 +49,3 @@ export function shouldExpectSoccerLiveData(status: unknown): boolean {
   return !isSoccerGameReplaced(status)
 }
 
-/** Live feed `game_status` (Halftime, Fulltime, game_time, …). */
-export function normalizeRollingInsightsSoccerGameStatus(gameStatus: unknown): string {
-  if (gameStatus == null || gameStatus === '') return 'unknown'
-  const s = String(gameStatus).trim()
-  const low = s.toLowerCase()
-  if (low.includes('half')) return 'halftime'
-  if (low.includes('full')) return 'fulltime'
-  return s
-}

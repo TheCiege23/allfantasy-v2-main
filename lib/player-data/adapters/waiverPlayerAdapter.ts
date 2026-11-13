@@ -287,9 +287,3 @@ function formatWeatherSummary(gameContext: NflRedraftGameContext | null): string
   return parts.length ? parts.join(' / ') : gameContext.weather.condition
 }
 
-export function adaptWaiverWirePlayerList(
-  rows: UnifiedPlayerWireDto[],
-  flags?: PlayerDataAdapterFlags,
-): WaiverPlayerAdapted[] {
-  return rows.map((r) => adaptWaiverWirePlayer(r, flags))
-}

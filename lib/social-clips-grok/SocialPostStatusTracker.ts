@@ -30,9 +30,3 @@ export async function getPublishLogsForAsset(
   }));
 }
 
-export async function getFailedLogsForRetry(assetId: string, userId: string): Promise<string[]> {
-  const logs = await getPublishLogsForAsset(assetId, userId);
-  return logs
-    .filter((l) => l.status === 'failed' || l.status === 'provider_unavailable')
-    .map((l) => l.id);
-}

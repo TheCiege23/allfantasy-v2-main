@@ -42,11 +42,6 @@ const ACTIVE_STATUSES: ReadonlySet<EntitlementStatus> = new Set<EntitlementStatu
 
 const entitlementResolver = new EntitlementResolver()
 
-/** Owner/admin override — always passes, independent of subscription state. */
-export function isFantasyOsAdminOrOwner(input: FantasyOsAccessInput): boolean {
-  return isAdminRole(input.role) || isAdminEmailAllowed(input.email) || isDevAdminUserId(input.userId)
-}
-
 /**
  * Resolve Fantasy OS access + the reason. Admin/owner short-circuits without a DB read;
  * everyone else is checked against an active `enterprise` entitlement.
@@ -85,7 +80,3 @@ export type FantasyOsAccessView = {
   reason: 'owner' | 'admin' | 'enterprise' | 'unauthorized'
 }
 
-export async function resolveFantasyOsAccessView(input: FantasyOsAccessInput): Promise<FantasyOsAccessView> {
-  const { allowed, reason } = await resolveFantasyOsAccess(input)
-  return { allowed, reason: reason === 'none' ? 'unauthorized' : reason }
-}

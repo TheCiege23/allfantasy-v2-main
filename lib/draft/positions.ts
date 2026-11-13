@@ -141,26 +141,6 @@ export const SPORT_ROSTER_SLOTS: Record<string, RosterSlot[]> = {
   ],
 }
 
-export const SPORT_POSITION_FILTERS: Record<string, string[]> = {
-  NFL: ['All', 'QB', 'RB', 'WR', 'TE', 'FLEX', 'DL', 'LB', 'DB', 'IDP FLEX'],
-  NCAAFB: ['All', 'QB', 'RB', 'WR', 'TE', 'FLEX'],
-  NCAAF: ['All', 'QB', 'RB', 'WR', 'TE', 'FLEX'],
-  NBA: ['All', 'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'],
-  NCAABB: ['All', 'PG', 'SG', 'SF', 'PF', 'C'],
-  NCAAB: ['All', 'PG', 'SG', 'SF', 'PF', 'C'],
-  MLB: ['All', 'C', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'P'],
-  NHL: ['All', 'C', 'LW', 'RW', 'D', 'G'],
-  SOCCER: ['All', 'GK', 'DEF', 'MID', 'FWD'],
-  PGA: ['All'],
-}
-
-export function rosterSlotsForSport(sport: string): RosterSlot[] {
-  const u = sport.trim().toUpperCase()
-  const aliases: Record<string, string> = { NCAAFB: 'NCAAF', NCAABB: 'NCAAB', EPL: 'SOCCER', MLS: 'SOCCER' }
-  const key = aliases[u] ?? u
-  return SPORT_ROSTER_SLOTS[key] ?? SPORT_ROSTER_SLOTS.NFL!
-}
-
 export function positionColor(pos: string, sport?: string): string {
   const p = pos.trim().toUpperCase()
   const su = sport?.trim().toUpperCase() ?? ''

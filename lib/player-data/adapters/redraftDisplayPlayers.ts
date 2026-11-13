@@ -180,8 +180,3 @@ export function resolveDisplayPlayer(
   }
 }
 
-export function displayPlayersFromUnifiedRows(
-  rows: UnifiedPlayerWireDto[] | null | undefined,
-): DisplayPlayerRecord[] {
-  return (rows ?? []).map(displayPlayerFromUnifiedRow)
-}

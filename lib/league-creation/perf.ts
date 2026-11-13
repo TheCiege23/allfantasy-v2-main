@@ -44,13 +44,3 @@ export function emitLeagueCreationPerf(
   window.dispatchEvent(new CustomEvent(PERF_EVENT_NAME, { detail }))
 }
 
-export function setLeagueCreationPerfEnabled(enabled: boolean): void {
-  if (typeof window === 'undefined') return
-  try {
-    if (enabled) window.localStorage.setItem(PERF_FLAG_KEY, '1')
-    else window.localStorage.removeItem(PERF_FLAG_KEY)
-  } catch {
-    // Ignore storage failures in restrictive browser contexts.
-  }
-}
-

@@ -25,10 +25,6 @@ export const TRIBE_REDRAW_RESPONSE_ACTIONS: string[] = Object.values(TRIBE_REDRA
 /** What happens when the commissioner has not answered by the next council: a random redraw. */
 export const TRIBE_REDRAW_DEFAULT_DECISION: TribeRedrawDecision = 'approve'
 
-export function isTribeRedrawDecision(value: unknown): value is TribeRedrawDecision {
-  return typeof value === 'string' && (TRIBE_REDRAW_DECISIONS as readonly string[]).includes(value)
-}
-
 /**
  * The owner's rule: a tribe has fallen below half the size of the largest tribe. Exactly half
  * (4 vs 2) is not below it. Needs two tribes with at least one manager between them.

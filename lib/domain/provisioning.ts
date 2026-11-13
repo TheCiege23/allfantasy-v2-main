@@ -256,9 +256,6 @@ export async function provisionTenant(
 
 // ─── Suspension ──────────────────────────────────────────────────────────────
 
-export const SUSPENDABLE_FROM = ['TRIAL', 'ACTIVE', 'PAST_DUE'] as const
-export const RESUMABLE_FROM = ['SUSPENDED'] as const
-
 /**
  * What a suspension changes, as data.
  *

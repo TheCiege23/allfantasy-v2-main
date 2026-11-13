@@ -67,18 +67,6 @@ const DEVY_LEAGUE_TYPES: LeagueTypeId[] = ['devy', 'dynasty']
 /** League types that support C2C. */
 const C2C_LEAGUE_TYPES: LeagueTypeId[] = ['c2c']
 
-/** Draft types that are "live" league draft (not mock). Excludes mock_draft by design for this helper. */
-const LIVE_DRAFT_TYPES: DraftTypeId[] = [
-  'snake',
-  'linear',
-  'auction',
-  'slow_draft',
-  'devy_snake',
-  'devy_auction',
-  'c2c_snake',
-  'c2c_auction',
-]
-
 export function isDynastyLeagueType(leagueType: LeagueTypeId): boolean {
   return DYNASTY_LEAGUE_TYPES.includes(leagueType)
 }
@@ -93,21 +81,12 @@ export function isKeeperLeagueType(leagueType: LeagueTypeId): boolean {
   return KEEPER_LEAGUE_TYPES.includes(leagueType)
 }
 
-/** True when league type is exactly keeper (hybrid seasonal + retention), not dynasty. */
-export function isKeeperOnlyLeagueType(leagueType: LeagueTypeId): boolean {
-  return leagueType === 'keeper'
-}
-
 export function isDevyLeagueType(leagueType: LeagueTypeId): boolean {
   return DEVY_LEAGUE_TYPES.includes(leagueType)
 }
 
 export function isC2CLeagueType(leagueType: LeagueTypeId): boolean {
   return C2C_LEAGUE_TYPES.includes(leagueType)
-}
-
-export function isLiveDraftType(draftType: DraftTypeId): boolean {
-  return LIVE_DRAFT_TYPES.includes(draftType)
 }
 
 export function getAllowedLeagueTypesForSport(sport: LeagueSport | string): LeagueTypeId[] {

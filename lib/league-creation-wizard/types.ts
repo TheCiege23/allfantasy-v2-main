@@ -184,75 +184,6 @@ export interface WizardPrivacySettings {
   allowInviteLink: boolean
 }
 
-/**
- * UI-only type contracts used by wizard format panels.
- * These are consolidated here so panel imports remain stable.
- */
-export interface WizardSurvivorSettings {
-  commissionerPlays: boolean
-  tribeCount: number
-  mergeAtCount: number
-  idolsEnabled: boolean
-  exileEnabled: boolean
-  rocksEnabled: boolean
-  idolCount: number
-}
-
-export interface WizardZombieSettings {
-  whispererSelection: 'random' | 'veteran_priority'
-  infectionLossToWhisperer: boolean
-  infectionLossToZombie: boolean
-  zombieTradeBlocked: boolean
-  serumReviveCount: number
-  ambushCountPerWeek: number
-}
-
-export interface WizardGuillotineSettings {
-  endgame: 'last_team_standing' | 'final_four' | 'final_three' | 'final_two'
-  eliminationsPerPeriod: number
-  faabBudget: number
-  protectedWeek1: boolean
-  samePeriodPickups: boolean
-  tradesEnabled: boolean
-}
-
-export interface WizardTournamentSettings {
-  participantCount: number
-  conferenceCount: number
-  leaguesPerConference: number
-  teamsPerLeague: number
-  namingMode: 'ai_generated' | 'commissioner_custom' | 'hybrid'
-  totalRounds: number
-  advancersPerLeague: number
-  bubbleEnabled: boolean
-  redraftBetweenRounds: boolean
-  tradesEnabled: boolean
-}
-
-export interface WizardSalaryCapSettings {
-  draftMode: 'auction' | 'snake'
-  salaryCurve: 'linear' | 'steep' | 'exponential' | 'flat'
-  totalCap: number
-  maxSalary: number
-  minSalary: number
-  defaultContractYears: number
-  maxContractYears: number
-  franchiseTagEnabled: boolean
-  deadMoneyEnabled: boolean
-  capRolloverEnabled: boolean
-  capFloorEnabled: boolean
-}
-
-export interface WizardIdpSettings {
-  positionMode: 'standard' | 'advanced' | 'hybrid'
-  rosterPreset: 'beginner' | 'standard' | 'advanced' | 'custom'
-  dlSlots: number
-  lbSlots: number
-  dbSlots: number
-  idpFlexSlots: number
-  scoringPreset: 'balanced' | 'tackle_heavy' | 'big_play_heavy'
-}
-
 export interface LeagueCreationWizardState {
   step: WizardStepId
   /** Starting point: build fresh, clone an AF league’s settings, or use the full import flow elsewhere. */
@@ -302,9 +233,6 @@ export const WIZARD_STEP_ORDER = [
   'draft_privacy',
   'review',
 ] as const satisfies readonly WizardStepId[]
-
-/** Steps actually shown in the current wizard flow (subset of {@link WizardStepId}). */
-export type WizardActiveStepId = (typeof WIZARD_STEP_ORDER)[number]
 
 export const DEFAULT_DRAFT_SETTINGS: WizardDraftSettings = {
   rounds: 15,

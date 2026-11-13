@@ -8,7 +8,6 @@
  * deterministic fixture provider instead of hitting the network.
  */
 
-import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
 import type { LiveGameSnapshot, LiveGameStatus } from '@/lib/live-scoring/types'
 
 /** A scheduled/active game with the two team abbreviations, from the schedule source. */
@@ -154,40 +153,3 @@ export function teamsInGames(games: readonly LiveGameLite[]): string[] {
   return [...set]
 }
 
-/**
- * Deterministic in-memory provider for tests + staging E2E. No network. Returns
- * exactly the games/stats it was constructed with; `normalizeGameStatus` reuses the
- * canonical normalizer so fixtures behave like the real provider.
- */
-export class FixtureLiveStatsProvider implements LiveStatsProvider {
-  constructor(
-    private readonly fixture: {
-      games: LiveGameLite[]
-      playerStats?: Map<string, Record<string, number>>
-      teamDefenseStats?: Map<string, Record<string, number>>
-    },
-  ) {}
-
-  async fetchActiveGames(): Promise<LiveGameLite[]> {
-    return this.fixture.games
-  }
-
-  async fetchPlayerStatsForGames(
-    query: LiveStatsQuery & { games: readonly LiveGameLite[]; playerIds: readonly string[] },
-  ): Promise<Map<string, Record<string, number>>> {
-    const want = new Set(query.playerIds)
-    const out = new Map<string, Record<string, number>>()
-    for (const [playerId, stats] of this.fixture.playerStats ?? []) {
-      if (want.has(playerId)) out.set(playerId, stats)
-    }
-    return out
-  }
-
-  async fetchTeamDefenseStatsForGames(): Promise<Map<string, Record<string, number>>> {
-    return new Map(this.fixture.teamDefenseStats ?? [])
-  }
-
-  normalizeGameStatus(raw: string | null | undefined): LiveGameStatus {
-    return normalizeLiveGameStatus(raw)
-  }
-}

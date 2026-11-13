@@ -87,4 +87,3 @@ export const PremiumLineupDecisionJsonSchema = z.object({
   alerts: z.array(z.string()),
 })
 
-export type PremiumLineupDecisionJsonZ = z.infer<typeof PremiumLineupDecisionJsonSchema>

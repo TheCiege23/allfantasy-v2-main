@@ -1,9 +1,5 @@
 export type SportCode = 'NFL' | 'NBA' | 'MLB' | string
 
-export interface AgingCurveContext {
-  sport: SportCode
-}
-
 export interface PlayerHistoryPoint {
   season: number
   age: number | null

@@ -20,7 +20,6 @@ export const GoalTypeEnum = z.enum([
   'youth_movement', 'pick_collection', 'prospect_pipeline', 'c2c_dual_window_balance',
   'devy_pipeline_build', 'risk_control', 'aggressive_upside', 'commissioner_defined_custom_goal',
 ])
-export type GoalType = z.infer<typeof GoalTypeEnum>
 
 export type TrendDirection = 'improving' | 'stable' | 'drifting' | 'off_track'
 

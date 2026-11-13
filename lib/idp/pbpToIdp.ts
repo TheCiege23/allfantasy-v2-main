@@ -34,20 +34,6 @@ const add = (line: IdpWeeklyStatLine, key: string, n = 1) => {
   line[key] = (line[key] ?? 0) + n
 }
 
-/**
- * ⚠ NOT MAPPED, ON PURPOSE:
- *
- *   role 'fumbler'  — GAPS N-06 records this as ambiguous: it may name the
- *                     player who FUMBLED rather than the one who forced it.
- *                     Crediting a forced fumble to whoever fumbled would hand
- *                     defensive points to the offense that lost the ball.
- *
- *   action 'pressure' — a hurry is not a QB hit, and `idp_qb_hit` is the only
- *                     near-miss key available. Counting hurries as hits would
- *                     inflate every edge rusher in the league.
- */
-const UNMAPPED_BY_DESIGN = ['fumbler', 'pressure'] as const
-
 function isDefensivePlayer(p: PbpPlayer): boolean {
   return p.role === 'defender' || p.role === 'interceptor' || p.role === 'recoverer'
 }
@@ -176,5 +162,3 @@ export function idpLinesFromGame(game: PbpGame): IdpGameLine[] {
   return [...byPlayer.values()].filter((l) => Object.keys(l.stats).length > 0)
 }
 
-/** Exported so a test can assert the exclusions stay deliberate. */
-export const __unmappedByDesign = UNMAPPED_BY_DESIGN

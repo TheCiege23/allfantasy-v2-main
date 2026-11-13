@@ -48,9 +48,6 @@ export type MissingStatVerdict =
   | 'game_not_final'
   | 'unplaced'
 
-/** Verdicts under which a missing player is TRULY worth 0 for the week. */
-export const MISSING_STAT_ZERO_VERDICTS: ReadonlySet<MissingStatVerdict> = new Set(['did_not_play', 'no_game', 'inactive'])
-
 /** Verdicts that mean the feed is missing data: the week must not seal (and a chop must not run). */
 export const MISSING_STAT_BLOCKING_VERDICTS: ReadonlySet<MissingStatVerdict> = new Set(['game_box_missing', 'game_not_final'])
 

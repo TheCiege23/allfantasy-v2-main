@@ -54,11 +54,6 @@ export const DYNASTY_SPORT_PRESETS: readonly DynastySportPreset[] = [
   { id: 'mlb_dynasty_points_deep', sport: 'MLB', scoringPresetId: 'mlb_points', benchCount: 26, irCount: 6, taxiSlotCount: 0, taxiEligibilityYears: 3, startupRosterDepth: 40 },
 ]
 
-export function isDynastySportPresetSport(sport: string | null | undefined): sport is DynastySportPresetSport {
-  const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'NBA' || s === 'NHL' || s === 'MLB'
-}
-
 /** Presets for one sport, default first. Empty for NFL / NCAAF / NCAAB / SOCCER. */
 export function getDynastySportPresets(sport: string | null | undefined): DynastySportPreset[] {
   const s = String(sport ?? '').trim().toUpperCase()

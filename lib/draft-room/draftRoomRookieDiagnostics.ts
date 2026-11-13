@@ -3,7 +3,6 @@
  */
 
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
-import { normalizeCollegeClass } from '@/lib/draft-room/collegeClass'
 import {
   isDraftRoomRookie,
   poolRowHasRookieSignals,
@@ -109,19 +108,6 @@ export function coalesceYearsExpFromNormalizedEntry(e: NormalizedDraftEntry): nu
   return null
 }
 
-export function playerEntryFromNormalizedForRookieDiagnostics(
-  e: NormalizedDraftEntry,
-): DraftRoomRookiePlayerLike {
-  const yearsExp = coalesceYearsExpFromNormalizedEntry(e)
-  const base: DraftRoomRookiePlayerLike = {
-    ...e,
-    yearsExp,
-    isRookie: e.isRookie,
-    display: e.display ?? null,
-  }
-  return base
-}
-
 export function buildRookieSignalDiagnostics(
   players: DraftRoomRookiePlayerLike[],
   sport: string,
@@ -179,63 +165,6 @@ export type NcaaFootballClassFilterDiagnostics = {
   classCounts: Record<string, number>
   sampleClassValues: string[]
   sampleMissingClassRows: Array<{ name: string; position: string; team: string | null }>
-}
-
-/**
- * When NCAA football freshman/class filters look empty, inspect class coverage on pool rows.
- * Uses `display.metadata.class` / `collegeClass` — align ingestion with Rolling Insights `class`.
- */
-export function buildNcaaFootballClassFilterDiagnostics(
-  players: DraftRoomRookiePlayerLike[],
-): NcaaFootballClassFilterDiagnostics {
-  const classCounts: Record<string, number> = {}
-  const sampleClassValues: string[] = []
-  const seen = new Set<string>()
-  const sampleMissingClassRows: NcaaFootballClassFilterDiagnostics['sampleMissingClassRows'] = []
-  let playersWithClass = 0
-
-  for (const p of players) {
-    const dm =
-      p.display?.metadata && typeof p.display.metadata === 'object'
-        ? (p.display.metadata as Record<string, unknown>)
-        : undefined
-    const nested =
-      dm && typeof dm.metadata === 'object' && dm.metadata
-        ? (dm.metadata as Record<string, unknown>).class
-        : undefined
-    const raw =
-      dm?.collegeClass ?? dm?.class ?? nested
-    const cls =
-      typeof raw === 'string'
-        ? raw.trim()
-        : raw != null && raw !== ''
-          ? String(raw).trim()
-          : ''
-
-    if (cls) {
-      playersWithClass += 1
-      const bucket = normalizeCollegeClass(cls)
-      classCounts[bucket] = (classCounts[bucket] ?? 0) + 1
-      if (seen.size < 16 && !seen.has(cls)) {
-        seen.add(cls)
-        sampleClassValues.push(cls)
-      }
-    } else if (sampleMissingClassRows.length < 12) {
-      sampleMissingClassRows.push({
-        name: String((p as { name?: string }).name ?? ''),
-        position: String((p as { position?: string }).position ?? ''),
-        team: (p as { team?: string | null }).team ?? null,
-      })
-    }
-  }
-
-  return {
-    totalPlayers: players.length,
-    playersWithClass,
-    classCounts,
-    sampleClassValues,
-    sampleMissingClassRows,
-  }
 }
 
 export function rookieHelperTrueWhenNflDraftYearMatchesSeason(args: {

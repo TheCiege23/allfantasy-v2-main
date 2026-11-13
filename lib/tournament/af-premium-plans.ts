@@ -53,4 +53,3 @@ export const AF_TOKEN_COST_TIERS = {
   deep: { tokens: 3, examples: 'Tournament-wide report, fairness scan, full draft-room sequence' },
 } as const
 
-export type MonetizationSurface = 'tournament_commissioner' | 'league_shell' | 'dashboard_ai'

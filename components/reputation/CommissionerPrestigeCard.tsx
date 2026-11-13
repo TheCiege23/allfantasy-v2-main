@@ -82,11 +82,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function CommissionerPrestigeCardSkeleton({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn("h-28 animate-pulse rounded-xl", className)}
-      style={{ background: "var(--panel2)" }}
-    />
-  )
-}

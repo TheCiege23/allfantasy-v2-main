@@ -26,11 +26,3 @@ export function ensureNumber(value: any, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
-export function ensureObject(value: any): Record<string, any> {
-  return value && typeof value === "object" ? value : {}
-}
-
-export function safeDivide(a: number, b: number): number {
-  if (!b || b === 0) return 0
-  return a / b
-}

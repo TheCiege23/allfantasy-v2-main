@@ -1,5 +1,4 @@
 import type { DevyPlayer } from '@prisma/client'
-import { getPlayerAnalytics, type PlayerAnalytics } from './player-analytics'
 
 export interface DevyIntelMetrics {
   /** Null when no recruiting evidence exists — never the bare 0.75 default. */
@@ -48,16 +47,6 @@ const DRAFT_CAPITAL_MULTIPLIERS: Record<number, number> = {
 }
 
 const DRAFT_CAPITAL_UDFA = 0.10
-
-const DYNASTY_VALUE_BY_ROUND: Record<number, { min: number; max: number }> = {
-  1: { min: 8000, max: 10000 },
-  2: { min: 5500, max: 7999 },
-  3: { min: 3500, max: 5499 },
-  4: { min: 2000, max: 3499 },
-  5: { min: 1000, max: 1999 },
-  6: { min: 500, max: 999 },
-  7: { min: 200, max: 499 },
-}
 
 export function computeRecruitingComposite(player: DevyPlayer): number {
   if (player.recruitingComposite != null && player.recruitingComposite > 0) {
@@ -378,7 +367,6 @@ export function computeDraftProjectionScore(player: DevyPlayer): number {
   return Math.round(Math.min(100, Math.max(0, dps)) * 100) / 100
 }
 
-
 // ──────────────────────────────────────────────────────────────────
 // Evidence layer — what we actually know about a player
 //
@@ -650,115 +638,6 @@ export function computeDevyFinalScore(
   }
 }
 
-export function computeDevyDynastyValue(
-  player: DevyPlayer,
-  teamDirection: 'Contender' | 'Rebuilder',
-): number | null {
-  const metrics = computeAllDevyIntelMetrics(player)
-  const round = metrics.projectedDraftRound
-  // A dynasty value is a price. Without a projected round and a score there is
-  // nothing to price, and inventing one is worse than showing nothing.
-  if (round == null || metrics.draftProjectionScore == null) return null
-  const rangeForRound = DYNASTY_VALUE_BY_ROUND[round] || { min: 100, max: 199 }
-
-  const positionInRound = (metrics.draftProjectionScore / 100)
-  let dynastyValue = rangeForRound.min + (rangeForRound.max - rangeForRound.min) * positionInRound
-
-  const yearsOut = Math.max(0, (player.draftEligibleYear || 2028) - new Date().getFullYear())
-
-  if (teamDirection === 'Contender') {
-    dynastyValue *= Math.max(0.5, 1 - yearsOut * 0.15)
-  } else {
-    dynastyValue *= Math.min(1.3, 1 + yearsOut * 0.08)
-  }
-
-  if (metrics.volatilityScore > 60) dynastyValue *= 0.85
-  if (metrics.injurySeverityScore > 50) dynastyValue *= 0.90
-
-  if (metrics.ppaScore >= 80) dynastyValue *= 1.08
-  else if (metrics.ppaScore >= 65) dynastyValue *= 1.04
-
-  if (metrics.wepaScore >= 80) dynastyValue *= 1.05
-  else if (metrics.wepaScore >= 65) dynastyValue *= 1.02
-
-  if (metrics.transferRisk > 20) dynastyValue *= 0.92
-  else if (metrics.transferRisk > 10) dynastyValue *= 0.96
-
-  if (metrics.teamContextBoost > 0) {
-    dynastyValue *= Math.min(1.10, 1 + metrics.teamContextBoost * 0.005)
-  } else if (metrics.teamContextBoost < 0) {
-    dynastyValue *= Math.max(0.92, 1 + metrics.teamContextBoost * 0.005)
-  }
-
-  return Math.round(dynastyValue)
-}
-
-export function computeDevyAcceptDrivers(
-  player: DevyPlayer,
-  partnerArchetype: string | null,
-  leagueLdiPick: number | null
-): { driver: string; delta: number; direction: 'boost' | 'penalty' }[] {
-  const drivers: { driver: string; delta: number; direction: 'boost' | 'penalty' }[] = []
-  const metrics = computeAllDevyIntelMetrics(player)
-
-  if (partnerArchetype === 'FutureFocused' || partnerArchetype === 'future_focused') {
-    drivers.push({ driver: 'Partner loves youth/future assets', delta: 0.08, direction: 'boost' })
-  }
-
-  if (leagueLdiPick != null && leagueLdiPick > 65) {
-    drivers.push({ driver: 'League heavily invests in draft capital', delta: 0.05, direction: 'boost' })
-  }
-
-  const breakoutAge = computeBreakoutAge(player)
-  if (breakoutAge != null && breakoutAge <= 20) {
-    drivers.push({ driver: `Early breakout age (${breakoutAge})`, delta: 0.03, direction: 'boost' })
-  }
-
-  // A driver is a stated reason. Without a projected round there is no reason
-  // to state, so none is pushed.
-  if (metrics.projectedDraftRound == null) {
-    // no round-based driver
-  } else if (metrics.projectedDraftRound <= 1) {
-    drivers.push({ driver: 'Projected Round 1 NFL pick', delta: 0.06, direction: 'boost' })
-  } else if (metrics.projectedDraftRound <= 2) {
-    drivers.push({ driver: 'Projected Day 1-2 NFL pick', delta: 0.03, direction: 'boost' })
-  }
-
-  if (metrics.injurySeverityScore > 70) {
-    drivers.push({ driver: 'Significant injury concern', delta: 0.07, direction: 'penalty' })
-  } else if (metrics.injurySeverityScore > 40) {
-    drivers.push({ driver: 'Moderate injury risk', delta: 0.03, direction: 'penalty' })
-  }
-
-  if (metrics.volatilityScore > 70) {
-    drivers.push({ driver: 'High volatility prospect', delta: 0.04, direction: 'penalty' })
-  }
-
-  if (metrics.ppaScore >= 80) {
-    drivers.push({ driver: 'Elite efficiency (PPA)', delta: 0.04, direction: 'boost' })
-  } else if (metrics.ppaScore >= 65) {
-    drivers.push({ driver: 'Above-average efficiency (PPA)', delta: 0.02, direction: 'boost' })
-  }
-
-  if (metrics.wepaScore >= 80) {
-    drivers.push({ driver: 'Strong opponent-adjusted production (WEPA)', delta: 0.03, direction: 'boost' })
-  }
-
-  if (metrics.transferRisk > 20) {
-    drivers.push({ driver: 'High transfer risk / uncertain landing spot', delta: 0.05, direction: 'penalty' })
-  } else if (metrics.transferRisk > 10) {
-    drivers.push({ driver: 'Transfer portal entrant', delta: 0.02, direction: 'penalty' })
-  }
-
-  if (metrics.teamContextBoost >= 8) {
-    drivers.push({ driver: 'Elite program context (SP+)', delta: 0.03, direction: 'boost' })
-  } else if (metrics.teamContextBoost <= -5) {
-    drivers.push({ driver: 'Weak program context', delta: 0.02, direction: 'penalty' })
-  }
-
-  return drivers
-}
-
 export function computeAvailabilityPctV2(
   player: DevyPlayer,
   pickNumber: number,
@@ -795,91 +674,3 @@ export function computeAvailabilityPctV2(
   return Math.round(Math.min(95, Math.max(5, baseAvailability)))
 }
 
-export async function enrichDevyWithAnalytics(player: DevyPlayer): Promise<DevyPlayer> {
-  try {
-    const analytics = await getPlayerAnalytics(player.name)
-    if (!analytics) return player
-
-    const enriched = { ...player }
-
-    if (enriched.breakoutAge == null && analytics.college.breakoutAge != null) {
-      enriched.breakoutAge = analytics.college.breakoutAge
-    }
-
-    if (enriched.athleticProfileScore == null && analytics.combine.athleticismScore != null) {
-      const rawScore = analytics.combine.athleticismScore
-      enriched.athleticProfileScore = Math.round(Math.min(100, Math.max(10, (rawScore / 140) * 100)) * 100) / 100
-    }
-
-    if (enriched.heightInches == null && analytics.physical.heightIn != null) {
-      enriched.heightInches = analytics.physical.heightIn
-    }
-    if (enriched.weightLbs == null && analytics.physical.weightLb != null) {
-      enriched.weightLbs = analytics.physical.weightLb
-    }
-
-    if (enriched.nflDraftRound == null && analytics.draft.draftYear != null && analytics.draft.draftPick != null) {
-      const pick = analytics.draft.draftPick
-      if (pick <= 32) enriched.nflDraftRound = 1
-      else if (pick <= 64) enriched.nflDraftRound = 2
-      else if (pick <= 100) enriched.nflDraftRound = 3
-      else if (pick <= 135) enriched.nflDraftRound = 4
-      else if (pick <= 176) enriched.nflDraftRound = 5
-      else if (pick <= 220) enriched.nflDraftRound = 6
-      else enriched.nflDraftRound = 7
-    }
-
-    return enriched
-  } catch {
-    return player
-  }
-}
-
-export async function getPlayerComparables(name: string): Promise<string[]> {
-  try {
-    const analytics = await getPlayerAnalytics(name)
-    return analytics?.comparablePlayers || []
-  } catch {
-    return []
-  }
-}
-
-export async function getPlayerCombineProfile(name: string): Promise<{
-  fortyYardDash: number | null
-  benchPress: number | null
-  broadJump: number | null
-  verticalJump: number | null
-  threeConeDrill: number | null
-  twentyYardShuttle: number | null
-  athleticismScore: number | null
-  speedScore: number | null
-  burstScore: number | null
-  agilityScore: number | null
-  sparqX: number | null
-  armLength: number | null
-  handSize: number | null
-  throwVelocity: number | null
-} | null> {
-  try {
-    const analytics = await getPlayerAnalytics(name)
-    if (!analytics) return null
-    return {
-      fortyYardDash: analytics.combine.fortyYardDash,
-      benchPress: analytics.combine.benchPress,
-      broadJump: analytics.combine.broadJump,
-      verticalJump: analytics.combine.verticalJump,
-      threeConeDrill: analytics.combine.threeConeDrill,
-      twentyYardShuttle: analytics.combine.twentyYardShuttle,
-      athleticismScore: analytics.combine.athleticismScore,
-      speedScore: analytics.combine.speedScore,
-      burstScore: analytics.combine.burstScore,
-      agilityScore: analytics.combine.agilityScore,
-      sparqX: analytics.combine.sparqX,
-      armLength: analytics.physical.armLengthIn,
-      handSize: analytics.physical.handSizeIn,
-      throwVelocity: analytics.physical.throwVelocityMph,
-    }
-  } catch {
-    return null
-  }
-}

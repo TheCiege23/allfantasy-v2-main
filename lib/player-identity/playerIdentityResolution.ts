@@ -313,13 +313,3 @@ export type IdentityMatchMetadata = {
   reason: string
 }
 
-export function buildIdentityMetadata(
-  matchType: IdentityMatchType,
-  reason: string,
-): IdentityMatchMetadata {
-  return {
-    matchType,
-    confidence: resolvePlayerIdentityConfidence(matchType),
-    reason,
-  }
-}

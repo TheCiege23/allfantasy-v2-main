@@ -42,23 +42,3 @@ export function summarizeDraft(
   }
 }
 
-/**
- * Aggregate multiple draft summaries into platform-wide round-by-round position rates.
- * Chunk 2/3 can use this for "most common pick in round 2" etc.
- */
-export function aggregateDraftMeta(summaries: DraftMetaSummary[]): {
-  byRound: Record<number, Record<string, number>>
-  totalDrafts: number
-} {
-  const byRound: Record<number, Record<string, number>> = {}
-  for (const s of summaries) {
-    for (const [roundStr, posCounts] of Object.entries(s.positionByRound)) {
-      const round = parseInt(roundStr, 10)
-      if (!byRound[round]) byRound[round] = {}
-      for (const [pos, count] of Object.entries(posCounts)) {
-        byRound[round][pos] = (byRound[round][pos] ?? 0) + count
-      }
-    }
-  }
-  return { byRound, totalDrafts: summaries.length }
-}

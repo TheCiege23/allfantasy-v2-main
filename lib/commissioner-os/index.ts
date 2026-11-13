@@ -11,15 +11,12 @@
 
 export {
   composeCapabilities,
-  capabilitiesForConcept,
-  capabilitiesForFormat,
   hasCapabilityDomain,
   type CommissionerCapabilityId,
 } from './capabilities'
 
 export {
   resolveActionAuthority,
-  describeActionAuthority,
   type ActionAuthority,
   type EffectScope,
   type ResolveActionAuthorityInput,
@@ -27,7 +24,6 @@ export {
 
 export {
   RULE_EFFECTS,
-  RULE_EFFECT_TYPES,
   getRuleEffect,
   type RuleEffectDefinition,
   type RuleEffectExecutorStatus,

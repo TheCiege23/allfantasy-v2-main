@@ -10,7 +10,6 @@ export type {
   MatchupPrepDashboardOutput,
   MatchupPrepDashboardResult,
   MatchupPrepToggles,
-  MatchupPrepViewTabId,
   MatchupScoringSummary,
   MatchupSlotEdge,
   MatchupStreamingHint,

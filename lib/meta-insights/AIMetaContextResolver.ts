@@ -50,14 +50,6 @@ function buildStrategyLine(
   return `Strategy shifts: ${line || 'none'}`
 }
 
-/**
- * Resolve full meta context for AI prompt injection (waiver, draft, trade, chat).
- * Use from API routes that call OpenAI / DeepSeek / Grok so models get platform meta.
- */
-export async function resolveAIMetaContext(sport: string): Promise<AIMetaContextPayload> {
-  return resolveAIMetaContextWithWindow(sport, '7d')
-}
-
 export async function resolveAIMetaContextWithWindow(
   sport: string,
   timeframe: '24h' | '7d' | '30d' = '7d'
@@ -78,14 +70,6 @@ export async function resolveAIMetaContextWithWindow(
     summary: aiSummary.summary,
     topTrends: aiSummary.topTrends,
   }
-}
-
-/**
- * Get only the text blob for prompt injection (minimal payload).
- */
-export async function getMetaPromptBlob(sport: string): Promise<string> {
-  const ctx = await getMetaInsightsContext(resolveSportForMetaUI(sport))
-  return formatMetaContextForPrompt(ctx)
 }
 
 /** Context optimized for DeepSeek quantitative modeling prompts. */

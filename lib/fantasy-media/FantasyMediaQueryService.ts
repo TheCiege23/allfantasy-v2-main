@@ -64,12 +64,3 @@ export async function createEpisode(input: CreateEpisodeInput) {
   });
 }
 
-export async function updateEpisodeStatus(
-  episodeId: string,
-  data: { status: string; playbackUrl?: string | null; meta?: object }
-) {
-  return prisma.fantasyMediaEpisode.update({
-    where: { id: episodeId },
-    data: { ...data, updatedAt: new Date() },
-  });
-}

@@ -88,7 +88,6 @@ export const LAUNCH_FEATURES = [
   "chimmy_explanation",
   "paid_upgrade",
 ] as const
-export type LaunchFeature = (typeof LAUNCH_FEATURES)[number]
 
 /** Pricing/plans/tokens come from the catalog — the single pricing source of truth. */
 export function getLaunchPricing(): MonetizationCatalog {

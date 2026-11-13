@@ -34,28 +34,6 @@ export type LeagueFeedCategory =
   | "system"
   | "other"
 
-export type LeagueFeedEventType =
-  | "draft_pick"
-  | "auto_pick"
-  | "waiver_claim"
-  | "drop"
-  | "trade_proposed"
-  | "trade_accepted"
-  | "trade_rejected"
-  | "trade_countered"
-  | "lineup_set"
-  | "player_moved"
-  | "commissioner_message"
-  | "ai_team_enabled"
-  | "ai_team_takeover"
-  | "matchup_result"
-  | "playoff_clinch"
-  | "eliminated"
-  | "league_joined"
-  | "league_created"
-  | "draft_started"
-  | "draft_completed"
-
 export type CreateLeagueFeedEventInput = {
   leagueId: string
   eventType: string

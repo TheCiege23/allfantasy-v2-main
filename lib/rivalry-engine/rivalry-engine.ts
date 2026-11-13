@@ -23,25 +23,6 @@ export type RivalryType =
   | 'trade_driven' | 'commissioner_challenger' | 'dynasty_long_arc'
   | 'cross_season_grudge' | 'social_cluster'
 
-export interface HistoricalMatchup {
-  managerA: string
-  managerB: string
-  season: number
-  week: number
-  scoreA: number
-  scoreB: number
-  isPlayoff: boolean
-  isChampionship: boolean
-}
-
-export interface TradeInteraction {
-  managerA: string
-  managerB: string
-  season: number
-  wasBlocked: boolean
-  wasControversial: boolean
-}
-
 export const RivalryInputSchema = z.object({
   leagueId: z.string(),
   sport: z.string().default('NFL'),

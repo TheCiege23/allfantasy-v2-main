@@ -1,7 +1,6 @@
 export {
   recordEngagementEvent,
   getActivitySummary,
-  getActiveDaysCount,
   getEngagementStreak,
 } from "./UserActivityTracker"
 export type { ActivitySummary, EngagementStreakData } from "./UserActivityTracker"

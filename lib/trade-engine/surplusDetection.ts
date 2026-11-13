@@ -92,37 +92,3 @@ export function detectSurplusAssets(
   };
 }
 
-export function buildTradablePool(
-  intelligence: LeagueIntelligence,
-  rosterId: number,
-  opts?: { includePicks?: boolean; includeFaab?: boolean }
-): Asset[] {
-  const includePicks = opts?.includePicks ?? true;
-  const includeFaab = opts?.includeFaab ?? false;
-
-  const { surplus } = detectSurplusAssets(intelligence, rosterId);
-
-  const anyIntel = intelligence as any;
-  const byRoster = anyIntel.assetsByRosterId?.[rosterId] as Asset[] | undefined;
-
-  const extra: Asset[] = [];
-  if (Array.isArray(byRoster)) {
-    for (const a of byRoster) {
-      if (!isAssetLike(a)) continue;
-      if (a.type === "PICK" && includePicks) extra.push(a);
-      if (a.type === "FAAB" && includeFaab) extra.push(a);
-    }
-  }
-
-  const seen = new Set<string>();
-  const out: Asset[] = [];
-  for (const a of [...surplus, ...extra]) {
-    const k = `${a.type}:${a.id}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(a);
-  }
-
-  out.sort((a, b) => (a.value ?? 0) - (b.value ?? 0));
-  return out;
-}

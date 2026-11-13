@@ -470,12 +470,3 @@ export function computeAcceptanceProbability(
   };
 }
 
-export function explainAcceptanceProbability(output: AcceptanceOutput): string {
-  const pct = Math.round(output.final * 100);
-
-  if (pct >= 75) return `Very likely to accept (${pct}%) — strong fit across all factors`;
-  if (pct >= 60) return `Likely to accept (${pct}%) — trade works well for their team`;
-  if (pct >= 45) return `Could go either way (${pct}%) — consider a counter offer`;
-  if (pct >= 30) return `Unlikely to accept (${pct}%) — significant adjustments needed`;
-  return `Very unlikely to accept (${pct}%) — consider a different trade structure`;
-}

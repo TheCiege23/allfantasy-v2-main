@@ -556,21 +556,3 @@ export function buildDeterministicFacts(
   }
 }
 
-/**
- * Format deterministic facts as a prompt block for AI injection.
- */
-export function formatFactsForPrompt(result: DeterministicFactsResult): string {
-  const lines = [
-    '=== DETERMINISTIC TEAM & LEAGUE FACTS (authoritative — AI must not contradict) ===',
-    '',
-    ...result.facts,
-    '',
-    'RULES FOR AI:',
-    '- These facts are GROUND TRUTH. Do not invent contradictory data.',
-    '- Biggest needs, urgency, and contender window scores MUST inform your recommendations.',
-    '- Drop candidates are pre-scored — reference them when suggesting drops.',
-    '- Use scarcity scores to adjust bid aggressiveness per position.',
-    '=== END DETERMINISTIC FACTS ===',
-  ]
-  return lines.join('\n')
-}

@@ -140,8 +140,6 @@ function compareFantraxIdDesc(a: string, b: string): number {
   return a < b ? 1 : a > b ? -1 : 0
 }
 
-export type MlbKnownIdentity = { fantraxId: string | null; name: string | null; team: string | null; position: string | null }
-
 /** The sets the rule reads, built from MLB `PlayerIdentityMap` rows. */
 export function knownMlbIdentitySets(identities: Iterable<{ fantraxId: string | null; normalizedName: string | null; canonicalName: string | null; currentTeam: string | null; position: string | null }>) {
   const fantraxIds = new Set<string>()

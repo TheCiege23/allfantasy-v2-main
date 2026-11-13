@@ -3,12 +3,8 @@
  * Delegates to trade-engine quality-gate where applicable; provides shared helpers.
  */
 
-export const MAX_CONFIDENCE_FOR_MINIMAL_DATA = 55;
-export const MAX_CONFIDENCE_FOR_PARTIAL_DATA = 75;
 export const MAX_CONFIDENCE_FOR_STALE_INJURY = 70;
 export const MAX_CONFIDENCE_FOR_STALE_VALUATION = 65;
-
-export type DataQualityTier = 'FULL' | 'PARTIAL' | 'MINIMAL';
 
 export interface FactGuardInput {
   confidence: number;

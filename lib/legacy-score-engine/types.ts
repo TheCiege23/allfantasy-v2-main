@@ -6,7 +6,6 @@
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export const LEGACY_SPORTS = [...SUPPORTED_SPORTS] as const
-export type LegacySport = (typeof LEGACY_SPORTS)[number]
 
 export const LEGACY_ENTITY_TYPES = ['MANAGER', 'TEAM', 'FRANCHISE'] as const
 export type LegacyEntityType = (typeof LEGACY_ENTITY_TYPES)[number]

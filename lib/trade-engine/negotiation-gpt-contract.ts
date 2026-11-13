@@ -34,15 +34,6 @@ export type NegotiationValidationResult = {
   violations: string[]
 }
 
-export const NEGOTIATION_GPT_INVALID_FALLBACK = {
-  opener: '',
-  rationale: '',
-  fallback: '',
-  counters: [] as Array<{ description: string; driverIds: string[] }>,
-  error: 'AI_OUTPUT_INVALID' as const,
-  fallbackMessage: 'Negotiation language unavailable due to driver mismatch.',
-}
-
 const BANNED_NEGOTIATION_PATTERNS = [
   /top[- ]?\d+\s+(WR|RB|QB|TE|K|DEF|DST|flex)/i,
   /\b(WR|RB|QB|TE)\d{1,2}\b/,

@@ -41,36 +41,3 @@ export function parseRankForTeamExternalId(teams: unknown, externalId: string | 
   return null
 }
 
-/** Oldest → newest within the last `maxPoints` saved snapshots (by recency). */
-export function buildRankTrailForExternalId(
-  snapshots: Array<{ teams: unknown; computedAt: Date }>,
-  externalId: string | null,
-  maxPoints: number,
-): number[] {
-  if (!externalId) return []
-  const sortedNewestFirst = [...snapshots].sort((a, b) => b.computedAt.getTime() - a.computedAt.getTime())
-  const slice = sortedNewestFirst.slice(0, maxPoints)
-  const chronological = slice.sort((a, b) => a.computedAt.getTime() - b.computedAt.getTime())
-  const ranks: number[] = []
-  for (const s of chronological) {
-    const r = parseRankForTeamExternalId(s.teams, externalId)
-    if (r != null) ranks.push(r)
-  }
-  return ranks
-}
-
-/** Oldest → newest within the last `maxPoints` saved snapshots (by recency). */
-export function buildMyRankTrailFromSnapshots(
-  snapshots: Array<{ teams: unknown; computedAt: Date }>,
-  maxPoints: number,
-): number[] {
-  const sortedNewestFirst = [...snapshots].sort((a, b) => b.computedAt.getTime() - a.computedAt.getTime())
-  const slice = sortedNewestFirst.slice(0, maxPoints)
-  const chronological = slice.sort((a, b) => a.computedAt.getTime() - b.computedAt.getTime())
-  const ranks: number[] = []
-  for (const s of chronological) {
-    const r = parseMyRankFromSnapshotTeams(s.teams)
-    if (r != null) ranks.push(r)
-  }
-  return ranks
-}

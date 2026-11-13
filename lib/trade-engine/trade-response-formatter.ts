@@ -1,6 +1,6 @@
 import type { TradeDecisionContextV1, AssetValuation, PlayerRiskMarker } from './trade-decision-context'
-import type { PeerReviewConsensus, DisagreementBlock } from './trade-analysis-schema'
-import type { QualityGateResult, ConditionalRecommendation } from './quality-gate'
+import type { DisagreementBlock } from './trade-analysis-schema'
+import type { ConditionalRecommendation } from './quality-gate'
 
 /** 'N/A' = refused: zero valued assets — see verdictHasNoSignal(). Never a letter. */
 export type FairnessGrade = 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F' | 'N/A'
@@ -175,17 +175,6 @@ function computeVetoRisk(pctDiff: number): ValueVerdict['vetoRisk'] {
   if (pctDiff <= 15) return 'Low'
   if (pctDiff <= 25) return 'Moderate'
   return 'High'
-}
-
-function computeEdgeLabel(ctx: TradeDecisionContextV1): string {
-  const pct = ctx.valueDelta.percentageDiff
-  const side = ctx.valueDelta.favoredSide
-
-  if (side === 'Even' || pct <= 3) return 'Dead even'
-  if (pct <= 7) return `Slight edge to Side ${side}`
-  if (pct <= 15) return `Clear edge to Side ${side} (+${pct}%)`
-  if (pct <= 25) return `Strong edge to Side ${side} (+${pct}%)`
-  return `Lopsided toward Side ${side} (+${pct}%)`
 }
 
 function computeNeedsAlignment(ctx: TradeDecisionContextV1): {
@@ -419,96 +408,6 @@ function computeAcceptanceScore(ctx: TradeDecisionContextV1, partnerFitScore: nu
   else likelihood = 'Very Unlikely'
 
   return { score, likelihood, signals }
-}
-
-function buildActionPlan(
-  gate: QualityGateResult,
-  ctx: TradeDecisionContextV1,
-  consensus: PeerReviewConsensus,
-  acceptanceScore: number
-): ActionPlan {
-  const pctDiff = ctx.valueDelta.percentageDiff
-  const favoredSide = ctx.valueDelta.favoredSide
-  const isConditional = gate.conditionalRecommendation.isConditional
-
-  let assessment: string
-  let sendAsIs = false
-  let adjustmentNeeded: string | null = null
-
-  const isReviewMode = consensus.disagreement.reviewMode
-
-  if (isConditional) {
-    const caveat = gate.conditionalRecommendation.reasons[0] || 'key data is missing'
-    assessment = `This recommendation is conditional — ${caveat}. Verify the missing information before acting on this analysis.`
-    sendAsIs = false
-    adjustmentNeeded = 'Confirm missing data (roster info, valuations, or injury status) before sending this trade'
-  } else if (isReviewMode) {
-    assessment = `Our AI models disagree on this trade — we recommend reviewing both perspectives before deciding. The value numbers are solid, but the strategic interpretation is split.`
-    sendAsIs = false
-    adjustmentNeeded = 'Wait for more data clarity or get input from leaguemates before sending'
-  } else if (pctDiff <= 5) {
-    assessment = 'This trade is close enough in value to send as-is. Both sides should feel good about this deal.'
-    sendAsIs = true
-  } else if (pctDiff <= 12) {
-    assessment = `Slightly favors Side ${favoredSide} by ${pctDiff}%. Sendable as-is if roster fit is strong, but a small sweetener could seal the deal.`
-    sendAsIs = acceptanceScore >= 60
-    if (!sendAsIs) {
-      adjustmentNeeded = `Consider adding a late-round pick or depth piece to balance the ${pctDiff}% gap`
-    }
-  } else if (pctDiff <= 20) {
-    assessment = `Noticeable edge to Side ${favoredSide} (+${pctDiff}%). You\'ll likely need to adjust before sending.`
-    sendAsIs = false
-    adjustmentNeeded = `The ${pctDiff}% value gap needs to be narrowed — add assets to the lighter side or remove from the heavier side`
-  } else {
-    assessment = `This trade heavily favors Side ${favoredSide} (+${pctDiff}%). It will almost certainly be rejected as-is.`
-    sendAsIs = false
-    adjustmentNeeded = `Major restructuring needed — the ${pctDiff}% gap is too large for most managers to accept`
-  }
-
-  const counters: ActionPlan['counters'] = []
-  for (const counter of gate.filteredCounters.slice(0, 2)) {
-    counters.push({
-      description: counter,
-      rationale: 'AI-suggested alternative based on roster needs and value alignment',
-    })
-  }
-
-  if (counters.length === 0 && pctDiff > 5) {
-    if (favoredSide === 'A') {
-      counters.push({
-        description: `Side A could add a future pick to close the ${pctDiff}% gap`,
-        rationale: 'Picks are the easiest way to bridge small value differences',
-      })
-    } else if (favoredSide === 'B') {
-      counters.push({
-        description: `Side B could add a future pick to close the ${pctDiff}% gap`,
-        rationale: 'Picks are the easiest way to bridge small value differences',
-      })
-    }
-  }
-
-  let messageText: string
-  if (sendAsIs) {
-    messageText = `Hey, I've been looking at our rosters and I think this trade makes sense for both of us. ${
-      ctx.sideA.needs.length > 0 ? `I could use help at ${ctx.sideA.needs.slice(0, 2).join('/')}` : 'It fills some gaps for me'
-    }${
-      ctx.sideB.needs.length > 0 ? ` and you look like you could use ${ctx.sideB.needs.slice(0, 2).join('/')} depth` : ''
-    }. Let me know what you think!`
-  } else if (pctDiff <= 15) {
-    messageText = `Hey, I've been thinking about a deal. I know the numbers might not be perfectly even, but I think this trade helps both our rosters${
-      ctx.sideB.needs.length > 0 ? ` — you get help at ${ctx.sideB.needs.slice(0, 2).join('/')}` : ''
-    }. Would you be open to something like this? Happy to tweak it.`
-  } else {
-    messageText = `Hey, I wanted to float a trade idea to start a conversation. I know this might need some adjustments, but I think there's a deal to be made here${
-      ctx.sideB.needs.length > 0 ? ` that addresses your ${ctx.sideB.needs.slice(0, 2).join('/')} needs` : ''
-    }. What would make this work for you?`
-  }
-
-  return {
-    bestOffer: { assessment, sendAsIs, adjustmentNeeded },
-    counters,
-    messageText,
-  }
 }
 
 const TIER_RANK: Record<string, number> = {
@@ -960,89 +859,3 @@ export function computeDeterministicVerdict(ctx: TradeDecisionContextV1): {
   }
 }
 
-export function formatTradeResponse(
-  consensus: PeerReviewConsensus,
-  ctx: TradeDecisionContextV1,
-  gate: QualityGateResult,
-  options?: { isotonicApplied?: boolean; rawAcceptProbability?: number }
-): FormattedTradeResponse {
-  const { verdict: detVerdict, intermediates } = computeDeterministicVerdict(ctx)
-  const { partnerFit, timing, rankingsImpact, injuryAdjusted: injuryAdjustedValue, starterBench: starterBenchDelta, acceptanceResult } = intermediates
-  const { score: acceptanceScore, likelihood, signals } = acceptanceResult
-
-  const leagueFreq = ctx.tradeHistoryStats.leagueTradeFrequency
-  const leagueActivity = leagueFreq === 'high'
-    ? `Active league (${ctx.tradeHistoryStats.totalTrades} trades, ${ctx.tradeHistoryStats.recentTrades} in last 30 days)`
-    : leagueFreq === 'medium'
-    ? `Moderate activity (${ctx.tradeHistoryStats.totalTrades} trades total)`
-    : `Low activity league (${ctx.tradeHistoryStats.totalTrades} trades total)`
-
-  const staleSources: string[] = []
-  if (ctx.missingData.valuationDataStale) staleSources.push('Valuations')
-  if (ctx.missingData.adpDataStale) staleSources.push('ADP')
-  if (ctx.missingData.injuryDataStale) staleSources.push('Injuries')
-  if (ctx.missingData.analyticsDataStale) staleSources.push('Analytics')
-  if (ctx.missingData.tradeHistoryStale) staleSources.push('Trade History')
-
-  const warnings = [...gate.filteredWarnings]
-  if (staleSources.length > 0) {
-    warnings.push(`Data freshness notice: ${staleSources.join(', ')} may be outdated`)
-  }
-
-  return {
-    deterministicVerdict: detVerdict,
-    valueVerdict: {
-      fairnessGrade: verdictHasNoSignal(ctx) ? 'N/A' : computeFairnessGrade(ctx.valueDelta.percentageDiff),
-      edge: computeEdgeLabel(ctx),
-      edgeSide: ctx.valueDelta.favoredSide,
-      valueDeltaPercent: ctx.valueDelta.percentageDiff,
-      valueDeltaAbsolute: ctx.valueDelta.absoluteDiff,
-      sideATotalValue: ctx.sideA.totalValue,
-      sideBTotalValue: ctx.sideB.totalValue,
-      confidence: gate.adjustedConfidence,
-      deterministicConfidence: gate.deterministicConfidence,
-      vetoRisk: computeVetoRisk(ctx.valueDelta.percentageDiff),
-      reasons: gate.filteredReasons,
-      warnings,
-      ...(() => {
-        const codes = [...(consensus.meta.disagreementCodes || [])]
-        let details = consensus.meta.disagreementDetails || ''
-        if (staleSources.length >= 2 && !codes.includes('data_quality_concern')) {
-          codes.push('data_quality_concern')
-          details = details
-            ? `${details} ${staleSources.length} data sources are stale, which may affect analysis reliability.`
-            : `${staleSources.length} data sources are stale, which may affect analysis reliability.`
-        }
-        return codes.length > 0 ? { disagreementCodes: codes, disagreementDetails: details } : {}
-      })(),
-      dataFreshness: {
-        staleSourceCount: staleSources.length,
-        staleSources,
-      },
-      dataCoverage: {
-        tier: gate.dataCoverage.tier,
-        score: gate.dataCoverage.score,
-        badge: gate.dataCoverage.badge,
-        dimensions: gate.dataCoverage.dimensions,
-      },
-      recommendationType: gate.conditionalRecommendation,
-      disagreement: consensus.disagreement,
-    },
-    viabilityVerdict: {
-      acceptanceLikelihood: likelihood,
-      acceptanceScore,
-      partnerFit,
-      timing,
-      rankingsImpact,
-      injuryAdjustedValue,
-      starterBenchDelta,
-      leagueActivity,
-      signals,
-      calibration: options?.isotonicApplied ? {
-        isotonicApplied: true,
-        rawAcceptProbability: options.rawAcceptProbability,
-      } : undefined,
-    },
-    actionPlan: buildActionPlan(gate, ctx, consensus, acceptanceScore),
-  }
-}

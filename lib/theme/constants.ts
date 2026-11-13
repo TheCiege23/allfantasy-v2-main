@@ -38,10 +38,6 @@ export const THEME_DISPLAY_NAMES: Record<ThemeId, string> = {
   system: 'System',
 }
 
-export function getThemeDisplayName(id: ThemeId): string {
-  return THEME_DISPLAY_NAMES[id] ?? id
-}
-
 function systemPrefersLight(): boolean {
   if (typeof window === 'undefined') return false
   try {

@@ -16,8 +16,6 @@ export const LEAGUE_TRADE_STATUSES = [
   'expired',
 ] as const
 
-export type LeagueTradeStatus = (typeof LEAGUE_TRADE_STATUSES)[number]
-
 export const TRADE_ITEM_TYPES = [
   'player',
   'rookie_pick',

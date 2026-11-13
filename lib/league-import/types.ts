@@ -20,17 +20,6 @@ export interface C2CImportSource {
   rosterDepth: number | 'all'
 }
 
-/**
- * Multi-source import job payload. `sources` must include exactly one 'pro'
- * and one 'college' entry. Downstream normalizer runs each source through
- * the single-provider pipeline, then merges by manager email/name match.
- */
-export interface MultiSourceImportJob {
-  leagueId?: string
-  leagueName?: string
-  sources: C2CImportSource[]
-}
-
 export interface SourceTracking {
   source_provider: ImportProvider
   source_league_id: string

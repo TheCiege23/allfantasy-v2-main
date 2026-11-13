@@ -527,33 +527,3 @@ export function getScoringNormalization(
   )
 }
 
-/**
- * Normalize a player value to the unified 0-10000 scale.
- * Applies sport-specific scale factor and scoring format multipliers.
- */
-export function normalizeValueForSport(
-  rawValue: number,
-  sport: string,
-  position: string,
-  scoringFormat?: string,
-): number {
-  const tuning = getSportTuning(sport)
-  const norm = scoringFormat
-    ? getScoringNormalization(sport, scoringFormat)
-    : tuning.scoringFormats[0]
-
-  if (!norm) return rawValue
-
-  const posMult = norm.positionMultipliers[position.toUpperCase()] ?? 1.0
-  const scaled = rawValue * posMult * norm.scaleFactor
-
-  // Apply consistency boost for low-scoring sports (soccer)
-  if (tuning.consistencyBoost) {
-    // Consistency boost: reduce volatility penalty, reward floor players
-    const volProfile = getVolatilityProfile(sport, position)
-    const consistencyFactor = 1 + volProfile.consistencyWeight * 0.1
-    return Math.round(scaled * consistencyFactor)
-  }
-
-  return Math.round(scaled)
-}

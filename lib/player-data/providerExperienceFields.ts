@@ -211,10 +211,6 @@ export function extractExperienceSignalsFromProviderPayload(
   return empty()
 }
 
-export function extractRollingInsightsExperienceSignals(input: unknown): ProviderExperienceSignal {
-  return extractExperienceSignalsFromProviderPayload(input, 'rolling_insights')
-}
-
 export function extractTheSportsDbExperienceSignals(input: unknown): ProviderExperienceSignal {
   return extractExperienceSignalsFromProviderPayload(input, 'thesportsdb')
 }

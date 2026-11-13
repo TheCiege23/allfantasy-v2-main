@@ -2,8 +2,6 @@ import { dispatchNotification } from "@/lib/notifications/NotificationDispatcher
 import { getDeepLinkRedirect } from "@/lib/routing/DeepLinkHandler"
 import type { EngagementNotificationType } from "./types"
 
-export type ProductType = "shared" | "app" | "bracket" | "legacy"
-
 /**
  * Sends engagement notifications (daily digest, league reminder, AI insight, weekly recap).
  * All notifications include meta.actionHref / actionLabel for deep linking when set.

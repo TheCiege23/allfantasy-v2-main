@@ -65,12 +65,6 @@ export function riSupports(endpoint: RiEndpoint, sport: string): boolean {
   return SUPPORT[endpoint]?.[getRollingInsightsSportCode(sport)] === true
 }
 
-/** Every endpoint the vendor documents for a sport, for capability reporting. */
-export function riSupportedEndpoints(sport: string): RiEndpoint[] {
-  const code = getRollingInsightsSportCode(sport)
-  return (Object.keys(SUPPORT) as RiEndpoint[]).filter((e) => SUPPORT[e][code])
-}
-
 /** Year the season STARTED — the only form `season` may take (`identifiers.season_arg`). */
 export function riSeasonArg(input: number | string | undefined, now = new Date()): string {
   if (input != null) {

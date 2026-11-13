@@ -194,15 +194,3 @@ export interface CommissionerDivergenceItem {
   notes: string[]
 }
 
-export interface CommissionerShadowEvaluation {
-  evaluationId: string
-  leagueId: string
-  generatedAt: string
-  context: CommissionerContext
-  pulse: LeaguePulse
-  health: LeagueHealthAssessment
-  attentionItems: CommissionerAttentionItem[]
-  ranking: CommissionerPowerRanking | null
-  brief: CommissionerBrief
-  divergence: CommissionerDivergenceItem[]
-}

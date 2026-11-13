@@ -22,11 +22,6 @@ export interface NewsFeedItem {
   sport?: string;
 }
 
-export interface NewsFeedResult {
-  items: NewsFeedItem[];
-  summarizedHeadlines?: Record<string, string>;
-}
-
 // ——— Prompt 131: Enriched intelligence output ———
 
 export type NewsType =

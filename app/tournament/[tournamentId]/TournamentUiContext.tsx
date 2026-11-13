@@ -26,6 +26,3 @@ export function useTournamentUi(): TournamentUiContextValue {
   return v
 }
 
-export function useTournamentUiSafe(): TournamentUiContextValue | null {
-  return useContext(Ctx)
-}

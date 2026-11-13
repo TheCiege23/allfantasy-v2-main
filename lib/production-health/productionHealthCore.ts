@@ -356,36 +356,6 @@ export type CronStatusReport = {
   total: number
 }
 
-/**
- * Aggregates per-job health across the expected job set, grouping the supplied
- * runs by jobName.
- */
-export function computeCronStatus(
-  expectedJobs: ExpectedJob[],
-  runs: JobRunRecord[],
-  options: { now?: number } = {},
-): CronStatusReport {
-  const byJob = new Map<string, JobRunRecord[]>()
-  for (const run of runs) {
-    const list = byJob.get(run.jobName) ?? []
-    list.push(run)
-    byJob.set(run.jobName, list)
-  }
-
-  const jobs = expectedJobs.map((expected) =>
-    computeJobHealth(expected, byJob.get(expected.jobName) ?? [], options),
-  )
-
-  return {
-    trafficLight: rollupTrafficLights(jobs.map((j) => j.trafficLight)),
-    jobs,
-    failed: jobs.filter((j) => j.trafficLight === 'failed').map((j) => j.jobName),
-    stale: jobs.filter((j) => j.trafficLight === 'warning').map((j) => j.jobName),
-    healthy: jobs.filter((j) => j.trafficLight === 'healthy').length,
-    total: jobs.length,
-  }
-}
-
 // ───────────────────────────── Cron state classification ──────────────────
 
 /**

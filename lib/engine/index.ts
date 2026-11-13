@@ -35,22 +35,17 @@ export {
 
 export {
   computeScoringAdjustments,
-  adjustValueForScoring,
-  scoringFormatLabel,
   type ScoringAdjustment,
 } from './scoring'
 
 export {
   computePositionalScarcity,
-  scarcityAdjustedValue,
-  computeReplacementLevel,
   type PositionalScarcity,
 } from './scarcity'
 
 export {
   classifyTeamPhase,
   classifyAllTeams,
-  phaseValueModifier,
   type ContenderClassification,
 } from './contender'
 
@@ -68,7 +63,7 @@ export {
   type AcceptDriver,
 } from './ldi-accept'
 
-export { ENGINE_FLAGS, isEnabled, getActiveFlags, getIterationLimit, getCacheTTL } from './flags'
+export { ENGINE_FLAGS, isEnabled, getCacheTTL } from './flags'
 
 export type {
   TradeConfidenceState,
@@ -103,16 +98,13 @@ export {
 
 export { computeLiquidity, computeLiquidity as computeEngineLiquidity } from './liquidity'
 
-export { computeAcceptanceProbability as computeEngineAcceptance, explainAcceptanceProbability } from './acceptance'
-
-export { buildContextFromSleeper, buildContextFromExisting } from './context-builder'
+export { computeAcceptanceProbability as computeEngineAcceptance } from './acceptance'
 
 export {
   computeContextHash,
   getCachedResult,
   setCachedResult,
   invalidateCache,
-  cleanExpiredSnapshots,
   type CacheType,
 } from './cache'
 
@@ -337,33 +329,3 @@ export async function runEngine(
   return result
 }
 
-export function computeEngineContext(
-  ctx: EngineContext,
-  flags: Partial<import('./capabilities').FeatureFlags> = {},
-  dataQuality: { tradeCount30d: number; rosterCompleteness: number } = { tradeCount30d: 0, rosterCompleteness: 0.5 }
-): EngineOutput<EngineComputedContext> {
-  const start = Date.now()
-  const capabilities = resolveCapabilities(ctx, flags)
-  const confidence = resolveConfidence(capabilities, dataQuality)
-
-  const allPlayers = Object.values(ctx.managers)
-    .flatMap(m => m.assets)
-    .filter(a => a.type === 'player' && a.player)
-    .map(a => a.player!)
-
-  const scoring = gracefulDowngrade(
-    'scoring', capabilities,
-    () => computeScoringAdjustments(ctx.league),
-    { baseMultiplier: 1, tepMultiplier: 1, sfMultiplier: 1, idpMultiplier: 1, positionMultiplier: {} }
-  )
-  const scarcity = gracefulDowngrade('scarcity', capabilities, () => computePositionalScarcity(ctx.league, allPlayers), {})
-  const teamPhases = gracefulDowngrade('contenderClassifier', capabilities, () => classifyAllTeams(ctx.managers, ctx.league), {})
-  const archetypes = gracefulDowngrade('managerArchetypes', capabilities, () => classifyAllArchetypes(ctx.managers), {})
-
-  return {
-    data: { scoring, scarcity, teamPhases, archetypes },
-    capabilities,
-    confidence,
-    meta: { computedAt: Date.now(), engineVersion: ENGINE_VERSION, computeTimeMs: Date.now() - start },
-  }
-}

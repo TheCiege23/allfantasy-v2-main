@@ -38,10 +38,6 @@ export function isMonetizationComplianceError(error: unknown): error is Monetiza
   return error instanceof MonetizationComplianceError
 }
 
-export function getMonetizationComplianceMessage(code: MonetizationComplianceCode): string {
-  return COMPLIANCE_MESSAGES[code]
-}
-
 function stringifyMetadataValue(value: unknown): string {
   if (value == null) return ""
   if (typeof value === "string") return value

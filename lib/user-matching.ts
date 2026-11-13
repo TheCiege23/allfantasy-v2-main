@@ -27,25 +27,3 @@ export function isUserParty(
   return false
 }
 
-export function isWinnerUser(
-  winner: string | undefined | null,
-  username: string,
-  sleeperUserId?: string,
-  userPartyDisplayName?: string
-): boolean {
-  if (!winner || winner === 'Even') return false
-  const winnerLower = winner.toLowerCase()
-  const userLower = username.toLowerCase()
-  const partyLower = userPartyDisplayName?.toLowerCase()
-
-  if (winnerLower === userLower) return true
-  if (partyLower && winnerLower === partyLower) return true
-  if (sleeperUserId && winnerLower === sleeperUserId) return true
-
-  if (userLower.length > 2 && winnerLower.includes(userLower)) return true
-  if (partyLower && partyLower.length > 2 && winnerLower.includes(partyLower)) return true
-  if (userLower.length > 2 && userLower.includes(winnerLower)) return true
-  if (partyLower && partyLower.length > 2 && partyLower.includes(winnerLower)) return true
-
-  return false
-}

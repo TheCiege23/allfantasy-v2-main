@@ -76,13 +76,6 @@ export function challengeInputKind(kind: ChallengeBuilderKind): ChallengeInputKi
 /** Kinds that are always settled by the commissioner: nothing we store answers them. */
 const MANUAL_KINDS: ReadonlySet<string> = new Set(['custom_choice', 'custom_number', 'first_td_scorer', 'last_score_type', 'sweep'])
 
-/** Where the true answer can come from without a person (kind-level; see `challengeSettlementSource`). */
-export function challengeAutoSource(kind: ChallengeBuilderKind, hasGame: boolean): 'game' | 'player_stat' | 'manual' {
-  if (kind === 'player_stat_over_under' || kind === 'anytime_td' || kind === 'position_leader') return 'player_stat'
-  if (MANUAL_KINDS.has(kind) || kind === 'puzzle') return 'manual'
-  return hasGame ? 'game' : 'manual'
-}
-
 export type ChallengeSettlementSource = 'game' | 'player_stat' | 'position_leader' | 'exact_answer' | 'manual'
 
 /**
@@ -113,7 +106,6 @@ export function challengeNeedsGame(kind: ChallengeBuilderKind): boolean {
 export const CHALLENGE_PLAYER_STATS = ['fantasy_points', 'pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td'] as const
 /** A stat key: one of `CHALLENGE_PLAYER_STATS`, or one of the sport's own (`CHALLENGE_SPORT_STATS`). */
 export type ChallengePlayerStat = string
-export const NFL_ONLY_PLAYER_STATS: readonly ChallengePlayerStat[] = ['pass_yds', 'rush_yds', 'rec_yds', 'rec', 'pass_td', 'total_td']
 
 /**
  * The per-player stats each sport STORES in `PlayerWeeklyScore.stats`, read from the ingestion code
@@ -363,8 +355,6 @@ export const SURVIVOR_PRIZE_PHASE_RULES_KEY = 'survivorPrizePhaseRules'
 
 /** Prize types that need tribe scope (so only exist before the merge). */
 export const TRIBE_ONLY_PRIZE_TYPES: readonly ChallengePrizeType[] = ['faab_transfer']
-/** Prize types that need individual scope. */
-export const INDIVIDUAL_ONLY_PRIZE_TYPES: readonly ChallengePrizeType[] = ['immunity']
 
 export function defaultPrizePhaseRules(): SurvivorPrizePhaseRules {
   const all = [...CHALLENGE_PRIZE_TYPES]
@@ -411,10 +401,6 @@ const PRIZE_TYPE_LABEL: Record<ChallengeLang, Record<ChallengePrizeType, string>
 const PRIZE_PHASE_LABEL: Record<ChallengeLang, Record<SurvivorPrizePhase, string>> = {
   en: { pre_merge: 'before the merge', post_merge: 'after the merge', finale: 'at the finale' },
   es: { pre_merge: 'antes de la fusión', post_merge: 'después de la fusión', finale: 'en la final' },
-}
-
-export function prizePhaseLabel(phase: SurvivorPrizePhase, lang: ChallengeLang): string {
-  return PRIZE_PHASE_LABEL[lang][phase]
 }
 
 /** Null when that prize type may be handed out in that phase; otherwise a clear EN/ES refusal. */

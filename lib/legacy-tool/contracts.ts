@@ -51,37 +51,6 @@ export interface PlayerState {
   cluster_profile: string
 }
 
-export interface TeamState {
-  team_id: string
-  sport: string
-  offense_grade: number
-  defense_grade: number
-  special_teams_grade: number
-  pace_index: number
-  scoring_environment: number
-  injury_environment: number
-  coach_stability: number
-  line_quality: number
-  defensive_pressure_rate: number
-  coverage_grade: number
-  return_role_value: number
-  news_shift_score: number
-  last_updated_at: string
-}
-
-export interface UserTeamContext {
-  user_id: string
-  league_id: string
-  team_direction: 'contender' | 'retooling' | 'rebuilding' | 'fringe'
-  risk_profile: 'aggressive' | 'balanced' | 'conservative'
-  roster_strengths: string[]
-  roster_weaknesses: string[]
-  bench_redundancy: string[]
-  needs_short_term_points: boolean
-  playoff_focus: boolean
-  future_pick_strategy: 'buy' | 'hold' | 'sell' | 'neutral'
-}
-
 export interface CommissionerAlert {
   required: boolean
   severity: 'low' | 'medium' | 'high'

@@ -82,8 +82,6 @@ export const league = {
   hordeSitOuts: { myPendingResponse: null },
 } satisfies Pack & ZMeta
 
-export const eventFeed = { animations: [] as FeedAnimation[] }
-
 export const matchups = {
   week: 10,
   rules: { bashingThreshold: 30, maulingThreshold: 50, bashShare: 0.1, maulShare: 0.25 },

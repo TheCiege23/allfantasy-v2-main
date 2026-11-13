@@ -8,8 +8,6 @@ export const TOKEN_ENTRY_TYPES = {
   ADJUSTMENT: "adjustment",
 } as const
 
-export type TokenEntryType = (typeof TOKEN_ENTRY_TYPES)[keyof typeof TOKEN_ENTRY_TYPES]
-
 export type TokenSpendRuleCode = (typeof TOKEN_SPEND_RULE_MATRIX)[number]["code"]
 
 export type TokenSpendRuleTier = "low" | "mid" | "high"

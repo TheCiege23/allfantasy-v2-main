@@ -11,7 +11,7 @@ import {
   type SportSlug,
 } from '@/lib/seo-landing/config'
 import type { ToolCategoryId } from './types'
-import { getToolsByCategory, getFeaturedToolSlugs, getTrendingToolSlugs } from './FeaturedToolResolver'
+import { getToolsByCategory } from './FeaturedToolResolver'
 
 export type ToolHubTool = {
   slug: ToolSlug
@@ -113,12 +113,3 @@ export function getToolsForSport(sportSlug: SportSlug | null): ToolHubTool[] {
   return filtered.length > 0 ? filtered : all
 }
 
-export function getFeaturedTools(): ToolHubTool[] {
-  const featured = new Set(getFeaturedToolSlugs())
-  return getAllTools().filter((tool) => featured.has(tool.slug))
-}
-
-export function getTrendingTools(): ToolHubTool[] {
-  const trending = new Set(getTrendingToolSlugs())
-  return getAllTools().filter((tool) => trending.has(tool.slug))
-}

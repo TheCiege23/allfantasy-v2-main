@@ -3,7 +3,6 @@
  */
 
 export const DEFAULT_REGION_ORDER = ['West', 'East', 'South', 'Midwest'] as const
-export const CLASSIC_REGION_SET = new Set(DEFAULT_REGION_ORDER)
 
 /**
  * Round display label (e.g. "Round of 64", "Championship").
@@ -88,9 +87,3 @@ export function isClassicRegionalBoard(nodes: BracketBoardNodeLike[]): boolean {
   return hasClassicRegions && rounds.includes(5) && rounds.includes(6)
 }
 
-/**
- * Cell key for React list (round + slot or node id).
- */
-export function getBracketCellKey(round: number, slotOrId: string): string {
-  return `r${round}-${slotOrId}`
-}

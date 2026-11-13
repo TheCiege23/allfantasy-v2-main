@@ -54,10 +54,6 @@ export function normalizeSalaryCapDraftType(value: unknown): SalaryCapDraftType 
   return 'auction'
 }
 
-export function getSalaryCapEngineCore(draftType: SalaryCapDraftType): 'auction' {
-  return 'auction'
-}
-
 // ── Sport-aware constants ─────────────────────────────────────────────────────
 
 const NFL_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 } as const

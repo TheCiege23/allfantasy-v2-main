@@ -74,14 +74,6 @@ export function isPreseasonGame(row: { seasonType?: string | null }): boolean {
   return t === 'pre' || t === 'preseason' || t === 'pre-season'
 }
 
-/**
- * Drop positively-marked preseason rows, keeping unlabelled ones. See {@link isPreseasonGame}
- * for why this is not `=== 'regular'`.
- */
-export function excludePreseason<T extends { seasonType?: string | null }>(rows: readonly T[]): T[] {
-  return rows.filter((r) => !isPreseasonGame(r))
-}
-
 /** The minimum a row needs for this module to key and rank it. */
 export type DedupableGame = {
   homeTeam: string | null

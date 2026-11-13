@@ -100,9 +100,3 @@ export type AiTimeContextPayload = {
   timeAuthorityNote: string
 }
 
-export type DeviceTimeReport = {
-  deviceTimezone: string
-  deviceLocalIso: string
-  /** Optional: IANA offset string if client sends it */
-  utcOffsetMinutes?: number | null
-}

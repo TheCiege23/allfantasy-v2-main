@@ -19,10 +19,6 @@ export function isEnabled(flag: EngineFlagKey): boolean {
   return ENGINE_FLAGS[flag] === true
 }
 
-export function getActiveFlags(): Record<string, boolean> {
-  return { ...ENGINE_FLAGS }
-}
-
 export const ITERATION_LIMITS = {
   monteCarlo: {
     dev: 10000,
@@ -37,11 +33,6 @@ export const ITERATION_LIMITS = {
     prod: 1000,
   },
 } as const
-
-export function getIterationLimit(type: keyof typeof ITERATION_LIMITS): number {
-  const isProd = process.env.NODE_ENV === 'production'
-  return isProd ? ITERATION_LIMITS[type].prod : ITERATION_LIMITS[type].dev
-}
 
 export const CACHE_TTL = {
   rankings: 15 * 60 * 1000,

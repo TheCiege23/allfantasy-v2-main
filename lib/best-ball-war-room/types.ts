@@ -141,14 +141,3 @@ export interface BestBallWarRoomContext {
   }
 }
 
-export type BestBallWarRoomAction =
-  | 'roster-construction'
-  | 'depth'
-  | 'upside'
-  | 'draft-plan'
-  | 'stacks'
-  | 'risk'
-  | 'waivers'
-  | 'trade-analyze'
-  | 'trade-find'
-  | 'ask'

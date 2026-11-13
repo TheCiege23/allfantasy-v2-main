@@ -131,7 +131,3 @@ export function resolveProviderForFeature(
   return TASK_ROUTES[key as FeatureKey] ?? null
 }
 
-/** Read-only view of the built-in map, for admin/diagnostic surfaces. */
-export function getTaskRouteTable(): Readonly<Partial<Record<FeatureKey, TaskRoute>>> {
-  return TASK_ROUTES
-}

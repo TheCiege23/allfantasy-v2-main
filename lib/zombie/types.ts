@@ -36,28 +36,6 @@ export interface WeaponThreshold {
   weaponType: string
 }
 
-/** Per-roster status row. */
-export interface ZombieLeagueTeamRow {
-  id: string
-  leagueId: string
-  zombieLeagueId: string | null
-  rosterId: string
-  status: ZombieOwnerStatus
-  weekBecameZombie: number | null
-  killedByRosterId: string | null
-  revivedAt: Date | null
-}
-
-/** Matchup result (team space: LeagueTeam.id). */
-export interface ZombieMatchupResult {
-  teamA: string
-  teamB: string
-  scoreA: number
-  scoreB: number
-  winnerTeamId: string | null
-  matchupId?: string
-}
-
 /** Roster <-> Team mapping for a league (by draft order or index). */
 export interface RosterTeamMap {
   rosterIdToTeamId: Map<string, string>

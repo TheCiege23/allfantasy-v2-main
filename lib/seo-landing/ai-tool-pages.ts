@@ -247,17 +247,6 @@ export const AI_TOOL_PAGES = {
 
 export type AIToolPageSlug = keyof typeof AI_TOOL_PAGES
 
-export const AI_TOOL_PAGE_SLUGS: AIToolPageSlug[] = [
-  'trade-analyzer',
-  'waiver-wire',
-  'draft-helper',
-  'war-room',
-  'ai-chat',
-  'player-comparison',
-  'matchup-simulator',
-  'fantasy-coach',
-]
-
 const BASE = 'https://allfantasy.ai'
 
 export function getAIToolPageCanonical(slug: AIToolPageSlug): string {

@@ -17,8 +17,6 @@ export type AutomationJobStatus =
   | "cancelled"
   | "skipped"
 
-export type AutomationRunStatus = "running" | "completed" | "failed" | "skipped"
-
 /** Known job kinds — extend as new automation surfaces ship. */
 export type AutomationJobType =
   | "waivers.processLeague"
@@ -56,4 +54,3 @@ export type RetryPolicy = {
 
 export type NotificationChannel = "in_app" | "league_chat" | "email" | "sms" | "push"
 
-export type NotificationStatus = "pending" | "sent" | "failed" | "cancelled"

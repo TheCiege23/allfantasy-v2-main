@@ -5,40 +5,6 @@
 
 import type { AIContextEnvelope, AIModelRole, OrchestrationMode } from "./types"
 
-/** Which role each model fulfills. */
-export const MODEL_RESPONSIBILITIES: Record<
-  AIModelRole,
-  { primary: string; bestFor: string[] }
-> = {
-  openai: {
-    primary: "Final user-facing explanation, natural language, action plans, Chimmy voice.",
-    bestFor: ["explanation", "chat", "guidance", "synthesis", "voice"],
-  },
-  deepseek: {
-    primary: "Structured analytical reasoning, stats interpretation, numeric review, deterministic context.",
-    bestFor: ["analysis", "numbers", "projections", "matrix_review", "decision_support"],
-  },
-  grok: {
-    primary: "Trend interpretation, narrative framing, social/summary, league story, engagement.",
-    bestFor: ["trends", "narrative", "social", "story", "engagement"],
-  },
-  anthropic: {
-    primary:
-      "Chimmy's main model (2026-09-23): answers first in the tool loop and on the push path; the other three are Chimmy's fallback. Not routed to by other features.",
-    bestFor: ["chat", "explanation", "analysis", "synthesis", "tool_use"],
-  },
-}
-
-/** Assistant responsibilities outside core 3-model execution. */
-export const ASSISTANT_RESPONSIBILITIES = {
-  chimmy:
-    "Calm, natural chat surface for private fantasy guidance using unified orchestration context.",
-  openclaw_dev_assistant:
-    "Workflow assistant endpoint for engineering and platform operations support.",
-  openclaw_growth_marketing_assistant:
-    "Workflow assistant endpoint for growth and marketing execution support.",
-} as const
-
 const QUANT_PATTERNS = [
   "math",
   "projection",

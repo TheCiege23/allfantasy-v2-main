@@ -10,11 +10,6 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 export const DEVY_SUPPORTED_SPORTS = ['NFL', 'NCAAF', 'NBA', 'NCAAB'] as const
 export type DevySupportedSport = (typeof DEVY_SUPPORTED_SPORTS)[number]
 
-export function supportsDevyLeagueFormat(sport: LeagueSport | string): sport is DevySupportedSport {
-  const s = normalizeToSupportedSport(sport) as DevySupportedSport
-  return (DEVY_SUPPORTED_SPORTS as readonly string[]).includes(s)
-}
-
 export type DevyModeId =
   | 'standard_devy'
   | 'campus_to_canton'

@@ -32,16 +32,6 @@ export type CanonicalRedraftSlotKey =
   | 'IR'
   | 'K'
 
-export interface CanonicalRedraftRosterSlot {
-  key: CanonicalRedraftSlotKey
-  display: string
-  count: number
-  starter: boolean
-  optional: boolean
-  eligiblePositions: string[]
-  aliases: string[]
-}
-
 export interface RedraftRosterTemplate {
   rosterMode: 'redraft'
   starterSlots: Record<string, number>
@@ -121,8 +111,6 @@ export const REDRAFT_DRAFT_TYPE_IDS: readonly RedraftDraftType[] = [
 ] as const
 
 const DEFAULT_STARTER_ORDER = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLX', 'K', 'DEF'] as const
-const OLD_NFL_STANDARD_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 } as const
-const OLD_NCAAF_STANDARD_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 } as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -227,21 +215,6 @@ export function getCanonicalRedraftStarterSlots(input: {
       includeIr: false,
     }),
   )
-}
-
-export function isKnownLegacyRedraftStarterMap(
-  sport: FootballRedraftSport,
-  value: unknown,
-): boolean {
-  if (!isRecord(value)) return false
-  const expected = sport === 'NCAAF' ? OLD_NCAAF_STANDARD_STARTERS : OLD_NFL_STANDARD_STARTERS
-  const keys = Object.keys(value).sort()
-  const expectedKeys = Object.keys(expected).sort()
-  if (keys.length !== expectedKeys.length) return false
-  return expectedKeys.every((key, index) => {
-    if (keys[index] !== key) return false
-    return Number(value[key]) === Number((expected as Record<string, number>)[key])
-  })
 }
 
 function pickOrderForDraftType(draftType: unknown): 'snake' | 'linear' {

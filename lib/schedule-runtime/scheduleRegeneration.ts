@@ -34,9 +34,6 @@ export const SCHEDULE_REGEN_CONFIRM_FLAG = 'confirmMidSeasonChange'
 export const SCHEDULE_REGEN_CONFIRMATION_MESSAGE =
   "This league's season has started. Regenerating keeps every week that has started and rebuilds only the weeks after it. Confirm to continue."
 
-/** Lifecycle states in which a schedule rewrite is never allowed. */
-export const SCHEDULE_REGEN_REFUSED_LIFECYCLE_STATES: ReadonlySet<string> = new Set(['drafting', 'archived'])
-
 export type ScheduleRegenerationRefusal = {
   code: 'DRAFT_IN_PROGRESS' | 'LEAGUE_ARCHIVED'
   message: string
@@ -109,8 +106,3 @@ export function firstRegenerableWeek(input: WeekStartInput & { regularSeasonWeek
   return lastStarted + 1
 }
 
-export function hasScheduleRegenConfirmation(body: unknown): boolean {
-  return Boolean(
-    body && typeof body === 'object' && (body as Record<string, unknown>)[SCHEDULE_REGEN_CONFIRM_FLAG] === true,
-  )
-}

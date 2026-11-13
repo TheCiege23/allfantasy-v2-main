@@ -38,19 +38,6 @@ export function isCategoryScoredSport(sport: string | null | undefined): sport i
 }
 
 /**
- * ⚠ MLB KEYS COLLIDE ACROSS GROUPS AND MEAN OPPOSITE THINGS.
- *
- * `H`, `R`, `HR`, `BB`, `SB`, `CS`, `HBP`, `IBB`, `1B`, `2B`, `3B` all appear under BOTH
- * `regular_season.batting` and `regular_season.pitching`. A hit RECORDED and a hit ALLOWED are the
- * same key. Flattening the two groups into one namespace would add a pitcher's hits-allowed to a
- * batter's hits and score the result as offence — silently, with no error anywhere.
- *
- * So grouped components are addressed `"<group>.<KEY>"` and never merged. NBA and NHL are already
- * flat under `regular_season` and need no prefix.
- */
-export const MLB_GROUPED_KEY_PREFIXES = ['batting', 'pitching'] as const
-
-/**
  * DraftKings MLB, as published.
  *
  * Hitters score on the singles/doubles/triples split rather than total hits, which is why `1B`

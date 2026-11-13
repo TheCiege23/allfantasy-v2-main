@@ -52,7 +52,3 @@ export function scheduleCareerProfileRefresh(userId: string | null | undefined):
   })()
 }
 
-/** Test seam. */
-export function __pendingCareerRefreshes(): number {
-  return pending.size
-}

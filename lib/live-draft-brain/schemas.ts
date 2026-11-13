@@ -30,20 +30,6 @@ export const NextPickPredictionSchema = z.object({
   reason: z.string(),
 })
 
-export const AiManagerAssignmentSchema = z.object({
-  teamId: z.string(),
-  aiStyle: z.string(),
-  tradeAggression: z.enum(['none', 'low', 'medium', 'high']),
-  active: z.boolean(),
-})
-
-export const DraftTradeDecisionSchema = z.object({
-  action: z.enum(['send', 'accept', 'reject', 'counter']),
-  confidence: z.number(),
-  reasoning: z.array(z.string()),
-  guardrailsPassed: z.boolean(),
-})
-
 export const PostDraftGradeSchema = z.object({
   teamName: z.string(),
   letterGrade: z.string(),
@@ -51,12 +37,6 @@ export const PostDraftGradeSchema = z.object({
   bestPick: z.string(),
   biggestReach: z.string(),
   summary: z.string(),
-})
-
-export const LeagueChatPostSchema = z.object({
-  title: z.string(),
-  body: z.string(),
-  awards: z.array(z.string()),
 })
 
 export const CombinedAdpDataSchema = z.object({
@@ -94,5 +74,4 @@ export const LiveDraftBrainEnvelopeSchema = z.object({
   }),
 })
 
-export type PickRecommendationJson = z.infer<typeof PickRecommendationSchema>
 export type LiveDraftBrainEnvelope = z.infer<typeof LiveDraftBrainEnvelopeSchema>

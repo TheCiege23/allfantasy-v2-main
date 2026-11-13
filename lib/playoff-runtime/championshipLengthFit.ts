@@ -222,14 +222,3 @@ export function playoffFitOverflowMessage(o: PlayoffFitOverflow): string {
   return `${head} No bracket fits with playoffs starting in week ${o.playoffStartWeek} — move the playoffs earlier or shorten the rounds or the final.`
 }
 
-/** Null when the new length fits (or does not move the final later); the overrun otherwise. */
-export function championshipLengthOverflow(
-  input: { league: LeagueForFit; championshipLength: number },
-  deps: { prisma?: PrismaClient } = {},
-): Promise<ChampionshipLengthOverflow | null> {
-  return playoffFitOverflow({ league: input.league, change: { championshipLength: input.championshipLength } }, deps)
-}
-
-export function championshipLengthOverflowMessage(o: ChampionshipLengthOverflow): string {
-  return playoffFitOverflowMessage(o)
-}

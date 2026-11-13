@@ -1,5 +1,4 @@
 import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
-import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { normalizePosition, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
@@ -697,6 +696,3 @@ export function buildNflRedraftCanonicalPlayer(
   }
 }
 
-export function getNflRedraftCanonicalFromWire(row: UnifiedPlayerWireDto): NflRedraftCanonicalPlayer | null {
-  return row.nflRedraft ?? null
-}

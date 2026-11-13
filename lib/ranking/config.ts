@@ -43,16 +43,3 @@ export const TIERS: Tier[] = [
   { tier: 20, name: "AllFantasy Legend", minLevel: 12000, color: "Gold", description: "Top 0.1%; crest badge + Hall of Fame listing" },
 ];
 
-export function levelFromXp(xp: number): number {
-  const safe = Number.isFinite(xp) ? Math.max(0, xp) : 0;
-  return Math.floor(safe / XP_PER_LEVEL);
-}
-
-export function tierFromLevel(level: number) {
-  const lv = Math.max(0, Math.floor(level));
-  let t = TIERS[0];
-  for (const tier of TIERS) {
-    if (lv >= tier.minLevel) t = tier;
-  }
-  return t;
-}

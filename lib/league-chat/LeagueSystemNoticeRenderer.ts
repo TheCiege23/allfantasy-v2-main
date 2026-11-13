@@ -67,35 +67,6 @@ export function getLeagueSystemNoticeLabel(messageType: string): string {
   }
 }
 
-/** Parse broadcast message body (JSON { announcement } or plain text). */
-export function getBroadcastBody(body: string): string {
-  try {
-    const parsed = JSON.parse(body || "{}")
-    if (typeof parsed.announcement === "string") return parsed.announcement
-  } catch {
-    // fallback
-  }
-  return body || ""
-}
-
-/** Parse stats_bot message body (JSON with weekLabel, bestTeam, etc.). */
-export function getStatsBotPayload(body: string): {
-  weekLabel?: string
-  bestTeam?: string
-  worstTeam?: string
-  bestPlayer?: string
-  winStreak?: string
-  lossStreak?: string
-} | null {
-  try {
-    const parsed = JSON.parse(body || "{}")
-    if (parsed && typeof parsed === "object") return parsed
-  } catch {
-    // ignore
-  }
-  return null
-}
-
 /** Parse pin message body (JSON { messageId } or { messageId, snippet }). */
 export function getPinReferencedMessageId(body: string): string | null {
   try {

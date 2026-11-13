@@ -60,6 +60,3 @@ export async function stopIntegrityWorker(): Promise<void> {
   integrityWorker = null
 }
 
-export function getIntegrityWorker(): Worker<IntegrityJobPayload, IntegrityJobResult> | null {
-  return integrityWorker
-}

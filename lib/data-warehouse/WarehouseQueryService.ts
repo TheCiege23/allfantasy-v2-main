@@ -6,27 +6,9 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeSportForWarehouse } from './types'
 import type { LeagueHistorySummary } from './LeagueHistoryAggregator'
-import {
-  getLeagueHistorySummary,
-  getMatchupHistory,
-  getStandingsHistory,
-  getRosterSnapshotsForTeam,
-  getPlayerGameFactsForPlayer,
-  getDraftHistoryForLeague,
-  getTransactionHistoryForLeague,
-} from './LeagueHistoryAggregator'
+import { getLeagueHistorySummary, getMatchupHistory, getStandingsHistory } from './LeagueHistoryAggregator'
 
 export type { LeagueHistorySummary }
-
-export const warehouseQuery = {
-  getLeagueHistorySummary,
-  getMatchupHistory,
-  getStandingsHistory,
-  getRosterSnapshotsForTeam,
-  getPlayerGameFactsForPlayer,
-  getDraftHistoryForLeague,
-  getTransactionHistoryForLeague,
-}
 
 /**
  * Historical query: player fantasy points by season/week (for charts and trends).

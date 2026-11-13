@@ -3,20 +3,9 @@
  */
 
 import type { ReliabilityMetadata, DeterministicFallbackPayload, ProviderResultMeta } from './types';
-import { resolveProviderFailure, providerStatusFromError } from './ProviderFailureResolver';
+import { resolveProviderFailure } from './ProviderFailureResolver';
 import { buildDeterministicFallback } from './DeterministicFallbackService';
 import type { TradeDecisionContextV1 } from '@/lib/trade-engine/trade-decision-context';
-
-export interface StableTradeAnalysisResult {
-  success: boolean;
-  /** When false, only deterministic result is included */
-  hasAiConsensus: boolean;
-  sections?: unknown;
-  deterministicVerdict?: unknown;
-  deterministicFallback?: DeterministicFallbackPayload;
-  fallbackExplanation?: string;
-  reliability: ReliabilityMetadata;
-}
 
 /**
  * Build reliability metadata from provider results and optional consensus/gate.
@@ -76,10 +65,3 @@ export function buildStableFallbackResponse(
   };
 }
 
-export function providerResultMeta(provider: string, error: unknown): ProviderResultMeta {
-  return {
-    provider,
-    status: providerStatusFromError(error),
-    error: error instanceof Error ? error.message : String(error),
-  };
-}

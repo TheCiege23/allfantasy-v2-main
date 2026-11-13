@@ -348,11 +348,6 @@ export function settingsFormErrors(form: SurvivorSettingsForm, ctx: SurvivorSett
   return errors
 }
 
-/** The challenge part of the form. Tolerates an older form without these fields (the defaults). */
-export function validateChallengeSettings(form: Partial<SurvivorSettingsForm>, t: SettingsErrorCopy = settingsErrorMessages.en): string[] {
-  return challengeSettingsErrors(form, t).map(e => e.message)
-}
-
 export function challengeSettingsErrors(form: Partial<SurvivorSettingsForm>, t: SettingsErrorCopy = settingsErrorMessages.en): SettingsError[] {
   const d = SURVIVOR_CHALLENGE_SETTING_DEFAULTS
   const errors: SettingsError[] = []

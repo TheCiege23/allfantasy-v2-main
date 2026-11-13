@@ -50,9 +50,3 @@ export function buildSignupConsentCookie(secure: boolean): string {
   return parts.join("; ")
 }
 
-/** Expire it once consumed, so a later OAuth sign-in cannot inherit an old tick. */
-export function buildSignupConsentClearCookie(secure: boolean): string {
-  const parts = [`${SIGNUP_CONSENT_COOKIE}=`, "path=/", "max-age=0", "samesite=lax"]
-  if (secure) parts.push("secure")
-  return parts.join("; ")
-}

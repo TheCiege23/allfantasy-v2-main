@@ -99,14 +99,3 @@ export function parsePickLabel(label: string): ParsedPick | null {
   return result;
 }
 
-export function formatPickForHistorical(parsed: ParsedPick): {
-  year: number;
-  round: number;
-  tier: 'early' | 'mid' | 'late' | undefined;
-} {
-  return {
-    year: parsed.year,
-    round: parsed.round,
-    tier: parsed.bucket
-  };
-}

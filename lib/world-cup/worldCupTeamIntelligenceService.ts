@@ -278,20 +278,3 @@ export async function getWorldCupTeamIntelligence(
   }
 }
 
-/** Look up a team by name (case-insensitive partial match). */
-export async function findWorldCupTeamByName(
-  nameQuery: string
-): Promise<{ id: string; name: string } | null> {
-  const rows = await (prisma as any).worldCupTeam.findMany({
-    where: {
-      name: { contains: nameQuery, mode: "insensitive" },
-      NOT: [
-        { qualificationStatus: "test" },
-        { qualificationStatus: "test_placeholder" },
-      ],
-    },
-    select: { id: true, name: true },
-    take: 1,
-  })
-  return (rows as any[])[0] ?? null
-}

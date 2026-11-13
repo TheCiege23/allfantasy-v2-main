@@ -635,35 +635,3 @@ export async function promoteEligiblePlayers(input: {
   return { ok: true, leagueId: input.leagueId, processed: promotable.length, updated, errors: [] }
 }
 
-export async function runCollegeDataWorker(input: {
-  sport?: string
-  leagueId?: string
-  week?: number
-  season?: number
-}) {
-  const sport = resolveCollegeSport(input.sport)
-  const importResult = await importCollegePlayers(sport)
-  const projectionResult = await refreshDraftProjections(sport)
-  const portalResult = await refreshTransferPortal(sport)
-  let scoringResult: DevyWorkerResult | null = null
-  let promotionResult: DevyWorkerResult | null = null
-  if (input.leagueId) {
-    scoringResult = await calculateC2CPointsForLeague({
-      leagueId: input.leagueId,
-      week: input.week,
-      season: input.season,
-    })
-    promotionResult = await promoteEligiblePlayers({
-      leagueId: input.leagueId,
-      season: input.season,
-    })
-  }
-
-  return {
-    importResult,
-    projectionResult,
-    portalResult,
-    scoringResult,
-    promotionResult,
-  }
-}

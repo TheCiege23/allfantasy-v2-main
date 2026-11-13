@@ -119,9 +119,3 @@ export async function stopSimulationWorker(): Promise<void> {
   simulationWorker = null;
 }
 
-export function getSimulationWorker(): Worker<
-  SimulationJobData,
-  SimulationWorkerResult
-> | null {
-  return simulationWorker;
-}

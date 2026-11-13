@@ -11,14 +11,6 @@ export const TIER_TO_SEMANTIC: Record<AssetTier, SemanticTier> = {
   4: 'depth',
 };
 
-export const SEMANTIC_TO_TIER: Record<SemanticTier, AssetTier> = {
-  'elite': 0,
-  'high': 1,
-  'starter': 2,
-  'replaceable': 3,
-  'depth': 4,
-};
-
 export interface TieredPlayer {
   name: string;
   tier: AssetTier;
@@ -717,20 +709,6 @@ AI INSTRUCTIONS (MANDATORY):
 `.trim();
 }
 
-export function detectIDPFromRosterPositions(rosterPositions: string[]): number {
-  const idpPositions = ['LB', 'DB', 'DL', 'DE', 'DT', 'S', 'CB', 'IDP', 'ED', 'EDGE'];
-  let count = 0;
-  
-  for (const pos of rosterPositions) {
-    const upper = pos.toUpperCase();
-    if (idpPositions.includes(upper)) {
-      count++;
-    }
-  }
-  
-  return count;
-}
-
 export function detectSFFromRosterPositions(rosterPositions: string[]): boolean {
   const sfPositions = ['SUPER_FLEX', 'SUPERFLEX', 'SF'];
   return rosterPositions.some(pos => sfPositions.includes(pos.toUpperCase()));
@@ -753,67 +731,6 @@ export function shouldShowAsSuggestion(evaluation: TradeEvaluation): boolean {
   return true;
 }
 
-export function enforceGradeDistribution(
-  grades: GradeType[],
-  maxDistribution: Record<string, number> = {
-    'A+': 0.01,
-    'A': 0.10,
-    'A-': 0.15,
-    'B+': 0.20,
-    'B': 0.25,
-    'B-': 0.15,
-    'C+': 0.10,
-    'C': 0.15,
-    'C-': 0.10,
-    'D': 0.10,
-    'F': 0.10,
-  }
-): GradeType[] {
-  const total = grades.length;
-  if (total === 0) return grades;
-  
-  const currentCounts: Record<string, number> = {};
-  const adjustedGrades: GradeType[] = [...grades];
-  
-  for (const grade of GRADE_PRIORITY) {
-    currentCounts[grade] = grades.filter(g => g === grade).length;
-  }
-  
-  for (let i = 0; i < adjustedGrades.length; i++) {
-    const grade = adjustedGrades[i];
-    const maxCount = Math.max(1, Math.floor(total * (maxDistribution[grade] || 0.10)));
-    
-    if (currentCounts[grade] > maxCount) {
-      const gradeIndex = GRADE_PRIORITY.indexOf(grade);
-      if (gradeIndex < GRADE_PRIORITY.length - 1) {
-        const newGrade = GRADE_PRIORITY[gradeIndex + 1];
-        adjustedGrades[i] = newGrade;
-        currentCounts[grade]--;
-        currentCounts[newGrade] = (currentCounts[newGrade] || 0) + 1;
-      }
-    }
-  }
-  
-  return adjustedGrades;
-}
-
-export function isIDPKillSwitchTriggered(
-  evaluation: TradeEvaluation,
-  idpStarterCount: number
-): boolean {
-  if (idpStarterCount > 3) return false;
-  
-  const idpAssets = evaluation.senderAssets.filter(a => a.isIDP);
-  const offensiveStars = evaluation.receiverAssets.filter(a => a.tier !== null && a.tier <= 2);
-  
-  if (idpAssets.length === 0 || offensiveStars.length === 0) return false;
-  
-  const idpValue = idpAssets.reduce((sum, a) => sum + a.adjustedValue, 0);
-  const offensiveValue = offensiveStars.reduce((sum, a) => sum + a.adjustedValue, 0);
-  
-  return idpValue > (offensiveValue * 0.30);
-}
-
 export function categorizeTradeSuggestion(evaluation: TradeEvaluation): 'VIABLE' | 'AGGRESSIVE' | 'UNREALISTIC' {
   if (!shouldShowAsSuggestion(evaluation)) {
     return 'UNREALISTIC';
@@ -826,30 +743,3 @@ export function categorizeTradeSuggestion(evaluation: TradeEvaluation): 'VIABLE'
   return 'VIABLE';
 }
 
-export function filterAndCategorizeSuggestions(evaluations: TradeEvaluation[]): {
-  viable: TradeEvaluation[];
-  aggressive: TradeEvaluation[];
-  unrealistic: TradeEvaluation[];
-} {
-  const viable: TradeEvaluation[] = [];
-  const aggressive: TradeEvaluation[] = [];
-  const unrealistic: TradeEvaluation[] = [];
-  
-  for (const evaluation of evaluations) {
-    const category = categorizeTradeSuggestion(evaluation);
-    
-    switch (category) {
-      case 'VIABLE':
-        viable.push(evaluation);
-        break;
-      case 'AGGRESSIVE':
-        aggressive.push(evaluation);
-        break;
-      case 'UNREALISTIC':
-        unrealistic.push(evaluation);
-        break;
-    }
-  }
-  
-  return { viable, aggressive, unrealistic };
-}

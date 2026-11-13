@@ -6,13 +6,6 @@ import type { ZombieMatchupView } from '@/lib/zombie/zombieMatchupBoard'
 
 export type { ZombieBoardEntry, ZombieTurnMoment, ZombieMatchupView }
 
-export type ZombieView =
-  | 'home'
-  | 'resources'
-  | 'ambush'
-  | 'weekly-board'
-  | 'ai'
-
 export interface ZombieSummaryConfig {
   whispererSelection: string
   infectionLossToWhisperer: boolean

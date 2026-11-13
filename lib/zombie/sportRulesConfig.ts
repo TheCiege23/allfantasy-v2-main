@@ -381,6 +381,3 @@ export function getSportLabel(sport: string): string {
   return getZombieSportConfig(sport).label
 }
 
-export function getAllSportKeys(): string[] {
-  return Object.keys(ZOMBIE_SPORT_CONFIGS)
-}

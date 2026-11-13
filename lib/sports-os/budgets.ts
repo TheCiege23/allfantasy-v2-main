@@ -213,4 +213,3 @@ export function allBudgets(): Array<{ key: string; budget: Budget }> {
   return rows.sort((a, b) => a.key.localeCompare(b.key))
 }
 
-export const BUDGET_PHASES: readonly BudgetPhase[] = Object.keys(BASE_BUDGETS) as BudgetPhase[]

@@ -1,7 +1,5 @@
 'use client'
 
-import type { ReactNode } from 'react'
-import Link from 'next/link'
 import { Sparkles } from 'lucide-react'
 import type { TierTheme } from '@/lib/rank/tier-theme'
 import { getAiScoreDescriptor } from '@/lib/rank/tier-theme'
@@ -10,39 +8,6 @@ export type RankMovement = {
   kind: 'up' | 'down' | 'flat' | 'hot'
   delta?: number
   label?: string
-}
-
-export function RankMovementChip({ movement }: { movement: RankMovement | null | undefined }) {
-  if (!movement) return null
-
-  const label =
-    movement.label ??
-    (movement.kind === 'hot'
-      ? 'Hot streak'
-      : movement.kind === 'flat'
-        ? 'No change'
-        : movement.kind === 'up' && typeof movement.delta === 'number'
-          ? `Up ${movement.delta}`
-          : movement.kind === 'down' && typeof movement.delta === 'number'
-            ? `Down ${movement.delta}`
-            : null)
-
-  if (!label) return null
-
-  const cls =
-    movement.kind === 'up' || movement.kind === 'hot'
-      ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200'
-      : movement.kind === 'down'
-        ? 'border-rose-500/35 bg-rose-500/10 text-rose-200'
-        : 'border-slate-500/30 bg-slate-500/10 text-slate-300'
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${cls}`}
-    >
-      {label}
-    </span>
-  )
 }
 
 export function RankPrestigeEmblem({
@@ -227,31 +192,6 @@ export function XpProgressPremium({
   )
 }
 
-export function RankingStatMiniCard({
-  icon,
-  label,
-  value,
-  sub,
-}: {
-  icon: ReactNode
-  label: string
-  value: string
-  sub?: string
-}) {
-  return (
-    <div className="group flex min-w-0 flex-col rounded-xl border border-white/[0.08] bg-white/[0.03] px-2.5 py-2.5 transition hover:border-white/[0.12] hover:bg-white/[0.05] sm:px-3 sm:py-3">
-      <div className="mb-1 flex items-center gap-1.5 text-white/40">
-        <span className="shrink-0 opacity-80" aria-hidden>
-          {icon}
-        </span>
-        <span className="truncate text-[11px] font-bold uppercase tracking-wider">{label}</span>
-      </div>
-      <p className="truncate text-base font-black tabular-nums text-white/95 sm:text-lg">{value}</p>
-      {sub ? <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/38">{sub}</p> : null}
-    </div>
-  )
-}
-
 export function RankInsightBanner({ text }: { text: string }) {
   if (!text?.trim()) return null
   return (
@@ -262,57 +202,3 @@ export function RankInsightBanner({ text }: { text: string }) {
   )
 }
 
-export function RankingsCtaRow({
-  fullRankingsHref = '/af-rankings',
-  viewFullLabel = 'View full rankings',
-  chimmyWhyLabel = 'Ask Chimmy why',
-  xpExplainerLabel = 'How XP works',
-  chimmyHref,
-  onAskChimmy,
-  xpExplainerHref,
-}: {
-  fullRankingsHref?: string
-  viewFullLabel?: string
-  chimmyWhyLabel?: string
-  xpExplainerLabel?: string
-  chimmyHref?: string
-  onAskChimmy?: () => void
-  /** e.g. `/af-rankings#af-xp-breakdown` from dashboard */
-  xpExplainerHref?: string
-}) {
-  return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-      <Link
-        href={fullRankingsHref}
-        className="inline-flex items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/[0.12] px-4 py-2.5 text-sm font-bold text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.12)] transition hover:border-cyan-400/55 hover:bg-cyan-500/[0.18]"
-        data-testid="rankings-cta-full"
-      >
-        {viewFullLabel}
-      </Link>
-      <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
-        {onAskChimmy ? (
-          <button
-            type="button"
-            onClick={onAskChimmy}
-            className="text-cyan-300/90 underline-offset-2 transition hover:text-cyan-200 hover:underline"
-            data-testid="rankings-cta-chimmy-why"
-          >
-            {chimmyWhyLabel}
-          </button>
-        ) : chimmyHref ? (
-          <Link href={chimmyHref} className="text-cyan-300/90 underline-offset-2 hover:underline">
-            {chimmyWhyLabel}
-          </Link>
-        ) : null}
-        {xpExplainerHref ? (
-          <Link
-            href={xpExplainerHref}
-            className="text-white/40 underline-offset-2 transition hover:text-white/60 hover:underline"
-          >
-            {xpExplainerLabel}
-          </Link>
-        ) : null}
-      </div>
-    </div>
-  )
-}

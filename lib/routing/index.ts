@@ -8,7 +8,6 @@ export {
 export {
   getProductSwitchHref,
   getProductSwitchItems,
-  getSwitchTargetFromPath,
 } from "./ProductSwitchController"
 export {
   safeRedirectPath,
@@ -16,21 +15,14 @@ export {
   getRedirectAfterSignup,
   loginUrlWithIntent,
   signupUrlWithIntent,
-  getPostAuthDestination,
-  buildLoginUrlWithIntent,
-  buildSignupUrlWithIntent,
 } from "./PostAuthIntentRouter"
 export {
   isProtectedPath,
   isAdminPath,
   getLoginRedirectUrl,
-  getAdminLoginRedirectUrl,
-  getSignupRedirectUrl,
-  resolveProtectedRouteRedirect,
 } from "./ProtectedRouteResolver"
 export {
   getUnauthorizedFallback,
-  DEFAULT_UNAUTHENTICATED_FALLBACK,
   DEFAULT_UNAUTHORIZED_FALLBACK,
 } from "./UnauthorizedFallbackResolver"
 export {

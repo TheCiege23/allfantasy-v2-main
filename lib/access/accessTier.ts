@@ -1,5 +1,3 @@
-import type { SubscriptionPlanId } from '@/lib/subscription/types'
-
 /** Paid subscription tiers that gate real feature access (excludes the enterprise workspace tier). */
 export type PaidTier = 'pro' | 'commissioner' | 'war_room' | 'supreme'
 
@@ -52,7 +50,3 @@ export function resolveAccessTier(input: { isAuthenticated: boolean } & AccessTi
   }
 }
 
-/** Maps a PaidTier to its SubscriptionPlanId for display/pricing lookups. */
-export function paidTierToPlanId(tier: PaidTier): SubscriptionPlanId {
-  return tier
-}

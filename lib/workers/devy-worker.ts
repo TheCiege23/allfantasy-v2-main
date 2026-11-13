@@ -62,6 +62,3 @@ export async function stopDevyWorker(): Promise<void> {
   devyWorker = null;
 }
 
-export function getDevyWorker(): Worker<DevyJobPayload, DevyJobResult> | null {
-  return devyWorker;
-}

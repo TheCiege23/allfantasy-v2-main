@@ -15,11 +15,3 @@ export function LoadingState({ rows = 3 }: LoadingStateProps) {
   )
 }
 
-export function KpiCardSkeleton() {
-  return (
-    <div className="space-y-2 p-2" aria-busy="true">
-      <Skeleton className="h-3 w-20" />
-      <Skeleton className="h-8 w-24" />
-    </div>
-  )
-}

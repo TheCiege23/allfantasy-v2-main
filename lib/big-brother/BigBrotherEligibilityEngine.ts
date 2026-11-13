@@ -93,12 +93,6 @@ export async function getEligibility(
   return base
 }
 
-/** Can this roster perform competitive actions (lineup, waiver, trade)? */
-export async function canRosterCompete(leagueId: string, rosterId: string): Promise<boolean> {
-  const excluded = await getExcludedRosterIds(leagueId)
-  return !excluded.includes(rosterId)
-}
-
 /** Is this roster jury (eliminated but jury member)? */
 export async function isJuryRoster(leagueId: string, rosterId: string): Promise<boolean> {
   const member = await prisma.bigBrotherJuryMember.findUnique({

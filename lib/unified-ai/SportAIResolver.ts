@@ -43,12 +43,4 @@ export function getSportLabelForPrompt(sport: string): string {
   return SPORT_LABELS[n] ?? n
 }
 
-/**
- * Build a one-line sport context string for inclusion in AI prompts.
- */
-export function buildSportContextLine(sport: string | null | undefined): string {
-  const s = resolveSportForAI(sport)
-  return `Sport: ${getSportLabelForPrompt(s)}.`
-}
-
 export { isSupportedSport, DEFAULT_SPORT }

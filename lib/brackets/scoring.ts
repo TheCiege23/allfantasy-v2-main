@@ -26,18 +26,6 @@ export function scoringConfigKey(mode: ScoringMode, flags: BonusFlags): string {
   return parts.join("+")
 }
 
-export function parseScoringConfigKey(key: string): { mode: ScoringMode; flags: BonusFlags } {
-  const parts = key.split("+")
-  return {
-    mode: parts[0] as ScoringMode,
-    flags: {
-      upsetDeltaEnabled: parts.includes("upset"),
-      leverageBonusEnabled: parts.includes("leverage"),
-      insuranceEnabled: parts.includes("insurance"),
-    },
-  }
-}
-
 export function bonusFlagsFromRules(rules: any): BonusFlags {
   return {
     upsetDeltaEnabled: rules.upsetDeltaEnabled !== false,

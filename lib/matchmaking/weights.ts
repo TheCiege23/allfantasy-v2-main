@@ -52,9 +52,3 @@ export const DISCOVERY_RAIL_CAPS = {
   minFitToInclude: 0.45,
 } as const
 
-/** Commissioner trust blend (used for `CommissionerSuggestion.trust`). */
-export const COMMISSIONER_TRUST_BLEND = {
-  credibility: 0.55,
-  reputation: 0.3,
-  verifiedBoost: 0.15,
-} as const

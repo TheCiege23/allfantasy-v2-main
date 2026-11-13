@@ -6,52 +6,6 @@ import { findPlayerTier } from './dynasty-tiers';
 // AI can ONLY see candidate trades, values, needs, reasons, verdicts
 // AI is FORBIDDEN from changing totals or proposing new values
 
-export interface AITargetTeamsInput {
-  candidateTrades: TradeCandidate[];
-  leagueFacts: TeamFacts;
-  standings: Array<{ team_id: string; team_name: string; wins: number; losses: number }>;
-}
-
-export interface AITargetTeamsOutput {
-  targets: Array<{
-    team_id: string;
-    team_name: string;
-    why_target: string[];
-    best_offers: string[]; // offer IDs
-    message_template: string;
-  }>;
-}
-
-export interface AIRestructureInput {
-  rejected_offer: TradeCandidate;
-  rejection_reasons: string[];
-  available_tradeable_pool: Asset[];
-  constraints: Constraints;
-}
-
-export interface AIRestructureOutput {
-  restructured_offers: Array<{
-    based_on_offer_id: string;
-    new_offer: TradeCandidate;
-    why_this_is_more_acceptable: string[];
-  }>;
-}
-
-export interface AIRiskAnalysisInput {
-  offer: TradeCandidate;
-  player_tags: Record<string, string[]>; // player_id -> ['young', 'injury_risk', etc]
-  team_directions: Record<string, TeamDirection>;
-  fairness_breakdown: HumanFairnessResult;
-}
-
-export interface AIRiskAnalysisOutput {
-  offer_id: string;
-  risk_summary: string[];
-  timing_summary: string[];
-  who_benefits_now: string;
-  who_benefits_later: string;
-}
-
 // Trade candidate for AI layer
 export interface TradeCandidate {
   offer_id: string;
@@ -127,24 +81,6 @@ Output JSON only:
   "who_benefits_now": "...",
   "who_benefits_later": "..."
 }`
-} as const;
-
-// AI Rules (for prompt injection)
-export const AI_RULES = {
-  FORBIDDEN: [
-    'Do NOT propose new trades outside the provided candidates',
-    'Do NOT change any asset values',
-    'Do NOT override fairness scores',
-    'Do NOT invent facts not in the provided data',
-    'Do NOT suggest trades that violate cornerstone rules'
-  ],
-  ALLOWED: [
-    'Rank existing candidate trades',
-    'Explain why a trade works for each team',
-    'Suggest restructures within allowed constraints',
-    'Explain risks using provided tags',
-    'Generate message templates for outreach'
-  ]
 } as const;
 
 // ============================================
@@ -323,19 +259,6 @@ export function calculateDynamicThresholds(
   };
 }
 
-// Build complete thresholds from FantasyCalc player data
-export function buildThresholdsFromFantasyCalc(
-  players: Array<{ pos: string; value: number }>
-): Thresholds {
-  const percentiles = computePositionPercentiles(players);
-  const calculated = calculateDynamicThresholds(percentiles);
-  
-  return {
-    ...calculated,
-    EARLY_1ST_CORNERSTONE: true // Always true
-  };
-}
-
 // ============================================
 // TRADE PIPELINE (Order of Operations)
 // ============================================
@@ -369,183 +292,6 @@ export interface TradePipelineOutput {
   validTrades: ValidatedTrade[];
   rejectedTrades: Array<{ trade: Trade; reasons: string[] }>;
   thresholdsUsed: Thresholds;
-}
-
-// Step 1 & 2: Tag all assets with cornerstone flags
-function prepareAssets(
-  assets: Asset[],
-  league: LeagueSettings,
-  thresholds: Thresholds
-): Asset[] {
-  return assets.map(a => classifyCornerstone(a, league, thresholds));
-}
-
-// Step 3: Generate candidate trade structures (1-for-1, 2-for-1, 2-for-2)
-type TradeStructure = '1-for-1' | '2-for-1' | '1-for-2' | '2-for-2';
-
-function generateCandidateStructures(
-  userAssets: Asset[],
-  targetAssets: Asset[],
-  constraints: Constraints
-): Array<{ structure: TradeStructure; userGives: Asset[]; userGets: Asset[] }> {
-  const candidates: Array<{ structure: TradeStructure; userGives: Asset[]; userGets: Asset[] }> = [];
-  
-  // Filter to tradeable assets only (exclude low value filler)
-  const userTradeable = userAssets.filter(a => a.value >= constraints.noFillerMinValue);
-  const targetTradeable = targetAssets.filter(a => a.value >= constraints.noFillerMinValue);
-
-  // 1-for-1 trades
-  for (const give of userTradeable) {
-    for (const get of targetTradeable) {
-      candidates.push({
-        structure: '1-for-1',
-        userGives: [give],
-        userGets: [get]
-      });
-    }
-  }
-
-  // 2-for-1 trades (user consolidates)
-  for (let i = 0; i < userTradeable.length; i++) {
-    for (let j = i + 1; j < userTradeable.length; j++) {
-      for (const get of targetTradeable) {
-        candidates.push({
-          structure: '2-for-1',
-          userGives: [userTradeable[i], userTradeable[j]],
-          userGets: [get]
-        });
-      }
-    }
-  }
-
-  // 1-for-2 trades (user expands)
-  for (const give of userTradeable) {
-    for (let i = 0; i < targetTradeable.length; i++) {
-      for (let j = i + 1; j < targetTradeable.length; j++) {
-        candidates.push({
-          structure: '1-for-2',
-          userGives: [give],
-          userGets: [targetTradeable[i], targetTradeable[j]]
-        });
-      }
-    }
-  }
-
-  // 2-for-2 trades
-  for (let i = 0; i < userTradeable.length; i++) {
-    for (let j = i + 1; j < userTradeable.length; j++) {
-      for (let k = 0; k < targetTradeable.length; k++) {
-        for (let l = k + 1; l < targetTradeable.length; l++) {
-          candidates.push({
-            structure: '2-for-2',
-            userGives: [userTradeable[i], userTradeable[j]],
-            userGets: [targetTradeable[k], targetTradeable[l]]
-          });
-        }
-      }
-    }
-  }
-
-  return candidates;
-}
-
-// Main pipeline function
-export function runTradePipeline(input: TradePipelineInput): TradePipelineOutput {
-  const thresholds = input.thresholds || DEFAULT_THRESHOLDS;
-  const constraints = input.constraints || DEFAULT_CONSTRAINTS;
-
-  // Step 1 & 2: Prepare assets with cornerstone classification
-  const userAssets = prepareAssets(input.userAssets, input.league, thresholds);
-  const targetAssets = prepareAssets(input.targetManagerAssets, input.league, thresholds);
-
-  // Step 3: Generate candidate trade structures
-  const candidates = generateCandidateStructures(userAssets, targetAssets, constraints);
-
-  const validTrades: ValidatedTrade[] = [];
-  const rejectedTrades: Array<{ trade: Trade; reasons: string[] }> = [];
-
-  for (const candidate of candidates) {
-    const trade: Trade = {
-      teamA_gives: candidate.userGives,
-      teamA_gets: candidate.userGets
-    };
-
-    // Step 4: Hard filter
-    const hardRuleResult = violatesHardRules(trade, input.league, constraints);
-    
-    if (!hardRuleResult.ok) {
-      rejectedTrades.push({ trade, reasons: hardRuleResult.reasons });
-      continue;
-    }
-
-    // Step 5: Compute human fairness
-    const userContext: TeamRosterContext = {
-      weakPositions: input.userFacts.teamNeeds[input.userTeamId] || []
-    };
-    const fairness = humanFairness(trade, userContext, hardRuleResult.reasons);
-
-    // Skip trades with very low scores
-    if (fairness.final < 40) {
-      rejectedTrades.push({ trade, reasons: ['Fairness score too low'] });
-      continue;
-    }
-
-    // Check cornerstone rules satisfied
-    const givesCornerstone = trade.teamA_gives.some(a => a.isCornerstone);
-    const getsCornerstone = trade.teamA_gets.some(a => a.isCornerstone);
-    const givesTotal = sumValue(trade.teamA_gives);
-    const getsTotal = sumValue(trade.teamA_gets);
-    const ratio = getsTotal / Math.max(givesTotal, 1);
-    
-    let cornerstoneRulesSatisfied = true;
-    if (givesCornerstone && !getsCornerstone) {
-      // Must receive premium
-      cornerstoneRulesSatisfied = ratio >= constraints.cornerstonePremiumMin;
-    }
-
-    // Step 6: Build deterministic explanations
-    const whyUserAccepts = buildWhyTeamAccepts(
-      input.userTeamId,
-      { gets: candidate.userGets, gives: candidate.userGives },
-      input.userFacts
-    );
-    const whyTargetAccepts = buildWhyTeamAccepts(
-      input.targetTeamId,
-      { gets: candidate.userGives, gives: candidate.userGets },
-      input.userFacts
-    );
-
-    // Generate UI labels
-    const uiLabels = generateUILabels(fairness, hardRuleResult.reasons, cornerstoneRulesSatisfied);
-
-    // Build validated trade
-    const validatedTrade: ValidatedTrade = {
-      offer_id: `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      teamA_id: input.userTeamId,
-      teamA_name: '', // Would be filled from league data
-      teamB_id: input.targetTeamId,
-      teamB_name: '',
-      teamA_gives: candidate.userGives,
-      teamA_gets: candidate.userGets,
-      fairness,
-      whyTeamAAccepts: whyUserAccepts,
-      whyTeamBAccepts: whyTargetAccepts,
-      hardRuleResult,
-      uiLabels,
-      cornerstoneRulesSatisfied
-    };
-
-    validTrades.push(validatedTrade);
-  }
-
-  // Sort by fairness score (best first)
-  validTrades.sort((a, b) => b.fairness.final - a.fairness.final);
-
-  return {
-    validTrades: validTrades.slice(0, 20), // Top 20 trades
-    rejectedTrades,
-    thresholdsUsed: thresholds
-  };
 }
 
 // ============================================
@@ -725,7 +471,6 @@ export function violatesHardRules(
 export const QB_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.QB_CORNERSTONE_SF;
 export const TE_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.TE_CORNERSTONE_STD;
 export const SKILL_ELITE_THRESHOLD = DEFAULT_THRESHOLDS.SKILL_CORNERSTONE;
-export const PICK_EARLY_1ST_THRESHOLD = 7000;
 
 export type AssetClassification = 'CORNERSTONE' | 'STANDARD';
 
@@ -778,33 +523,6 @@ export interface AssetForClassification {
   round?: number;
   projected?: 'early' | 'mid' | 'late';
   cornerstone?: boolean;
-}
-
-// Convert new Asset to legacy format for existing functions
-export function assetToClassification(asset: Asset, leagueSettings: LeagueSettingsForClassification): AssetForClassification {
-  if (asset.type === 'PLAYER') {
-    return {
-      type: asset.pos as 'QB' | 'RB' | 'WR' | 'TE',
-      value: asset.value,
-      name: asset.name,
-      cornerstone: asset.isCornerstone
-    };
-  }
-  if (asset.type === 'PICK') {
-    return {
-      type: 'PICK',
-      value: asset.value,
-      round: asset.round,
-      projected: asset.projected === 'unknown' ? undefined : asset.projected,
-      cornerstone: asset.isCornerstone
-    };
-  }
-  // FAAB
-  return {
-    type: 'FAAB',
-    value: asset.faabAmount || asset.value,
-    cornerstone: false
-  };
 }
 
 // Compute cornerstone flag for an Asset
@@ -874,15 +592,6 @@ export function tagAssetCornerstone(
     isCornerstone,
     cornerstoneReason: reason
   };
-}
-
-// Tag all assets in an array
-export function tagAllAssets(
-  assets: Asset[],
-  league: LeagueSettings | LeagueSettingsForClassification,
-  thresholds: Thresholds = DEFAULT_THRESHOLDS
-): Asset[] {
-  return assets.map(a => tagAssetCornerstone(a, league, thresholds));
 }
 
 // Convenience: Classify cornerstone and return full Asset (matches user's classifyCornerstone)
@@ -1209,29 +918,6 @@ export function buildWhyTeamAccepts(
   return reasons.slice(0, 3);
 }
 
-// Convenience: Build facts from roster evidence
-export function buildFactsFromEvidence(
-  teamId: string,
-  evidence: TeamEvidence
-): Partial<TeamFacts> {
-  const teamNeeds: Record<string, PlayerPosition[]> = {};
-  const teamDirection: Record<string, TeamDirection> = {};
-  const teamSurplus: Record<string, PlayerPosition[]> = {};
-  const teamRecord: Record<string, { wins: number; losses: number }> = {};
-
-  // Derive needs/surplus from roster evidence
-  const { surplus, needs } = computeTeamNeeds(evidence.rosterEvidence);
-  teamNeeds[teamId] = needs;
-  teamSurplus[teamId] = surplus;
-  teamDirection[teamId] = evidence.direction;
-  
-  if (evidence.record) {
-    teamRecord[teamId] = evidence.record;
-  }
-
-  return { teamNeeds, teamDirection, teamSurplus, teamRecord };
-}
-
 export interface RosterEvidence {
   position: 'QB' | 'RB' | 'WR' | 'TE';
   startableCount: number;       // How many startable players at this position
@@ -1291,144 +977,6 @@ export function computeTeamNeeds(evidence: RosterEvidence[]): {
   }
   
   return { surplus, needs };
-}
-
-// Generate explanation from evidence only
-export function generateTradeExplanation(
-  teamEvidence: TeamEvidence,
-  receivingAssets: AssetForClassification[],
-  givingAssets: AssetForClassification[]
-): TradeExplanation {
-  const provenFacts: string[] = [];
-  const unprovenClaims: string[] = [];
-  
-  let rosterReason: RosterReason | null = null;
-  let directionReason: DirectionReason | null = null;
-  let marketReason: MarketReason | null = null;
-  
-  const { surplus, needs } = computeTeamNeeds(teamEvidence.rosterEvidence);
-  
-  // ============================================
-  // 1. ROSTER-BASED REASON (from roster data)
-  // ============================================
-  
-  // Check if receiving asset fills a need
-  for (const asset of receivingAssets) {
-    if (asset.type !== 'PICK' && asset.type !== 'FAAB') {
-      const posEvidence = teamEvidence.rosterEvidence.find(r => r.position === asset.type);
-      if (posEvidence && needs.includes(asset.type as any)) {
-        rosterReason = {
-          type: 'FILLS_STARTER_NEED',
-          position: asset.type,
-          currentStarters: posEvidence.startableCount,
-          slots: posEvidence.starterSlots
-        };
-        provenFacts.push(
-          `Team needs ${asset.type} (has ${posEvidence.startableCount} startable, needs ${posEvidence.starterSlots})`
-        );
-        break;
-      }
-    }
-  }
-  
-  // Check if giving asset is from a surplus
-  if (!rosterReason) {
-    for (const asset of givingAssets) {
-      if (asset.type !== 'PICK' && asset.type !== 'FAAB') {
-        const posEvidence = teamEvidence.rosterEvidence.find(r => r.position === asset.type);
-        if (posEvidence && surplus.includes(asset.type as any)) {
-          rosterReason = {
-            type: 'HAS_SURPLUS',
-            position: asset.type,
-            startableCount: posEvidence.startableCount,
-            slots: posEvidence.starterSlots,
-            names: posEvidence.playerNames || []
-          };
-          provenFacts.push(
-            `Team has ${asset.type} surplus (${posEvidence.startableCount} startable, only ${posEvidence.starterSlots} slots)`
-          );
-          break;
-        }
-      }
-    }
-  }
-  
-  // ============================================
-  // 2. DIRECTION-BASED REASON (from team phase)
-  // ============================================
-  
-  if (teamEvidence.direction === 'REBUILD') {
-    // Check if converting production into youth/picks
-    const givingProduction = givingAssets.some(a => 
-      (a.type === 'RB' || a.type === 'WR') && a.value >= 3000
-    );
-    const receivingYouthOrPicks = receivingAssets.some(a => 
-      a.type === 'PICK' || (a.value >= 2000 && a.value < 5000)
-    );
-    
-    if (givingProduction && receivingYouthOrPicks) {
-      const fromPos = givingAssets.find(a => a.type === 'RB' || a.type === 'WR')?.type || 'production';
-      directionReason = {
-        type: 'REBUILDING_CONVERTING',
-        from: `${fromPos} production`,
-        to: 'youth/picks'
-      };
-      provenFacts.push(`Team is rebuilding and converting ${fromPos} production into youth/picks`);
-    }
-  } else if (teamEvidence.direction === 'CONTENDER') {
-    // Check if receiving win-now asset
-    const receivingWinNow = receivingAssets.find(a => 
-      a.value >= 4000 && a.type !== 'PICK'
-    );
-    if (receivingWinNow) {
-      directionReason = {
-        type: 'CONTENDING_NEEDS_NOW',
-        position: receivingWinNow.type
-      };
-      provenFacts.push(`Team is contending and needs ${receivingWinNow.type} production now`);
-    }
-  } else {
-    directionReason = { type: 'MIDDLE_FLEXIBLE' };
-    provenFacts.push('Team is in middle phase and can go either direction');
-  }
-  
-  // ============================================
-  // 3. MARKET-BASED REASON (optional)
-  // ============================================
-  
-  // Elite TE or QB positional scarcity
-  const receivingEliteTE = receivingAssets.find(a => 
-    a.type === 'TE' && a.value >= TE_ELITE_THRESHOLD
-  );
-  const receivingEliteQB = receivingAssets.find(a => 
-    a.type === 'QB' && a.value >= QB_ELITE_THRESHOLD
-  );
-  
-  if (receivingEliteTE) {
-    marketReason = { type: 'POSITIONAL_SCARCITY', position: 'TE' };
-    provenFacts.push('Acquiring elite TE (positional scarcity premium applies)');
-  } else if (receivingEliteQB) {
-    marketReason = { type: 'POSITIONAL_SCARCITY', position: 'QB' };
-    provenFacts.push('Acquiring elite QB (Superflex scarcity premium applies)');
-  }
-  
-  return {
-    whyTheyAccept: {
-      rosterReason,
-      directionReason,
-      marketReason
-    },
-    provenFacts,
-    unprovenClaims
-  };
-}
-
-// Format explanation to human-readable string
-export function formatExplanation(explanation: TradeExplanation): string {
-  if (explanation.provenFacts.length === 0) {
-    return 'No clear acceptance narrative based on available data.';
-  }
-  return explanation.provenFacts.join('. ') + '.';
 }
 
 export interface FairnessScoreResult {
@@ -1639,163 +1187,6 @@ export interface TradeRejection {
   code: 'CORNERSTONE_1_FOR_1' | 'CORNERSTONE_UNDERPAID' | 'TOO_MANY_ASSETS' | 'FAAB_AS_ANCHOR' | null;
 }
 
-export function rejectTradeImmediately(
-  givingAssets: AssetForClassification[],
-  receivingAssets: AssetForClassification[],
-  leagueSettings: LeagueSettingsForClassification
-): TradeRejection {
-  const givingClassified = classifyTradeAssets(givingAssets, leagueSettings);
-  const receivingClassified = classifyTradeAssets(receivingAssets, leagueSettings);
-  
-  const givingTotal = givingAssets.reduce((sum, a) => sum + a.value, 0);
-  const receivingTotal = receivingAssets.reduce((sum, a) => sum + a.value, 0);
-  
-  // ❌ RULE 1: Cornerstone traded 1-for-1 for non-cornerstone
-  if (
-    givingAssets.length === 1 && 
-    receivingAssets.length === 1 &&
-    givingClassified.cornerstones.length === 1 &&
-    receivingClassified.cornerstones.length === 0
-  ) {
-    return {
-      rejected: true,
-      reason: `Cannot trade cornerstone ${givingAssets[0].name || givingAssets[0].type} 1-for-1 for non-cornerstone`,
-      code: 'CORNERSTONE_1_FOR_1'
-    };
-  }
-  
-  // ❌ RULE 2: Cornerstone side receives < 110-125% value
-  if (givingClassified.cornerstones.length > 0 && receivingClassified.cornerstones.length === 0) {
-    const ratio = receivingTotal / givingTotal;
-    if (ratio < 1.10) {
-      return {
-        rejected: true,
-        reason: `Cornerstone trade requires 110-125% return. Got ${(ratio * 100).toFixed(0)}%`,
-        code: 'CORNERSTONE_UNDERPAID'
-      };
-    }
-  }
-  
-  // ❌ RULE 3: More than 3 assets per side
-  if (givingAssets.length > 3) {
-    return {
-      rejected: true,
-      reason: `Too many assets on giving side (${givingAssets.length}). Max 3 per side.`,
-      code: 'TOO_MANY_ASSETS'
-    };
-  }
-  if (receivingAssets.length > 3) {
-    return {
-      rejected: true,
-      reason: `Too many assets on receiving side (${receivingAssets.length}). Max 3 per side.`,
-      code: 'TOO_MANY_ASSETS'
-    };
-  }
-  
-  // ❌ RULE 4: FAAB used as primary value (can only balance, never anchor)
-  const givingFAAB = givingAssets.filter(a => a.type === 'FAAB');
-  const receivingFAAB = receivingAssets.filter(a => a.type === 'FAAB');
-  const givingNonFAAB = givingAssets.filter(a => a.type !== 'FAAB');
-  const receivingNonFAAB = receivingAssets.filter(a => a.type !== 'FAAB');
-  
-  // FAAB is anchor if it's the only asset or highest value asset
-  if (givingFAAB.length > 0 && givingNonFAAB.length === 0) {
-    return {
-      rejected: true,
-      reason: 'FAAB cannot be the primary asset in a trade (balance only)',
-      code: 'FAAB_AS_ANCHOR'
-    };
-  }
-  if (receivingFAAB.length > 0 && receivingNonFAAB.length === 0) {
-    return {
-      rejected: true,
-      reason: 'FAAB cannot be the primary asset in a trade (balance only)',
-      code: 'FAAB_AS_ANCHOR'
-    };
-  }
-  
-  // Check if FAAB is highest value on either side
-  const givingFAABValue = givingFAAB.reduce((sum, a) => sum + a.value, 0);
-  const givingNonFAABValue = givingNonFAAB.reduce((sum, a) => sum + a.value, 0);
-  if (givingFAABValue > givingNonFAABValue && givingFAABValue > 0) {
-    return {
-      rejected: true,
-      reason: 'FAAB cannot exceed player/pick value (balance only)',
-      code: 'FAAB_AS_ANCHOR'
-    };
-  }
-  
-  const receivingFAABValue = receivingFAAB.reduce((sum, a) => sum + a.value, 0);
-  const receivingNonFAABValue = receivingNonFAAB.reduce((sum, a) => sum + a.value, 0);
-  if (receivingFAABValue > receivingNonFAABValue && receivingFAABValue > 0) {
-    return {
-      rejected: true,
-      reason: 'FAAB cannot exceed player/pick value (balance only)',
-      code: 'FAAB_AS_ANCHOR'
-    };
-  }
-  
-  // ✅ Trade passes all rejection rules
-  return { rejected: false, reason: '', code: null };
-}
-
-export function validateCornerstoneTradeRatio(
-  givingAssets: AssetForClassification[],
-  receivingAssets: AssetForClassification[],
-  leagueSettings: LeagueSettingsForClassification
-): { isValid: boolean; ratio: number; message: string; hasCornerstoneViolation: boolean } {
-  const givingClassified = classifyTradeAssets(givingAssets, leagueSettings);
-  const receivingClassified = classifyTradeAssets(receivingAssets, leagueSettings);
-  
-  const givingTotal = givingAssets.reduce((sum, a) => sum + a.value, 0);
-  const receivingTotal = receivingAssets.reduce((sum, a) => sum + a.value, 0);
-  const ratio = receivingTotal / givingTotal;
-  
-  // If giving up cornerstone(s)
-  if (givingClassified.cornerstones.length > 0) {
-    // Check if receiving cornerstone(s) in return
-    if (receivingClassified.cornerstones.length > 0) {
-      // Cornerstone for cornerstone - use standard fairness band
-      if (ratio >= 0.92 && ratio <= 1.08) {
-        return { isValid: true, ratio, message: 'Cornerstone-for-cornerstone trade within fairness band', hasCornerstoneViolation: false };
-      }
-      return { isValid: false, ratio, message: `Cornerstone trade ratio ${ratio.toFixed(2)} outside 0.92-1.08 band`, hasCornerstoneViolation: true };
-    }
-    
-    // Giving cornerstone but not receiving one - require 1.10-1.25 premium
-    if (ratio < 1.10) {
-      const cornerstoneNames = givingClassified.cornerstones.map(a => a.name || a.type).join(', ');
-      return { 
-        isValid: false, 
-        ratio, 
-        message: `CORNERSTONE_UNDERPAID: Trading ${cornerstoneNames} requires 1.10-1.25 ratio, got ${ratio.toFixed(2)}`,
-        hasCornerstoneViolation: true
-      };
-    }
-    if (ratio > 1.25) {
-      return { 
-        isValid: true, 
-        ratio, 
-        message: `Excellent premium for cornerstone (${ratio.toFixed(2)} ratio)`,
-        hasCornerstoneViolation: false
-      };
-    }
-    return { isValid: true, ratio, message: `Valid cornerstone premium (${ratio.toFixed(2)} ratio)`, hasCornerstoneViolation: false };
-  }
-  
-  // No cornerstones involved - standard fairness band
-  if (ratio >= 0.92 && ratio <= 1.08) {
-    return { isValid: true, ratio, message: 'Trade within standard fairness band', hasCornerstoneViolation: false };
-  }
-  
-  return { 
-    isValid: false, 
-    ratio, 
-    message: `Trade ratio ${ratio.toFixed(2)} outside standard 0.92-1.08 band`,
-    hasCornerstoneViolation: false
-  };
-}
-
 export interface TradeConstraints {
   max_assets_per_side: number;
   no_filler_threshold_value: number;
@@ -1908,45 +1299,6 @@ export function identifyUntouchables(
     .map(p => p.name);
 }
 
-export function isFillerAsset(
-  value: number,
-  constraints: TradeConstraints = DEFAULT_TRADE_CONSTRAINTS
-): boolean {
-  return value < constraints.no_filler_threshold_value;
-}
-
-export function validateTradeFairness(
-  teamAGivesTotal: number,
-  teamAGetsTotal: number,
-  isRebuilding: boolean = false,
-  constraints: TradeConstraints = DEFAULT_TRADE_CONSTRAINTS
-): { isValid: boolean; ratio: number; message: string } {
-  const ratio = teamAGetsTotal / teamAGivesTotal;
-  const band = isRebuilding ? constraints.rebuild_fairness_band : constraints.fairness_band;
-  
-  if (ratio < band.min) {
-    return {
-      isValid: false,
-      ratio,
-      message: `Trade unfair - ratio ${ratio.toFixed(2)} is below minimum ${band.min}`
-    };
-  }
-  
-  if (ratio > band.max) {
-    return {
-      isValid: false,
-      ratio,
-      message: `Trade unfair - ratio ${ratio.toFixed(2)} is above maximum ${band.max}`
-    };
-  }
-  
-  return {
-    isValid: true,
-    ratio,
-    message: 'Trade is within fairness band'
-  };
-}
-
 export function validateCornerstoneProtection(
   assetsGiven: { name: string; value: number }[],
   assetsReceived: { name: string; value: number }[],
@@ -1981,34 +1333,6 @@ export function validateCornerstoneProtection(
   return {
     isValid: false,
     message: `Trading cornerstone without adequate return - need +${(constraints.cornerstone_premium_required * 100).toFixed(0)}% premium or another cornerstone`
-  };
-}
-
-export function validateFillerAssets(
-  assets: { name: string; value: number; pos?: string }[],
-  starterNeeds: string[] = [],
-  handcuffs: string[] = [],
-  constraints: TradeConstraints = DEFAULT_TRADE_CONSTRAINTS
-): { isValid: boolean; fillerCount: number; message: string } {
-  const fillers = assets.filter(a => {
-    if (a.value >= constraints.no_filler_threshold_value) return false;
-    const posNeeded = starterNeeds.some(need => a.pos?.toUpperCase() === need.toUpperCase());
-    const isHandcuff = handcuffs.some(h => h.toLowerCase() === a.name.toLowerCase());
-    return !posNeeded && !isHandcuff;
-  });
-  
-  if (fillers.length === 0) {
-    return { isValid: true, fillerCount: 0, message: 'No filler assets' };
-  }
-  
-  if (fillers.length === 1 && assets.length <= 3) {
-    return { isValid: true, fillerCount: 1, message: 'Minor filler acceptable' };
-  }
-  
-  return {
-    isValid: false,
-    fillerCount: fillers.length,
-    message: `Trade includes ${fillers.length} filler asset(s) with no clear purpose: ${fillers.map(f => f.name).join(', ')}`
   };
 }
 

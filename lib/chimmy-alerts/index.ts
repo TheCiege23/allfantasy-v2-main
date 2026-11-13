@@ -20,14 +20,10 @@ export {
   scoreAlertRelevance,
   renderAlertPayload,
   suppressDuplicateAlerts,
-  dedupeAlerts,
   applyChannelPrefs,
   chooseAlertChannel,
-  chooseAlertDeliverySurface,
-  routeAlertDeliveryPlan,
   bindAlertActions,
   deliverAlert,
-  logAlertEvent,
   logAlertLifecycle,
 } from './ChimmyAlertEngine'
 

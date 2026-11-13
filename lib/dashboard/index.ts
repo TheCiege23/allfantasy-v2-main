@@ -6,7 +6,6 @@ export {
   getProductLauncherCards,
   PRODUCT_LAUNCHER_CARDS,
   type DashboardCardConfig,
-  type DashboardSectionConfig,
   type DashboardSectionCardType,
 } from "./DashboardCardResolver"
 export { getDashboardSections, type DashboardSectionSpec, type DashboardLayoutInput } from "./DashboardLayoutEngine"
@@ -30,9 +29,6 @@ export {
 } from "./DashboardLeagueSummaryService"
 export {
   getDashboardSportOrder,
-  getSportSectionLabel,
-  getSportSectionEmoji,
-  getSportSectionInfo,
   type SportSectionInfo,
 } from "./SportDashboardResolver"
 export {

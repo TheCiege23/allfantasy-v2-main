@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { Filter } from 'lucide-react'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
@@ -23,20 +22,6 @@ export type DashboardFilterState = {
   feature: string
   userSegment: string
   timeRange: '7d' | '30d' | 'all'
-}
-
-const defaultDates = () => {
-  const to = new Date()
-  const from = new Date(to.getTime() - 30 * 86400000)
-  return {
-    dateFrom: from.toISOString().slice(0, 10),
-    dateTo: to.toISOString().slice(0, 10),
-  }
-}
-
-export function useAIDashboardFilters(initial?: Partial<DashboardFilterState>) {
-  const base = useMemo(() => ({ ...defaultDates(), ...initial }), [initial])
-  return base
 }
 
 export function AIDashboardFilters({

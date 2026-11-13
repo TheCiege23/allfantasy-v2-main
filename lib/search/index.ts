@@ -13,7 +13,6 @@ export {
   type UniversalSearchPayload,
   type UniversalLiveResults,
   type UniversalLiveSearchOptions,
-  type SearchResultGroup,
 } from "./UniversalSearchService"
 export {
   getQuickActions,
@@ -35,7 +34,6 @@ export {
 } from "./SearchResultResolver"
 export {
   ALL_SPORT_SEARCH_FILTER,
-  getSupportedSportFilters,
   getSportSearchFilterOptions,
   resolveSportFilter,
   shouldShowSportFilter,

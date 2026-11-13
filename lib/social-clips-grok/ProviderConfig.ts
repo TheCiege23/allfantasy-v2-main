@@ -20,16 +20,6 @@ export function isSocialProviderConfigured(platform: SocialPlatform): boolean {
   })
 }
 
-export function getSocialProviderConfigStatus(): Record<SocialPlatform, boolean> {
-  return {
-    x: isSocialProviderConfigured("x"),
-    instagram: isSocialProviderConfigured("instagram"),
-    tiktok: isSocialProviderConfigured("tiktok"),
-    facebook: isSocialProviderConfigured("facebook"),
-    reddit: isSocialProviderConfigured("reddit"),
-  }
-}
-
 export function getSocialProviderEnvKeys(platform: SocialPlatform): string[] {
   return [...(PLATFORM_ENV_KEYS[platform] ?? [])]
 }

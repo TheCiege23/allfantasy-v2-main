@@ -55,8 +55,3 @@ export function mapNflLikePositionCategory(
   return 'UNK'
 }
 
-/** Map PK → K for roster slot matching while preserving raw position elsewhere. */
-export function aliasKickerPosition(position: string | null | undefined): string {
-  const p = String(position ?? '').trim().toUpperCase()
-  return p === 'PK' ? 'K' : p || '—'
-}

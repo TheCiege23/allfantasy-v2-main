@@ -530,23 +530,3 @@ export function lookupSportsPlayerRecordAugmentDetailed(
   }
 }
 
-/**
- * @param poolExternalOrRecordId — `SportsPlayerRecord.id` / pool `player_id` when aligned with sports_players cache.
- */
-export function lookupSportsPlayerRecordAugment(
-  maps: SportsPlayerRecordDraftMaps,
-  sport: LeagueSport,
-  name: string,
-  position: string,
-  team: string | null | undefined,
-  poolExternalOrRecordId?: string | null,
-): SportsPlayerRecordDraftAugment | null {
-  return lookupSportsPlayerRecordAugmentDetailed(
-    maps,
-    sport,
-    name,
-    position,
-    team,
-    poolExternalOrRecordId,
-  ).augment
-}

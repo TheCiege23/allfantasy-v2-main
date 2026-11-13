@@ -23,8 +23,6 @@ export const NFL_REDRAFT_CORE_TAB_IDS = [
   'commissioner',
 ] as const
 
-export type NflRedraftCoreTabId = (typeof NFL_REDRAFT_CORE_TAB_IDS)[number]
-
 const FOOTBALL_REDRAFT_COMPACT_TABS: TabDef[] = [
   { id: 'home', label: 'Home' },
   { id: 'draft', label: 'Draft' },

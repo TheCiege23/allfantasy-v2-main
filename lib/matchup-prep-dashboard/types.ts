@@ -22,16 +22,6 @@ export type MatchupStrategyModeId =
   | 'playoff_prep'
   | 'neutral'
 
-export type MatchupPrepViewTabId =
-  | 'overview'
-  | 'game_plan'
-  | 'lineup_edge'
-  | 'opponent_weaknesses'
-  | 'injuries'
-  | 'schedule'
-  | 'streaming'
-  | 'ai_insights'
-
 export type MatchupPrepToggles = {
   includeLiveNews: boolean
   includeInjuries: boolean

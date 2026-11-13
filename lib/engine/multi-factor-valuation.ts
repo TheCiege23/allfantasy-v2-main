@@ -193,16 +193,6 @@ function computeHistoricalFactor(input: PlayerValuationInput): number {
 // Batch valuation
 // ---------------------------------------------------------------------------
 
-/**
- * Compute valuations for multiple players in batch.
- * Optimized for speed — processes sequentially but avoids async overhead.
- */
-export function computeMultiFactorBatch(
-  inputs: PlayerValuationInput[]
-): PlayerValuationResult[] {
-  return inputs.map(computeMultiFactorValue)
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

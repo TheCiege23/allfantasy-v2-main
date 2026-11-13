@@ -72,9 +72,3 @@ export function withEffectiveScoringPeriod(
   return { ...bb, scoringPeriod: period, dailyBestBall: period === 'daily' }
 }
 
-/** One plain sentence on how the automatic lineup is chosen, for prompts and member-facing copy. */
-export function describeBestBallScoringPeriod(period: BestBallScoringPeriodValue): string {
-  return period === 'daily'
-    ? 'Daily best ball: each day the highest-scoring legal lineup from the players on the roster that day counts, and the week score is the sum of the days.'
-    : 'Weekly best ball: each week the highest-scoring legal lineup from the whole roster, on weekly totals, counts.'
-}

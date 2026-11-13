@@ -104,16 +104,3 @@ export function evaluateVeto(input: VetoInput): VetoResult {
   }
 }
 
-export function canOverrideVeto(input: VetoInput): { canOverride: boolean; reason: string } {
-  const { receivedAssets, fairnessScore, hasTierJump } = input
-  
-  const receivedHighestTier = receivedAssets.find(a => a.tier === 'Elite')
-  if (receivedHighestTier && hasTierJump && fairnessScore >= 47) {
-    return {
-      canOverride: true,
-      reason: 'Elite tier jump with acceptable value cost'
-    }
-  }
-  
-  return { canOverride: false, reason: '' }
-}

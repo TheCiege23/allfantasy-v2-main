@@ -44,9 +44,5 @@ export const DEFAULT_TIEBREAKER_ORDER = [
 /** Correction window modes. */
 export const CORRECTION_IMMEDIATE = 'immediate'
 export const CORRECTION_AFTER_STAT = 'after_stat_corrections'
-export const CORRECTION_CUSTOM = 'custom_cutoff'
 
-/** Roster release timing. */
-export const RELEASE_IMMEDIATE = 'immediate'
 export const RELEASE_NEXT_WAIVER = 'next_waiver_run'
-export const RELEASE_CUSTOM = 'custom_time'

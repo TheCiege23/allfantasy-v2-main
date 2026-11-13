@@ -54,10 +54,6 @@ export function getSmsShareUrl(url: string, message: string): string {
   return `sms:?body=${encodeURIComponent(`${trimToLength(message, 220)} ${url}`.trim())}`;
 }
 
-export function getDiscordShareUrl(url: string): string {
-  return url;
-}
-
 export function getPlatformShareUrl(
   destination: ShareDestination,
   payload: SharePayload,
@@ -157,10 +153,6 @@ export function buildShareTargetDescriptors(
         };
     }
   });
-}
-
-export function getShareDisplayUrl(payload: SharePayload): string {
-  return payload.url;
 }
 
 export { buildShareText, getOrigin };

@@ -192,7 +192,6 @@ export async function assertSafeWebhookUrl(
 
 // ─── Signing ─────────────────────────────────────────────────────────────────
 
-export const SIGNATURE_HEADER = 'x-commish-signature'
 export const SIGNATURE_VERSION = 'v1'
 /** How far a timestamp may be from now, in either direction. */
 export const SIGNATURE_TOLERANCE_MS = 5 * 60 * 1000

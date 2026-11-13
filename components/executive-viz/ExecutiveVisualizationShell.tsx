@@ -9,14 +9,10 @@
  */
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { BarChart3, Clock3, Info, ShieldAlert, TriangleAlert } from 'lucide-react'
+import { BarChart3, Clock3, Info, ShieldAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDecisionOsUpdated } from '@/components/decision-os/DecisionOsCardPrimitives'
-import {
-  EXECUTIVE_LEGEND_ENTRIES,
-  EXECUTIVE_STATUS_DOT,
-  EXECUTIVE_VIZ_TYPOGRAPHY,
-} from './executiveVizTokens'
+import { EXECUTIVE_VIZ_TYPOGRAPHY } from './executiveVizTokens'
 
 /** The outer container for any executive visualization: header (title/description/meta), an
  * accessible text summary, the chart body, and an optional footer (legend, source, freshness). */
@@ -120,41 +116,6 @@ export function ExecutiveFreshnessStamp({ updatedAt, includeTime = false }: { up
   )
 }
 
-/** Status legend. Defaults to the executive health legend, but accepts a custom entry list so other
- * future charts can supply their own series legend. */
-export function ExecutiveLegend({
-  entries = EXECUTIVE_LEGEND_ENTRIES,
-  className,
-}: {
-  entries?: { status: keyof typeof EXECUTIVE_STATUS_DOT; label: string }[]
-  className?: string
-}) {
-  return (
-    <ul className={cn('flex flex-wrap items-center gap-x-4 gap-y-1.5', className)} aria-label="Legend">
-      {entries.map((entry) => (
-        <li key={entry.status} className={cn('inline-flex items-center gap-1.5', EXECUTIVE_VIZ_TYPOGRAPHY.legend)}>
-          <span className={cn('h-2.5 w-2.5 rounded-full', EXECUTIVE_STATUS_DOT[entry.status])} aria-hidden />
-          {entry.label}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-/** Loading placeholder — an honest "still loading", distinct from empty/unavailable. */
-export function ExecutiveLoadingState({ rows = 5, label = 'Loading visualization' }: { rows?: number; label?: string }) {
-  return (
-    <div className="animate-pulse space-y-2.5 py-1 motion-reduce:animate-none" role="status" aria-label={label}>
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="flex items-center gap-3">
-          <div className="h-3 w-28 shrink-0 rounded bg-surface-muted" />
-          <div className="h-3 flex-1 rounded bg-surface-muted" />
-        </div>
-      ))}
-    </div>
-  )
-}
-
 /** Empty state — data pipeline is healthy, there is simply nothing to show yet. */
 export function ExecutiveEmptyState({
   icon: Icon = Info,
@@ -211,18 +172,3 @@ export function ExecutiveUnavailableState({
   )
 }
 
-/** Error state — the visualization tried to load and failed. */
-export function ExecutiveErrorState({ description }: { description: string }) {
-  return (
-    <div
-      className="rounded-xl border border-status-danger/25 bg-status-danger/[0.06] p-5"
-      role="alert"
-      data-testid="executive-viz-error"
-    >
-      <div className="flex items-start gap-2.5">
-        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-status-danger" aria-hidden />
-        <p className="text-sm leading-6 text-secondary">{description}</p>
-      </div>
-    </div>
-  )
-}

@@ -42,12 +42,6 @@ export const TIMER_PRESETS: TimerPreset[] = [
   { value: '24h', label: '24 hours', seconds: 86400 },
 ]
 
-export const TIMER_PRESET_KEYS = new Set<string>([
-  ...TIMER_PRESETS.map((p) => p.value),
-  'custom',
-  'off',
-])
-
 const PRESET_BY_VALUE: Record<string, TimerPreset> = Object.fromEntries(
   TIMER_PRESETS.map((p) => [p.value, p]),
 )

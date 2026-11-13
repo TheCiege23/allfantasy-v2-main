@@ -61,22 +61,6 @@ export interface TeamLedgerRow {
   capSpace: number
 }
 
-/** Player contract (active or historical). */
-export interface PlayerContractRow {
-  id: string
-  rosterId: string
-  playerId: string
-  playerName: string | null
-  position: string | null
-  salary: number
-  yearsTotal: number
-  yearSigned: number
-  contractYear: number
-  status: ContractStatus
-  source: ContractSource
-  deadMoneyRemaining: Record<number, number> | null
-}
-
 /** Cap legality result. */
 export interface CapLegalityResult {
   legal: boolean

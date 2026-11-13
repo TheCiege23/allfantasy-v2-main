@@ -1,4 +1,3 @@
-import { formatDistance } from 'date-fns'
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 
 /** Convert wall-clock date + time in an IANA zone to UTC. */
@@ -57,10 +56,6 @@ export function timeZoneShortName(tz: string | null | undefined, at: Date = new 
 
 export function formatInTz(utcDate: Date, tz: string): string {
   return formatInTimeZone(utcDate, tz, 'MMM d, yyyy h:mm a zzz')
-}
-
-export function formatDistanceUtc(utcDate: Date, base: Date = new Date()): string {
-  return formatDistance(utcDate, base, { addSuffix: true })
 }
 
 export const COMMON_TIMEZONES = [

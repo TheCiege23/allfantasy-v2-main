@@ -21,14 +21,6 @@ export interface RedraftTierInfo {
   description: string;
 }
 
-export const REDRAFT_TIERS: Record<RedraftTier, RedraftTierInfo> = {
-  A: { tier: 'A', parRange: [6.0, Infinity], description: 'League Winner - Elite weekly production' },
-  B: { tier: 'B', parRange: [3.0, 5.9], description: 'High-End Starter - Consistent advantage' },
-  C: { tier: 'C', parRange: [1.0, 2.9], description: 'Solid Starter - Above replacement' },
-  D: { tier: 'D', parRange: [0, 0.9], description: 'Fringe Starter - Barely above replacement' },
-  F: { tier: 'F', parRange: [-Infinity, -0.1], description: 'Waiver Level - Below replacement' },
-};
-
 export function getRedraftTierFromPAR(par: number): RedraftTier {
   if (par >= 6.0) return 'A';
   if (par >= 3.0) return 'B';
@@ -79,16 +71,6 @@ export function getReplacementBaseline(
   const base = REPLACEMENT_BASELINES[leagueSize][position];
   const adj = SCORING_ADJUSTMENTS[scoring][position] || 0;
   return base + adj;
-}
-
-export function calculatePAR(
-  weeklyProjection: number,
-  position: Position,
-  leagueSize: LeagueSize = 12,
-  scoring: ScoringFormat = 'half_ppr'
-): number {
-  const replacement = getReplacementBaseline(position, leagueSize, scoring);
-  return Math.round((weeklyProjection - replacement) * 10) / 10;
 }
 
 // ============================================================================
@@ -179,14 +161,6 @@ export function checkRedraftPlausibility(
 // ============================================================================
 // LAYER 4: TIMELINE CONSISTENCY (Playoff Schedule)
 // ============================================================================
-
-// Playoff schedule strength by team (Weeks 15-17 typical)
-export interface PlayoffSchedule {
-  week15Opponent: string;
-  week16Opponent: string;
-  week17Opponent: string;
-  avgDifficultyRank: number; // 1-32, lower = easier
-}
 
 export function getPlayoffMultiplier(avgDifficultyRank: number): number {
   // Top 8 easiest = boost, bottom 8 hardest = penalty
@@ -325,155 +299,6 @@ export interface RedraftTradeResult {
   };
   tierViolation: boolean;
   tierViolationReason?: string;
-}
-
-export function evaluateRedraftTrade(input: RedraftTradeInput): RedraftTradeResult {
-  const leagueSize = input.leagueSize || 12;
-  const scoring = input.scoring || 'half_ppr';
-  
-  // Calculate values for all players
-  const senderValues = input.senderPlayers.map(p => 
-    calculateRedraftValue(p, leagueSize, scoring)
-  );
-  const receiverValues = input.receiverPlayers.map(p => 
-    calculateRedraftValue(p, leagueSize, scoring)
-  );
-  
-  // Total values
-  const senderTotalValue = senderValues.reduce((sum, v) => sum + v.adjustedValue, 0);
-  const receiverTotalValue = receiverValues.reduce((sum, v) => sum + v.adjustedValue, 0);
-  
-  // Delta and ratio
-  const valueDelta = Math.abs(senderTotalValue - receiverTotalValue);
-  const minValue = Math.min(Math.abs(senderTotalValue), Math.abs(receiverTotalValue));
-  const maxValue = Math.max(Math.abs(senderTotalValue), Math.abs(receiverTotalValue));
-  const valueRatio = minValue > 0 ? maxValue / minValue : 999;
-  
-  // Winner determination
-  let winner: 'sender' | 'receiver' | 'even' = 'even';
-  if (senderTotalValue > receiverTotalValue + 2) winner = 'sender';
-  else if (receiverTotalValue > senderTotalValue + 2) winner = 'receiver';
-  
-  // Check for tier violation (giving up Tier A for Tier D/F pieces)
-  let tierViolation = false;
-  let tierViolationReason: string | undefined;
-  
-  const senderHasTierA = senderValues.some(v => v.tier === 'A');
-  const receiverBestTier = receiverValues.reduce((best, v) => {
-    const tierOrder: RedraftTier[] = ['A', 'B', 'C', 'D', 'F'];
-    return tierOrder.indexOf(v.tier) < tierOrder.indexOf(best) ? v.tier : best;
-  }, 'F' as RedraftTier);
-  
-  if (senderHasTierA && (receiverBestTier === 'D' || receiverBestTier === 'F')) {
-    tierViolation = true;
-    tierViolationReason = 'Trading Tier A starter for Tier D/F pieces';
-  }
-  
-  // Verdict and grade cap
-  let verdict: RedraftTradeResult['verdict'] = 'FAIR';
-  let maxGradeCap: RedraftGrade | undefined;
-  let capReason: string | undefined;
-  
-  if (tierViolation) {
-    verdict = 'UNREALISTIC';
-    maxGradeCap = 'C-';
-    capReason = tierViolationReason;
-  } else if (valueRatio >= 1.45) {
-    verdict = 'BAD_TRADE';
-    maxGradeCap = 'D';
-    capReason = 'Extreme value disparity';
-  } else if (valueRatio >= 1.25) {
-    verdict = 'LOPSIDED';
-    maxGradeCap = 'C';
-    capReason = 'Significant value gap';
-  } else if (valueRatio >= 1.10) {
-    verdict = 'SLIGHT_EDGE';
-  }
-  
-  // Calculate grades
-  function computeGrade(isWinner: boolean, ratio: number): RedraftGrade {
-    if (ratio <= 1.10) return isWinner ? 'B+' : 'B';
-    if (ratio <= 1.15) return isWinner ? 'B+' : 'B-';
-    if (ratio <= 1.25) return isWinner ? 'B' : 'C+';
-    if (ratio <= 1.35) return isWinner ? 'C+' : 'C-';
-    if (ratio <= 1.45) return isWinner ? 'C' : 'D';
-    return isWinner ? 'C-' : 'F';
-  }
-  
-  let senderGrade = computeGrade(winner === 'sender', valueRatio);
-  let receiverGrade = computeGrade(winner === 'receiver', valueRatio);
-  
-  // Apply cap
-  if (maxGradeCap) {
-    const gradeOrder: RedraftGrade[] = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
-    const capIndex = gradeOrder.indexOf(maxGradeCap);
-    if (gradeOrder.indexOf(senderGrade) < capIndex) senderGrade = maxGradeCap;
-    if (gradeOrder.indexOf(receiverGrade) < capIndex) receiverGrade = maxGradeCap;
-  }
-  
-  // Plausibility check
-  const senderStarterPARChange = receiverValues
-    .filter(v => v.starterImpact !== 'negative')
-    .reduce((sum, v) => sum + v.par, 0) -
-    senderValues
-    .filter(v => v.starterImpact !== 'negative')
-    .reduce((sum, v) => sum + v.par, 0);
-    
-  const senderBenchPARChange = receiverValues
-    .filter(v => v.starterImpact === 'negative')
-    .reduce((sum, v) => sum + v.par, 0) -
-    senderValues
-    .filter(v => v.starterImpact === 'negative')
-    .reduce((sum, v) => sum + v.par, 0);
-  
-  const senderWindow = input.senderContext 
-    ? determineWindowStatus(input.senderContext) 
-    : 'BUBBLE_TEAM';
-  const receiverWindow = input.receiverContext 
-    ? determineWindowStatus(input.receiverContext) 
-    : 'BUBBLE_TEAM';
-  
-  const plausibility = checkRedraftPlausibility(
-    senderStarterPARChange,
-    senderBenchPARChange,
-    senderWindow,
-    receiverWindow
-  );
-  
-  // Indicators
-  const starterImpact = senderStarterPARChange > 2 ? 'positive' : 
-    senderStarterPARChange < -2 ? 'negative' : 'neutral';
-  
-  const rosPointsChange = receiverValues.reduce((sum, v) => sum + v.baseROSPoints, 0) -
-    senderValues.reduce((sum, v) => sum + v.baseROSPoints, 0);
-  
-  const avgReceiverPlayoff = receiverValues.reduce((sum, v) => sum + v.playoffMultiplier, 0) / receiverValues.length;
-  const avgSenderPlayoff = senderValues.reduce((sum, v) => sum + v.playoffMultiplier, 0) / senderValues.length;
-  const playoffOutlook = avgReceiverPlayoff > avgSenderPlayoff + 0.03 ? 'helps' :
-    avgReceiverPlayoff < avgSenderPlayoff - 0.03 ? 'hurts' : 'neutral';
-  
-  return {
-    senderValues,
-    receiverValues,
-    senderTotalValue: Math.round(senderTotalValue * 10) / 10,
-    receiverTotalValue: Math.round(receiverTotalValue * 10) / 10,
-    valueDelta: Math.round(valueDelta * 10) / 10,
-    valueRatio: Math.round(valueRatio * 100) / 100,
-    winner,
-    senderGrade,
-    receiverGrade,
-    maxGradeCap,
-    capReason,
-    verdict,
-    plausibility,
-    indicators: {
-      starterImpact,
-      rosPointsChange: Math.round(rosPointsChange * 10) / 10,
-      playoffOutlook,
-    },
-    tierViolation,
-    tierViolationReason,
-  };
 }
 
 // ============================================================================

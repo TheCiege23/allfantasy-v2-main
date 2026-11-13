@@ -80,11 +80,6 @@ export function normalizedLiveMatchToProviderFixture(
   }
 }
 
-/** Parses manual JSON payloads (array of normalized rows or `{ matches: [...] }`). */
-export function parseManualWorldCupLiveJson(body: unknown): NormalizedWorldCupLiveMatch[] {
-  return normalizeManualLivePayload(body)
-}
-
 /**
  * Accepts fully-normalized rows or loose provider-shaped objects (coerced per-row).
  */

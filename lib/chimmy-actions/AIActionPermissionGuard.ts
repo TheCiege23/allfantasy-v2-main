@@ -403,18 +403,6 @@ export function evaluateAIActionDecision(
 // ─── Composite ─────────────────────────────────────────────────────────────────
 
 /**
- * Combined check: permissions + league state.
- * Returns the first blocking reason, or null if fully available.
- */
-export function getDisabledReason(
-  action: AIAction,
-  context: AIActionContext,
-): string | null {
-  const decision = evaluateAIActionDecision(action, context)
-  return decision.status === 'blocked' ? decision.reason : null
-}
-
-/**
  * Returns a new action object with `isAvailable` and `disabledReason` populated.
  */
 export function applyAvailabilityToAction(

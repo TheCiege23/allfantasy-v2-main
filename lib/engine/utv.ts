@@ -67,10 +67,7 @@ const SPORT_POSITION_WEIGHTS: Record<string, Record<string, number>> = {
 // In-memory cache (precomputed nightly, refreshed on demand)
 // ---------------------------------------------------------------------------
 
-let _utvCache: Map<string, UTVEntry> = new Map()
 let _utvPickCache: Map<string, UTVPickEntry> = new Map()
-let _cacheTimestamp = 0
-const CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes
 
 // ---------------------------------------------------------------------------
 // Core UTV computation
@@ -209,41 +206,6 @@ export function computePickUTV(inputs: {
 // ---------------------------------------------------------------------------
 // Cache management
 // ---------------------------------------------------------------------------
-
-/**
- * Get cached UTV for a player. Returns null if not cached.
- */
-export function getCachedUTV(playerId: string): UTVEntry | null {
-  if (Date.now() - _cacheTimestamp > CACHE_TTL_MS) return null
-  return _utvCache.get(playerId) ?? null
-}
-
-/**
- * Set UTV in cache.
- */
-export function setCachedUTV(entry: UTVEntry): void {
-  _utvCache.set(entry.playerId, entry)
-  _cacheTimestamp = Date.now()
-}
-
-/**
- * Bulk set UTV entries (for nightly precompute).
- */
-export function bulkSetUTV(entries: UTVEntry[]): void {
-  _utvCache = new Map(entries.map(e => [e.playerId, e]))
-  _cacheTimestamp = Date.now()
-}
-
-/**
- * Get all cached UTV entries for a sport.
- */
-export function getUTVBySport(sport: SportKey): UTVEntry[] {
-  const result: UTVEntry[] = []
-  for (const entry of _utvCache.values()) {
-    if (entry.sport === sport) result.push(entry)
-  }
-  return result
-}
 
 // ---------------------------------------------------------------------------
 // Exports for trade engine integration

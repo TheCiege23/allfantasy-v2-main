@@ -226,12 +226,3 @@ export function emptyApplyResult(): ApplyScopeResult {
   return { imported: 0, unchanged: 0, rejected: 0, removed: 0, notes: [] }
 }
 
-export function mergeApplyResults(a: ApplyScopeResult, b: ApplyScopeResult): ApplyScopeResult {
-  return {
-    imported: a.imported + b.imported,
-    unchanged: a.unchanged + b.unchanged,
-    rejected: a.rejected + b.rejected,
-    removed: a.removed + b.removed,
-    notes: [...a.notes, ...b.notes],
-  }
-}

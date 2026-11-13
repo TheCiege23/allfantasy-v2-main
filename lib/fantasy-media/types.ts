@@ -89,4 +89,3 @@ export const EPISODE_STATUS = [
   'failed',
 ] as const;
 
-export type EpisodeStatus = (typeof EPISODE_STATUS)[number];

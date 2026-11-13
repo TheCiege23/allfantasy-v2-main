@@ -3,11 +3,6 @@
  * Single source for unified manager/team summaries and AI context.
  */
 
-import type { LeagueSport } from '@prisma/client'
-
-/** All supported sports for prestige (matches sport-scope). */
-export type PrestigeSport = LeagueSport
-
 /** Unified manager summary: trust + legacy + HoF context. */
 export interface UnifiedManagerSummary {
   managerId: string

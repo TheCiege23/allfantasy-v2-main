@@ -195,26 +195,6 @@ export interface ResumeLeagueApplicationCard extends ResumePublicCard {
   compatibility: number | null
 }
 
-export interface ResumeCommissionerReviewCard {
-  userId: string
-  username: string | null
-  reliabilityScore: number | null
-  reportsFiled: number
-  reportsAgainst: number
-  leaguesActive: number
-  recentInactivityWeeks: number
-  credibilityFlags: SuspiciousFlag[]
-}
-
-export interface ResumeLeaderboardRow {
-  userId: string
-  username: string | null
-  rank: number
-  rating: number
-  delta: number
-  archetypeLabel: string | null
-}
-
 export interface ResumeMatchmakingProfile {
   userId: string
   preferredSports: RankingSport[]

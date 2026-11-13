@@ -52,13 +52,6 @@ export interface RoadmapPlayer {
   team: string | null
 }
 
-export interface RoadmapPick {
-  season: number
-  round: number
-  projected: 'early' | 'mid' | 'late' | 'unknown'
-  ownerTeamId?: string
-}
-
 export const FranchiseRoadmapInputSchema = z.object({
   mode: RoadmapModeEnum,
   sport: z.string().default('NFL'),

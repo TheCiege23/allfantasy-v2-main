@@ -119,6 +119,4 @@ export function generateLineupRecommendations(context: UserOsContext, generatedA
   return recommendations
 }
 
-/** Exposed for tests — not part of the public generator contract. */
-export const __test = { isLikelyOut }
 export type { RosterPlayerEntry }

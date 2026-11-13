@@ -26,10 +26,3 @@ export function buildAiPlayerCompareToolUrl(params: AiPlayerComparisonBridgePara
   return `/tools/player-decision?${q.toString()}`
 }
 
-/**
- * Server-safe: return path + query only (no origin).
- */
-export function buildChimmyStartSitHandoffMarkdown(params: AiPlayerComparisonBridgeParams): string {
-  const url = buildAiPlayerCompareToolUrl(params)
-  return `[Open Start A vs B tool](${url})`
-}

@@ -39,13 +39,6 @@ export function getDraftOrderRule(snakeOrLinear: string | undefined | null): Dra
 }
 
 /**
- * Whether the draft uses snake order (reversing each round).
- */
-export function isSnakeDraft(snakeOrLinear: string | undefined | null): boolean {
-  return (snakeOrLinear ?? 'snake').toString().toLowerCase() !== 'linear'
-}
-
-/**
  * Resolve full draft order behavior including third-round reversal support.
  */
 export function getDraftOrderBehavior(

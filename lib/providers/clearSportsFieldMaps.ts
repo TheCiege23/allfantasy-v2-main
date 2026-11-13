@@ -7,9 +7,6 @@
 
 import { extractClearSportsExperienceSignals } from '@/lib/player-data/providerExperienceFields'
 
-/** Base URL from vendor docs (separate from legacy ingestion routes). */
-export const CLEARSPORTS_API_PUBLIC_BASE = 'https://api.clearsportsapi.com'
-
 export const CLEARSPORTS_NFL_ENDPOINTS = {
   playerStats: '/api/v1/nfl/player-stats',
   teamStats: '/api/v1/nfl/team-stats',

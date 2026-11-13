@@ -13,8 +13,6 @@ export const QUEUE_NAMES = {
   LEAGUE_ENGINE: "league_engine",
 } as const
 
-export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
-
 /** Payload for notification jobs: dispatch in-app + optional email/SMS/push. */
 export interface NotificationJobPayload {
   userIds: string[]

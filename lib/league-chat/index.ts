@@ -3,14 +3,7 @@
  */
 
 export {
-  getLeagueChatMessagesUrl,
-  getLeagueChatPinnedUrl,
-  getLeagueChatSendPayload,
-  getLeagueChatPinPayload,
-  getLeagueChatBroadcastPayload,
-  isLeagueVirtualChat,
   LEAGUE_CHAT_MESSAGES_LIMIT,
-  LEAGUE_CHAT_POLL_INTERVAL_MS,
 } from "./LeagueChatService"
 
 export {
@@ -24,8 +17,6 @@ export {
 export {
   isLeagueSystemNotice,
   getLeagueSystemNoticeLabel,
-  getBroadcastBody,
-  getStatsBotPayload,
   getPinReferencedMessageId,
   getSystemNoticeBody,
   LEAGUE_SYSTEM_MESSAGE_TYPES,
@@ -53,7 +44,6 @@ export {
 export type { LeaguePollPayload } from "./LeaguePollService"
 
 export {
-  LEAGUE_CHAT_MENTIONS_ENDPOINT,
   getMentionsPayload,
   getTradeAcceptedNoticePayload,
   getWaiverNoticePayload,

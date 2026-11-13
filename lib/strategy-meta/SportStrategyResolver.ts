@@ -4,7 +4,6 @@
  */
 import type { StrategySport, StrategyType } from './types'
 import { SUPPORTED_STRATEGY_SPORTS } from './types'
-import { getDetectionConfig } from './detection-config'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 export const STRATEGY_SPORTS: readonly StrategySport[] = [...SUPPORTED_STRATEGY_SPORTS]
@@ -67,13 +66,6 @@ export function getStrategyLabelForSport(strategyType: StrategyType, sport: Stra
   const overrides = SPORT_STRATEGY_OVERRIDES[sport]
   if (overrides && overrides[strategyType]) return overrides[strategyType]!
   return STRATEGY_LABELS[strategyType] ?? String(strategyType)
-}
-
-/**
- * Get detection config for a sport (draft position allocation, positional concentration).
- */
-export function getSportStrategyConfig(sport: StrategySport) {
-  return getDetectionConfig(sport)
 }
 
 /**

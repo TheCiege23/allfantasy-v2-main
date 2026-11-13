@@ -13,7 +13,7 @@
  * A "free trade" token (or any other effect) can bypass the tribe and played-player rules through
  * `bypass`; the commissioner's freeze is never bypassed. See survivorTradeRuleBypass.ts.
  */
-import type { SurvivorCrossTribeWindow, SurvivorGovernanceDay, SurvivorGovernanceSettings } from './survivorGovernanceSettings'
+import type { SurvivorCrossTribeWindow, SurvivorGovernanceSettings } from './survivorGovernanceSettings'
 
 const WEEK_MINUTES = 7 * 24 * 60
 const DAY_INDEX: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 }
@@ -231,6 +231,3 @@ export function weekLastGameFinal(rows: ReadonlyArray<{ startTime: Date | null; 
   return timed.some((r) => r.startTime.getTime() >= last - 30 * 60_000 && isFinal(r.status))
 }
 
-export function isSurvivorGovernanceDay(value: string): value is SurvivorGovernanceDay {
-  return value in DAY_INDEX
-}

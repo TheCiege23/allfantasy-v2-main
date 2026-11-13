@@ -32,14 +32,3 @@ export function canAiProposeTrade(
   return { allowed: true }
 }
 
-export function canAiAcceptTrade(
-  teamId: string,
-  aiByTeamId: Map<string, CommissionerAiTeamAssignment>,
-  ctx: DraftTradeGuardrailContext
-): { allowed: boolean; reason?: string } {
-  if (ctx.commissionerDisableAiTrades) return { allowed: false, reason: 'Commissioner disabled AI draft trades.' }
-  if (ctx.allowAiAccept === false) return { allowed: false, reason: 'AI acceptance disabled.' }
-  const ai = aiByTeamId.get(teamId)?.active
-  if (!ai) return { allowed: true }
-  return { allowed: true }
-}

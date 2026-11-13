@@ -50,16 +50,7 @@ export const nflAdapter: SportAdapter = {
   },
 }
 
-export function getByeWeek(_playerId: string): number | null {
-  return null
-}
-
 export function getInjuryStatus(_player: { injuryStatus?: string | null }): string | null {
   return _player.injuryStatus ?? null
 }
 
-export function getDefenseRank(_teamAbbr: string, _position: string): number {
-  void _teamAbbr
-  void _position
-  return 16
-}

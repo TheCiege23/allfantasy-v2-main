@@ -6,8 +6,6 @@
 export * from './types'
 export {
   getPlayoffStagesBySport,
-  getPremiumPlayoffStages,
-  getDefaultPlayoffStages,
   validateStageIds,
   hasPremiumStages,
 } from './PlayoffStageRegistry'

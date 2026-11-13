@@ -2,7 +2,7 @@
  * Build and aggregate import error reports. Deterministic; no AI.
  */
 
-import type { ImportErrorItem, ImportErrorReport } from './types'
+import type { ImportErrorReport } from './types'
 
 export function createEmptyReport(): ImportErrorReport {
   return { errors: [], warnings: [], canProceed: true }
@@ -33,10 +33,3 @@ export function mergeReports(target: ImportErrorReport, source: ImportErrorRepor
   if (!source.canProceed) target.canProceed = false
 }
 
-export function reportToJson(report: ImportErrorReport): { errors: ImportErrorItem[]; warnings: ImportErrorItem[]; canProceed: boolean } {
-  return {
-    errors: [...report.errors],
-    warnings: [...report.warnings],
-    canProceed: report.canProceed,
-  }
-}

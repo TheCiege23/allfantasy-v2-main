@@ -1,4 +1,3 @@
-export type { CrossLeagueUserStats } from "./types"
 export {
   getCrossLeagueUserStats,
 } from "./CrossLeagueUserStatsService"

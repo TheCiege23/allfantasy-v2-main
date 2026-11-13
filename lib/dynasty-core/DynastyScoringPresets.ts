@@ -26,7 +26,3 @@ export function getDynastyScoringPresetList(): DynastyScoringPresetDto[] {
   }))
 }
 
-/**
- * Recommended dynasty scoring format type (Full PPR + TEP optional).
- */
-export const DYNASTY_RECOMMENDED_SCORING_FORMAT = 'dynasty_full_ppr_tep'

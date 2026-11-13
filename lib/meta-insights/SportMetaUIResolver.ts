@@ -16,6 +16,3 @@ export function resolveSportForMetaUI(sport: string | null | undefined): MetaUIS
   return normalizeToSupportedSport(sport ?? DEFAULT_SPORT)
 }
 
-export function getSportOptionsForUI(): Array<{ value: string; label: string }> {
-  return META_UI_SPORTS.map((s) => ({ value: s, label: s }))
-}

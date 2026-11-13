@@ -14,14 +14,12 @@ export {
 export {
   getReferralCodeFromRequest,
   setReferralCookie,
-  resolveAndPersistClick,
 } from "./ReferralTrackingResolver"
 
 export {
   REWARD_TYPE_SIGNUP,
   grantRewardForSignup,
   grantRewardsForTrigger,
-  getRewardDefinitions,
   listRewards,
   redeemReward,
   getRewardLabel,

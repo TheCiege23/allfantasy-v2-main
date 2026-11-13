@@ -163,41 +163,6 @@ export function applyTierJumpOverride(
   return { bonus, timePenaltyCapApplied: true }
 }
 
-export function sideTotalValue(assets: TradeAsset[], currentYear: number, classStrengthByYear?: Record<number, number>): number {
-  let total = 0
-  for (const a of assets) {
-    if (a.type === 'pick' && a.round && a.year) {
-      const cs = classStrengthByYear?.[a.year] ?? null
-      total += pickValue(a.round, a.year, currentYear, a.daysToDraft ?? null, cs)
-    } else if (a.type === 'player' && a.playerValue) {
-      total += a.playerValue
-    }
-  }
-  return total
-}
-
-export function recomputeIncomingPicksWithTimeCap(
-  assets: TradeAsset[], 
-  currentYear: number, 
-  capPenalty: number
-): number {
-  const minMult = 1.00 - capPenalty
-  let total = 0
-  
-  for (const a of assets) {
-    if (a.type === 'pick' && a.round && a.year) {
-      const base = BASE_PICK_VALUE[roundToKey(a.round)] || 10
-      const yearsOut = a.year - currentYear
-      let timeMult = TIME_MULTIPLIER_BY_YEARS_OUT[yearsOut] ?? TIME_FLOOR
-      timeMult = clamp(timeMult, Math.max(minMult, TIME_FLOOR), 1.00)
-      total += base * timeMult * rookieFeverMultiplier(a.daysToDraft ?? null)
-    } else if (a.type === 'player' && a.playerValue) {
-      total += a.playerValue
-    }
-  }
-  return total
-}
-
 export function tradeScore(sideValueGet: number, sideValueGive: number): number {
   if (sideValueGive <= 0) return 50
   const ratio = sideValueGet / sideValueGive
@@ -248,14 +213,6 @@ export function timingLabel(outgoingAssets: TradeAsset[], incomingAssets: TradeA
   return "Delayed Gain"
 }
 
-export function tradeMagnitude(outgoingValue: number, incomingValue: number): number {
-  return outgoingValue + incomingValue
-}
-
-export function lowStakesFlag(magnitude: number): boolean {
-  return magnitude < 60
-}
-
 interface ConfidenceInputs {
   magnitude: number
   missingDataCount: number
@@ -286,15 +243,6 @@ export function confidenceLabel(confidence: number, isLowStakes: boolean): strin
   return "Low confidence"
 }
 
-export function adjustedLetterGrade(score: number, confidence: number, isLowStakes: boolean): string {
-  if (isLowStakes && confidence < 0.55) {
-    if (score >= 62) return "B"
-    if (score <= 38) return "D"
-    return "C"
-  }
-  return letterGrade(score)
-}
-
 export interface WhyTooltipPayload {
   headline: string
   bullets: string[]
@@ -312,56 +260,6 @@ export interface WhyTooltipPayload {
   }
 }
 
-interface TooltipContext {
-  headline: string
-  outgoingValue: number
-  incomingValue: number
-  score: number
-  tierOverrideApplied: boolean
-  isLowStakes: boolean
-  futureDiscountUsed: boolean
-  tierDelta?: number
-  yearsOut?: number
-}
-
-export function buildWhyTooltipPayload(context: TooltipContext): WhyTooltipPayload {
-  const bullets: string[] = []
-  
-  if (context.tierOverrideApplied && context.tierDelta) {
-    bullets.push(`You moved up ${context.tierDelta} tier(s) (meaningful hit-rate jump).`)
-  }
-  
-  if (context.yearsOut && context.yearsOut > 0) {
-    bullets.push(`You pushed the asset out ${context.yearsOut} year(s) (small discount applied).`)
-  }
-  
-  const delta = context.incomingValue - context.outgoingValue
-  bullets.push(`Net value: ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} points after aging curve.`)
-  
-  bullets.push(
-    context.tierOverrideApplied
-      ? "Tier Jump Override applied: capped time penalty and added tier bonus."
-      : "No tier override needed."
-  )
-
-  return {
-    headline: context.headline,
-    bullets,
-    math: {
-      outgoingValue: Math.round(context.outgoingValue * 10) / 10,
-      incomingValue: Math.round(context.incomingValue * 10) / 10,
-      delta: Math.round(delta * 10) / 10,
-      ratio: Math.round((context.incomingValue / Math.max(context.outgoingValue, 1)) * 1000) / 1000,
-      score: Math.round(context.score)
-    },
-    flags: {
-      tierOverrideApplied: context.tierOverrideApplied,
-      lowStakesTrade: context.isLowStakes,
-      futurePickDiscountApplied: context.futureDiscountUsed
-    }
-  }
-}
-
 export function getDaysToDraft(pickYear: number): number | null {
   const now = new Date()
   const currentYear = now.getFullYear()
@@ -376,6 +274,3 @@ export function getDaysToDraft(pickYear: number): number | null {
   return diffDays > 0 ? diffDays : null
 }
 
-export function getCurrentYear(): number {
-  return new Date().getFullYear()
-}

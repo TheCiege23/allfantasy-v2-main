@@ -197,24 +197,3 @@ export interface GameDayDivergenceItem {
   notes: string[]
 }
 
-export interface GameDaySnapshot {
-  snapshotId: string
-  userId: string
-  generatedAt: string
-  includedLeagueIds: string[]
-  leagues: LeagueGameDayContext[]
-  exposures: UserPlayerExposure[]
-  attentionItems: LineupAttentionItem[]
-  gameWindows: GameWindow[]
-  managerTendency: ManagerTendencyContext
-  dataQuality: {
-    leagueCount: number
-    unavailableLeagueCount: number
-    staleMatchupCount: number
-  }
-  freshnessSummary: {
-    oldestFetchedAt: string | null
-    newestFetchedAt: string | null
-  }
-  divergence: GameDayDivergenceItem[]
-}

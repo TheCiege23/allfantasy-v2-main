@@ -652,19 +652,3 @@ export async function syncLegacyLeagueFromSleeper(
   await importLeague(legacyUserId, sleeperUserId, league, season)
 }
 
-// Legacy function for backward compatibility
-export async function runLegacyImport(
-  jobId: string,
-  userId: string,
-  sleeperUserId: string,
-  options: { concurrency?: number; seasonBackoffMinMs?: number; seasonBackoffMaxMs?: number } = {}
-) {
-  let done = false;
-  while (!done) {
-    const result = await runLegacyImportStep(jobId, userId, sleeperUserId);
-    done = result.done;
-    if (!done) {
-      await jitterSleep(options.seasonBackoffMinMs ?? 100, options.seasonBackoffMaxMs ?? 200);
-    }
-  }
-}

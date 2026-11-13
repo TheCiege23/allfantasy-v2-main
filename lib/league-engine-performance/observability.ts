@@ -84,15 +84,3 @@ export type LeagueEngineFailureSummary = {
   sampleError?: string
 }
 
-export function logLeagueEngineFailureSummary(summary: LeagueEngineFailureSummary): void {
-  logLeagueEngineEvent({
-    subsystem: summary.subsystem,
-    action: `${summary.action}_batch_summary`,
-    ok: summary.failures === 0,
-    error: summary.sampleError,
-    extra: {
-      failures: summary.failures,
-      total: summary.total,
-    },
-  })
-}

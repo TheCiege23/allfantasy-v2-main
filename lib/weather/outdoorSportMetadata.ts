@@ -169,11 +169,6 @@ export function isWeatherSensitiveSport(sport: string): boolean {
   return OUTDOOR_SPORT_METADATA[key]?.isOutdoor ?? false
 }
 
-export function requiresVenueCheck(sport: string): boolean {
-  const key = sport.trim().toUpperCase()
-  return OUTDOOR_SPORT_METADATA[key]?.venueCheckRequired ?? false
-}
-
 export function getPositionWeatherFactors(sport: string, position: string): WeatherFactor[] {
   const key = sport.trim().toUpperCase()
   const meta = OUTDOOR_SPORT_METADATA[key]

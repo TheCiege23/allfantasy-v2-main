@@ -104,10 +104,6 @@ export function isFantasyInternalDomain(domain: DataDomain): boolean {
   )
 }
 
-export function isProviderAllowedForDomain(provider: ProviderName, domain: DataDomain, sport: string): boolean {
-  return getFallbackProvidersForDomain(domain, sport).includes(provider)
-}
-
 export type GapFillMetadata = {
   staleCurrent?: boolean
   lowConfidenceCurrent?: boolean
@@ -139,18 +135,6 @@ export function shouldProviderFillGap(
 }
 
 export type MergeFieldPolicy = 'prefer_higher_tier' | 'never_overwrite_nonempty'
-
-export function mergeProviderField<T>(
-  current: T | null | undefined,
-  candidate: T | null | undefined,
-  policy: MergeFieldPolicy,
-): T | null | undefined {
-  if (policy === 'never_overwrite_nonempty') {
-    if (!isEmpty(current)) return current
-    return isEmpty(candidate) ? current : candidate
-  }
-  return isEmpty(current) ? (isEmpty(candidate) ? current : candidate) : current
-}
 
 export function providerTierIndex(provider: ProviderName, domain: DataDomain, sport: string): number {
   const c = getFallbackProvidersForDomain(domain, sport)

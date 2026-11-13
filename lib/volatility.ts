@@ -116,10 +116,6 @@ export function computeTradeVolatility(assets: PricedAsset[]): number {
   return weightedAvg + stdDev;
 }
 
-export function getRiskAdjustedDelta(rawDelta: number, volatilityScore: number): number {
-  return rawDelta / (1 + volatilityScore * 0.1);
-}
-
 export function getVolatilityLabel(score: number): 'Low' | 'Medium' | 'High' {
   if (score < 0.9) return 'Low';
   if (score < 1.1) return 'Medium';

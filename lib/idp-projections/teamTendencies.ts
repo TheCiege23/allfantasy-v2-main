@@ -93,14 +93,3 @@ export function tendencyForTeam(teamId: string | null | undefined): TeamDefenseT
   return ROWS.find((r) => r.teamId === key) ?? null
 }
 
-/** Every team's latest row, for callers that need the whole league at once. */
-export function latestTendencies(): TeamDefenseTendency[] {
-  const seen = new Set<string>()
-  const out: TeamDefenseTendency[] = []
-  for (const r of ROWS) {
-    if (seen.has(r.teamId)) continue
-    seen.add(r.teamId)
-    out.push(r)
-  }
-  return out
-}

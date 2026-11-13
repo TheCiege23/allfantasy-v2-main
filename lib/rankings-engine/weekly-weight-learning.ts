@@ -549,24 +549,3 @@ export async function getActiveWeightsForSegment(segmentKey: string): Promise<Co
   }
 }
 
-export async function getWeightHistory(segmentKey: string, limit = 6) {
-  return prisma.rankingWeightsWeekly.findMany({
-    where: { segmentKey },
-    orderBy: { weekStart: 'desc' },
-    take: limit,
-  })
-}
-
-export async function runWeeklyLearningAllSegments(forceDate?: Date): Promise<WeeklyLearningResult[]> {
-  const results: WeeklyLearningResult[] = []
-  for (const seg of SEGMENT_KEYS) {
-    try {
-      const result = await runWeeklyLearningForSegment(seg, forceDate)
-      results.push(result)
-      console.log(`[WeeklyWeights] ${seg}: ${result.status} (n=${result.metrics.nSamples}, AUC Δ=${result.metrics.aucDelta})`)
-    } catch (err: any) {
-      console.error(`[WeeklyWeights] ${seg} failed:`, err?.message)
-    }
-  }
-  return results
-}

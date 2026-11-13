@@ -262,14 +262,6 @@ export type DraftEventType =
   | 'auction_bid'
   | 'auction_sold'
 
-export interface DraftEvent {
-  type: DraftEventType
-  sessionId: string
-  leagueId: string
-  at: string
-  payload?: Record<string, unknown>
-}
-
 // ————— Auction draft (deterministic) —————
 
 export interface AuctionNomination {

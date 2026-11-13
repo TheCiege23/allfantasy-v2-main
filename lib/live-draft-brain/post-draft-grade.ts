@@ -40,17 +40,3 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
 
-export function buildLeagueChatPostDraftPayload(args: {
-  grades: PostDraftGrade[]
-  highlights: string[]
-}): { title: string; body: string; awards: string[] } {
-  const lines = args.grades.slice(0, 12).map((g) => `${g.letterGrade} ${g.teamName} — ${g.summary}`)
-  const body = [`Draft complete. AI post-draft grades (deterministic ADP value layer):`, ...lines, ...args.highlights].join(
-    '\n'
-  )
-  return {
-    title: 'Draft Complete',
-    body: body.slice(0, 3500),
-    awards: args.highlights.slice(0, 8),
-  }
-}

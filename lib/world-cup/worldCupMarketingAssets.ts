@@ -60,4 +60,3 @@ export const WC_ASSETS = {
   fallbackImageSrc: "/images/brackets/world-cup/af-world-cup-logo.png",
 } as const
 
-export type WcAssetKey = keyof typeof WC_ASSETS

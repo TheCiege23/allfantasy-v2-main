@@ -11,19 +11,10 @@ export function resolveExtendedLineupSport(raw?: string | null): ExtendedLineupS
   return normalizeToSupportedSport(raw)
 }
 
-export function isExtendedLineupSport(s: string): s is ExtendedLineupSport {
-  return isSupportedSport(s) || s === 'GOLF' || s === 'NASCAR'
-}
-
 export function displaySportLabel(sport: string): string {
   if (sport === 'GOLF') return 'Golf'
   if (sport === 'NASCAR') return 'NASCAR'
   return sport
-}
-
-/** When sport is unknown/future, default roster template uses flexible utility slots. */
-export function futureSportFallbackSlots(): string[] {
-  return ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'FLEX', 'FLEX', 'UTIL']
 }
 
 export { DEFAULT_SPORT }

@@ -58,11 +58,3 @@ export function saveAIThreadMessages(storageKey: string, messages: ChimmyThreadM
   }
 }
 
-export function clearAIThreadMessages(storageKey: string): void {
-  if (!canUseStorage()) return
-  try {
-    window.localStorage.removeItem(storageKey)
-  } catch {
-    // Ignore storage errors.
-  }
-}

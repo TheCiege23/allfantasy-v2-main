@@ -15,14 +15,6 @@ export type ChimmyAssistantMode = (typeof CHIMMY_ASSISTANT_MODE_VALUES)[number]
  */
 export const DEFAULT_CHIMMY_ASSISTANT_MODE: ChimmyAssistantMode = 'deep_analysis'
 
-export const CHIMMY_ASSISTANT_MODE_LABELS: Record<ChimmyAssistantMode, string> = {
-  fast_take: 'Fast Take',
-  deep_analysis: 'Deep Analysis',
-  commissioner_view: 'Commissioner View',
-  dynasty_lens: 'Dynasty Lens',
-  dfs_upside: 'DFS/Upside',
-}
-
 export function normalizeChimmyAssistantMode(value: unknown): ChimmyAssistantMode {
   if (typeof value !== 'string') return DEFAULT_CHIMMY_ASSISTANT_MODE
   const raw = value.trim().toLowerCase()

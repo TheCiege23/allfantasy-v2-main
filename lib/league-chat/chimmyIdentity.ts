@@ -32,9 +32,6 @@
 /** The only name Chimmy posts under. Never bare "AI". */
 export const CHIMMY_DISPLAY_NAME = 'Chimmy'
 
-/** The server-owned metadata key that marks a message as Chimmy's. */
-export const CHIMMY_MARKER_KEY = 'chimmy'
-
 /**
  * Every metadata key that makes a row Chimmy-authored, plus the moment descriptor. All of them are
  * server-owned: the client allowlist must never admit any of these (a test pins it).

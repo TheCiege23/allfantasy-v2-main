@@ -25,14 +25,6 @@ export interface TeamSeasonForecast {
   currentRank?: number
 }
 
-export interface SeasonForecastSnapshotPayload {
-  leagueId: string
-  season: number
-  week: number
-  teamForecasts: TeamSeasonForecast[]
-  generatedAt: string
-}
-
 export interface LeagueForecastContext {
   leagueId: string
   season: number

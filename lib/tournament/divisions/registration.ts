@@ -7,7 +7,6 @@
  * log — "placement is deterministic and logged".
  */
 
-export type RegistrationPhase = 'blueprint' | 'registering' | 'placed' | 'live' | 'complete'
 export type JoinState = 'open' | 'almost_full' | 'full' | 'closed' | 'in' | 'waitlisted'
 
 /** "Almost full" once 10% or fewer of the spots are left (at least the last 4). */

@@ -101,16 +101,6 @@ export function computePositionalScarcity(
   return result
 }
 
-export function scarcityAdjustedValue(
-  value: number,
-  position: string,
-  scarcity: Record<string, PositionalScarcity>
-): number {
-  const posScarcity = scarcity[position]
-  if (!posScarcity) return value
-  return Math.round(value * posScarcity.scarcityMultiplier)
-}
-
 function normalizeSlotToPosition(slot: string): string | null {
   const upper = slot.toUpperCase()
   if (upper === 'QB') return 'QB'
@@ -128,13 +118,3 @@ function normalizeSlotToPosition(slot: string): string | null {
   return null
 }
 
-export function computeReplacementLevel(
-  position: string,
-  league: EngineLeagueContext,
-  playerValues: number[]
-): number {
-  const sorted = [...playerValues].sort((a, b) => b - a)
-  const demandSlots = league.numTeams * (position === 'RB' || position === 'WR' ? 2 : 1)
-  const idx = Math.min(demandSlots, sorted.length - 1)
-  return sorted[idx] ?? 0
-}

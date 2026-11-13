@@ -112,13 +112,6 @@ export type NflRedraftProviderContext = {
   leagueId?: string | null
 }
 
-export interface NflRedraftProviderAdapter {
-  id: NflRedraftProviderId
-  displayName: string
-  capabilities: NflRedraftProviderDomain[]
-  healthCheck(context?: NflRedraftProviderContext): Promise<NflRedraftProviderHealth>
-}
-
 export const NFL_PROVIDER_ENV_KEYS: Record<NflRedraftProviderId, string[]> = {
   api_sports: ['API_SPORTS_KEY', 'APISPORTS_API_KEY', 'API_SPORTS_API_KEY'],
   clearsports: ['CLEARSPORTS_API_KEY', 'CLEAR_SPORTS_API_KEY'],
