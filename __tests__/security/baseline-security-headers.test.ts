@@ -28,7 +28,7 @@ describe("baseline security headers", () => {
     vi.stubEnv('NODE_ENV', 'development')
     const res = await middleware(from('/api/health'))
     expect(res.headers.get('content-security-policy-report-only')).toBeNull()
-    expect(res.headers.get('content-security-policy')).toBe("frame-ancestors 'none'")
+    expect(res.headers.get('content-security-policy')).toBe("frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
     expect(res.headers.get('x-frame-options')).toBe('DENY')
   })
   it('retains the report-only policy in production', async () => {
@@ -39,7 +39,7 @@ describe("baseline security headers", () => {
   it.each(["/", "/login", "/blog", "/api/health"])("are set on %s", async (path) => {
     const res = await middleware(from(path))
     expect(res.headers.get("x-frame-options")).toBe("DENY")
-    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'")
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
     // The script-restricting policy ships REPORT-ONLY (lib/security/cspReportOnly.ts).
     expect(res.headers.get("content-security-policy-report-only")).toContain("script-src 'self'")
     expect(res.headers.get("content-security-policy-report-only")).toContain("report-uri /api/security/csp-report")

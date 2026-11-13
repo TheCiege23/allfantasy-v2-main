@@ -44,6 +44,40 @@ const GOOGLE_ANALYTICS = [
 
 const META = ['https://connect.facebook.net', 'https://www.facebook.com']
 
+/*
+ * Ad and analytics vendors that Google Tag Manager injects at runtime. Every origin
+ * below was MEASURED, not guessed: they are the top of the production csp-report log
+ * for 2026-11-11 → 11-12 (501 reports), and each matches a vendor named in
+ * docs/play-store/RUNBOOK.md's network capture and in /privacy's Section 5 table.
+ * Listing them turns those reports off so the remaining ones are signal.
+ *
+ * ⚠ DELIBERATELY STILL MISSING, so they keep reporting until someone decides:
+ *   - `eval` (script-src) — a GTM custom template; allowing it is 'unsafe-eval'.
+ *   - `mpc-pilot-*.a.run.app` / `mpc2-prod-*.a.run.app` — an unidentified fetch that
+ *     fires right after the Meta SDK (see the runbook). Its hostname rotates, so a
+ *     single entry would not hold, and an unknown third party should not be waved
+ *     through by an allowlist.
+ */
+const AD_VENDOR_SCRIPTS = [
+  'https://analytics.tiktok.com',
+  'https://www.redditstatic.com',
+  'https://googleads.g.doubleclick.net',
+  'https://static.cloudflareinsights.com',
+]
+
+const AD_VENDOR_CONNECT = [
+  'https://analytics.tiktok.com',
+  'https://analytics-ipv6.tiktokw.us',
+  'https://alb.reddit.com',
+  'https://pixel-config.reddit.com',
+  'https://analytics.google.com',
+  'https://www.google.com',
+  'https://ad.doubleclick.net',
+  'https://stats.g.doubleclick.net',
+  'https://googleads.g.doubleclick.net',
+  'https://cloudflareinsights.com',
+]
+
 export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
   'default-src': ["'self'"],
   'script-src': [
@@ -54,12 +88,14 @@ export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
     'https://js.stripe.com', // /support's buy button
     'https://sdk.scdn.co', // Spotify Web Playback SDK
     'https://platform.twitter.com', // opt-in X posts
+    ...AD_VENDOR_SCRIPTS,
   ],
   'connect-src': [
     "'self'", // also covers same-host ws(s): and PostHog, which is proxied via /ingest
     ...GOOGLE_ANALYTICS,
     ...META,
     ...SENTRY_INGEST,
+    ...AD_VENDOR_CONNECT,
     'https://api.stripe.com',
     'https://syndication.twitter.com',
   ],

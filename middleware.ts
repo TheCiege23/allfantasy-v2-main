@@ -1086,7 +1086,11 @@ export async function middleware(request: NextRequest) {
 const BASELINE_SECURITY_HEADERS: Record<string, string> = {
   "Strict-Transport-Security": "max-age=31536000",
   "X-Frame-Options": "DENY",
-  "Content-Security-Policy": "frame-ancestors 'none'",
+  // `object-src 'none'` and `base-uri 'self'` are enforced too: neither restricts what any
+  // vendor script loads, and in the production report log (2026-11-11 → 11-12, 501
+  // reports) neither directive was violated once. They close plugin-based script
+  // injection and <base href> hijacking of every relative URL on the page.
+  "Content-Security-Policy": "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   // The app uses the microphone (voice input); camera and geolocation are unused.
