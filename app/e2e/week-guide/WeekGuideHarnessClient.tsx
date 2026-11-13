@@ -5,6 +5,7 @@ import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import { WeekGuide, WeekToolsDisclosure } from '@/components/core-app/week/WeekGuide'
 import type { EliminationWeek, WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WeeklyCalendar } from '@/lib/core-app/weeklyCalendar'
+import type { LineupFact } from '@/lib/core-app/weekGuide'
 
 /**
  * Harness only (app/e2e is 404 in production). SAMPLE data throughout — leagues, opponents, scores and
@@ -62,7 +63,7 @@ const BOARD: WeekBoardData = {
   ],
   leaning: [
     game('d', 'Sample Dynasty D', { projection: proj(165.3, 117.6, 0.86) }),
-    game('e', 'Sample Keeper E', { projection: proj(122.6, 140.5, 0.24), live: { you: 61, them: 69.4, margin: -8.4, final: false } }),
+    game('e', 'Sample Keeper E', { projection: proj(122.6, 140.5, 0.24), live: { you: 71, them: 66.6, margin: 4.4, final: false } }),
     game('f', 'Sample Pirate F', { projection: proj(124.8, 30.1, 0.97) }),
     game('g', 'Sample Redraft G', { projection: proj(170.7, 123.1, 0.81), live: { you: 40, them: 67.2, margin: -27.2, final: false } }),
   ],
@@ -105,6 +106,26 @@ const CALENDAR: WeeklyCalendar = {
   gaps: [],
 }
 
+/* SAMPLE lineup facts — one per action state: swap, fill, clean, and (no row) unknown. */
+const fact = (leagueId: string, over: Partial<LineupFact>): LineupFact => ({
+  leagueId,
+  empty: 0,
+  out: 0,
+  bye: 0,
+  questionable: 0,
+  lockAt: '2026-11-15T18:00:00.000Z',
+  locked: false,
+  automatic: false,
+  href: '#lineup',
+  ...over,
+})
+const LINEUPS: LineupFact[] = [
+  fact('a', { out: 1, bye: 1 }),
+  fact('b', { empty: 1 }),
+  fact('d', { questionable: 1 }),
+  fact('e', {}),
+]
+
 const QUIET: WeekBoardData = { ...BOARD, coinFlips: [], eliminationWeeks: [], firstKickoffAt: null, withoutSchedule: 0 }
 
 export default function WeekGuideHarnessClient({ quiet }: { quiet: boolean }) {
@@ -119,7 +140,7 @@ export default function WeekGuideHarnessClient({ quiet }: { quiet: boolean }) {
       comms={{ leagues: [], chimmyTokenCost: null, dockable: false, supportEmail: null }}
     >
       <div data-testid="week-guide-harness">
-        <WeekGuide board={board} calendar={quiet ? null : CALENDAR} totalLeagues={82} allHref="#" isCommissioner={!quiet} />
+        <WeekGuide board={board} calendar={quiet ? null : CALENDAR} totalLeagues={82} allHref="#" isCommissioner={!quiet} lineups={quiet ? [] : LINEUPS} />
         <WeekBoard board={board} outlook={null} rivalriesHref="#" allHref="#" totalLeagues={82} embedded />
         <WeekToolsDisclosure>
           <p style={{ padding: 18, opacity: 0.7 }}>SAMPLE — the compact Weekly Blueprint renders here on the real page.</p>

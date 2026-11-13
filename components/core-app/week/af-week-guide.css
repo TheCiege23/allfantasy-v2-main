@@ -6,7 +6,7 @@
  */
 .af-wg { margin-bottom: 18px; }
 .af-wg-head .af-hg-eyebrow time { color: inherit; }
-/* The headline's chips are facts, not links — no hover, no pointer. */
+/* A headline chip with nowhere to go ("no game this week") is a fact — no hover, no pointer. The rest link. */
 .af-wg-chip { cursor: default; }
 .af-wg-chip:hover { border-color: var(--line2); }
 
@@ -30,6 +30,17 @@
 .af-wg-row-title span { color: var(--muted); font-weight: 500; }
 .af-wg-row-title time { font: 800 13px/1.2 'JetBrains Mono', ui-monospace, monospace; }
 .af-wg-row-sub { margin: 2px 0 0; color: var(--text2); font-size: 12.5px; line-height: 1.4; }
+/* The league name opens the game; the button is the one move to make in it. */
+.af-wg-row-name { color: inherit; text-decoration: none; }
+.af-wg-row-name:hover { color: var(--accent); }
+.af-wg-why { color: var(--muted); }
+/*
+ * af3a-btn goes width: 100% at <=860px (af-dash-3a.css). In a row that squeezed the game text to zero
+ * width between 561 and 860px; the button keeps its own width here and only goes full-width once the
+ * row wraps (<=560px, below).
+ */
+.af-wg-rows .af3a-btn { flex: none; width: auto; }
+a.af-hg-chip { color: inherit; text-decoration: none; }
 
 .af-wg-row-link {
   display: flex;
@@ -55,6 +66,8 @@
 .af-wg-board-head { margin: 4px 0 10px; }
 .af-wg-board-head h2 { margin: 0; color: var(--text); font-size: 18px; font-weight: 800; }
 .af-wg-board-head p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+.af-wg-board-link { color: var(--accent); font-weight: 700; text-decoration: none; white-space: nowrap; }
+.af-wg-board-link:hover { text-decoration: underline; }
 
 /* The Blueprint's tools, kept whole behind one disclosure. */
 .af-wg-tools {
