@@ -53,7 +53,34 @@ function sanitizeNext(next?: string) {
   return next;
 }
 
+/*
+ * 🛑 THE SHARED-PASSWORD ADMIN LOGIN IS RETIRED IN PRODUCTION (2026-11-13).
+ *
+ * One password for everyone meant: anyone who ever learned it had full admin, nothing
+ * recorded WHO signed in, and rotating it locked every admin out at once. Admins now sign
+ * in as themselves — the magic link on /admin-login or an allowlisted account — and, once
+ * ADMIN_TOTP_SECRETS is set, with an authenticator code on top (lib/security/adminTotp.ts).
+ *
+ * It stays available outside production only because the Playwright @admin suite signs in
+ * through it on an ephemeral CI dev server (.github/workflows/playwright.yml). Production
+ * can never re-enable it: there is no flag, and lib/adminAuth.ts also refuses any session
+ * this route minted earlier (`authMethod: "password"`).
+ *
+ * ADMIN_PASSWORD itself is NOT retired by this — it is still the Bearer / x-admin-secret
+ * credential scripts and crons send (lib/adminAuth.ts checkBearerToken).
+ */
+function isPasswordAdminLoginRetired(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 export const POST = withApiUsage({ endpoint: "/api/auth/login", tool: "AuthLogin" })(async (req: Request) => {
+  if (isPasswordAdminLoginRetired()) {
+    return NextResponse.json(
+      { error: "Password sign-in has been retired. Sign in at /admin-login.", next: "/admin-login" },
+      { status: 410 }
+    );
+  }
+
   const ip = ipFrom(req);
   const key = `admin_login:${ip}`;
   const b = bucketFor(key);

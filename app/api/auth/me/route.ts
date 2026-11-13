@@ -2,6 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { verifyAdminSessionCookie } from "@/lib/adminSession"
+import { isAdminSessionPayloadUsable } from "@/lib/adminAuth"
 
 export const GET = withApiUsage({ endpoint: "/api/auth/me", tool: "AuthMe" })(async () => {
   const cookieStore = await cookies()
@@ -12,7 +13,7 @@ export const GET = withApiUsage({ endpoint: "/api/auth/me", tool: "AuthMe" })(as
   }
 
   const sessionData = verifyAdminSessionCookie(adminSession.value)
-  if (!sessionData?.authenticated) {
+  if (!sessionData?.authenticated || !isAdminSessionPayloadUsable(sessionData)) {
     return NextResponse.json({ user: null }, { status: 401 })
   }
 
