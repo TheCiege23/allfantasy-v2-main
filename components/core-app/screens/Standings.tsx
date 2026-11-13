@@ -30,6 +30,10 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { useMessages } from '@/components/i18n/useMessages'
 import { standingsScreenMessages } from '@/lib/core-app/messages/standingsScreen'
+import { standingsGuideMessages } from '@/lib/core-app/messages/standingsGuide'
+import { standingsHeadline } from '@/lib/core-app/standingsGuide'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/standings/af-standings-guide.css'
 import { DynastyStandingsHistory } from '@/components/core-app/screens/DynastyStandingsHistory'
 import type { DynastyStandingsHistory as DynastyHistory } from '@/lib/core-app/dynastyStandingsHistory'
 
@@ -177,6 +181,8 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
   /* The reader's language (2026-10-05): a head-to-head league's stakes panel was English in Spanish mode. */
   const language = useOptionalLanguage().language
   const m = useMessages(standingsScreenMessages)
+  // Not `g`: the rooting list below maps each game as `g`, which hid these messages (2026-11-13).
+  const guide = useMessages(standingsGuideMessages)
   const you = odds?.you && odds.you.rosterId === me.rosterId ? odds.you : null
   const stakes = you ? (odds?.stakes ?? null) : null
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
@@ -267,9 +273,12 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
                           {nameOf(other.id, other.name)}
                           {otherSeed != null ? <span className="af-num af-st-stakes-seed"> #{otherSeed}</span> : null}
                         </span>
+                        {/*
+                          "75% vs 68%" read as a scoreline (2026-11-13 guide). Your odds, said as what
+                          they are: if the team you root for wins, and if it does not.
+                        */}
                         <span className="af-st-stakes-delta af-num">
-                          {formatOdds(hi)} <span aria-hidden>vs</span>
-                          <span className="af-sr">{m.rootForYouAgainst}</span> {formatOdds(lo)}
+                          {formatOdds(hi)} {guide.ifTheyWin} · {formatOdds(lo)} {guide.ifNot}
                         </span>
                       </li>
                     )
@@ -290,6 +299,9 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
           {m.stakesBasis}
         </p>
       ) : null}
+      <p className="af-stg-teach">
+        <b>{guide.why}</b> {guide.stakesTeach}
+      </p>
     </section>
   )
 }
@@ -466,6 +478,31 @@ export function Standings({
   const me = board.teams.find((t) => t.isYou) ?? null
   const n = board.teams.length
   const P = board.rules.platformLabel
+  /*
+   * 2026-11-13 guide: the title said only "Standings". It now says where you stand and whether you are
+   * in a playoff spot, with Season Outlook's odds — the answer people open the page for.
+   */
+  const g = useMessages(standingsGuideMessages)
+  const myOdds = me && odds?.you && odds.you.rosterId === me.rosterId ? odds.you.playoffPct : null
+  const head = standingsHeadline({
+    me,
+    teamCount: n,
+    playoffTeams: Math.min(board.rules.playoffTeams, n),
+    elimination: elimination != null,
+    oddsPct: myOdds == null ? null : Math.round(Math.max(0, Math.min(100, myOdds))),
+  })
+  const headline =
+    head.kind === 'unknown'
+      ? g.headUnknown
+      : head.kind === 'place'
+        ? g.headPlace(head.seed, head.of)
+        : head.kind === 'clinched'
+          ? g.headClinched(head.seed, head.of, head.bye)
+          : head.kind === 'eliminated'
+            ? g.headEliminated(head.seed, head.of)
+            : head.kind === 'in'
+              ? g.headIn(head.seed, head.of, head.odds, head.bubble)
+              : g.headOut(head.seed, head.of, head.gamesBack, head.odds, head.bubble)
 
   return (
     <div className="af-st">
@@ -475,9 +512,9 @@ export function Standings({
         titleClassName="af-st-title"
         subClassName="af-st-sub"
         actionsClassName="af-st-headactions"
-        eyebrow={league.name}
-        title={copy('Standings')}
-        sub={m.subtitle({ platform: P, season, seasonComplete, week, throughWeek: board.throughWeek, headToHead: board.hasHeadToHead })}
+        eyebrow={g.eyebrow(league.name)}
+        title={headline}
+        sub={g.intro({ headToHead: board.hasHeadToHead, seasonComplete, week, throughWeek: board.throughWeek ?? null })}
         actions={
           <>
             {chip}
@@ -567,11 +604,17 @@ export function Standings({
 
       {dynasty ? <DynastyStandingsHistory history={dynasty} /> : null}
 
+      {/*
+        Folded (2026-11-13 guide): this week's projected lineups (Week and Matchup carry those) and your
+        own season numbers. The page answers "where do I stand"; these are the detail behind it.
+      */}
+      {lineups || me ? (
+      <details className="af-stg-deeper" data-testid="standings-your-season">
+        <summary>{g.deeperSeason}</summary>
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />
       ) : null}
 
-      {/* ── Your season ─────────────────────────────────────────────── */}
       {me ? (
         <>
           <section className="af-st-section">
@@ -649,6 +692,8 @@ export function Standings({
             </section>
           </div>
         </>
+      ) : null}
+      </details>
       ) : null}
 
       {/* About projected records and playoff odds: a points-only or elimination league has neither. */}
