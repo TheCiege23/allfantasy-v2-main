@@ -162,7 +162,7 @@ import { CommissionerSettingsModal } from './components/CommissionerSettingsModa
 import { ErrorBoundary } from '@/components/error-handling/ErrorBoundary'
 import { toast } from 'sonner'
 import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
-import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
+import { LeagueSettingsHubTab } from './tabs/LeagueSettingsHubTab'
 import { RedraftTab } from './tabs/RedraftTab'
 import { RedraftStandingsPlayoffsView } from './tabs/redraft/RedraftStandingsPlayoffsView'
 import { CanonicalRedraftScheduleTab } from './tabs/redraft/CanonicalRedraftScheduleTab'
@@ -1942,6 +1942,7 @@ export function LeagueShell({
               draftSetupSession={draftSetupSession}
               hasActiveRedraftSeason={hasActiveRedraftSeason}
               viewerUserId={userId}
+              onLeaveLeague={() => setLeaveLeagueHintOpen(true)}
               // After the welcome sheet and any format intro, so the walkthrough never stacks on them.
               autoOpenFormatWalkthrough={isCommissioner && createdFromLeagueCreate && welcomeStage === 'done'}
             />
@@ -2265,6 +2266,7 @@ function LeagueTabRouter({
   leagueRail,
   viewerUserId,
   autoOpenFormatWalkthrough,
+  onLeaveLeague,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -2299,6 +2301,8 @@ function LeagueTabRouter({
   viewerUserId: string
   /** The commissioner just created this league and the post-create welcome has finished. */
   autoOpenFormatWalkthrough: boolean
+  /** Opens the shell's leave-league dialog (Settings › My Settings › Leave League). */
+  onLeaveLeague?: () => void
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -2791,10 +2795,13 @@ function LeagueTabRouter({
       return <HistoryTab league={selectedLeague} />
     case 'settings':
       return (
-        <LeagueSettingsContentTab
-          leagueId={leagueId}
+        <LeagueSettingsHubTab
+          league={selectedLeague}
+          viewerUserId={viewerUserId}
           isCommissioner={isCommissioner}
           isHeadCommissioner={isHeadCommissioner}
+          onOpenEditor={(panelId) => onOpenLeagueSettingsModal(panelId)}
+          onLeaveLeague={onLeaveLeague}
         />
       )
     case 'standings':

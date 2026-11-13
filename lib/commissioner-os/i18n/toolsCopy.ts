@@ -621,7 +621,7 @@ export function settingsText(text: string, language: string | null | undefined):
 }
 
 /**
- * The scoring rules' labels — `STAT_LABELS` in leagueSettingsReads.ts. Terms follow the scoring
+ * The scoring rules' labels — `SCORING_STAT_LABELS` in scoringStatLabels.ts. Terms follow the scoring
  * editors' table (lib/i18n/scoring-stats/football.ts): a sack is a "captura", a fumble a "balón
  * suelto", a tackle a "tacleada"; TD, FG, PAT, QB, TE and IDP stay. A raw provider key (a stat nobody
  * has labelled yet) passes through.
@@ -632,6 +632,9 @@ const SCORING_RULE_ES: Record<string, string> = {
   'Interception thrown': 'Intercepción lanzada',
   'Passing 2-pt': 'Conversión de 2 puntos por pase',
   'Sack taken': 'Captura recibida',
+  'Pass completed': 'Pase completo',
+  'Incomplete pass': 'Pase incompleto',
+  'Pass attempt': 'Intento de pase',
   'Rushing yards': 'Yardas por carrera',
   'Rushing TD': 'TD por carrera',
   'Rush attempt': 'Intento de carrera',
