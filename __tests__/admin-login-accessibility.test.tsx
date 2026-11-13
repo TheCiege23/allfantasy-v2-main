@@ -129,6 +129,31 @@ describe("/admin-login — confirmation state is enumeration-safe", () => {
   })
 })
 
+describe("/admin-login — stays readable when the site is in dark mode", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.mode
+  })
+
+  it("pins the light text tokens on the page root, whatever html[data-mode] says", () => {
+    // Production 2026-11-13: with html[data-mode="dark"] the tokens resolved to near-white, so
+    // the heading, instructions, label and footer were white on this page's white card.
+    document.documentElement.dataset.mode = "dark"
+    const { container } = render(<AdminLoginContent />)
+    const main = container.querySelector("main")!
+    expect(main.style.getPropertyValue("--text")).toBe("rgba(2,6,23,0.92)")
+    expect(main.style.getPropertyValue("--muted")).toBe("rgba(2,6,23,0.65)")
+    expect(main.style.getPropertyValue("--border")).toBe("rgba(2,6,23,0.10)")
+    expect(main.style.colorScheme).toBe("light")
+    // Every themed text node sits inside that root, so it inherits the pinned values.
+    expect(main).toContainElement(screen.getByRole("heading", { name: /admin sign in/i }))
+  })
+
+  it("applies the same pin to the server-rendered loading fallback", () => {
+    const pageSrc = readFileSync(resolve(process.cwd(), "app/admin-login/page.tsx"), "utf-8")
+    expect(pageSrc).toMatch(/style=\{ADMIN_LOGIN_LIGHT_TOKENS\}/)
+  })
+})
+
 // ── Source-assertion theme guards ─────────────────────────────────────────────────────
 // The page must render on the app's LIGHT tokens. The global `html[data-mode="light"]
 // .mode-readable` layer force-clamps every `text-white*` class to the dark --text token with

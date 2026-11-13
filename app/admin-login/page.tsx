@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import AdminLoginContent from './AdminLoginContent'
+import { ADMIN_LOGIN_LIGHT_TOKENS } from './lightTokens'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -9,7 +10,10 @@ export const metadata = {
 
 function AdminLoginFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-[#EEF1F7] text-[13px] text-[color:var(--muted)]">
+    <div
+      style={ADMIN_LOGIN_LIGHT_TOKENS}
+      className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-[#EEF1F7] text-[13px] text-[color:var(--muted)]"
+    >
       Loading…
     </div>
   )
