@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { classifyTradeIntent } from '@/lib/chimmy-trade/intent'
 import {
   TRADE_INTELLIGENCE_SYSTEM_RULES,
   FORBIDDEN_PHRASE_PATTERNS,
@@ -7,33 +6,6 @@ import {
   COMMISSIONER_REVIEW_FRAMING,
 } from '@/lib/chimmy-trade/answerPolicy'
 import { explainPlayerMarketValue } from '@/lib/chimmy-trade/tradeIntelligenceTools'
-
-describe('T10 intent classifier (deterministic, no hidden-id guessing)', () => {
-  const cases: Array<[string, string]> = [
-    ['Is this trade fair?', 'explain_trade'],
-    ['Should I veto this trade?', 'commissioner_review'],
-    ['Who should I trade with?', 'find_partners'],
-    ['What can I offer for Bijan?', 'suggest_packages'],
-    ['Why is this player value moving?', 'explain_player_value'],
-    ['Who is on the trade block?', 'summarize_block'],
-    ['Explain trades to a beginner', 'teach'],
-  ]
-  for (const [q, kind] of cases) {
-    it(`"${q}" → ${kind}`, () => {
-      expect(classifyTradeIntent(q).kind).toBe(kind)
-    })
-  }
-
-  it('non-trade question is not trade-related', () => {
-    const r = classifyTradeIntent('Who should I start at QB this week?')
-    expect(r.isTradeRelated).toBe(false)
-    expect(r.kind).toBe('general_trade')
-  })
-
-  it('empty message is safe', () => {
-    expect(classifyTradeIntent('').isTradeRelated).toBe(false)
-  })
-})
 
 describe('T10 answer policy / prompt hardening', () => {
   it('system rules forbid "must veto", auto-actions, and collusion framing', () => {

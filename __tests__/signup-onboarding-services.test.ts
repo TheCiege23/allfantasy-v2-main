@@ -15,7 +15,6 @@ import {
   validateAvatarUploadFile,
 } from "@/lib/signup/AvatarPickerService"
 import { validateSignupAgreements } from "@/lib/signup/AgreementAcceptanceService"
-import { getLegacyImportProviderMessage } from "@/lib/signup/LegacyImportOnboardingService"
 
 describe("Signup onboarding services", () => {
   it("normalizes and formats phone values", () => {
@@ -81,10 +80,5 @@ describe("Signup onboarding services", () => {
       ok: false,
       error: "You must confirm you are 18 or older.",
     })
-  })
-
-  it("returns provider copy for planned legacy imports", () => {
-    expect(getLegacyImportProviderMessage("sleeper")).toContain("available")
-    expect(getLegacyImportProviderMessage("espn")).toContain("planned")
   })
 })

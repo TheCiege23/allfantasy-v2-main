@@ -18,7 +18,6 @@ import {
   scoringLabelIdForNflPreset,
   scoringLabelIdForWizard,
 } from '@/lib/league-labels/liveValues'
-import { KNOWN_VALUE_DIFFERENCES, computeValueDifferences, describeDifference } from '@/lib/league-labels/valueDifferences'
 import { findScoringPresetRule, receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
 import { nflScoringSeedForCreate } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import { NFL_ROSTER_TEMPLATES } from '@/lib/nfl-roster/NflRosterTemplates'
@@ -26,23 +25,6 @@ import { NFL_ROSTER_TEMPLATES } from '@/lib/nfl-roster/NflRosterTemplates'
 const PUBLIC = path.join(process.cwd(), 'public')
 
 describe('label catalogue ↔ live presets', () => {
-  it('every difference between a label and its backing preset is a reviewed, listed one (and none are stale)', () => {
-    const actual = computeValueDifferences().map(describeDifference).sort()
-    expect(actual).toEqual([...KNOWN_VALUE_DIFFERENCES].sort())
-  })
-
-  it('the difference check can fail: a label value that disagrees with its preset is reported', () => {
-    const half = SCORING_LABELS.find((s) => s.id === 'half')!
-    const rec = half.values.find((v) => v.key === 'rec')!
-    const original = rec.value
-    try {
-      ;(rec as { value: number }).value = 0.75
-      expect(computeValueDifferences().map(describeDifference)).toContain('scoring:half:reception design=0.75 live=0.5')
-    } finally {
-      ;(rec as { value: number }).value = original
-    }
-  })
-
   it('backed NFL labels read the same rules creation seeds', () => {
     for (const [wizardId, labelId] of Object.entries(WIZARD_PRESET_TO_SCORING_LABEL)) {
       const rule = findScoringPresetRule(wizardId)

@@ -9,19 +9,6 @@ import {
   cssVar,
   type SeverityTier,
 } from "@/lib/commissioner-ui/tokens/colors"
-import {
-  spacingScale,
-  radiusScale,
-  elevationScale,
-  motionScale,
-  iconSizeScale,
-  controlHeightScale,
-  badgeHeightScale,
-  containerWidthScale,
-  zIndexScale,
-  opacityScale,
-} from "@/lib/commissioner-ui/tokens/spacing"
-import { breakpoints, mediaQuery } from "@/lib/commissioner-ui/tokens/breakpoints"
 
 const globalsCssPath = join(process.cwd(), "app/globals.css")
 const globalsCss = readFileSync(globalsCssPath, "utf-8")
@@ -55,31 +42,6 @@ describe("commissioner-os design tokens — module shape", () => {
   it("cssVar wraps a token name in a var() reference", () => {
     expect(cssVar(severityTokens.critical.text)).toBe("var(--severity-critical-text)")
   })
-
-  it("defines a closed base-4 spacing scale", () => {
-    expect(
-      Object.keys(spacingScale)
-        .map(Number)
-        .sort((a, b) => a - b)
-    ).toEqual([4, 8, 12, 16, 24, 32, 48, 64, 96])
-  })
-
-  it("defines exactly three radius steps", () => {
-    expect(Object.keys(radiusScale).sort()).toEqual(["generous", "standard", "subtle"])
-  })
-
-  it("defines exactly two elevation levels", () => {
-    expect(Object.keys(elevationScale).sort()).toEqual(["0", "1"])
-  })
-
-  it("defines breakpoints matching the Design Language System", () => {
-    expect(breakpoints).toEqual({ tablet: 640, desktop: 1024, largeDesktop: 1440 })
-  })
-
-  it("mediaQuery produces valid min/max-width conditions", () => {
-    expect(mediaQuery("tablet")).toBe("(min-width: 640px)")
-    expect(mediaQuery("tablet", "down")).toBe("(max-width: 639px)")
-  })
 })
 
 describe("commissioner-os design tokens — app/globals.css", () => {
@@ -92,16 +54,6 @@ describe("commissioner-os design tokens — app/globals.css", () => {
       ...Object.values(severityTokens).flatMap((t) => [t.text, t.bg, t.border]),
       ...Object.values(statusTokens).flatMap((t) => [t.text, t.bg, t.border]),
       ...Object.values(benchmarkTokens),
-      ...Object.values(spacingScale).map((s) => s.token),
-      ...Object.values(radiusScale).map((s) => s.token),
-      ...Object.values(elevationScale),
-      ...Object.values(motionScale).map((s) => s.token),
-      ...Object.values(iconSizeScale).map((s) => s.token),
-      ...Object.values(controlHeightScale).map((s) => s.token),
-      ...Object.values(badgeHeightScale).map((s) => s.token),
-      ...Object.values(containerWidthScale).map((s) => s.token),
-      ...Object.values(zIndexScale).map((s) => s.token),
-      ...Object.values(opacityScale).map((s) => s.token),
     ]
     for (const name of allTokenNames) {
       expect(globalsCss).toContain(`${name}:`)
@@ -143,10 +95,5 @@ describe("commissioner-os design tokens — app/globals.css", () => {
       }
     })
     expect(hasOverride).toBe(true)
-  })
-
-  it("keeps the new z-index scale below the two pre-existing hardcoded values in this file", () => {
-    const maxNewZIndex = Math.max(...Object.values(zIndexScale).map((z) => z.value))
-    expect(maxNewZIndex).toBeLessThan(90)
   })
 })

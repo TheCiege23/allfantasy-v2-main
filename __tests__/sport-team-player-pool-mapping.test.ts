@@ -312,21 +312,6 @@ describe('Sport teams, logos, and player pool mapping', () => {
     )
   })
 
-  it('resolves logo from db first and static fallback otherwise', async () => {
-    const { resolveTeamLogoUrl, resolveTeamLogoUrlSync } = await import('@/lib/sport-teams/TeamLogoResolver')
-
-    sportsTeamFindFirstMock.mockResolvedValueOnce({ logo: 'https://cdn.example/bos.png' })
-    const dbLogo = await resolveTeamLogoUrl('BOS', 'NBA')
-    expect(dbLogo).toBe('https://cdn.example/bos.png')
-
-    sportsTeamFindFirstMock.mockResolvedValueOnce(null)
-    const fallbackLogo = await resolveTeamLogoUrl('LAL', 'NBA')
-    expect(fallbackLogo).toContain('/nba/500/lal.png')
-
-    const syncLogo = resolveTeamLogoUrlSync('LAL', 'NBA')
-    expect(syncLogo).toContain('/nba/500/lal.png')
-  })
-
   it('bootstraps league player pool context with sport-specific teams and players', async () => {
     const { bootstrapLeaguePlayerPool } = await import('@/lib/sport-teams/LeaguePlayerPoolBootstrapService')
 

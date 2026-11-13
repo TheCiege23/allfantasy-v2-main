@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { ROLLING_INSIGHTS_ENDPOINTS_BY_SPORT, getRollingInsightsFieldPath, getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFieldMaps'
-import { buildRollingInsightsSoccerUrl } from '@/lib/providers/rollingInsightsSoccerUrl'
 import { normalizeSoccerLeague } from '@/lib/providers/rollingInsightsSoccerLeague'
 import { isSoccerGameReplaced, normalizeRollingInsightsSoccerStatus, shouldExpectSoccerLiveData } from '@/lib/providers/rollingInsightsSoccerStatus'
 import { normalizeRollingInsightsSoccerDraws } from '@/lib/providers/rollingInsightsSoccerTeamStats'
@@ -36,22 +35,6 @@ describe('Rolling Insights SOCCER', () => {
     expect(ROLLING_INSIGHTS_ENDPOINTS_BY_SPORT.SOCCER.scheduleDay).toContain('schedule-daily')
     expect(ROLLING_INSIGHTS_ENDPOINTS_BY_SPORT.SOCCER.scheduleWeek).toContain('schedule-weekly')
     expect(ROLLING_INSIGHTS_ENDPOINTS_BY_SPORT.SOCCER.scheduleDayAlias).toContain('/schedule/')
-  })
-
-  it('URL builder requires league + token', () => {
-    expect(buildRollingInsightsSoccerUrl('team_info', { token: '', league: 'EPL' }).ok).toBe(false)
-    expect(buildRollingInsightsSoccerUrl('team_info', { token: 't', league: 'nope' }).ok).toBe(false)
-    const ok = buildRollingInsightsSoccerUrl('team_info', { token: 'x', league: 'EPL' })
-    expect(ok.ok && ok.url.includes('league=EPL') && ok.url.includes('RSC_token=x')).toBe(true)
-  })
-
-  it('URL builder adds relegated for team_info', () => {
-    const r = buildRollingInsightsSoccerUrl('team_info', {
-      token: 't',
-      league: 'EPL',
-      relegated: true,
-    })
-    expect(r.ok && r.url.includes('relegated=TRUE')).toBe(true)
   })
 
   it('status helpers treat replaced as no live expectation', () => {

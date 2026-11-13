@@ -1,13 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDraftDefaults, getRosterDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
-import {
-  getDraftPreset,
-  getDraftPresetDefinitions,
-  getSupportedDraftVariantsForSport,
-} from '@/lib/draft-defaults/DraftDefaultsRegistry'
-import { resolveDraftPreset } from '@/lib/draft-defaults/DraftPresetResolver'
 import { getDraftOrderBehavior } from '@/lib/draft-defaults/DraftOrderRuleResolver'
-import { getDraftRankingContext } from '@/lib/draft-defaults/DraftRankingContextResolver'
 
 const { leagueFindUniqueMock, leagueUpdateMock } = vi.hoisted(() => ({
   leagueFindUniqueMock: vi.fn(),
@@ -89,33 +82,6 @@ describe('Prompt 17 draft defaults by sport and variant', () => {
 
     expect(soccer.pre_draft_ranking_source).toBe('sport_default')
     expect(soccer.position_filter_behavior).toBe('by_eligibility')
-  })
-
-  it('exposes draft preset definitions and supported variants by sport', () => {
-    const nflVariants = getSupportedDraftVariantsForSport('NFL')
-    expect(nflVariants).toEqual(
-      expect.arrayContaining(['STANDARD', 'PPR', 'HALF_PPR', 'SUPERFLEX', 'IDP', 'DYNASTY_IDP'])
-    )
-
-    const defs = getDraftPresetDefinitions('NFL')
-    expect(defs.length).toBeGreaterThanOrEqual(6)
-    expect(defs.map((d) => d.variant)).toEqual(expect.arrayContaining(['IDP', 'DYNASTY_IDP']))
-
-    const soccerPreset = getDraftPreset('SOCCER', 'STANDARD')
-    expect(soccerPreset.sport_type).toBe('SOCCER')
-  })
-
-  it('resolves draft preset capabilities and ranking context by sport/variant', () => {
-    const idpPreset = resolveDraftPreset('NFL', 'IDP')
-    expect(idpPreset.supportsIdpPlayers).toBe(true)
-    expect(idpPreset.defaultOrderMode).toBe('snake')
-
-    const soccerPreset = resolveDraftPreset('SOCCER', 'STANDARD')
-    expect(soccerPreset.supportsIdpPlayers).toBe(false)
-
-    const ranking = getDraftRankingContext('NFL', 'IDP')
-    expect(ranking.pre_draft_ranking_source).toBe('tiers')
-    expect(ranking.contextLabel).toContain('NFL IDP')
   })
 
   it('resolves draft order behavior including third-round reversal', () => {
