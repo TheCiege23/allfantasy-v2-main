@@ -19,8 +19,9 @@
  *   - `cf-*` is trusted only when the request carries a valid Cloudflare origin proof
  *     (lib/http/originLock). No proof configured, or none presented, means no
  *     Cloudflare can be vouched for, so the headers are removed before anything
- *     reads them. Geo then falls back to the IP lookup and rate limits key on
- *     `x-real-ip`, which Railway's edge sets from the TCP peer.
+ *     reads them. Geo then falls back to the IP lookup, and rate limits key on the
+ *     platform-set peer address (lib/http/clientIp's second rule) — which this file
+ *     never reads itself; that file stays the one rule for "which address is the client".
  *   - `x-vercel-*` is never trusted: Railway is not Vercel, so it can only be forged.
  *
  * ⚠ IF THE ORIGIN LOCK IS EVER TURNED OFF ON A SERVICE THAT *IS* BEHIND CLOUDFLARE,
