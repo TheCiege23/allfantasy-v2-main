@@ -293,8 +293,6 @@ export const translationsEsParity: Record<string, string> = {
   "dashboard.shell.leagueFallback": "Liga",
   "dashboard.shell.leagueNotFound": "Liga no encontrada",
   "dashboard.shell.leagueNotInList": "No hay ninguna liga con este id en tu lista conectada.",
-  "dashboard.shell.leagueTabsPlaceholder":
-    "Las pestañas Draft, Equipo, Liga, Jugadores, Tendencia, Trades y Marcadores aparecerán aquí (LEAGUE_PAGE_TASK).",
   "dashboard.shell.leagueWorkspace": "Espacio de liga",
   "dashboard.shell.learnMore": "Más información",
   "dashboard.shell.loadingLeague": "Cargando liga…",
