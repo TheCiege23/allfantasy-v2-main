@@ -163,7 +163,7 @@ import {
 } from '@/lib/core-app/leagueFirst'
 import { readLastLeague, rememberLastLeague } from '@/lib/core-app/leagueFirstStore'
 import { readLeagueChatPreview } from '@/lib/core-app/leagueChatPreview'
-import { composeChimmyMoves, composeMyTeamMoves, type ChimmyMoves } from '@/lib/core-app/chimmyMoves'
+import { composeChimmyMoves, type ChimmyMoves } from '@/lib/core-app/chimmyMoves'
 import { LineupIntelligenceActions } from '@/components/core-app/LineupIntelligenceActions'
 import { ChimmyMovesCard } from '@/components/core-app/ChimmyMovesCard'
 import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
@@ -4894,13 +4894,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'my-team' ? (
         myTeam ? (
           <>
-            {myTeam.preDraft || myTeam.eliminated || myTeam.completed ? null : myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : <ChimmyMovesCard leagueName={myTeam.league.name} data={composeMyTeamMoves({
-              leagueId: myTeam.league.id,
-              leagueName: myTeam.league.name,
-              starters: myTeam.starters.available ? myTeam.starters.data.flatMap((slot) => slot.player ? [slot.player] : []) : [],
-              emptySlots: myTeam.starters.available ? myTeam.starters.data.flatMap((slot, index) => slot.empty && !slot.player ? [{ index, slotLabel: slot.slotLabel }] : []) : [],
-              nowIso: new Date().toISOString(),
-            })} />}
+            {/*
+              2026-11-13 My team guide: the "Chimmy's moves" card listed the same questionable starters the
+              page's own "What to do" list names again a screen below. Those now live in one list (MyTeam),
+              with its "Ask Chimmy" button. Best Ball keeps its own actions card: it has no lineup to set.
+            */}
+            {myTeam.preDraft || myTeam.eliminated || myTeam.completed ? null : myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : null}
             <MyTeam data={myTeam} />
           </>
         ) : myTeamLoadFailed ? (

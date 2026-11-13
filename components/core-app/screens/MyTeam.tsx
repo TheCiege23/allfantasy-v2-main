@@ -48,6 +48,10 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor, type Catalog } from '@/lib/i18n/messages'
 import { useMessages } from '@/components/i18n/useMessages'
 import { myTeamScreenMessages } from '@/lib/core-app/messages/myTeamScreen'
+import { myTeamGuideMessages } from '@/lib/core-app/messages/myTeamGuide'
+import { myTeamHeadline, startersToCheck, type MyTeamHeadline } from '@/lib/core-app/myTeamGuide'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/myteam/af-my-team-guide.css'
 
 type MyTeamScreenMessages = typeof myTeamScreenMessages extends Catalog<infer M> ? M : never
 
@@ -1240,6 +1244,7 @@ function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false 
  */
 function LineupOptimizerCard({ result, platform, fixHref }: { result: LineupOptimization; platform: string; fixHref: string | null }) {
   const m = useMessages(myTeamScreenMessages)
+  const g = useMessages(myTeamGuideMessages)
   const pts = (n: number) => n.toFixed(1)
   return (
     <section className="af-frame af-mt-opt" aria-label={m.optimizerTitle} data-state={result.state} data-testid="mt-optimizer">
@@ -1284,9 +1289,13 @@ function LineupOptimizerCard({ result, platform, fixHref }: { result: LineupOpti
                   ))}
                 </ul>
                 {moves.length > 0 ? (
-                  <p className="af-mt-opt-moves">
-                    {m.optimizerMoves(moves.map((mv) => m.optimizerMove(mv.name, mv.fromSlot, mv.toSlot)).join(', '))}
-                  </p>
+                  /* Seat-only shuffles ("Geno Smith QB → QB", twenty of them) folded: they change no score. */
+                  <details className="af-mt-opt-moves-fold">
+                    <summary>{g.everySeat(moves.length)}</summary>
+                    <p className="af-mt-opt-moves">
+                      {m.optimizerMoves(moves.map((mv) => m.optimizerMove(mv.name, mv.fromSlot, mv.toSlot)).join(', '))}
+                    </p>
+                  </details>
                 ) : null}
               </>
             )
@@ -1725,7 +1734,115 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
   )
 }
 
+/** Weekday and clock time in the reader's own zone — after hydration only, as the rest of /core does. */
+function useLocalWhen(iso: string | null): string | null {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    if (!iso) return setText(null)
+    try {
+      setText(new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)))
+    } catch {
+      setText(null)
+    }
+  }, [iso])
+  return text
+}
+
+/**
+ * The top of My team (2026-11-13, owner: "users should know exactly what they need to do"). One
+ * sentence that answers "is my lineup OK?", one line on what the page is for, and up to three numbers
+ * that each jump to the section explaining them. It replaced a "Chimmy's moves" card that listed the
+ * same questionable starters the lineup check lists again below.
+ */
+function MyTeamGuide({
+  head,
+  leagueName,
+  platform,
+  checkCount,
+  kickoffAt,
+  projected,
+}: {
+  head: MyTeamHeadline
+  leagueName: string
+  platform: string
+  checkCount: number
+  kickoffAt: string | null
+  projected: { you: number; them: number | null } | null
+}) {
+  const g = useMessages(myTeamGuideMessages)
+  const when = useLocalWhen(kickoffAt)
+  const title =
+    head.kind === 'auto'
+      ? g.headAuto
+      : head.kind === 'fix'
+        ? g.headFix(head.count)
+        : head.kind === 'questionable'
+          ? g.headQuestionable(head.count)
+          : head.kind === 'better'
+            ? g.headBetter(head.gain.toFixed(1))
+            : head.kind === 'set'
+              ? g.headSet
+              : g.headUnknown
+  const chips: Array<{ key: string; value: string; label: string; href: string | null; tone: 'warn' | 'info' | 'ok' }> = []
+  if (head.kind !== 'auto' && head.kind !== 'unknown') {
+    chips.push({
+      key: 'check',
+      value: String(checkCount),
+      label: g.chipCheck,
+      href: checkCount > 0 ? '#af-mt-decision-title' : null,
+      tone: head.kind === 'fix' ? 'warn' : checkCount > 0 ? 'info' : 'ok',
+    })
+  }
+  if (kickoffAt) chips.push({ key: 'kickoff', value: when ?? '—', label: g.chipKickoff, href: null, tone: 'ok' })
+  if (projected) {
+    chips.push({
+      key: 'projected',
+      value: projected.them != null ? `${projected.you.toFixed(1)}–${projected.them.toFixed(1)}` : projected.you.toFixed(1),
+      label: g.chipProjected,
+      href: '#af-mt-matchup',
+      tone: projected.them != null && projected.you < projected.them ? 'warn' : 'ok',
+    })
+  }
+  return (
+    <section className="af-hg-head af-mtg-head" aria-labelledby="af-mtg-title" data-testid="my-team-guide">
+      <div className="af-hg-head-top">
+        <p className="af-hg-eyebrow">{g.eyebrow(leagueName)}</p>
+      </div>
+      <h2 id="af-mtg-title" className="af-hg-title" suppressHydrationWarning>
+        {title}
+      </h2>
+      <p className="af-hg-intro">{head.kind === 'auto' ? g.introAuto : g.intro(platform)}</p>
+      {chips.length > 0 ? (
+        <ul className="af-hg-chips">
+          {chips.map((c) => {
+            const body = (
+              <>
+                <b suppressHydrationWarning>{c.value}</b>
+                <span>{c.label}</span>
+              </>
+            )
+            return (
+              <li key={c.key}>
+                {c.href ? (
+                  <a className="af-hg-chip" data-tone={c.tone} data-chip={c.key} href={c.href}>
+                    {body}
+                  </a>
+                ) : (
+                  <span className="af-hg-chip af-mtg-chip" data-tone={c.tone} data-chip={c.key}>
+                    {body}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </section>
+  )
+}
+
 export function MyTeam({ data }: MyTeamProps) {
+  const g = useMessages(myTeamGuideMessages)
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const m = useMessages(myTeamScreenMessages)
@@ -1802,6 +1919,19 @@ export function MyTeam({ data }: MyTeamProps) {
    * Best Ball, so no league loses either.
    */
   const lineupCheck = !bestBall && data.starters.available ? summariseLineupCheck(data.starters.data, decisionNow) : null
+  /*
+   * The guide reads the check's items from the SERVER-time pass (lock asOf), not the ticking clock, so
+   * the server render and the first client render agree on the headline.
+   */
+  const guideCheck = !bestBall && data.starters.available
+    ? summariseLineupCheck(data.starters.data, data.lock?.available ? data.lock.data.asOf ?? decisionNow : decisionNow)
+    : null
+  const guideHead = myTeamHeadline({ bestBall, check: guideCheck, optimizer: data.lineupOptimizer ?? null })
+  const guideKickoff = data.lock?.available && data.lock.data.daysAway < DISTANT_LOCK_DAYS ? new Date(data.lock.data.at).toISOString() : null
+  const guideProjected =
+    data.nextMatchup.available && data.nextMatchup.data.you.projected != null
+      ? { you: data.nextMatchup.data.you.projected, them: data.nextMatchup.data.opponent?.projected ?? null }
+      : null
 
 
 
@@ -1838,6 +1968,14 @@ export function MyTeam({ data }: MyTeamProps) {
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <DynastyMarkersScope markers={data.dynastyMarkers}>
     <div className="af-mt">
+      <MyTeamGuide
+        head={guideHead}
+        leagueName={data.league.name}
+        platform={platform}
+        checkCount={startersToCheck(guideCheck)}
+        kickoffAt={guideKickoff}
+        projected={guideProjected}
+      />
       <header className="af-frame af-mt-head">
         {data.team.available ? (
           <>
@@ -1992,7 +2130,8 @@ export function MyTeam({ data }: MyTeamProps) {
       {!bestBall ? (
         <section className="af-frame af-mt-decision" aria-labelledby="af-mt-decision-title">
           <div>
-            <span className="af-label">{copy('Lineup decision')}</span>
+            {/* "Lineup decision" → "What to do" (2026-11-13 guide): the label says what the card is FOR. */}
+            <span className="af-label">{g.whatToDo}</span>
             <h2 id="af-mt-decision-title">
               {decisionStarted
                 ? m.decisionReviewLock(decisionSlot?.player?.name)
@@ -2037,6 +2176,10 @@ export function MyTeam({ data }: MyTeamProps) {
                 fixHref={data.league.sourceLink?.href ?? null}
               />
             ) : null}
+            {/* Inside the text column: as a third grid child it squeezed the card into a narrow strip. */}
+            <p className="af-mtg-teach">
+              <b>{g.why}</b> {g.decisionTeach}
+            </p>
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
@@ -2046,6 +2189,20 @@ export function MyTeam({ data }: MyTeamProps) {
               identical buttons a few lines apart. Kept only when the check does not draw its own.
             */}
             {data.league.sourceLink && !checkDrawsFix(lineupCheck, data.league.sourceLink.href) ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+            {/* Chimmy's per-player moves card was folded into this list; its question lives here. */}
+            <button
+              type="button"
+              className="af-btn af-btn--ghost af-mtg-ask"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent(COMMS_OPEN_EVENT, {
+                    detail: { tab: 'chimmy', leagueId: data.league.id, prefill: g.chimmyPrompt(data.league.name) },
+                  }),
+                )
+              }
+            >
+              {g.askChimmy}
+            </button>
           </div>
         </section>
       ) : null}
@@ -2071,7 +2228,7 @@ export function MyTeam({ data }: MyTeamProps) {
         not the points they have scored; it is the points they are about to.
       */}
       {data.nextMatchup.available ? (
-        <section className="af-frame af-mt-matchup">
+        <section className="af-frame af-mt-matchup" id="af-mt-matchup">
           <div className="af-mt-mu-head">
             <h2 className="af-label">
               {copy('Week')} {data.nextMatchup.data.week} · {copy(bestBall ? 'listed starter projections' : 'projected matchup')}
@@ -2136,9 +2293,11 @@ export function MyTeam({ data }: MyTeamProps) {
             {data.upcomingByes.map((b) => (
               <li key={b.week} data-stack={b.names.length >= 3}>
                 <span className="af-mt-byes-wk af-num">{copy('Week')} {b.week}</span>
-                <span className="af-mt-byes-who">
-                  {b.names.length} {copy('off')} · {b.names.join(', ')}
-                </span>
+                {/* The count is the fact; the names are one tap away (sixteen of them ran four lines). */}
+                <details className="af-mt-byes-who">
+                  <summary>{g.byesNames(b.names.length)}</summary>
+                  <span>{b.names.join(', ')}</span>
+                </details>
               </li>
             ))}
           </ul>

@@ -1,0 +1,45 @@
+/*
+ * The My team guide (MyTeam.tsx MyTeamGuide). Builds on the home guide's `af-hg-*` headline so Home,
+ * Week, Live, Trades and My team read as one product. Token layer only. No text below 11px
+ * (__tests__/core-app/type-floor.test.ts).
+ */
+.af-core .af-mtg-head { margin-bottom: 14px; }
+/*
+ * Always first. On a phone .af-mt is a flex column that re-orders its sections (af-my-team.css,
+ * "lineup first": head -2, decision -1); without this the guide sank below all of them.
+ */
+.af-core .af-mt > .af-mtg-head { order: -100; }
+.af-core .af-mtg-chip { cursor: default; }
+.af-core .af-mtg-chip:hover { border-color: var(--line2); }
+.af-core .af-mtg-head a.af-hg-chip { color: inherit; text-decoration: none; }
+
+/* "Why it matters" under "What to do". */
+.af-core .af-mtg-teach {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-line);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-core .af-mtg-teach b { color: var(--accent); }
+
+/* Byes: the count is the fact, the names one tap away. */
+.af-core .af-mt-byes-who > summary { cursor: pointer; color: var(--text2); }
+.af-core .af-mt-byes-who > span { display: block; margin-top: 4px; color: var(--muted); }
+
+/* Best lineup: seat-only moves folded. */
+.af-core .af-mt-opt-moves-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .af-core .af-mt-opt-moves-fold > summary,
+  .af-core .af-mt-byes-who > summary { min-height: 44px; display: flex; align-items: center; }
+}

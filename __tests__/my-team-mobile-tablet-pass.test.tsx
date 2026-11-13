@@ -128,9 +128,11 @@ describe('phone: the countdown above the Sleeper check strip', () => {
     /* Context stays first; the narrow CSS then puts the countdown ahead of verification. */
     const { container } = render(<MyTeam data={page()} />)
     const kids = [...container.querySelector('.af-mt')!.children].map((c) => c.classList)
-    expect(kids[0].contains('af-mt-head')).toBe(true)
+    // 2026-11-13: the My team guide (what to do, in one sentence) leads; the team header follows it.
+    expect(kids[0].contains('af-mtg-head')).toBe(true)
+    expect(kids[1].contains('af-mt-head')).toBe(true)
     expect(inQuery(MT_CSS, '.af-core .af-mt > .af-mt-head', NARROW_PAGE).order).toBe('-2')
-    expect(kids[1].contains('af-lv')).toBe(true)
-    expect(kids[2].contains('af-mt-lock')).toBe(true)
+    expect(kids[2].contains('af-lv')).toBe(true)
+    expect(kids[3].contains('af-mt-lock')).toBe(true)
   })
 })
