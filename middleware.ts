@@ -30,11 +30,14 @@ import {
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
 import {
   CSP_ENFORCED_POLICY,
+  CSP_PROBE_COOKIE,
   CSP_REPORT_ONLY_POLICY,
   buildNoncePolicy,
   cspMode,
+  cspModeForRequest,
   generateCspNonce,
   modeUsesNonce,
+  type CspMode,
 } from "@/lib/security/cspReportOnly"
 
 /**
@@ -1077,7 +1080,7 @@ export async function middleware(request: NextRequest) {
   cleaned.delete("content-security-policy")
   cleaned.delete("content-security-policy-report-only")
   cleaned.delete("x-nonce")
-  const mode = cspMode()
+  const mode = cspModeForRequest(request.cookies.get(CSP_PROBE_COOKIE)?.value)
   const nonce = process.env.NODE_ENV !== "development" && modeUsesNonce(mode) ? generateCspNonce() : undefined
   if (nonce) {
     cleaned.set("x-nonce", nonce)
@@ -1086,7 +1089,7 @@ export async function middleware(request: NextRequest) {
   const trusted = new NextRequest(request, { headers: cleaned })
 
   const response = await routeMiddleware(trusted)
-  return applyBaselineSecurityHeaders(applyAttributionCapture(trusted, response), nonce)
+  return applyBaselineSecurityHeaders(applyAttributionCapture(trusted, response), nonce, mode)
 }
 
 /*
@@ -1122,20 +1125,21 @@ const BASELINE_SECURITY_HEADERS: Record<string, string> = {
 }
 
 /*
- * 🛑 WHICH CSP IS SENT IS `CSP_MODE` (lib/security/cspReportOnly.ts `cspMode`):
+ * 🛑 WHICH CSP IS SENT IS `CSP_MODE` (lib/security/cspReportOnly.ts `cspMode`), except
+ * that a browser with the `af_csp_probe=nonce` cookie gets `nonce` (stricter only):
  *
- *   nonce-report (default)  enforce the measured allowlist (Phase 2) AND report the
- *                           nonce policy, which has no 'unsafe-inline' (Phase 3)
- *   nonce                   enforce the nonce policy
- *   enforce                 enforce the allowlist only
- *   report-only             report the allowlist only (Phase 1)
+ *   enforce (default)  enforce the measured allowlist (Phase 2)
+ *   nonce              enforce the nonce policy, which has no 'unsafe-inline' (Phase 3)
+ *   report-only        report the allowlist only (Phase 1)
+ *   nonce-report       allowlist + report the nonce policy; NOT a preview of `nonce`
+ *                      (Next stamps no nonce there — see cspReportOnly.ts)
  *
  * `next dev` keeps the minimal header above: webpack's HMR runtime evals module code.
  * A response built before a nonce exists (an origin-lock refusal) is not a page, so it
  * gets the allowlist rather than a nonce policy. A route that set its own
  * Content-Security-Policy keeps it (e.g. the sandboxed emblem SVG).
  */
-function applyBaselineSecurityHeaders<T extends Response>(response: T, nonce?: string): T {
+function applyBaselineSecurityHeaders<T extends Response>(response: T, nonce?: string, requestMode?: CspMode): T {
   const routeSetCsp = response.headers.has('Content-Security-Policy')
   for (const [key, value] of Object.entries(BASELINE_SECURITY_HEADERS)) {
     // Never overwrite a header a route set on purpose (e.g. its own CSP).
@@ -1144,7 +1148,9 @@ function applyBaselineSecurityHeaders<T extends Response>(response: T, nonce?: s
   // Next dev's evaluated bundles generate a flood of reports and break under enforcement.
   if (process.env.NODE_ENV === 'development') return response
 
-  const mode = cspMode()
+  // The mode decided for this request (env + probe cookie); responses built before that
+  // (origin-lock refusals) fall back to the service's mode.
+  const mode = requestMode ?? cspMode()
   if (mode === 'report-only') {
     if (!response.headers.has('Content-Security-Policy-Report-Only')) {
       response.headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY_POLICY)

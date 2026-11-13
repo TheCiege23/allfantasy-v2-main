@@ -40,19 +40,18 @@ describe("baseline security headers", () => {
     expect(csp).toContain("object-src 'none'")
     expect(csp).toContain("base-uri 'self'")
     expect(csp).toContain("report-uri /api/security/csp-report")
-    // The default (nonce-report) also REPORTS the stricter nonce policy — never the same
-    // allowlist twice, which would double every report.
+    // The default (enforce) sends the allowlist alone: no second, report-only copy.
+    expect(res.headers.get("content-security-policy-report-only")).toBeNull()
+  })
+
+  it("CSP_MODE=nonce-report also REPORTS the stricter nonce policy", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("CSP_MODE", "nonce-report")
+    const res = await middleware(from("/"))
+    expect(res.headers.get("content-security-policy")).toBe(CSP_ENFORCED_POLICY)
     const reportOnly = res.headers.get("content-security-policy-report-only") ?? ""
     expect(reportOnly).not.toBe(CSP_ENFORCED_POLICY)
     expect(reportOnly).toMatch(/'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/)
-  })
-
-  it("CSP_MODE=enforce sends the allowlist alone", async () => {
-    vi.stubEnv("NODE_ENV", "production")
-    vi.stubEnv("CSP_MODE", "enforce")
-    const res = await middleware(from("/"))
-    expect(res.headers.get("content-security-policy")).toBe(CSP_ENFORCED_POLICY)
-    expect(res.headers.get("content-security-policy-report-only")).toBeNull()
   })
 
   it("CSP_MODE=report-only rolls back to the minimal enforced header plus the report-only policy", async () => {
