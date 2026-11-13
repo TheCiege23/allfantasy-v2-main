@@ -804,8 +804,13 @@
  * Below the three-column width the decision column moves under the main content
  * rather than being dropped: on a phone "what do I do" is the whole reason the
  * screen was opened, so it must not be the thing that disappears.
+ *
+ * ⚠ 1560px, NOT 1180px (2026-11-13 guide). The query reads the VIEWPORT, but this grid sits beside the
+ * shell's own ~330px nav, so at 1280px the three columns left the player 160px wide — his name broke
+ * one word per line and the every-league list an injury alert opens was a sliver. Measured: 360 + 160 +
+ * 384 at a 1280px viewport.
  */
-@media (max-width: 1180px) {
+@media (max-width: 1560px) {
   .af-core.af-pf--2a,
   .af-core.af-pf--2a:not(:has(.af-pf-side)) {
     grid-template-columns: 320px minmax(0, 1fr);

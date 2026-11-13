@@ -2602,6 +2602,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             The search icon. Phone only in both modes (hidden above 720px by af-core-shell.css): the
             phone header folds the full-width search behind it so the topbar stays one row.
           */}
+          {active === 'players' ? null : (
           <button
             type="button"
             className="af-lf-search-btn"
@@ -2619,6 +2620,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           >
             <span aria-hidden>{lfSearchOpen ? '×' : '⌕'}</span>
           </button>
+          )}
           {/*
             League-first: the inbox — trade offers, waiver results, mentions, lineup alerts — one tap
             from every screen. The phone header hides `.af-topbar-right` and the nav, so without this
@@ -2644,7 +2646,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ) : null}
             </Link>
           ) : null}
-          <TopSearch leagues={searchLeagues} />
+          {/*
+            Not on the Player Finder (2026-11-13 guide): that page IS a player search, and two search
+            boxes one above the other read as two different things to fill in.
+          */}
+          {active === 'players' ? <span className="af-search-wrap" aria-hidden /> : <TopSearch leagues={searchLeagues} />}
 
           <div className="af-topbar-right">
             {weekLabel ? <span className="af-week af-num">{weekLabel}</span> : null}

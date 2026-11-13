@@ -34,6 +34,7 @@ export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
 // server-only-free module because the client link builder needs them too.
 import { parsePlayerRef } from './playerRef'
+import { teamCodesForQuery } from './finderGuide'
 import { playerRef } from './playerRef'
 export { playerRef, parsePlayerRef } from './playerRef'
 // The Player Command Center's replacement engine — reused as-is for the
@@ -379,6 +380,49 @@ export async function searchPlayers(query: string, limit = 12, sport?: string | 
    * detectably wrong one would otherwise survive the collapse as the group's face.
    */
   return collapseCatalog(await withoutDetectablyWrongHeadshots(rows), limit)
+}
+
+/** A team's roster as the finder shows it — enough for a full NFL roster after duplicates collapse. */
+export const FINDER_TEAM_LIMIT = 60
+const POSITION_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DST', 'DL', 'LB', 'DB']
+
+/**
+ * The Player Finder's search (2026-11-13 guide): by NAME, as `searchPlayers`, and by TEAM ("Bills",
+ * "Buffalo", "BUF" — finderGuide.teamCodesForQuery), so after a game-day alert you can find a player
+ * whose name you do not remember from the club he plays for. Name matches first, then that team's
+ * players in position order.
+ *
+ * ⚠ FINDER ONLY. `searchPlayers` also grounds Chimmy and the AI context enricher, where "Bills"
+ * expanding to sixty players would flood a prompt. Team matching is opt-in by calling this instead.
+ */
+export async function searchFinderPlayers(query: string, limit = 12, sport?: string | null): Promise<PlayerMatch[]> {
+  const q = query.trim()
+  if (q.length < 2) return []
+  const codes = teamCodesForQuery(q, sport)
+  const [byName, teamRows] = await Promise.all([
+    searchPlayers(q, limit, sport),
+    codes.length === 0
+      ? Promise.resolve([] as CatalogRow[])
+      : prisma.sportsPlayer.findMany({
+          where: { team: { in: codes }, ...(sport ? { sport } : {}) },
+          orderBy: [{ sleeperId: { sort: 'desc', nulls: 'last' } }, { name: 'asc' }, { externalId: 'asc' }],
+          take: FINDER_TEAM_LIMIT * 3,
+          select: {
+            externalId: true, sleeperId: true, name: true, position: true,
+            team: true, imageUrl: true, number: true, sport: true, source: true,
+          },
+        }),
+  ])
+  if (teamRows.length === 0) return byName
+  const rank = (p: string | null) => {
+    const i = POSITION_ORDER.indexOf(normalizePosition(p))
+    return i < 0 ? POSITION_ORDER.length : i
+  }
+  const byTeam = collapseCatalog(await withoutDetectablyWrongHeadshots(teamRows), FINDER_TEAM_LIMIT).sort(
+    (a, b) => rank(a.position) - rank(b.position) || a.name.localeCompare(b.name),
+  )
+  const seen = new Set(byName.map((m) => `${m.sport}|${m.externalId}`))
+  return [...byName, ...byTeam.filter((m) => !seen.has(`${m.sport}|${m.externalId}`))]
 }
 
 /** One catalog row as the two search paths read it. */

@@ -102,7 +102,7 @@ describe('the top-bar search', () => {
   )
   const hitNames = () => Array.from(document.querySelectorAll('.af-search-ac-name')).map((n) => n.textContent)
   const type = (value: string) => {
-    const box = screen.getByPlaceholderText('Find a player or jump to a league')
+    const box = screen.getByPlaceholderText('Search players or leagues')
     fireEvent.focus(box)
     fireEvent.change(box, { target: { value } })
   }

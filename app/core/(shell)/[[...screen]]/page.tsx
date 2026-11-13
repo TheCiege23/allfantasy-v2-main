@@ -85,7 +85,7 @@ import {
 import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core-app/leagueDataCoverage'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
-import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
+import { searchFinderPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { readFinderDynastyMarkers } from '@/lib/core-app/dynastyMarkerRead'
 import { normalizeFinderSport } from '@/lib/core-app/finderSports'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -2543,7 +2543,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const finderLeagueIds = finderScope.leagueIds
 
   const playerSport = normalizeFinderSport(sp.sport)
-  const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery, 12, playerSport).catch(() => []) : []
+  const playerMatches = activeKey === 'players' ? await searchFinderPlayers(playerQuery, 12, playerSport).catch(() => []) : []
   /*
    * A held DYNASTY league (the shell's own `dynastyEra`): age / ROOKIE / PROSPECT chips on the results,
    * from ONE batched SportsPlayer read for every match (lib/core-app/dynastyMarkerRead.ts). The league

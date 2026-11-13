@@ -308,7 +308,9 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
 
     // The chip and the header line.
     expect(container.querySelector('.af-pf-name-row .af-pf-ready')?.textContent).toBe('Dudoso')
-    expect(container.querySelector('.af-pf-rostered')?.textContent).toBe(' · en 5 de tus 6 ligas, en Yahoo, Sleeper y ESPN · lo tienen otros en 2')
+    // Said once, as the every-league count over the list (2026-11-13 guide) — the header line steps aside.
+    expect(container.querySelector('.af-pf-rostered')).toBeNull()
+    expect(container.querySelector('.af-pfg-count-text')?.textContent).toBe('En 5 de tus 6 ligas · titular en 1 · no es titular en 4 · en Yahoo, Sleeper y ESPN · en el equipo de otro en 2')
     expect(container.querySelector('.af-sync')?.textContent).toBe('hace 12 min')
 
     // Tiles.
@@ -527,7 +529,7 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
       expect(out).toContain('Coincidencias · 0')
       // Signed in with no player open, the home leads with "Mis jugadores" instead of the
       // "pick a match" card (2026-10-08, "My players").
-      expect(out).toContain('Mis jugadores')
+      expect(out).toContain('Encuentra cualquier jugador en todas tus ligas')
       expect(out).not.toContain('Elige una coincidencia para ver puestos, lesión e historial de temporadas.')
       unmount()
     }
@@ -541,7 +543,8 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
       expect(out).toContain(
         count === 1 ? 'No está en ninguna plantilla de la liga que conectaste.' : 'No está en ninguna plantilla de las 4 ligas que conectaste.',
       )
-      expect(container.querySelector('.af-pf-rostered')?.textContent).toBe(count === 1 ? ' · no está en tu única liga' : ' · no está en ninguna de tus 4 ligas')
+      // The every-league count says it now (2026-11-13 guide).
+      expect(container.querySelector('.af-pfg-count-text')?.textContent).toBe(count === 1 ? 'No está en tu equipo en tu única liga' : 'No está en tu equipo en ninguna de tus 4 ligas')
       unmount()
     }
   })
@@ -959,7 +962,8 @@ describe('Player Finder — English is unchanged', () => {
     const { container } = renderFinder({ depth: DEPTH })
     expect(container.querySelector('h1')?.textContent).toBe('Player Finder')
     expect(container.querySelector('.af-pf-name-row .af-pf-ready')?.textContent).toBe('Questionable')
-    expect(container.querySelector('.af-pf-rostered')?.textContent).toBe(' · on 5 of your 6 leagues, across Yahoo, Sleeper and ESPN · rostered by others in 2')
+    expect(container.querySelector('.af-pf-rostered')).toBeNull()
+    expect(container.querySelector('.af-pfg-count-text')?.textContent).toBe("In 5 of your 6 leagues · starting in 1 · not starting in 4 · on Yahoo, Sleeper and ESPN · on someone else's team in 2")
     expect(container.querySelector('.af-sync')?.textContent).toBe('12m ago')
     expect([...container.querySelectorAll('.af-pf-table th')].map((th) => th.textContent)).toEqual(['League', 'Slot', 'Status', 'Proj', 'AF', 'Value', ''])
     expect([...container.querySelectorAll('.af-pf-slot')].map((s) => s.textContent)).toEqual(['BENCH', 'IR SLOT', 'BENCH', 'BENCH', 'TE', 'NOT YOURS', 'NOT YOURS'])
