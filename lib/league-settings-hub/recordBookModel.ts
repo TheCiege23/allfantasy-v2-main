@@ -64,12 +64,45 @@ export function topTeamScores(data: Pick<StoryData, 'fixtures' | 'teams'>, limit
     .map((s, i) => ({ rank: i + 1, teamName: data.teams.get(s.team)!.name, season: s.season, week: s.week, points: Math.round(s.points * 100) / 100 }))
 }
 
+/** One starter whose points the league office's stats changed after the week sealed. */
+export type CorrectionChange = {
+  player: string
+  position: string | null
+  team: string
+  before: number
+  after: number
+  delta: number
+}
+
 export type CorrectionWeek = {
   week: number
   /** Every stored score for the week is finalized — past the stat-correction window. */
   final: boolean
   /** When the week was last rescored after stat corrections, if ever. ISO string. */
   rescoredAt: string | null
+  /**
+   * The players the stat-correction check found changed (lib/stat-corrections/statCorrectionDetector),
+   * biggest change first. `[]` = the week was checked and nothing moved; absent = never checked (an
+   * imported league, a sport the check does not cover, or a week it has not reached).
+   */
+  changes?: CorrectionChange[]
+}
+
+/**
+ * Joins the detector's stored per-week reviews onto the weeks. A reviewed week the score rows do not
+ * list is still shown — the review is the evidence that it was played and checked.
+ */
+export function attachCorrectionChanges(
+  weeks: ReadonlyArray<CorrectionWeek>,
+  reviews: ReadonlyArray<{ week: number; changes: ReadonlyArray<CorrectionChange> }>,
+): CorrectionWeek[] {
+  const byWeek = new Map(weeks.map((w) => [w.week, { ...w }]))
+  for (const r of reviews) {
+    const w = byWeek.get(r.week) ?? { week: r.week, final: false, rescoredAt: null }
+    w.changes = [...r.changes].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.player.localeCompare(b.player))
+    byWeek.set(r.week, w)
+  }
+  return [...byWeek.values()].sort((a, b) => a.week - b.week)
 }
 
 /**
