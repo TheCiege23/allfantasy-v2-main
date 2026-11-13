@@ -19,8 +19,10 @@ vi.mock('@/lib/geo/geoIpFetch', () => ({ fetchIpApi: vi.fn(async () => null), fe
 import { middleware } from '@/middleware'
 import {
   CSP_ENFORCED_POLICY,
+  CSP_PROBE_COOKIE,
   buildNonceDirectives,
   cspMode,
+  cspModeForRequest,
   generateCspNonce,
   summarizeCspReports,
 } from '@/lib/security/cspReportOnly'
@@ -74,16 +76,68 @@ describe('the nonce policy', () => {
 })
 
 describe('cspMode', () => {
-  it('defaults to nonce-report, and a typo cannot loosen anything', () => {
-    expect(cspMode(undefined)).toBe('nonce-report')
-    expect(cspMode('nonse')).toBe('nonce-report')
+  it('defaults to enforce (the allowlist), and a typo cannot loosen anything', () => {
+    expect(cspMode(undefined)).toBe('enforce')
+    expect(cspMode('nonse')).toBe('enforce')
     expect(cspMode('nonce')).toBe('nonce')
+    expect(cspMode('nonce-report')).toBe('nonce-report')
     expect(cspMode('enforce')).toBe('enforce')
     expect(cspMode('report-only')).toBe('report-only')
   })
 })
 
-describe('middleware, default mode (nonce-report)', () => {
+describe('cspModeForRequest — the strict-mode probe cookie', () => {
+  it('upgrades any service mode to nonce, and only to nonce', () => {
+    for (const env of ['enforce', 'report-only', 'nonce-report', 'nonce'] as const) {
+      expect(cspModeForRequest('nonce', env)).toBe('nonce')
+      expect(cspModeForRequest(' NONCE ', env)).toBe('nonce')
+      // Any other value is ignored — the cookie can never select a looser mode.
+      expect(cspModeForRequest('report-only', env)).toBe(env)
+      expect(cspModeForRequest('enforce', env)).toBe(env)
+      expect(cspModeForRequest(undefined, env)).toBe(env)
+    }
+  })
+
+  it('through the middleware: a probe browser gets the enforced nonce policy, everyone else the allowlist', async () => {
+    const probe = await middleware(page('/', { headers: { cookie: `${CSP_PROBE_COOKIE}=nonce` } }))
+    const csp = probe.headers.get('content-security-policy') ?? ''
+    const nonce = csp.match(NONCE_RE)?.[1]
+    expect(nonce).toBeTruthy()
+    expect(forwarded(probe, 'x-nonce')).toBe(nonce)
+
+    const visitor = await middleware(page('/'))
+    expect(visitor.headers.get('content-security-policy')).toBe(CSP_ENFORCED_POLICY)
+    expect(forwarded(visitor, 'x-nonce')).toBeNull()
+  })
+
+  it('a probe value other than nonce changes nothing', async () => {
+    const res = await middleware(page('/', { headers: { cookie: `${CSP_PROBE_COOKIE}=report-only` } }))
+    expect(res.headers.get('content-security-policy')).toBe(CSP_ENFORCED_POLICY)
+  })
+})
+
+/*
+ * 🛑 THE PRODUCTION FINDING THIS FILE NOW GUARDS. Next's router copies every RESPONSE
+ * header the middleware sets onto the REQUEST (resolve-routes.js `req.headers[key] =
+ * value`), and the renderer reads its nonce from `content-security-policy` first. So the
+ * nonce Next stamps on its own scripts is whatever the ENFORCED response header carries.
+ * In nonce mode that must be this request's nonce, or every Next script is refused.
+ */
+describe('Next reads its nonce from the enforced response header', () => {
+  it('in nonce mode, the enforced response CSP carries the same nonce as x-nonce', async () => {
+    vi.stubEnv('CSP_MODE', 'nonce')
+    const res = await middleware(page('/'))
+    const responseNonce = (res.headers.get('content-security-policy') ?? '').match(NONCE_RE)?.[1]
+    expect(responseNonce).toBeTruthy()
+    expect(responseNonce).toBe(forwarded(res, 'x-nonce'))
+  })
+})
+
+describe('middleware, CSP_MODE=nonce-report', () => {
+  beforeEach(() => {
+    vi.stubEnv('CSP_MODE', 'nonce-report')
+  })
+
   it('enforces the allowlist and REPORTS the nonce policy, with one nonce on response and request', async () => {
     const res = await middleware(page('/'))
     expect(res.headers.get('content-security-policy')).toBe(CSP_ENFORCED_POLICY)

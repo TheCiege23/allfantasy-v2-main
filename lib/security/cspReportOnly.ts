@@ -231,12 +231,22 @@ export function buildNoncePolicy(nonce: string): string {
 /**
  * What the site sends, by `CSP_MODE` on the service (a variable write redeploys it):
  *
- *   nonce-report  DEFAULT. Enforce the allowlist; ALSO report the nonce policy, so the
- *                 csp-report log shows exactly what dropping 'unsafe-inline' would block
- *                 (disposition "report") while nothing is blocked by it yet.
+ *   enforce       DEFAULT. Enforce the measured allowlist (Phase 2).
  *   nonce         Enforce the nonce policy — 'unsafe-inline' is gone.
- *   enforce       Enforce the allowlist only (Phase 2).
  *   report-only   Report the allowlist only (Phase 1) — the deepest rollback.
+ *   nonce-report  Enforce the allowlist AND report the nonce policy. ⚠ NOT a faithful
+ *                 preview of `nonce` — read why below. Kept only for its inline
+ *                 `script-sample`s, never as a go/no-go signal.
+ *
+ * 🛑 WHY nonce-report CANNOT PREVIEW nonce, MEASURED ON PRODUCTION 2026-11-13. Next's
+ * router copies every RESPONSE header the middleware sets onto the REQUEST as well
+ * (next/dist/server/lib/router-utils/resolve-routes.js: `req.headers[key] = value`), and
+ * the renderer takes its nonce from `content-security-policy` before
+ * `content-security-policy-report-only`. With the enforced allowlist present, Next reads
+ * a policy with no nonce and stamps NOTHING: 60 of 62 <script> tags on `/` went out
+ * without one, so every Next chunk and flight script reports as a violation. In `nonce`
+ * mode the enforced header IS the nonce policy, so Next reads the right value. Preview
+ * strict mode per request with the probe cookie instead (`cspModeForRequest`).
  *
  * An unknown value is the default, so a typo cannot loosen anything.
  */
@@ -244,8 +254,24 @@ export type CspMode = 'nonce-report' | 'nonce' | 'enforce' | 'report-only'
 
 export function cspMode(raw: string | undefined = process.env.CSP_MODE): CspMode {
   const v = raw?.trim().toLowerCase()
-  if (v === 'nonce' || v === 'enforce' || v === 'report-only') return v
-  return 'nonce-report'
+  if (v === 'nonce' || v === 'nonce-report' || v === 'report-only') return v
+  return 'enforce'
+}
+
+/** Cookie that previews strict (nonce) mode for one browser. See `cspModeForRequest`. */
+export const CSP_PROBE_COOKIE = 'af_csp_probe'
+
+/**
+ * The mode for THIS request: the service's `CSP_MODE`, except that a browser carrying
+ * `af_csp_probe=nonce` gets `nonce`.
+ *
+ * It can only make a page STRICTER: every mode it overrides is looser than `nonce`, and
+ * no cookie value selects anything else. So it is safe to leave in production, and it
+ * is how strict mode is verified on the live site — real pages, the real GTM
+ * container — before `CSP_MODE=nonce` applies it to everyone.
+ */
+export function cspModeForRequest(probeCookie: string | undefined, envMode: CspMode = cspMode()): CspMode {
+  return probeCookie?.trim().toLowerCase() === 'nonce' ? 'nonce' : envMode
 }
 
 /** Whether pages in this mode need a nonce stamped on their scripts. */
