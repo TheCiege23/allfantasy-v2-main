@@ -63,7 +63,7 @@ export function GuillyHome({ leagueId }: { leagueId: string }) {
             ))}
           </ol>
         )}
-        <p style={{ margin: '12px 0 0', fontSize: 13, color: '#9aa3b8' }}>Points over the projected lowest score. {describeTiebreak(data.config?.tiebreakerOrder)}</p>
+        <p style={{ margin: '12px 0 0', fontSize: 13, color: '#9aa3b8' }}>Points over the projected lowest score. {describeTiebreak(data.config?.tiebreakerOrder, data.config?.periodWeeks)}</p>
       </SpecialtyCard>
 
       {latestChop ? (
@@ -124,7 +124,9 @@ export function GuillyHome({ leagueId }: { leagueId: string }) {
       <SpecialtyCard label="How Guilly works">
         <SpecialtyRules rules={[
           'Everyone plays everyone: one weekly points race across the whole league.',
-          `The lowest weekly score is chopped${data.config && data.config.teamsPerChop > 1 ? ` (${data.config.teamsPerChop} per week)` : ''}, starting week ${data.config?.eliminationStartWeek ?? 1}.`,
+          (data.config?.periodWeeks ?? 1) > 1
+            ? `Scores add up over two-week periods, and the lowest two-week score is chopped${data.config && data.config.teamsPerChop > 1 ? ` (${data.config.teamsPerChop} per period)` : ''} at the end of each period, starting week ${(data.config?.eliminationStartWeek ?? 1) + 1}.`
+            : `The lowest weekly score is chopped${data.config && data.config.teamsPerChop > 1 ? ` (${data.config.teamsPerChop} per week)` : ''}, starting week ${data.config?.eliminationStartWeek ?? 1}.`,
           'Their whole roster drops into blind FAAB at the next waiver run.',
           'Last team standing wins. Your FAAB has to last all season.',
         ]} />

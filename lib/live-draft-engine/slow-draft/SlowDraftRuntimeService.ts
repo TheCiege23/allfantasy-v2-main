@@ -1,4 +1,5 @@
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
+import { loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
 import { prisma } from '@/lib/prisma'
 import { instantAutopickReason, shouldPickNow } from '@/lib/live-draft-engine/instantAutopick'
@@ -140,7 +141,17 @@ export async function tryQueueAutoPick(
 
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
-  const eligibleQueueCandidates = filterEntriesByDraftEligiblePositions(queueCandidates, draftEligiblePositions, rosterRules?.sport)
+  let eligibleQueueCandidates = filterEntriesByDraftEligiblePositions(queueCandidates, draftEligiblePositions, rosterRules?.sport)
+  /*
+   * The starter guard (autopickStarterGuard.ts): once this team's remaining picks only just cover its
+   * open starting spots, a queued player who cannot start in one is skipped. If the queue holds nobody
+   * who can, the queue yields no pick and best available — which applies the same guard — makes it.
+   */
+  const ownPositions = draftSession.picks.filter((p) => p.rosterId === rosterId).map((p) => p.position)
+  const guard = await loadStarterGuard(leagueId, ownPositions, draftSession.rounds)
+  if (guard.mustFill) {
+    eligibleQueueCandidates = eligibleQueueCandidates.filter((entry) => guard.allows(String(entry.position ?? '')))
+  }
 
   // Commit Q — pass `expectedOverall` to each submitPick attempt so the
   // Commit-M stale-overall guard short-circuits the candidate loop the

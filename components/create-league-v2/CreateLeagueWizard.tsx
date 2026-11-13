@@ -3,6 +3,9 @@
 import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
 import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
+import { BestBallRulesSummary, BestBallSetupPanel } from './BestBallSetupPanel'
+import { fitBestBallToTeamCount } from '@/lib/create-league-v2/bestBallWizard'
+import { bestBallPoolCheckForWizard } from '@/lib/create-league-v2/form-completion'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { SG_CREATE_TRIBE_COUNTS } from '@/lib/survivor-guillotine/createFit'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -370,6 +373,7 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   league_name_invalid: 'basics',
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
+  best_ball_pool: 'basics',
 }
 
 export function stepForIssue(code: string): WizardStep {
@@ -957,7 +961,7 @@ export function LeagueBasicsStep({
       ...(getEffectiveLeagueType(state) === 'survivor' && !tribeOptions.includes(state.survivorTribeCount)
       ? { survivorTribeCount: tribeOptions[0] ?? 2 } : {}),
       ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}),
-      ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })
+      ...(state.leagueType === 'best_ball' ? { bestBall: fitBestBallToTeamCount(state.bestBall, teamCount) } : {}) })
   }
   const canFewer = teamCountOptions.some((count) => count < state.teamCount)
   const canMore = teamCountOptions.some((count) => count > state.teamCount)
@@ -1306,7 +1310,66 @@ export function LeagueBasicsStep({
         </span>
       </label>
       ) : null}
+
+      {/* MLB Guilly only: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). */}
+      {getEffectiveLeagueType(state) === 'guillotine' && state.sport === 'MLB' ? (
+      <label
+        className={cx(
+          'flex min-h-12 cursor-pointer touch-manipulation items-start gap-3 rounded-xl border px-4 py-3 text-sm transition',
+          state.guillotineTwoWeekPeriods === true
+            ? 'border-violet-500 bg-violet-600/10'
+            : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)]',
+        )}
+        data-testid="g30-guillotine-two-week-periods"
+      >
+        <CheckBox
+          className="mt-0.5"
+          checked={state.guillotineTwoWeekPeriods === true}
+          onChange={(checked) => onChange({ guillotineTwoWeekPeriods: checked })}
+        />
+        <span>
+          <span className="block font-bold">{t('createLeague.g30.guillotineTwoWeekPeriods.label')}</span>
+          <span className="block text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.guillotineTwoWeekPeriods.body')}
+          </span>
+        </span>
+      </label>
+      ) : null}
+
+      <BestBallPoolNote state={state} t={t} />
     </section>
+  )
+}
+
+/**
+ * Best ball only: whether this many teams can fill every starter seat from the sport's player pool
+ * (lib/bestball/poolCapacity.ts). A refusal also blocks Create (form-completion.ts) and is refused by
+ * the server; a warning is advice. The text is built from the numbers, so it has no translation key.
+ */
+function BestBallPoolNote({ state, t }: { state: CreateLeagueV2State; t: (key: string) => string }) {
+  const check = bestBallPoolCheckForWizard(state)
+  if (!check || (check.refusals.length === 0 && check.warnings.length === 0)) return null
+  const refused = check.refusals.length > 0
+  return (
+    <div
+      role={refused ? 'alert' : 'status'}
+      className={cx(
+        'space-y-1 rounded-xl border p-3 text-xs leading-5',
+        refused
+          ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-200'
+          : 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200',
+      )}
+      data-testid={refused ? 'g30-best-ball-pool-refused' : 'g30-best-ball-pool-warning'}
+    >
+      <p className="font-bold">
+        {refused
+          ? tx(t, 'createLeague.g30.bestBallPool.refusedTitle', 'Too many teams for this player pool')
+          : tx(t, 'createLeague.g30.bestBallPool.warningTitle', 'A tight player pool')}
+      </p>
+      {(refused ? check.refusals : check.warnings).map((issue) => (
+        <p key={`${issue.code}:${issue.slots.join('+')}`}>{issue.message}</p>
+      ))}
+    </div>
   )
 }
 
@@ -1437,6 +1500,9 @@ export function DraftStep({
       </div>
 
       <DynastySportPresetPicker state={state} onChange={onChange} />
+
+      {/* Classic Best Ball: how the league competes (lib/create-league-v2/bestBallWizard.ts). */}
+      {leagueType === 'best_ball' && !state.idpSelected ? <BestBallSetupPanel state={state} onChange={onChange} /> : null}
 
       {/* NFL scoring add-ons. TE premium has to say its amount — the commissioner picks it. */}
       {state.sport === 'NFL' ? (
@@ -1754,6 +1820,7 @@ export function ReviewCreateStep({
       </div>
 
       <SurvivorSeasonPreview state={state} />
+      {getEffectiveLeagueType(state) === 'best_ball' && !state.idpSelected ? <BestBallRulesSummary state={state} /> : null}
       {completionIssues.length > 0 ? (
         <div className="rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4" data-testid="g30-review-issues">
           <p className="text-sm font-black text-amber-700 dark:text-amber-200">{t('createLeague.g30.review.needsAttention')}</p>

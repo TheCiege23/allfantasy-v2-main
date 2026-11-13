@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const h = vi.hoisted(() => ({ leagues: vi.fn(), existing: vi.fn(), count: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findMany: h.leagues }, roster: { findUnique: h.existing } } }))
+const h = vi.hoisted(() => ({ lookup: vi.fn(), league: vi.fn(), existing: vi.fn(), count: vi.fn() }))
+// The code is looked up in the database (one league), then that league is loaded.
+vi.mock('@/lib/prisma', () => ({ prisma: { $queryRaw: h.lookup, league: { findUnique: h.league }, roster: { findUnique: h.existing } } }))
 vi.mock('@/lib/league/leagueSeats', () => ({ countSeatsHeldByPeople: h.count }))
 import { validateFantasyInviteCode } from '@/lib/league-invite/InviteValidationResolver'
 beforeEach(() => {
-  h.leagues.mockResolvedValue([{ id: 'L', name: 'League', sport: 'NFL', leagueSize: 2, settings: { inviteCode: 'join-code' } }])
+  h.lookup.mockResolvedValue([{ id: 'L' }])
+  h.league.mockResolvedValue({ id: 'L', name: 'League', sport: 'NFL', leagueSize: 2, settings: { inviteCode: 'join-code' } })
   h.count.mockResolvedValue(2)
   h.existing.mockResolvedValue(null)
 })

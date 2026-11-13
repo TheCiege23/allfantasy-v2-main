@@ -1,4 +1,5 @@
 import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
+import { readWeekPositions } from '@/lib/bestball/weekPositions'
 import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -12,11 +13,10 @@ import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
-import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
-import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
-import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
+import { bestBallPlayerPositions, buildBestBallSlots } from '@/lib/bestball/productionLineup'
+import { normalizeToken } from '@/lib/redraft/lineupValidation'
 import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leagueScoringRules'
 import { fantraxSoccerScoringPosition } from '@/lib/league-import/fantrax/fantraxScoring'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
@@ -37,12 +37,25 @@ import {
   type PlayerDailyStats,
 } from './dailyLineups'
 import { gamesCountActive } from './gamesCount'
-import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
+import { warnDailyBestBallWaitingForSchedule } from '@/lib/bestball/dailyScheduleStatus'
 import { applyGamesLimits, readGamesLimits, slotSeats, type GamesLimitsSummary, type LimitLedgerEntry } from './gamesLimits'
 import { capSlotKey, loadDailyGamesPlayed, loadPriorSeasonLedger, positionTokens } from './gamesLimitsScoring'
 import { loadGamesCountScoring, scoreCountedGames, type GamesCountScoring } from './gamesCountStore'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { heldFromSeasonStart, loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
+import { resolveBestBallScoringPeriod } from '@/lib/bestball/scoringPeriod'
+import { computeDailyBestBall, type DailyBestBallCandidate, type DailyBestBallCounted, type DailyBestBallDay } from '@/lib/bestball/dailyBestBall'
 import { writeNativePlayerWeeklyScores, type NativePlayerPoints } from './nativePlayerWeeklyScores'
+import {
+  frozenBestBallPositions,
+  frozenBestBallSlots,
+  nextBestBallRuleStamp,
+  readBestBallRuleStamp,
+  scoringRulesFingerprint,
+  type BestBallRuleStamp,
+} from '@/lib/bestball/resultRuleStamp'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,
@@ -172,30 +185,16 @@ export function leagueIsBestBall(
     | null
     | undefined,
 ): boolean {
-  if (!league) return false
-  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType) || isBestBallGuillotine(league)
+  return lineupSetsItself(league)
 }
 
-/**
- * The league's starter slots as optimizer input: the commissioner's roster (a superflex league
- * gets its SF seat), with the same slot eligibility lineup validation enforces.
+/*
+ * `buildBestBallSlots` and the roster-position split live in `lib/bestball/productionLineup.ts` (pure, so
+ * the contest optimizer, the weekly processor, the scoring worker and the War Room seat the SAME slots
+ * without importing Prisma). Re-exported so every existing importer of this module is unchanged.
  */
-export function buildBestBallSlots(sport: string, leagueSettings: unknown): LineupSlotSpec[] {
-  const config = resolveRedraftRosterConfig(sport, leagueSettings)
-  const slots: LineupSlotSpec[] = []
-  let order = 0
-  for (const [token, count] of config.starterCapacities) {
-    slots.push({ slot: token, eligible: allowedPositionsForSlot(sport, token), count, slotOrder: order++ })
-  }
-  return slots
-}
-
-function playerPositions(position: string | null | undefined): string[] {
-  return String(position ?? '')
-    .split(/[/,]/)
-    .map((p) => normalizeToken(p))
-    .filter(Boolean)
-}
+export { buildBestBallSlots }
+const playerPositions = bestBallPlayerPositions
 
 /** A league's own scoring, resolved once: raw stat line (and the player's position) to fantasy points. */
 export type LeagueStatScorer = (rawStats: Record<string, number>, position?: string | null) => number
@@ -281,8 +280,23 @@ export type RosterScoreSummary = {
    * the guillotine tiebreak's `bench_points` step reads it.
    */
   benchPoints?: number
-  /** Best ball only: the lineup the system started this week, and any seat nobody could fill. */
-  bestBall?: { assignments: OptimalSlotAssignment[]; unfilledSlots: { slot: string; seat: number }[] }
+  /**
+   * Best ball only: the lineup the system started this week, and any seat nobody could fill. A DAILY
+   * best ball league (lib/bestball/scoringPeriod.ts) has no one weekly lineup: `assignments` is empty,
+   * `days` holds each day's counted lineup and `counted` each player's points summed across his days.
+   */
+  bestBall?: {
+    assignments: OptimalSlotAssignment[]
+    unfilledSlots: { slot: string; seat: number }[]
+    period?: 'daily'
+    days?: DailyBestBallDay[]
+    counted?: DailyBestBallCounted[]
+    /**
+     * playerId -> the position each SCORED player was seated and scored at. Feeds the result stamp's
+     * `sealedPositions` (lib/bestball/resultRuleStamp.ts) on the write that seals the week.
+     */
+    positions?: Record<string, string | null>
+  }
   /** Daily-lineup leagues with games limits on only (`gamesLimits.ts`): usage against each limit. */
   gamesLimits?: GamesLimitsSummary
   /**
@@ -292,9 +306,74 @@ export type RosterScoreSummary = {
    * Absent for the devy engine, which scores a team without a per-player breakdown.
    */
   playerPoints?: NativePlayerPoints[]
+  /**
+   * Only with `collectDailyBestBallDetail`, and only when the week was scored as DAILY best ball: the
+   * day keys the week ran over and, per scored player, the days he was on the roster and his points on
+   * each day he played — exactly what `computeDailyBestBall` was given. A Guilly chop records it as the
+   * baseline a later stat correction re-runs the same daily optimizer against (statCorrectionHandler.ts).
+   */
+  dailyBestBall?: DailyBestBallDetail
 }
 
-type BestBallScoringContext = { sport: string; slots: LineupSlotSpec[] }
+/** A daily best ball week's inputs, per scored player (see `RosterScoreSummary.dailyBestBall`). */
+export type DailyBestBallDetail = {
+  days: string[]
+  players: Array<{
+    playerId: string
+    sport: string
+    position: string | null
+    onRosterDays: string[]
+    pointsByDay: Record<string, number>
+  }>
+}
+
+/**
+ * `platform` decides whether the roster is read as of the week (`bestBallWeekRoster.ts`): a native
+ * league is, an imported one keeps the current-roster read. Absent (an older caller) reads as before.
+ */
+type BestBallScoringContext = {
+  sport: string
+  slots: LineupSlotSpec[]
+  platform?: string | null
+  asOfWeek?: boolean
+  /** Daily best ball (lib/bestball/scoringPeriod.ts). Absent for every weekly league. */
+  daily?: boolean
+  /**
+   * A SEALED week's stored positions (`frozenBestBallPositions`): a player in it is seated and scored at
+   * that position, not his current one. Absent for an open, unstamped or legacy week.
+   */
+  frozenPositions?: Record<string, string | null>
+}
+
+/**
+ * The position a best ball player is seated and scored at: the sealed one when the week froze it, else
+ * the position recorded for this week (lib/bestball/weekPositions.ts), else his current one.
+ */
+function bestBallPositionOf(
+  ctx: BestBallScoringContext,
+  p: { playerId: string; position?: string | null },
+  weekPositions?: ReadonlyMap<string, string | null>,
+): string | null {
+  const frozen = ctx.frozenPositions
+  if (frozen && Object.prototype.hasOwnProperty.call(frozen, p.playerId)) return frozen[p.playerId] ?? null
+  if (weekPositions?.has(p.playerId)) return weekPositions.get(p.playerId) ?? null
+  return p.position ?? null
+}
+
+/** This week's recorded positions for the candidates, per sport key (the weekly score's own key). */
+async function loadCandidateWeekPositions(
+  candidates: ReadonlyArray<{ playerId: string; sport: string }>,
+  season: number,
+  week: number,
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  const bySport = new Map<string, string[]>()
+  for (const c of candidates) bySport.set(c.sport, [...(bySport.get(c.sport) ?? []), c.playerId])
+  for (const [sport, ids] of bySport) {
+    for (const [id, position] of await readWeekPositions(prisma as never, { sport, season, week }, ids)) out.set(id, position)
+  }
+  return out
+}
 
 export type MatchupScoreUpdateSummary = {
   matchupId: string
@@ -315,6 +394,8 @@ async function scoreRosterStarters(args: {
   includeBench?: boolean
   /** Also return `playerPoints` (and score the bench to fill it). `updateMatchupScores` only. */
   collectPlayerPoints?: boolean
+  /** Also return `dailyBestBall` when the week scores as daily best ball (`scoreRosterForWeek`). */
+  collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary> {
   if (args.bestBall && !args.useDevyEngine) return scoreRosterBestBall({ ...args, bestBall: args.bestBall })
   if (args.useDevyEngine) {
@@ -744,10 +825,22 @@ async function scoreRosterBestBall(args: {
   collectPlayerPoints?: boolean
   /** Also return `benchPoints`: the scored players the optimal lineup left out (the guillotine tiebreak). */
   includeBench?: boolean
+  collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary> {
-  const players = await prisma.redraftRosterPlayer.findMany({
-    where: { rosterId: args.rosterId, droppedAt: null },
-  })
+  if (args.bestBall.daily) {
+    const daily = await scoreRosterBestBallDaily(args)
+    if (daily) return daily
+  }
+  // The roster as it stood at each player's first game lock of THIS week, not as it is now.
+  const players = args.bestBall.asOfWeek
+    ? await loadBestBallWeekRosterRows(prisma, {
+        rosterIds: [args.rosterId],
+        sport: args.bestBall.sport,
+        season: args.seasonYear,
+        week: args.week,
+        platform: args.bestBall.platform,
+      })
+    : await prisma.redraftRosterPlayer.findMany({ where: { rosterId: args.rosterId, droppedAt: null } })
   // Best ball still excludes whoever was on IR / taxi / devy in THIS week's saved lineup.
   const weekLineups = await loadWeekLineups(prisma, {
     redraftRosterIds: [args.rosterId],
@@ -762,6 +855,8 @@ async function scoreRosterBestBall(args: {
   let allFinal = true
   const missingPlayerIds: string[] = []
   const inputs: { playerId: string; positions: string[]; points: number; playerName: string | null }[] = []
+  const positionsUsed: Record<string, string | null> = {}
+  const weekPositions = await loadCandidateWeekPositions(candidates, args.seasonYear, args.week)
   for (const p of candidates) {
     const row = await prisma.playerWeeklyScore.findUnique({
       where: {
@@ -773,14 +868,16 @@ async function scoreRosterBestBall(args: {
       allFinal = false
       continue
     }
+    const position = bestBallPositionOf(args.bestBall, p, weekPositions)
+    positionsUsed[p.playerId] = position
     const points = await calculateScoreFromSportConfig(
       args.leagueId,
       p.playerId,
       args.week,
       row.stats as Record<string, number>,
-      p.position,
+      position,
     )
-    inputs.push({ playerId: p.playerId, positions: playerPositions(p.position), points, playerName: p.playerName ?? null })
+    inputs.push({ playerId: p.playerId, positions: playerPositions(position), points, playerName: p.playerName ?? null })
     scored += 1
     if (!row.isFinalized) allFinal = false
   }
@@ -802,9 +899,135 @@ async function scoreRosterBestBall(args: {
       : {}),
     missingPlayerIds,
     allFinal,
-    bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots },
+    bestBall: { assignments: lineup.assignments, unfilledSlots: lineup.unfilledSlots, positions: positionsUsed },
     ...(args.collectPlayerPoints
       ? { playerPoints: inputs.map((i) => ({ playerId: i.playerId, points: i.points, isStarter: started.has(i.playerId) })) }
+      : {}),
+  }
+}
+
+/**
+ * DAILY BEST BALL (lib/bestball/dailyBestBall.ts): the week's score is the sum over its Eastern days of
+ * that day's optimal lineup from the players on the roster THAT day, on that day's stats
+ * (`player_daily_scores`, which the stat sync writes for these leagues — playerWeeklyScoreService.ts).
+ *
+ * WHO CAN COUNT is the weekly best ball roster (`loadBestBallWeekRosterRows`) — the exact set the week
+ * finalizer seals — narrowed per day by `daysOnRoster`: a player dropped mid-week stops counting after his
+ * drop day (decided by his game's lock). Scoring anyone outside the sealed set would leave a row the
+ * finalizer never seals, and the matchup could never go final; so a player added after his first lock of
+ * the week counts from next week, exactly as in weekly best ball.
+ *
+ * Completeness is read from the WEEKLY row, as everywhere else: none -> missing; not sealed -> not final.
+ * A weekly row with stats but no per-day rows means the sync has not written his days yet (the same rule
+ * as games-count): he is missing until it does, never silently scored 0.
+ *
+ * Null when the week has no daily date window; the caller then scores the week weekly.
+ *
+ * 🛑 A SEASON PAST THE CURATED TABLE HAS NO WINDOW UNTIL SOMETHING PRIMES IT. Its opener is derived from
+ * the stored schedule by `ensureDailySportSeasonStart`, which records it in-process. The stat sync primes
+ * it, but scoring often runs in a different process (a cron, a request), where the synchronous resolver
+ * returned null and every daily league silently scored weekly. So this primes it itself, and when there
+ * is still no opener it says so (the commissioner panel and the Best Ball tab say it too —
+ * lib/bestball/dailyScheduleStatus.ts).
+ */
+async function scoreRosterBestBallDaily(args: {
+  leagueId: string
+  rosterId: string
+  week: number
+  seasonYear: number
+  bestBall: BestBallScoringContext
+  collectPlayerPoints?: boolean
+  includeBench?: boolean
+  collectDailyBestBallDetail?: boolean
+}): Promise<RosterScoreSummary | null> {
+  const sport = String(args.bestBall.sport).toUpperCase()
+  let window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
+  if (!window && !resolveDailySportSeasonStart(sport, args.seasonYear)) {
+    await ensureDailySportSeasonStart(sport, args.seasonYear, { db: prisma as never }).catch(() => null)
+    window = resolveDailySportWeekWindow(sport, args.seasonYear, args.week)
+    if (!resolveDailySportSeasonStart(sport, args.seasonYear)) warnDailyBestBallWaitingForSchedule(sport, args.seasonYear)
+  }
+  if (!window) return null
+  const players = await loadBestBallWeekRosterRows(prisma, {
+    rosterIds: [args.rosterId],
+    sport: args.bestBall.sport,
+    season: args.seasonYear,
+    week: args.week,
+    platform: args.bestBall.platform,
+  })
+  const weekLineups = await loadWeekLineups(prisma, { redraftRosterIds: [args.rosterId], season: args.seasonYear, week: args.week })
+  const candidates = players.filter((p: (typeof players)[number]) => isBestBallCandidateSlot(weekSlotType(p, weekLineups)))
+  const days = daysInWindow(window)
+  const lockStarts = await loadDailyLockStarts(prisma, { sport, season: args.seasonYear, week: args.week })
+  const playerIds = candidates.map((p: (typeof candidates)[number]) => p.playerId)
+  const dailyStatsBySport = new Map<string, PlayerDailyStats>()
+  for (const playerSport of new Set(candidates.map((p: (typeof candidates)[number]) => p.sport))) {
+    dailyStatsBySport.set(playerSport, await loadPlayerDailyStats(prisma, { playerIds, sport: playerSport, season: args.seasonYear, window }))
+  }
+
+  let scored = 0
+  let allFinal = true
+  const missingPlayerIds: string[] = []
+  const inputs: DailyBestBallCandidate[] = []
+  const positionsUsed: Record<string, string | null> = {}
+  const sportOf = new Map<string, string>()
+  const weekPositions = await loadCandidateWeekPositions(candidates, args.seasonYear, args.week)
+  for (const p of candidates) {
+    const row = await prisma.playerWeeklyScore.findUnique({
+      where: { playerId_week_season_sport: { playerId: p.playerId, week: args.week, season: args.seasonYear, sport: p.sport } },
+    })
+    const byDay = dailyStatsBySport.get(p.sport)?.get(p.playerId)
+    const weeklyHasStats = Object.values((row?.stats ?? {}) as Record<string, unknown>).some((v) => typeof v === 'number' && v !== 0)
+    if (!row || (!byDay?.size && weeklyHasStats)) {
+      missingPlayerIds.push(p.playerId)
+      allFinal = false
+      continue
+    }
+    scored += 1
+    if (!row.isFinalized) allFinal = false
+    // A drafted or kept row is held from before the season, whatever its `addedAt` says.
+    const rosterRow = heldFromSeasonStart(p) ? { addedAt: null, droppedAt: p.droppedAt } : p
+    const onRosterDays = new Set(daysOnRoster(rosterRow, days, lockStartOnFor(lockStarts, p)).map((d) => dayKey(d)))
+    const position = bestBallPositionOf(args.bestBall, p, weekPositions)
+    positionsUsed[p.playerId] = position
+    const pointsByDay = new Map<string, number>()
+    for (const key of onRosterDays) {
+      const line = byDay?.get(key)
+      if (!line) continue
+      pointsByDay.set(key, await calculateScoreFromSportConfig(args.leagueId, p.playerId, args.week, line.stats, position))
+    }
+    inputs.push({ playerId: p.playerId, positions: playerPositions(position), playerName: p.playerName ?? null, onRosterDays, pointsByDay })
+    sportOf.set(p.playerId, p.sport)
+  }
+
+  const dayKeys = days.map((d) => dayKey(d))
+  const result = computeDailyBestBall({ candidates: inputs, slots: args.bestBall.slots, days: dayKeys })
+  const counted = new Set(result.counted.map((c) => c.playerId))
+  return {
+    rosterId: args.rosterId,
+    starterCount: candidates.length,
+    scoredStarterCount: scored,
+    points: result.total,
+    ...(args.includeBench ? { benchPoints: result.benchPoints } : {}),
+    missingPlayerIds,
+    allFinal,
+    bestBall: { assignments: [], unfilledSlots: [], period: 'daily', days: result.days, counted: result.counted, positions: positionsUsed },
+    ...(args.collectPlayerPoints
+      ? { playerPoints: [...result.pointsByPlayer].map(([playerId, points]) => ({ playerId, points, isStarter: counted.has(playerId) })) }
+      : {}),
+    ...(args.collectDailyBestBallDetail
+      ? {
+          dailyBestBall: {
+            days: dayKeys,
+            players: inputs.map((i) => ({
+              playerId: i.playerId,
+              sport: sportOf.get(i.playerId) ?? sport,
+              position: positionsUsed[i.playerId] ?? null,
+              onRosterDays: [...i.onRosterDays].sort(),
+              pointsByDay: Object.fromEntries(i.pointsByDay),
+            })),
+          },
+        }
       : {}),
   }
 }
@@ -812,11 +1035,37 @@ async function scoreRosterBestBall(args: {
 async function loadBestBallContext(leagueId: string): Promise<BestBallScoringContext | null> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true },
+    select: { sport: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true, platform: true },
   })
   if (!league || !leagueIsBestBall(league)) return null
   const sport = String(league.sport ?? 'NFL')
-  return { sport, slots: buildBestBallSlots(sport, league.settings) }
+  // A weekly league gets exactly the context it always did; only a daily league carries the flag.
+  const daily = resolveBestBallScoringPeriod({ sport, settings: league.settings }) === 'daily'
+  return { sport, slots: buildBestBallSlots(sport, league.settings), platform: league.platform ?? null, asOfWeek: true, ...(daily ? { daily: true } : {}) }
+}
+
+/**
+ * A stored result's best ball rules (lib/bestball/resultRuleStamp.ts). Once the result has been sealed
+ * under a stamp, its rescore seats the STORED slots, never the league's current ones: a commissioner who
+ * changes the roster seats mid-season must not silently rescore weeks that are already closed. A result
+ * with no stamp (or a legacy one) scores on the current slots, exactly as before.
+ */
+function withStoredBestBallRules(
+  bestBall: BestBallScoringContext | null,
+  lineupSnapshots: unknown,
+): { bestBall: BestBallScoringContext | null; stored: BestBallRuleStamp | null } {
+  if (!bestBall) return { bestBall, stored: null }
+  const stored = readBestBallRuleStamp(lineupSnapshots)
+  const frozen = frozenBestBallSlots(stored)
+  const frozenPositions = frozenBestBallPositions(stored)
+  return {
+    bestBall: {
+      ...bestBall,
+      ...(frozen ? { slots: frozen } : {}),
+      ...(frozenPositions ? { frozenPositions } : {}),
+    },
+    stored,
+  }
 }
 
 /**
@@ -833,6 +1082,8 @@ export async function scoreRosterForWeek(args: {
   includeBench?: boolean
   /** Also return `playerPoints` (scripts/backfill-native-player-weekly-scores.ts). */
   collectPlayerPoints?: boolean
+  /** Also return `dailyBestBall` for a daily best ball week (the Guilly stat-correction baseline). */
+  collectDailyBestBallDetail?: boolean
 }): Promise<RosterScoreSummary> {
   const useDevyEngine = await leagueUsesDevyEngine(args.leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
@@ -915,7 +1166,10 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   const categories = scoringMode === 'h2h_category' || scoringMode === 'roto' ? resolveLeagueCategories(scoringSettings, categoryId) : null
   if (scoringMode !== 'points' && !categories) throw new Error('Category scoring requires a supported native category preset.')
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
-  const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
+  const { bestBall, stored: storedBestBallRules } = withStoredBestBallRules(
+    useDevyEngine ? null : await loadBestBallContext(leagueId),
+    m.lineupSnapshots,
+  )
   const { isBasketballC2CLeague } = await import('@/lib/c2c/campusLineup')
   if (scoringLeague && isNativePlatform(scoringLeague.platform) && isBasketballC2CLeague(scoringLeague) && (scoringMode !== 'points' || bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
 
@@ -1030,6 +1284,19 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
           redraftScoring: {
             scoredAt: new Date().toISOString(),
             isComplete,
+            ...(bestBall
+              ? {
+                  bestBallRules: nextBestBallRuleStamp({
+                    previous: storedBestBallRules,
+                    previousStatus: m.status,
+                    slotsUsed: bestBall.slots,
+                    scoringFingerprint: scoringLeague ? scoringRulesFingerprint(scoringLeague) : null,
+                    isFinal,
+                    now: new Date(),
+                    positionsUsed: { ...home.bestBall?.positions, ...away.bestBall?.positions },
+                  }),
+                }
+              : {}),
             ...(commissionerAdjustment ? { commissionerAdjustment } : {}),
             ...(campus ? { campus } : {}),
             ...(basketballCampus ? { campus: basketballCampus } : {}),
@@ -1163,6 +1430,7 @@ async function updateByeRowScore(row: {
   week: number
   homeRosterId: string
   lineupSnapshots: unknown
+  status?: string | null
 }): Promise<void> {
   let m = row
   const [league, season] = await Promise.all([
@@ -1189,7 +1457,10 @@ async function updateByeRowScore(row: {
   if (await leagueUsesC2CEngine(m.leagueId)) return
 
   const useDevyEngine = await leagueUsesDevyEngine(m.leagueId)
-  const bestBall = useDevyEngine ? null : await loadBestBallContext(m.leagueId)
+  const { bestBall, stored: storedBestBallRules } = withStoredBestBallRules(
+    useDevyEngine ? null : await loadBestBallContext(m.leagueId),
+    m.lineupSnapshots,
+  )
   if (isNativePlatform(league.platform) && isBasketballC2CLeague(league) && (bestBall || useDevyEngine)) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
   const home = await scoreRosterStarters({
     leagueId: m.leagueId,
@@ -1212,17 +1483,31 @@ async function updateByeRowScore(row: {
   const missingPlayerIds = [...home.missingPlayerIds, ...(basketballCampus?.home.missingPlayerIds ?? [])]
   const isComplete =
     missingPlayerIds.length === 0 && home.starterCount > 0 && home.scoredStarterCount === home.starterCount
+  const isFinal = isComplete && home.allFinal && (basketballCampus?.home.allFinal ?? true)
   await prisma.redraftMatchup.update({
     where: { id: m.id },
     data: {
       homeScore: home.points,
-      status: isComplete && home.allFinal && (basketballCampus?.home.allFinal ?? true) ? 'final' : 'active',
+      status: isFinal ? 'final' : 'active',
       lineupSnapshots: {
         ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}),
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
           bye: true,
+          ...(bestBall
+            ? {
+                bestBallRules: nextBestBallRuleStamp({
+                  previous: storedBestBallRules,
+                  previousStatus: m.status,
+                  slotsUsed: bestBall.slots,
+                  scoringFingerprint: scoringRulesFingerprint(league),
+                  isFinal,
+                  now: new Date(),
+                  positionsUsed: { ...home.bestBall?.positions },
+                }),
+              }
+            : {}),
           home,
           missingPlayerIds,
           ...(campus ? { campus: { cfbWeeks: campus.cfbWeeks, home: campus.home } } : {}),

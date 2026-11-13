@@ -102,6 +102,10 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     )
   }
   if (lt === 'zombie') conceptSetup.zombieLeagueCount = state.zombieLeagueCount ?? 1
+  // Two-week elimination periods: MLB Guilly only. Sent only when chosen, so every other league's body is unchanged.
+  if (lt === 'guillotine' && state.sport === 'MLB' && state.guillotineTwoWeekPeriods === true) {
+    conceptSetup.guillotinePeriodWeeks = 2
+  }
   // The server fits the season schedule to the team count; the tribe count is the one rule chosen here.
   if (lt === 'survivor_guillotine') conceptSetup.survivorGuillotineTribeCount = state.survivorGuillotineTribeCount ?? 2
   if (lt === 'guillotine' && state.guillotineBestBall === true) {

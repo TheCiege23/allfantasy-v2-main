@@ -19,6 +19,8 @@ export type DiscoveryLeagueStyle =
   | "best_ball"
   | "keeper"
   | "survivor"
+  /** Guilly: the lowest score is chopped every week (`League.guillotineMode`). */
+  | "guillotine"
   | "bracket"
   | "community"
 export type LeagueStyleFilter = "all" | DiscoveryLeagueStyle
@@ -67,6 +69,11 @@ export interface DiscoveryCard {
   leagueType: DiscoverySource
   /** League style for discovery filtering (dynasty, redraft, best_ball, etc.). */
   leagueStyle?: DiscoveryLeagueStyle | null
+  /**
+   * Further styles the league also matches. A Guilly league's style is `guillotine`; one that is also
+   * best ball (or dynasty, keeper) keeps answering that filter too, as it did before Guilly had its own.
+   */
+  alsoStyles?: DiscoveryLeagueStyle[]
   /** Draft type when available (snake | linear | auction). */
   draftType: string | null
   /** Draft session status when available (pre_draft | in_progress | paused | completed). */
@@ -101,8 +108,12 @@ export interface DiscoveryCard {
   rankingTierDelta?: number
   /** Step up / your level / chill against the signed-in viewer's rank; absent for anonymous viewers. */
   rankBand?: RankBand | null
-  /** "invite": join here with the code. "request": the league plays elsewhere; ask the commissioner. */
-  joinMode?: "invite" | "request"
+  /**
+   * "invite": join here with the code. "request": the league plays elsewhere; ask the commissioner.
+   * "approval": a private AllFantasy league; ask, and join once the commissioner approves
+   * (lib/public-discovery/privateLeagueRequests.ts). An approval card carries no code and no page.
+   */
+  joinMode?: "invite" | "request" | "approval"
   /** For a league that plays on another platform: which one (sleeper, espn, …). */
   externalPlatform?: string | null
   /** How the lister was shown to be the commissioner (lib/public-discovery/externalListing.ts). */

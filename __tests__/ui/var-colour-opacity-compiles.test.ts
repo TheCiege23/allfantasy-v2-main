@@ -79,11 +79,13 @@ describe('colour classes with an opacity', () => {
     }
   })
 
-  // The second way to get nothing: an opacity off Tailwind's scale (multiples of 5). `/12` emits no rule even on a
-  // real palette colour; it must be written `/[0.12]`. Five zombie/tournament badges and an IDP card did this.
+  // The second way to get nothing: an opacity off Tailwind's scale (multiples of 5, plus the extra steps listed in
+  // tailwind.config.js `theme.extend.opacity`). An off-scale step emits no rule even on a real palette colour; it
+  // must be bracketed. Five zombie/tournament badges and an IDP card did this. `/13` is off both scales (`/12` is
+  // now one of the extra steps, so it compiles).
   it('positive control: an off-scale opacity emits nothing, the bracketed form does', async () => {
-    expect(await compile('bg-zombie-crimson/12')).not.toContain('--zombie-crimson-rgb')
-    expect(await compile('bg-zombie-crimson/[0.12]')).toContain('rgb(var(--zombie-crimson-rgb) / 0.12)')
+    expect(await compile('bg-zombie-crimson/13')).not.toContain('--zombie-crimson-rgb')
+    expect(await compile('bg-zombie-crimson/[0.13]')).toContain('rgb(var(--zombie-crimson-rgb) / 0.13)')
   })
 
   it('uses only on-scale opacities on the palettes', () => {

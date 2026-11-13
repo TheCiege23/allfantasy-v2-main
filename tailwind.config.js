@@ -132,6 +132,18 @@ const config = {
   darkMode: ['selector', '[data-mode="dark"]'],
   theme: {
     extend: {
+      /*
+       * 🛑 OPACITY STEPS THE APP USES THAT TAILWIND 3.4 DOES NOT SHIP. Its default scale is 0, 5, 10,
+       * 15 … 100, and an opacity modifier outside the scale generates NOTHING: `border-white/8` (443 uses)
+       * fell back to Preflight's default light-grey border, `bg-black/72` to no background at all, and
+       * `text-white/88` to the inherited colour — no warning, no build error. Every off-scale step the
+       * code uses (a census of app/, components/ and lib/ on 2026-11-06) is listed here so each class
+       * renders as written. Add a step here before using a new one.
+       */
+      opacity: Object.fromEntries(
+        [2, 3, 4, 6, 7, 8, 9, 12, 14, 16, 18, 22, 24, 26, 28, 32, 34, 38, 42, 48, 52, 58, 62, 68, 72, 76, 78, 82, 84, 86, 88, 92, 93, 96, 98]
+          .map((n) => [String(n), String(n / 100)]),
+      ),
       colors: {
         // zombie colours with opacity support (see the cap note below): `bg-zombie-crimson/15`.
         zombie: {

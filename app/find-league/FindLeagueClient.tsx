@@ -121,6 +121,7 @@ const LEAGUE_TYPE_OPTIONS: { value: LeagueStyleFilter; label: string }[] = [
   { value: "best_ball", label: "Best Ball" },
   { value: "keeper", label: "Keeper" },
   { value: "survivor", label: "Survivor" },
+  { value: "guillotine", label: "Guilly" },
   { value: "bracket", label: "Bracket" },
   { value: "community", label: "Community" },
 ]
@@ -215,6 +216,8 @@ function initialFiltersFrom(searchParams: { get(name: string): string | null } |
     rankBand: (get("rankBand") || "all") as RankBandFilter,
     vibe: (parsed?.vibe ?? (get("vibe") || "all")) as LeagueVibeFilter,
     aiEnabled: get("aiEnabled") === "true",
+    // Public unless the link asks for both: a saved search for "Public & private" reopens as one.
+    visibility: (get("visibility") === "all" ? "all" : "public") as VisibilityFilter,
     teamCountMin: teamCount || get("teamCountMin"),
     teamCountMax: teamCount || get("teamCountMax"),
     searchReadAs:
@@ -241,7 +244,10 @@ export function FindLeagueClient() {
   const [rankBand, setRankBand] = useState<RankBandFilter>(initial.rankBand)
   const [vibe, setVibe] = useState<LeagueVibeFilter>(initial.vibe)
   const [searchReadAs, setSearchReadAs] = useState<string[]>(initial.searchReadAs)
-  const [visibility, setVisibility] = useState<VisibilityFilter>("public")
+  // Public leagues by default — the leagues anyone can join straight away (owner's call, 2026-11-10:
+  // on production 10 of 12 cards were private). "Public & private" adds private leagues as "Ask to
+  // join" cards (lib/public-discovery/privateLeagueRequests.ts).
+  const [visibility, setVisibility] = useState<VisibilityFilter>(initial.visibility)
   const [sort, setSort] = useState<DiscoverySort>("ranking_match")
   const [leagues, setLeagues] = useState<DiscoveryCard[]>([])
   const [total, setTotal] = useState(0)

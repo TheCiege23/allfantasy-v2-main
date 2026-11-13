@@ -80,9 +80,16 @@ export type NormalizedSalaryCapSettings = {
 }
 
 export type NormalizedLineupBehavior = {
-  /** Best ball / weekly vs daily — from league bbScoringPeriod + platform hints */
+  /** Best ball weekly vs daily — the period the league is actually scored with (lib/bestball/scoringPeriod.ts) */
   scoringPeriod: 'weekly' | 'daily' | 'unknown'
+  /** The Classic Best Ball column. FALSE for a best ball Guilly league — ask `lineupSetsItself` about lineups. */
   bestBallMode: boolean
+  /**
+   * The lineup sets itself — Classic Best Ball OR best ball Guilly (lib/bestball/bestBallLeagueState.ts).
+   * Every "is there a start/sit decision to make" reader asks this, never `bestBallMode`. Optional only so
+   * an older hand-built context reads as a manual lineup.
+   */
+  lineupSetsItself?: boolean
   bestBallSettings?: {
     mode: string | null
     matchupFormat: string | null

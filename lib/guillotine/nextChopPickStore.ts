@@ -9,13 +9,19 @@ import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import { guillotineFantasyWeekAt } from './lateStartSeats'
 import { resolveRosterDisplayNames } from './rosterDisplayNames'
 import { appendEvent } from './GuillotineEventLog'
-import { latestPicks, nextChopLeaderboard, openPickWeek, type NextChopPick } from './nextChopPick'
+import { latestPicks, nextChopLeaderboard, openPickWeek, pickLockWeek, type NextChopPick } from './nextChopPick'
+import { readPeriodWeeks } from './eliminationPeriods'
 
 export const NEXT_CHOP_PICK_EVENT = 'next_chop_pick' as const
 
 export type NextChopPickState = {
   /** The week a pick is open for; null once the chops are over (or the calendar cannot tell). */
   week: number | null
+  /**
+   * The week the pick locks: `week` itself, or the period's first week in an MLB two-week league (whose
+   * picks are keyed by the period's last week, ./eliminationPeriods.ts). Null with `week`.
+   */
+  locksWeek: number | null
   /** The viewer's team has been chopped, so they play. */
   canPick: boolean
   /** The viewer's pick for the open week. */
@@ -31,7 +37,7 @@ type Deps = { now?: () => Date; calendarWeek?: (sport: string, season: number, a
 
 async function leagueBasics(leagueId: string) {
   const [league, config, states, rosters] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } }),
     getGuillotineConfig(leagueId),
     prisma.guillotineRosterState.findMany({ where: { leagueId, choppedAt: { not: null } }, select: { rosterId: true, choppedInPeriod: true } }),
     prisma.roster.findMany({ where: { leagueId }, select: { id: true } }),
@@ -39,7 +45,7 @@ async function leagueBasics(leagueId: string) {
   const choppedWeek = new Map(states.filter((s) => s.choppedInPeriod != null).map((s) => [s.rosterId, s.choppedInPeriod as number]))
   const chopped = new Set(states.map((s) => s.rosterId))
   const alive = rosters.map((r) => r.id).filter((id) => !chopped.has(id))
-  return { league, config, choppedWeek, chopped, alive }
+  return { league, config, choppedWeek, chopped, alive, periodWeeks: readPeriodWeeks(league?.settings) }
 }
 
 async function pickWeekFor(basics: Awaited<ReturnType<typeof leagueBasics>>, deps: Deps): Promise<number | null> {
@@ -47,7 +53,7 @@ async function pickWeekFor(basics: Awaited<ReturnType<typeof leagueBasics>>, dep
   if (!league || !config || typeof league.season !== 'number') return null
   const calendar = await (deps.calendarWeek ?? guillotineFantasyWeekAt)(String(league.sport), league.season, (deps.now ?? (() => new Date()))())
   if (calendar == null) return null
-  return openPickWeek({ calendarWeek: calendar, eliminationStartWeek: config.eliminationStartWeek, eliminationEndWeek: config.eliminationEndWeek ?? null })
+  return openPickWeek({ calendarWeek: calendar, eliminationStartWeek: config.eliminationStartWeek, eliminationEndWeek: config.eliminationEndWeek ?? null, periodWeeks: basics.periodWeeks })
 }
 
 async function readPicks(leagueId: string, season: number | null): Promise<NextChopPick[]> {
@@ -78,6 +84,7 @@ export async function loadNextChopPickState(leagueId: string, viewerRosterId: st
     const settled = mine.filter((p) => choppedWeeks.has(p.week)).sort((a, b) => b.week - a.week)[0]
     return {
       week,
+      locksWeek: week == null ? null : pickLockWeek(week, basics.periodWeeks),
       canPick: !!viewerRosterId && basics.chopped.has(viewerRosterId),
       myPick: week == null ? null : mine.find((p) => p.week === week)?.pickedRosterId ?? null,
       candidates: basics.alive.map((rosterId) => ({ rosterId, name: nameOf(rosterId) })).sort((a, b) => a.name.localeCompare(b.name)),

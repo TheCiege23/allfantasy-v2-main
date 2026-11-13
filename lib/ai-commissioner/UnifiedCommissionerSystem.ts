@@ -10,6 +10,7 @@ import {
   toConfigView,
 } from './AICommissionerService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'
 
 type SpecialtyModeKey =
@@ -171,6 +172,8 @@ export async function getUnifiedCommissionerAssessment(input: {
           bestBallMode: true,
           isDynasty: true,
           leagueType: true,
+          leagueVariant: true,
+          settings: true,
           integritySettings: {
             select: {
               collusionMonitoringEnabled: true,
@@ -518,7 +521,8 @@ export async function getUnifiedCommissionerAssessment(input: {
       },
       {
         key: 'best_ball',
-        enabled: Boolean(league.bestBallMode),
+        // Classic Best Ball or best ball Guilly: both are scored by the optimizer (lib/bestball/bestBallLeagueState.ts).
+        enabled: bestBallLineupSetsItself(league),
         note: 'Prioritize scoring integrity and optimizer transparency.',
       },
       {

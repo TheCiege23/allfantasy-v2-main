@@ -123,6 +123,8 @@ export type RuleSnapshot = {
   blindAuction?: boolean | null
   /** Guilly: best ball — lineups set themselves; each team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
   bestBallLineups?: boolean | null
+  /** Guilly: weeks per elimination period — 1, or 2 for an MLB two-week league (lib/guillotine/eliminationPeriods.ts). */
+  chopPeriodWeeks?: number | null
   /** Keeper leagues: `League.keeperCount`, `keeperCostSystem`, `keeperMaxYears`. */
   keeperCount?: number | null
   keeperCost?: string | null

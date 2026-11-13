@@ -18,6 +18,7 @@
  * change once the draft has started: a team drafted for one way of scoring would be playing another.
  */
 
+import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { isBestBallSettings } from '@/lib/core-app/lineupMode'
 import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
 
@@ -43,6 +44,28 @@ export function isBestBallGuillotine(league: {
   return isGuillotineRow(league) && readGuillotineBestBall(league.settings)
 }
 
+/**
+ * Lineups set themselves: a Best Ball league (its `bestBallMode` column, its variant, or `leagueType`) or a
+ * best ball Guilly league. This IS scoring's test (lib/redraft/scoringEngine.ts `leagueIsBestBall` delegates
+ * here), so a lineup save is refused exactly where scoring would ignore the lineup. An imported league that
+ * carries only the provider's `settings.best_ball` flag is not one: scoring reads its slots as before.
+ */
+export function lineupSetsItself(
+  league:
+    | {
+        bestBallMode?: boolean | null
+        leagueVariant?: string | null
+        leagueType?: string | null
+        guillotineMode?: boolean | null
+        settings?: unknown
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!league) return false
+  return isBestBallLeague(league.leagueVariant, league.bestBallMode) || isBestBallLeague(league.leagueType) || isBestBallGuillotine(league)
+}
+
 /** Stages before the first pick. `drafting` is not one: the teams are being built for a way of scoring. */
 const BEFORE_DRAFT_STAGES = new Set(['setup', 'pre_draft', 'predraft'])
 
@@ -53,7 +76,8 @@ export function canChangeGuillotineBestBall(league: { status?: string | null; li
 }
 
 /**
- * The lineup saves refuse a starter/bench shuffle in a best ball Guilly league (lib/roster-lineup-engine/
+ * The lineup saves refuse a starter/bench shuffle in any league whose lineup sets itself — a Best Ball
+ * league or a best ball Guilly league (`lineupSetsItself`; lib/roster-lineup-engine/
  * lineupService.ts, app/api/redraft/roster/route.ts PATCH): the score is the best lineup whatever the
  * slots say, so a manager who moves a player would be told it saved and then see it change nothing.
  * Moves onto or off injured reserve and taxi still save — those decide who is eligible at all.

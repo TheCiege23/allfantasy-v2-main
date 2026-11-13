@@ -183,6 +183,93 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  // Written by the Guilly correction pass (lib/guillotine/statCorrectionHandler.ts): a stat correction
+  // after a chop moved that week's scores. Applied to scores and history; the chop always stands.
+  guillotine_stat_correction: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const a = obj(ctx.row.afterState)
+      const week = num(m.week)
+      const changes = Array.isArray(a.changes) ? a.changes.length : 0
+      const disputed = a.chopDisputed === true
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const wk = { en: week != null ? ` in week ${week}` : '', es: week != null ? ` en la semana ${week}` : '' }
+      return {
+        en: `Stat corrections updated ${changes} team score${changes === 1 ? '' : 's'}${wk.en}`,
+        es: `Las correcciones de estadísticas cambiaron ${changes} puntuaci${changes === 1 ? 'ón' : 'ones'}${wk.es}`,
+        detailEn: disputed
+          ? `With the corrected scores ${names(a.wouldHaveChoppedRedraftRosterIds, 'en') || 'another team'} would have been chopped instead of ${names(a.choppedRedraftRosterIds, 'en') || 'the chopped team'}. The chop stands.`
+          : 'The chop would have been the same. The chop stands.',
+        detailEs: disputed
+          ? `Con las puntuaciones corregidas habría caído ${names(a.wouldHaveChoppedRedraftRosterIds, 'es') || 'otro equipo'} en lugar de ${names(a.choppedRedraftRosterIds, 'es') || 'el equipo eliminado'}. La eliminación se mantiene.`
+          : 'La eliminación habría sido la misma. La eliminación se mantiene.',
+      }
+    },
+  },
+  // Written by the week finalizer (lib/redraft/weekFinalizer.ts) when a team's game is final but its box
+  // score has been missing from the feed for a day past the grace period. The week is NOT closed on zeros;
+  // it keeps waiting, and this is how the commissioner learns why.
+  week_stat_gap: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const teams = obj(ctx.row.afterState).teams
+      const list = Array.isArray(teams) ? teams.filter((t): t is string => typeof t === 'string') : []
+      const wk = { en: week != null ? `Week ${week}` : 'A week', es: week != null ? `La semana ${week}` : 'Una semana' }
+      const named = list.length ? list.slice(0, 6).join(', ') : null
+      return {
+        en: `${wk.en} is waiting on missing stats`,
+        es: `${wk.es} espera estadísticas que faltan`,
+        detailEn: `${named ? `No box score has arrived for ${named}. ` : ''}The week stays open rather than score those players 0, and closes on its own once the stats land.`,
+        detailEs: `${named ? `No ha llegado la ficha de ${named}. ` : ''}La semana sigue abierta en vez de dar 0 a esos jugadores, y se cierra sola cuando lleguen las estadísticas.`,
+      }
+    },
+  },
+  // Written by the week finalizer when a box score is STILL missing three days past the grace period. The
+  // week is sealed so the league can move on; the players named scored 0 for now, and a box score that
+  // lands later is applied by the stat-correction pass.
+  week_stat_gap_sealed: {
+    category: 'scoring',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const teams = obj(ctx.row.afterState).teams
+      const list = Array.isArray(teams) ? teams.filter((t): t is string => typeof t === 'string') : []
+      const wk = { en: week != null ? `Week ${week}` : 'A week', es: week != null ? `La semana ${week}` : 'Una semana' }
+      const named = list.length ? list.slice(0, 6).join(', ') : null
+      return {
+        en: `${wk.en} closed with stats still missing`,
+        es: `${wk.es} se cerró con estadísticas pendientes`,
+        detailEn: `${named ? `No box score arrived for ${named} in three days. ` : ''}The week was closed so the season can continue; those players count 0 until their stats land, and late stats are applied as a correction.`,
+        detailEs: `${named ? `No llegó la ficha de ${named} en tres días. ` : ''}La semana se cerró para que la temporada siga; esos jugadores cuentan 0 hasta que lleguen sus estadísticas, y las tardías se aplican como corrección.`,
+      }
+    },
+  },
+  // Written once per league per season by lib/bestball/draftUnfinishedAtSeasonStart.ts when a best ball
+  // league's first scoring week kicks off with its draft still open. Commissioner-only: it is the
+  // commissioner's to act on (finish the draft), and no manager is notified.
+  best_ball_draft_unfinished_at_season_start: {
+    category: 'draft',
+    members: false,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const season = num(m.season)
+      const yr = season != null ? `${season} ` : ''
+      return {
+        en: `The ${yr}season started before the draft finished`,
+        es: `La temporada ${yr}empezó antes de terminar el draft`,
+        detailEn:
+          'No team has a roster until the draft finishes, so best ball scoring has not started. Weeks played before the draft finishes may not count. Finish the draft to start scoring.',
+        detailEs:
+          'Ningún equipo tiene plantilla hasta que termine el draft, así que la puntuación de best ball no ha empezado. Las semanas jugadas antes de terminar el draft pueden no contar. Termina el draft para empezar a puntuar.',
+      }
+    },
+  },
   score_adjustment_added: {
     category: 'scoring',
     members: true,
@@ -472,6 +559,12 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)
+    }
+    if (row.actionType === 'guillotine_stat_correction') {
+      const a = obj(row.afterState)
+      for (const id of [a.choppedRedraftRosterIds, a.wouldHaveChoppedRedraftRosterIds].flatMap((v) => (Array.isArray(v) ? v : []))) {
+        if (str(id)) ids.add(str(id)!)
+      }
     }
   }
   return [...ids]

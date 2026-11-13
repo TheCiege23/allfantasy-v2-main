@@ -21,6 +21,7 @@ import { getAssignmentForRoster, parseCommissionerAiManagers } from '@/lib/commi
 import { mapAiStyleToCpuMode } from '@/lib/commissioner-ai-draft-manager/mapAiStyle'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
+import { guardCandidates, loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 
 export type AiManagerAuditAction = 'draft_pick' | 'trade_accept' | 'trade_reject' | 'trade_counter' | 'trade_send'
 
@@ -255,6 +256,10 @@ export async function executeDraftPickForOrphan(
 
   const myPicks = snapshot.picks.filter((p) => p.rosterId === currentRosterId)
   const teamRoster = myPicks.map((p) => ({ position: p.position }))
+  // The same starter guard autopick applies (autopickStarterGuard.ts): once this team's remaining picks
+  // only just cover its open starting spots, Chimmy chooses only among players who can start in one.
+  const guard = await loadStarterGuard(leagueId, myPicks.map((p) => p.position), snapshot.rounds)
+  const candidates = guardCandidates(guard, available, (p) => p.position)
   const rosterSlots = await getRosterSlotLabelsForLeagueDraft(leagueId, String(sport))
 
   const isSuperflex = (() => {
@@ -271,7 +276,7 @@ export async function executeDraftPickForOrphan(
   const aiProviderAvailable = isAIDrafterProviderAvailable()
   const shouldAttemptAIMode = requestedMode === 'ai' && aiProviderAvailable
   const strategyProfile = resolveStrategyProfile(currentRosterId, String(sport))
-  const queuePreview = buildDeterministicQueuePreview(available, strategyProfile)
+  const queuePreview = buildDeterministicQueuePreview(candidates, strategyProfile)
 
   const dsAi = await prisma.draftSession.findFirst({
     where: { leagueId },
@@ -283,7 +288,7 @@ export async function executeDraftPickForOrphan(
   const modeFromCommissioner = commissionerAssign ? mapAiStyleToCpuMode(commissionerAssign.aiStyle) : null
 
   const cpuInput = {
-    available,
+    available: candidates,
     teamRoster,
     rosterSlots,
     round: snapshot.currentPick.round,

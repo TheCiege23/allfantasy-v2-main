@@ -1,4 +1,3 @@
-import { createRng, seedFromString } from '@/lib/core-app/outlookSim'
 import type { PeriodScoreRow, TiebreakStep } from './types'
 
 export type DraftSlotByRoster = Map<string, number>
@@ -12,12 +11,18 @@ export function resolveTiebreak(args: {
   draftSlotByRoster: DraftSlotByRoster
   commissionerChoppedRosterIds?: string[]
   /**
-   * Source for the `random` step, in [0, 1). Omitted → a draw seeded by the week and the tied teams
-   * (see `drawFor`). Tests and the season simulator pass their own seeded source.
+   * Fixes the `random` step and the last-resort order (see `seededOrder`). Pass the league and season
+   * (`leagueId:season`); the chop engine and the chop preview pass the same one so they agree.
+   */
+  tiebreakSeed?: string
+  /**
+   * A caller's own source for the `random` step, in [0, 1) — tests and the season simulator. Omitted →
+   * the seeded order above, which is what every real chop and preview uses.
    */
   random?: () => number
 }): { choppedRosterIds: string[]; stepUsed: TiebreakStep | null; reason: string } {
   const { candidates, tiebreakerOrder, weekOrPeriod, draftSlotByRoster } = args
+  const seed = args.tiebreakSeed ?? ''
   const count = Math.max(0, Math.min(Math.floor(args.teamsPerChop), candidates.length))
   if (!count) return { choppedRosterIds: [], stepUsed: null, reason: 'no candidates' }
   const overrides = [...new Set(args.commissionerChoppedRosterIds ?? [])]
@@ -41,7 +46,8 @@ export function resolveTiebreak(args: {
     if (needed <= 0) return []
     if (rows.length <= needed) return rows
     const step = tiebreakerOrder[index]
-    if (!step) return rows.slice(0, needed)
+    // Every configured step is spent: a seeded order, never whatever order the database returned.
+    if (!step) return seededOrder(rows, seed, weekOrPeriod).slice(0, needed)
     if (step === 'commissioner') {
       const chosen = rows.filter((row) => overrides.includes(row.rosterId))
       if (!chosen.length) return breakTie(rows, needed, index + 1)
@@ -50,7 +56,7 @@ export function resolveTiebreak(args: {
     }
     if (step === 'random') {
       stepUsed = step
-      return shuffleAndTake(rows, needed, args.random ?? drawFor(weekOrPeriod, rows))
+      return args.random ? shuffleAndTake(rows, needed, args.random) : seededOrder(rows, seed, weekOrPeriod).slice(0, needed)
     }
     if (step === 'draft_slot' && weekOrPeriod > 1) return breakTie(rows, needed, index + 1)
     const key = (row: PeriodScoreRow) => {
@@ -77,21 +83,29 @@ function groupByKey<T>(sorted: T[], key: (row: T) => number): T[][] {
 }
 
 /**
- * The default draw for the `random` step: seeded by the week and the SORTED ids of the teams tied on
- * the line, so the same tie always draws the same team.
- *
- * ⚠ IT WAS `Math.random()`, AND THAT MADE THE PREVIEW AND THE CHOP DISAGREE. The commissioner's chop
- * preview (./chopPreview.ts) and the real chop (./GuillotineEliminationEngine.ts) both call this
- * resolver, each drew its own coin, and the preview had to warn that "the real chop may pick the other
- * team". A rerun of the same week could also chop a different team. Seeding by the tie itself keeps
- * it a fair draw — nobody chooses the seed — while making it the same draw everywhere it is computed.
- * Sorting the ids makes it independent of the order each caller lists the candidates in.
+ * 🛑 THE `random` STEP USED Math.random, SO THE SAME TIE COULD CHOP A DIFFERENT TEAM ON A RETRY.
+ * The chop engine re-runs a week it crashed in (`resumeAuditedRosterRelease`, the started-check), the
+ * chop preview runs the same rule ahead of time, and a disputed chop has to be explainable afterwards.
+ * Each tied team is ordered by a hash of the seed, the period and its roster id: arbitrary, and the same
+ * answer every time it is asked. The last-resort fallback (every step spent) used input order, which is
+ * database order; it takes the same seeded order.
  */
-function drawFor(weekOrPeriod: number, tied: PeriodScoreRow[]): () => number {
-  const ids = tied.map((row) => row.rosterId).sort()
-  return createRng(seedFromString(`guillotine-tiebreak|${weekOrPeriod}|${ids.join(',')}`))
+export function seededOrder<T extends { rosterId: string }>(rows: readonly T[], seed: string, weekOrPeriod: number): T[] {
+  const key = (row: T) => fnv1a(`${seed}:${weekOrPeriod}:${row.rosterId}`)
+  return [...rows].sort((a, b) => key(a) - key(b) || (a.rosterId < b.rosterId ? -1 : a.rosterId > b.rosterId ? 1 : 0))
 }
 
+/** 32-bit FNV-1a. Pure JS, so this module stays importable anywhere; ordering needs no cryptography. */
+function fnv1a(text: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash
+}
+
+/** A caller-supplied draw (`random`), applied to a canonical order so input order never matters. */
 function shuffleAndTake(rows: PeriodScoreRow[], count: number, random: () => number): PeriodScoreRow[] {
   // Start from a canonical order, so the result depends only on the draw, never on input order.
   const result = [...rows].sort((a, b) => (a.rosterId < b.rosterId ? -1 : a.rosterId > b.rosterId ? 1 : 0))
