@@ -822,7 +822,8 @@ describe('DraftHqBoard', () => {
         totalLeagues={65}
       />,
     )
-    expect(container.textContent ?? '').toMatch(/55 of your leagues carry no draft we can read/i)
+    // One footer clause since the 2026-11-13 guide (was "55 of your leagues carry no draft we can read").
+    expect(container.textContent ?? '').toMatch(/55 leagues have no draft we can read/i)
   })
 })
 

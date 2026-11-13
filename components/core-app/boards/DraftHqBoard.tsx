@@ -7,7 +7,6 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import {
   BoardHead,
-  FooterSummary,
   LeagueCrest,
   PlayerFace,
   SectionHead,
@@ -19,160 +18,125 @@ import { DraftClock } from '@/components/core-app/boards/DraftClock'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-core-boards.css'
 import '@/components/core-app/af-draft-hq-redesign.css'
-import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import '@/components/core-app/af-draft-hq-guide.css'
+import { messagesFor } from '@/lib/i18n/messages'
+import { draftHqGuideMessages } from '@/lib/core-app/messages/draftHqGuide'
+import { draftHqHeadline, groupDrafts, isYourPickNow, type DraftHqHeadline } from '@/lib/core-app/draftHqGuide'
 
 /**
- * `/core/draft-hq` with no league held — every draft, ranked by clock.
+ * `/core/draft-hq` with no league held — every draft you are in, the one that needs you first.
  *
- * 2026-09-07 handoff (`AF Core Draft HQ.dc.html`).
+ * ── 2026-11-13: ONE SENTENCE AT THE TOP, AND A CARD ONLY WHERE A CLOCK IS RUNNING ──────────────────
  *
- * ── 2026-09-08: THIS BOARD ABSORBED THE CROSS-LEAGUE WAR ROOM ───────────────
+ * The owner's ask, for every /core page: users should know exactly what the page is for and what to
+ * do. The board used to open on a paragraph about its ranking rule and then stack ten identical cards,
+ * six stat boxes each — for a draft that had not started, half of them "—" — and the same queue
+ * disclaimer on every card. Now:
  *
- * The War Room used to be a second cross-league draft screen, filtered to the
- * drafts running right now, and its reason for existing was stated as "Draft HQ
- * is the schedule, the War Room is the present tense". That split is retired:
- * the War Room is now the season-long Decision OS hub, and a draft is a Draft HQ
- * concern in every phase it can be in.
+ *   - the h1 answers "does a draft need me?" (lib/core-app/draftHqGuide.ts draftHqHeadline);
+ *   - full cards only for drafts with a clock (your pick, drafting now); not-started and finished
+ *     drafts are one line each, since nothing on them is ticking;
+ *   - each fact is said once: a stat box that would read "—" is not drawn, "picks made" is gone (the
+ *     tag says the pick number), and the queue note is one line for the page.
  *
- * So the live tail the War Room drew — the last picks on the board and your
- * remaining queue targets — moved HERE, onto the cards that were already ranked
- * with the live ones first. It renders ONLY for a row whose phase is `live`; a
- * finished draft's card is unchanged, because `getLiveDraftPicks` is scoped to
- * live sessions and holds nothing for the rest.
+ * ── Carried rules, unchanged ───────────────────────────────────────────────
  *
- * ⚠ `picks` IS OPTIONAL AND AN ABSENT ENTRY IS NOT AN EMPTY DRAFT. The loader is
- * only called when something is actually live, so `undefined` means "not
- * loaded", which is why the detail block is skipped entirely rather than
- * rendering "no picks recorded yet" against a draft nobody has read.
+ * ⚠ `picks` IS OPTIONAL AND AN ABSENT ENTRY IS NOT AN EMPTY DRAFT. The loader is only called when
+ * something is live, so `undefined` means "not loaded" and the live block is skipped rather than
+ * rendering "no picks recorded yet" against a draft nobody read.
  *
- * ── The ranking rule, and why it is the clock ───────────────────────────────
+ * ⚠ "STARTS IN 45M" IS NOT RENDERED, BECAUSE NO SCHEDULED START TIME IS STORED. `DraftSession` carries
+ * `startedAt` and nothing else, so a countdown to a pre-draft would be invented — and it is why the
+ * not-started rows are not ordered as "next up": nothing says which starts first.
  *
- * A draft is the one surface in this product with a hard, externally-imposed
- * deadline measured in seconds. So the order is: you are on the clock, then
- * somebody else is on the clock in a draft you are in, then drafts that have
- * not started, then finished ones. Everything else about a draft — your slot,
- * the round count, your queue — is context for a decision the clock is forcing.
- *
- * ── What is NOT here, and why ───────────────────────────────────────────────
- *
- * ⚠ "STARTS IN 45M" IS NOT RENDERED, BECAUSE NO SCHEDULED START TIME IS STORED.
- * `DraftSession` carries `startedAt` (the first transition to in_progress) and
- * nothing else — there is no scheduled-for column, so a countdown to a pre-draft
- * would be invented. The design shows one; this shows the draft's own status
- * instead, which is a fact.
- *
- * ⚠ AND A ZERO QUEUE IS "NOTHING BUILT HERE", NOT "UNPREPARED". The queue tables
- * are AllFantasy's own. A Sleeper draft keeps its queue on Sleeper, so an
- * imported draft reports zero because we hold nothing — see the note on
- * `DraftHqAllRow.queuedCount`. The copy says which.
+ * ⚠ A ZERO QUEUE IS "NOTHING BUILT HERE", NOT "UNPREPARED". The queue tables are AllFantasy's own; a
+ * Sleeper draft keeps its queue on Sleeper (see `DraftHqAllRow.queuedCount`).
  */
 
 type DraftHqBoardProps = {
   data: DraftHqAllData
-  /** Where the footer's "View all" goes — the full picker. */
+  /** Where the footer's "See all" goes — the full picker. */
   allHref: string
-  /** Total leagues on the account, for the footer's denominator. */
+  /** Total leagues on the account, for the footer. */
   totalLeagues: number
   /**
    * The tail of each LIVE draft's board and your queue for it, keyed by league.
-   *
-   * Optional: absent means the loader did not run (nothing is live), which is a
-   * different fact from "this draft has no picks" — see the header note.
+   * Optional: absent means the loader did not run (nothing is live) — see the header note.
    */
   picks?: LiveDraftPicks
+  language?: string | null
 }
 
-/** On the clock first, then live, then upcoming, then unknown, then done. */
-function urgency(r: DraftHqAllRow): number {
-  if (r.yoursOnClock) return 0
-  if (r.phase === 'live') return 1
-  if (r.phase === 'upcoming') return 2
-  if (r.phase === 'unknown') return 3
-  return 4
-}
+type Copy = typeof draftHqGuideMessages.en
 
-function statusOf(r: DraftHqAllRow): { label: string; sev: 'bad' | 'warn' | 'good' | 'info' } {
-  if (r.rawStatus === 'paused') return { label: 'PAUSED', sev: 'info' }
-  if (r.yoursOnClock) return { label: 'YOU ARE ON THE CLOCK', sev: 'bad' }
-  if (r.phase === 'live') {
-    return {
-      label:
-        r.nextOverallPick != null
-          ? `LIVE · PICK ${r.nextOverallPick}`
-          : 'LIVE',
-      sev: 'warn',
-    }
+function headlineText(h: DraftHqHeadline, m: Copy): string {
+  switch (h.kind) {
+    case 'yourPick':
+      return m.headYourPick(h.league, h.n)
+    case 'running':
+      return m.headRunning(h.league, h.n)
+    case 'paused':
+      return m.headPaused(h.league, h.n, h.yours)
+    case 'upcoming':
+      return m.headUpcoming(h.n)
+    case 'allDone':
+      return m.headAllDone
+    default:
+      return m.headNone
   }
-  if (r.phase === 'upcoming') return { label: 'NOT STARTED', sev: 'info' }
-  if (r.phase === 'done') return { label: 'COMPLETE', sev: 'good' }
+}
+
+function statusOf(r: DraftHqAllRow, m: Copy): { label: string; sev: 'bad' | 'warn' | 'good' | 'info' } {
+  if (r.rawStatus === 'paused') return { label: m.tagPaused, sev: 'info' }
+  if (r.yoursOnClock) return { label: m.tagYourPick, sev: 'bad' }
+  if (r.phase === 'live') return { label: m.tagLive(r.nextOverallPick), sev: 'warn' }
+  if (r.phase === 'upcoming') return { label: m.tagUpcoming, sev: 'info' }
+  if (r.phase === 'done') return { label: m.tagDone, sev: 'good' }
   /*
-   * ⚠ THE RAW STATUS, NOT A GUESS. The draft-status vocabulary is inconsistent
-   * across providers and across this codebase; a finished draft filed as
-   * "upcoming" is a confident lie, while `post_draft_v2` is at least something a
+   * ⚠ THE RAW STATUS, NOT A GUESS. The draft-status vocabulary is inconsistent across providers; a
+   * finished draft filed as "upcoming" is a confident lie, while `post_draft_v2` is at least something a
    * reader can look up. Same rule the aggregator applies.
    */
   return { label: r.rawStatus.toUpperCase(), sev: 'info' }
 }
 
-/**
- * One derived sentence per draft.
- *
- * ⚠ COMPUTED FROM THE ROW, NEVER GENERATED. The design prints a paragraph of
- * advice per card; every clause here comes from a number already on the row, so
- * the line cannot say something the board does not show. Nothing on this screen
- * spends a token.
- */
-function reasoningOf(r: DraftHqAllRow): string {
-  const bits: string[] = []
+/** The one line under a card. Computed from the row, never generated — it cannot say what the board does not show. */
+function lineOf(r: DraftHqAllRow, m: Copy): string | null {
+  if (r.rawStatus === 'paused') return m.linePaused
+  if (r.yoursOnClock) return m.lineYourPick
+  if (r.phase === 'live') return r.onClockName ? m.lineOnClock(r.onClockName) : m.lineRunning
+  return null
+}
 
-  if (r.rawStatus === 'paused') {
-    bits.push('This draft is paused; the pick countdown is stopped.')
-  } else if (r.yoursOnClock) {
-    bits.push('It is your pick right now.')
-  } else if (r.phase === 'live' && r.onClockName) {
-    bits.push(`${r.onClockName} is on the clock.`)
-  } else if (r.phase === 'live') {
-    bits.push('This draft is running.')
-  }
+function boardHref(r: DraftHqAllRow): string {
+  return `/core/draft-hq?league=${encodeURIComponent(r.leagueId)}`
+}
 
-  if (r.yourSlot != null && r.teamCount != null) {
-    const early = r.yourSlot <= Math.max(1, Math.round(r.teamCount / 4))
-    const late = r.yourSlot >= r.teamCount - Math.max(0, Math.round(r.teamCount / 4) - 1)
-    if (early) bits.push(`Your original draft slot is ${r.yourSlot} of ${r.teamCount} — near the front of the opening round.`)
-    else if (late) bits.push(`Your original draft slot is ${r.yourSlot} of ${r.teamCount} — near the end of the opening round.`)
-    else bits.push(`You pick ${r.yourSlot} of ${r.teamCount}.`)
-  }
+function buttonLabel(r: DraftHqAllRow, m: Copy): string {
+  return r.phase === 'live' ? m.btnLive : r.phase === 'upcoming' ? m.btnUpcoming : m.btnDone
+}
 
-  if (r.phase !== 'done') {
-    bits.push(
-      r.queuedCount > 0
-        ? `${r.queuedCount} ${r.queuedCount === 1 ? 'player' : 'players'} queued here.`
-        : 'No queue built in AllFantasy for this one — if you keep it on the platform, that is where it is.',
-    )
-  }
-
-  return bits.join(' ')
+function slotOf(r: DraftHqAllRow, m: Copy): string | null {
+  return r.yourSlot != null && r.teamCount != null ? m.of(r.yourSlot, r.teamCount) : null
 }
 
 /**
  * The two-column live block, lifted from the retired cross-league War Room.
  *
- * ⚠ AN UNNAMED PICK IS SHOWN AS UNNAMED, NOT DROPPED. Dropping it would silently
- * shorten the board and make the pick numbers skip — a gap in our player
- * resolution reading as a gap in the draft.
+ * ⚠ AN UNNAMED PICK IS SHOWN AS UNNAMED, NOT DROPPED — dropping it would make the pick numbers skip, a
+ * gap in our player resolution reading as a gap in the draft. And the name is only a control when the
+ * three-key join landed a Sleeper id; `PlayerName` degrades to plain text without one.
  *
- * ⚠ AND THE NAME IS ONLY A CONTROL WHEN THE THREE-KEY JOIN LANDED A SLEEPER ID.
- * `PlayerName` degrades to plain text without one, which is right for a pick we
- * could not identify: an inert control promises a lookup that cannot happen.
+ * An empty queue draws no column: the page's one queue note says why it is empty.
  */
-function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks }) {
+function LiveDetail({ row, picks, m }: { row: DraftHqAllRow; picks: LiveDraftPicks; m: Copy }) {
   const board = picks.byLeague[row.leagueId] ?? []
   const queue = picks.queueByLeague[row.leagueId] ?? []
 
   return (
     <div className="af-bd-card-body">
       <div className="af-bd-side">
-        <span className="af-bd-side-label">Last picks</span>
+        <span className="af-bd-side-label">{m.lastPicks}</span>
         {board.length > 0 ? (
           board.map((p) => (
             <span className="af-bd-asset" key={p.overall}>
@@ -181,7 +145,7 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
               </span>
               <PlayerFace
                 imageUrl={p.imageUrl}
-                name={p.playerName ?? 'Unnamed pick'}
+                name={p.playerName ?? m.unnamedPick}
                 teamLogoUrl={teamLogoUrl(p.sport ?? 'NFL', p.team)}
                 size="sm"
               />
@@ -197,7 +161,7 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
                     leagueId={row.leagueId}
                   />
                 ) : (
-                  'Player not identified'
+                  m.unnamedPick
                 )}
                 {p.position ? (
                   <span className="af-bd-pos" data-pos={p.position.toUpperCase()}>
@@ -206,20 +170,20 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
                   </span>
                 ) : null}
               </span>
-              <span className="af-bd-asset-val">{p.isYours ? 'YOU' : (p.managerName ?? '—')}</span>
+              <span className="af-bd-asset-val">{p.isYours ? m.youTag : (p.managerName ?? '—')}</span>
             </span>
           ))
         ) : (
           <span className="af-bd-asset">
-            <span className="af-bd-asset-name">No picks recorded yet.</span>
+            <span className="af-bd-asset-name">{m.noPicks}</span>
           </span>
         )}
       </div>
 
-      <div className="af-bd-side">
-        <span className="af-bd-side-label">Your queue</span>
-        {queue.length > 0 ? (
-          queue.map((q, i) => (
+      {queue.length > 0 ? (
+        <div className="af-bd-side">
+          <span className="af-bd-side-label">{m.yourQueue}</span>
+          {queue.map((q, i) => (
             <span className="af-bd-asset" key={`${q.playerName}-${i}`}>
               <span className="af-bd-asset-val">{String(i + 1).padStart(2, '0')}</span>
               <span className="af-bd-asset-name">
@@ -232,71 +196,39 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
                 ) : null}
               </span>
             </span>
-          ))
-        ) : (
+          ))}
+          {/*
+            🛑 THE CAVEAT TRAVELS WITH THE QUEUE. A queue rendered beside a live draft implies
+            availability unless it says otherwise — at a draft, that is the difference between a target
+            and a player taken four picks ago.
+          */}
           <span className="af-bd-asset">
-            {/*
-              ⚠ "NO QUEUE HERE", NOT "NO QUEUE". The queue tables are
-              AllFantasy's own — a draft that runs on Sleeper keeps its queue on
-              Sleeper, so zero means we hold nothing, not that the manager is
-              unprepared. See `DraftHqAllRow.queuedCount`.
-            */}
-            <span className="af-bd-asset-name">No queue built in AllFantasy for this draft.</span>
+            {/* A sentence, not a name: it wraps (it was cut to "read the picks bes…" at 1280px). */}
+            <span className="af-bd-asset-name af-dh-caveat">{m.queueUnchecked}</span>
           </span>
-        )}
-
-        {/*
-          🛑 THE CAVEAT TRAVELS WITH THE QUEUE, AND IT DID NOT ON THE FIRST MOVE.
-          The retired War Room carried this sentence in its reasoning line; when
-          the queue block moved here the sentence stayed behind, so for one
-          commit this screen listed queued targets with no indication that
-          nothing had checked whether they were still on the board. A queue
-          rendered beside a live draft implies availability unless it says
-          otherwise — at a draft, that is the difference between a target and a
-          player taken four picks ago.
-        */}
-        {queue.length > 0 ? (
-          <span className="af-bd-asset">
-            <span className="af-bd-asset-name">
-              This does not check whether they are still available — read the picks beside them.
-            </span>
-          </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   )
 }
 
-function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
-  const status = statusOf(row)
+/** A draft with a clock: your pick, or one running (paused ones included). */
+function Card({ row, picks, m }: { row: DraftHqAllRow; picks?: LiveDraftPicks; m: Copy }) {
+  const status = statusOf(row, m)
   const label = platformLabel(row.platform)
   const format = [row.modeLabel, row.draftType].filter(Boolean).join(' · ') || null
-  /*
-   * ⚠ "ON CLOCK" IS ONLY A NAME WHILE A DRAFT IS RUNNING. Off a live draft there
-   * is nobody on the clock, and the dash says so rather than repeating a stale
-   * name from whenever the draft last moved.
-   */
-  const onClock = row.yoursOnClock ? 'You' : row.phase === 'live' ? (row.onClockName ?? '—') : '—'
+  const yourPick = isYourPickNow(row)
+  /* "On the clock" only while a pick is genuinely being made; off that, it is not drawn at all. */
+  const onClock = row.yoursOnClock ? m.you : row.phase === 'live' ? row.onClockName : null
+  const slot = slotOf(row, m)
+  const round = row.currentRound != null ? (row.rounds != null ? m.of(row.currentRound, row.rounds) : String(row.currentRound)) : null
+  const line = lineOf(row, m)
 
   return (
     <li>
-      {/*
-        2026-09-13 handoff: status and the action in the header, a divided stat
-        strip, the reasoning line. The rank numeral is gone (the section label
-        states the rule) and the bottom link row became the header button.
-      */}
-      <article
-        className="af-bd-card"
-        data-live={row.phase === 'live' ? 'true' : undefined}
-        data-sev={row.yoursOnClock ? 'bad' : undefined}
-      >
+      <article className="af-bd-card" data-live={row.phase === 'live' ? 'true' : undefined} data-sev={yourPick ? 'bad' : undefined}>
         <header className="af-bd-card-head">
-          <LeagueCrest
-            imageUrl={row.imageUrl}
-            name={row.leagueName}
-            platform={row.platform}
-            size="sm"
-          />
+          <LeagueCrest imageUrl={row.imageUrl} name={row.leagueName} platform={row.platform} size="sm" />
           <span className="af-bd-league">
             <span className="af-bd-name">{row.leagueName}</span>
             <span className="af-bd-sub">
@@ -309,125 +241,150 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
           <span className="af-bd-tag" data-sev={status.sev}>
             {status.label}
           </span>
-          {/*
-            The only live number on the card, and it only exists while a pick is
-            genuinely running — `pickExpiresAt` is null off a live draft, so the
-            countdown cannot render against a draft that is not counting.
-          */}
+          {/* Only while a pick is genuinely running — `pickExpiresAt` is null off a live, unpaused draft. */}
           {row.pickExpiresAt ? <DraftClock endsAt={row.pickExpiresAt} /> : null}
-          <Link
-            className="af-bd-btn"
-            href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}
-          >
-            {row.phase === 'live' ? 'Open the board →' : row.phase === 'upcoming' ? 'Prepare for draft →' : 'Open board →'}
+          <Link className="af-bd-btn" href={boardHref(row)}>
+            {buttonLabel(row, m)}
           </Link>
         </header>
 
+        {/* Each box only when it has something to say; "—" in a box told the reader nothing. */}
         <div className="af-bd-kvrow">
-          <StatPair
-            k="Your slot"
-            v={row.yourSlot != null && row.teamCount != null ? `${row.yourSlot} of ${row.teamCount}` : '—'}
-          />
-          <StatPair k="Rounds" v={row.rounds != null ? String(row.rounds) : '—'} />
-          <StatPair k="On clock" v={onClock} sev={row.yoursOnClock ? 'bad' : undefined} />
-          <StatPair
-            k="Picks made"
-            v={row.picksMade != null ? String(row.picksMade) : '—'}
-          />
-          <StatPair
-            k="Round"
-            v={row.currentRound != null ? String(row.currentRound) : '—'}
-          />
-          <StatPair
-            k="Queued here"
-            v={String(row.queuedCount)}
-            sev={row.queuedCount > 0 ? 'accent' : undefined}
-          />
+          {slot ? <StatPair k={m.statSlot} v={slot} /> : null}
+          {round ? <StatPair k={m.statRound} v={round} /> : null}
+          {onClock ? <StatPair k={m.statOnClock} v={onClock} sev={yourPick ? 'bad' : undefined} /> : null}
+          {row.queuedCount > 0 ? <StatPair k={m.statQueued} v={String(row.queuedCount)} sev="accent" /> : null}
         </div>
 
-        {/*
-          The live tail, only for a draft that is actually running and only when
-          the loader ran. See the header note on why `undefined` is skipped
-          rather than rendered as an empty board.
-        */}
-        {row.phase === 'live' && picks ? <LiveDetail row={row} picks={picks} /> : null}
+        {row.phase === 'live' && picks ? <LiveDetail row={row} picks={picks} m={m} /> : null}
 
-        <p className="af-bd-reason">{reasoningOf(row)}</p>
+        {line ? <p className="af-bd-reason">{line}</p> : null}
       </article>
     </li>
   )
 }
 
-function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoardProps) {
-  const rows = [...data.rows]
-    .sort((a, b) => urgency(a) - urgency(b) || a.leagueName.localeCompare(b.leagueName))
-    .slice(0, 10)
+/** A draft with nothing ticking — not started, finished, or an unreadable status: one line. */
+function Row({ row, m }: { row: DraftHqAllRow; m: Copy }) {
+  const status = statusOf(row, m)
+  const facts = m.rowFacts(slotOf(row, m), row.rounds)
+  return (
+    <li className="af-dh-row" data-phase={row.phase}>
+      <LeagueCrest imageUrl={row.imageUrl} name={row.leagueName} platform={row.platform} size="sm" />
+      <span className="af-dh-row-main">
+        <span className="af-bd-name">{row.leagueName}</span>
+        <span className="af-bd-sub">
+          <span className="af-bd-plat" data-platform={platformKey(row.platform)}>
+            {platformLabel(row.platform).toUpperCase()}
+          </span>
+          {facts ? ` · ${facts}` : null}
+          {row.queuedCount > 0 ? ` · ${m.statQueued} ${row.queuedCount}` : null}
+        </span>
+      </span>
+      <span className="af-bd-tag" data-sev={status.sev}>
+        {status.label}
+      </span>
+      <Link className="af-bd-btn af-dh-row-btn" href={boardHref(row)}>
+        {buttonLabel(row, m)}
+      </Link>
+    </li>
+  )
+}
 
-  const withDraft = data.rows.length
+function DraftHqBoard({ data, allHref, totalLeagues, picks, language = null }: DraftHqBoardProps) {
+  // A server component: the catalog is read directly, not through the client hook.
+  const m = messagesFor(draftHqGuideMessages, language)
 
   /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
   if (totalLeagues === 0) {
     return (
       <div className="af-bd af-bd--drafts">
-        <BoardHead eyebrow="Core · Draft HQ" title="Draft HQ" blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come." />
-        <NoLeaguesYet what="Once one is, every draft you are in shows here, ranked by the clock. A mock draft works right now, with no league at all." />
+        <BoardHead eyebrow={m.eyebrow} title={m.headNone} blurb={m.intro} />
+        <NoLeaguesYet
+          what="Once one is, every draft you are in shows here, the one that needs you first. A mock draft works right now, with no league at all."
+          language={language ?? 'en'}
+        />
       </div>
     )
   }
 
+  const headline = draftHqHeadline(data.rows)
+  const { groups, shown } = groupDrafts(data.rows, 10)
+  const withDraft = data.rows.length
+  /* The queue note, once for the page — only when a draft still to come or running shows an empty queue. */
+  const anyEmptyQueue = [...groups.yourPick, ...groups.drafting, ...groups.comingUp].some((r) => r.queuedCount === 0)
+
   return (
     <div className="af-bd af-bd--drafts">
-      <BoardHead
-        eyebrow="Core · Draft HQ"
-        title="Draft HQ"
-        blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come."
-      />
-      <p className="af-bd-note">Latest draft per league <TopicTip topic="draftHqScope" /></p>
+      <BoardHead eyebrow={m.eyebrow} title={headlineText(headline, m)} blurb={m.intro} />
 
-      {rows.length > 0 ? (
-        <section className="af-bd-sec" aria-labelledby="af-dh-board">
-          <SectionHead
-            id="af-dh-board"
-            label={`Top ${rows.length} · ranked by clock`}
-            count={`${data.counts.live} live · ${data.counts.upcoming} upcoming · ${data.counts.done} complete`}
-            /*
-             * Once for the list, beside the heading. It sat in its own bordered box on every card,
-             * ten "?" boxes down the page with nothing else in them (live /core, 2026-11-05).
-             */
-            info={<TopicTip topic="draftCardStats" />}
-          />
+      {withDraft === 0 ? <p className="af-bd-note">{m.noDraftYet(data.withoutDraft)}</p> : null}
+
+      {groups.yourPick.length > 0 ? (
+        <section className="af-bd-sec" aria-labelledby="af-dh-yours">
+          <SectionHead id="af-dh-yours" label={m.secYourPick} tone="bad" count={String(groups.yourPick.length)} info={<TopicTip topic="draftCardStats" />} />
           <ul className="af-bd-cards af-bd-cards--rich">
-            {rows.map((r) => (
-              <Card key={r.leagueId} row={r} picks={picks} />
+            {groups.yourPick.map((r) => (
+              <Card key={r.leagueId} row={r} picks={picks} m={m} />
             ))}
           </ul>
         </section>
-      ) : (
-        <p className="af-bd-note">
-          {data.withoutDraft > 0
-            ? `No draft is set up in any of your ${data.withoutDraft.toLocaleString(getAppIntlLocale())} leagues yet.`
-            : 'No draft to show yet.'}
-        </p>
-      )}
-
-      {/*
-        ⚠ "NO DRAFT SET UP" IS NOT AN ERROR AND IS NOT AN EMPTY CARD. Most
-        leagues on a large account have already drafted or never will in
-        AllFantasy; the count says so in one line rather than filling the board.
-      */}
-      {data.withoutDraft > 0 ? (
-        <p className="af-bd-note af-bd-note--plain">
-          {data.withoutDraft.toLocaleString(getAppIntlLocale())} of your leagues carry no draft we can read — either
-          it never ran through AllFantasy, or the platform has not published one.
-        </p>
       ) : null}
 
-      <FooterSummary
-        hidden={Math.max(0, withDraft - rows.length)}
-        total={totalLeagues}
-        href={allHref}
-        quiet="have a draft that is not on the clock."
-      />
+      {groups.drafting.length > 0 ? (
+        <section className="af-bd-sec" aria-labelledby="af-dh-drafting">
+          <SectionHead
+            id="af-dh-drafting"
+            label={m.secDrafting}
+            tone="warn"
+            count={String(groups.drafting.length)}
+            info={groups.yourPick.length === 0 ? <TopicTip topic="draftCardStats" /> : undefined}
+          />
+          <ul className="af-bd-cards af-bd-cards--rich">
+            {groups.drafting.map((r) => (
+              <Card key={r.leagueId} row={r} picks={picks} m={m} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {groups.comingUp.length > 0 ? (
+        <section className="af-bd-sec" aria-labelledby="af-dh-coming">
+          <SectionHead id="af-dh-coming" label={m.secComingUp} count={String(groups.comingUp.length)} />
+          <ul className="af-dh-rows">
+            {groups.comingUp.map((r) => (
+              <Row key={r.leagueId} row={r} m={m} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {groups.finished.length > 0 ? (
+        <section className="af-bd-sec" aria-labelledby="af-dh-finished">
+          <SectionHead id="af-dh-finished" label={m.secFinished} tone="good" count={String(groups.finished.length)} />
+          <ul className="af-dh-rows">
+            {groups.finished.map((r) => (
+              <Row key={r.leagueId} row={r} m={m} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {anyEmptyQueue ? <p className="af-bd-note af-dh-queue-note">{m.queueNote}</p> : null}
+
+      {/*
+        ⚠ ONE FOOTER LINE, AND ITS LINK IS THE ONLY ROUTE TO THE FULL PICKER (BoardKit FooterSummary's
+        rule) — so it renders even when every draft is shown. Leagues with no readable draft are counted
+        here in one clause rather than filling the board.
+      */}
+      <div className="af-bd-foot">
+        <p className="af-bd-foot-text">
+          {m.foot(shown, withDraft, data.withoutDraft)} <TopicTip topic="draftHqScope" />
+        </p>
+        <Link className="af-bd-foot-cta" href={allHref}>
+          {m.footAll(totalLeagues)} &rarr;
+        </Link>
+      </div>
     </div>
   )
 }

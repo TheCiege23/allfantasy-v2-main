@@ -42,6 +42,21 @@ export function draftNextPick(status: string, nextOverall: number, totalPicks: n
   return Number.isInteger(nextOverall) && nextOverall > 0 && nextOverall <= totalPicks ? nextOverall : null
 }
 
+/**
+ * A manager name worth printing, or null.
+ *
+ * ⚠ THE IMPORT STORES A PLACEHOLDER AS IF IT WERE A NAME. SleeperRosterMapper writes 'Unknown' for a
+ * roster with no user (an orphaned team), and that string reached Draft HQ as "Unknown is on the
+ * clock" — read as a person called Unknown (live /core/draft-hq, 2026-11-13). Null lets each screen
+ * say what it can ("—", "This draft is running") instead.
+ */
+const PLACEHOLDER_NAMES = new Set(['unknown', 'tbd', 'n/a', 'na', 'none', 'null', 'undefined', '-', '—'])
+export function realManagerName(name: string | null | undefined): string | null {
+  const trimmed = String(name ?? '').trim()
+  if (!trimmed || PLACEHOLDER_NAMES.has(trimmed.toLowerCase())) return null
+  return trimmed
+}
+
 /** Current-only portfolio matches the league route until explicit archive selection ships. */
 export function latestDraftsByLeague<T extends { leagueId: string; id: string; createdAt: Date }>(sessions: T[]): T[] {
   const latest = new Map<string, T>()

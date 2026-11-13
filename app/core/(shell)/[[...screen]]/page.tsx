@@ -135,6 +135,8 @@ import { loadWaiverEdgeForScreen } from '@/lib/competitive-edge/waiverEdgeLoader
 import { loadScoutEdgeForScreen } from '@/lib/competitive-edge/scoutEdgeLoader'
 import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
+import { messagesFor } from '@/lib/i18n/messages'
+import { draftHqGuideMessages } from '@/lib/core-app/messages/draftHqGuide'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { loadWarLeagueStrategy } from '@/lib/core-app/warRoomLeagueLoader'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
@@ -5133,7 +5135,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             allHref="/core/draft-hq?all=1"
             totalLeagues={playedLeagues.length}
             picks={liveDraftPicks}
-          />{draftArchiveFirst ? null : draftArchiveSlot}</>
+            language={language}
+          />{draftArchiveFirst || !draftArchiveSlot ? null : (
+            /*
+              ⚠ FOLDED UNDER THE BOARD (2026-11-13). Every past draft listed out (280 on the owner's
+              account) buried the footer and read as part of "what needs me now". A `?draft=`/archive
+              link sets draftArchiveFirst, so the archive still leads, unfolded, when it was asked for.
+            */
+            <details className="af-dh-past" data-testid="draft-hq-past-drafts">
+              <summary>{messagesFor(draftHqGuideMessages, language).pastDrafts}</summary>
+              {draftArchiveSlot}
+            </details>
+          )}</>
         )
       ) : activeKey === 'war-room' ? (
         /*
