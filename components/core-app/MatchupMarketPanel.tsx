@@ -66,8 +66,13 @@ export function MarketEnvironmentView({ state }: { state: MarketPanelState }) {
   const tip = [c.tip1, c.tip2, c.tip3, c.tip4]
 
   return (
-    <section className="af-frame af-mu-section af-mu-market" aria-labelledby="af-mu-market-h">
-      <header className="af-mu-section-head">
+    /*
+      Folded (2026-11-13 matchup guide). "Buffalo Bills 30.0 expected pts — at NYJ · favored by 8.5 ·
+      51.5 combined" is market detail most managers never need; it was the last full section on the
+      page and read as important as the score. One tap opens it.
+    */
+    <details className="af-frame af-mu-section af-mu-market">
+      <summary className="af-mu-section-head af-mu-market-summary">
         <h2 className="af-label" id="af-mu-market-h">
           {c.title}
         </h2>
@@ -78,7 +83,7 @@ export function MarketEnvironmentView({ state }: { state: MarketPanelState }) {
             </span>
           ))}
         </InfoTip>
-      </header>
+      </summary>
 
       {state.status === 'failed' ? (
         <p className="af-mu-unavailable" role="status">
@@ -109,7 +114,7 @@ export function MarketEnvironmentView({ state }: { state: MarketPanelState }) {
           <p className="af-mu-note">{c.footer}</p>
         </>
       )}
-    </section>
+    </details>
   )
 }
 
