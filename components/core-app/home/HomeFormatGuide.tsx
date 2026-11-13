@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import { useMessages } from '@/components/i18n/useMessages'
 import type { FormatCount, FormatKey } from '@/lib/core-app/homeFormats'
 import { homeLearnMessages } from '@/lib/core-app/messages/homeLearn'
@@ -16,7 +16,9 @@ import '@/components/core-app/home/af-home-guide.css'
 export function HomeFormatGuide({ formats }: { formats: FormatCount[] }) {
   const t = useMessages(homeLearnMessages)
   const [open, setOpen] = useState<FormatKey | null>(null)
-  const panelId = useId()
+  // A fixed id, not useId(): the server's and the browser's generated ids disagreed (a hydration
+  // mismatch seen on the dev server, 2026-11-12), and the card is drawn at most once per page.
+  const panelId = 'af-formats-panel'
   if (formats.length === 0) return null
   return (
     <section className="af3a-card af-hg-card" aria-labelledby="af-formats-title">
