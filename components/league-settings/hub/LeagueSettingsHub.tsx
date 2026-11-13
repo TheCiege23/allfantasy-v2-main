@@ -11,6 +11,8 @@
  *   GET   /api/leagues/[id]/draft/order            draft order
  *   GET   /api/leagues/[id]/history                past seasons + all-time standings
  *   GET   /api/leagues/[id]/record-book            highest_score records
+ *   GET   /api/leagues/[id]/player-high-scores     biggest starter weeks (this season + last)
+ *   GET   /api/leagues/[id]/stat-corrections       per-week final/open + rescored-at
  *   GET   /api/user/profile  · PATCH { notificationPreferences }   per-league alert mutes
  *   POST  /api/leagues/[id]/my-team { teamName }   rename my team
  *   GET/POST /api/leagues/[id]/team-coowners       co-owner invitations
@@ -105,6 +107,8 @@ export function LeagueSettingsHub({
   const [orderStatus, setOrderStatus] = useState<string | null>(null)
   const [history, setHistory] = useState<Loadable<{ seasons?: Array<Record<string, unknown>>; allTimeStandings?: Parameters<typeof buildAllTimeStandings>[0] }>>(undefined)
   const [records, setRecords] = useState<Loadable<Array<{ holderId: string; value: number; season: number | null; rank: number }>>>(undefined)
+  const [playerHighs, setPlayerHighs] = useState<Loadable<{ seasons: number[]; rows: Array<{ rank: number; playerName: string; teamName: string; season: number; week: number; points: number }> }>>(undefined)
+  const [corrections, setCorrections] = useState<Loadable<{ season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> }>>(undefined)
   const [prefs, setPrefs] = useState<Loadable<NotificationPreferences>>(undefined)
   const [invite, setInvite] = useState<Loadable<string>>(undefined)
   const [coOwners, setCoOwners] = useState<Loadable<Array<{ id: string; accepted: boolean; name: string }>>>(undefined)
@@ -129,6 +133,8 @@ export function LeagueSettingsHub({
     })
     void getJson<{ seasons?: Array<Record<string, unknown>>; allTimeStandings?: Parameters<typeof buildAllTimeStandings>[0] }>(`/api/leagues/${id}/history`).then((d) => { if (live) setHistory(d) })
     void getJson<{ records?: Array<{ holderId: string; value: number; season: number | null; rank: number }> }>(`/api/leagues/${id}/record-book?recordType=highest_score&limit=10`).then((d) => { if (live) setRecords(d?.records ?? null) })
+    void getJson<{ seasons: number[]; rows: Array<{ rank: number; playerName: string; teamName: string; season: number; week: number; points: number }> }>(`/api/leagues/${id}/player-high-scores?limit=10`).then((d) => { if (live) setPlayerHighs(d) })
+    void getJson<{ season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> }>(`/api/leagues/${id}/stat-corrections`).then((d) => { if (live) setCorrections(d) })
     void getJson<{ notificationPreferences?: NotificationPreferences | null }>('/api/user/profile').then((d) => {
       if (!live) return
       const p = (d?.notificationPreferences ?? {}) as NotificationPreferences
@@ -300,8 +306,10 @@ export function LeagueSettingsHub({
       seasons: history === undefined ? undefined : seasons ?? null,
       standings: history === undefined ? undefined : history ? buildAllTimeStandings(history.allTimeStandings) : null,
       highScores: records === undefined ? undefined : records ? records.map((r) => ({ rank: r.rank, holder: teamName(r.holderId) ?? 'Former manager', season: r.season, value: Number(r.value).toFixed(2) })) : null,
+      playerHighScores: playerHighs === undefined ? undefined : playerHighs ? { seasons: playerHighs.seasons, rows: playerHighs.rows.map((r) => ({ rank: r.rank, name: r.playerName, team: r.teamName, season: r.season, week: r.week, points: r.points.toFixed(2) })) } : null,
+      correctionWeeks: corrections,
     }
-  }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, leagueId])
+  }, [payload, league, kind, canEdit, isHeadCommissioner, native, myTeam, prefs, roster, order, orderStatus, teams, userId, coOwners, invite, history, records, playerHighs, corrections, leagueId])
 
   return (
     <LeagueSettingsHubView
