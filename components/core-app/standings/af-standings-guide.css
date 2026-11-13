@@ -1,0 +1,36 @@
+/*
+ * The Standings guide (Standings.tsx headline, rooting rows, the two "dig deeper" folds). The headline
+ * reuses the shared PageHeader; only the folds and the teach line are new. Token layer only. No text
+ * below 11px (__tests__/core-app/type-floor.test.ts).
+ */
+.af-core .af-stg-teach {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-line);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-core .af-stg-teach b { color: var(--accent); }
+
+/* "How the table got here" / "Your season so far": the detail behind the answer, one tap away. */
+.af-core .af-stg-deeper {
+  margin: 18px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.af-core .af-stg-deeper > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 12px 16px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.af-core .af-stg-deeper[open] > summary { border-bottom: 1px solid var(--line); }
+.af-core .af-stg-deeper > :not(summary) { margin-left: 16px; margin-right: 16px; }
+.af-core .af-stg-deeper > :last-child { margin-bottom: 16px; }

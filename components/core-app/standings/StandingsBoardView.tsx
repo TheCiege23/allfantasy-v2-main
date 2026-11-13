@@ -33,6 +33,7 @@ import { standingsBoardCopy } from '@/lib/core-app/standingsUiCopy'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { useMessages } from '@/components/i18n/useMessages'
+import { standingsGuideMessages } from '@/lib/core-app/messages/standingsGuide'
 import { standingsBoardMessages } from '@/lib/core-app/messages/standingsScreen'
 import { redraftRaceTag } from '@/lib/core-app/redraftCoreRace'
 
@@ -1553,6 +1554,7 @@ export function StandingsBoardView({
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
   const m = useMessages(standingsBoardMessages)
+  const guideCopy = useMessages(standingsGuideMessages)
   const [view, setView] = useState<StandingsViewKey>(initial.view)
   const [division, setDivision] = useState<string>(
     initial.division === 'all' || initial.division === 'group' || finalBoard.divisions.some((d) => d.key === initial.division)
@@ -1867,6 +1869,12 @@ export function StandingsBoardView({
         )}
       </details>
 
+      {/*
+        Folded (2026-11-13 standings guide): the tiebreak picker, the head-to-head grid and both charts
+        explain how the table got here. The table itself is the answer; these are one tap away.
+      */}
+      <details className="af-stg-deeper" data-testid="standings-how-table">
+        <summary>{guideCopy.deeperBoard}</summary>
       {board.hasHeadToHead && board.teams.length > 1 ? <WhyAbove board={board} view={view} /> : null}
 
       {board.hasHeadToHead && board.teams.length > 2 ? <HeadToHeadGrid board={board} /> : null}
@@ -1885,6 +1893,7 @@ export function StandingsBoardView({
         </h3>
         <StandingsPointsChart board={board} teams={board.teams} />
       </section>
+      </details>
     </div>
     </EliminationContext.Provider>
   )
