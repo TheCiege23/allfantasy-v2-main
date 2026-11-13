@@ -14,12 +14,12 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-const LineupStrategyEnum = z.enum([
+export const LineupStrategyEnum = z.enum([
   'balanced', 'safe', 'upside', 'favored', 'underdog', 'projection_max', 'chaos_mode',
 ])
-type LineupStrategy = z.infer<typeof LineupStrategyEnum>
+export type LineupStrategy = z.infer<typeof LineupStrategyEnum>
 
-interface LineupPlayer {
+export interface LineupPlayer {
   playerId: string
   playerName: string
   team: string | null
@@ -49,9 +49,9 @@ export const LineupOptimizerInputSchema = z.object({
   strategyMode: LineupStrategyEnum.default('balanced'),
   riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).default('moderate'),
 })
-type LineupOptimizerInput = z.infer<typeof LineupOptimizerInputSchema>
+export type LineupOptimizerInput = z.infer<typeof LineupOptimizerInputSchema>
 
-interface LineupSlotResult {
+export interface LineupSlotResult {
   slot: string
   playerId: string
   playerName: string
@@ -64,21 +64,21 @@ interface LineupSlotResult {
   riskLabel: string
 }
 
-interface BenchRecommendation {
+export interface BenchRecommendation {
   playerId: string
   playerName: string
   whyBenched: string
   startIf: string
 }
 
-interface PivotOption {
+export interface PivotOption {
   slot: string
   recommendedStarter: string
   alternateStarter: string
   whenToUseAlternate: string
 }
 
-interface LineupOptimizerResult {
+export interface LineupOptimizerResult {
   strategyMode: string
   confidencePct: number
   projectedPoints: number

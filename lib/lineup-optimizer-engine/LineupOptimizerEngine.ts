@@ -102,14 +102,14 @@ const DEFAULT_SLOT_CODES: Record<SupportedSport, string[]> = {
   SOCCER: ['GKP', 'DEF', 'DEF', 'MID', 'MID', 'FWD', 'FWD', 'UTIL'],
 }
 
-function resolveOptimizerSportKey(raw?: string): LineupOptimizerSportKey {
+export function resolveOptimizerSportKey(raw?: string): LineupOptimizerSportKey {
   const u = raw?.trim().toUpperCase() ?? ''
   if (u === 'PGA' || u === 'GOLF') return 'GOLF'
   if (u === 'CUP' || u === 'NASCAR') return 'NASCAR'
   return normalizeToSupportedSport(raw)
 }
 
-function defaultSlotCodesForSport(sportKey: LineupOptimizerSportKey): string[] {
+export function defaultSlotCodesForSport(sportKey: LineupOptimizerSportKey): string[] {
   if (sportKey === 'GOLF') return ['GOLFER', 'GOLFER', 'GOLFER', 'GOLFER']
   if (sportKey === 'NASCAR') return ['DRIVER', 'DRIVER', 'DRIVER', 'DRIVER', 'FLEX']
   return DEFAULT_SLOT_CODES[sportKey]
