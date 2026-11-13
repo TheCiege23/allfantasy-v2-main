@@ -34,7 +34,7 @@ export function LeagueSettingsHubTab({
           <button
             type="button"
             onClick={() => setAdvanced(false)}
-            className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/15 px-4 text-[12px] font-bold text-white/85 hover:border-[#ff3d81]/50"
+            className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/15 px-4 text-[12px] font-bold text-white/85 hover:border-[#22d3ee]/50"
             data-testid="league-settings-hub-back"
           >
             ← Back to settings

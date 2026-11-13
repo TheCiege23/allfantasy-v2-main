@@ -6,11 +6,11 @@
  * own rails, so a 1440px window can still hand this component a tablet-sized box.
  */
 .af-lsh {
-  /* AF pink by default; a league surface that sets --league-accent overrides it. */
-  --lsh-accent: var(--league-accent, #ff3d81);
-  --lsh-on-accent: #1a0610;
-  --lsh-soft: var(--league-soft, rgba(255, 61, 129, 0.12));
-  --lsh-line: var(--league-line, rgba(255, 61, 129, 0.38));
+  /* AF cyan by default (the approved design); a league surface that sets --league-accent overrides it. */
+  --lsh-accent: var(--league-accent, #22d3ee);
+  --lsh-on-accent: #04202a;
+  --lsh-soft: var(--league-soft, rgba(34, 211, 238, 0.12));
+  --lsh-line: var(--league-line, rgba(34, 211, 238, 0.38));
   --lsh-bg: #050814;
   --lsh-card: #0a1228;
   --lsh-card-2: #0f1934;
