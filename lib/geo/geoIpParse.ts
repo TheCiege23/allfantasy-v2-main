@@ -251,19 +251,6 @@ export function parseProxycheckPayload(data: Record<string, unknown> | null, ip:
   }
 }
 
-/**
- * The one rule for "is this client hiding where it is": Tor, a proxy or VPN, a
- * data centre, or a privacy relay. `true` when any signal says so, `false` when
- * a vendor answered and none did, `null` when nothing could answer.
- *
- * ⚠ `null` is NOT "clean", and callers must not cache or report it as such.
- * The gate fails open on it — deliberately, because a vendor outage must not
- * take the product down — but it is an absence of evidence, not evidence.
- */
-export function combineAnonymizerSignals(s: AnonymizerSignals): boolean | null {
-  return combineAnonymizerDetail(s).anonymized
-}
-
 interface AnonymizerSignals {
   tor: boolean
   proxycheck: ProxycheckVerdict | null
@@ -271,7 +258,7 @@ interface AnonymizerSignals {
 }
 
 export interface AnonymizerDetail {
-  /** Same meaning as `combineAnonymizerSignals`: true, false, or null for "nobody could tell". */
+  /** True, false, or null for "nobody could tell". */
   anonymized: boolean | null
   /** Set only when `anonymized` is true. */
   kind: AnonymizerKind | null
@@ -282,7 +269,7 @@ export interface AnonymizerDetail {
 /** The three things that can call a connection anonymized. */
 type AnonymizerSource = "tor" | "proxycheck" | "ipapi"
 
-/** `combineAnonymizerSignals`, plus which signal decided it. One rule, two shapes. */
+/** Whether any signal calls the connection anonymized, plus which signal decided it. */
 export function combineAnonymizerDetail(s: AnonymizerSignals): AnonymizerDetail {
   if (s.tor) return { anonymized: true, kind: "tor", decidedBy: "tor" }
   if (s.proxycheck?.anonymized) return { anonymized: true, kind: s.proxycheck.kind ?? "proxy", decidedBy: "proxycheck" }

@@ -126,8 +126,6 @@ const CalloutsSchema = z.object({
   holdFAABRecommendation: z.boolean(),
 })
 
-export type Callouts = z.infer<typeof CalloutsSchema>
-
 // ---------------------------------------------------------------------------
 // Full Response Schema
 // ---------------------------------------------------------------------------

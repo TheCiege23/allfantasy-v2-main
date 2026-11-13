@@ -13,9 +13,8 @@
  *
  * WORKFLOW:
  *   1. Sport plugin builds the contract in buildGroundingPacket()
- *   2. Engine calls serializeContractForPrompt() → LLM user message
- *   3. Engine calls validateAIResponse(response, contract) after generation
- *   4. Front-end reads sourceFreshness.shortDisplay for the answer chip
+ *   2. The caller calls validateAIResponse(response, contract) after generation
+ *   3. Front-end reads sourceFreshness.shortDisplay for the answer chip
  */
 import type { SportKey, FeatureKey, UserRole, DataFreshnessTier } from "./engine/types"
 
@@ -336,20 +335,3 @@ export function buildForbiddenClaims(
 
 // ─── Serialization ────────────────────────────────────────────────────────────
 
-/**
- * Convert the contract to the compact JSON string embedded in the LLM user message.
- * Promotes enforcement fields to the top so the model sees them immediately.
- * Uses no whitespace to minimize token count.
- */
-export function serializeContractForPrompt(contract: AIGroundingContract): string {
-  const { missingData, allowedClaims, forbiddenClaims, sourceFreshness, ...rest } = contract
-  return JSON.stringify({
-    _notice: "GROUNDING PACKET — only use facts in this object. Never invent numbers.",
-    _source: sourceFreshness.display,
-    _missing: missingData,
-    _allowed: allowedClaims,
-    _forbidden: forbiddenClaims,
-    sourceFreshness,
-    ...rest,
-  })
-}

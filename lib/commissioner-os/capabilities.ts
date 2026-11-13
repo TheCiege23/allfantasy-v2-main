@@ -206,11 +206,3 @@ export function composeCapabilities(input: {
   return sortCapabilities(out)
 }
 
-/** True when the league has any capability in a domain, e.g. `hasCapabilityDomain(caps, 'powers')`. */
-export function hasCapabilityDomain(
-  capabilityIds: readonly CommissionerCapabilityId[],
-  domain: string,
-): boolean {
-  const prefix = `${domain}.`
-  return capabilityIds.some((id) => id.startsWith(prefix))
-}

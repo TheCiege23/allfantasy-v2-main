@@ -15,9 +15,7 @@ import {
 import type { GraphQueryInput } from "./GraphQueryService";
 import { buildRelationshipMap } from "./LeagueRelationshipMapBuilder";
 import type { RelationshipMapInput, RelationshipMapOutput } from "./LeagueRelationshipMapBuilder";
-import { buildLeagueRelationshipProfile as buildRelationshipProfile, getManagerInfluenceProfile as getManagerProfile } from "./GraphInfluenceEngine";
-import type { GraphInfluenceInput } from "./GraphInfluenceEngine";
-import type { LeagueGraphSnapshotPayload, LeagueRelationshipProfile, ManagerInfluenceProfile } from "./types";
+import type { LeagueGraphSnapshotPayload } from "./types";
 
 export interface BuildGraphInput extends BuildSnapshotInput {}
 
@@ -100,24 +98,4 @@ export async function buildLeagueRelationshipMap(
 }
 
 // ─── Relationship & Influence Engine ─────────────────────────────────────────
-
-/**
- * Builds LeagueRelationshipProfile: rivalries, trade clusters, influence leaders,
- * central/isolated managers, dynasty power transitions, elimination patterns.
- * When season is null, includes all dynasty history.
- */
-export async function buildLeagueRelationshipProfile(
-  input: GraphInfluenceInput
-): Promise<LeagueRelationshipProfile> {
-  return buildRelationshipProfile(input);
-}
-
-/** Returns ManagerInfluenceProfile for a manager (entityId or userId). */
-export async function getManagerInfluenceProfile(
-  leagueId: string,
-  managerIdentifier: string,
-  season?: number | null
-): Promise<ManagerInfluenceProfile | null> {
-  return getManagerProfile(leagueId, managerIdentifier, season);
-}
 

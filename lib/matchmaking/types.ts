@@ -20,11 +20,7 @@
  */
 
 import type { RankingSport } from "@/lib/ranking/types"
-import type {
-  ResumeMatchmakingProfile,
-  ResumePublicCard,
-  ResumeLeagueApplicationCard,
-} from "@/lib/resume/types"
+import type { ResumeMatchmakingProfile } from "@/lib/resume/types"
 
 /* -------------------------------------------------------------------------- */
 /* League descriptor                                                          */
@@ -138,22 +134,6 @@ export interface LeagueRecommendation {
   score: LeagueFitScore
   /** Optional rail this rec belongs to. */
   railKind?: DiscoveryRailKind | null
-}
-
-/** Recommended user shown to a commissioner. */
-export interface UserRecommendation {
-  /** Public-safe card; never includes private resume fields. */
-  card: ResumeLeagueApplicationCard
-  score: LeagueFitScore
-}
-
-/** Commissioner suggestion shown to a candidate. */
-export interface CommissionerSuggestion {
-  card: ResumePublicCard
-  /** Aggregate trust 0..1 — credibility + commissioner reputation blend. */
-  trust: number
-  /** Concise reason, e.g. "Verified commissioner, 12 leagues, 0 disputes". */
-  rationale: string
 }
 
 /* -------------------------------------------------------------------------- */

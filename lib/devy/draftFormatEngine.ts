@@ -1,14 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { DEFAULT_SPORT, type SupportedSport } from '@/lib/sport-scope'
-
-type DraftPoolConfig = {
-  poolId: string
-  label: string
-  description: string
-  /** What player universes feed this pool (logical labels). */
-  includes: string[]
-  sport: string
-}
 
 export type FutureDraftConfig = {
   format: string
@@ -25,59 +15,6 @@ type DraftPool = {
   rookieCandidates: { playerId: string; label: string; sport: string }[]
   devyCandidates: { playerId: string; label: string; sport: string }[]
   ownedDevyPlayerIds: string[]
-}
-
-/** Startup draft pool layout — format is locked at league creation. */
-export function getStartupDraftPoolConfig(format: string, sport: string): DraftPoolConfig[] {
-  const s = (sport || DEFAULT_SPORT) as SupportedSport
-  if (format === 'combined') {
-    return [
-      {
-        poolId: 'combined_all',
-        label: 'Combined startup',
-        description: 'NFL veterans, NFL rookies, and devy prospects in one draft order.',
-        includes: ['nfl_veteran', 'nfl_rookie', 'devy'],
-        sport: s,
-      },
-    ]
-  }
-  if (format === 'split_vets_first') {
-    return [
-      {
-        poolId: 'vets_rookies',
-        label: 'NFL veterans + current rookies',
-        description: 'Established NFL talent and rookie class first.',
-        includes: ['nfl_veteran', 'nfl_rookie'],
-        sport: s,
-      },
-      {
-        poolId: 'devy_only',
-        label: 'Devy draft',
-        description: 'College / developmental players after the NFL pool completes.',
-        includes: ['devy'],
-        sport: s,
-      },
-    ]
-  }
-  if (format === 'split_devy_first') {
-    return [
-      {
-        poolId: 'vets_only',
-        label: 'NFL veterans',
-        description: 'Veterans only — youth held for the second draft.',
-        includes: ['nfl_veteran'],
-        sport: s,
-      },
-      {
-        poolId: 'rookies_devy',
-        label: 'Rookies + devy',
-        description: 'NFL rookie class and devy prospects together.',
-        includes: ['nfl_rookie', 'devy'],
-        sport: s,
-      },
-    ]
-  }
-  return getStartupDraftPoolConfig('combined', s)
 }
 
 /**

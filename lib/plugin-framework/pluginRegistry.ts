@@ -58,10 +58,6 @@ export function requirePlugin(key: PluginLookupKey): CoreLeaguePlugin {
   return globalRegistry.requirePlugin(key)
 }
 
-export function listPlugins(): CoreLeaguePlugin[] {
-  return globalRegistry.listPlugins()
-}
-
 export function resetPluginRegistryForTests(): void {
   globalRegistry.clear()
 }
