@@ -212,6 +212,7 @@ import { getWeeklyScheduleForecasts } from '@/lib/core-app/weeklyScheduleForecas
 import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
 import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
+import { WeekGuide, WeekToolsDisclosure } from '@/components/core-app/week/WeekGuide'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
 import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import { buildDraftOrderPreview, readDraftOrderRule } from '@/lib/core-app/standingsDraftOrder'
@@ -5354,7 +5355,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * against the route ceiling.
          */
         <>
-          {weeklyBlueprint ? <WeeklyBlueprint data={weeklyBlueprint} path={weeklyPath} /> : null}
+          {/*
+            The all-leagues week is the week GUIDE (2026-11-13, components/core-app/week/WeekGuide.tsx):
+            headline, close games, survival leagues, kickoffs, then the scoreboard, then the Blueprint's
+            tools folded. The full Blueprint stays on a single league's week and beside `?all=1`.
+          */}
+          {weeklyBlueprint && !(weekBoard && !weekBoard.leagueBoard && !showAllLeagues && !rivalriesView) ? (
+            <WeeklyBlueprint data={weeklyBlueprint} path={weeklyPath} />
+          ) : null}
           {weekBoard?.historyIncomplete || rivalries?.historyIncomplete ? <WeekHistoryNotice retryHref={retryHref} /> : null}
           {rivalriesView ? (
             rivalries ? (
@@ -5379,15 +5387,30 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                */
               <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" lineups={ctx.weekLineups} />
             ) : (
-              <WeekBoard
-                priorityLeagueIds={weeklyBlueprint?.attentionLeagueIds}
-                board={weekBoard}
-                outlook={outlook}
-                rivalriesHref="/core/week?view=rivalries"
-                allHref="/core/week?all=1"
-                totalLeagues={playedLeagues.length}
-                lineups={ctx.weekLineups}
-              />
+              <>
+                <WeekGuide
+                  board={weekBoard}
+                  calendar={weeklyBlueprint?.calendar ?? weeklyCalendar ?? null}
+                  totalLeagues={playedLeagues.length}
+                  allHref="/core/week?all=1"
+                  isCommissioner={playedLeagues.some((l) => Boolean(l.isCommissioner))}
+                />
+                <WeekBoard
+                  priorityLeagueIds={weeklyBlueprint?.attentionLeagueIds}
+                  board={weekBoard}
+                  outlook={outlook}
+                  rivalriesHref="/core/week?view=rivalries"
+                  allHref="/core/week?all=1"
+                  totalLeagues={playedLeagues.length}
+                  lineups={ctx.weekLineups}
+                  embedded
+                />
+                {weeklyBlueprint ? (
+                  <WeekToolsDisclosure>
+                    <WeeklyBlueprint data={weeklyBlueprint} path={weeklyPath} compact />
+                  </WeekToolsDisclosure>
+                ) : null}
+              </>
             )
           ) : (
             <ScreenLoadError screen={navLabel('week')} retryHref={retryHref} language={language} />

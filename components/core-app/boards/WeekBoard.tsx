@@ -34,6 +34,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { useMessages } from '@/components/i18n/useMessages'
 import { weekBoardMessages } from '@/lib/core-app/messages/weekBoard'
+import { weekGuideMessages } from '@/lib/core-app/messages/weekGuide'
 
 /** Universal weekly priorities, then unitless matchup closeness. No playoff-odds exclusion. */
 
@@ -59,6 +60,13 @@ export type WeekBoardProps = {
   totalLeagues: number
   /** This week's AF and API lineup projections — the rail's read. Optional; absent draws none. */
   lineups?: WeekLineups | null
+  /**
+   * Drawn under the week guide (components/core-app/week/WeekGuide.tsx, 2026-11-13): the guide already
+   * carries the page title and date, so the board drops its own second header for a plain "Every game
+   * this week" heading, folds the methodology note behind "How projections work", and words its footer
+   * without "sit between these two columns".
+   */
+  embedded?: boolean
 }
 
 /** Label a long shot without asserting mathematical elimination. */
@@ -191,9 +199,11 @@ export function WeekBoard({
   totalLeagues,
   lineups,
   priorityLeagueIds = [],
+  embedded = false,
 }: WeekBoardProps) {
   const { language } = useOptionalLanguage()
   const msg = useMessages(weekBoardMessages)
+  const guide = useMessages(weekGuideMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   const pctByLeague = new Map<string, number>()
   if (outlook) {
@@ -272,14 +282,43 @@ export function WeekBoard({
     )
   }
 
+  const methodology = (
+    <>
+      {/*
+        ⚠ `model.basis` IS A WHOLE SENTENCE WHEN THERE IS NOTHING TO FIT, and
+        appending ", fitted on 0 roster-weeks" to it produced "…nothing here is
+        projected., fitted on 0 roster-weeks." Found by rendering it. With no
+        sample the basis stands alone; with one it is a clause.
+      */}
+      {board.model.sampleSize > 0
+        ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
+             a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
+             on 40,396 roster-weeks." on production, 2026-09-28. */
+          `${copy(board.model.basis)} ${msg.fittedOn(board.model.sampleSize.toLocaleString(getAppIntlLocale()))}`
+        : copy(board.model.basis)}{' '}
+      {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
+      {copy("Once a league's week has points on the board, its margin is the actual score, not a projection.")}{' '}
+      {msg.lowOddsNote}
+    </>
+  )
+
   return (
     <div className="af-bd">
-      <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
-      <BoardHead
-        eyebrow={copy('Core · Your week')}
-        title={copy('Your week')}
-        blurb={msg.blurb}
-      />
+      {embedded ? (
+        <div className="af-wg-board-head">
+          <h2>{guide.boardTitle}</h2>
+          <p>{guide.boardSub}</p>
+        </div>
+      ) : (
+        <>
+          <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
+          <BoardHead
+            eyebrow={copy('Core · Your week')}
+            title={copy('Your week')}
+            blurb={msg.blurb}
+          />
+        </>
+      )}
 
       <div
         className="af-bd-split"
@@ -431,7 +470,8 @@ export function WeekBoard({
         The value column is points clear of the cut line, which is the same
         question "margin" asks in a head-to-head: how much room do you have.
       */}
-      {board.eliminationWeeks.length > 0 ? (
+      {/* Embedded under the week guide, whose "Survival leagues" card lists every one of these in plain words. */}
+      {board.eliminationWeeks.length > 0 && !embedded ? (
         <section className="af-bd-sec">
           <SectionHead
             label={copy('No opponent · lowest score is out')}
@@ -506,23 +546,14 @@ export function WeekBoard({
         </section>
       ) : null}
 
-      <p className="af-bd-note af-bd-note--plain">
-        {/*
-          ⚠ `model.basis` IS A WHOLE SENTENCE WHEN THERE IS NOTHING TO FIT, and
-          appending ", fitted on 0 roster-weeks" to it produced "…nothing here is
-          projected., fitted on 0 roster-weeks." Found by rendering it. With no
-          sample the basis stands alone; with one it is a clause.
-        */}
-        {board.model.sampleSize > 0
-          ? /* `basis` is whole sentences, so the sample is its own sentence too — splicing it in as
-               a clause read "…completed weeks — Projected from … A heuristic, not a simulation., fitted
-               on 40,396 roster-weeks." on production, 2026-09-28. */
-            `${copy(board.model.basis)} ${msg.fittedOn(board.model.sampleSize.toLocaleString(getAppIntlLocale()))}`
-          : copy(board.model.basis)}{' '}
-        {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
-        {copy("Once a league's week has points on the board, its margin is the actual score, not a projection.")}{' '}
-        {msg.lowOddsNote}
-      </p>
+      {embedded ? (
+        <details className="af-bd-note af-bd-note--plain af-wg-method">
+          <summary>{guide.howProjections}</summary>
+          <p>{methodology}</p>
+        </details>
+      ) : (
+        <p className="af-bd-note af-bd-note--plain">{methodology}</p>
+      )}
 
       {/*
         ⚠ EVERYTHING THE COLUMNS DID NOT SHOW IS ACCOUNTED FOR BY REASON. Four
@@ -562,7 +593,7 @@ export function WeekBoard({
         hidden={Math.max(0, considered - shown)}
         total={considered}
         href={allHref}
-        quiet={copy('sit between these two columns, or have no game we can project this week.')}
+        quiet={embedded ? guide.boardQuiet : copy('sit between these two columns, or have no game we can project this week.')}
         language={language}
       />
     </div>

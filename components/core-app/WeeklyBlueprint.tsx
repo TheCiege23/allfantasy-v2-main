@@ -23,7 +23,14 @@ import { spanishFlag } from '@/lib/core-app/messages/coreLocale'
  * The weekly builders (weeklyBrief, buildWeeklySwings, playoffInputChanges, WeeklyScheduleForecasts …)
  * still take a Spanish flag rather than a language; `spanishFlag` (coreLocale.ts) is the one bridge.
  */
-export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: WeeklyPlayoffPath | null }) {
+/*
+ * `compact` (2026-11-13): drawn inside the week guide's "Plan, calendar and sharing tools" disclosure on
+ * the all-leagues week. The guide above already says the week in one line and Home lists the lineup
+ * to-dos, so compact keeps the tools — Ask Chimmy, Copy my brief, plans by sport, schedule forecasts,
+ * the 7-day calendar with its .ics download, sharing — and drops the paragraph, the priorities and the
+ * data-source coverage panel. The single-league week still renders the full Blueprint.
+ */
+export function WeeklyBlueprint({ data, path, compact = false }: { data: Blueprint; path?: WeeklyPlayoffPath | null; compact?: boolean }) {
   const { language } = useOptionalLanguage(); const es = spanishFlag(language)
   const m = useMessages(weeklyBlueprintMessages)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'manual'>('idle')
@@ -36,14 +43,14 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
   const askAction = (action: WeeklyAction) => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, {detail:{tab:'chimmy',leagueId:action.leagueId,prefill:swings.find(s=>s.id===action.id)?.prompt ?? weeklyActionPrompt(action,es)} satisfies CommsOpenDetail}))
   async function copyBrief() { try { await navigator.clipboard.writeText(brief); setCopyState('copied') } catch { setCopyState('manual') } }
   return <section className="af-wbp" aria-label={m.sectionLabel}>
-    <header><p className="af-label">{m.kicker}</p>
+    <header>{compact ? null : <><p className="af-label">{m.kicker}</p>
       <h2>{data.name ? `${data.name}, ` : ''}{m.yourFantasyWeek}</h2>
-      <p>{brief}</p>
+      <p>{brief}</p></>}
       <div className="af-wbp-buttons"><button type="button" onClick={ask}>{m.askChimmy}</button><button type="button" onClick={copyBrief}>{m.copyMyBrief}</button></div>
       <span role="status">{copyState === 'copied' ? m.briefCopied : copyState === 'manual' ? m.selectToCopy : ''}</span>
       {copyState === 'manual' ? <textarea aria-label={m.briefToCopy} readOnly value={brief} onFocus={e => e.target.select()} /> : null}
     </header>
-    <div className="af-wbp-grid"><section><h3>{m.nextPriorities}</h3>
+    {compact ? null : <div className="af-wbp-grid"><section><h3>{m.nextPriorities}</h3>
       <p>{m.prioritiesBlurb}</p>
       {data.actions.length ? <ol className="af-wbp-actions">{data.actions.map(a => <li key={a.id} id={`weekly-issue-${a.id}`}>
         <span className="af-wbp-action-tag">{a.kind === 'monitor' ? m.tagMonitor : a.kind === 'sync' ? m.tagSync : a.kind === 'lineup' ? m.tagLineup : m.tagPlan}</span>
@@ -58,7 +65,7 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
     </section>{path ? <PlayoffPath path={path} /> : <section><h3>{m.lineupCoverage}</h3>
       <p>{m.coverageBlurb}</p>
       <ul>{data.coverage.slice(0, 5).map(c => <li key={c.leagueId}><Link href={`/core/my-team?league=${encodeURIComponent(c.leagueId)}`}>{c.leagueName}</Link>: {c.af ? 'AF' : ''}{c.af && c.provider ? ' + ' : ''}{c.provider ? m.provider : ''}{!c.af && !c.provider ? m.forecastUnavailable : ''}{c.partial ? m.partial : ''}</li>)}</ul>
-    </section>}</div>
+    </section>}</div>}
     {data.sportPlans?.length ? <details className="af-wbp-sports"><summary>{m.sportPlanSummary}</summary><p>{m.sportPlanBlurb}</p><ul>{[...new Set(data.sportPlans.map(s=>s.sport))].map(sport=><li key={sport}><strong>{sport}</strong><p>{sportWeekAdvice(sport,es)}</p><div>{data.sportPlans!.filter(s=>s.sport===sport).map(l=><Link key={l.leagueId} href={`/core/my-team?league=${encodeURIComponent(l.leagueId)}`}>{l.leagueName} → </Link>)}</div></li>)}</ul></details> : null}
     <WeeklyScheduleForecasts forecasts={data.scheduleForecasts} es={es}/>
     <WeeklyCalendar data={data.calendar} />
