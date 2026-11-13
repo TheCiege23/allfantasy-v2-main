@@ -260,18 +260,3 @@ export function scoreLeagueFit(
   }
 }
 
-/**
- * Score one candidate against many leagues — used by user-facing
- * "Find League" rails.
- */
-export function rankLeaguesForCandidate(
-  candidate: LeagueFitCandidate,
-  leagues: ReadonlyArray<LeagueDescriptor>,
-  limit = 10
-): Array<{ league: LeagueDescriptor; score: LeagueFitScore }> {
-  const scored = leagues
-    .map((l) => ({ league: l, score: scoreLeagueFit(candidate, l) }))
-    .filter((r) => !r.score.hardRejected)
-  scored.sort((a, b) => b.score.score - a.score.score)
-  return scored.slice(0, Math.max(1, Math.min(limit, leagues.length)))
-}

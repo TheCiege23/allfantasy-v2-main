@@ -8,15 +8,6 @@ export const BRAND_PLATFORMS = [
 
 export type BrandPlatform = (typeof BRAND_PLATFORMS)[number]
 
-export const BRAND_POST_STATUSES = [
-  'draft',
-  'scheduled',
-  'publishing',
-  'sent',
-  'failed',
-  'cancelled',
-] as const
-
 /** Platform-specific character limits used to constrain AI drafts. */
 export const PLATFORM_CHAR_LIMITS: Record<BrandPlatform, number> = {
   x: 280,

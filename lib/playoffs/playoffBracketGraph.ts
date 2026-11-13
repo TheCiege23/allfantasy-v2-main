@@ -164,11 +164,6 @@ export function seriesOdds(series: PlayoffSeriesView): SeriesOdds {
   return { home, away: 100 - home, basis: "seed" }
 }
 
-/** True once both sides name a real club rather than a placeholder. */
-export function isResolved(series: PlayoffSeriesView, isOfficial: (n: string | null) => boolean): boolean {
-  return isOfficial(series.homeTeamName) && isOfficial(series.awayTeamName)
-}
-
 type SeriesStatusKind = "live" | "final" | "scheduled" | "tbd"
 
 export function seriesStatusKind(

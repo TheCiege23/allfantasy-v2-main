@@ -9,16 +9,6 @@ export function getConceptExtensions(ctx: HandlerContext): Record<string, unknow
   return {}
 }
 
-export function emptyResult(summary: string, skipReason?: string): HandlerResult {
-  return {
-    summary,
-    actions: [],
-    events: [],
-    skipped: true,
-    skipReason,
-  }
-}
-
 export function notApplicableTrigger(ctx: HandlerContext, label: string): HandlerResult {
   return {
     summary: `${label}: skipped for trigger ${ctx.trigger}.`,

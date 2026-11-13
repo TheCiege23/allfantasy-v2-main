@@ -9,15 +9,6 @@ export interface ComponentWeights {
   demand: number
 }
 
-export interface LearnedWeightsResult {
-  leagueClass: LeagueClass
-  season: number
-  weights: ComponentWeights
-  correlations: ComponentWeights
-  nTrades: number
-  isLearned: boolean
-}
-
 const LEAGUE_CLASS_BASELINES: Record<string, ComponentWeights> = {
   DYN_SF:  { market: 0.35, impact: 0.25, scarcity: 0.20, demand: 0.20 },
   DYN_1QB: { market: 0.40, impact: 0.25, scarcity: 0.15, demand: 0.20 },
@@ -65,14 +56,6 @@ export function smoothWeights(
     scarcity: alpha * defaultW.scarcity + (1 - alpha) * learnedW.scarcity,
     demand: alpha * defaultW.demand + (1 - alpha) * learnedW.demand,
   })
-}
-
-export function applyTFSMultiplier(
-  rankScore: number,
-  teamFitScore: number,
-): number {
-  const tfsNorm = teamFitScore / 100
-  return rankScore * (1 + 0.15 * (tfsNorm - 0.5))
 }
 
 export function applyGoalModifier(

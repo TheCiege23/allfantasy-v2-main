@@ -32,22 +32,3 @@ export type {
   UserGoal,
 } from "./team-needs";
 
-// --- Deterministic Facts Layer ---
-export {
-  buildDeterministicFacts,
-} from "./waiver-deterministic-facts";
-
-// --- Sport Adapters ---
-export {
-  getWaiverSportAdapter,
-} from "./waiver-sport-adapters";
-
-// --- Recommendation Types & Scoring ---
-export {
-  WaiverResponseV2Schema,
-} from "./waiver-recommendation-types";
-export type {
-  RecommendationType,
-  WaiverFitScoreInput,
-} from "./waiver-recommendation-types";
-

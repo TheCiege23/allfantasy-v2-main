@@ -30,7 +30,6 @@ export {
 
 export {
   getSportOptionsForSimulation,
-  getVolatilityLabel,
   getSimulationTeamPresets,
   getScheduleFactorDefinitionsForSport,
   getDefaultScheduleFactorsForPreset,

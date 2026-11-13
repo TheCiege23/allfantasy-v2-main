@@ -30,7 +30,6 @@ import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
  * so one client helper can answer both: a 409 with this code, re-sent with `{ [flag]: true }`.
  */
 export const SCHEDULE_REGEN_CONFIRMATION_CODE = 'mid_season_confirmation_required'
-export const SCHEDULE_REGEN_CONFIRM_FLAG = 'confirmMidSeasonChange'
 export const SCHEDULE_REGEN_CONFIRMATION_MESSAGE =
   "This league's season has started. Regenerating keeps every week that has started and rebuilds only the weeks after it. Confirm to continue."
 

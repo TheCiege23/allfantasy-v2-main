@@ -4,7 +4,6 @@
  */
 
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
-import { getVolatilityTag } from '@/lib/simulation-engine/SportSimulationResolver'
 import type {
   MatchupLineupSlotInput,
   MatchupScheduleFactorsInput,
@@ -128,13 +127,6 @@ export function getSportOptionsForSimulation(): SportOption[] {
 function getSportLabel(sport: string): string {
   const normalized = normalizeToSupportedSport(sport)
   return SPORT_LABELS[normalized] ?? normalized
-}
-
-/**
- * Volatility tag from combined stdDev (low/medium/high).
- */
-export function getVolatilityLabel(combinedStdDev: number): 'low' | 'medium' | 'high' {
-  return getVolatilityTag(combinedStdDev)
 }
 
 export function getSimulationTeamPresets(sport: string): SimulationTeamPreset[] {

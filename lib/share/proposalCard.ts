@@ -40,4 +40,3 @@ export function sideTotal(assets: ProposalCardInput['give']): number | null {
   return assets.every((a) => a.value != null) ? assets.reduce((s, a) => s + (a.value ?? 0), 0) : null
 }
 
-export const formatValue = (n: number) => Math.round(n).toLocaleString('en-US')

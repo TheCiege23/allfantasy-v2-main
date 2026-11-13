@@ -2,31 +2,6 @@
 
 import { useEffect, useCallback, useState } from "react"
 
-export interface MarketplaceItemRow {
-  itemId: string
-  itemName: string
-  description: string | null
-  price: number
-  cosmeticCategory: string
-  cosmeticCategoryLabel: string
-  sportRestriction: string | null
-}
-
-export interface WalletRow {
-  managerId: string
-  currencyBalance: number
-  earnedLifetime: number
-  spentLifetime: number
-}
-
-export interface InventoryItemRow {
-  itemId: string
-  itemName: string
-  cosmeticCategory: string
-  cosmeticCategoryLabel: string
-  count: number
-}
-
 interface ResolvedCosmeticRow {
   category: string
   itemId: string | null

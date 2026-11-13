@@ -1,11 +1,5 @@
 import type { RecentPerformanceMetrics, TrajectoryDirection } from './types'
 
-export interface StandingsSample {
-  week: number
-  rank: number
-  size: number
-}
-
 export function inferTrajectoryDirection(
   recent: RecentPerformanceMetrics,
   nextYearStrength: number,

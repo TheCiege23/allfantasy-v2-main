@@ -106,12 +106,3 @@ export function bestUnit(seconds: number): TimerUnit {
   return 'seconds'
 }
 
-export function timerLabel(seconds: number | null | undefined): string {
-  if (seconds == null || seconds === 0) return 'Off'
-  const match = PRESET_BY_SECONDS[seconds]
-  if (match) return match.label
-  if (seconds < 60) return `Custom: ${seconds} seconds`
-  if (seconds % 3600 === 0) return `Custom: ${seconds / 3600} hours`
-  if (seconds % 60 === 0) return `Custom: ${seconds / 60} minutes`
-  return `Custom: ${seconds} seconds`
-}

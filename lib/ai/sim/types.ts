@@ -2,15 +2,6 @@
  * Shared inputs/outputs for the AllFantasy AI simulation engine (Monte Carlo + deterministic blends).
  */
 
-export type SimLeagueSettings = Record<string, unknown>
-
-export type SimScoringSettings = {
-  /** e.g. ppr, half, std */
-  format?: string
-  /** Superflex etc. */
-  rosterSlots?: Record<string, number>
-}
-
 export type SimPlayerInput = {
   id: string
   name?: string
@@ -27,20 +18,10 @@ export type SimPlayerInput = {
   usageTrend?: number
 }
 
-export type SimRosterInput = {
-  teamId: string
-  players: SimPlayerInput[]
-}
-
 export type SimTeamInput = {
   id: string
   name?: string
   roster: SimPlayerInput[]
-}
-
-export type SimScheduleInput = {
-  /** Week index → [homeTeamId, awayTeamId][] */
-  weeks: Array<Array<{ home: string; away: string }>>
 }
 
 export type MonteCarloOptions = {

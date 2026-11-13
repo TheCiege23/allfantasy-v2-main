@@ -47,33 +47,6 @@ export function gameSourceRank(source: string | null | undefined): number {
   return i === -1 ? 99 : i
 }
 
-/**
- * Is this row a PRESEASON game?
- *
- * ⚠ THE OBVIOUS PREDICATE IS WRONG AND WOULD DELETE REAL GAMES. `seasonType = 'regular'` looks
- * like the filter and is not: measured 2026-08-30 on NFL 2026 week 1, the four source blocks are
- *
- *     espn              seasonType 'regular'   16 rows   Sep 10-15
- *     rolling_insights  seasonType 'pre'       16 rows   Aug 13-16   <- preseason
- *     rolling_insights  seasonType 'regular'   16 rows   Sep 10-15
- *     thesportsdb       seasonType NULL        16 rows   Sep 10-15   <- REAL, unlabelled
- *
- * 472 of the 841 NFL 2026 rows carry a NULL `seasonType` at all. Excluding anything that is not
- * literally 'regular' therefore drops every TheSportsDB row — 16 genuine week-1 games — to remove
- * 16 preseason ones. Excluding only what is POSITIVELY marked preseason keeps the unlabelled rows,
- * which is the safe direction: an unlabelled regular game shown is a smaller error than a real
- * game hidden.
- *
- * ⚠ AND THE PRESEASON ROWS ARE NOT A DATA BUG. NFL preseason has its own week 1, so
- * `week: 1, seasonType: 'pre'` is CORRECT — Rolling Insights labelled it properly. The defect was
- * always on the read side: consumers asking for "week 1" without saying which season type they
- * meant. Do not "fix" the ingest.
- */
-export function isPreseasonGame(row: { seasonType?: string | null }): boolean {
-  const t = String(row.seasonType ?? '').trim().toLowerCase()
-  return t === 'pre' || t === 'preseason' || t === 'pre-season'
-}
-
 /** The minimum a row needs for this module to key and rank it. */
 type DedupableGame = {
   homeTeam: string | null

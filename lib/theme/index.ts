@@ -8,7 +8,6 @@ export {
   THEME_SYSTEM_RESOLVED_COOKIE_KEY,
   DEFAULT_THEME,
   THEME_IDS,
-  THEME_DISPLAY_NAMES,
   isValidTheme,
   normalizeStoredTheme,
   resolveEffectiveDataMode,

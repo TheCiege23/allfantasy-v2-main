@@ -4,7 +4,7 @@
  */
 
 import type { TournamentSettings } from './types'
-export { TOURNAMENT_PARTICIPANT_POOL_SIZES, TOURNAMENT_LEAGUE_SIZE_FIXED } from './types'
+export { TOURNAMENT_PARTICIPANT_POOL_SIZES } from './types'
 
 export const TOURNAMENT_LEAGUE_VARIANT = 'tournament_mode' as const
 

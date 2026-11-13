@@ -31,4 +31,3 @@ export {
   listImportWarningsForLeague,
   resolveImportReviewTask,
 } from './importReviewService'
-export * from './importAdapterRegistry'

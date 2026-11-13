@@ -49,25 +49,6 @@ export interface ZombieInfectionOutcome {
   infected: { survivorRosterId: string; infectedByRosterId: string; matchupId?: string }[]
 }
 
-/** Universe level row. */
-export interface ZombieUniverseLevelRow {
-  id: string
-  universeId: string
-  name: string
-  rankOrder: number
-  leagueCount: number
-}
-
-/** Universe league row (league in universe). */
-export interface ZombieUniverseLeagueRow {
-  id: string
-  universeId: string
-  levelId: string
-  leagueId: string
-  name: string | null
-  orderInLevel: number
-}
-
 /** Audit event types (deterministic). */
 export type ZombieAuditEventType =
   | 'whisperer_selected'

@@ -8,10 +8,6 @@ import { getPositionsForSport as getPositionsFromRosterDefaults } from '@/lib/ro
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 
 const NFL_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'] as const
-/** NFL + IDP positions; DL/DB/IDP_FLEX are slot names; DE, DT, LB, CB, S are player positions. */
-export const NFL_IDP_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST', 'DE', 'DT', 'LB', 'CB', 'S'] as const
-/** Slot-only names for IDP flex (not player positions). */
-export const NFL_IDP_FLEX_SLOTS = ['DL', 'DB', 'IDP_FLEX'] as const
 const NBA_POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL'] as const
 const MLB_POSITIONS = ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'UTIL'] as const
 const NHL_POSITIONS = ['C', 'LW', 'RW', 'D', 'G', 'UTIL'] as const

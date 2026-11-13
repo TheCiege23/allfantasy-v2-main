@@ -23,22 +23,3 @@ export type GameWeather = {
   impact?: string
 }
 
-export type StandingRow = {
-  rank: number
-  teamName: string
-  teamLogo?: string
-  wins: number
-  losses: number
-  ties?: number
-  pointsFor?: number
-  pointsAgainst?: number
-  streak?: string
-}
-
-export type DepthChartEntry = {
-  team: string
-  position: string
-  players: string[]
-  source: string
-}
-

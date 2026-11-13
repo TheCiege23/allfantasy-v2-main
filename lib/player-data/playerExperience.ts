@@ -298,11 +298,3 @@ export function resolvePlayerExperience(input: ResolvePlayerExperienceInput): Pl
   }
 }
 
-export function isProRookie(r: PlayerExperienceResult): boolean {
-  return r.rookie === true || r.status === 'rookie'
-}
-
-export function isVeteran(r: PlayerExperienceResult): boolean {
-  return r.veteran === true || r.status === 'veteran'
-}
-

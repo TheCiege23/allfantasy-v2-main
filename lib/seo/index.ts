@@ -10,7 +10,6 @@ export {
 
 export {
   buildMetadata,
-  mergeMetadata,
 } from "./MetadataInjectionService"
 
 export {

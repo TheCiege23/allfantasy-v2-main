@@ -18,10 +18,6 @@ type UsernameValidationResult =
   | { ok: true; normalized: string; lookup: string }
   | { ok: false; reason: string }
 
-export function normalizeUsernameLookup(raw: string): string {
-  return String(raw ?? "").trim().toLowerCase()
-}
-
 /**
  * Validates a raw username input.
  * `normalized` is the canonical stored username and intentionally preserves case.

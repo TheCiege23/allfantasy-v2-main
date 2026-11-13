@@ -14,11 +14,6 @@ export const RECORD_TYPES = [
 
 export type RecordType = (typeof RECORD_TYPES)[number]
 
-export function isRecordType(value: string | null | undefined): value is RecordType {
-  if (!value) return false
-  return (RECORD_TYPES as readonly string[]).includes(value)
-}
-
 export const RECORD_LABELS: Record<RecordType, string> = {
   highest_score: 'Highest Score',
   longest_win_streak: 'Longest Win Streak',

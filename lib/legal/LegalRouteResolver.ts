@@ -4,9 +4,6 @@ export {
   getDisclaimerUrl,
   getTermsUrl,
   getPrivacyUrl,
-  getDataDeletionUrl,
   getNoGamblingPolicyUrl,
-  getSmsTermsUrl,
-  getCopyrightPolicyUrl,
   resolveLegalBackLink,
 } from "@/lib/legal/legal-route-resolver"

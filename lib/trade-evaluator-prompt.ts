@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { AI_CORE_PERSONALITY, getModeInstructions, SIGNATURE_PHRASES, MEMORY_AWARENESS, WHEN_TO_SPEAK_RULES, ESCALATION_SYSTEM } from '@/lib/ai-personality';
 import { getUniversalAIContext } from '@/lib/ai-player-context';
 
@@ -40,75 +39,4 @@ Return JSON only.
  *     (`lib/decision-os/trade/explainTrade.ts`).
  * A model explains a grade the engine gave. It is never asked to give one.
  */
-
-const BetterAlternativeSchema = z.object({
-  teamId: z.string(),
-  fitScore: z.number().min(0).max(100),
-  whyBetter: z.string(),
-  tradeFramework: z.string(),
-});
-
-const NegotiationDmMessageSchema = z.object({
-  tone: z.enum(['FRIENDLY', 'CONFIDENT', 'CASUAL', 'DATA_BACKED', 'SHORT']),
-  hook: z.string().min(4),
-  message: z.string().min(10),
-});
-
-const NegotiationCounterSchema = z.object({
-  label: z.string().min(3),
-  ifTheyObject: z.string().min(3),
-  counterTrade: z.object({
-    youAdd: z.array(z.string()).optional(),
-    youRemove: z.array(z.string()).optional(),
-    theyAdd: z.array(z.string()).optional(),
-    theyRemove: z.array(z.string()).optional(),
-    faabAdd: z.number().int().positive().optional(),
-  }),
-  rationale: z.string().min(8),
-});
-
-const NegotiationSweetenerSchema = z.object({
-  label: z.string().min(3),
-  addOn: z.object({
-    faab: z.number().int().positive().optional(),
-    pickSwap: z.object({
-      youAddPickId: z.string().optional(),
-      youRemovePickId: z.string().optional(),
-    }).optional(),
-  }),
-  whenToUse: z.string().min(6),
-});
-
-const NegotiationBlockSchema = z.object({
-  dmMessages: z.array(NegotiationDmMessageSchema).max(7).optional().default([]),
-  counters: z.array(NegotiationCounterSchema).max(6).optional().default([]),
-  sweeteners: z.array(NegotiationSweetenerSchema).max(5).optional().default([]),
-  redLines: z.array(z.string().min(6)).max(10).optional().default([]),
-});
-
-export type NegotiationBlock = z.infer<typeof NegotiationBlockSchema>;
-export type NegotiationCounter = z.infer<typeof NegotiationCounterSchema>;
-export type NegotiationSweetener = z.infer<typeof NegotiationSweetenerSchema>;
-
-export const StructuredTradeEvalResponseSchema = z.object({
-  verdict: z.object({
-    overall: z.enum(['FAIR', 'FAIR_UPSIDE_SKEWED', 'UNFAIR_TEAM_A', 'UNFAIR_TEAM_B']),
-    teamA: z.enum(['WIN', 'NEUTRAL', 'LOSS']),
-    teamB: z.enum(['WIN', 'NEUTRAL', 'LOSS']),
-  }),
-  explanation: z.object({
-    summary: z.string(),
-    teamAReasoning: z.string(),
-    teamBReasoning: z.string(),
-    leagueContextNotes: z.array(z.string()),
-  }),
-  confidence: z.object({
-    rating: z.enum(['HIGH', 'MEDIUM', 'LEARNING']),
-    score: z.number().min(0).max(100),
-    drivers: z.array(z.string()),
-  }),
-  betterAlternatives: z.array(BetterAlternativeSchema),
-  riskFlags: z.array(z.string()),
-  negotiation: NegotiationBlockSchema.optional(),
-});
 

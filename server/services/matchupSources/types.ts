@@ -47,9 +47,3 @@ export type MatchupContextResult =
   | { kind: 'bye'; selected: MatchupSideContext }
   | { kind: 'none'; reason: string }
 
-export type MatchupSourceParams = {
-  leagueId: string
-  viewerUserId: string
-  season: number
-  week: number
-}

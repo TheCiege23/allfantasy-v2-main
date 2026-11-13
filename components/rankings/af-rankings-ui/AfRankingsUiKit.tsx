@@ -4,12 +4,6 @@ import { Sparkles } from 'lucide-react'
 import type { TierTheme } from '@/lib/rank/tier-theme'
 import { getAiScoreDescriptor } from '@/lib/rank/tier-theme'
 
-export type RankMovement = {
-  kind: 'up' | 'down' | 'flat' | 'hot'
-  delta?: number
-  label?: string
-}
-
 export function RankPrestigeEmblem({
   theme,
   level,

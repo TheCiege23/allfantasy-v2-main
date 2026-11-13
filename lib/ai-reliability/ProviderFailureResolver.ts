@@ -2,7 +2,7 @@
  * Resolves provider failure state and user-facing message (Prompt 127).
  */
 
-import type { ProviderResultMeta, ProviderStatus } from './types';
+import type { ProviderResultMeta } from './types';
 
 interface ProviderFailureState {
   allFailed: boolean;
@@ -43,9 +43,3 @@ export function resolveProviderFailure(providerResults: ProviderResultMeta[]): P
   };
 }
 
-export function providerStatusFromError(error: unknown): ProviderStatus {
-  const str = String(error ?? '').toLowerCase();
-  if (str.includes('timeout') || str.includes('timed out')) return 'timeout';
-  if (str.includes('invalid') || str.includes('parse') || str.includes('schema')) return 'invalid_response';
-  return 'failed';
-}

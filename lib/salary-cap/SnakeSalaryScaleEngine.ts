@@ -33,44 +33,6 @@ export type SnakeSalaryScaleConfig = {
   customScale?: Record<number, number>
 }
 
-type PickSalaryAssignment = {
-  overall: number
-  round: number
-  pick: number
-  salary: number
-  contractYears: number
-}
-
-/**
- * Generate the full salary scale for a snake draft.
- * Returns salary assignments for every pick in the draft.
- */
-export function generateSalaryScale(config: SnakeSalaryScaleConfig): PickSalaryAssignment[] {
-  const totalPicks = config.teamCount * config.draftRounds
-  const assignments: PickSalaryAssignment[] = []
-
-  for (let overall = 1; overall <= totalPicks; overall++) {
-    const round = Math.ceil(overall / config.teamCount)
-    const pick = ((overall - 1) % config.teamCount) + 1
-
-    let salary: number
-
-    if (config.customScale && config.customScale[overall] != null) {
-      salary = config.customScale[overall]
-    } else {
-      salary = calculateSalary(overall, totalPicks, config)
-    }
-
-    salary = Math.max(config.minSalary, Math.round(salary * 100) / 100)
-
-    const contractYears = config.contractYearsByRound[round] ?? getDefaultContractYears(round, config.draftRounds)
-
-    assignments.push({ overall, round, pick, salary, contractYears })
-  }
-
-  return assignments
-}
-
 function calculateSalary(
   overall: number,
   totalPicks: number,

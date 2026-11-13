@@ -41,38 +41,6 @@ function trimHttpUrl(url: string | null | undefined): string | null {
   return t
 }
 
-export function getDraftRoomDisplayName(player: DraftRoomDisplayPlayerLike | null | undefined): string {
-  if (!player) return ''
-  return (
-    player.canonicalPlayerMetadata?.displayName?.trim() ||
-    player.unifiedProductView?.unified.fullName?.trim() ||
-    player.display?.displayName?.trim() ||
-    String(player.name ?? '').trim() ||
-    ''
-  )
-}
-
-export function getDraftRoomDisplayTeam(player: DraftRoomDisplayPlayerLike | null | undefined): string | null {
-  if (!player) return null
-  const u = player.unifiedProductView?.unified
-  const abbr = u?.teamAbbr ?? u?.team
-  const fromDisplay = player.display?.metadata?.teamAbbreviation
-  const raw = player.canonicalPlayerMetadata?.teamAbbr ?? abbr ?? fromDisplay ?? player.team ?? null
-  if (raw == null || String(raw).trim() === '') return null
-  return String(raw).trim()
-}
-
-export function getDraftRoomDisplayPosition(player: DraftRoomDisplayPlayerLike | null | undefined): string {
-  if (!player) return ''
-  return (
-    player.canonicalPlayerMetadata?.position?.trim() ||
-    player.unifiedProductView?.unified.position?.trim() ||
-    player.display?.metadata?.position?.trim() ||
-    String(player.position ?? '').trim() ||
-    ''
-  )
-}
-
 export function getDraftRoomDisplayHeadshot(player: DraftRoomDisplayPlayerLike | null | undefined): string | null {
   if (!player) return null
   const canonical = player.canonicalPlayerMetadata?.headshot
@@ -94,18 +62,6 @@ export function getDraftRoomDisplayInjury(player: DraftRoomDisplayPlayerLike | n
     if (c != null && String(c).trim() !== '') return String(c).trim()
   }
   return null
-}
-
-export function getDraftRoomDisplayIntelligence(
-  player: DraftRoomDisplayPlayerLike | null | undefined,
-): NflRedraftPlayerIntelligence | null {
-  return player?.canonicalPlayerIntelligence ?? null
-}
-
-export function getDraftRoomDisplayGameContext(
-  player: DraftRoomDisplayPlayerLike | null | undefined,
-): NflRedraftGameContext | null {
-  return player?.canonicalGameContext ?? null
 }
 
 export function getDraftRoomDisplayLiveScoringContext(
@@ -135,16 +91,6 @@ export function getDraftRoomDisplayExperienceBadge(player: DraftRoomDisplayPlaye
     return `${exp.proYears} YOE`
   }
   return null
-}
-
-export type DraftRoomProviderSources = {
-  profile?: string | null
-  stats?: string | null
-  projections?: string | null
-  image?: string | null
-  adp?: string | null
-  aiAdp?: string | null
-  experience?: string | null
 }
 
 type BoardPickDisplayMerge = {

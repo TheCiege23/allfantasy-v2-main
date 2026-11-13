@@ -43,26 +43,6 @@ export type NormalizedWorldCupLiveMatch = {
   raw?: unknown
 }
 
-export type WorldCupLiveProviderCapability = {
-  id: WorldCupLiveProviderId
-  /** Short note — see markdown doc for citations */
-  fifaWorldCupFixtureSupport: "strong" | "partial" | "unknown" | "none"
-  worldCup2026Readiness: "strong" | "partial" | "unknown" | "none"
-  teamIdsAndMapping: "strong" | "partial" | "unknown"
-  flagsLogos: boolean
-  kickoffDateTime: boolean
-  liveScore: boolean
-  liveMinute: boolean
-  statusGranularity: "full" | "partial"
-  finalWinner: boolean
-  penaltyShootout: boolean
-  /** Typical request budget — verify with vendor */
-  rateLimitHint: string
-  pricingHint: string
-  reliabilityHint: string
-  requiredEnvVars: string[]
-}
-
 /** Recommended primary + fallback order (manual always available last). */
 export const WORLD_CUP_LIVE_PROVIDER_DEFAULT_CHAIN: WorldCupLiveProviderId[] = [
   "api_sports",

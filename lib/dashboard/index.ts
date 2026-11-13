@@ -19,9 +19,6 @@ export {
   type DashboardLeagueSummaryInput,
 } from "./DashboardLeagueSummaryService"
 export {
-  type SportSectionInfo,
-} from "./SportDashboardResolver"
-export {
   groupLeaguesBySport,
   type LeagueForGrouping,
   type SportGroup,

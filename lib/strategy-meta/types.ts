@@ -3,9 +3,8 @@
  * Supports NFL, NHL, NBA, MLB, NCAAF, NCAAB, SOCCER.
  */
 
-import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope'
+import { type SupportedSport } from '@/lib/sport-scope'
 
-export const SUPPORTED_STRATEGY_SPORTS: readonly SupportedSport[] = [...SUPPORTED_SPORTS]
 export type StrategySport = SupportedSport
 
 /** Strategy types to detect (Chunk 2 will implement rules). */

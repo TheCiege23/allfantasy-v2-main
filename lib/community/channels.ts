@@ -83,7 +83,6 @@ export const COMMUNITY_CHANNELS: readonly CommunityChannel[] = [
 ] as const
 
 export const SPORT_TAGS = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'] as const
-export type SportTag = (typeof SPORT_TAGS)[number]
 
 /**
  * The reaction set. Deliberately small: a fixed handful is a vocabulary people learn,

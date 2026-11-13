@@ -5,7 +5,3 @@
 
 export type SoccerPipeline = 'mls' | 'euro'
 
-export function isSoccerPipeline(value: unknown): value is SoccerPipeline {
-  return value === 'mls' || value === 'euro'
-}
-

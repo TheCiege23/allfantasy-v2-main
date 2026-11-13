@@ -208,7 +208,6 @@ export const TradeDecisionContextV1Schema = z.object({
 
 export type TradeDecisionContextV1 = z.infer<typeof TradeDecisionContextV1Schema>
 
-export type LeagueConfig = z.infer<typeof LeagueConfigSchema>
 export type AssetValuation = z.infer<typeof AssetValuationSchema>
 export type PlayerRiskMarker = z.infer<typeof PlayerRiskMarkerSchema>
 export type ManagerPreferenceVector = z.infer<typeof ManagerPreferenceVectorSchema>

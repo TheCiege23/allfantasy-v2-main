@@ -20,10 +20,5 @@ export { computeCommissionerRecap } from "./commissionerRecap"
 export { computePoolParity } from "./poolParity"
 export { computeUpsetImpact } from "./upsetImpact"
 
-export type {
-  GroupAdvancementResult,
-} from "./groupAdvancement"
-export type { BracketPathResult } from "./bracketPath"
-
 // ── Shared input types ─────────────────────────────────────────────────────────
 export type { InsightEntry, InsightMatch, InsightPool } from "./types"

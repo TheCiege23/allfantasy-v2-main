@@ -9,42 +9,6 @@ import { detectHistoricMoments, toMomentInput } from './HistoricMomentDetector'
 import type { HallOfFameEntryInput, HallOfFameMomentInput } from './types'
 import type { HallOfFameEntityType, HallOfFameCategory } from './types'
 
-interface CreateEntryResult {
-  id: string
-  entityType: string
-  entityId: string
-  score: number
-}
-
-export async function createHallOfFameEntry(
-  input: HallOfFameEntryInput
-): Promise<CreateEntryResult | null> {
-  const sport = normalizeSportForHallOfFame(input.sport)
-  if (!isSupportedHallOfFameSport(sport)) return null
-
-  const score = Number.isFinite(input.score) ? Math.max(0, Math.min(1, input.score)) : 0
-  const entry = await prisma.hallOfFameEntry.create({
-    data: {
-      entityType: input.entityType,
-      entityId: input.entityId,
-      sport,
-      leagueId: input.leagueId ?? null,
-      season: input.season ?? null,
-      category: input.category,
-      title: input.title,
-      summary: input.summary ?? null,
-      score,
-      metadata: (input.metadata ?? {}) as object,
-    },
-  })
-  return {
-    id: entry.id,
-    entityType: entry.entityType,
-    entityId: entry.entityId,
-    score: Number(entry.score),
-  }
-}
-
 async function createHallOfFameMoment(
   input: HallOfFameMomentInput
 ): Promise<{ id: string; significanceScore: number } | null> {

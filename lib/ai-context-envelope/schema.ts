@@ -7,17 +7,6 @@
 import { z } from 'zod'
 import { isSupportedSport } from '@/lib/sport-scope'
 
-/** Supported tool identifiers that require deterministic grounding. */
-export const AI_TOOL_IDS = [
-  'trade_analyzer',
-  'waiver_ai',
-  'draft_helper',
-  'matchup',
-  'rankings',
-  'story_creator',
-  'content',
-] as const
-
 /** Single evidence item: source, label, value. No AI-invented values. */
 const EvidenceItemSchema = z.object({
   /** Source of the fact (e.g. "trade_engine", "rankings_engine", "waiver_engine"). */

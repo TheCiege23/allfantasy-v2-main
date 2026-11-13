@@ -18,16 +18,3 @@ export interface PlayerAgingInputs {
   history: PlayerHistoryPoint[]
 }
 
-export interface PlayerCareerProjection {
-  playerId: string
-  sport: SportCode
-  projectedPointsYear1: number
-  projectedPointsYear2: number
-  projectedPointsYear3: number
-  projectedPointsYear4: number
-  projectedPointsYear5: number
-  breakoutProbability: number
-  declineProbability: number
-  volatilityScore: number
-}
-

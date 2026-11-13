@@ -3,15 +3,8 @@
  */
 
 export {
-  getCreateDMPayload,
   getThreadMessagesUrl,
 } from "./DirectMessageService"
-
-export {
-  getCreateGroupPayload,
-  GROUP_MIN_MEMBERS,
-  GROUP_MAX_MEMBERS,
-} from "./GroupMessageService"
 
 export {
   getDMThreads,
@@ -22,7 +15,6 @@ export {
 } from "./ConversationListResolver"
 
 export {
-  PARTICIPANT_SEARCH_MIN_QUERY,
   parseParticipantUsernames,
 } from "./ParticipantSelectorService"
 

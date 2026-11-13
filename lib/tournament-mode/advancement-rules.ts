@@ -14,8 +14,6 @@ export function getAdvancementSlotsPerConference(participantPoolSize: number): n
 /** Default tiebreaker order (deterministic). Commissioner override can be stored in Tournament.settings.qualificationTiebreakers. */
 export const DEFAULT_TIEBREAKER_ORDER = ['wins', 'points_for'] as const
 
-export type TiebreakerKey = 'wins' | 'points_for' | 'points_against' | 'head_to_head'
-
 /**
  * Head-to-head record between two rosters in the same league.
  * Returns positive if `a` has more H2H wins, negative if `b` does, 0 if tied or no matchups.

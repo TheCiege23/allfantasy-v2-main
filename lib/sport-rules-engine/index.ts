@@ -13,7 +13,6 @@ export {
   getSupportedSports,
 } from './SportRulesEngine'
 export type {
-  SportKey,
   SportRules,
   RosterRules,
   RosterSlotRule,

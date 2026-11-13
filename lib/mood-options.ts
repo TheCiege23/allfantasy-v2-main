@@ -84,9 +84,3 @@ export const MOOD_OPTIONS: MoodOption[] = [
   },
 ];
 
-export function getMoodRecommendation(mood: string) {
-  return (
-    MOOD_OPTIONS.find((option) => option.value === mood)?.recommendations ??
-    MOOD_OPTIONS[0].recommendations
-  );
-}

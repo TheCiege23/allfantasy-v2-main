@@ -3,10 +3,6 @@
  * Supports NFL, NHL, NBA, MLB, NCAA Basketball, NCAA Football, Soccer.
  */
 
-import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
-
-export const LEGACY_SPORTS = [...SUPPORTED_SPORTS] as const
-
 const LEGACY_ENTITY_TYPES = ['MANAGER', 'TEAM', 'FRANCHISE'] as const
 export type LegacyEntityType = (typeof LEGACY_ENTITY_TYPES)[number]
 

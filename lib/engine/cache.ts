@@ -72,20 +72,3 @@ export async function setCachedResult(
   } catch {}
 }
 
-export async function invalidateCache(
-  leagueId: string,
-  type?: CacheType
-): Promise<void> {
-  try {
-    if (type) {
-      await prisma.engineSnapshot.deleteMany({
-        where: { leagueId, type },
-      })
-    } else {
-      await prisma.engineSnapshot.deleteMany({
-        where: { leagueId },
-      })
-    }
-  } catch {}
-}
-

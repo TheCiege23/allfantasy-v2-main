@@ -6,10 +6,6 @@
 export * from './types'
 export {
   getWeekVolumeProfile,
-  getLeastBusyDay,
-  getMostBusyDay,
-  getBalancedScoringDays,
-  getWeekGameCounts,
   getSeasonVolumeProfiles,
   classifyDay,
 } from './NbaGameVolumeService'

@@ -1,5 +1,3 @@
-export type NotificationChannel = 'private_dm' | 'league_chat' | 'commissioner_alerts'
-
 type PrivateDmCoachingPayload = {
   channel: 'private_dm'
   notification_type: 'ai_trade_coaching' | 'ai_waiver_coaching'
@@ -96,7 +94,6 @@ export function buildCommissionerFairnessNotification(args: {
     severity: args.severity,
   }
 }
-
 
 export function buildLeagueWaiverProcessedNotification(args: {
   leagueId: string

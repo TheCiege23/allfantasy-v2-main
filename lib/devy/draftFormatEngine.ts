@@ -1,13 +1,5 @@
 import { prisma } from '@/lib/prisma'
 
-export type FutureDraftConfig = {
-  format: string
-  rookieDraftIncludes: string[]
-  devyDraftIncludes: string[]
-  combinedIncludes: string[]
-  notes: string[]
-}
-
 type DraftPool = {
   draftType: 'rookie' | 'devy' | 'combined'
   season: number

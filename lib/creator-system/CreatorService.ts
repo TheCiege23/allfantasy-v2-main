@@ -1175,31 +1175,6 @@ export async function createCreatorLeague(
   return toLeagueDto(league, baseUrl)
 }
 
-export async function createInvite(
-  creatorId: string,
-  userId: string,
-  creatorLeagueId?: string | null,
-  viewerEmail?: string | null
-) {
-  const profile = await prisma.creatorProfile.findUnique({
-    where: { id: creatorId },
-    select: { id: true, userId: true },
-  })
-  if (!profile || !canManageCreator(profile, userId, viewerEmail)) return null
-
-  const code = await ensureUniqueInviteCode()
-  return prisma.creatorInvite.create({
-    data: {
-      creatorId,
-      creatorLeagueId: creatorLeagueId || null,
-      code,
-      metadata: {
-        source: creatorLeagueId ? 'manual_league' : 'manual_creator',
-      },
-    },
-  })
-}
-
 async function joinCreatorLeagueByResolvedInvite(input: {
   creatorId: string
   inviteId: string | null

@@ -377,7 +377,3 @@ export function getZombieSportConfig(sport: string): ZombieSportConfig {
   return ZOMBIE_SPORT_CONFIGS[key] ?? ZOMBIE_SPORT_CONFIGS.nfl
 }
 
-export function getSportLabel(sport: string): string {
-  return getZombieSportConfig(sport).label
-}
-

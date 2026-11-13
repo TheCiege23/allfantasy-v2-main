@@ -1,13 +1,11 @@
 export type {
   IntelligenceChipState,
   IntelligencePlatformHealth,
-  IntelligenceSnapshot,
   LeagueSourceKind,
   ResolvedLeagueIntelligenceContext,
 } from '@/lib/intelligence/types'
 
 export { computeIntelligencePlatformHealth } from '@/lib/intelligence/computePlatformHealth'
-export { resolveLeagueIntelligenceContext } from '@/lib/intelligence/resolveLeagueIntelligenceContext'
 export { buildAiToolPayload } from '@/lib/intelligence/buildAiToolPayload'
 export type { AiToolPayloadEnvelope } from '@/lib/intelligence/buildAiToolPayload'
 export { attachIntelligenceToChimmyPayload } from '@/lib/intelligence/chimmyIntelligenceMerge'

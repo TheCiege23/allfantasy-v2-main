@@ -63,19 +63,3 @@ export function buildMetadata(input: MetadataInput): Metadata {
   }
 }
 
-/** Merge partial metadata with defaults (e.g. from layout). */
-export function mergeMetadata(
-  base: Metadata,
-  override: Partial<Metadata>
-): Metadata {
-  return {
-    ...base,
-    ...override,
-    openGraph: override?.openGraph
-      ? { ...base.openGraph, ...override.openGraph }
-      : base.openGraph,
-    twitter: override?.twitter
-      ? { ...base.twitter, ...override.twitter }
-      : base.twitter,
-  }
-}

@@ -3,10 +3,6 @@
  * Supports NFL, NHL, NBA, MLB, NCAA Basketball, NCAA Football, Soccer.
  */
 
-import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
-
-export const HOF_SPORTS = [...SUPPORTED_SPORTS] as const
-
 const HOF_ENTITY_TYPES = [
   'MANAGER',
   'TEAM',

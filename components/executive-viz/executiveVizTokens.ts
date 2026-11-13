@@ -42,16 +42,6 @@ export const EXECUTIVE_STATUS_BAR: Record<ExecutiveHealthStatus, string> = {
   unavailable: 'bg-line-strong',
 }
 
-/** A small solid legend/indicator dot per status. Solid tokens only, same reason as the bar. */
-export const EXECUTIVE_STATUS_DOT: Record<ExecutiveHealthStatus, string> = {
-  excellent: 'bg-status-success',
-  healthy: 'bg-status-success',
-  watch: 'bg-status-warning',
-  at_risk: 'bg-status-danger',
-  critical: 'bg-status-danger',
-  unavailable: 'bg-line-strong',
-}
-
 /** Plain-language, customer-facing status wording. No "resolver", "signal", "payload", "Decision OS". */
 export const EXECUTIVE_STATUS_LABEL: Record<ExecutiveHealthStatus, string> = {
   excellent: 'Excellent',
@@ -61,17 +51,6 @@ export const EXECUTIVE_STATUS_LABEL: Record<ExecutiveHealthStatus, string> = {
   critical: 'Critical',
   unavailable: 'Not available',
 }
-
-/** The legend only needs the meaningful, non-redundant buckets, coarsened for an executive read:
- * excellent+healthy collapse into one "Stable" swatch in the legend (they already share a hue), while
- * watch / needs-attention / critical / unavailable stay distinct. Order is best → worst → unavailable. */
-export const EXECUTIVE_LEGEND_ENTRIES: { status: ExecutiveHealthStatus; label: string }[] = [
-  { status: 'healthy', label: 'Stable' },
-  { status: 'watch', label: 'Monitor' },
-  { status: 'at_risk', label: 'Needs attention' },
-  { status: 'critical', label: 'Critical' },
-  { status: 'unavailable', label: 'Not available' },
-]
 
 /** Chart typography / spacing tokens, referenced by the shell so future charts stay visually consistent. */
 export const EXECUTIVE_VIZ_TYPOGRAPHY = {

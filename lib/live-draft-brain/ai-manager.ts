@@ -1,7 +1,5 @@
 import { z } from 'zod'
 
-export const MAX_AI_MANAGERS_PER_DRAFT = 4
-
 const AiDraftStyleSchema = z.enum([
   'BPA',
   'NEEDS',

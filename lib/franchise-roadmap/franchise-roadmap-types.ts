@@ -34,7 +34,6 @@ const UserGoalEnum = z.enum([
   'devy_pipeline_build',
   'c2c_dual_window_balance',
 ])
-export type UserGoal = z.infer<typeof UserGoalEnum>
 
 const WindowStrengthEnum = z.enum(['weak', 'moderate', 'strong'])
 export type WindowStrength = z.infer<typeof WindowStrengthEnum>

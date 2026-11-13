@@ -28,21 +28,3 @@ export function decideTradeOfferRequest(bot: BotProfile, leagueId: string, teamI
   return decideTradeOffer(bot, leagueId, teamId, cooldownBlocks)
 }
 
-export type DropCandidateContext = {
-  bot: BotProfile
-  rosterPlayerIds: string[]
-  /** Lower score = drop first */
-  scoresByPlayerId: Record<string, number>
-  minToDrop: number
-}
-
-export type RosterMovePlan = {
-  adds: string[]
-  drops: string[]
-  reason: string
-}
-
-export type ExplainLayer = {
-  line?: string
-}
-

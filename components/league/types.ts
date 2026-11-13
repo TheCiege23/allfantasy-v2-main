@@ -4,8 +4,6 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
-export type LeaguePlayersSubtab = 'search' | 'trend' | 'available' | 'leaders' | 'trade'
-
 type LeagueVariantMode = 'standard' | 'devy' | 'c2c'
 
 type LeagueRecord = {

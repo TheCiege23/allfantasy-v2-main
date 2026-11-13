@@ -15,8 +15,6 @@ export {
   signupUrlWithIntent,
 } from "./PostAuthIntentRouter"
 export {
-  isProtectedPath,
-  isAdminPath,
   getLoginRedirectUrl,
 } from "./ProtectedRouteResolver"
 export {

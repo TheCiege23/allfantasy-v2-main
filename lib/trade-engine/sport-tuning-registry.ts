@@ -431,41 +431,9 @@ function getSportTuning(sport: string): SportTuning {
   return SPORT_REGISTRY[key] ?? SPORT_REGISTRY.NFL
 }
 
-/**
- * Get all supported sports.
- */
-export function getSupportedSports(): SupportedSport[] {
-  return Object.keys(SPORT_REGISTRY) as SupportedSport[]
-}
-
 // ---------------------------------------------------------------------------
 // Sport-Aware Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Get the scarcity multiplier for a position in a given sport.
- * Handles SF/TEP variants for NFL.
- */
-export function getScarcityMultiplier(
-  sport: string,
-  position: string,
-  options?: { isSF?: boolean; isTEP?: boolean },
-): number {
-  const tuning = getSportTuning(sport)
-
-  // NFL special cases
-  if (tuning.sport === 'NFL') {
-    if (position === 'QB' && options?.isSF) {
-      return tuning.scarcity.find(s => s.position === 'QB_SF')?.multiplier ?? 1.3
-    }
-    if (position === 'TE' && options?.isTEP) {
-      return tuning.scarcity.find(s => s.position === 'TE_TEP')?.multiplier ?? 1.2
-    }
-  }
-
-  const entry = tuning.scarcity.find(s => s.position === position.toUpperCase())
-  return entry?.multiplier ?? 0.9
-}
 
 /**
  * Get the age curve for a position in a given sport.
@@ -509,21 +477,6 @@ export function getVolatilityProfile(sport: string, position: string): Volatilit
       baseVolatility: 0.20,
       consistencyWeight: 0.3,
     }
-  )
-}
-
-/**
- * Get scoring format normalization for a sport + format combo.
- */
-export function getScoringNormalization(
-  sport: string,
-  format: string,
-): ScoringNormalization | null {
-  const tuning = getSportTuning(sport)
-  return (
-    tuning.scoringFormats.find(
-      f => f.format.toLowerCase() === format.toLowerCase(),
-    ) ?? tuning.scoringFormats[0] ?? null
   )
 }
 

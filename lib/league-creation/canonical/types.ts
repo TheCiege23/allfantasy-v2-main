@@ -6,20 +6,6 @@ import type { LeagueFormatResolution } from '@/lib/league/format-engine'
 import type { SettingsSnapshot } from '@/lib/league-contract/types'
 import type { MetaEventPayload } from '@/lib/meta-events'
 
-export type CanonicalDraftType =
-  | 'snake'
-  | 'linear'
-  | 'auction'
-  | 'slow_draft'
-  | 'mock_draft'
-  | 'devy_snake'
-  | 'devy_auction'
-  | 'c2c_snake'
-  | 'c2c_auction'
-  | 'offline'
-  | 'auto'
-  | 'team'
-
 export interface DerivedLeagueFlags {
   isDynasty: boolean
   isKeeper: boolean

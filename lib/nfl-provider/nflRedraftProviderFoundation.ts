@@ -106,12 +106,6 @@ export type CanonicalNflRedraftProviderRecord<T> = {
   warnings: string[]
 }
 
-export type NflRedraftProviderContext = {
-  season: number
-  week?: number | null
-  leagueId?: string | null
-}
-
 const NFL_PROVIDER_ENV_KEYS: Record<NflRedraftProviderId, string[]> = {
   api_sports: ['API_SPORTS_KEY', 'APISPORTS_API_KEY', 'API_SPORTS_API_KEY'],
   clearsports: ['CLEARSPORTS_API_KEY', 'CLEAR_SPORTS_API_KEY'],

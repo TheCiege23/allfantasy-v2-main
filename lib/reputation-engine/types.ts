@@ -45,18 +45,6 @@ const REPUTATION_EVIDENCE_TYPES = [
 ] as const
 export type ReputationEvidenceType = (typeof REPUTATION_EVIDENCE_TYPES)[number]
 
-/** Dimension keys stored on ManagerReputationRecord. */
-export const REPUTATION_DIMENSIONS = [
-  'reliabilityScore',
-  'activityScore',
-  'tradeFairnessScore',
-  'sportsmanshipScore',
-  'commissionerTrustScore',
-  'toxicityRiskScore',
-  'participationQualityScore',
-  'responsivenessScore',
-] as const
-
 export interface ReputationScores {
   overallScore: number
   reliabilityScore: number

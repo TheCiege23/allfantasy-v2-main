@@ -3,10 +3,7 @@
  * Supported sports: NFL, NHL, NBA, MLB, NCAAB, NCAAF, SOCCER.
  */
 
-import type { LeagueSport } from '@prisma/client'
 import type { PlatformSportRulesDraftTypeId } from '@/lib/draft-types/draftTypeRegistry'
-
-export type SportKey = LeagueSport | string
 
 /** A single roster slot rule: name, allowed positions, count, and whether it's a flex slot. */
 export interface RosterSlotRule {

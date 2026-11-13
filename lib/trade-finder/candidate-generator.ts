@@ -49,11 +49,6 @@ export interface PricedAsset {
   injuryFlag?: boolean
 }
 
-export interface TradeSide {
-  assets: PricedAsset[]
-  totalValue: number
-}
-
 export interface TradeCandidate {
   tradeId: string
   teamA: { teamId: string; gives: PricedAsset[]; receives: PricedAsset[] }
