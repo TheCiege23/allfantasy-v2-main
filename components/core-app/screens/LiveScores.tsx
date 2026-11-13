@@ -57,6 +57,10 @@ import {
   type TeamShooting,
 } from '@/lib/live/espnGamePresentation'
 import '@/components/core-app/af-live.css'
+import { LiveGuideChips, LiveGuideEyebrow, liveGuideTitle } from '@/components/core-app/live/LiveGuideHead'
+import { liveChips, liveMoment, orderSportTabs, PLAYS_SHOWN } from '@/lib/live/liveGuide'
+import { liveGuideMessages } from '@/lib/core-app/messages/liveGuide'
+import { useMessages } from '@/components/i18n/useMessages'
 // Redraft batch B3: broadcast score bugs, scoped to the /core shell's data-format="redraft".
 import '@/components/core-app/af-core-redraft-matchup.css'
 // Redraft: the "now" strip, the games strip and the matchup scoreboard card (design board LiveScores).
@@ -177,6 +181,12 @@ export type LiveScoresProps = {
   leagueWeek?: { byLeague: Record<string, RailMatchup> | null; leagues: LeagueRef[] } | null
   /** The held league's OTHER games this week (your own is the strip above). Null: not read, or no league held. */
   leagueGames?: (LiveLeagueGamesData & { weekFinal: boolean }) | null
+  /**
+   * The next stated kickoff for the sport the page opened on (lib/core-app/seasonPhase.ts, cached), so
+   * "Nothing of yours is playing right now" can say when something will be. Today's slate cannot answer
+   * that on a Thursday night: Sunday is not in it. Ignored when the reader switches to another sport.
+   */
+  sportNextKickoff?: { sport: string; at: string } | null
 }
 
 export function scopeLiveGamesToLeague(
@@ -193,7 +203,9 @@ export function scopeLiveGamesToLeague(
     }))
 }
 
-export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null, leagueGames = null }: LiveScoresProps) {
+export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null, leagueGames = null, sportNextKickoff = null }: LiveScoresProps) {
+  const guide = useMessages(liveGuideMessages)
+  const [playsOpen, setPlaysOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -522,6 +534,22 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
   )
 
   /*
+   * The headline's moment. "Now" is the payload's own fetch time, not the ticking client clock, so the
+   * server render and the first client render agree (a chip that flips between "Next kickoff" and
+   * "Done today" during hydration would be a mismatch).
+   */
+  const sportNextAt = sportNextKickoff && sportNextKickoff.sport === data.sport ? sportNextKickoff.at : null
+  const fetchedMs = data.fetchedAt ? Date.parse(data.fetchedAt) : NaN
+  const moment = liveMoment({
+    rosterFailed: data.rosterFailed,
+    hasRosterData: data.hasRosterData,
+    impact,
+    sportNextAt,
+    nowMs: Number.isFinite(fetchedMs) ? fetchedMs : 0,
+  })
+  const chips = liveChips(moment, glance)
+
+  /*
    * Newest play per game, for the in-card panel.
    *
    * ⚠ FIRST WINS, BECAUSE THE FEED IS NEWEST-FIRST. `impact.plays` documents
@@ -575,17 +603,23 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       {/* The lede follows the EFFECTIVE scope, not the URL. Saying "only games
           affecting starters in this league" while showing every fixture is the
           same defect as the hidden toggle, wearing different clothes. */}
-      <PageHeader
-        className="af-live-head"
-        eyebrowClassName="af-live-eyebrow"
-        titleClassName="af-live-title"
-        subClassName="af-live-lede"
-        eyebrow={lsc('Core · Live', language)}
-        title={lsc('Live Scores', language)}
-        sub={lsc(leagueFilterId
-          ? 'Only games affecting starters in this league, scored with this league’s rules.'
-          : scope === 'my' ? 'Games affecting your starters across all leagues. Points follow each league’s scoring.' : 'All games, with your roster contributions highlighted where available.', language)}
-      />
+      {/*
+        2026-11-13: the header says what is happening for YOU and why the page exists, not just what it
+        lists. The old lede ("Games affecting your starters across all leagues…") moved to the slate's own
+        heading below, which is where it describes something.
+      */}
+      <section className="af-hg-head af-lg-head" aria-labelledby="af-live-h1">
+        <PageHeader
+          className="af-live-head"
+          eyebrowClassName="af-hg-eyebrow af-lg-eyebrow"
+          titleClassName="af-live-title af-hg-title"
+          subClassName="af-live-lede af-hg-intro"
+          eyebrow={<LiveGuideEyebrow moment={moment} sportLabel={activeSportLabel} leagueScoped={leagueFilterId != null} />}
+          title={<span id="af-live-h1">{liveGuideTitle(moment, guide)}</span>}
+          sub={moment.kind === 'no-roster' ? guide.introNoRoster : guide.intro}
+        />
+        <LiveGuideChips chips={chips} />
+      </section>
 
       <LiveNowStrip
         strip={slateStrip}
@@ -605,7 +639,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           eliminated={heldWeek?.eliminated === true}
         />
       ) : (
-        <LiveLeaguesGlance glance={glance} sportLabel={activeSportLabel} />
+        <LiveLeaguesGlance glance={glance} sportLabel={activeSportLabel} guided />
       )}
 
       {selectedLeagueId && leagueGames ? <LiveLeagueGames leagueId={selectedLeagueId} data={leagueGames} /> : null}
@@ -613,7 +647,6 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">
         <div className="af-live-bar-top">
-          <span className="af-live-bar-name">{lsc('Live Scores', language)}</span>
 
           {/*
             ⚠ ALWAYS RENDERED, INCLUDING WITH A LEAGUE SELECTED. It used to be
@@ -658,12 +691,17 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             screen's live-broadcast convention, so painting "Reconnecting" red
             would read as a game kicking off.
           */}
-          <LowDataToggle
-            decision={lowData}
-            onChange={setLowData}
-            className="af-live-lowdata-toggle"
-          />
+          {/* In the bar only while it is ON (so it can be turned off); off, it waits in the footer note. */}
+          {lowData.lowData ? (
+            <LowDataToggle
+              decision={lowData}
+              onChange={setLowData}
+              className="af-live-lowdata-toggle"
+            />
+          ) : null}
 
+          {/* "Idle" is a polling state, not news: the badge appears only when it says something (live, delayed, offline). */}
+          {connection === 'idle' ? null : (
           <span
             className="af-live-freshness"
             data-live={connection === 'live'}
@@ -672,9 +710,10 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           >
             {connection === 'live' ? <span className="af-live-pulse" aria-hidden /> : null}
             <span role="status">{lsc(connectionLabel(connection), language)}</span>
-            {ageSeconds != null && connection !== 'live' && connection !== 'idle' ? <span>{updatedAgo(formatAge(ageSeconds), language)}</span> : null}
+            {ageSeconds != null && connection !== 'live' ? <span>{updatedAgo(formatAge(ageSeconds), language)}</span> : null}
             {refreshing ? <span className="af-live-refreshing" aria-hidden> ·</span> : null}
           </span>
+          )}
           <button type="button" className="af-btn af-live-refresh" aria-label={lsc(refreshing ? 'Refreshing scores' : 'Refresh scores', language)} disabled={refreshing} onClick={() => void load(sport, scope)}><span className="af-live-refresh-icon" aria-hidden>↻</span><span className="af-live-refresh-label">{lsc(refreshing ? 'Refreshing…' : 'Refresh scores', language)}</span></button>
         </div>
 
@@ -692,7 +731,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           panel and the wiring says so.
         */}
         <div className="af-live-sports" role="tablist" aria-label={lsc('Sport', language)}>
-          {data.counts.map((c) => (
+          {orderSportTabs(data.counts).map((c) => (
             <button
               key={c.sport}
               type="button"
@@ -712,10 +751,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
                 if (!keys.includes(event.key)) return
                 event.preventDefault()
-                const index = data.counts.findIndex(item => item.sport === c.sport)
-                const next = event.key === 'Home' ? 0 : event.key === 'End' ? data.counts.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + data.counts.length) % data.counts.length
-                pickSport(data.counts[next].sport)
-                document.getElementById(`af-live-tab-${data.counts[next].sport}`)?.focus()
+                // Arrow keys move in the order the tabs are DRAWN (sports with games first).
+                const tabs = orderSportTabs(data.counts)
+                const index = tabs.findIndex(item => item.sport === c.sport)
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+                pickSport(tabs[next].sport)
+                document.getElementById(`af-live-tab-${tabs[next].sport}`)?.focus()
               }}
             >
               {c.label}
@@ -741,7 +782,10 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         panel follows them. The side copy is hidden on phones and this one on desktop, both with
         `display: none`, so a screen reader meets exactly one.
       */}
-      <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="inline" />
+      {/* The starter count is the headline now; the panel stays only where it explains a failure or an empty roster. */}
+      {data.hasRosterData && !data.rosterFailed ? null : (
+        <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="inline" />
+      )}
 
       <div className="af-live-grid">
         <section
@@ -761,10 +805,13 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
           <LockWarning alerts={lockAlerts} now={now} />
 
-          <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · {lsc(leagueFilterId ? 'this league' : scope === 'my' ? 'your starters · live first, then most leagues affected' : 'all games · live first', language)}{' '}
-            <TopicTip topic="liveGameWinEstimate" />
-          </h2>
+          <div className="af-lg-sec-head af-live-slate-head">
+            <h2>
+              {leagueFilterId ? guide.slateLeague : scope === 'my' ? guide.slateMine : guide.slateAll}{' '}
+              <TopicTip topic="liveGameWinEstimate" />
+            </h2>
+            <p>{leagueFilterId ? guide.slateLeagueSub : scope === 'my' ? guide.slateMineSub : guide.slateAllSub}</p>
+          </div>
 
           {data.top25 && (data.top25.hidden > 0 || data.top25.showingAll) && !top25Empty ? (
             /*
@@ -836,11 +883,52 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               />
             </>
           )}
+          {visibleGames.length > 0 ? (
+            <p className="af-lg-teach">
+              <b>{guide.why}</b> {guide.slateTeach}
+            </p>
+          ) : null}
         </section>
 
         <aside className="af-live-side" data-roster={data.hasRosterData} aria-label={lsc('Your live impact', language)}>
 
-          <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="side" />
+          {data.hasRosterData && !data.rosterFailed ? null : (
+            <ImpactSummary data={data} impact={impact} leagueScoped={leagueFilterId != null} placement="side" />
+          )}
+
+          {/*
+            ⚠ UP NEXT LEADS THE PANEL BETWEEN GAMES (2026-11-13). It sat under the play feed, so on a
+            Thursday night the panel was a finished game's plays and never said when your players are on
+            again. When today's slate has none of your games left, it falls back to the sport's next
+            stated kickoff — labelled as that, not as "yours".
+          */}
+          {impact.upNext.length > 0 || (moment.kind === 'between' && moment.nextAt) ? (
+            <div className="af-live-card" id="af-live-next">
+              <h2 className="af-label">{guide.upNextTitle}</h2>
+              <ul className="af-live-next">
+                {impact.upNext.length > 0
+                  ? impact.upNext.map((u, i) => (
+                      <li key={`${u.playerName}-${i}`}>
+                        <span className="af-live-next-label">
+                          {u.playerName} · {u.matchup}
+                        </span>
+                        <span className="af-live-next-time af-num"><LocalDateTime value={u.startTime} /></span>
+                      </li>
+                    ))
+                  : moment.kind === 'between' && moment.nextAt ? (
+                      <li>
+                        <span className="af-live-next-label">{guide.nextSportKickoff(activeSportLabel)}</span>
+                        <span className="af-live-next-time af-num"><LocalDateTime value={moment.nextAt} /></span>
+                      </li>
+                    ) : null}
+              </ul>
+              {moment.kind === 'between' ? (
+                <Link className="af-lg-next-link" href="/core/week">
+                  {guide.nextPlanLink}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
 
           <details className="af-live-card af-live-contributions" open={!!leagueFilterId}>
             <summary>{lsc('Contributions by league', language)}</summary>
@@ -889,9 +977,10 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 placeholders is noise on a Tuesday. `impact.plays` is NFL-only by
                 construction, so on any other tab this card is simply absent.
               */}
-              <h2 className="af-label">{lsc('Live plays', language)}</h2>
+              <h2 className="af-label">{anyLive ? guide.playsLive : guide.playsToday}</h2>
               <ul className="af-live-plays">
-                {impact.plays.map((p) => (
+                {/* Five, then "Show more": a finished game's whole feed ran a screen and a half. */}
+                {(playsOpen ? impact.plays : impact.plays.slice(0, PLAYS_SHOWN)).map((p) => (
                   /* Keyed on the feed's own idempotency key — the same key it
                      dedupes on, so re-polling cannot duplicate a row. */
                   <li key={p.id} className="af-live-play" data-tone={playTone(p.type)}>
@@ -951,28 +1040,23 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
-
-          {impact.upNext.length > 0 ? (
-            <div className="af-live-card">
-              <h2 className="af-label">{lsc('Up next for you', language)}</h2>
-              <ul className="af-live-next">
-                {impact.upNext.map((u, i) => (
-                  <li key={`${u.playerName}-${i}`}>
-                    <span className="af-live-next-label">
-                      {u.playerName} · {u.matchup}
-                    </span>
-                    <span className="af-live-next-time af-num"><LocalDateTime value={u.startTime} /></span>
-                  </li>
-                ))}
-              </ul>
+              {impact.plays.length > PLAYS_SHOWN ? (
+                <button type="button" className="af-lg-plays-more" aria-expanded={playsOpen} onClick={() => setPlaysOpen((o) => !o)}>
+                  {playsOpen ? guide.playsLess : guide.playsMore(impact.plays.length - PLAYS_SHOWN)}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
           <p className="af-live-note">
             {lsc('Scores come from the official feed. AllFantasy only reads your leagues — nothing here changes anything on your platform.', language)}
           </p>
+          {lowData.lowData ? null : (
+            <p className="af-lg-lowdata">
+              <span>{guide.lowDataHint}</span>
+              <LowDataToggle decision={lowData} onChange={setLowData} className="af-live-lowdata-toggle" />
+            </p>
+          )}
         </aside>
       </div>
     </div>

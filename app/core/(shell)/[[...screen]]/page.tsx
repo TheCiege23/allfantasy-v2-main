@@ -197,7 +197,7 @@ import { loadSleeperWaiverSchedules } from '@/lib/waivers/sleeperWaiverSchedule'
 import { scheduleLabel } from '@/lib/core-app/waiverRunClock'
 import { getUrgencyBadges, recordPendingOffers } from '@/lib/core-app/urgencyBadges'
 import { isSpeculativeRequestHeaders } from '@/lib/http/speculativeRequest'
-import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
+import { getFirstStatedKickoff, hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
@@ -3286,6 +3286,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
   const liveLeagueWeekFinal = liveMatchup?.week.available ? liveMatchup.week.data.isFinal : false
 
+  /*
+   * The next stated kickoff for the sport the live page opens on, so its headline can say when your
+   * players are on again ("Nothing of yours is playing right now" → next kickoff Sun 1:00 PM). One cached
+   * findFirst on SportsGame (seasonPhase.ts, 5-min revalidate); null on any failure, and the page then
+   * simply does not name a time.
+   */
+  const liveOpenSport = typeof sp.sport === 'string' ? normalizeToLiveSport(sp.sport) : liveDefaultSport
+  const liveSportNextAt =
+    activeKey === 'live' && !liveGameId ? await getFirstStatedKickoff(liveOpenSport).catch(() => null) : null
+
   const liveScores =
     activeKey === 'live' && !liveGameId
       ? await getLivePageData({
@@ -5518,6 +5528,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             selectedLeagueId={selectedLeagueId}
             matchupStrip={liveMatchupStrip}
             leagueGames={liveLeagueGames ? { ...liveLeagueGames, weekFinal: liveLeagueWeekFinal } : null}
+            sportNextKickoff={liveSportNextAt ? { sport: liveScores.sport, at: liveSportNextAt } : null}
             leagueWeek={{
               byLeague: ctx.weekLineups?.byLeague ?? null,
               leagues: playedLeagues.map((l) => ({
