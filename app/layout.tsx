@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { Session } from 'next-auth';
 import Script from 'next/script';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { SpotifyMiniPlayer } from '@/components/spotify/SpotifyMiniPlayer';
 import { FloatingMusicWidget } from '@/components/MusicWidget';
@@ -105,6 +105,10 @@ export const metadata: Metadata = {
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
+  // This request's CSP nonce, set by middleware (lib/security/cspReportOnly.ts, Phase 3).
+  // Every inline script below carries it; under the nonce policy one that does not is
+  // refused. Undefined in `next dev` and in the allowlist-only modes, where it is unused.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   const cookieLang = cookieStore.get('af_lang')?.value;
   const htmlLang = resolveLanguage(cookieLang);
   const htmlDir = getLanguageTextDirection(htmlLang);
@@ -263,11 +267,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           there (lib/platform/iosApp says why). Client-side on purpose: reading
           the User-Agent on the server would make every page dynamic.
         */}
-        <script id="af-ios-app-flag" dangerouslySetInnerHTML={{ __html: IOS_APP_HTML_FLAG_SCRIPT }} />
+        <script id="af-ios-app-flag" nonce={nonce} dangerouslySetInnerHTML={{ __html: IOS_APP_HTML_FLAG_SCRIPT }} />
 
         {metaPixelId ? (
           <script
             id="meta-pixel-immediate-bootstrap"
+            nonce={nonce}
             dangerouslySetInnerHTML={{
               __html: `
                 (function(f,b,e,v,pixelId,n,t,s) {
@@ -322,7 +327,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         ) : null}
 
         {metaPixelId ? (
-          <Script id="meta-pixel-base" strategy="afterInteractive">
+          <Script id="meta-pixel-base" nonce={nonce} strategy="afterInteractive">
             {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) {
               !function(f,b,e,v,n,t,s)
               {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -387,7 +392,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {gaMeasurementId && (
           <>
             {/* Injected here rather than as <Script src> so the iOS app can skip it (lib/platform/iosApp). */}
-            <Script id="google-gtag" strategy="afterInteractive">
+            <Script id="google-gtag" nonce={nonce} strategy="afterInteractive">
               {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) {
                 var gtagJs = document.createElement('script');
                 gtagJs.async = true;
@@ -445,13 +450,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         {gtmId && (
           <>
-            <Script id="gtm-init" strategy="beforeInteractive">
+            <Script id="gtm-init" nonce={nonce} strategy="beforeInteractive">
               {`window.dataLayer = window.dataLayer || [];`}
             </Script>
-            <Script id="gtm-loader" strategy="afterInteractive">
+            <Script id="gtm-loader" nonce={nonce} strategy="afterInteractive">
               {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;${nonce ? `j.setAttribute('nonce',${JSON.stringify(nonce)});` : ''}j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','${gtmId}');`}
             </Script>
@@ -459,7 +464,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         )}
 
         <DefaultJsonLd />
-        <Script id="analytics-healthcheck" strategy="afterInteractive">
+        <Script id="analytics-healthcheck" nonce={nonce} strategy="afterInteractive">
           {`
             (function() {
               try {

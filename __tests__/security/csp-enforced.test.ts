@@ -71,11 +71,14 @@ describe('the ENFORCED policy', () => {
 })
 
 describe('cspMode', () => {
-  it('enforces unless explicitly rolled back', () => {
-    expect(cspMode(undefined)).toBe('enforce')
-    expect(cspMode('')).toBe('enforce')
+  it('defaults to nonce-report (allowlist enforced) unless explicitly set', () => {
+    // Every mode except report-only ENFORCES the allowlist or stricter, so an unset or
+    // mistyped variable can never loosen the site.
+    expect(cspMode(undefined)).toBe('nonce-report')
+    expect(cspMode('')).toBe('nonce-report')
+    expect(cspMode('garbage')).toBe('nonce-report')
     expect(cspMode('enforce')).toBe('enforce')
-    expect(cspMode('garbage')).toBe('enforce')
+    expect(cspMode('nonce')).toBe('nonce')
     expect(cspMode('report-only')).toBe('report-only')
     expect(cspMode(' Report-Only ')).toBe('report-only')
   })

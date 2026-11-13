@@ -5,13 +5,17 @@
  * An inline <script>, not a client effect: it has to run before the app's own fetch wrappers
  * capture `window.fetch`, or they keep calling the real one. Never shipped outside /e2e.
  */
+import { headers } from 'next/headers'
+
 const NAMES = [
   'KBI Smoke Black', 'KBFL', 'Parbur', 'Its gonna be Maye 26', 'The Deep!', 'Sunday Night Redraft',
   'Office Dynasty', 'Taco Tuesday Superflex', 'Waiver Wire Wizards — 2QB Salary Cap Keeper League',
   'Gridiron Ghosts', 'Bench Mob', 'Red Zone Rejects',
 ]
 
-export function MockFetch({ mode }: { mode: string }) {
+export async function MockFetch({ mode }: { mode: string }) {
+  // Under the nonce CSP an inline script without this request's nonce is refused.
+  const nonce = (await headers()).get('x-nonce') ?? undefined
   const leagues = NAMES.map((name, i) => ({
     sourceId: `11800000000000000${String(i).padStart(2, '0')}`,
     name,
@@ -54,5 +58,5 @@ export function MockFetch({ mode }: { mode: string }) {
       return real(input, init);
     };
   })();`
-  return <script dangerouslySetInnerHTML={{ __html: code }} />
+  return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: code }} />
 }
