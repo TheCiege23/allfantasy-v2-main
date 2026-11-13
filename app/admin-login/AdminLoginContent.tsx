@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { CheckCircle2, Loader2, Shield, TriangleAlert } from 'lucide-react'
+import { ADMIN_LOGIN_LIGHT_TOKENS } from './lightTokens'
 
 /** Only allow `next` that points inside `/admin` — matches the consume route's sanitizer. */
 function sanitizeNext(raw: string | null | undefined): string {
@@ -124,7 +125,10 @@ export default function AdminLoginContent() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-[#EEF1F7] px-4 py-10 text-[color:var(--text)]">
+    <main
+      style={ADMIN_LOGIN_LIGHT_TOKENS}
+      className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-[#EEF1F7] px-4 py-10 text-[color:var(--text)]"
+    >
       {/*
         Two scoped, higher-specificity rules (this page only):
         1. The app clamps ALL input placeholders to --muted2 (≈3.3:1) with !important in light mode —
@@ -137,6 +141,7 @@ export default function AdminLoginContent() {
         dangerouslySetInnerHTML={{
           __html:
             'html[data-mode="light"] input.af-admin-email::placeholder{color:rgba(2,6,23,0.62)!important}' +
+            'html:not([data-mode="light"]) input.af-admin-email::placeholder{color:rgba(2,6,23,0.62)!important}' +
             '.af-admin-focus:focus{outline:2px solid var(--accent,#2563EB)!important;outline-offset:2px!important}',
         }}
       />
