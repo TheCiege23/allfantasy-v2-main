@@ -98,6 +98,8 @@ type LeagueSettingsHomeProps = {
   renderSubPage: (id: SettingsSubPageId) => SettingsSubPageRender | null
   /** Leaves settings (back to the league). Omit to hide the list's back arrow. */
   onExit?: () => void
+  /** Where onExit lands, for the back arrow's label: the Settings tab's hub, or the league. */
+  exitTo?: 'home' | 'settings'
   /** Fired when a sub-page closes, so the caller can refetch the values it shows. */
   onSubPageClosed?: (id: SettingsSubPageId) => void
   initialSubPage?: SettingsSubPageId | null
@@ -121,6 +123,7 @@ export function LeagueSettingsHome({
   canEdit,
   renderSubPage,
   onExit,
+  exitTo = 'home',
   onSubPageClosed,
   initialSubPage = null,
   header,
@@ -167,7 +170,7 @@ export function LeagueSettingsHome({
 
   return (
     <div className="af-core lsh-root" data-testid="league-settings-home" data-rd-settings={redraft ? 'true' : undefined} data-rd-sport={redraft?.sport}>
-      <SettingsHeader title="League Settings" onBack={onExit} backLabel="Back to league" />
+      <SettingsHeader title="League Settings" onBack={onExit} backLabel={exitTo === 'settings' ? 'Back to settings' : 'Back to league'} />
       <div className="lsh-column">
         {leagueName ? <p className="lsh-subtitle">{leagueName}</p> : null}
         {!canEdit ? (

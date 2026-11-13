@@ -1941,6 +1941,7 @@ export function LeagueShell({
                     ? backToSettingsHub
                     : () => handleUserTabChange(tabDefs.some((tab) => tab.id === 'native_home') ? 'native_home' : tabDefs[0]?.id ?? 'home')
                 }
+                exitTo={activeTab === 'settings' ? 'settings' : 'home'}
               />
             ) : (
             <LeagueTabRouter

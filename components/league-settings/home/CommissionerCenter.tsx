@@ -145,12 +145,15 @@ export function CommissionerCenter({
   onSubPageClosed,
   header,
   redraft = null,
+  exitTo = 'home',
 }: {
   leagueId?: string
   leagueName?: string | null
   sections: SettingsHomeSection[]
   renderSubPage: (id: SettingsSubPageId) => SettingsSubPageRender | null
   onExit?: () => void
+  /** Where onExit lands, for the back button's label: the Settings tab's hub, or the league home. */
+  exitTo?: 'home' | 'settings'
   initialSubPage?: SettingsSubPageId | null
   /** The league is past its draft: in-season tools read READY, otherwise IN SEASON. */
   inSeason: boolean
@@ -186,7 +189,7 @@ export function CommissionerCenter({
       <header className="cc-head">
         {onExit ? (
           <button type="button" className="cc-back" onClick={() => { if (confirmDiscardIfDirty(saveScope.ref.current)) onExit() }} data-testid="cc-back">
-            <ChevronLeft size={16} aria-hidden /> {t('lsh.cc.back')}
+            <ChevronLeft size={16} aria-hidden /> {t(exitTo === 'settings' ? 'lsh.cc.backSettings' : 'lsh.cc.back')}
           </button>
         ) : null}
         <p className="cc-eyebrow" data-testid="cc-eyebrow">{tInterpolate('lsh.cc.eyebrow', { league })}</p>

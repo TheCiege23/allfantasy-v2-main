@@ -63,9 +63,12 @@ export function LeagueSettingsHomeContainer({
   onExit,
   initialSubPage = null,
   onSubPageReturn,
+  exitTo = 'home',
 }: {
   ctx: SubPanelContext
   onExit?: () => void
+  /** Where onExit lands — the Settings tab's hub or the league home — so the back button says so. */
+  exitTo?: 'home' | 'settings'
   /** Opens straight into this sub-page (an old settings link routed here); members get the list. */
   initialSubPage?: SettingsSubPageId | null
   /**
@@ -285,6 +288,7 @@ export function LeagueSettingsHomeContainer({
         sections={sections}
         renderSubPage={renderSubPage}
         onExit={onExit}
+        exitTo={exitTo}
         initialSubPage={initialSubPage}
         inSeason={phase === 'Regular season' || phase === 'Playoffs'}
         managers={{
@@ -308,6 +312,7 @@ export function LeagueSettingsHomeContainer({
       canEdit={ctx.isCommissioner}
       renderSubPage={renderSubPage}
       onExit={onExit}
+      exitTo={exitTo}
       onSubPageClosed={() => { setReloadKey((k) => k + 1); onSubPageReturn?.() }}
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
       header={header}
