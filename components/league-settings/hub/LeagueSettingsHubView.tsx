@@ -10,7 +10,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import './league-settings-hub.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { hubLocale, hubSeasons, hubText } from '@/lib/league-settings-hub/hubI18n'
+import { hubLocale, hubScheduleMode, hubSeasons, hubText } from '@/lib/league-settings-hub/hubI18n'
 import {
   HUB_KIND_META,
   championWord,
@@ -106,8 +106,8 @@ export type HubCallbacks = {
  * `t` swaps in Spanish for strings lib/league-settings-hub/hubI18n knows and leaves data — names,
  * presets, numbers — untouched.
  */
-type HubTr = { t: (s: string) => string; tStat: (s: string) => string; lang: string }
-const HubT = createContext<HubTr>({ t: (s) => s, tStat: (s) => s, lang: 'en' })
+type HubTr = { t: (s: string) => string; tStat: (s: string) => string; tMode: (s: string) => string; lang: string }
+const HubT = createContext<HubTr>({ t: (s) => s, tStat: (s) => s, tMode: (s) => s, lang: 'en' })
 const useT = () => useContext(HubT)
 
 const TABS: Array<{ id: HubTabId; label: string }> = [
@@ -139,6 +139,8 @@ export function LeagueSettingsHubView({
     t: (s) => hubText(language, s, data.sport),
     // Scoring-table names only: a stat "Save" is a save, never the button verb.
     tStat: (s) => hubText(language, s, data.sport, { stat: true }),
+    // A waiver-schedule day: "Waivers" there is a run («Reclamos»), not the free-agent screen.
+    tMode: (s) => hubScheduleMode(language, s, data.sport),
   }), [language, data.sport])
   const { t } = tr
   const meta = HUB_KIND_META[data.kind]
@@ -307,7 +309,7 @@ function Face({ name, src }: { name: string; src?: string | null }) {
 }
 
 function RowView({ row, canEdit, busyField, onToggle }: { row: HubRow; canEdit: boolean; busyField?: string | null; onToggle?: (field: string, next: boolean) => void }) {
-  const { t } = useT()
+  const { t, tMode } = useT()
   return (
     <>
       <div className="af-lsh-row" data-indent={row.indent ? 'true' : undefined}>
@@ -329,7 +331,7 @@ function RowView({ row, canEdit, busyField, onToggle }: { row: HubRow; canEdit: 
       {row.schedule ? (
         <div className="af-lsh-schedule">
           {row.schedule.map((d) => (
-            <div key={d.day}><span>{t(d.day)}</span><span>{t(d.mode)}</span></div>
+            <div key={d.day}><span>{t(d.day)}</span><span>{tMode(d.mode)}</span></div>
           ))}
         </div>
       ) : null}
