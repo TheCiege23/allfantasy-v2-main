@@ -696,9 +696,18 @@ async function copyText(value: string, successMessage: string, errorMessage: str
   toast.error(errorMessage)
 }
 
-function resolvePublicTournamentUrl(tournamentId: string): string {
-  if (typeof window === 'undefined') return `/tournament/${tournamentId}`
-  return `${window.location.origin}/tournament/${tournamentId}`
+/**
+ * The public hub link, absolute once mounted. The first render returns the bare path on BOTH sides: reading
+ * `window.location.origin` during render made the server print `/tournament/<id>` and the browser print
+ * `https://…/tournament/<id>`, so a dashboard opened straight on the Media tab failed hydration.
+ */
+function usePublicTournamentUrl(tournamentId: string): string {
+  const path = `/tournament/${tournamentId}`
+  const [url, setUrl] = useState(path)
+  useEffect(() => {
+    setUrl(`${window.location.origin}${path}`)
+  }, [path])
+  return url
 }
 
 function StandingsTab({ tournamentId, summary }: { tournamentId: string; summary: Summary | null }) {
@@ -1038,7 +1047,7 @@ function ChatTab({
 
 function MediaTab({ tournamentId, feederLeagues }: { tournamentId: string; feederLeagues: Summary['feederLeagues'] }) {
   const { t, tInterpolate } = useLanguage()
-  const publicUrl = resolvePublicTournamentUrl(tournamentId)
+  const publicUrl = usePublicTournamentUrl(tournamentId)
 
   return (
     <Panel title={t('tournament.commissioner.media.title')} subtitle={t('tournament.commissioner.media.subtitle')}>
