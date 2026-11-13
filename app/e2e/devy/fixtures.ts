@@ -6,6 +6,7 @@
 import type { DevySlot, PlayerState, TaxiSlot, WeeklyEntry } from '@/app/devy/[leagueId]/roster/DevyRosterClient'
 import type { DevyPickInventory } from '@/app/devy/[leagueId]/picks/DevyPicksClient'
 import type { PickRow } from '@/app/devy/components/PicksBoard'
+import type { HarnessApiRoute } from '../harnessApi'
 
 export const HARNESS_USER_ID = 'e2e-devy-user'
 
@@ -81,3 +82,12 @@ const inventory = {
 }
 
 export const allPicks = { picks: ALL }
+
+/** Every /api/ answer the Devy screens need, served by scripts/e2e-harness-capture.mjs. `type=all` first: both picks reads share a path. */
+export const HARNESS_API: HarnessApiRoute[] = [
+  { path: '/api/devy', body: config },
+  { path: '/api/redraft/season', body: season },
+  { path: '/api/devy/roster', body: roster },
+  { path: '/api/devy/picks', query: { type: 'all' }, body: allPicks },
+  { path: '/api/devy/picks', body: inventory },
+]
