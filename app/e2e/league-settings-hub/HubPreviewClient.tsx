@@ -110,7 +110,7 @@ export function HubPreviewClient({ type, role, tab }: { type: string; role: 'com
     <div style={{ minHeight: '100vh', background: '#050814', fontFamily: 'Inter, "Segoe UI", system-ui, sans-serif' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px', borderBottom: '1px dashed #262c6a', background: '#070c1e' }} data-testid="hub-preview-controls">
         {KINDS.map((k) => (
-          <button key={k} type="button" onClick={() => setKind(k)} aria-pressed={k === kind} style={{ minHeight: 32, padding: '0 10px', borderRadius: 16, border: `1px solid ${k === kind ? '#ff3d81' : '#262c6a'}`, background: k === kind ? 'rgba(255,61,129,.15)' : 'transparent', color: '#e6edf7', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{HUB_KIND_META[k].label}</button>
+          <button key={k} type="button" onClick={() => setKind(k)} aria-pressed={k === kind} style={{ minHeight: 32, padding: '0 10px', borderRadius: 16, border: `1px solid ${k === kind ? '#22d3ee' : '#262c6a'}`, background: k === kind ? 'rgba(34,211,238,.15)' : 'transparent', color: '#e6edf7', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{HUB_KIND_META[k].label}</button>
         ))}
         <button type="button" onClick={() => setCommish((c) => !c)} style={{ marginLeft: 'auto', minHeight: 32, padding: '0 12px', borderRadius: 16, border: '1px solid #262c6a', background: '#12163e', color: '#e6edf7', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{commish ? 'Viewing as commissioner' : 'Viewing as manager'}</button>
       </div>
