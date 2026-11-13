@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { draftPickOwner, draftNextPick, latestDraftsByLeague } from './draftHqState'
+import { draftPickOwner, draftNextPick, latestDraftsByLeague, realManagerName } from './draftHqState'
 
 /**
  * Draft Season HQ, across every league — the cross-league aggregator.
@@ -241,8 +241,8 @@ export async function getDraftHqAll(
         draftType: session.draftType, thirdRoundReversal: session.thirdRoundReversal,
         slotOrder: order, tradedPicks: session.tradedPicks })
       if (onClock) {
-        const named = onClock.displayName?.trim()
-        onClockName = named && named.length > 0 ? named : null
+        // A stored 'Unknown' (an orphaned roster) is not a name — see realManagerName.
+        onClockName = realManagerName(onClock.displayName)
         yoursOnClock =
           externalId != null && String(onClock.rosterId ?? '') === String(externalId)
       }
