@@ -18,6 +18,7 @@ import { NCAAB_STAT_LABELS } from '@/lib/ncaab-scoring/NcaabScoringPresets'
 import { NCAAF_STAT_LABELS } from '@/lib/ncaaf-scoring/NcaafScoringPresets'
 import { NFL_STAT_LABELS } from '@/lib/nfl-scoring/NflScoringPresets'
 import { NHL_GOALIE_STAT_KEYS, NHL_SKATER_STAT_KEYS, NHL_STAT_LABELS } from '@/lib/nhl-scoring/NhlScoringPresets'
+import { NHL_ALL_SCORING_CATEGORIES } from '@/lib/nhl-scoring/NhlScoringCategories'
 import {
   SOCCER_ATTACKING_KEYS,
   SOCCER_DEFENDING_KEYS,
@@ -80,11 +81,11 @@ const isBonus = (k: string) => /^bonus/.test(k) || /_bonus/.test(k)
 const FOOTBALL_CATEGORIES: ScoringCategoryDef[] = [
   // Both vocabularies: provider keys (pass_td, rec_yd) and AF's canonical keys (passing_td, receiving_yards).
   { key: 'passing', label: 'Passing', test: (k) => /^pass/.test(k) || ['int', 'qb_sack', 'qb_sacked', 'interception', 'interception_thrown', 'pick_6_thrown', 'completion', 'incomplete_pass'].includes(k) },
-  { key: 'rushing', label: 'Rushing', test: (k) => /^rush/.test(k) || ['fum', 'fum_lost', 'fumble', 'fumble_lost'].includes(k) },
+  { key: 'rushing', label: 'Rushing', test: (k) => /^rush/.test(k) || ['fum', 'fum_lost', 'fumble', 'fumble_lost', 'off_fumble_recovery_td', 'fum_rec_td'].includes(k) },
   { key: 'receiving', label: 'Receiving', test: (k) => /^rec/.test(k) || /_rec$/.test(k) || ['te_premium', 'target'].includes(k) },
   { key: 'kicking', label: 'Kicking', test: (k) => /^(fg|xp|pat|kick)/.test(k) },
-  { key: 'defense', label: 'Team Defense', test: (k) => /^(def|pts_allow|yds_allow|dst|blk)/.test(k) || k === 'sack' || k === 'safe' || k === 'ff' || k === 'fum_rec' },
-  { key: 'special', label: 'Special Teams', test: (k) => /^(st_|kr_|pr_)/.test(k) },
+  { key: 'defense', label: 'Team Defense', test: (k) => /^(def|pts_allow|yds_allow|dst|blk)/.test(k) || k === 'sack' || k === 'safe' || k === 'ff' || k === 'fum_rec' || k === 'fumble_recovery' },
+  { key: 'special', label: 'Special Teams', test: (k) => /^(st_|kr_|pr_|return_)/.test(k) },
   { key: 'idp', label: 'IDP', test: (k) => /^idp/.test(k) },
   { key: 'bonus', label: 'Bonus', test: isBonus },
 ]
@@ -94,7 +95,7 @@ const FOOTBALL_CATEGORIES: ScoringCategoryDef[] = [
 const BASKETBALL_CATEGORIES: ScoringCategoryDef[] = [
   { key: 'scoring', label: 'Scoring', test: (k) => /^(points|pts|field_goals|two_point|three_point|free_throws|fg|ft|tp|3p)/.test(k) },
   { key: 'rebounds', label: 'Rebounds', test: (k) => /reb/.test(k) },
-  { key: 'playmaking', label: 'Playmaking', test: (k) => /^(assist|ast)/.test(k) || k === 'turnover' || k === 'to' },
+  { key: 'playmaking', label: 'Playmaking', test: (k) => /^(assist|ast)/.test(k) || k === 'turnover' || k === 'turnovers' || k === 'to' },
   { key: 'defense', label: 'Defense', test: (k) => /^(steal|stl|block|blk)/.test(k) },
   { key: 'discipline', label: 'Fouls', test: (k) => /foul/.test(k) || k === 'pf' || k === 'tf' || k === 'ff' },
   { key: 'bonus', label: 'Bonuses', test: (k) => isBonus(k) || ['double_double', 'triple_double', 'dd', 'td'].includes(k) },
@@ -107,10 +108,21 @@ const BASEBALL_CATEGORIES: ScoringCategoryDef[] = [
   { key: 'bonus', label: 'Bonuses', test: isBonus },
 ]
 
+/**
+ * Hockey keys come in two spellings: the preset's (`goals`, `saves`, `goalie_wins`) and the singular
+ * one AF's default NHL template stores (`goal`, `save`, `win`). The commissioner panel's own
+ * categories (lib/nhl-scoring/NhlScoringCategories) group the first; the singular aliases are listed
+ * here. Game milestones (`five_hit_game`, `forty_save_game`) and analytics bonuses go to Bonuses.
+ */
+const NHL_PANEL_GROUP = new Map(NHL_ALL_SCORING_CATEGORIES.flatMap((c) => c.rows.map((r) => [r.key, c.group] as const)))
+const HOCKEY_SKATER_ALIASES = new Set(['goal', 'assist', 'point', 'shot_on_goal', 'blocked_shot', 'power_play_point', 'short_handed_point', 'shot', 'shots'])
+const HOCKEY_GOALIE_ALIASES = new Set(['save', 'goal_allowed', 'goals_allowed', 'win', 'loss', 'shutout', 'overtime_win', 'shootout_win', 'overtime_loss'])
+const isHockeyBonus = (k: string) => isBonus(k) || /_game$/.test(k) || NHL_PANEL_GROUP.get(k) === 'premium' || (NHL_PANEL_GROUP.get(k) === 'global' && !['empty_net_goal', 'shootout_goal', 'shootout_miss', 'overtime_goals'].includes(k))
+
 const HOCKEY_CATEGORIES: ScoringCategoryDef[] = [
-  { key: 'skaters', label: 'Skaters', test: inSet(NHL_SKATER_STAT_KEYS) },
-  { key: 'goalies', label: 'Goalies', test: (k) => inSet(NHL_GOALIE_STAT_KEYS)(k) || /^goalie/.test(k) },
-  { key: 'bonus', label: 'Bonuses', test: isBonus },
+  { key: 'skaters', label: 'Skaters', test: (k) => inSet(NHL_SKATER_STAT_KEYS)(k) || HOCKEY_SKATER_ALIASES.has(k) || NHL_PANEL_GROUP.get(k) === 'skaters' || NHL_PANEL_GROUP.get(k) === 'global' },
+  { key: 'goalies', label: 'Goalies', test: (k) => inSet(NHL_GOALIE_STAT_KEYS)(k) || /^goalie/.test(k) || HOCKEY_GOALIE_ALIASES.has(k) || NHL_PANEL_GROUP.get(k) === 'goalies' },
+  { key: 'bonus', label: 'Bonuses', test: isHockeyBonus },
 ]
 
 const SOCCER_CATEGORIES: ScoringCategoryDef[] = [
@@ -152,6 +164,17 @@ const BASKETBALL_PROVIDER_LABELS: Record<string, string> = {
   fta: 'Free Throws Attempted', dd: 'Double-Double', td: 'Triple-Double', tf: 'Technical Foul', ff: 'Flagrant Foul',
   pf: 'Personal Foul', bonus_pt_40p: '40+ Points Bonus', bonus_pt_50p: '50+ Points Bonus',
   bonus_ast_15p: '15+ Assists Bonus', bonus_reb_20p: '20+ Rebounds Bonus',
+  // AF's own default basketball template stores these plain plurals.
+  points: 'Points', rebounds: 'Rebounds', assists: 'Assists', steals: 'Steals', blocks: 'Blocks',
+  turnovers: 'Turnovers', three_pointers_made: '3-Pointers Made',
+}
+
+/** The NHL commissioner panel's own names, plus the singular keys AF's default NHL template stores. */
+const HOCKEY_PANEL_LABELS: Record<string, string> = {
+  ...Object.fromEntries(NHL_ALL_SCORING_CATEGORIES.flatMap((c) => c.rows.map((r) => [r.key, r.label]))),
+  goal: 'Goal', assist: 'Assist', point: 'Point', shot_on_goal: 'Shots on Goal', blocked_shot: 'Blocked Shots',
+  power_play_point: 'Power Play Point', short_handed_point: 'Short-Handed Point', save: 'Save',
+  goal_allowed: 'Goal Against', win: 'Win', loss: 'Loss', shutout: 'Shutout',
 }
 
 const LABELS: Record<HubSport, Array<Record<string, string>>> = {
@@ -160,7 +183,7 @@ const LABELS: Record<HubSport, Array<Record<string, string>>> = {
   NBA: [NBA_STAT_LABELS, BASKETBALL_PROVIDER_LABELS],
   NCAAB: [NCAAB_STAT_LABELS, NBA_STAT_LABELS, BASKETBALL_PROVIDER_LABELS],
   MLB: [MLB_STAT_LABELS],
-  NHL: [NHL_STAT_LABELS],
+  NHL: [NHL_STAT_LABELS, HOCKEY_PANEL_LABELS],
   SOCCER: [SOCCER_STAT_LABELS],
 }
 

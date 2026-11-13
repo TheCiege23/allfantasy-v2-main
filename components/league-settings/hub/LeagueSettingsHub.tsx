@@ -39,6 +39,8 @@ import {
 import { followGlobal, muteLeague, toggleCategory } from '@/lib/notification-settings/leagueOverrideEdits'
 import type { NotificationCategoryId, NotificationPreferences } from '@/lib/notification-settings/types'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubText } from '@/lib/league-settings-hub/hubI18n'
 import { LeagueSettingsHubView, type HubTabId, type HubViewData } from './LeagueSettingsHubView'
 
 export const COMMISSIONER_NOTES_KEY = 'commissioner_notes'
@@ -108,6 +110,9 @@ export function LeagueSettingsHub({
   advanced?: { label: string; onOpen: () => void }
 }) {
   const leagueId = league.id
+  const { language } = useOptionalLanguage()
+  // Toasts and the share title in the viewer's language; the view translates everything it renders.
+  const tx = (s: string) => hubText(language, s, league.sport ?? null)
   const [payload, setPayload] = useState<Loadable<HubSettingsPayload>>(undefined)
   const [roster, setRoster] = useState<Loadable<{ unifiedConfig?: unknown; slotDefs?: HubSlotDef[] }>>(undefined)
   const [order, setOrder] = useState<Loadable<Array<{ slot: number; name: string }>>>(undefined)
@@ -185,8 +190,8 @@ export function LeagueSettingsHub({
     setBusyField(field)
     const r = await sendJson('/api/league/settings', 'PATCH', { leagueId, [field]: next })
     setBusyField(null)
-    if (!r.ok) { toast.error(r.error ?? 'Save failed'); return }
-    toast.success('Saved')
+    if (!r.ok) { toast.error(tx(r.error ?? 'Save failed')); return }
+    toast.success(tx('Saved'))
     await loadSettings()
   }, [leagueId, loadSettings])
 
@@ -212,7 +217,7 @@ export function LeagueSettingsHub({
     if (!r.ok) {
       prefsRef.current = prev
       setPrefs(prev)
-      toast.error(r.error ?? 'Could not save notification settings')
+      toast.error(tx(r.error ?? 'Could not save notification settings'))
     }
   }, [])
 
@@ -230,8 +235,8 @@ export function LeagueSettingsHub({
 
   const onToggleCoCommissioner = useCallback(async (memberId: string, next: boolean) => {
     const r = await sendJson('/api/league/settings/co-commissioners', 'PATCH', { leagueId, memberId, isCoCommissioner: next })
-    if (!r.ok) { toast.error(r.error ?? 'Update failed'); return }
-    toast.success(next ? 'Co-commissioner added' : 'Co-commissioner removed')
+    if (!r.ok) { toast.error(tx(r.error ?? 'Update failed')); return }
+    toast.success(tx(next ? 'Co-commissioner added' : 'Co-commissioner removed'))
     await loadSettings()
   }, [leagueId, loadSettings])
 
@@ -246,12 +251,12 @@ export function LeagueSettingsHub({
   }, [leagueId, myTeam?.externalId])
 
   const onCopy = useCallback((text: string) => {
-    void navigator.clipboard?.writeText(text).then(() => toast.success('Copied'), () => toast.error('Copy failed'))
+    void navigator.clipboard?.writeText(text).then(() => toast.success(tx('Copied')), () => toast.error(tx('Copy failed')))
   }, [])
 
   const onShare = useMemo(() => {
     if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return undefined
-    return (url: string) => { void navigator.share({ title: league.name ?? 'Join my league', url }).catch(() => {}) }
+    return (url: string) => { void navigator.share({ title: league.name ?? tx('Join my league'), url }).catch(() => {}) }
   }, [league.name])
 
   /* ---------------------------------------------------------- view data */
