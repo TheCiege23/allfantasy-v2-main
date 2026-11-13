@@ -28,7 +28,7 @@ import {
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
-import { CSP_REPORT_ONLY_POLICY } from "@/lib/security/cspReportOnly"
+import { CSP_ENFORCED_POLICY, CSP_REPORT_ONLY_POLICY, cspMode } from "@/lib/security/cspReportOnly"
 
 /**
  * Inside the iOS app nothing is sold except through Apple (App Store guideline
@@ -1072,13 +1072,11 @@ export async function middleware(request: NextRequest) {
  * `headers()` because a catch-all source there expands to one rule per route
  * and trips the 2048-rule cap noted beside that config.
  *
- * The script-restricting Content-Security-Policy is NOT enforced: Meta Pixel,
- * PostHog, Sentry, GA and Stripe all load scripts, and an enforced CSP that
- * misses one breaks checkout or analytics silently. It ships as
- * `Content-Security-Policy-Report-Only` (lib/security/cspReportOnly.ts) so the
- * real origin set is measured first. `frame-ancestors` alone restricts nothing
- * but framing, so it is safe to enforce now — and stays in the enforced header,
- * because the two headers are evaluated independently.
+ * The header below is the MINIMAL policy, used in `next dev` and under the
+ * CSP_MODE=report-only rollback. In production the full script-restricting policy
+ * replaces it (see applyBaselineSecurityHeaders): it shipped report-only first
+ * (Phase 1) so the real origin set was measured before anything was blocked, and
+ * an allowlist that misses one origin breaks checkout or analytics silently.
  *
  * HSTS omits includeSubDomains on purpose: it would pin every subdomain to
  * HTTPS for a year, and nothing here inventories what the subdomains serve.
@@ -1097,13 +1095,29 @@ const BASELINE_SECURITY_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), geolocation=(), microphone=(self)",
 }
 
+/*
+ * 🛑 THE FULL SCRIPT CSP IS ENFORCED (Phase 2, lib/security/cspReportOnly.ts) — built from a
+ * week of measured production reports, so every tag that was live keeps loading.
+ *
+ * Two exceptions, both keeping the old minimal header above:
+ *  - `next dev`: webpack's HMR runtime evals module code and would be refused.
+ *  - `CSP_MODE=report-only`: the no-code rollback, back to Phase 1 (enforce the minimal
+ *    header, REPORT the full policy). Use it if something breaks, then fix the allowlist.
+ *
+ * A route that set its own Content-Security-Policy keeps it (e.g. the sandboxed emblem SVG).
+ */
 function applyBaselineSecurityHeaders<T extends Response>(response: T): T {
+  const routeSetCsp = response.headers.has('Content-Security-Policy')
   for (const [key, value] of Object.entries(BASELINE_SECURITY_HEADERS)) {
     // Never overwrite a header a route set on purpose (e.g. its own CSP).
     if (!response.headers.has(key)) response.headers.set(key, value)
   }
-  // Next dev's evaluated bundles generate a flood of reports; production still measures the policy.
-  if (process.env.NODE_ENV !== 'development' && !response.headers.has('Content-Security-Policy-Report-Only')) {
+  // Next dev's evaluated bundles generate a flood of reports and break under enforcement.
+  if (process.env.NODE_ENV === 'development') return response
+
+  if (cspMode() === 'enforce') {
+    if (!routeSetCsp) response.headers.set('Content-Security-Policy', CSP_ENFORCED_POLICY)
+  } else if (!response.headers.has('Content-Security-Policy-Report-Only')) {
     response.headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY_POLICY)
   }
   return response

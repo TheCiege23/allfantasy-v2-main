@@ -143,7 +143,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * server/ or scripts/ ever starts fetching one, this classification fails rather than
    * quietly exempting a data read.
    */
-  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
+  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|hooks\.stripe\.com|www\.google-analytics\.com)$/i },
   // Ad and analytics vendors Google Tag Manager injects into the visitor's page; named in
   // the report-only CSP (lib/security/cspReportOnly.ts) from the measured csp-report log.
   // Same NEVER_FETCHED guarantee as above: our code must never call them.
