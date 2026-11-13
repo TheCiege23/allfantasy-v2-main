@@ -15,6 +15,22 @@ import {
   type HubSettingsPayload,
 } from '@/lib/league-settings-hub/hubModel'
 import { LeagueSettingsHubView, type HubTabId, type HubViewData } from '@/components/league-settings/hub/LeagueSettingsHubView'
+import { getAfDefaultMlbScoring } from '@/lib/mlb-scoring/MlbScoringPresets'
+import { getAfDefaultNbaScoring } from '@/lib/nba-scoring/NbaScoringPresets'
+import { getAfDefaultNhlScoring } from '@/lib/nhl-scoring/NhlScoringPresets'
+import { getSoccerScoringPreset } from '@/lib/soccer-scoring/SoccerScoringPresets'
+import { MLB_ROSTER_SLOTS } from '@/lib/mlb-roster/MlbRosterTemplates'
+import { NBA_ROSTER_SLOTS } from '@/lib/nba-roster/NbaRosterTemplates'
+import { NHL_ROSTER_SLOTS } from '@/lib/nhl-roster/NhlRosterTemplates'
+import { SOCCER_ROSTER_SLOTS } from '@/lib/soccer-roster/SoccerRosterTemplates'
+
+/** `?sport=` fixtures for the non-football sports: each sport's AF default scoring and roster slots. */
+const SPORT_FIXTURES: Record<string, { rules: Record<string, number>; slots: Record<string, number>; defs: Array<{ key: string; label: string; shortLabel: string; color: string }> }> = {
+  NBA: { rules: getAfDefaultNbaScoring().rules, slots: { PG: 1, SG: 1, SF: 1, PF: 1, C: 1, G: 1, F: 1, UTIL: 2, BN: 3, IL: 2 }, defs: NBA_ROSTER_SLOTS },
+  MLB: { rules: getAfDefaultMlbScoring().rules, slots: { C: 1, '1B': 1, '2B': 1, '3B': 1, SS: 1, OF: 3, UTIL: 1, SP: 5, RP: 3, BN: 5, IL: 2 }, defs: MLB_ROSTER_SLOTS },
+  NHL: { rules: getAfDefaultNhlScoring().rules, slots: { C: 2, LW: 2, RW: 2, D: 4, G: 2, UTIL: 1, BN: 4, IR: 2 }, defs: NHL_ROSTER_SLOTS },
+  SOCCER: { rules: getSoccerScoringPreset('af_default').rules, slots: { GK: 1, DEF: 4, MID: 4, FWD: 2, FLEX: 1, BN: 5, IR: 1 }, defs: SOCCER_ROSTER_SLOTS },
+}
 
 const KINDS: HubKind[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine', 'devy', 'c2c', 'salary_cap', 'survivor', 'big_brother', 'zombie', 'tournament']
 const MANAGERS = ['BlitzKing22', 'LateRoundQB', 'WaiverWizard', 'GridironGhost', 'DynastyDon', 'TacoTuesdayFF', 'RedZoneRita', 'NightOwlGM', 'FourthAndLong', 'CommishCarl', 'HailMaryHank', 'BenchMob']
@@ -79,7 +95,8 @@ function fixtureRoster(kind: HubKind) {
   return { rosterConfig: { sections } }
 }
 
-export function HubPreviewClient({ type, role, tab, native = false }: { type: string; role: 'commish' | 'manager'; tab: string; native?: boolean }) {
+export function HubPreviewClient({ type, role, tab, native = false, sport = 'NFL' }: { type: string; role: 'commish' | 'manager'; tab: string; native?: boolean; sport?: string }) {
+  const sf = SPORT_FIXTURES[sport]
   const [kind, setKind] = useState<HubKind>((KINDS as string[]).includes(type) ? (type as HubKind) : 'redraft')
   const [commish, setCommish] = useState(role === 'commish')
   const [muted, setMuted] = useState<string[]>([])
@@ -90,18 +107,20 @@ export function HubPreviewClient({ type, role, tab, native = false }: { type: st
   const data: HubViewData = useMemo(() => {
     const p = fixturePayload(kind, native)
     p.canEdit = commish
-    const groups = buildNotificationGroups(kind, commish)
+    if (p.league) p.league.sport = sport
+    if (sf) p.scoringConfig = { formatType: 'points', rules: Object.entries(sf.rules).map(([statKey, pointsValue]) => ({ statKey, pointsValue, enabled: true })) }
+    const groups = buildNotificationGroups(kind, commish, sport)
     const on: Record<string, boolean> = {}
     for (const g of groups) for (const r of g.rows) on[r.id] = !muted.includes(r.id) && r.id !== 'league_drama'
     return {
-      leagueId: 'kn-2026', kind, leagueName: 'Kingdom North', leagueAvatarUrl: null, sport: 'NFL', season: 2026,
+      leagueId: 'kn-2026', kind, leagueName: 'Kingdom North', leagueAvatarUrl: null, sport, season: 2026,
       teamCount: Number(p.league?.teamCount), leagueArt: null, canEdit: commish, isHeadCommissioner: commish, importedFrom: null,
       myTeam: { name: 'Ghost Protocol', avatarUrl: null },
       notifications: { groups, on, leagueEnabled: leagueOn },
       general: buildGeneralGroups(p, kind), waivers: buildWaiverGroups(p, kind), typeRules: buildTypeRuleGroups(p, kind),
       commissionerNote: note ?? (p.settingsSnapshot?.commissioner_notes as string) ?? null,
-      roster: buildRosterItems(fixtureRoster(kind), []),
-      scoring: { preset: kind === 'best_ball' ? 'Half PPR' : 'PPR', categories: groupScoringRules(p.scoringConfig?.rules) },
+      roster: sf ? buildRosterItems({ rosterConfig: { sections: [{ key: 'pro', label: 'Roster', slots: sf.slots }] } }, sf.defs, sport) : buildRosterItems(fixtureRoster(kind), [], sport),
+      scoring: { preset: sf ? 'AllFantasy Default' : kind === 'best_ball' ? 'Half PPR' : 'PPR', categories: groupScoringRules(p.scoringConfig?.rules, sport) },
       draft: buildDraftGroups(p),
       draftOrder: MANAGERS.map((m, i) => ({ slot: i + 1, name: MANAGERS[(i * 5 + 3) % 12] })),
       members: MANAGERS.map((m, i) => ({ id: `t${i + 1}`, name: m, teamName: TEAMS[i], avatarUrl: null, isCommissioner: i === 3, isCoCommissioner: Boolean(co[`t${i + 1}`]), isYou: i === 3 })),
@@ -122,7 +141,7 @@ export function HubPreviewClient({ type, role, tab, native = false }: { type: st
       },
       correctionWeeks: { season: 2026, weeks: Array.from({ length: 10 }, (_, i) => ({ week: i + 1, final: i < 9, rescoredAt: i === 4 ? '2026-10-08T14:00:00Z' : null })) },
     }
-  }, [kind, commish, muted, leagueOn, co, note, native])
+  }, [kind, commish, muted, leagueOn, co, note, native, sport, sf])
 
   return (
     <div style={{ minHeight: '100vh', background: '#050814', fontFamily: 'Inter, "Segoe UI", system-ui, sans-serif' }}>

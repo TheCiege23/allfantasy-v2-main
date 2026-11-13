@@ -117,3 +117,27 @@ describe('native editor routing helpers', () => {
     expect(seasonsLabel([2026, 2023, 2024])).toBe('2023–2026')
   })
 })
+
+describe('Record Book by sport', () => {
+  it('a baseball league shows the injured list, a pitching matchup and no football correction days', () => {
+    render(<LeagueSettingsHubView data={{ ...makeData('redraft', false), sport: 'MLB' }} cb={cb()} initialTab="record" />)
+    expect(screen.getByText('Injured List')).toBeTruthy()
+    expect(screen.queryByText('Injured Reserve')).toBeNull()
+    expect(screen.getByText('Opponent matchup')).toBeTruthy()
+    expect(screen.queryByText('Defense matchup')).toBeNull()
+    expect(screen.getAllByText(/pitching staff/).length).toBe(3)
+    expect(screen.queryByText(/through Thursday/)).toBeNull()
+  })
+
+  it('a football league keeps the football legend', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', false)} cb={cb()} initialTab="record" />)
+    expect(screen.getByText('Injured Reserve')).toBeTruthy()
+    expect(screen.getByText('Defense matchup')).toBeTruthy()
+    expect(screen.getByText(/through Thursday/)).toBeTruthy()
+  })
+
+  it('a college basketball league is named in words in the header', () => {
+    render(<LeagueSettingsHubView data={{ ...makeData('redraft', false), sport: 'NCAAB' }} cb={cb()} />)
+    expect(screen.getAllByText(/College Basketball/).length).toBeGreaterThan(0)
+  })
+})
