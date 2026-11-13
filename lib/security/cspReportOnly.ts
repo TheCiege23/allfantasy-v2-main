@@ -178,15 +178,79 @@ export const CSP_ENFORCED_DIRECTIVES: Record<string, string[]> = {
 
 export const CSP_ENFORCED_POLICY = serializeCsp(CSP_ENFORCED_DIRECTIVES)
 
-export type CspMode = 'enforce' | 'report-only'
+// ── Phase 3: per-request NONCE, no 'unsafe-inline' ─────────────────────────────
+//
+// The allowlist above cannot stop an INLINE-script XSS: 'unsafe-inline' runs any
+// <script> an attacker manages to inject. This policy drops it. A script runs only if
+//   - it carries this request's nonce (Next stamps its own; the root layout stamps
+//     ours), or
+//   - it was inserted by a script that already runs ('strict-dynamic') — which is how
+//     GTM, gtag, fbevents, Stripe, Spotify and the X embed all load their code.
+//
+// `https:` and `'unsafe-inline'` stay in the list ONLY as the documented fallback for
+// browsers that predate CSP3: any browser that understands 'strict-dynamic' or a
+// nonce ignores both (CSP3 §8.2), so they open nothing in a modern browser. Host
+// allowlists are ignored under 'strict-dynamic' for the same reason, which is why
+// none is repeated here. `'unsafe-eval'` stays: GTM custom templates eval (98 inline
+// reports in the week this policy was measured from).
+//
+// `'report-sample'` asks the browser to include the first 40 characters of a blocked
+// inline script in its report — the only way to tell WHICH GTM Custom HTML tag would
+// break before anything is enforced.
+//
+// Every page is already rendered per request (the root layout reads cookies()), so a
+// per-request nonce costs no static rendering.
+
+/** A fresh nonce: 128 random bits, base64 — Edge-runtime safe. */
+export function generateCspNonce(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin)
+}
+
+export function buildNonceDirectives(nonce: string): Record<string, string[]> {
+  return {
+    ...CSP_ENFORCED_DIRECTIVES,
+    'script-src': [
+      `'nonce-${nonce}'`,
+      "'strict-dynamic'",
+      "'unsafe-eval'",
+      "'report-sample'",
+      'https:', // pre-CSP3 fallback only
+      "'unsafe-inline'", // pre-CSP3 fallback only; ignored when a nonce is present
+    ],
+  }
+}
+
+export function buildNoncePolicy(nonce: string): string {
+  return serializeCsp(buildNonceDirectives(nonce))
+}
 
 /**
- * `CSP_MODE=report-only` is the no-code rollback: setting it on the Railway service
- * (a variable write redeploys it) puts the site back on the Phase 1 headers while a
- * breakage is investigated. Anything else — including unset — enforces.
+ * What the site sends, by `CSP_MODE` on the service (a variable write redeploys it):
+ *
+ *   nonce-report  DEFAULT. Enforce the allowlist; ALSO report the nonce policy, so the
+ *                 csp-report log shows exactly what dropping 'unsafe-inline' would block
+ *                 (disposition "report") while nothing is blocked by it yet.
+ *   nonce         Enforce the nonce policy — 'unsafe-inline' is gone.
+ *   enforce       Enforce the allowlist only (Phase 2).
+ *   report-only   Report the allowlist only (Phase 1) — the deepest rollback.
+ *
+ * An unknown value is the default, so a typo cannot loosen anything.
  */
+export type CspMode = 'nonce-report' | 'nonce' | 'enforce' | 'report-only'
+
 export function cspMode(raw: string | undefined = process.env.CSP_MODE): CspMode {
-  return raw?.trim().toLowerCase() === 'report-only' ? 'report-only' : 'enforce'
+  const v = raw?.trim().toLowerCase()
+  if (v === 'nonce' || v === 'enforce' || v === 'report-only') return v
+  return 'nonce-report'
+}
+
+/** Whether pages in this mode need a nonce stamped on their scripts. */
+export function modeUsesNonce(mode: CspMode): boolean {
+  return mode === 'nonce' || mode === 'nonce-report'
 }
 
 // ── Report sanitising ──────────────────────────────────────────────────────────
@@ -197,9 +261,23 @@ export type CspViolationSummary = {
   page: string
   source: string | null
   disposition: string
+  /**
+   * The browser's `script-sample` — at most the first 40 characters of a blocked INLINE
+   * script, sent only because the nonce policy carries 'report-sample'. It is what
+   * names the GTM tag that would break. Present only when the browser sent one.
+   */
+  sample?: string
 }
 
 const MAX_FIELD = 120
+const MAX_SAMPLE = 40
+
+/** The spec caps a sample at 40 characters; enforce that here too, and drop control characters. */
+function sampleOf(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const s = raw.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, MAX_SAMPLE)
+  return s || undefined
+}
 
 function clip(value: string): string {
   return value.length > MAX_FIELD ? `${value.slice(0, MAX_FIELD)}…` : value
@@ -251,6 +329,7 @@ export function summarizeCspReports(payload: unknown): CspViolationSummary[] {
       page: redactUrl(legacy['document-uri'], 'path') ?? 'unknown',
       source: redactUrl(legacy['source-file'], 'origin'),
       disposition: clip(str(legacy['disposition']) || 'report'),
+      ...(sampleOf(legacy['script-sample']) ? { sample: sampleOf(legacy['script-sample']) } : {}),
     })
     return out
   }
@@ -266,6 +345,7 @@ export function summarizeCspReports(payload: unknown): CspViolationSummary[] {
         page: redactUrl(body.documentURL, 'path') ?? 'unknown',
         source: redactUrl(body.sourceFile, 'origin'),
         disposition: clip(str(body.disposition) || 'report'),
+        ...(sampleOf(body.sample) ? { sample: sampleOf(body.sample) } : {}),
       })
     }
   }
