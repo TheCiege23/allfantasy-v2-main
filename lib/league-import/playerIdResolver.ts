@@ -48,7 +48,8 @@ const PROVIDER_COLUMN: Partial<Record<ImportProvider, ProviderColumn>> = {
   fleaflicker: 'fleaflickerId',
   /*
    * `fantraxId` was added to PlayerIdentityMap on 2026-08-31 and is written
-   * weekly by `lib/devy/ingestFantraxPlayerIdentities.ts`. Before that, Fantrax
+   * weekly by `lib/player-identity/ingestNcaafFantraxIdentities.ts` for CFB (and the pro and NFL writers
+   * beside it). Before that, Fantrax
    * had no column and this comment said so.
    *
    * ⚠ COVERAGE IS PARTIAL AND THAT IS SAFE HERE. Measured on the first real
