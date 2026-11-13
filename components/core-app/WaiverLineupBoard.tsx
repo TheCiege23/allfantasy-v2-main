@@ -18,6 +18,8 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { waiverLineupBoardMessages } from '@/lib/core-app/messages/waiverLineupBoard'
 import { crowdLine } from '@/lib/waivers/waiverCrowdLine'
 import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+import { waiverPick, type WaiverPick } from '@/lib/core-app/waiversGuide'
+import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -58,9 +60,15 @@ export type WaiverLineupBoardProps = {
    * of the order, so the list says what that costs against what waiting costs — facts, not a verdict.
    */
   rollingPriority?: { priority: number; leagueRosters: number } | null
+  /**
+   * The page headline reads the board's top row (2026-11-13 guide): called once the board loads, or
+   * fails. One read, shared — the headline never fetches a second copy of the wire.
+   */
+  onPick?: (pick: WaiverPick) => void
 }
 
-export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null }: WaiverLineupBoardProps) {
+export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null, onPick }: WaiverLineupBoardProps) {
+  const guide = useMessages(waiversGuideMessages)
   const [board, setBoard] = useState<WaiverBoard | null>(null)
   const [failed, setFailed] = useState(false)
   /* The filter bar: a name search and one position chip at a time, over the ranked adds only. */
@@ -98,11 +106,21 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         if (!r.ok) throw new Error(String(r.status))
         return (await r.json()) as WaiverBoard
       })
-      .then((b) => alive && setBoard(b))
-      .catch(() => alive && setFailed(true))
+      .then((b) => {
+        if (!alive) return
+        setBoard(b)
+        onPick?.(waiverPick(b))
+      })
+      .catch(() => {
+        if (!alive) return
+        setFailed(true)
+        // A failed board removes itself; the headline then says only what the page is for.
+        onPick?.({ kind: 'unranked' })
+      })
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onPick is a callback, not an input to the read
   }, [leagueId, out])
 
   // Bring the highlighted add into view once the board has drawn him.
@@ -150,13 +168,10 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         <h2 className="af-label">
           {m.worthAdding} <TopicTip topic="worthAdding" />
         </h2>
-        {board.state === 'ok' && board.currentLineupPoints != null ? (
-          <span className="af-wv-section-note af-num">
-            {/* The BEST lineup your roster can field — not the one set on the platform. */}
-            {m.yourBestLineup} {board.currentLineupPoints}
-            {perGame ? m.perGame : board.week ? m.weekSuffix(board.week) : ''}
-          </span>
-        ) : null}
+        {/*
+          "your best lineup 133.7 · wk 9" stood here. Every row's "+N" is already against that lineup, so
+          the total was a second number to decode (2026-11-13 guide) — the "?" above explains the basis.
+        */}
       </div>
 
       {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} /> : null}
@@ -216,22 +231,18 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                   <span className="af-wlb-meta-pos">{c.position ?? '—'} · </span>
                   {c.team ? `${c.team} · ` : ''}
                   {/* One unit: the chips after it must not leave "proj" at a line end without its number. */}
-                  <span className="af-wlb-proj">
+                  {/*
+                    ONE projection on the row (2026-11-13 guide): "proj 11.1 · AF 11.8" made the reader
+                    pick between two numbers that rank nothing. The ranking runs on `projectedPoints`;
+                    AllFantasy's own figure stays one hover away, in the title.
+                  */}
+                  <span
+                    className="af-wlb-proj"
+                    title={c.afProjectedPoints != null ? guide.afTitle(c.afProjectedPoints.toFixed(1)) : undefined}
+                  >
                     {m.proj}{' '}
                     <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
                   </span>
-                  {/* AllFantasy's own engine, beside the provider's figure. */}
-                  {c.afProjectedPoints != null ? (
-                    <>
-                      {' · '}
-                      <span
-                        className="af-wlb-af af-num"
-                        title={m.afEngineTitle}
-                      >
-                        AF {c.afProjectedPoints.toFixed(1)}
-                      </span>
-                    </>
-                  ) : null}
                   {/*
                     ⚠ A FORM NUMBER IS BACKWARD-LOOKING AND SAYS SO. It is a recency-weighted mean
                     of what he has actually scored here, used only where no projection feed covers
@@ -303,11 +314,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
               <span className="af-wlb-over">
                 {c.displaces ? (
                   <>
-                    {m.over} {c.displaces.name}{' '}
-                    <span className="af-num">
-                      ({c.displaces.projectedPoints.toFixed(1)}
-                      {c.displaces.afProjectedPoints != null ? ` · AF ${c.displaces.afProjectedPoints.toFixed(1)}` : ''})
-                    </span>
+                    {guide.replaces} {c.displaces.name}{' '}
+                    <span className="af-num">({c.displaces.projectedPoints.toFixed(1)})</span>
                   </>
                 ) : (
                   // No incumbent to name; a blank here would read as a bug.
@@ -338,7 +346,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
           aria-controls="af-wlb-notes"
           onClick={() => setNotesOpen((open) => !open)}
         >
-          {notesOpen ? m.hideListNotes : m.howThisListWasBuilt}
+          {notesOpen ? guide.hideWhyNotListed : guide.whyNotListed}
         </button>
       ) : null}
       <div className="af-wlb-notes" id="af-wlb-notes" data-open={notesOpen || undefined}>
@@ -348,6 +356,11 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
           </p>
         ))}
       </div>
+      {board.state === 'ok' ? (
+        <p className="af-wvg-teach">
+          <b>{guide.why}</b> {guide.boardTeach}
+        </p>
+      ) : null}
     </section>
   )
 }

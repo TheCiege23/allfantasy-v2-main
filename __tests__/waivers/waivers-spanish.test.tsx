@@ -98,14 +98,14 @@ afterEach(() => {
 /** English that must not survive into Spanish — each a phrase only the English rendering carries. */
 const ENGLISH = [
   'Worth adding',
-  'your best lineup',
   'Ranked by how much',
   'Games already kicked off',
   'ruled out, on injured reserve',
   'could not be projected',
   'were skipped because',
   'form · ',
-  'over Oronde',
+  'replaces Oronde',
+  'Why some players',
   'No TE backup',
   'rostered for',
   'Your priority',
@@ -126,8 +126,8 @@ describe('"Worth adding" in Spanish', () => {
     const text = await boardText(BOARD, { rollingPriority: { priority: 3, leagueRosters: 18 } })
     for (const english of ENGLISH) expect(text, english).not.toContain(english)
     expect(text).toContain('Vale la pena sumar')
-    expect(text).toContain('tu mejor alineación 83.64 · sem 4')
-    expect(text).toContain('en lugar de Oronde Gadsden')
+    expect(text).toContain('reemplaza a Oronde Gadsden')
+    expect(text).toContain('Por qué faltan algunos jugadores')
     expect(text).toContain('forma · 3 p')
     expect(text).toContain('Sin suplente de TE')
     expect(text).toContain('Tu prioridad: #3 de 18.')
