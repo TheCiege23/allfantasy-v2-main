@@ -186,3 +186,23 @@ describe('buildAllTimeStandings', () => {
     expect(a).toMatchObject({ rank: 1, record: '46-24', winPct: '66%', pointsFor: '6,412.30' })
   })
 })
+
+describe('groupScoringRules — AF canonical NFL keys', () => {
+  it('labels and buckets passing_td-style keys the way the live scoring config stores them', () => {
+    const cats = groupScoringRules([
+      { statKey: 'passing_yards', pointsValue: 0.04, enabled: true },
+      { statKey: 'passing_td', pointsValue: 4, enabled: true },
+      { statKey: 'passing_2pt', pointsValue: 2, enabled: true },
+      { statKey: 'interception_thrown', pointsValue: -1, enabled: true },
+      { statKey: 'reception', pointsValue: 1, enabled: true },
+      { statKey: 'te_premium', pointsValue: 0.5, enabled: true },
+      { statKey: 'fumble_lost', pointsValue: -2, enabled: true },
+    ])
+    const passing = cats.find((c) => c.key === 'passing')!
+    expect(passing.rows.map((r) => r.label)).toEqual(['Passing Yards', 'Passing TD', 'Passing 2PT', 'INT Thrown'])
+    expect(passing.rows[0].perUnit).toBe('1 point every 25 yards')
+    expect(cats.find((c) => c.key === 'receiving')!.rows.map((r) => r.key)).toEqual(['reception', 'te_premium'])
+    expect(cats.find((c) => c.key === 'rushing')!.rows.map((r) => r.key)).toEqual(['fumble_lost'])
+    expect(cats.some((c) => c.key === 'other')).toBe(false)
+  })
+})

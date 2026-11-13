@@ -62,6 +62,13 @@ export type LeagueSettingsHubLeague = {
 
 type Loadable<T> = T | null | undefined
 
+type HighScoresPayload = {
+  seasons: number[]
+  rows: Array<{ rank: number; playerName: string; teamName: string; season: number; week: number; points: number }>
+  teamSeasons?: number[]
+  teamRows?: Array<{ rank: number; teamName: string; season: number; week: number; points: number }>
+}
+
 async function getJson<T>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url, { credentials: 'include', cache: 'no-store' })
@@ -107,7 +114,7 @@ export function LeagueSettingsHub({
   const [orderStatus, setOrderStatus] = useState<string | null>(null)
   const [history, setHistory] = useState<Loadable<{ seasons?: Array<Record<string, unknown>>; allTimeStandings?: Parameters<typeof buildAllTimeStandings>[0] }>>(undefined)
   const [records, setRecords] = useState<Loadable<Array<{ holderId: string; value: number; season: number | null; rank: number }>>>(undefined)
-  const [playerHighs, setPlayerHighs] = useState<Loadable<{ seasons: number[]; rows: Array<{ rank: number; playerName: string; teamName: string; season: number; week: number; points: number }> }>>(undefined)
+  const [playerHighs, setPlayerHighs] = useState<Loadable<HighScoresPayload>>(undefined)
   const [corrections, setCorrections] = useState<Loadable<{ season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> }>>(undefined)
   const [prefs, setPrefs] = useState<Loadable<NotificationPreferences>>(undefined)
   const [invite, setInvite] = useState<Loadable<string>>(undefined)
@@ -133,7 +140,7 @@ export function LeagueSettingsHub({
     })
     void getJson<{ seasons?: Array<Record<string, unknown>>; allTimeStandings?: Parameters<typeof buildAllTimeStandings>[0] }>(`/api/leagues/${id}/history`).then((d) => { if (live) setHistory(d) })
     void getJson<{ records?: Array<{ holderId: string; value: number; season: number | null; rank: number }> }>(`/api/leagues/${id}/record-book?recordType=highest_score&limit=10`).then((d) => { if (live) setRecords(d?.records ?? null) })
-    void getJson<{ seasons: number[]; rows: Array<{ rank: number; playerName: string; teamName: string; season: number; week: number; points: number }> }>(`/api/leagues/${id}/player-high-scores?limit=10`).then((d) => { if (live) setPlayerHighs(d) })
+    void getJson<HighScoresPayload>(`/api/leagues/${id}/player-high-scores?limit=10`).then((d) => { if (live) setPlayerHighs(d) })
     void getJson<{ season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> }>(`/api/leagues/${id}/stat-corrections`).then((d) => { if (live) setCorrections(d) })
     void getJson<{ notificationPreferences?: NotificationPreferences | null }>('/api/user/profile').then((d) => {
       if (!live) return
@@ -305,7 +312,15 @@ export function LeagueSettingsHub({
       draftHistory: p === undefined ? undefined : draftRow.draftType || order?.length ? { title: `${(p?.league?.season as number | undefined) ?? league.season ?? ''} ${kind === 'dynasty' ? 'Rookie Draft' : 'Season Draft'}`.trim(), status: [orderStatus ? orderStatus.replace(/_/g, ' ') : null, draftRow.draftType ? String(draftRow.draftType) : null, draftRow.rounds ? `${draftRow.rounds} rounds` : null].filter(Boolean).join(' · ') || 'Scheduled' } : null,
       seasons: history === undefined ? undefined : seasons ?? null,
       standings: history === undefined ? undefined : history ? buildAllTimeStandings(history.allTimeStandings) : null,
-      highScores: records === undefined ? undefined : records ? records.map((r) => ({ rank: r.rank, holder: teamName(r.holderId) ?? 'Former manager', season: r.season, value: Number(r.value).toFixed(2) })) : null,
+      // Record-book entries when the engine has run (all-time); otherwise the league's own final results.
+      highScores: records?.length
+        ? records.map((r) => ({ rank: r.rank, holder: teamName(r.holderId) ?? 'Former manager', season: r.season, value: Number(r.value).toFixed(2) }))
+        : records === undefined || playerHighs === undefined
+          ? undefined
+          : playerHighs?.teamRows?.length
+            ? playerHighs.teamRows.map((r) => ({ rank: r.rank, holder: r.teamName, season: r.season, week: r.week, value: r.points.toFixed(2) }))
+            : records === null && playerHighs === null ? null : [],
+      highScoresSeasons: records?.length ? null : playerHighs?.teamRows?.length ? playerHighs.teamSeasons : null,
       playerHighScores: playerHighs === undefined ? undefined : playerHighs ? { seasons: playerHighs.seasons, rows: playerHighs.rows.map((r) => ({ rank: r.rank, name: r.playerName, team: r.teamName, season: r.season, week: r.week, points: r.points.toFixed(2) })) } : null,
       correctionWeeks: corrections,
     }

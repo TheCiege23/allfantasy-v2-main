@@ -20,17 +20,34 @@ import type { PrismaClient } from '@prisma/client'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
 import { loadStoryData } from '@/lib/storyline-studio/loadStoryData'
-import { summarizeCorrectionWeeks, topPlayerScores, type CorrectionWeek, type PlayerHighScoreRow } from './recordBookModel'
+import {
+  summarizeCorrectionWeeks,
+  topPlayerScores,
+  topTeamScores,
+  type CorrectionWeek,
+  type PlayerHighScoreRow,
+  type TeamHighScoreRow,
+} from './recordBookModel'
 
+/**
+ * Player AND team high scores from one `loadStoryData` read. Team rows come from final
+ * head-to-head results (the same fixtures Storyline Studio reads), so a league whose record-book
+ * engine has not run still has team highs. Each list carries the seasons it actually covers.
+ */
 export async function loadPlayerHighScores(
   prisma: PrismaClient,
   leagueId: string,
   limit = 10,
-): Promise<{ seasons: number[]; rows: PlayerHighScoreRow[] } | null> {
+): Promise<{ seasons: number[]; rows: PlayerHighScoreRow[]; teamSeasons: number[]; teamRows: TeamHighScoreRow[] } | null> {
   const loaded = await loadStoryData(prisma, leagueId)
   if (!loaded) return null
-  const seasons = [...new Set(loaded.data.playerWeeks.map((w) => w.season))].sort((a, b) => b - a)
-  return { seasons, rows: topPlayerScores(loaded.data, limit) }
+  const desc = (xs: number[]) => [...new Set(xs)].sort((a, b) => b - a)
+  return {
+    seasons: desc(loaded.data.playerWeeks.map((w) => w.season)),
+    rows: topPlayerScores(loaded.data, limit),
+    teamSeasons: desc(loaded.data.fixtures.filter((f) => f.final).map((f) => f.season)),
+    teamRows: topTeamScores(loaded.data, limit),
+  }
 }
 
 export async function loadCorrectionWeeks(

@@ -71,7 +71,9 @@ export type HubViewData = {
   draftHistory: { title: string; status: string } | null | undefined
   seasons: Array<{ year: number; champion: string | null; runnerUp: string | null }> | null | undefined
   standings: HubStandingRow[] | null | undefined
-  highScores: Array<{ rank: number; holder: string; season: number | null; value: string }> | null | undefined
+  highScores: Array<{ rank: number; holder: string; season: number | null; week?: number | null; value: string }> | null | undefined
+  /** Set when team highs come from final results rather than the record-book engine: the seasons covered. */
+  highScoresSeasons?: number[] | null
   /** Biggest single-week starter scores; `seasons` is the window the rows cover. */
   playerHighScores:
     | { seasons: number[]; rows: Array<{ rank: number; name: string; team: string; season: number; week: number; points: string }> }
@@ -207,6 +209,20 @@ export function LeagueSettingsHubView({
       </div>
     </div>
   )
+}
+
+/** The native settings sub-page that edits this format's own rules (lib/league-settings-home). */
+export function rulesEditorFor(kind: HubKind): string {
+  if (kind === 'guillotine') return 'guillotine-rules'
+  if (kind === 'pirate') return 'pirate-rules'
+  if (kind === 'survivor') return 'survivor-tribes'
+  return 'format'
+}
+
+/** "2026 & 2025" for two seasons, "2022–2026" for a longer run. */
+export function seasonsLabel(seasons: number[]): string {
+  if (seasons.length <= 2) return seasons.join(' & ')
+  return `${Math.min(...seasons)}–${Math.max(...seasons)}`
 }
 
 function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; label: string }> {
@@ -423,7 +439,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
 
   return (
     <>
-      <Card id="general" title="General Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('commish-general')} />}>
+      <Card id="general" title="General Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('general')} />}>
         <div className="af-lsh-card-body" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div className="af-lsh-avatar" aria-hidden>{data.leagueAvatarUrl ? <img src={data.leagueAvatarUrl} alt="" /> : initials(data.leagueName)}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
@@ -438,12 +454,12 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         {data.general === undefined ? <Loading lines={5} /> : <GroupGrid groups={data.general} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
       </Card>
 
-      <Card id="waivers" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('commish-general')} />}>
+      <Card id="waivers" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('waivers')} />}>
         {data.waivers === undefined ? <Loading /> : <GroupGrid groups={data.waivers} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
       </Card>
 
       {data.typeRules === undefined || data.typeRules.length ? (
-        <Card id="rules" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('commish-controls')} />}>
+        <Card id="rules" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor(rulesEditorFor(data.kind))} />}>
           {data.typeRules === undefined ? <Loading /> : <GroupGrid groups={data.typeRules} canEdit={edit} />}
         </Card>
       ) : null}
@@ -670,7 +686,7 @@ function MembersTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
         </div>
       </Card>
 
-      <Card id="managers" title="Manage Members" sub="Assign or remove members from rosters and the league" action={<EditButton show={edit} label="Manage" onClick={() => cb.onOpenEditor('members-commish')} />}>
+      <Card id="managers" title="Manage Members" sub="Assign or remove members from rosters and the league" action={<EditButton show={edit} label="Manage" onClick={() => cb.onOpenEditor('members')} />}>
         <div className="af-lsh-card-body">
           {members === undefined ? <Loading /> : (
             <div className="af-lsh-table">
@@ -838,12 +854,15 @@ function RecordTab({ data }: { data: HubViewData }) {
                   {data.highScores.map((h) => (
                     <div className="af-lsh-tr af-lsh-records" key={h.rank}>
                       <span style={{ color: 'var(--lsh-muted)', fontWeight: 700 }}>{h.rank}</span>
-                      <span className="af-lsh-who"><Face name={h.holder} /><span><strong>{h.holder}</strong>{h.season ? <small>{h.season}</small> : null}</span></span>
+                      <span className="af-lsh-who"><Face name={h.holder} /><span><strong>{h.holder}</strong>{h.season ? <small>{h.season}{h.week ? ` Wk ${h.week}` : ''}</small> : null}</span></span>
                       <strong className="r">{h.value}</strong>
                     </div>
                   ))}
                 </div>
               )}
+              {data.highScores?.length && data.highScoresSeasons?.length ? (
+                <span className="af-lsh-note" style={{ marginTop: 0 }}>From final results · {seasonsLabel(data.highScoresSeasons)} seasons</span>
+              ) : null}
             </div>
             <div className="af-lsh-list" data-testid="league-settings-hub-player-highs">
               <strong style={{ fontSize: 15 }}>Player high scores</strong>
@@ -862,7 +881,7 @@ function RecordTab({ data }: { data: HubViewData }) {
                     ))}
                   </div>
                   <span className="af-lsh-note" style={{ marginTop: 0 }}>
-                    Starters only{data.playerHighScores.seasons.length ? ` · ${data.playerHighScores.seasons.join(' & ')} seasons` : ''}
+                    Starters only{data.playerHighScores.seasons.length ? ` · ${seasonsLabel(data.playerHighScores.seasons)} seasons` : ''}
                   </span>
                 </>
               )}

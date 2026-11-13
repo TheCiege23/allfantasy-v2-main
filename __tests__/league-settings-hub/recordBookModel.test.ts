@@ -78,3 +78,22 @@ describe('summarizeCorrectionWeeks', () => {
     ])
   })
 })
+
+describe('topTeamScores', () => {
+  it('ranks both sides of every FINAL fixture and ignores live or scheduled games', async () => {
+    const { topTeamScores } = await import('@/lib/league-settings-hub/recordBookModel')
+    const rows = topTeamScores({
+      teams,
+      fixtures: [
+        { season: 2025, week: 3, a: 'A', b: 'B', scoreA: 150.5, scoreB: 162.25, final: true },
+        { season: 2026, week: 1, a: 'A', b: 'B', scoreA: 199, scoreB: 80, final: false }, // live — not a result
+        { season: 2026, week: 2, a: 'B', b: 'Z', scoreA: 140, scoreB: 170, final: true }, // Z is not a mapped team
+      ],
+    })
+    expect(rows.map((r) => [r.rank, r.teamName, r.season, r.week, r.points])).toEqual([
+      [1, 'Ghost Protocol', 2025, 3, 162.25],
+      [2, 'Blitz Brigade', 2025, 3, 150.5],
+      [3, 'Ghost Protocol', 2026, 2, 140],
+    ])
+  })
+})

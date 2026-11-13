@@ -1,7 +1,7 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { LeagueSettingsHubView, type HubCallbacks, type HubViewData } from '@/components/league-settings/hub/LeagueSettingsHubView'
+import { LeagueSettingsHubView, rulesEditorFor, seasonsLabel, type HubCallbacks, type HubViewData } from '@/components/league-settings/hub/LeagueSettingsHubView'
 import { buildDraftGroups, buildGeneralGroups, buildNotificationGroups, buildTypeRuleGroups, buildWaiverGroups, type HubKind } from '@/lib/league-settings-hub/hubModel'
 
 afterEach(cleanup)
@@ -100,5 +100,20 @@ describe('LeagueSettingsHubView', () => {
     expect(screen.getByText('HEAD')).toBeTruthy()
     fireEvent.click(screen.getByRole('switch', { name: 'Co-commissioner: Other' }))
     expect(c.onToggleCoCommissioner).toHaveBeenCalledWith('t2', true)
+  })
+})
+
+describe('native editor routing helpers', () => {
+  it('sends each league type to the editor that owns its rules', () => {
+    expect(rulesEditorFor('guillotine')).toBe('guillotine-rules')
+    expect(rulesEditorFor('pirate')).toBe('pirate-rules')
+    expect(rulesEditorFor('survivor')).toBe('survivor-tribes')
+    expect(rulesEditorFor('redraft')).toBe('format')
+  })
+
+  it('labels the seasons a record list covers', () => {
+    expect(seasonsLabel([2026])).toBe('2026')
+    expect(seasonsLabel([2026, 2025])).toBe('2026 & 2025')
+    expect(seasonsLabel([2026, 2023, 2024])).toBe('2023–2026')
   })
 })

@@ -13,6 +13,7 @@
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import { resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
 import { SCORING_STAT_LABELS } from '@/lib/commissioner-settings/scoringStatLabels'
+import { NFL_STAT_LABELS } from '@/lib/nfl-scoring/NflScoringPresets'
 
 export type HubKind =
   | 'redraft'
@@ -523,9 +524,10 @@ export function buildRosterItems(
 export type HubScoringCategory = { key: string; label: string; rows: Array<{ key: string; label: string; value: string; perUnit?: string }> }
 
 const SCORING_CATEGORIES: Array<{ key: string; label: string; test: (k: string) => boolean }> = [
-  { key: 'passing', label: 'Passing', test: (k) => /^pass/.test(k) || k === 'int' || k === 'qb_sack' },
-  { key: 'rushing', label: 'Rushing', test: (k) => /^rush/.test(k) || k === 'fum' || k === 'fum_lost' },
-  { key: 'receiving', label: 'Receiving', test: (k) => /^rec/.test(k) || /_rec$/.test(k) },
+  // Both vocabularies: provider keys (pass_td, rec_yd) and AF's canonical NFL keys (passing_td, receiving_yards).
+  { key: 'passing', label: 'Passing', test: (k) => /^pass/.test(k) || ['int', 'qb_sack', 'qb_sacked', 'interception', 'interception_thrown', 'pick_6_thrown', 'completion', 'incomplete_pass'].includes(k) },
+  { key: 'rushing', label: 'Rushing', test: (k) => /^rush/.test(k) || ['fum', 'fum_lost', 'fumble', 'fumble_lost'].includes(k) },
+  { key: 'receiving', label: 'Receiving', test: (k) => /^rec/.test(k) || /_rec$/.test(k) || ['te_premium', 'target'].includes(k) },
   { key: 'kicking', label: 'Kicking', test: (k) => /^(fg|xp|pat|kick)/.test(k) },
   { key: 'defense', label: 'Team Defense', test: (k) => /^(def|pts_allow|yds_allow|dst|blk)/.test(k) || k === 'sack' || k === 'safe' || k === 'ff' || k === 'fum_rec' },
   { key: 'special', label: 'Special Teams', test: (k) => /^(st_|kr_|pr_)/.test(k) },
@@ -547,7 +549,7 @@ export function groupScoringRules(rules: HubScoringRule[] | null | undefined): H
     const k = r.statKey.toLowerCase()
     const cat = SCORING_CATEGORIES.find((c) => c.test(k))
     const isYards = /(_yd|_yds|yards)$/.test(k) && Math.abs(r.pointsValue) < 1
-    const label = SCORING_STAT_LABELS[k] ?? humanize(r.statKey)
+    const label = NFL_STAT_LABELS[k] ?? SCORING_STAT_LABELS[k] ?? humanize(r.statKey)
     const row = isYards
       ? { key: r.statKey, label, value: `${fmtPoints(r.pointsValue)} / yd`, perUnit: `1 point every ${Math.round(1 / Math.abs(r.pointsValue))} yards` }
       : { key: r.statKey, label, value: fmtPoints(r.pointsValue) }

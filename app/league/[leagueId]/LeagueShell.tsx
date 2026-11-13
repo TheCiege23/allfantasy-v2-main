@@ -993,6 +993,29 @@ export function LeagueShell({
     nonce: 0,
   })
   /*
+   * Native leagues' Settings tab opens the four-tab hub (LeagueSettingsHubTab). The existing settings
+   * container still owns every EDITOR: a sub-page request (a hub Edit button, an old `?settingsPanel=`
+   * link, the header gear) opens it on that editor, and closing the editor comes back to the hub.
+   * "Advanced settings" opens the container's full list (`settingsCenterOpen`). Leaving the tab resets
+   * both, so the next visit lands on the hub again.
+   */
+  const [settingsCenterOpen, setSettingsCenterOpen] = useState(false)
+  useEffect(() => {
+    if (activeTab === 'settings') return
+    setSettingsCenterOpen(false)
+    if (activeTab !== 'commissioner') {
+      setSettingsHomeRequest((prev) => (prev.subPage ? { subPage: null, nonce: prev.nonce + 1 } : prev))
+    }
+  }, [activeTab])
+  const backToSettingsHub = useCallback(() => {
+    setSettingsCenterOpen(false)
+    setSettingsHomeRequest((prev) => ({ subPage: null, nonce: prev.nonce + 1 }))
+  }, [])
+  const openSettingsCenter = useCallback(() => {
+    setSettingsHomeRequest((prev) => ({ subPage: null, nonce: prev.nonce + 1 }))
+    setSettingsCenterOpen(true)
+  }, [])
+  /*
    * The settings modal mounts on FIRST open and then stays mounted, so its code is fetched only
    * when someone asks for settings and its close animation still plays afterwards. Set during
    * render so the first open mounts it in the same pass. See the note on `LeagueSettingsModal`.
@@ -1895,10 +1918,12 @@ export function LeagueShell({
               platform={league.platform}
             />
 
-            {nativeWorkspace && (activeTab === 'settings' || activeTab === 'commissioner') ? (
+            {nativeWorkspace && (activeTab === 'commissioner' || (activeTab === 'settings' && (settingsHomeRequest.subPage !== null || settingsCenterOpen))) ? (
               <LeagueSettingsHomeContainer
                 key={`settings-home-${settingsHomeRequest.nonce}`}
                 initialSubPage={settingsHomeRequest.subPage}
+                // Opened from the Settings hub straight onto an editor: closing it returns to the hub.
+                onSubPageReturn={activeTab === 'settings' && !settingsCenterOpen ? backToSettingsHub : undefined}
                 ctx={{
                   league,
                   displayLeague: selectedLeague,
@@ -1911,7 +1936,11 @@ export function LeagueShell({
                   sleeperMemberMap: sleeperUsersByPlatformId,
                   onGoToDraftTab: () => setActiveTab('draft'),
                 }}
-                onExit={() => handleUserTabChange(tabDefs.some((tab) => tab.id === 'native_home') ? 'native_home' : tabDefs[0]?.id ?? 'home')}
+                onExit={
+                  activeTab === 'settings'
+                    ? backToSettingsHub
+                    : () => handleUserTabChange(tabDefs.some((tab) => tab.id === 'native_home') ? 'native_home' : tabDefs[0]?.id ?? 'home')
+                }
               />
             ) : (
             <LeagueTabRouter
@@ -1943,6 +1972,7 @@ export function LeagueShell({
               hasActiveRedraftSeason={hasActiveRedraftSeason}
               viewerUserId={userId}
               onLeaveLeague={() => setLeaveLeagueHintOpen(true)}
+              onOpenSettingsCenter={nativeWorkspace ? openSettingsCenter : undefined}
               // After the welcome sheet and any format intro, so the walkthrough never stacks on them.
               autoOpenFormatWalkthrough={isCommissioner && createdFromLeagueCreate && welcomeStage === 'done'}
             />
@@ -2267,6 +2297,7 @@ function LeagueTabRouter({
   viewerUserId,
   autoOpenFormatWalkthrough,
   onLeaveLeague,
+  onOpenSettingsCenter,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -2303,6 +2334,8 @@ function LeagueTabRouter({
   autoOpenFormatWalkthrough: boolean
   /** Opens the shell's leave-league dialog (Settings › My Settings › Leave League). */
   onLeaveLeague?: () => void
+  /** Native leagues: opens the full settings list (the container) from the hub's "Advanced settings". */
+  onOpenSettingsCenter?: () => void
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -2802,6 +2835,7 @@ function LeagueTabRouter({
           isHeadCommissioner={isHeadCommissioner}
           onOpenEditor={(panelId) => onOpenLeagueSettingsModal(panelId)}
           onLeaveLeague={onLeaveLeague}
+          onAdvanced={onOpenSettingsCenter}
         />
       )
     case 'standings':
