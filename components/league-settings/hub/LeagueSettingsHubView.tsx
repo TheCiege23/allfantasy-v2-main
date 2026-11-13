@@ -72,6 +72,13 @@ export type HubViewData = {
   seasons: Array<{ year: number; champion: string | null; runnerUp: string | null }> | null | undefined
   standings: HubStandingRow[] | null | undefined
   highScores: Array<{ rank: number; holder: string; season: number | null; value: string }> | null | undefined
+  /** Biggest single-week starter scores; `seasons` is the window the rows cover. */
+  playerHighScores:
+    | { seasons: number[]; rows: Array<{ rank: number; name: string; team: string; season: number; week: number; points: string }> }
+    | null
+    | undefined
+  /** Per week of `season`: final vs still open to corrections, and when it was rescored. */
+  correctionWeeks: { season: number; weeks: Array<{ week: number; final: boolean; rescoredAt: string | null }> } | null | undefined
 }
 
 export type HubCallbacks = {
@@ -727,6 +734,45 @@ const MATCHUP_LEGEND = [
   { tag: 'vs BAL', name: 'Tough', fg: '#fca5a5', d: 'A strong defense. Your player is more likely to fall short.' },
 ]
 
+/** Sleeper's week stepper, showing what is actually stored: final or still open, and when rescored. */
+function CorrectionWeeks({ data }: { data: HubViewData['correctionWeeks'] }) {
+  const weeks = data?.weeks ?? []
+  const [idx, setIdx] = useState<number | null>(null)
+  if (data === undefined) return <Loading lines={2} />
+  if (!weeks.length) return <p className="af-lsh-empty" style={{ paddingTop: 0 }}>No scored weeks yet this season.</p>
+  const i = idx ?? weeks.length - 1
+  const w = weeks[Math.min(i, weeks.length - 1)]
+  const rescored = w.rescoredAt ? new Date(w.rescoredAt) : null
+  return (
+    <div className="af-lsh-card-body" data-testid="league-settings-hub-corrections">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingBottom: 12, borderBottom: '1px solid var(--lsh-rule)' }}>
+        <strong style={{ fontSize: 14 }}>Week</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: 2, borderRadius: 12, border: '1px solid rgba(255,255,255,.14)' }}>
+          <button type="button" className="af-lsh-btn" data-variant="ghost" data-size="sm" style={{ border: 0, minWidth: 40 }} aria-label="Previous week" disabled={i <= 0} onClick={() => setIdx((prev) => Math.max(0, (prev ?? weeks.length - 1) - 1))}>‹</button>
+          <span style={{ minWidth: 72, textAlign: 'center', fontSize: 13, fontWeight: 700 }} aria-live="polite">Week {w.week}</span>
+          <button type="button" className="af-lsh-btn" data-variant="ghost" data-size="sm" style={{ border: 0, minWidth: 40 }} aria-label="Next week" disabled={i >= weeks.length - 1} onClick={() => setIdx((prev) => Math.min(weeks.length - 1, (prev ?? weeks.length - 1) + 1))}>›</button>
+        </div>
+      </div>
+      <div className="af-lsh-row" style={{ paddingLeft: 0, paddingRight: 0 }}>
+        <div className="af-lsh-row-copy">
+          <span>{w.final ? 'Scores are final' : 'Open for stat corrections'}</span>
+          <span>{w.final ? 'This week is past the correction window.' : 'Points can still change as official corrections come in.'}</span>
+        </div>
+        <span className="af-lsh-tag" style={w.final ? undefined : { background: '#2a2108', color: '#fcd34d' }}>{w.final ? 'FINAL' : 'OPEN'}</span>
+      </div>
+      <div className="af-lsh-row" style={{ paddingLeft: 0, paddingRight: 0 }}>
+        <div className="af-lsh-row-copy">
+          <span>Rescored after corrections</span>
+          <span>Each player’s total already includes any correction</span>
+        </div>
+        <span className="af-lsh-value" data-empty={rescored ? undefined : 'true'}>
+          {rescored ? rescored.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Not rescored'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function RecordTab({ data }: { data: HubViewData }) {
   const note = statCorrectionNote(data.kind)
   return (
@@ -779,26 +825,54 @@ function RecordTab({ data }: { data: HubViewData }) {
         </div>
       </Card>
 
-      <Card id="highs" title="All-Time High Scores" sub="The league’s biggest weeks">
+      <Card id="highs" title="All-Time High Scores" sub="The league’s biggest weeks, by team and by player">
         <div className="af-lsh-card-body">
-          {data.highScores === undefined ? <Loading /> : !data.highScores?.length ? (
-            <p className="af-lsh-note" style={{ marginTop: 0 }}>High scores are recorded after each completed week.</p>
-          ) : (
-            <div className="af-lsh-table">
-              <div className="af-lsh-tr af-lsh-records" data-head="true"><span /><span>Team</span><span className="r">Score</span></div>
-              {data.highScores.map((h) => (
-                <div className="af-lsh-tr af-lsh-records" key={h.rank}>
-                  <span style={{ color: 'var(--lsh-muted)', fontWeight: 700 }}>{h.rank}</span>
-                  <span className="af-lsh-who"><Face name={h.holder} /><span><strong>{h.holder}</strong>{h.season ? <small>{h.season}</small> : null}</span></span>
-                  <strong className="r">{h.value}</strong>
+          <div className="af-lsh-split" data-even="true">
+            <div className="af-lsh-list">
+              <strong style={{ fontSize: 15 }}>Weekly high scores</strong>
+              {data.highScores === undefined ? <Loading /> : !data.highScores?.length ? (
+                <p className="af-lsh-note" style={{ marginTop: 0 }}>High scores are recorded after each completed week.</p>
+              ) : (
+                <div className="af-lsh-table">
+                  <div className="af-lsh-tr af-lsh-records" data-head="true"><span /><span>Team</span><span className="r">Score</span></div>
+                  {data.highScores.map((h) => (
+                    <div className="af-lsh-tr af-lsh-records" key={h.rank}>
+                      <span style={{ color: 'var(--lsh-muted)', fontWeight: 700 }}>{h.rank}</span>
+                      <span className="af-lsh-who"><Face name={h.holder} /><span><strong>{h.holder}</strong>{h.season ? <small>{h.season}</small> : null}</span></span>
+                      <strong className="r">{h.value}</strong>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
+            <div className="af-lsh-list" data-testid="league-settings-hub-player-highs">
+              <strong style={{ fontSize: 15 }}>Player high scores</strong>
+              {data.playerHighScores === undefined ? <Loading /> : !data.playerHighScores?.rows.length ? (
+                <p className="af-lsh-note" style={{ marginTop: 0 }}>Player high scores appear once a week’s scores are final.</p>
+              ) : (
+                <>
+                  <div className="af-lsh-table">
+                    <div className="af-lsh-tr af-lsh-records" data-head="true"><span /><span>Player</span><span className="r">Score</span></div>
+                    {data.playerHighScores.rows.map((p) => (
+                      <div className="af-lsh-tr af-lsh-records" key={`${p.rank}-${p.name}`}>
+                        <span style={{ color: 'var(--lsh-muted)', fontWeight: 700 }}>{p.rank}</span>
+                        <span className="af-lsh-who"><Face name={p.name} /><span><strong>{p.name}</strong><small style={{ whiteSpace: 'normal' }}>{p.team} · {p.season} Wk {p.week}</small></span></span>
+                        <strong className="r">{p.points}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <span className="af-lsh-note" style={{ marginTop: 0 }}>
+                    Starters only{data.playerHighScores.seasons.length ? ` · ${data.playerHighScores.seasons.join(' & ')} seasons` : ''}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </Card>
 
       <Card id="corrections" title="Stat Corrections" sub="Corrections are applied retroactively to each player’s total">
+        <CorrectionWeeks data={data.correctionWeeks} />
         <div className="af-lsh-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, lineHeight: 1.55, color: 'var(--lsh-muted)' }}>
           <span>Our stats feed updates live during games, then posts official corrections over the next few days.</span>
           <span>Corrections can land through Thursday — most arrive Monday or Tuesday — so a weekly result isn’t final until then.</span>

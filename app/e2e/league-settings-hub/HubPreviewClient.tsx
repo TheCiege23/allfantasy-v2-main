@@ -103,6 +103,12 @@ export function HubPreviewClient({ type, role, tab }: { type: string; role: 'com
       seasons: [2025, 2024, 2023, 2022].map((y, i) => ({ year: y, champion: MANAGERS[i * 2], runnerUp: MANAGERS[i * 2 + 1] })),
       standings: buildAllTimeStandings(MANAGERS.map((m, i) => ({ managerName: m, managerAvatar: null, totalWins: 46 - i * 2, totalLosses: 24 + i * 2, totalTies: 0, winPct: (46 - i * 2) / 70, totalPoints: 6412.3 - i * 61.4, seasonsPlayed: 5, championships: i < 4 ? 1 : 0 }))),
       highScores: MANAGERS.slice(0, 8).map((m, i) => ({ rank: i + 1, holder: m, season: 2025 - (i % 4), value: (212.68 - i * 3.4).toFixed(2) })),
+      playerHighScores: {
+        seasons: [2026, 2025],
+        rows: [['J. Allen', 'Late Round Legends', 2025, 14, 56.58], ['J. Gibbs', 'Blitz Brigade', 2026, 6, 54.9], ['J. Chase', 'Ghost Protocol', 2025, 10, 51.2], ['L. Jackson', 'Wizards of Waivers', 2026, 3, 50.36], ['C. McCaffrey', "Don's Dynasty", 2025, 16, 49.1], ['A. St. Brown', 'Night Owls', 2026, 9, 46.2], ['J. Hurts', 'Red Zone Royalty', 2025, 7, 45.8], ['B. Robinson', 'Taco Tuesday', 2026, 2, 44.7]]
+          .map(([name, team, season, week, pts], i) => ({ rank: i + 1, name: String(name), team: String(team), season: Number(season), week: Number(week), points: Number(pts).toFixed(2) })),
+      },
+      correctionWeeks: { season: 2026, weeks: Array.from({ length: 10 }, (_, i) => ({ week: i + 1, final: i < 9, rescoredAt: i === 4 ? '2026-10-08T14:00:00Z' : null })) },
     }
   }, [kind, commish, muted, leagueOn, co, note])
 

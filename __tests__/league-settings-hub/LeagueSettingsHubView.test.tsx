@@ -25,6 +25,8 @@ function makeData(kind: HubKind, canEdit: boolean): HubViewData {
       { id: 't2', name: 'Other', teamName: 'B', avatarUrl: null, isCommissioner: false, isCoCommissioner: false, isYou: false },
     ],
     coOwners: null, invite: { link: null, filled: 12, capacity: 12 }, draftHistory: null, seasons: [], standings: [], highScores: [],
+    playerHighScores: { seasons: [2026, 2025], rows: [{ rank: 1, name: 'J. Allen', team: 'Blitz Brigade', season: 2025, week: 14, points: '56.58' }] },
+    correctionWeeks: { season: 2026, weeks: [{ week: 1, final: true, rescoredAt: '2026-09-12T15:00:00Z' }, { week: 2, final: false, rescoredAt: null }] },
   }
 }
 
@@ -72,6 +74,24 @@ describe('LeagueSettingsHubView', () => {
     expect(screen.getByText('Endgame')).toBeTruthy()
     expect(screen.getByText('Chopped Rosters')).toBeTruthy()
     expect(screen.queryByText('Playoff Teams')).toBeNull()
+  })
+
+  it('Record Book shows player high scores with their window, and steps correction weeks', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="record" />)
+    const highs = screen.getByTestId('league-settings-hub-player-highs')
+    expect(within(highs).getByText('J. Allen')).toBeTruthy()
+    expect(within(highs).getByText('Blitz Brigade · 2025 Wk 14')).toBeTruthy()
+    expect(within(highs).getByText(/2026 & 2025 seasons/)).toBeTruthy()
+    const corr = screen.getByTestId('league-settings-hub-corrections')
+    // Opens on the latest week, which is still open.
+    expect(within(corr).getByText('Week 2')).toBeTruthy()
+    expect(within(corr).getByText('OPEN')).toBeTruthy()
+    expect(within(corr).getByText('Not rescored')).toBeTruthy()
+    expect((within(corr).getByRole('button', { name: 'Next week' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(within(corr).getByRole('button', { name: 'Previous week' }))
+    expect(within(corr).getByText('Week 1')).toBeTruthy()
+    expect(within(corr).getByText('FINAL')).toBeTruthy()
+    expect(within(corr).queryByText('Not rescored')).toBeNull()
   })
 
   it('only the head commissioner can flip co-commissioners; the head row shows a tag', () => {
