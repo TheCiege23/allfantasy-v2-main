@@ -2,7 +2,8 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { Session } from 'next-auth';
 import Script from 'next/script';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
+import { getRequestNonce } from '@/lib/security/requestNonce';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { SpotifyMiniPlayer } from '@/components/spotify/SpotifyMiniPlayer';
 import { FloatingMusicWidget } from '@/components/MusicWidget';
@@ -108,7 +109,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // This request's CSP nonce, set by middleware (lib/security/cspReportOnly.ts, Phase 3).
   // Every inline script below carries it; under the nonce policy one that does not is
   // refused. Undefined in `next dev` and in the allowlist-only modes, where it is unused.
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
+  const nonce = await getRequestNonce();
   const cookieLang = cookieStore.get('af_lang')?.value;
   const htmlLang = resolveLanguage(cookieLang);
   const htmlDir = getLanguageTextDirection(htmlLang);
@@ -456,7 +457,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Script id="gtm-loader" nonce={nonce} strategy="afterInteractive">
               {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;${nonce ? `j.setAttribute('nonce',${JSON.stringify(nonce)});` : ''}j.src=
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;var n=d.currentScript&&d.currentScript.nonce;if(n)j.setAttribute('nonce',n);j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','${gtmId}');`}
             </Script>
