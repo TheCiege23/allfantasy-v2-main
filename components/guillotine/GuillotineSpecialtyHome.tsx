@@ -53,6 +53,12 @@ interface GuillotineSpecialtySummary {
 
 const asset = (f: string) => specialtyAsset('guillotine', f)
 const TONE: Record<ChopLineRow['tier'], SpecialtyTone> = { safe: 'safe', danger: 'danger', chop_zone: 'zone' }
+/** Tier text: the shell's tone tokens, dark literal as fallback (light mode sets them for Guilly). */
+const TONE_TEXT: Record<ChopLineRow['tier'], string> = {
+  safe: 'var(--sp-safe, #7fe0a6)',
+  danger: 'var(--sp-danger, #ffc46b)',
+  chop_zone: 'var(--sp-zone, #ff9a8a)',
+}
 const BAR: Record<ChopLineRow['tier'], string> = {
   safe: 'linear-gradient(90deg,#1f7a4a,#3abe78)',
   danger: 'linear-gradient(90deg,#8a5a1c,#ffc46b)',
@@ -136,7 +142,7 @@ export function GuillotineSpecialtyHome({
   const meTone = me?.tier ?? 'safe'
 
   return (
-    <SpecialtyShell format="guillotine" testId="guillotine-specialty-home">
+    <SpecialtyShell format="guillotine" className={gl.home} testId="guillotine-specialty-home">
       {/* ---------- desktop / tablet ---------- */}
       <div className={gl.desktopOnly}>
         <SpecialtyHero
@@ -198,7 +204,7 @@ export function GuillotineSpecialtyHome({
                           r.tier === 'chop_zone'
                             ? { background: 'rgba(224,64,46,.1)', borderColor: 'rgba(224,64,46,.45)' }
                             : r.isMe
-                              ? { background: '#151a28', borderColor: 'rgba(159,176,220,.35)' }
+                              ? { background: 'var(--gl-me-row, #151a28)', borderColor: 'var(--gl-me-line, rgba(159,176,220,.35))' }
                               : undefined
                         }
                       >
@@ -211,7 +217,7 @@ export function GuillotineSpecialtyHome({
                         <span className={`${sp.num} ${gl.pts}`}>{fmt(r.points)}</span>
                         <span
                           className={`${sp.num} ${gl.delta}`}
-                          style={{ color: r.tier === 'chop_zone' ? '#ff9a8a' : r.tier === 'danger' ? '#ffc46b' : '#7fe0a6' }}
+                          style={{ color: TONE_TEXT[r.tier] }}
                         >
                           {r.tier === 'chop_zone' ? 'CUT' : `+${fmt(r.margin)}`}
                         </span>
@@ -257,7 +263,7 @@ export function GuillotineSpecialtyHome({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={asset(meTone === 'safe' ? 'icon-safe.svg' : 'icon-zone.svg')} alt="" aria-hidden style={{ width: 44, height: 44 }} />
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span className={sp.lbl} style={{ color: meTone === 'safe' ? '#7fe0a6' : meTone === 'danger' ? '#ffc46b' : '#ff9a8a' }}>
+                    <span className={sp.lbl} style={{ color: TONE_TEXT[meTone] }}>
                       Your survival · week {week}
                     </span>
                     <span
@@ -290,7 +296,7 @@ export function GuillotineSpecialtyHome({
 
       {/* ---------- phone ---------- */}
       <div className={`${gl.phoneOnly} ${gl.phone}`} data-testid="guillotine-phone-home">
-        <div className={gl.phoneHead}>
+        <div className={`${gl.phoneHead} ${sp.stayDark}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className={gl.bg} src={asset('banner.svg')} alt="" aria-hidden />
           <div className={gl.veil} />
@@ -309,10 +315,10 @@ export function GuillotineSpecialtyHome({
             className={`${sp.card} ${gl.phoneStatus}`}
             style={{ borderColor: me.tier === 'safe' ? 'rgba(58,190,120,.35)' : me.tier === 'danger' ? 'rgba(255,196,107,.35)' : 'rgba(224,64,46,.45)' }}
           >
-            <span className={sp.lbl} style={{ color: me.tier === 'safe' ? '#7fe0a6' : me.tier === 'danger' ? '#ffc46b' : '#ff9a8a' }}>
+            <span className={sp.lbl} style={{ color: TONE_TEXT[me.tier] }}>
               {me.tier === 'safe' ? 'You’re safe right now' : me.tier === 'danger' ? 'You’re in the danger tier' : 'You’re in the chop zone'}
             </span>
-            <span className={`${gl.big} ${gl.phoneMargin}`} style={me.tier === 'chop_zone' ? { color: '#ffb0a4' } : undefined}>
+            <span className={`${gl.big} ${gl.phoneMargin}`} style={me.tier === 'chop_zone' ? { color: 'var(--gl-zone-big, #ffb0a4)' } : undefined}>
               {me.tier === 'chop_zone' ? 'CUT' : `+${fmt(me.margin)}`}
             </span>
             <span className={sp.t2}>
@@ -397,7 +403,7 @@ export function GuillotineChopMoment({
   return (
     <section
       id="guillotine-chop"
-      className={`${sp.card} ${sp.pad} ${done ? gl.chopped : ''}`}
+      className={`${sp.card} ${sp.pad} ${sp.stayDark} ${done ? gl.chopped : ''}`}
       style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(224,64,46,.14), transparent 60%), #0b0d14', gap: 16 }}
       data-testid="guillotine-chop-moment"
       data-state={done ? 'chopped' : 'armed'}
