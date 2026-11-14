@@ -25,11 +25,7 @@ import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
 import { buildLeagueHomePulse } from '@/lib/decision-os/league-pulse'
 import { localizeLeaguePulse } from '@/lib/i18n/decision-os/leaguePulse'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import ManagerDnaCard from '@/components/decision-os/ManagerDnaCard'
-import DecisionRecommendationsCard from '@/components/decision-os/DecisionRecommendationsCard'
 import UserOsCard from '@/components/decision-os/UserOsCard'
-import { buildManagerDnaViewModel } from '@/lib/decision-os/manager-dna'
-import { buildDecisionRecommendationsViewModel } from '@/lib/decision-os/recommendations'
 import type { ManagerIntelligencePayload } from '@/lib/decision-os/dashboard-intelligence'
 import type { UserOsSnapshot } from '@/lib/decision-os/userOs'
 import { LeagueRulesHomeHost } from '@/components/league/native/LeagueRulesHomeHost'
@@ -540,14 +536,6 @@ export function LeagueTab({
       ),
     [isCommissioner, league, teams, managerIntelligence, language]
   )
-  const managerDna = useMemo(
-    () => buildManagerDnaViewModel({ source: managerIntelligence?.managerDna ?? null }),
-    [managerIntelligence],
-  )
-  const recommendations = useMemo(
-    () => buildDecisionRecommendationsViewModel({ source: managerIntelligence?.recommendations ?? null }),
-    [managerIntelligence],
-  )
   const [userOs, setUserOs] = useState<UserOsSnapshot | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -630,10 +618,11 @@ export function LeagueTab({
         </>
       ) : null}
       <LeaguePulseCard pulse={leaguePulse} variant="league" compact />
-      <section className="grid gap-4 xl:grid-cols-2" aria-label="Manager guidance">
-        <ManagerDnaCard profile={managerDna} variant="league" compact />
-        <DecisionRecommendationsCard model={recommendations} variant="league" compact />
-      </section>
+      {/* The Manager DNA and recommendations cards that sat here were removed 2026-11-14: their
+          source, /api/decision-os/manager-intelligence, has returned `managerDna: null,
+          recommendations: null` since the Competitive Edge privacy pass, so both rendered a
+          permanent placeholder. Bring them back only with a real producer behind them — move
+          guidance belongs on the trade, waiver and lineup screens that act on it. */}
       <UserOsCard snapshot={userOs} variant="league" />
       <LeagueScoringPreviews leagueId={league.id} season={previewSeason} week={previewWeek} />
       {showSpecialtyAutomationStrip(league) ? (

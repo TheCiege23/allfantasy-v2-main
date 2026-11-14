@@ -57,8 +57,9 @@ import type { DynastyStandingsHistory as DynastyHistory } from '@/lib/core-app/d
 /**
  * How old the board is, when it came from the summary cache.
  *
- * ⚠ OPTIONAL BECAUSE THE ROLLOUT MAKES IT OPTIONAL. `sports-os.screen-summaries` is at 10%, so most
- * readers still take the direct read, which has no envelope and nothing to label. `null` renders no
+ * ⚠ OPTIONAL BECAUSE THE ROLLOUT MAKES IT OPTIONAL. `sports-os.screen-summaries` is at 100% by
+ * default but can be pulled back by env (lib/sports-os/rolloutConfig.ts), and a reader outside it
+ * takes the direct read, which has no envelope and nothing to label. `null` renders no
  * chip at all — never a chip reading "unknown", which would claim the data is of uncertain age when
  * it was in fact just computed.
  */

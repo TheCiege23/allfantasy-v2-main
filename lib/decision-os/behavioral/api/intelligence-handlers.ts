@@ -58,6 +58,28 @@ import { resolveManagerDnaDirectory } from '@/lib/decision-os/managerDnaDirector
 export interface IntelligenceApiContext {
   headers:      { get(key: string): string | null }
   searchParams: URLSearchParams
+  /**
+   * IN-PROCESS CALLERS ONLY — set by `in-process.ts`, never by a route file. A first-party server
+   * caller that has ALREADY authorised the session for this league (Commissioner OS resolves the
+   * league from the session's own commissioned leagues) runs at this tier without an API key or
+   * the public-API flag, because those two exist to admit EXTERNAL callers. Every route under
+   * `app/api/v1/intelligence/` builds its context from `req.headers` and `searchParams` alone, so
+   * nothing an HTTP client sends can set this field.
+   */
+  internalTier?: IntelligenceTier
+}
+
+/** The public gate for HTTP callers; a pre-authorised in-process caller skips it. */
+function gateFor(ctx: IntelligenceApiContext): ReturnType<typeof checkIntelligenceGate> {
+  if (ctx.internalTier) {
+    return {
+      ok: true,
+      tier: ctx.internalTier,
+      requestId: `inproc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+      env: 'live',
+    }
+  }
+  return checkIntelligenceGate(ctx.headers)
 }
 
 // ── Result ─────────────────────────────────────────────────────────────────────
@@ -200,7 +222,7 @@ export async function platformIntelligenceHandler(
   ctx:          IntelligenceApiContext,
   dataProvider: IntelligenceDataProvider,
 ): Promise<IntelligenceHandlerResult> {
-  const gate = checkIntelligenceGate(ctx.headers)
+  const gate = gateFor(ctx)
   if (!gate.ok) return { status: gate.status, body: gate.error }
 
   const { tier, requestId } = gate
@@ -241,7 +263,7 @@ export async function leagueIntelligenceHandler(
   ctx:          IntelligenceApiContext,
   dataProvider: IntelligenceDataProvider,
 ): Promise<IntelligenceHandlerResult> {
-  const gate = checkIntelligenceGate(ctx.headers)
+  const gate = gateFor(ctx)
   if (!gate.ok) return { status: gate.status, body: gate.error }
 
   const { tier, requestId } = gate
@@ -285,7 +307,7 @@ export async function leagueManagersIntelligenceHandler(
   ctx:          IntelligenceApiContext,
   dataProvider: IntelligenceDataProvider,
 ): Promise<IntelligenceHandlerResult> {
-  const gate = checkIntelligenceGate(ctx.headers)
+  const gate = gateFor(ctx)
   if (!gate.ok) return { status: gate.status, body: gate.error }
 
   const { tier, requestId } = gate
@@ -320,7 +342,7 @@ export async function leagueManagersIntelligenceHandler(
 export async function leagueTrendIntelligenceHandler(
   ctx: IntelligenceApiContext,
 ): Promise<IntelligenceHandlerResult> {
-  const gate = checkIntelligenceGate(ctx.headers)
+  const gate = gateFor(ctx)
   if (!gate.ok) return { status: gate.status, body: gate.error }
 
   const { tier, requestId } = gate
@@ -370,7 +392,7 @@ export async function leagueTrendIntelligenceHandler(
 export async function leagueManagerDnaIntelligenceHandler(
   ctx: IntelligenceApiContext,
 ): Promise<IntelligenceHandlerResult> {
-  const gate = checkIntelligenceGate(ctx.headers)
+  const gate = gateFor(ctx)
   if (!gate.ok) return { status: gate.status, body: gate.error }
 
   const { tier, requestId } = gate
@@ -421,7 +443,7 @@ export async function leagueManagerDnaIntelligenceHandler(
 export async function leagueDeadlineIntelligenceHandler(
   ctx: IntelligenceApiContext,
 ): Promise<IntelligenceHandlerResult> {
-  const gate = checkIntelligenceGate(ctx.headers)
+  const gate = gateFor(ctx)
   if (!gate.ok) return { status: gate.status, body: gate.error }
 
   const { tier, requestId } = gate
@@ -467,7 +489,7 @@ export async function managerIntelligenceHandler(
   ctx:          IntelligenceApiContext,
   dataProvider: IntelligenceDataProvider,
 ): Promise<IntelligenceHandlerResult> {
-  const gate = checkIntelligenceGate(ctx.headers)
+  const gate = gateFor(ctx)
   if (!gate.ok) return { status: gate.status, body: gate.error }
 
   const { tier, requestId } = gate
