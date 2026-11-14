@@ -57,17 +57,15 @@ describe('notification grouping and read receipts', () => {
   it('keeps unread notices and offers retry after a failed receipt request', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
     render(<NotificationsCenter data={data()} />)
-    fireEvent.click(screen.getByLabelText('Notification actions'))
     fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Please try again'))
-    expect(screen.getByText(/2 waiting/)).toBeTruthy()
+    expect(screen.getByText(/2 unread/)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Mark all read' }) as HTMLButtonElement).disabled).toBe(false)
   })
   it('keeps mark-all within the selected league, including receipts outside the loaded window', async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
     vi.stubGlobal('fetch', request)
     render(<NotificationsCenter data={{ ...data(), leagueId: 'league1', unread: 90, olderNotListed: 88 }} />)
-    fireEvent.click(screen.getByLabelText('Notification actions'))
     fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }))
     await waitFor(() => expect(screen.getByText('Nothing is waiting on you in this league.')).toBeTruthy())
     expect(JSON.parse(request.mock.calls[0][1].body)).toEqual({ ids: 'all', leagueId: 'league1' })
