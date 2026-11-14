@@ -1,0 +1,107 @@
+/*
+ * The /core/rankings guide (2026-11-14): the row under the headline, the folded filters at every width,
+ * and the one line under the community board with its "How this board is scored" fold.
+ * (components/core-app/rankings/RankingsGuide.tsx, RankingsFilterBar.tsx, screens/Rankings.tsx)
+ *
+ * ⚠ Every block is at depth 0 — never inside another @media — and core tokens only, which af-core.css
+ * redefines for the light theme.
+ */
+
+/* ── Under the headline: how your place moved, Why, Ask Chimmy ──────── */
+.af-rk-yourow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 10px 0 0;
+}
+/* Left-aligned under the line it belongs to; the shared `.af-rk-headact` pushes itself right beside a title. */
+.af-rk .af-rk-yourow .af-rk-headact,
+.af-rk .af-pg-actions .af-rk-headact {
+  flex-basis: 100%;
+  justify-content: flex-start;
+  margin-left: 0;
+}
+.af-rk-yourow-move {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+/* ── Filters: folded at every width ─────────────────────────────────── */
+/* Two classes: af-rankings-screen.css hides `.af-rk-filterdrawer` above 720px, whichever sheet lands last. */
+.af-rk-filterdrawer.af-rk-filterdrawer--all {
+  display: block;
+  margin-bottom: 10px;
+}
+.af-rk-filterdrawer.af-rk-filterdrawer--all > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+.af-rk-filterdrawer.af-rk-filterdrawer--all > summary::-webkit-details-marker {
+  display: none;
+}
+.af-rk-filterdrawer.af-rk-filterdrawer--all > summary::after {
+  content: '▾';
+  margin-left: 6px;
+}
+.af-rk-filterdrawer.af-rk-filterdrawer--all[open] > summary::after {
+  content: '▴';
+}
+.af-rk-filterdrawer.af-rk-filterdrawer--all[open] > .af-rk-filters {
+  margin-top: 10px;
+}
+
+/* ── Under the board: one line, and how it is scored ────────────────── */
+.af-rk-boardfoot {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.af-rk-boardfoot-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-rk-howscored {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--chip);
+}
+.af-rk-howscored > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+.af-rk-howscored > summary::-webkit-details-marker {
+  display: none;
+}
+.af-rk-howscored > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--muted);
+}
+.af-rk-howscored[open] > summary::after {
+  content: '▴';
+}
+.af-rk-howscored-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+.af-rk-howscored-body .af-rk-method,
+.af-rk-howscored-body .af-rk-note,
+.af-rk-howscored-body .af-rk-fresh {
+  margin: 0;
+}

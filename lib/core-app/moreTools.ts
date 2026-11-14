@@ -22,6 +22,9 @@ type MoreToolLink = {
     | 'mockDraft'
     | 'warRoom'
     | 'managerCompare'
+    | 'rankingsCompare'
+    | 'yourCareer'
+    | 'findLeague'
     | 'playerComparisonLab'
   href: string
   /** A full page outside the /core shell. */
@@ -39,7 +42,16 @@ export const MORE_TOOLS: Readonly<Record<MoreToolsScreen, readonly MoreToolLink[
     { key: 'mockDraft', href: '/mock-draft', leavesShell: true },
     { key: 'warRoom', href: '/war-room', leavesShell: true },
   ],
-  rankings: [{ key: 'managerCompare', href: '/manager-compare', leavesShell: true, pro: true }],
+  /*
+   * 2026-11-14: Compare, Your Career and Find a League were three of five buttons beside the Rankings
+   * headline. They are things to do after reading your rank, not the rank itself, so they live here.
+   */
+  rankings: [
+    { key: 'rankingsCompare', href: '/core/rankings?view=compare', leavesShell: false },
+    { key: 'yourCareer', href: '/core/career', leavesShell: false },
+    { key: 'managerCompare', href: '/manager-compare', leavesShell: true, pro: true },
+    { key: 'findLeague', href: '/find-league', leavesShell: true },
+  ],
   players: [
     { key: 'playerComparisonLab', href: '/player-comparison-lab', leavesShell: true },
   ],

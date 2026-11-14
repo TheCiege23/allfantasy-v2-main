@@ -6,6 +6,7 @@ import {
   type RankingFilters,
 } from '@/lib/core-app/rankingsEngine'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { RankingsFilterSummary } from '@/components/core-app/rankings/RankingsGuide'
 
 /**
  * The filter row — a GET form.
@@ -27,6 +28,7 @@ export function RankingsFilterBar({
   options,
   hidden,
   resetHref,
+  label = null,
   unit = 'league-seasons',
 }: {
   filters: RankingFilters
@@ -34,6 +36,8 @@ export function RankingsFilterBar({
   /** Params the form must carry through (scope, league, board, view…). */
   hidden: Array<[string, string]>
   resetHref: string
+  /** What the filters narrow the board to ("NFL · Sleeper") — said in the folded summary. */
+  label?: string | null
   unit?: string
 }) {
   const active = [filters.platform, filters.sport, filters.type, filters.format, filters.season, filters.league].filter((v) => v != null).length
@@ -80,22 +84,19 @@ export function RankingsFilterBar({
     </form>
   )
   /*
-   * ⚠ TWO COPIES OF ONE FORM, ONE SHOWN PER WIDTH. A phone gets the filters folded behind a
-   * "Filters" summary so the board is the first thing on screen; a tablet or desktop gets the open
-   * row. A closed <details> cannot be opened by a media query, so CSS picks a copy rather than
-   * restyling one. The hidden copy is `display: none`, which takes it out of the accessibility tree
-   * too, so a screen reader meets one form, not two.
+   * ⚠ ONE FOLDED FORM AT EVERY WIDTH (2026-11-14). Six dropdowns and Apply sat open above the board on a
+   * tablet or desktop even when nothing was filtered. The fold's summary says what the board is narrowed
+   * to ("Filters · All leagues"), and it opens on arrival when a filter is set, so a narrowed board never
+   * hides why. It used to be two copies of the form, one per width, because a closed <details> cannot be
+   * opened by a media query; with one fold at every width there is one form.
    */
   return (
-    <>
-      <details className="af-rk-filterdrawer">
-        <summary className="af-rk-btn">
-          Filters{changed > 0 ? ` · ${changed} on` : ''}
-        </summary>
-        {form('af-rk-filters')}
-      </details>
-      {form('af-rk-filters af-rk-filters--wide')}
-    </>
+    <details className="af-rk-filterdrawer af-rk-filterdrawer--all" open={changed > 0 || undefined}>
+      <summary className="af-rk-btn">
+        {label != null ? <RankingsFilterSummary label={label} changed={changed} /> : <>Filters{changed > 0 ? ` · ${changed} on` : ''}</>}
+      </summary>
+      {form('af-rk-filters')}
+    </details>
   )
 }
 
