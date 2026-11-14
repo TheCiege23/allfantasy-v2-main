@@ -1,24 +1,31 @@
 /**
  * Reorder draft queue by roster need and availability.
- * Sport-agnostic position targets; supports NFL, NHL, NBA, MLB, NCAAB, NCAAF, SOCCER.
+ *
+ * ⚠ NEED COMES FROM THE DRAFT ENGINE (2026-11-14). This file used to carry its own position-weight
+ * table (QB 90, RB 85, …) and its own count-down curve, so "reorder my queue by need" could disagree
+ * with the draft room's own recommendation about what the roster needs — a superflex league's second
+ * QB, an IDP league's linebackers, a roster with three FLEX slots. It now asks
+ * `computeNeeds` (lib/draft-helper/RecommendationEngine.ts), the same need model behind
+ * /api/draft/recommend and the Decision OS `manager.draft.pick` decision, given the league's real
+ * roster slots and superflex/2QB flags when the caller has them. Without slots the engine uses its
+ * per-sport default targets, which cover all seven sports.
  */
 
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
+import { computeNeeds, normalizeDraftSlot, type RecommendationPlayer } from '@/lib/draft-helper/RecommendationEngine'
 
-/** Position need weight (higher = more need). Shared across sports. */
-const DEFAULT_POSITION_WEIGHTS: Record<string, number> = {
-  QB: 90, RB: 85, WR: 85, TE: 75, K: 30, DEF: 40,
-  C: 80, LW: 80, RW: 80, D: 75, G: 70,
-  PG: 85, SG: 85, SF: 85, PF: 85,
-  SP: 85, RP: 75, '1B': 75, '2B': 75, '3B': 75, SS: 75, OF: 80,
-  F: 80, M: 80, GK: 70,
-}
+/** A position the engine has no target for (not on this sport's roster) sorts below every real need. */
+const NO_TARGET_NEED = 0
 
 interface ReorderQueueInput {
   queue: QueueEntry[]
   /** Current user's roster (positions already drafted) */
   rosterPositions: string[]
   sport: string
+  /** The league's starting slots (e.g. ['QB','RB','RB','WR','WR','TE','FLEX','SUPER_FLEX']). */
+  rosterSlots?: string[]
+  isSF?: boolean
+  is2QB?: boolean
   /** Optional set of available names (trimmed lowercase). Unavailable entries are dropped before reorder. */
   availableNames?: Set<string>
   /** Optional: generate short explanation via AI */
@@ -32,23 +39,20 @@ interface ReorderQueueResult {
   needByPosition?: Record<string, number>
 }
 
-function getNeedCounts(rosterPositions: string[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const p of rosterPositions) {
-    const pos = (p || '').trim().toUpperCase()
-    if (pos) counts[pos] = (counts[pos] ?? 0) + 1
-  }
-  return counts
-}
-
-function needScore(position: string, counts: Record<string, number>): number {
-  const pos = (position || '').trim().toUpperCase()
-  const weight = DEFAULT_POSITION_WEIGHTS[pos] ?? 50
-  const count = counts[pos] ?? 0
-  if (count === 0) return weight
-  if (count === 1) return Math.max(5, weight - 35)
-  if (count === 2) return Math.max(5, weight - 55)
-  return Math.max(0, weight - 70)
+function engineNeeds(input: ReorderQueueInput, queue: QueueEntry[]): Record<string, number> {
+  const available: RecommendationPlayer[] = queue.map((e) => ({
+    name: e.playerName ?? '',
+    position: e.position ?? '',
+    team: e.team ?? null,
+  }))
+  return computeNeeds(
+    input.rosterPositions.map((position) => ({ position })),
+    input.rosterSlots ?? [],
+    Boolean(input.isSF),
+    available,
+    input.sport,
+    Boolean(input.is2QB),
+  )
 }
 
 /**
@@ -56,8 +60,7 @@ function needScore(position: string, counts: Record<string, number>): number {
  * Preserves all entries; only order changes.
  */
 export function reorderQueueByNeed(input: ReorderQueueInput): ReorderQueueResult {
-  const { queue, rosterPositions, availableNames } = input
-  const counts = getNeedCounts(rosterPositions)
+  const { queue, availableNames, sport } = input
   const needByPosition: Record<string, number> = {}
   const normalizedAvailable = availableNames ?? null
   const queueAvailable = normalizedAvailable
@@ -65,9 +68,10 @@ export function reorderQueueByNeed(input: ReorderQueueInput): ReorderQueueResult
     : queue
   const removedUnavailable = Math.max(0, queue.length - queueAvailable.length)
 
+  const needs = engineNeeds(input, queueAvailable)
   const scored = queueAvailable.map((entry, index) => {
-    const pos = (entry.position || '').trim().toUpperCase()
-    const score = needScore(entry.position ?? '', counts)
+    const pos = normalizeDraftSlot(entry.position ?? '', sport)
+    const score = needs[pos] ?? NO_TARGET_NEED
     if (pos) needByPosition[pos] = score
     return { entry, score, position: pos, index }
   })
@@ -79,8 +83,10 @@ export function reorderQueueByNeed(input: ReorderQueueInput): ReorderQueueResult
   })
 
   const reordered = scored.map((s) => s.entry)
-  const topNeeds = Object.entries(counts)
-    .filter(([, c]) => c < 2)
+  // The positions the engine rates most needed among those actually in the queue.
+  const topNeeds = Object.entries(needByPosition)
+    .filter(([, score]) => score >= 50)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([p]) => p)
     .slice(0, 3)
   let explanation =
@@ -99,7 +105,7 @@ export function reorderQueueByNeed(input: ReorderQueueInput): ReorderQueueResult
  * only unlocked rows are reordered among the unlocked slots (deterministic merge).
  */
 export function reorderQueueByNeedRespectingLocks(input: ReorderQueueInput): ReorderQueueResult {
-  const { queue, rosterPositions, sport, availableNames } = input
+  const { queue, availableNames } = input
 
   const unlocked = queue.filter((e) => !e.lockedByUser)
   if (unlocked.length === 0) {
@@ -110,12 +116,7 @@ export function reorderQueueByNeedRespectingLocks(input: ReorderQueueInput): Reo
     }
   }
 
-  const sub = reorderQueueByNeed({
-    queue: unlocked,
-    rosterPositions,
-    sport,
-    availableNames,
-  })
+  const sub = reorderQueueByNeed({ ...input, queue: unlocked, availableNames })
 
   let u = 0
   const merged = queue.map((entry) => {

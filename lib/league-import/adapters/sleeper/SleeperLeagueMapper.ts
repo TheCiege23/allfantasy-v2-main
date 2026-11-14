@@ -173,6 +173,17 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
        */
       league_average_match: toIntOrUndef(settings.league_average_match),
       /*
+       * Sleeper's first scoring week (2026-11-14). Dropped at import until now, so a league
+       * started mid-season looked like a full-season league and the draft engine could not tell
+       * that a bye already played costs nothing. Kept only as a real NFL week (1–18). The name
+       * comes from code already in the repo (lib/league-import/sleeper/survivalEvidence.ts), not
+       * from a fixture — contracts/sleeper/GAPS.md S-11.
+       */
+      start_week: (() => {
+        const w = toIntOrUndef(settings.start_week)
+        return w != null && w >= 1 && w <= 18 ? w : undefined
+      })(),
+      /*
        * 🛑 SLEEPER'S WAIVER SCHEDULE FIELDS, STORED RAW — AND ONLY ONE OF THEM IS INTERPRETED.
        *
        * Dropped at import until 2026-10-02 (`lib/chimmy-alerts/waiverCheck.ts` measured no league

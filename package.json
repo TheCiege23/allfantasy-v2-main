@@ -76,6 +76,7 @@
     "seed:dev": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/seed-dev-fixture.ts",
     "seed:redraft-war-room-runtime": "tsx scripts/seed-redraft-war-room-runtime.ts",
     "audit:draft-assets": "node --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-draft-player-assets.ts",
+    "backtest:draft": "node --require ./scripts/_audit-preload.cjs --import tsx scripts/draft-backtest.ts",
     "audit:draft-player-pool": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-draft-player-pool.ts",
     "audit:player-identity-mismatches": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-player-identity-mismatches.ts",
     "audit:ri-mapping": "node --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-rolling-insights-draft-mapping.ts",

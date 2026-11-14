@@ -216,6 +216,8 @@ import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
 import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
 import { WeekGuide, WeekToolsDisclosure } from '@/components/core-app/week/WeekGuide'
+import { weekNeedsFromSignals } from '@/lib/core-app/weekNeeds'
+import { loadSurvivorFormatSignals } from '@/lib/survivor/survivorFormatSignals'
 import { lineupFacts } from '@/lib/core-app/weekGuide'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
 import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
@@ -260,7 +262,8 @@ import { getCareerWire } from '@/lib/core-app/careerWire'
 import { getWeeklyStory } from '@/lib/core-app/weeklyStory'
 import { getDecisionRecord } from '@/lib/core-app/decisionRecord'
 import { parseCareerFilter } from '@/lib/core-app/careerModel'
-import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
+import { isEnabled } from '@/lib/sports-os/rollout'
+import { resolveRollouts } from '@/lib/sports-os/rolloutConfig'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
 import { classifyDevice } from '@/lib/observability/requestContext'
@@ -2307,7 +2310,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * unrelated surfaces both reasonably called "portfolio"; the collision was a redeclare error
    * rather than a silent shadow only because both are `const` in one function scope.
    */
-  const portfolioScreenOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  const portfolioScreenOnSummary = isEnabled('sports-os.screen-summaries', userId, resolveRollouts())
 
   /*
    * ── THE CROSS-LEAGUE BOARD ─────────────────────────────────────────────
@@ -2378,7 +2381,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * (`careerScreen.ts`).
    *
    * ⚠ THIS REPLACES TWO SUMMARIES. `careerSummary` cached the default view per platform behind the
-   * 10% `sports-os.screen-summaries` flag and rebuilt on a league-list fingerprint; the profile is
+   * `sports-os.screen-summaries` flag (10% at the time) and rebuilt on a league-list fingerprint; the profile is
    * for everyone, keyed on the history tables themselves rather than on the league list (which
    * never covered `legacy_leagues`). `careerRecordsSummary` still serves the unfiltered weekly book
    * under that flag, from inside `careerScreen`.
@@ -3031,7 +3034,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         .catch(() => null)
     : null
 
-  const tradesBoardOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  const tradesBoardOnSummary = isEnabled('sports-os.screen-summaries', userId, resolveRollouts())
 
   const tradesBoardFresh =
     wantsTradesBoard && tradesBoardOnSummary
@@ -3374,7 +3377,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * from an unpicked league, and a summary rebuild can fail for exactly the reasons the direct read
    * could. Letting it reject here would replace that message with a Suspense error boundary.
    */
-  const standingsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  const standingsOnSummary = isEnabled('sports-os.screen-summaries', userId, resolveRollouts())
   /*
    * ⚠ THE SAME FLAG AND THE SAME SUBJECT AS STANDINGS, SO A USER IS WHOLLY ON SUMMARIES OR WHOLLY
    * OFF. A second flag would put one user on a cached standings board and a live week board, which
@@ -3696,6 +3699,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       }) : outlook
   const weeklyCalendar = activeKey === 'week' && !rivalriesView
     ? await getWeeklyCalendar(weekLeagues,myTeamPulse,ctx.now,selectedLeagueId,playedLeagues.filter(l=>l.isCommissioner).map(l=>l.id)).catch(()=>null) : null
+  /*
+   * The Command Center's Survivor signals, folded into the all-leagues guide (2026-11-14, owner's
+   * call — see lib/core-app/weekNeeds.ts for which signals and why only these). Same loader and the
+   * same league ids the Manager Hub route uses; each source fails closed to [], so a failure here
+   * only drops the card. Its queries are bounded to `survivorMode` leagues, so an account without one
+   * pays a single indexed lookup.
+   */
+  const weekNeeds =
+    activeKey === 'week' && !rivalriesView && !selectedLeagueId && !showAllLeagues
+      ? weekNeedsFromSignals(
+          await loadSurvivorFormatSignals({ userId, leagueIds: weekLeagues.map((l) => l.id), now: ctx.now }).catch(
+            (error) => {
+              console.error('[core/week] survivor signals failed', error)
+              return []
+            },
+          ),
+          weekLeagues,
+        )
+      : []
   const weeklyBlueprint = activeKey === 'week' && !rivalriesView && weekBoard ? buildWeeklyBlueprint({
     name: ctx.viewerName, leagues: weekLeagues, board: weekBoard, pulse: myTeamPulse, outlook: weeklyOutlook, calendar: weeklyCalendar ?? undefined,
     lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
@@ -5472,6 +5494,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   allHref="/core/week?all=1"
                   isCommissioner={playedLeagues.some((l) => Boolean(l.isCommissioner))}
                   lineups={[...lineupFacts(myTeamPulse).values()]}
+                  needs={weekNeeds}
                 />
                 <WeekBoard
                   priorityLeagueIds={weeklyBlueprint?.attentionLeagueIds}

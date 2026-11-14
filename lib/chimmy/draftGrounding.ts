@@ -95,6 +95,13 @@ export async function buildDraftOsRecommendationLines(
   if (alternatives.length > 0) {
     lines.push(`Alternatives: ${alternatives.map((a) => `${describe(a.player)} — ${a.reason}`).join('; ')}.`)
   }
+  // This draft's specifics (2026-11-14): the scoring window, a live position run, the teams ahead.
+  for (const line of [result.scoringWindowInsight, result.runInsight, result.teamsAheadInsight]) {
+    if (line) lines.push(line)
+  }
+  if (result.teamsAheadInsight) {
+    lines.push('The teams-ahead line counts open roster slots only; do not describe any manager\'s personality or predict a specific manager\'s pick.')
+  }
   const notes = [result.scarcityInsight, result.reachWarning, result.valueWarning, result.byeNote].filter(
     (n): n is string => Boolean(n && n.trim()),
   )

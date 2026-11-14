@@ -92,10 +92,16 @@ describe('buildDraftDecisionContext', () => {
     const ctx = await buildDraftDecisionContext({ leagueId: 'league-1', rosterId: 'roster-1' })
 
     expect(ctx.round).toBe(3)
+    // The engine's `pick` is the pick within the round; overall 30 of a 12-team draft is 3.06.
     expect(ctx.pick).toBe(30)
+    expect(ctx.pickInRound).toBe(6)
+    expect(ctx.engineInput.round).toBe(3)
+    expect(ctx.engineInput.pick).toBe(6)
     expect(ctx.totalTeams).toBe(12)
     expect(ctx.managerKey).toBe('manager-1')
-    expect(ctx.engineInput.available).toEqual([{ name: 'Player One', position: 'RB', team: 'KC', adp: 25, byeWeek: null, age: 24 }])
+    expect(ctx.engineInput.available).toEqual([
+      { name: 'Player One', position: 'RB', team: 'KC', adp: 25, byeWeek: null, projectedPoints: null, age: 24 },
+    ])
     expect(ctx.playerIdByKey.get('player one|rb')).toBe('p1')
   })
 

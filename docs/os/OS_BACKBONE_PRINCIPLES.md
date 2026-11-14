@@ -1,0 +1,217 @@
+# The OS backbone: how it should work, and the rules that keep it from breaking
+
+**Written 2026-11-14.** This file sets direction. It does not record what has been measured. It turns
+the owner's stated intent into working rules and maps them onto the code that exists today. For
+what is built and how complete each part is, read `docs/decision-os/OS_INVENTORY_AND_ROADMAP.md`.
+
+## 1. The intent, in the owner's words, made concrete
+
+> The OS is the backbone — checks and balances for the app. It brings all the relevant
+> information into one place and sends out what the user needs to improve or learn more. The B2C
+> is a background function the user does not see. It ties into its equivalent on the front end.
+> The B2B is front-facing: companies tie in and get insight into their apps, with visuals.
+
+There are two products, and they need opposite rules:
+
+| | **B2C backbone** | **B2B platform** |
+|---|---|---|
+| Who sees it | Nobody. Only its results show up. | Partner companies, on purpose |
+| Branding | **None.** No "OS" label on any consumer screen | "Decision OS", "League Intelligence" and so on are the product |
+| How it is reached | In-process function calls from our own pages | Versioned HTTP API, API keys, sandbox and widgets |
+| Success | The Trades, Waivers and Draft screens get smarter and faster | A partner understands their leagues, their users and our value in five minutes |
+| Code today | `lib/decision-os/*`, `lib/sports-os/*`, `lib/import-os/*` | `app/api/v1/*`, `lib/domain/*`, `prisma/tenancy.prisma`, `lib/decision-os/sdk/` |
+
+## 2. The B2C backbone: three layers, one direction
+
+```
+  FACTS                         DECISIONS                         SURFACES (what users see)
+  ─────                         ─────────                         ─────────────────────────
+  Import OS (league sync)  ─┐   draft engine      ✅      ───▶  Draft room, Draft HQ, queue
+  Sports data (players,     │   waiver engine     ✅      ───▶  Waivers, waiver-wire
+   injuries, schedule)      ├─▶ trade engine      ✅      ───▶  Trades, War Room, Trade Evaluator
+  Market values             │   lineup engine     ✅      ───▶  My Team, Matchup
+  Behaviour events          │   commissioner health ✅    ───▶  Commissioner, Commissioner OS
+  (trades/claims/moves)    ─┘   attention / brief ✅      ───▶  Your week, notifications
+                                grounding packet  ✅      ───▶  Chimmy answers
+```
+
+Facts flow right. A surface never reaches back past the decision layer to compute its own verdict,
+and a decision engine never renders anything.
+
+### The domain map: every engine has exactly one front-end home
+
+| Domain | Engine (backbone) | Front-end equivalent | Status |
+|---|---|---|---|
+| Trades | `lib/decision-os/trade/` | `/core/trades`, War Room, `/trade-evaluator` | ✅ wired |
+| Waivers | `lib/decision-os/waiver/` | `/core/waivers`, `/waiver-wire` | ✅ wired |
+| Lineup | `lib/decision-os/lineup/` | `/core/my-team` | ✅ wired |
+| Commissioner | `commissioner-health/` plus the behavioural API | `/core/commissioner`, `/commissioner-os` | ✅ in-process since 2026-11-14 |
+| Cross-league "what needs me" | `managerCommandCenter.ts`, `attentionQueue.ts` | **Your week** (`/core/week`) | ✅ Survivor signals fold into the week guide since 2026-11-14; `/manager-hub` kept for white-label tenants |
+| Draft | `lib/decision-os/draft/` wrapping `lib/draft-helper/RecommendationEngine.ts` | draft room, Draft HQ, queue reorder, Guillotine advice | ✅ engine exists; converging duplicates (§2.1) |
+| Chat | `grounding/` packet | Chimmy | ✅ on in production per 2026-09-12 note |
+| Speed | `lib/sports-os/` summaries | every `/core` screen | ✅ 100% since 2026-11-14 |
+
+### 2.1 Draft: one engine, and where the others stand (2026-11-14)
+
+This file first said draft had no engine. That was wrong. `lib/decision-os/draft/decision.ts`
+(`manager.draft.pick`) wraps the shared ranker `lib/draft-helper/RecommendationEngine.ts`, which
+the draft room, Draft HQ, Chimmy, the live draft brain, the War Room panel and autopick all call.
+The real gap was **other rankers answering the same question their own way**. Where they stand:
+
+| Ranker | Status |
+|---|---|
+| `draft-intelligence/draft-decision-engine.ts` + `draft-war-room` | **Retired.** Its only caller, `/api/draft-war-room`, had no caller in the app and now answers 410 |
+| `guillotine/ai/draftAssistant.ts` | **On the engine.** It used to return the first three players sent |
+| `draft-queue-engine/reorder-by-need.ts` | **On the engine's need model** (`computeNeeds`), with the league's real slots and superflex/2QB |
+| `bestball/ai/draftAssistant.ts` | **Kept, on purpose.** Best ball has no lineup to set; its depth targets and stack rules are a different question |
+| `ai/opponents/draft`, `mock-draft-simulator/DraftAIManager`, `mock-draft/ai-pick` (`pick`), `predict-board`, `sleeperDraftBoard` | **Kept, on purpose.** They simulate *other drafters* (bots, personalities, ADP-order CPUs). Advice to you and a prediction of them are different jobs |
+| `app/api/draft/ai/*` (best-pick, roster-fit, scarcity, pick-survival, queue-suggestions) | **Grounded in the engine** (`lib/draft/engineGrounding*.ts`). Claude gets the engine's top choice, the roster needs and the live available list, and recommends only from that list. Off-board names are dropped, and when Claude is down the engine's pick is returned. `grade` and `draft-recap` review a finished draft, and `ai/draft-help` explains settings, so those three are not pick advice |
+
+### 2.2 Draft advice is specific to THIS draft (2026-11-14)
+
+The engine now scores what separates one draft from another, not only value and need
+(`lib/draft-helper/draftContextSignals.ts`, `auctionAdvice.ts`):
+
+| Specific | Where it comes from |
+|---|---|
+| **Scoring window.** A bye inside the weeks this draft scores costs that share of the window, and a bye already played is a plus | `TournamentRound.weekStart/weekEnd` via `resolveDraftScoringWindow`. The KBI redraft drafts in week 10 and scores from 11 |
+| **Bye weeks**, for every player | the schedule (`resolveTeamByeWeeks`). Before this, byes were never data |
+| **Position runs** | this draft's last half round of picks |
+| **Teams picking before you** | their own picks in this draft, by draft slot (so it works for Sleeper mirrors), against the league's starting slots. Counts only — no labels, no predicted picks |
+| **Auctions** | room-money market prices, your price adjusted for need and the window, a bid/let-go verdict on the player up for bid, value targets, and a player to nominate. Previously a 409 |
+| **League shape** | superflex/2QB, PPR, TE premium, and now WRRB_FLEX/REC_FLEX |
+
+**Manager psychology stays inside the Competitive Edge rule.** Persistent personality profiles
+of other managers were retired for privacy. In-draft roster facts are allowed; labels and
+predictions about a person are not. Revisiting that is an owner decision, not a code change.
+
+**Replacement value is on (2026-11-14), the projection half only.** `DRAFT_VORP_MODE` now
+defaults to `active`. It was checked with `scripts/simulate-draft-vorp-modes.ts`: full snake
+drafts on real ADP with every team using the engine. With projections, reaches of more than two
+rounds went 8 → 7 (12 teams) and 8 → 6 (16 teams), starter quality was unchanged, and every
+lineup was complete. The ADP "tier cliff" made drafts worse in every form tried (as high as
+8 → 17 reaches, and second kickers), so it is now evidence text only. Both signals count only at
+a position still needed. This is a sanity check, not proof of better picks: the real-outcome
+backtest needs production data. Roll back with `DRAFT_VORP_MODE=observe`.
+
+**Projections reach every draft surface (2026-11-14).** The decision card, Chimmy's league
+grounding and the `/draft` room tips read season projections from the league's WARM draft pool
+(`getWarmDraftPoolSnapshotFast`, allowing a stale row), the same rows and rule the draft room uses
+(`lib/draft-room/poolProjections.ts`). The pool is never built for a decision; a cold build takes
+60–522 s. A cold pool means no projections, which was the behaviour before. Mock rooms have no
+league, so they have no projections.
+
+Sleeper's `start_week` is imported since 2026-11-14 (GAPS S-11). Still open: Sleeper does not
+share auction bid amounts.
+
+## 3. The rules
+
+Every rule here comes from a failure already recorded in this repo; the source is cited where one exists.
+
+### Wiring
+
+1. **One engine per domain, one home per engine.** If two screens need a trade verdict, both call
+   the trade engine. A screen that computes its own verdict will drift from the engine.
+   `DashUserOs` and `UserOsCard` already follow this by sharing one presentational component.
+2. **First-party calls are function calls, never HTTP back into ourselves.** Commissioner OS used
+   to call its own `/api/v1/intelligence/*` routes over the network, and five paid modules depended
+   on three production settings being correct. HTTP plus an API key is the **B2B** interface only.
+   See `lib/decision-os/behavioral/api/in-process.ts`.
+3. **Ship the writer with the reader, or ship neither.** A surface pointed at a table nothing
+   refreshes fails silently and looks correct (CLAUDE.md, the CFBD / `ingestCFBDStats` history).
+4. **Nothing ships without a caller.** A built engine with no surface, or a surface fed `null`, is
+   unfinished work. The Manager DNA and recommendation cards on the league page rendered a
+   placeholder for months, and were removed 2026-11-14.
+
+### Trust
+
+5. **Every output carries its evidence, freshness and confidence.** Use the canonical envelope
+   (`docs/decision-os/CANONICAL_DECISION_CONTRACT.md`): headline, reasons, evidence, confidence,
+   `dataAsOf`, and the action to take. A recommendation with no "why" is not shown.
+6. **An honest absence beats a wrong claim.** "We have no recent activity for this league" is a
+   different statement from "your managers are inactive". The Mission Control data-age caveat
+   (`lib/commissioner-ui/decision-os-client/live.ts`, `withDataAgeCaveat`) is the model.
+7. **Privacy boundaries live in the backbone, not the UI.** Commissioner-grade facts about other
+   managers go only to commissioners, and inferred personality profiles go to nobody
+   (`retiredProfileRoute`). A new transport must keep the same boundary: the in-process path
+   answers 410 for retired routes, exactly as HTTP does.
+
+### Change safety (not breaking what is built, or what will be)
+
+8. **Shadow, then a percentage, then live, with one lever per step.** New engines run in shadow
+   first (`DECISION_OS_*_SHADOW`). Then they go out behind a deterministic rollout
+   (`lib/sports-os/rollout.ts`), and each flag gets one env override for an instant pull-back
+   (`rolloutConfig.ts`). Remember that on Railway, writing a variable is a deploy.
+9. **Flags expire.** A flag that has been off for 60 days is either shipped or deleted. Keep the
+   inventory in one place (§5, idea 5); flags scattered across `.env.production`, Railway and
+   `platform_config` are how "built but dark" became the norm.
+10. **Additive contracts.** Add fields; never repurpose one. Keep compatibility exports when moving
+    an engine (the waiver and trade grader moves did this). Version anything a partner can see.
+11. **Every check reproduces a known failure before its pass is trusted.** Break the code, watch the
+    test go red, then restore it (CLAUDE.md, "a check that cannot fail reads as a pass"). The tests
+    added on 2026-11-14 were all proved this way.
+
+### Learning
+
+12. **Close the loop.** Log *shown → acted on → outcome* for every decision (§1 of
+    `B2B_DECISION_OS_DATA_AND_EVIDENCE_REQUIREMENTS.md`). Without it the backbone cannot learn what
+    advice was good. The same ledger is what the B2B dashboard shows partners.
+
+## 4. The B2B front: what a partner company should see
+
+The data contracts already exist (`B2B_DECISION_OS_DATA_AND_EVIDENCE_REQUIREMENTS.md`,
+`B2B_EVENT_AND_LEAGUE_HEALTH_SCHEMA.md`) and so do the tenancy layer (`lib/domain/`), the versioned
+API (`app/api/v1/`) and the widget SDK (`lib/decision-os/sdk/`, `PARTNER_SANDBOX_API_ENABLED`). What
+is missing is the **front door**. It should be a public partner page plus a signed-in partner
+portal, with:
+
+1. **A live demo tenant.** A sample platform with seeded leagues, so a prospect clicks around real
+   charts before signing anything. Commissioner OS already has `demo.ts` fixtures for every module,
+   which is most of the data.
+2. **League health at a glance**: engagement, retention risk, activity trend and commissioner
+   workload, across all of the partner's leagues, with drill-down to one league.
+3. **What the engine decided, and whether it helped**: recommendations shown, accepted and
+   dismissed, and the outcome. This needs the outcome ledger (rule 12).
+4. **Data quality**: freshness, coverage and identity-resolution rates. Partners trust a system
+   that shows its own gaps.
+5. **How it works**: an architecture diagram (the §2 picture, partner-facing), the API reference,
+   the sandbox key flow, and copy-paste widget embeds.
+6. **Customer-safe language only**, per the B2B requirements doc ("Intelligence", "Assist"; never "AI").
+
+## 5. Ideas, ordered by value
+
+1. **Finish folding the Command Center into Your week.** Started 2026-11-14 with the Survivor
+   signals ("Also needs you", `lib/core-app/weekNeeds.ts`). Two pieces remain. The career title
+   stake ("win X and it's ring #3") needs the Career read and would ride the summaries cache. The
+   lineup, trade and waiver priorities need the per-league User OS read on the hot week page, so
+   they should be summary-cached, and they depend on an event store that is still thin in
+   production. Signal text is English-only today, as it is on `/manager-hub`; localize it at the
+   signal source rather than in the page.
+2. **Prove the draft engine on real outcomes (§2.2).** Run the draft backtest
+   (`lib/shared-services/draft/backtest/`) against completed drafts to confirm replacement value
+   improves picks, not just keeps them sane. Projections reach every draft surface since
+   2026-11-14.
+   Draft season is when most new users arrive.
+3. **A "what changed since you looked" feed** driven by the sports-os reaction events. Injuries,
+   trades and waiver results get pushed instead of polled, using the notification outbox and the
+   fatigue budget (R7) that already exist.
+4. **The outcome ledger** (rule 12). It is the single feature that improves B2C advice quality and
+   B2B sales together.
+5. **One flag registry.** An admin page listing every Decision OS, Sports OS and Commissioner OS
+   flag with its effective value, source (code, env or `platform_config`) and age.
+6. **Delete or finish the dead ends:** `dailyBriefResolver.ts` and `notificationResolver.ts` (no
+   importers), `/player-command-center` (superseded by the Player Finder on 2026-11-13), the
+   three-brain Phase 1 orchestrator (zero callers), and `/fantasy-os` (an unlinked menu over three
+   pages).
+7. **The B2B partner front door (§4)**, starting with the demo tenant.
+
+## 6. What changed on 2026-11-14 (this file's companion commit)
+
+- Commissioner OS reads Decision OS **in-process**, with no base URL, API key or public flag needed;
+  `DECISION_OS_TRANSPORT=http` reverts it. Each module's own `isLiveReady()` switch still applies.
+- Sports OS screen summaries and league invalidation went from 10% to **100%**, with per-flag env
+  pull-backs (`SPORTS_OS_SCREEN_SUMMARIES_ROLLOUT=off`).
+- The league page no longer renders the always-empty Manager DNA and recommendations cards.
+- Your week's all-leagues guide carries an "Also needs you" card with the Command Center's Survivor
+  signals: votes, challenges, trade windows and side games. The card renders nothing when there are
+  none.
