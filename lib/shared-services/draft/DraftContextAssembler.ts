@@ -146,10 +146,14 @@ export interface DraftDecisionContext {
   /** Real 2QB flag (Phase 31), mutually exclusive with isSF — see resolveLeagueScoringFlags(). */
   is2QB: boolean
   round: number
-  /** Pick within the round (1..totalTeams) — what the engine expects. */
+  /** Overall pick number in the draft (DraftSession.nextOverallPick) — unchanged meaning. */
   pick: number
-  /** Overall pick number in the draft. */
-  overallPick: number
+  /**
+   * Pick within the round (1..totalTeams) — what the ENGINE's `pick` means. Added 2026-11-14; the
+   * engine input now gets this, not `pick`. `pick` keeps its overall meaning so consumers on the
+   * decision-boundary backlog (DraftShadowService) are untouched.
+   */
+  pickInRound: number
   /** The weeks this draft scores, for a tournament-stage league; null for a season-long one. */
   scoringWindow: ScoringWindow | null
   totalTeams: number
@@ -559,7 +563,7 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
    */
   const overallPick = Math.max(1, session.nextOverallPick ?? 1)
   const round = session.currentRoundNum ?? Math.ceil(overallPick / Math.max(1, totalTeams))
-  const pick = ((overallPick - 1) % Math.max(1, totalTeams)) + 1
+  const pickInRound = ((overallPick - 1) % Math.max(1, totalTeams)) + 1
   const keeperLockedPlayers = extractKeeperLockedPlayers(session.keeperSelections)
   const targetRosterAliases = await resolveTargetRosterAliases({
     platformUserId: targetRoster.platformUserId ?? null,
@@ -587,7 +591,7 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     poolByKey,
     rosterSlots,
     round,
-    pick,
+    pick: pickInRound,
     totalTeams,
     sport: league.sport,
     isDynasty: league.isDynasty,
@@ -610,8 +614,8 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     isSF,
     is2QB,
     round,
-    pick,
-    overallPick,
+    pick: overallPick,
+    pickInRound,
     scoringWindow,
     totalTeams,
     status: session.status,

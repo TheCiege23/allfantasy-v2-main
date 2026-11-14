@@ -87,8 +87,9 @@ export async function runLegacyDraftGrader(ctx: DraftDecisionContext): Promise<L
       isDynasty: ctx.isDynasty,
       isDevy: ctx.isDevy,
       round: ctx.round,
-      pickInRound: ctx.pick,
-      overallPick: ctx.overallPick,
+      // `ctx.pick` is the overall pick; the in-round pick is carried separately (2026-11-14).
+      pickInRound: ctx.pickInRound,
+      overallPick: ctx.pick,
       rosterCounts,
       queue: [],
       available,
