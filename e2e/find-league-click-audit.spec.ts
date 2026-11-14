@@ -188,7 +188,8 @@ test.describe("@find-league click audit", () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto("/find-league", { waitUntil: "domcontentloaded" })
 
-    await expect(page.getByTestId("find-league-ranking-banner")).toContainText("Rankings effect enabled")
+    await expect(page.getByTestId("find-league-career-rule")).toContainText("within 3 levels of your Career Level")
+    await expect(page.getByTestId("find-league-invite-needed")).toContainText("1 league needs a commissioner invite")
     await expect(page.getByTestId("find-league-card-joinable-alpha")).toBeVisible()
     await expect(page.getByTestId("find-league-join-joinable-alpha")).toBeVisible()
     await expect(page.getByTestId("find-league-invite-required-invite-only-beta")).toBeVisible()
@@ -201,15 +202,8 @@ test.describe("@find-league click audit", () => {
       /\/join\?code=JOINABLE-ALPHA/
     )
 
-    // The filters toggle is `sm:hidden` — it exists only on mobile, and its label
-    // is "Filters" (it reads "Hide filters" once open), never "Show filters". At
-    // this desktop viewport the panel is already expanded, so the old
-    // unconditional click waited 30s for a control that is deliberately not
-    // rendered here. Click it only when the layout actually collapses the panel.
-    const filtersToggle = page.getByRole("button", { name: /^(filters|hide filters)$/i })
-    if (await filtersToggle.isVisible().catch(() => false)) {
-      await filtersToggle.click()
-    }
+    // Sport and Sort sit beside the search at every width; the rest are in "More filters" (2026-11-14).
+    await page.getByTestId("find-league-more-toggle").click()
     await page.getByLabel("Sport").selectOption("NFL")
     await page.getByLabel("League type").selectOption("dynasty")
     await page.getByLabel("Draft type").selectOption("snake")
@@ -225,10 +219,8 @@ test.describe("@find-league click audit", () => {
     await page.getByTestId("find-league-search-submit").click()
 
     await expect(page.getByTestId("find-league-card-joinable-alpha")).toBeVisible()
-    await expect(page.getByTestId("find-league-card-joinable-alpha")).toContainText("League type:")
-    await expect(page.getByTestId("find-league-card-joinable-alpha")).toContainText("Draft type:")
-    await expect(page.getByTestId("find-league-card-joinable-alpha")).toContainText("Teams filled:")
-    await expect(page.getByTestId("find-league-card-joinable-alpha")).toContainText("AI features:")
+    await expect(page.getByTestId("find-league-draft-time-joinable-alpha")).toBeVisible()
+    await expect(page.getByTestId("find-league-seats-joinable-alpha")).toBeVisible()
 
     const params = mocks.getLatestParams()
     expect(params.get("sport")).toBe("NFL")

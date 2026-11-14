@@ -75,18 +75,13 @@ function privateCard(o: Partial<DiscoveryCard> = {}): DiscoveryCard {
 
 const ENGLISH_ON_THE_PRIVATE_CARD = [
   "Private league",
-  "League type",
-  "Draft type",
-  "Draft status",
-  "Teams filled",
-  "AI features",
+  "season",
+  "snake",
   "Draft not scheduled",
+  "seats left",
   "The commissioner approves every new manager",
   "members-only",
   "Free",
-  "pre draft",
-  "snake",
-  "None",
 ]
 
 describe("the private card in Spanish", () => {
@@ -94,12 +89,10 @@ describe("the private card in Spanish", () => {
     render(<FindLeagueCard league={privateCard()} />)
     const text = document.body.textContent ?? ""
     expect(screen.getByText("Liga privada")).toBeTruthy()
-    expect(text).toContain("Tipo de liga: best ball")
-    expect(text).toContain("Tipo de draft: serpiente")
-    expect(text).toContain("Estado del draft: antes del draft")
-    expect(text).toContain("Equipos ocupados: 4 / 12")
-    expect(text).toContain("Funciones de IA: Ninguna")
-    expect(text).toContain("Draft sin programar")
+    // Since 2026-11-14 each fact is one line: season and draft type, the draft, the seats.
+    expect(screen.getByTestId("find-league-facts-P1").textContent).toBe("Temporada 2026 · draft serpiente")
+    expect(screen.getByTestId("find-league-draft-time-P1").textContent).toBe("Draft aún sin programar")
+    expect(screen.getByTestId("find-league-seats-P1").textContent).toBe("Quedan 8 plazas de 12")
     expect(screen.getByTestId("find-league-private-note-P1").textContent).toContain("El comisionado aprueba")
     expect(screen.getByTestId("find-league-ask-P1").textContent).toContain(translations.es["findLeague.ask.button"])
     expect(ENGLISH_ON_THE_PRIVATE_CARD.filter((s) => text.includes(s))).toEqual([])
@@ -108,21 +101,18 @@ describe("the private card in Spanish", () => {
 
   it("a Guilly card says Guilly", () => {
     render(<FindLeagueCard league={privateCard({ leagueStyle: "guillotine" })} />)
-    expect(document.body.textContent).toContain("Tipo de liga: guilly")
+    expect(screen.getByText("guilly")).toBeTruthy()
   })
 
-  it("[control] in English the card reads exactly as it always did", () => {
+  it("[control] in English the card reads one plain line per fact", () => {
     lang.code = "en"
     render(<FindLeagueCard league={privateCard()} />)
     const text = document.body.textContent ?? ""
     expect(screen.getByText("Private league")).toBeTruthy()
     for (const line of [
-      "League type: best ball",
-      "Draft type: snake",
-      "Draft status: pre draft",
-      "Teams filled: 4 / 12",
-      "AI features: None",
-      "Draft not scheduled",
+      "2026 season · snake draft",
+      "Draft not scheduled yet",
+      "8 seats left of 12",
       "The commissioner approves every new manager. Rosters and chat stay members-only.",
     ]) {
       expect(text).toContain(line)
@@ -146,7 +136,7 @@ const keysUsed = [...literalKeys.filter((k) => !prefixes.includes(k)), ...codeKe
 
 describe("find-league card copy is translated", () => {
   it("🛑 every key the card uses exists in English AND Spanish", () => {
-    expect(prefixes).toHaveLength(4) // the scan sees the code-label prefixes
+    expect(prefixes).toHaveLength(3) // the scan sees the code-label prefixes (draft status is one line now, not a code)
     expect(keysUsed.length).toBeGreaterThanOrEqual(45)
     expect(keysUsed.filter((k) => !translations.en[k])).toEqual([])
     expect(keysUsed.filter((k) => !translations.es[k])).toEqual([])

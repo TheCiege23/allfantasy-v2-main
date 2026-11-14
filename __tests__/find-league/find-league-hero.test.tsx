@@ -22,7 +22,7 @@ describe("FindLeagueHero", () => {
     render(<FindLeagueHero />)
     const hero = screen.getByTestId("find-league-hero")
     expect(hero.querySelector(".fl-hero-eyebrow")?.textContent).toBe("Public leagues · every sport")
-    expect(screen.getAllByRole("heading", { level: 1 }).map((h) => h.textContent)).toEqual(["Find a league"])
+    expect(screen.getAllByRole("heading", { level: 1 }).map((h) => h.textContent)).toEqual(["Find a league to join"])
     expect(screen.getByRole("link", { name: "← Home" }).getAttribute("href")).toBe("/")
   })
 
