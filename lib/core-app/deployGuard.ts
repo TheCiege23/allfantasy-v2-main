@@ -15,7 +15,7 @@
  * with the one seen when this page booted:
  *
  *   same deployment     → refresh in place, exactly as before
- *   new deployment      → skip, and raise "a new version is ready" (`NewVersionPill`)
+ *   new deployment      → skip, and flag it (`NewVersionReload` reloads when unseen)
  *   marker unreadable   → skip this tick (the server is mid-swap; the next tick retries)
  *
  * A refresh the reader ASKS for (a ↻ button, a save) does not go through here — if a

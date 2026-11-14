@@ -328,6 +328,20 @@ const nextConfig = {
       'recharts',
       'framer-motion',
     ],
+    // ⚠ A TAB YOU OPENED IN THE LAST 30s COMES BACK INSTANTLY (2026-11-14). Next 15 defaults
+    // `dynamic` to 0, so every click back to a /core tab you just left re-ran its whole server
+    // render (seconds of reads) — the "lag between tabs" a Sleeper user does not feel, because
+    // Sleeper shows what it already has. With 30 the client keeps the last render of each tab for
+    // 30s and shows it at once on a revisit.
+    //
+    // What keeps it from showing stale data: any `router.refresh()` empties this cache, and every
+    // /core save path, plus the shell's own 20s game-day / 2-min idle refresh, already calls it. So
+    // the worst case is a tab revisited within 30s of a change made OUTSIDE the app, and it is
+    // exactly as old as it was when you left it. Kept short on purpose; raise it only with that
+    // trade in view.
+    staleTimes: {
+      dynamic: 30,
+    },
   },
 
   images: {
