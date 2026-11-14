@@ -1,33 +1,42 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
 import { useNativeIapPrices } from '@/lib/monetization/native-iap-client'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { getTokenPurchasableRule, type TokenBuyer } from '@/lib/tokens/tokenPurchasable'
+import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
+import { activityRow, tokensHeadline, type ActivityRow } from '@/lib/core-app/tokensGuide'
+import { tokensGuideMessages } from '@/lib/core-app/messages/tokensGuide'
+// 2026-11-14: af-core.css carries the .af-core token layer (--surface, --line, --text2, --accent-ink …)
+// that af-tokens.css reads. This screen renders standalone at /tokens, outside AfCoreShell, and never
+// imported it — measured on the live page: --surface, --surface2, --line, --line2, --text2 and
+// --accent-ink all computed to the EMPTY STRING, packs painted with no background and no border, and
+// --accent fell through to an unrelated #7c3aed purple. Same failure, same fix, as PricingV4.tsx: the
+// import must precede af-tokens.css AND the root must carry the `af-core` class.
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-tokens.css'
+import '@/components/core-app/af-tokens-guide.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 20a — the token centre.
  *
- * ⚠ THE DESIGN'S CENTRAL TABLE FEATURE NO LONGER APPLIES, AND RENDERING IT ANYWAY
- * WOULD BE THEATRE. The handoff specifies five columns including "list price
- * struck through" beside "your price in --accent" — a subscriber discount made
- * visible. That discount was dropped this morning along with the token grants:
- * subscribers get features unlocked outright, so a discount on token spend served
- * nobody. `discountedTokenSpendPct` is now 0 for every plan, so those two columns
- * would show the same number twice, one of them crossed out. There is one price
- * and everybody pays it.
+ * 2026-11-14 guide pass: the balance is the headline, said in Chimmy questions; the packs come before
+ * the price list; what tokens don't cover folds; the history is "Recent activity" in plain words. The
+ * page also gained a header — it had none, and not one link, so there was no way back to the app.
  *
- * ⚠ COPY GOES THROUGH t(). The existing page is translated and a reskin that
- * hardcodes English silently un-translates it — easy to do, hard to notice, and
- * invisible to anyone testing in English. New keys are added to `en` only; the
- * provider falls back `dict[key] ?? en[key] ?? key`, so other locales render
- * English until translated rather than showing a raw key.
+ * ⚠ ONE PRICE COLUMN. The handoff's struck-through "list price" beside "your price" described a
+ * subscriber discount that was dropped with the token grants (`discountedTokenSpendPct` is 0 for every
+ * plan), so two columns would show the same number twice, one crossed out.
+ *
+ * ⚠ EXISTING COPY STILL GOES THROUGH t(); the guide's new copy is a catalog
+ * (lib/core-app/messages/tokensGuide.ts), so neither path silently un-translates the page.
  */
 
 type SpendRule = {
@@ -35,13 +44,6 @@ type SpendRule = {
   label: string
   who: TokenBuyer
   tokenCost: number
-}
-
-type SpendEntry = {
-  id: string
-  label: string
-  delta: number
-  createdAt: string | null
 }
 
 type TokenCentreV4Props = {
@@ -56,14 +58,33 @@ const WHO_KEY: Partial<Record<TokenBuyer, string>> = {
 
 const CHIMMY_RULE = 'ai_chimmy_chat_message'
 
+/** Same mark as the pricing and landing navs. */
+function Shield() {
+  return (
+    <svg width="24" height="26" viewBox="0 0 28 30" aria-hidden focusable="false">
+      <path
+        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
+        fill="var(--accent-soft)"
+        stroke="var(--accent)"
+        strokeWidth="1.5"
+      />
+      <text x="14" y="19" textAnchor="middle" fill="var(--accent)" style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}>
+        AF
+      </text>
+    </svg>
+  )
+}
+
 export function TokenCentreV4({ packs }: TokenCentreV4Props) {
   const { nativeApp, prices: nativePrices, error: playError } = useNativeIapPrices()
   const { t } = useLanguage()
+  const g = useMessages(tokensGuideMessages)
   const { balance, loading: balanceLoading } = useTokenBalance()
   const postPurchase = usePostPurchaseSync({})
+  const locale = getAppIntlLocale()
 
   const [rules, setRules] = useState<SpendRule[]>([])
-  const [history, setHistory] = useState<SpendEntry[]>([])
+  const [history, setHistory] = useState<ActivityRow[]>([])
   const [pendingSku, setPendingSku] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -78,9 +99,9 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
       const raw = (rulesRes?.rules ?? rulesRes?.data ?? []) as Array<Record<string, unknown>>
       /*
        * 🛑 ONLY WHAT A SCREEN CAN ACTUALLY SELL. The API returns every priced rule — 64 of them —
-       * and this page used to list them all under "What things cost", so it advertised 51
-       * actions no screen could buy (lib/tokens/tokenPurchasable.ts). The cost still comes from
-       * the live rule; the list and the plain-words label come from the allowlist.
+       * and this page used to list them all, advertising 51 actions no screen could buy
+       * (lib/tokens/tokenPurchasable.ts). The cost comes from the live rule; the list and the
+       * plain-words label come from the allowlist.
        */
       const buyable: SpendRule[] = []
       for (const r of raw) {
@@ -91,30 +112,22 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
       }
       buyable.sort((a, b) => a.tokenCost - b.tokenCost || a.label.localeCompare(b.label))
       setRules(buyable)
-      const entries = (histRes?.entries ?? histRes?.data ?? []) as Array<Record<string, unknown>>
       /*
-       * ⚠ THE HISTORY API'S FIELDS ARE `spendFeatureLabel`, `description` AND `tokenDelta`
-       * (TokenSpendService `toLedgerView`). This read `label` / `reason` / `delta`, which it
-       * never sends, so every row rendered a blank name and "0".
+       * ⚠ THE HISTORY API'S FIELDS ARE `spendFeatureLabel`, `description`, `sourceType` AND
+       * `tokenDelta` (TokenSpendService `toLedgerView`). `activityRow` phrases each one and drops a
+       * row that changed nothing — the live page showed a red "0".
        */
-      setHistory(
-        entries.map((e, i) => ({
-          id: String(e.id ?? i),
-          label: String(
-            e.spendFeatureLabel ?? e.description ?? e.tokenPackageSku ?? e.entryType ?? e.label ?? '',
-          ),
-          delta: Number(e.tokenDelta ?? e.delta ?? 0),
-          createdAt: e.createdAt ? String(e.createdAt) : null,
-        }))
-      )
+      const entries = (histRes?.entries ?? histRes?.data ?? []) as Array<Record<string, unknown>>
+      setHistory(entries.map(activityRow).filter((r): r is ActivityRow => r != null))
     })()
     return () => {
       cancelled = true
     }
   }, [])
 
-  /** What one Chimmy question costs, so a pack can say what it buys in plain terms. */
+  /** What one Chimmy question costs, so the balance and each pack can say what they buy. */
   const chimmyCost = useMemo(() => rules.find((r) => r.code === CHIMMY_RULE)?.tokenCost ?? null, [rules])
+  const head = tokensHeadline(balance, balanceLoading, chimmyCost)
 
   async function buy(sku: string) {
     setError(null)
@@ -132,39 +145,108 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
     window.location.assign(res.url)
   }
 
+  function activityText(h: ActivityRow): string {
+    if (h.kind === 'dailyTopUp') return g.dailyTopUp
+    if (h.kind === 'bought') return g.bought(Math.abs(h.delta).toLocaleString(locale))
+    if (h.kind === 'refund') return g.refund(h.label)
+    return h.label ?? ''
+  }
+  const day = (iso: string | null) =>
+    iso && !Number.isNaN(Date.parse(iso)) ? new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date(iso)) : null
+
+  function headlineContent() {
+    if (head.kind === 'unavailable') return g.headUnavailable
+    if (head.kind === 'loading') return g.headLoading
+    const n = head.balance.toLocaleString(locale)
+    const q = head.questions != null ? head.questions.toLocaleString(locale) : null
+    const text = g.headBalance(n, q)
+    const at = text.indexOf(n)
+    // The number keeps its e2e id (tokens-balance-display) and its own styling inside the sentence.
+    return (
+      <>
+        {text.slice(0, at)}
+        <span className="af-tkg-num af-num" data-testid="tokens-balance-display">
+          {n}
+        </span>
+        {text.slice(at + n.length)}
+      </>
+    )
+  }
+
   return (
-    <div className="af-tk">
+    <div className="af-core af-tk" data-guide="tokens">
+      {/*
+        ⚠ THIS PAGE HAD NO NAVIGATION AT ALL — no header and not one link. /tokens is behind sign-in
+        (app/tokens/layout.tsx), so the way out is always the app.
+      */}
+      <nav className="af-tkg-nav" aria-label="Main">
+        <Link href="/core" className="af-tkg-brand">
+          <Shield />
+          <span>{g.eyebrow}</span>
+        </Link>
+        <span className="af-tkg-nav-right">
+          <Link href="/pricing" className="af-tkg-nav-link">
+            {g.seePlans}
+          </Link>
+          <Link href="/core" className="af-tkg-nav-cta" data-testid="tokens-back-to-app">
+            {g.backToApp}
+          </Link>
+        </span>
+      </nav>
+
       <div className="af-tk-alerts">
         <CheckoutOutcomePanel phase={postPurchase.state.phase} onRetry={postPurchase.retrySync} />
       </div>
 
-      <header className="af-tk-head">
-        <h1 className="af-tk-title">{t('tokens.v4.title')}</h1>
-        <p className="af-tk-sub">{t('tokens.v4.subtitle')}</p>
+      {/* ── The answer: your balance, in Chimmy questions ────────────────────────── */}
+      <header className="af-tk-head af-tkg-head">
+        <h1 className="af-tk-title af-tkg-title" data-testid="tokens-headline">
+          {headlineContent()}
+        </h1>
+        {head.kind === 'unavailable' ? <p className="af-tk-sub">{g.unavailableHint}</p> : null}
+        <p className="af-tk-sub" data-testid="tokens-intro">
+          {g.intro}
+        </p>
+        <p className="af-tk-sub af-tkg-rule">{g.topUpRule(FREE_CHIMMY_QUESTIONS_PER_DAY)}</p>
       </header>
-
-      {/* ── Balance ──────────────────────────────────────────── */}
-      <section className="af-tk-balance">
-        <span className="af-tk-label">{t('tokens.v4.balanceLabel')}</span>
-        {balanceLoading ? (
-          <span className="af-tk-balance-num af-tk-balance-num--muted">{t('tokens.v4.loading')}…</span>
-        ) : balance == null ? (
-          /*
-            ⚠ NO NUMBER WHEN WE DO NOT HAVE ONE. A signed-out visitor gets a
-            sentence, never a zero — "0 tokens" reads as an empty wallet rather
-            than as not being signed in, and those prompt different actions.
-          */
-          <span className="af-tk-balance-none">{t('tokens.v4.balanceUnavailable')}</span>
-        ) : (
-          <span className="af-tk-balance-num" data-testid="tokens-balance-display">
-            {balance.toLocaleString(getAppIntlLocale())}
-          </span>
-        )}
-      </section>
 
       {(error || playError) ? <p className="af-tk-error">{error || playError}</p> : null}
 
-      {/* ── Costs ────────────────────────────────────────────── */}
+      {/* ── Packs: the one thing to do here ──────────────────────────────────────── */}
+      <section className="af-tk-packs-wrap" aria-labelledby="af-tkg-packs-h">
+        <h2 className="af-tk-h2" id="af-tkg-packs-h">
+          {g.packsTitle}
+        </h2>
+        <div className="af-tk-packs">
+          {packs.map((p) => (
+            <div key={p.sku} className="af-tk-pack">
+              <span className="af-tk-pack-num af-num">{p.tokenAmount != null ? p.tokenAmount.toLocaleString(locale) : '—'}</span>
+              <span className="af-tk-pack-label">{t('tokens.v4.packTokens')}</span>
+              <span className="af-tk-pack-price af-num">{nativeApp ? (nativePrices[p.sku] ?? 'Loading store price…') : `$${p.amountUsd.toFixed(2)}`}</span>
+              {p.tokenAmount != null && chimmyCost ? (
+                <span className="af-tk-pack-about" data-testid={`tokens-pack-about-${p.sku}`}>
+                  {t('tokens.v4.packAbout').replace('{{n}}', Math.floor(p.tokenAmount / chimmyCost).toLocaleString(locale))}
+                </span>
+              ) : null}
+              {/*
+                The token suite drives every purchase through `tokens-buy-cta-{sku}` and reads the
+                balance from `tokens-balance-display` — keep both ids.
+              */}
+              <button
+                type="button"
+                className="af-tk-btn"
+                data-testid={`tokens-buy-cta-${p.sku}`}
+                disabled={pendingSku === p.sku || (nativeApp && !nativePrices[p.sku])}
+                onClick={() => buy(p.sku)}
+              >
+                {pendingSku === p.sku ? `${t('tokens.v4.loading')}…` : t('tokens.v4.packBuy')}
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── What tokens buy ──────────────────────────────────────────────────────── */}
       <section className="af-tk-costs">
         <div className="af-tk-costs-head">
           <h2 className="af-tk-h2">{t('tokens.v4.costsTitle')}</h2>
@@ -181,11 +263,6 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
                   {r.label}
                   {WHO_KEY[r.who] ? <span className="af-tk-rule-who"> · {t(WHO_KEY[r.who]!)}</span> : null}
                 </span>
-                {/*
-                  One price column, not two. There is no subscriber discount
-                  any more, so a struck-through "list price" beside an
-                  identical "your price" would be invented drama.
-                */}
                 <span className="af-tk-rule-cost af-num">{r.tokenCost}</span>
               </li>
             ))}
@@ -193,73 +270,32 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
         )}
       </section>
 
-      {/* ── What tokens don't buy ────────────────────────────── */}
-      <section className="af-tk-free" data-testid="tokens-not-included">
-        <h2 className="af-tk-h2">{t('tokens.v4.notTitle')}</h2>
+      {/* ── What tokens don't cover — one fold where there were two sections ─────── */}
+      <details className="af-tkg-fold" data-testid="tokens-not-included">
+        <summary>{g.dontCoverTitle}</summary>
         <ul className="af-tk-not">
           <li>{t('tokens.v4.notPlan')}</li>
           <li>{t('tokens.v4.notUnlisted')}</li>
+          <li>{g.neverCosts}</li>
         </ul>
-      </section>
+      </details>
 
-      {/* ── What's free ──────────────────────────────────────── */}
-      <section className="af-tk-free">
-        <h2 className="af-tk-h2">{t('tokens.v4.freeTitle')}</h2>
-        <p className="af-tk-sub af-tk-sub--tight">{t('tokens.v4.freeBody')}</p>
-      </section>
-
-      {/* ── Packs ────────────────────────────────────────────── */}
-      <section className="af-tk-packs-wrap">
-        <h2 className="af-tk-h2">{t('tokens.v4.packsTitle')}</h2>
-        <div className="af-tk-packs">
-          {packs.map((p) => (
-            <div key={p.sku} className="af-tk-pack">
-              <span className="af-tk-pack-num af-num">
-                {p.tokenAmount != null ? p.tokenAmount.toLocaleString(getAppIntlLocale()) : '—'}
-              </span>
-              <span className="af-tk-pack-label">{t('tokens.v4.packTokens')}</span>
-              <span className="af-tk-pack-price af-num">{nativeApp ? (nativePrices[p.sku] ?? 'Loading store price…') : `$${p.amountUsd.toFixed(2)}`}</span>
-              {p.tokenAmount != null && chimmyCost ? (
-                <span className="af-tk-pack-about" data-testid={`tokens-pack-about-${p.sku}`}>
-                  {t('tokens.v4.packAbout').replace('{{n}}', Math.floor(p.tokenAmount / chimmyCost).toLocaleString(getAppIntlLocale()))}
-                </span>
-              ) : null}
-              {/*
-                The token suite drives every purchase through
-                `tokens-buy-cta-{sku}` and reads the balance from
-                `tokens-balance-display` — the ids the previous /tokens surface
-                emitted. This screen replaced it and kept both behaviours but
-                neither id, so the buy path lost its e2e hook. Restored here; the
-                rest of that suite needs UI this screen does not have, which the
-                spec now says out loud rather than failing on.
-              */}
-              <button
-                type="button"
-                className="af-tk-btn"
-                data-testid={`tokens-buy-cta-${p.sku}`}
-                disabled={pendingSku === p.sku || (nativeApp && !nativePrices[p.sku])}
-                onClick={() => buy(p.sku)}
-              >
-                {pendingSku === p.sku ? `${t('tokens.v4.loading')}…` : t('tokens.v4.packBuy')}
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Recent ───────────────────────────────────────────── */}
+      {/* ── Recent activity ──────────────────────────────────────────────────────── */}
       <section className="af-tk-recent">
-        <h2 className="af-tk-h2">{t('tokens.v4.recentTitle')}</h2>
+        <h2 className="af-tk-h2">{g.activityTitle}</h2>
         {history.length === 0 ? (
-          <p className="af-tk-empty">{t('tokens.v4.recentEmpty')}</p>
+          <p className="af-tk-empty">{g.activityEmpty}</p>
         ) : (
-          <ul className="af-tk-history">
+          <ul className="af-tk-history" data-testid="tokens-activity">
             {history.map((h) => (
               <li key={h.id}>
-                <span className="af-tk-hist-label">{h.label}</span>
+                <span className="af-tk-hist-label">
+                  {activityText(h)}
+                  {day(h.createdAt) ? <span className="af-tkg-date"> · {day(h.createdAt)}</span> : null}
+                </span>
                 <span className="af-tk-hist-delta af-num" data-up={h.delta > 0}>
                   {h.delta > 0 ? '+' : ''}
-                  {h.delta}
+                  {h.delta.toLocaleString(locale)}
                 </span>
               </li>
             ))}
@@ -269,4 +305,3 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
     </div>
   )
 }
-

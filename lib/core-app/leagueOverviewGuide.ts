@@ -72,3 +72,28 @@ export function overviewHeadline(input: {
   }
   return { kind: 'none' }
 }
+
+/**
+ * The one line under the headline (2026-11-14): this week's game in a head-to-head league, the cut in an
+ * elimination league. The headline says where you stand; this says what this week is. Before, the opponent
+ * was in the headline, again in a Matchup card under "Your next steps", and again on the scoreboard.
+ * Null when there is nothing to say for this week (before the draft, chopped, unranked, no game).
+ */
+export type OverviewWeekLine = { kind: 'game'; opponent: string; winPct: number | null } | { kind: 'cut' } | null
+
+export function overviewWeekLine(head: OverviewHeadline): OverviewWeekLine {
+  if (head.kind === 'h2h' && head.opponent) return { kind: 'game', opponent: head.opponent, winPct: head.winPct }
+  if (head.kind === 'alive') return { kind: 'cut' }
+  return null
+}
+
+/**
+ * The standings rows the Overview lists: the top `top`, plus your own team when it sits below them, so
+ * the table always answers "where am I" (12th of 14 was not on a six-row table).
+ */
+export function standingsRowsToShow<T extends { isYou: boolean }>(rows: T[], top = 6): T[] {
+  const head = rows.slice(0, top)
+  if (head.some((r) => r.isYou)) return head
+  const you = rows.slice(top).find((r) => r.isYou)
+  return you ? [...head, you] : head
+}

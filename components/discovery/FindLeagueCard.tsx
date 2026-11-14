@@ -7,6 +7,7 @@ import { Calendar, ExternalLink, Lock, ShieldCheck, User, Sparkles, Zap } from "
 import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { DiscoveryCard, RankBand } from "@/lib/public-discovery/types"
+import { cardDraft, cardSeats } from "@/lib/public-discovery/findLeagueGuide"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { platformLabel, verificationLabel } from "@/lib/public-discovery/externalListing"
@@ -44,11 +45,10 @@ function codeLabel(t: T, prefix: string, raw: string): string {
   return tOrFallback(t, `${prefix}.${raw}`, raw.replace(/_/g, " "))
 }
 
-/** "Sun, Sep 6, 7:30 PM EDT" on the viewer's clock (see resolveViewerTimeZone). */
-function formatDraftTime(iso: string | null, timeZone: string | null, notScheduled: string): string {
-  if (!iso) return notScheduled
+/** "Sun, Sep 6, 7:30 PM EDT" on the viewer's clock (see resolveViewerTimeZone); null when unreadable. */
+function formatDraftTime(iso: string, timeZone: string | null): string | null {
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return notScheduled
+  if (Number.isNaN(d.getTime())) return null
   try {
     return new Intl.DateTimeFormat(undefined, {
       weekday: "short",
@@ -60,7 +60,7 @@ function formatDraftTime(iso: string | null, timeZone: string | null, notSchedul
       ...(timeZone ? { timeZone } : {}),
     }).format(d)
   } catch {
-    return notScheduled
+    return null
   }
 }
 
@@ -94,15 +94,9 @@ function formatLeagueType(league: DiscoveryCard, t: T): string {
   return codeLabel(t, "findLeague.card.source", String(league.leagueType ?? league.source ?? "league"))
 }
 
-function formatDraftType(draftType: string | null | undefined, t: T): string {
+function formatDraftType(draftType: string | null | undefined, t: T): string | null {
   const raw = String(draftType ?? "").trim()
-  return raw ? codeLabel(t, "findLeague.card.draftType", raw) : "—"
-}
-
-function formatDraftStatus(status: string | null | undefined, t: T): string {
-  const raw = String(status ?? "").trim()
-  if (!raw) return "—"
-  return codeLabel(t, "findLeague.card.draftStatus", raw)
+  return raw ? codeLabel(t, "findLeague.card.draftType", raw) : null
 }
 
 function getSourceLabel(league: DiscoveryCard, t: T): string {
@@ -127,13 +121,27 @@ function getSourceBadgeStyle(source: DiscoveryCard["source"]): {
   return { background: "rgba(59, 130, 246, 0.15)", color: tone("rgb(96, 165, 250)") }
 }
 
-/** "Runs 3 AllFantasy leagues · since 2025" — who you'd be playing for, before you ask to join. */
-function commishLine(league: DiscoveryCard): string | null {
+type TI = (key: string, vars?: Record<string, string | number>) => string
+
+/** "18 leagues since 2026" — who you'd be playing for, before you join. */
+function commishLine(league: DiscoveryCard, t: T, ti: TI): string | null {
   const parts: string[] = []
   const run = league.commissionerLeaguesRun ?? 0
-  if (run > 0) parts.push(run === 1 ? "Runs 1 AllFantasy league" : `Runs ${run} AllFantasy leagues`)
-  if (league.commissionerSinceYear) parts.push(`since ${league.commissionerSinceYear}`)
-  return parts.length > 0 ? parts.join(" · ") : null
+  if (run > 0) parts.push(run === 1 ? t("findLeague.card.commishLeaguesOne") : ti("findLeague.card.commishLeagues", { count: run }))
+  if (league.commissionerSinceYear) parts.push(ti("findLeague.card.commishSince", { year: league.commissionerSinceYear }))
+  return parts.length > 0 ? parts.join(" ") : null
+}
+
+/** "2026 season · snake draft", with the tournament first when there is one. */
+function factsLine(league: DiscoveryCard, t: T, ti: TI): string {
+  const draftType = formatDraftType(league.draftType, t)
+  return [
+    league.tournamentName || null,
+    league.season != null ? ti("findLeague.card.season", { season: league.season }) : null,
+    draftType ? ti("findLeague.card.draftKind", { value: draftType }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ")
 }
 
 export function FindLeagueCard({ league }: FindLeagueCardProps) {
@@ -151,11 +159,15 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
   const canJoinDirect =
     !isFull &&
     !(league.inviteOnlyByTier === true || league.canJoinByRanking === false)
-  const rankFitScore = Math.max(0, Number(league.rankingEffectScore ?? 0))
   const sourceBadgeStyle = getSourceBadgeStyle(league.source)
   const visibleAiFeatures = hasAI ? league.aiFeatures.slice(0, 2) : []
   // A private league: no page to view and no code to join with — the commissioner approves.
   const isApproval = league.joinMode === "approval"
+  const draft = cardDraft(league)
+  const draftTime = draft.kind === "scheduled" ? formatDraftTime(draft.iso, viewerZone) : null
+  const seats = cardSeats(league)
+  const facts = factsLine(league, t, tInterpolate)
+  const commish = commishLine(league, t, tInterpolate)
 
   return (
     <article
@@ -191,12 +203,6 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             style={{ background: "var(--panel2)", color: "var(--text)" }}
           >
             {league.sport}
-          </span>
-          <span
-            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium capitalize"
-            style={sourceBadgeStyle}
-          >
-            {codeLabel(t, "findLeague.card.source", league.source)}
           </span>
           <span
             className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium capitalize"
@@ -255,15 +261,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             >
               {tOrFallback(t, `findLeague.card.rankBand.${rankBand}`, RANK_BAND_LABELS[rankBand])}
             </span>
-          ) : rankFitScore > 0 && (
-            <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
-              title="Ranking effect score based on league tier fit and direct-join eligibility."
-              style={{ background: "rgba(56, 189, 248, 0.14)", color: tone("rgb(125, 211, 252)") }}
-            >
-              Rank fit +{rankFitScore}
-            </span>
-          )}
+          ) : null}
         </div>
         {league.isPaid ? (
           <p className="text-[11px]" style={{ color: tone("rgba(250, 204, 21, 0.75)") }} data-testid={`find-league-paid-${league.id}`}>
@@ -286,11 +284,11 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           </div>
         ) : null}
 
-        <p className="text-xs sm:text-sm truncate" style={{ color: "var(--muted)" }}>
-          {league.sport}
-          {league.tournamentName ? ` · ${league.tournamentName}` : ""}
-          {league.season != null ? ` · ${league.season}` : ""}
-        </p>
+        {facts ? (
+          <p className="text-xs sm:text-sm truncate" style={{ color: "var(--muted)" }} data-testid={`find-league-facts-${league.id}`}>
+            {facts}
+          </p>
+        ) : null}
         {visibleAiFeatures.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {visibleAiFeatures.map((feature) => (
@@ -304,40 +302,45 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             ))}
           </div>
         ) : null}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:text-xs" style={{ color: "var(--muted)" }}>
-          <span>{tInterpolate("findLeague.card.leagueTypeLine", { value: formatLeagueType(league, t) })}</span>
-          <span>{tInterpolate("findLeague.card.draftTypeLine", { value: formatDraftType(league.draftType, t) })}</span>
-          <span>{tInterpolate("findLeague.card.draftStatusLine", { value: formatDraftStatus(league.draftStatus, t) })}</span>
-          <span>
-            {tInterpolate("findLeague.card.teamsFilledLine", {
-              value: league.teamCount > 0 ? `${league.memberCount} / ${league.teamCount}` : String(league.memberCount),
-            })}
-          </span>
-          <span>
-            {tInterpolate("findLeague.card.aiFeaturesLine", {
-              value: hasAI ? league.aiFeatures.join(", ") : t("findLeague.card.none"),
-            })}
-          </span>
+        <div className="flex flex-col gap-1 text-[11px] sm:text-xs" style={{ color: "var(--muted)" }}>
           <span className="flex items-center gap-1" data-testid={`find-league-draft-time-${league.id}`}>
             <Calendar className="h-3.5 w-3.5 shrink-0" />
-            {formatDraftTime(league.draftDate, viewerZone, t("findLeague.card.draftNotScheduled"))}
-            {league.draftDate ? <span className="opacity-70">{t("findLeague.card.yourTime")}</span> : null}
+            {draft.kind === "done" ? (
+              t("findLeague.card.draftDone")
+            ) : draft.kind === "live" ? (
+              t("findLeague.card.draftLive")
+            ) : draft.kind === "paused" ? (
+              t("findLeague.card.draftPaused")
+            ) : draftTime ? (
+              <>
+                {tInterpolate("findLeague.card.draftAt", { when: draftTime })}
+                <span className="opacity-70">{t("findLeague.card.yourTime")}</span>
+              </>
+            ) : (
+              t("findLeague.card.draftNotScheduledYet")
+            )}
           </span>
           {leagueRegion ? (
-            <span>League runs on {TIME_ZONE_REGION_LABELS[leagueRegion]} time</span>
+            <span>{tInterpolate("findLeague.card.runsOn", { region: TIME_ZONE_REGION_LABELS[leagueRegion] })}</span>
+          ) : null}
+          {league.leagueCareerLevel != null ? (
+            <span data-testid={`find-league-level-${league.id}`}>
+              {tInterpolate("findLeague.card.levelLeague", { level: league.leagueCareerLevel })}
+            </span>
           ) : null}
           {isApproval ? null : (
             <span className="flex min-w-0 flex-wrap items-center gap-1" data-testid={`find-league-commish-${league.id}`}>
               <User className="h-3.5 w-3.5 shrink-0" />
+              {t("findLeague.card.runBy")}
               {league.commissionerUsername ? (
                 <Link href={`/profile/${encodeURIComponent(league.commissionerUsername)}`} className="underline-offset-2 hover:underline">
                   {league.commissionerName || league.commissionerUsername}
                 </Link>
               ) : (
-                league.commissionerName || "Commissioner"
+                <span>{league.commissionerName || "Commissioner"}</span>
               )}
               <CommishReputationBadge reputation={league.commissionerReputation} className="ml-1" />
-              {commishLine(league) ? <span className="opacity-80">· {commishLine(league)}</span> : null}
+              {commish ? <span className="opacity-80">· {commish}</span> : null}
             </span>
           )}
         </div>
@@ -366,9 +369,18 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             &ldquo;{league.listingNote}&rdquo;
           </p>
         ) : null}
+        <p className="text-[11px] sm:text-xs font-medium" style={{ color: "var(--text)" }} data-testid={`find-league-seats-${league.id}`}>
+          {seats.kind === "open"
+            ? seats.left === 1
+              ? tInterpolate("findLeague.card.seatsLeftOne", { teams: seats.teams })
+              : tInterpolate("findLeague.card.seatsLeft", { left: seats.left, teams: seats.teams })
+            : seats.kind === "full"
+              ? tInterpolate("findLeague.card.seatsFull", { teams: seats.teams })
+              : tInterpolate("findLeague.card.managers", { count: seats.members })}
+        </p>
         {league.maxMembers > 0 && (
           <div
-            className="h-1.5 rounded-full overflow-hidden"
+            className="-mt-1 h-1.5 rounded-full overflow-hidden"
             style={{ background: "var(--panel2)" }}
           >
             <div
@@ -382,7 +394,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
         )}
       </div>
       <div
-        className="p-3 sm:p-4 pt-0 flex flex-wrap items-center gap-2 border-t"
+        className="p-3 sm:p-4 flex flex-wrap items-center gap-2 border-t"
         style={{ borderColor: "var(--border)" }}
       >
         {league.joinMode === "request" || isApproval ? null : (
@@ -392,10 +404,9 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
           className="rounded-lg border px-2.5 sm:px-3 py-2.5 min-h-[40px] sm:min-h-[44px] inline-flex items-center justify-center text-xs sm:text-sm font-medium transition-colors hover:bg-white/5 touch-manipulation"
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
         >
-          View
+          {t("findLeague.card.view")}
         </Link>
         )}
-        {league.leagueCareerLevel != null ? <span className="self-center text-xs" style={{ color: "var(--muted)" }}>Career Level {league.leagueCareerLevel}</span> : null}
         {isApproval && !isFull ? (
           <AskToJoinButton league={league} />
         ) : league.joinMode === "request" && !isFull ? (
@@ -444,7 +455,7 @@ export function FindLeagueCard({ league }: FindLeagueCardProps) {
             aria-disabled={!canJoinDirect}
             title={league.isPaid ? paidBoundaryDisclosure : undefined}
           >
-            Join
+            {t("findLeague.card.join")}
           </Link>
         )}
         {league.creatorSlug && (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 import { useMessages } from '@/components/i18n/useMessages'
 import { matchupPulseRefreshMessages } from '@/lib/core-app/messages/matchupPulseRefresh'
 
@@ -120,6 +121,17 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
     startTransition(() => router.refresh())
   }, [router])
 
+  /* Timer- and visibility-driven refreshes only: after a deploy one would reload the page. */
+  const backgroundRefresh = useCallback(() => {
+    void refreshInBackground(() => {
+      if (!pendingRef.current) refresh()
+    })
+  }, [refresh])
+
+  useEffect(() => {
+    void primeDeployBaseline()
+  }, [])
+
   useEffect(() => {
     const period = inPlay ? LIVE_POLL_MS : IDLE_POLL_MS
 
@@ -141,7 +153,7 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
        */
       if (document.visibilityState !== 'visible') return
       if (pendingRef.current) return
-      refresh()
+      backgroundRefresh()
     }
 
     const id = window.setInterval(tick, period)
@@ -152,7 +164,7 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
       // tabs does not fire a portfolio read every time.
       if (pendingRef.current) return
       if (refreshedAt != null && Date.now() - refreshedAt < period) return
-      refresh()
+      backgroundRefresh()
     }
     document.addEventListener('visibilitychange', onVisible)
 
@@ -160,7 +172,7 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
       window.clearInterval(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [inPlay, refresh, refreshedAt])
+  }, [inPlay, backgroundRefresh, refreshedAt])
 
   /*
    * Kickoff. While idle, one refresh just after the next starter's game begins, so the board turns

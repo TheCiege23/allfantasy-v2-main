@@ -873,9 +873,11 @@ function InsightCards({
         <div className="af-mu-insight" data-kind="to-win">
           <h2 className="af-mu-insight-label">{m.toWinLabel}</h2>
           <p className="af-mu-insight-title af-num">{win.needed > 0 ? m.toWinNeed(win.needed) : m.toWinAhead}</p>
-          <p className="af-mu-insight-body">
-            {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected)}
-          </p>
+          {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected, win.short) ? (
+            <p className="af-mu-insight-body" data-testid="matchup-to-win-body">
+              {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected, win.short)}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -993,11 +995,12 @@ export function Matchup({ data }: MatchupProps) {
           ? (head.leader === 'you' ? g.projWin : head.leader === 'them' ? g.projLose : g.projLevel)(f1(head.you), f1(head.them)) +
             (winPct != null ? g.chanceSuffix(winPct) : '')
           : g.unknown
-  const platformName = data.league.platform && data.league.platform !== 'manual' ? platformLabel(data.league.platform) : null
-  const guideChips: Array<{ key: string; value: string; label: string }> = []
-  if (winPct != null && weekState !== 'final') guideChips.push({ key: 'win', value: `${winPct}%`, label: g.chipWin })
-  if (projected && weekState !== 'final') guideChips.push({ key: 'projected', value: `${f1(projected.you)}–${f1(projected.opponent)}`, label: g.chipProjected })
-  if (yourLeft != null && theirLeft != null) guideChips.push({ key: 'left', value: `${yourLeft}–${theirLeft}`, label: g.chipLeft })
+  /*
+   * 2026-11-14: the headline is the whole top. The intro ("Follow this week's head-to-head … Lineup
+   * changes are made on Sleeper") is gone — the banner above every league tab says where changes
+   * happen — and so are the win-chance, projected-final and players-left chips: the scoreboard right
+   * below shows each of them.
+   */
 
   return (
     /*
@@ -1030,50 +1033,15 @@ export function Matchup({ data }: MatchupProps) {
           title={<span id="af-mug-title">{headline}</span>}
           eyebrow={data.week.available ? g.eyebrow(data.week.data.week) : null}
           eyebrowTestId="matchup-week-eyebrow"
-          sub={g.intro(platformName)}
         />
-        {guideChips.length > 0 ? (
-          <ul className="af-hg-chips">
-            {guideChips.map((c) => (
-              <li key={c.key}>
-                <span className="af-hg-chip af-mug-chip" data-tone="ok" data-chip={c.key}>
-                  <b>{c.value}</b>
-                  <span>{c.label}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
       </section>
 
       {/* ── Week banner ─────────────────────────────────────────────── */}
       <header className="af-mu-week">
         {/*
-          The league is NAMED AND SHOWN. On an account with sixty leagues the
-          only thing that told you which one you were looking at was a
-          highlighted rail chip, which is a poor answer to "whose matchup is
-          this".
+          The league's crest and name left this bar on 2026-11-14: the league bar above every league
+          tab names it, and the rail highlights it. The bar is the week now.
         */}
-        {data.league.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            className="af-mu-league-crest"
-            src={data.league.logoUrl}
-            alt=""
-            width={24}
-            height={24}
-          />
-        ) : (
-          <span className="af-mu-league-crest af-mu-league-crest--none" aria-hidden>
-            {initialsOf(data.league.name)}
-          </span>
-        )}
-        {/*
-          The league's name, in the banner. It was the page's h1 until 2026-11; the h1 is now the
-          shared PageHeader's "Matchup" above (the screen had no h1 at all before that, so a screen
-          reader jumping by heading landed halfway down). The name stays here as text.
-        */}
-        <p className="af-mu-league-name">{data.league.name}</p>
 
         {data.week.available ? (
           <>
@@ -1154,7 +1122,8 @@ export function Matchup({ data }: MatchupProps) {
             through one hardened resolver — never built here — and the component
             renders nothing at all for a native league.
           */}
-          {data.league.sourceLink ? (
+          {/* One button (2026-11-14): "Set lineup in" when that link resolved, else the matchup itself. */}
+          {data.league.sourceLink && !data.league.lineupLink ? (
             <SourceActionLink
               link={data.league.sourceLink}
               className="af-btn af-mu-source"
@@ -1251,12 +1220,10 @@ export function Matchup({ data }: MatchupProps) {
               </div>
               {data.winProbability.available ? (
                 <>
-                  <div
-                    className="af-mu-centre-value af-num"
-                    data-tone={data.winProbability.data.pWin >= 0.5 ? 'good' : 'bad'}
-                  >
-                    {Math.round(data.winProbability.data.pWin * 100)}%
-                  </div>
+                  {/*
+                    The percentage is the headline's ("· 9% to win"); here it is the bar, which is what a
+                    glance mid-game reads (2026-11-14). The bar still says the number to a screen reader.
+                  */}
                   {/*
                     The same number as a bar — your share on the left, theirs on the right, matching
                     the two team cards either side of it. A percentage is read; a bar is SEEN, which
@@ -1309,26 +1276,35 @@ export function Matchup({ data }: MatchupProps) {
                 as a live lead has been told something false by a screen that
                 knew better.
               */}
-              {compared == null ? (
-                <div className="af-mu-margin af-num" data-leader="unknown">
-                  {copy('No margin yet')}
-                </div>
-              ) : leader ? (
-                <div className="af-mu-margin af-num" data-leader={leader}>
-                  {scored
-                    ? leader === 'you'
-                      ? copy('You lead by ')
-                      : copy('Behind by ')
-                    : leader === 'you'
-                      ? copy('Projected ahead by ')
-                      : copy('Projected behind by ')}
-                  {Math.abs(compared.you - compared.opponent).toFixed(1)}
-                </div>
-              ) : (
-                <div className="af-mu-margin af-num" data-leader="tied">
-                  {copy(scored ? 'Level' : 'Projected level')}
-                </div>
-              )}
+              {/*
+                During the week "Behind by 13.0" is the headline's, and the tag that repeated it here is gone
+                (2026-11-14). On a finished week it stays: it is the result, and the redraft scoreboard
+                hides everything else in this column then (af-core-redraft-matchup.css).
+              */}
+              {weekState === 'final' ? (
+                <>
+                {compared == null ? (
+                  <div className="af-mu-margin af-num" data-leader="unknown">
+                    {copy('No margin yet')}
+                  </div>
+                ) : leader ? (
+                  <div className="af-mu-margin af-num" data-leader={leader}>
+                    {scored
+                      ? leader === 'you'
+                        ? copy('You lead by ')
+                        : copy('Behind by ')
+                      : leader === 'you'
+                        ? copy('Projected ahead by ')
+                        : copy('Projected behind by ')}
+                    {Math.abs(compared.you - compared.opponent).toFixed(1)}
+                  </div>
+                ) : (
+                  <div className="af-mu-margin af-num" data-leader="tied">
+                    {copy(scored ? 'Level' : 'Projected level')}
+                  </div>
+                )}
+                </>
+              ) : null}
             </div>
 
             <TeamCard
@@ -1372,11 +1348,6 @@ export function Matchup({ data }: MatchupProps) {
           {data.lineups.available ? <BoardTip live={data.playerScoring.available} /> : null}
         </header>
         <LineupBoard data={data} />
-        {data.lineups.available ? (
-          <p className="af-mug-teach">
-            <b>{g.why}</b> {g.boardTeach}
-          </p>
-        ) : null}
       </section>
 
       {/* ── What decides it ─────────────────────────────────────────── */}

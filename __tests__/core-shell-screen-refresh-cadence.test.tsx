@@ -14,6 +14,17 @@ const nav = vi.hoisted(() => ({
   router: { push: () => {}, replace: () => {}, prefetch: () => {}, refresh: vi.fn() },
 }))
 
+/* Background refreshes go through the deploy guard (lib/core-app/deployGuard). A synchronous
+   pass-through keeps fake-timer assertions in the same tick and keeps its marker read out of
+   fetch counts; guard.ok=false is "a deploy landed". */
+const guard = vi.hoisted(() => ({ ok: true }))
+vi.mock('@/lib/core-app/deployGuard', () => ({
+  primeDeployBaseline: () => Promise.resolve(),
+  canRefreshInBackground: () => ({ then: (cb: (ok: boolean) => void) => cb(guard.ok) }),
+  refreshInBackground: (fn: () => void) => { if (guard.ok) fn(); return Promise.resolve() },
+  isNewVersionReady: () => false,
+  subscribeNewVersionReady: () => () => {},
+}))
 vi.mock('next/navigation', () => ({
   useRouter: () => nav.router,
   usePathname: () => '/core',

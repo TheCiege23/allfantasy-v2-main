@@ -36,6 +36,7 @@ import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProv
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import { coreRefreshIntervalMs, shellRouteRefreshMs } from '@/lib/core-app/coreRefreshPolicy'
+import { canRefreshInBackground, primeDeployBaseline } from '@/lib/core-app/deployGuard'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
 import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
@@ -1554,6 +1555,8 @@ function AfCoreShell(incoming: AfCoreShellProps) {
     // Per SCREEN: a screen with no live value keeps the idle cadence on game days too.
     const refreshMs = shellRouteRefreshMs(active, Boolean(props.gameDayActive), props.liveGameCount ?? 0)
     let lastRefreshAt=Date.now()
+    let alive=true
+    void primeDeployBaseline()
     const refreshRoute=()=>{
       if (document.visibilityState !== 'visible') return
       if (Date.now()-lastRefreshAt<1000 || shellRefreshPendingRef.current) return
@@ -1564,7 +1567,12 @@ function AfCoreShell(incoming: AfCoreShellProps) {
       // timers on one route paid for two full renders every period.
       if (routeRefreshClaimed()) return
       lastRefreshAt=Date.now()
-      startShellRefresh(() => router.refresh())
+      // 🛑 After a deploy this refresh would be a FULL PAGE RELOAD under the reader — see
+      // lib/core-app/deployGuard. The guard skips it and offers "New version ready" instead.
+      void canRefreshInBackground().then((ok)=>{
+        if (!ok || !alive || navPendingRef.current || shellRefreshPendingRef.current) return
+        startShellRefresh(() => router.refresh())
+      })
     }
     const refresh = window.setInterval(refreshRoute, refreshMs)
     // Resume/reconnect must read a fresh roster and schedule, even between timer ticks.
@@ -1576,6 +1584,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
     window.addEventListener('online',resume)
     document.addEventListener('visibilitychange',resume)
     return () => {
+      alive=false
       window.clearInterval(clock)
       window.clearInterval(refresh)
       window.removeEventListener('pageshow',resume)

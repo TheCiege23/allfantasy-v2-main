@@ -605,3 +605,19 @@ a.af-nt-row-link:hover { background: var(--chip); }
 .af-nt-row-icon { flex: none; width: 16px; height: 16px; color: var(--muted); }
 .af-nt-row[data-urgent='false'] .af-nt-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .af-nt-row-menu p { overflow-wrap: anywhere; }
+
+/* 2026-11-14 — plain-words pass: Mark all read in sight, one line per league, news folded by sport. */
+.af-nt-head .af-nt-markall { align-self: center; min-height: 44px; }
+.af-nt-lines { display: flex; flex-direction: column; gap: 2px; }
+.af-nt-line { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.af-nt-newsgroup-fold { flex: 1; min-width: 0; }
+.af-nt-newsgroup-fold > summary { list-style: none; cursor: pointer; }
+.af-nt-newsgroup-fold > summary::-webkit-details-marker { display: none; }
+.af-nt-newsgroup-fold > summary:hover { background: var(--chip); }
+.af-nt-headlines { list-style: none; margin: 0; padding: 0 12px 12px 38px; display: flex; flex-direction: column; gap: 9px; }
+.af-nt-headlines li { display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; line-height: 1.45; }
+.af-nt-headlines a { color: var(--text2); text-decoration: none; overflow-wrap: anywhere; }
+.af-nt-headlines a:hover { color: var(--accent); text-decoration: underline; }
+.af-nt-headlines li[data-read='true'] a { color: var(--muted); }
+.af-nt-list + .af-nt-sectionnote { margin-top: 10px; }
+.af-nt-delivery { margin: 0 0 8px; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.6; color: var(--text2); }

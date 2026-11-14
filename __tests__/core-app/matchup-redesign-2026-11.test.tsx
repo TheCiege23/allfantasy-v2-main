@@ -82,7 +82,9 @@ describe('the scoreboard', () => {
     expect([...board.querySelectorAll('.af-mu-score')].map((n) => n.textContent)).toEqual(['38.8', '49.0'])
     const lines = [...board.querySelectorAll('.af-mu-score-line')].map((n) => n.textContent)
     expect(lines).toEqual(['proj 101.9' + '4 left to play' + '1 live', 'proj 108.9' + '3 left to play' + '1 live'])
-    expect(within(board).getByText('42%')).toBeTruthy()
+    // The percentage is the headline's; the scoreboard draws it as the bar (2026-11-14).
+    expect(board.querySelector('.af-mu-wp')?.getAttribute('aria-label')).toBe('Win probability 42%')
+    expect(within(board).queryByText('42%')).toBeNull()
   })
 
   it('never puts a projection under a FINAL score, and no live line before kickoff', () => {
@@ -156,9 +158,11 @@ describe('insight cards — present only with data', () => {
     // Chase 18.4 + Achane 15.2 + Ravens 8.1. Bijan is LIVE: part of his projection is already scored.
     expect(w.yourLeft).toBe(3)
     expect(w.yourLeftProjected).toBe(41.7)
+    // How far short, off the scoreboard's own projected finals (101.9 vs 108.9), so the two agree.
+    expect(w.short).toBe(7)
     render(<Matchup data={data('live')} />)
-    expect(screen.getByText('70.1 more points')).toBeTruthy()
-    expect(screen.getByText(/Your 3 still to play project for 41\.7\./)).toBeTruthy()
+    expect(screen.getByText('70.1 more points to pass them')).toBeTruthy()
+    expect(screen.getByTestId('matchup-to-win-body').textContent).toBe('On projection you finish 7.0 short, with 3 players still to play.')
   })
 
   it('to win: not before kickoff, not once final, and no remaining-projection sentence when one is unpriced', () => {
@@ -185,7 +189,8 @@ describe('insight cards — present only with data', () => {
     render(<Matchup data={data('live')} />)
     expect(screen.getByText('Partido clave')).toBeTruthy()
     expect(screen.getByText('Garrett Wilson no sumará puntos')).toBeTruthy()
-    expect(screen.getByText('70.1 puntos más')).toBeTruthy()
+    expect(screen.getByText('70.1 puntos más para superarlos')).toBeTruthy()
+    expect(screen.getByTestId('matchup-to-win-body').textContent).toBe('Según la proyección te quedas a 7.0 puntos, con 3 jugadores por jugar.')
   })
 })
 

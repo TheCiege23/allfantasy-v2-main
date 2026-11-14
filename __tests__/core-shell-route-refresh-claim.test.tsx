@@ -24,6 +24,14 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/core',
   useSearchParams: () => new URLSearchParams(),
 }))
+/* Background refreshes go through the deploy guard (lib/core-app/deployGuard). A synchronous
+   pass-through keeps fake-timer assertions in the same tick; guard.ok=false is "a deploy landed". */
+const guard = vi.hoisted(() => ({ ok: true }))
+vi.mock('@/lib/core-app/deployGuard', () => ({
+  primeDeployBaseline: () => Promise.resolve(),
+  canRefreshInBackground: () => ({ then: (cb: (ok: boolean) => void) => cb(guard.ok) }),
+  refreshInBackground: (fn: () => void) => { if (guard.ok) fn(); return Promise.resolve() },
+}))
 
 vi.mock('@/components/core-app/comms/CommsDock', () => ({ default: () => null }))
 vi.mock('@/components/core-app/SyncNowButton', () => ({ default: () => null }))
@@ -83,6 +91,24 @@ describe('the shell poll and the matchup board', () => {
     act(() => void vi.advanceTimersByTime(20_000))
     expect(nav.router.refresh).toHaveBeenCalledTimes(1)
     unmount()
+  })
+
+  /*
+   * 🛑 After a deploy, `router.refresh()` is a FULL PAGE RELOAD (Next hard-navigates on a build-id
+   * mismatch) — the "page reloads under my click when I come back" report. The timer and the
+   * return-to-tab listener must both stand down once the guard says the deployment moved.
+   */
+  it('🛑 after a deploy the shell neither ticks nor refreshes on return to the tab', () => {
+    guard.ok = false
+    try {
+      const { unmount } = render(<Shell />)
+      act(() => void vi.advanceTimersByTime(60_000))
+      act(() => void document.dispatchEvent(new Event('visibilitychange')))
+      expect(nav.router.refresh).not.toHaveBeenCalled()
+      unmount()
+    } finally {
+      guard.ok = true
+    }
   })
 
   it('with the board mounted, only the board refreshes — one render per period, not two', () => {
