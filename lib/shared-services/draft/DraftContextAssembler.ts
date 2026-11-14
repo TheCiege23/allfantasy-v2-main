@@ -456,12 +456,36 @@ export async function resolveTargetRosterAliases(args: {
 }
 
 /**
- * The NFL weeks a league's draft scores, when the league is a tournament-stage league
- * (TournamentLeague → TournamentRound.weekStart/weekEnd — the KBI calendar drafts a redraft stage
- * in week 10 and scores from week 11). Null for an ordinary season-long league, whose byes are then
- * not scored. Fails closed to null.
+ * The NFL weeks a league's draft scores. Two sources, most specific first:
+ *
+ *   1. A tournament stage: TournamentLeague → TournamentRound.weekStart/weekEnd (the KBI calendar
+ *      drafts a redraft stage in week 10 and scores from week 11).
+ *   2. A league that starts after week 1: the imported Sleeper `start_week`
+ *      (`League.settings.start_week`, 2026-11-14), scored through the end of the season.
+ *
+ * Null for an ordinary week-1 league — every bye then falls inside the season and scoring them would
+ * only shift every player equally. Fails closed to null.
  */
 export async function resolveDraftScoringWindow(leagueId: string): Promise<ScoringWindow | null> {
+  const fromTournament = await resolveTournamentScoringWindow(leagueId)
+  if (fromTournament) return fromTournament
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    return scoringWindowFromLeagueSettings(league?.settings)
+  } catch {
+    return null
+  }
+}
+
+/** PURE. A window from a league's stored settings, when it starts after week 1. */
+export function scoringWindowFromLeagueSettings(settings: unknown): ScoringWindow | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
+  const start = Number((settings as Record<string, unknown>).start_week)
+  if (!Number.isInteger(start) || start <= 1 || start > 18) return null
+  return { startWeek: start, endWeek: null, label: `League starts week ${start}` }
+}
+
+async function resolveTournamentScoringWindow(leagueId: string): Promise<ScoringWindow | null> {
   try {
     const row = await prisma.tournamentLeague.findUnique({
       where: { leagueId },

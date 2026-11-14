@@ -86,6 +86,12 @@ export interface NormalizedLeagueSettings {
   is_keeper?: boolean
   /** Sleeper's raw `settings.type` (0 redraft, 1 keeper, 2 dynasty); absent when Sleeper sent none. */
   sleeper_league_type?: number
+  /**
+   * The first NFL week the league scores (Sleeper `settings.start_week`). A league that starts after
+   * week 1 — a mid-season or tournament-stage redraft — scores only part of the season, which the
+   * draft engine uses as its scoring window (lib/shared-services/draft/DraftContextAssembler.ts).
+   */
+  start_week?: number
   /** ESPN's raw keeper count, only when ESPN sent a number (see EspnAdapter `espnKeeperCount`). */
   espn_keeper_count?: number
   /**
