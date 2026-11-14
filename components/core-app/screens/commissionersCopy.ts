@@ -27,17 +27,17 @@ type CommissionerFeature = {
 }
 
 export const COMMISSIONERS_META = {
-  title: 'Commissioner OS — Built by a commissioner, for commissioners | AllFantasy',
+  title: 'Commissioner OS — Built by a long-time commissioner, for commissioners | AllFantasy',
   description:
     'Know when your league needs attention before problems become obvious. League Health, illegal lineup alerts, a trade evaluator that knows your league type, and integrity reports — free to import.',
-  ogTitle: 'Built by a commissioner, for commissioners.',
+  ogTitle: 'Built by a long-time commissioner, for commissioners.',
   ogDescription:
     'Commissioner OS tells you when your league needs attention before problems become obvious. Import your league free.',
 } as const
 
 export const COMMISSIONERS_HERO = {
   eyebrow: 'Commissioner OS',
-  h1a: 'Built by a commissioner,',
+  h1a: 'Built by a long-time commissioner,',
   h1b: 'for commissioners.',
   sub: 'Know when your league needs attention before problems become obvious.',
   founder:
