@@ -382,7 +382,7 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
           <h1 className="af-display af-nt-title">{copy('Notifications')}</h1>
           <p className="af-nt-sub" data-testid="notifications-count">
             {unread > 0
-              ? m.unread(unread.toLocaleString(language === 'es' ? 'es' : 'en'), !!data.leagueId)
+              ? m.unread(unread.toLocaleString(language), !!data.leagueId)
               : data.leagueId
                 ? copy('Nothing is waiting on you in this league.')
                 : copy('Nothing is waiting on you.')}
