@@ -219,9 +219,6 @@ export async function computeHealthScore(
     }),
     prisma.bracketNode.findMany({
       where: { tournamentId },
-      include: {
-        picks: { select: { points: true, isCorrect: true, entryId: true } },
-      },
     }),
     prisma.bracketEntry.findMany({
       where: { league: { tournamentId } },
@@ -247,17 +244,18 @@ export async function computeHealthScore(
   }
 
   const pickedTeams = new Set(entry.picks.map(p => p.pickedTeamName).filter(Boolean))
-  const eliminatedTeams = new Set<string>()
-
-  for (const node of allNodes) {
-    const finalPicks = node.picks.filter(p => p.isCorrect === false)
-    for (const fp of finalPicks) {
-      const matchingPick = entry.picks.find(ep => ep.nodeId === node.id)
-      if (matchingPick?.pickedTeamName) {
-        eliminatedTeams.add(matchingPick.pickedTeamName)
-      }
-    }
-  }
+  /*
+   * A team this entry picked is out once one of the entry's OWN picks of it is graded wrong. Grading marks
+   * every pick that named a game's loser, and a team that went out early was picked — and graded — in the
+   * game it lost, so the entry's own wrong picks name exactly its eliminated teams.
+   *
+   * 🛑 This used to read every entry's picks on a node: if ANYONE got the game wrong, this entry's pick there
+   * counted as eliminated — so the winners it had picked counted too, since someone nearly always picks the
+   * loser. Teams-alive, alive %, champion-alive and Final Four alive all read low.
+   */
+  const eliminatedTeams = new Set(
+    entry.picks.flatMap((p) => (p.isCorrect === false && p.pickedTeamName ? [p.pickedTeamName] : [])),
+  )
 
   const teamsTotal = pickedTeams.size
   const teamsAlive = teamsTotal - eliminatedTeams.size
