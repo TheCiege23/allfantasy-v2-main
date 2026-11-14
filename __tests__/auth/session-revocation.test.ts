@@ -27,7 +27,8 @@ const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
   if (cmd === "SET") {
     store.set(rest[0], String(rest[1]))
     result = "OK"
-  } else if (cmd === "GET") result = store.get(rest[0]) ?? null
+  } else if (cmd === "DEL") result = store.delete(rest[0]) ? 1 : 0
+  else if (cmd === "GET") result = store.get(rest[0]) ?? null
   else if (cmd === "MGET") result = rest.map((k) => store.get(k) ?? null)
   return new Response(JSON.stringify({ result }), { status: 200 })
 })
@@ -143,5 +144,52 @@ describe("sign-out ends the session on the server", () => {
     expect(await isSessionRevoked({ ...USER, sid: "sid-a", iat })).toBe(true)
     expect(await isSessionRevoked({ ...USER, sid: "sid-b", iat })).toBe(true)
     expect(await isSessionRevoked({ id: "u-2", sid: "sid-c", iat })).toBe(false)
+  })
+})
+
+describe("a password change signs out every OTHER device", () => {
+  it("spares the changing device's sid and refuses the rest, through next-auth's real handler", async () => {
+    const { revokeAllSessionsForUser, __resetSessionRevocationCache } = await import("@/lib/auth/sessionRevocation")
+    const iat = Math.floor(Date.now() / 1000) - 10
+    const laptop = await cookieFor({ ...USER, sid: "sid-laptop", iat })
+    const stolen = await cookieFor({ ...USER, sid: "sid-stolen", iat })
+
+    expect(await revokeAllSessionsForUser("u-1", undefined, { exceptSid: "sid-laptop" })).toBe(true)
+    __resetSessionRevocationCache()
+
+    const kept = await sessionRequest(laptop)
+    expect((kept.body as { user?: { id?: string } })?.user?.id).toBe("u-1")
+
+    const refused = await sessionRequest(stolen)
+    expect(refused.body?.user).toBeUndefined()
+    expect(refused.cookies?.find((c) => c.name === COOKIE)?.value).toBe("")
+  })
+
+  it("a later 'sign out everywhere' deletes the exemption, so it cannot outlive it", async () => {
+    const { revokeAllSessionsForUser, isSessionRevoked, __resetSessionRevocationCache } = await import("@/lib/auth/sessionRevocation")
+    const iat = Math.floor(Date.now() / 1000) - 10
+    await revokeAllSessionsForUser("u-1", undefined, { exceptSid: "sid-laptop" })
+    __resetSessionRevocationCache()
+    expect(await isSessionRevoked({ ...USER, sid: "sid-laptop", iat })).toBe(false)
+
+    expect(await revokeAllSessionsForUser("u-1")).toBe(true)
+    expect(store.has("af:auth:revoked-user-except:u-1")).toBe(false)
+    __resetSessionRevocationCache()
+    expect(await isSessionRevoked({ ...USER, sid: "sid-laptop", iat })).toBe(true)
+  })
+
+  it("one user's exemption never spares another user's session with the same sid", async () => {
+    const { revokeAllSessionsForUser, isSessionRevoked, __resetSessionRevocationCache } = await import("@/lib/auth/sessionRevocation")
+    const iat = Math.floor(Date.now() / 1000) - 10
+    await revokeAllSessionsForUser("u-1", undefined, { exceptSid: "sid-x" })
+    await revokeAllSessionsForUser("u-2")
+    __resetSessionRevocationCache()
+    expect(await isSessionRevoked({ id: "u-2", sid: "sid-x", iat })).toBe(true)
+  })
+
+  it("reports NOT recorded when Redis is down, so the caller can say so", async () => {
+    const { revokeAllSessionsForUser } = await import("@/lib/auth/sessionRevocation")
+    redisDown = true
+    expect(await revokeAllSessionsForUser("u-1", undefined, { exceptSid: "sid-laptop" })).toBe(false)
   })
 })

@@ -35,6 +35,14 @@ const VALID_CACHE_MS = 15_000
 
 const SID_KEY = (sid: string) => `af:auth:revoked-sid:${sid}`
 const USER_KEY = (userId: string) => `af:auth:revoked-user:${userId}`
+/**
+ * The ONE session a user-wide revocation spares — the device that changed the password. Written
+ * BEFORE the cutoff so that device never sees the cutoff without its exemption, and DELETED by a
+ * revocation that spares nobody, so a stale exemption cannot outlive the next "sign out everywhere".
+ * A separate key (not folded into the cutoff value) so a replica running older code reads the
+ * cutoff it understands and simply signs the changing device out too, never fails open.
+ */
+const EXCEPT_KEY = (userId: string) => `af:auth:revoked-user-except:${userId}`
 
 /**
  * Any decoded session token. A record, not `{ sid?, id?, … }`: an all-optional object type is a
@@ -118,18 +126,29 @@ export async function revokeSessionForSignOut(token: Token, nowS = Math.floor(Da
 }
 
 /**
- * Account deletion, a password reset, or "Sign out everywhere": every session of this user issued
- * up to now is refused.
+ * Account deletion, a password reset, a password change, or "Sign out everywhere": every session of
+ * this user issued up to now is refused — except `exceptSid` when given (a password change keeps the
+ * device that made it signed in). The spared session's cookie is re-issued with a fresh `iat` on its
+ * next read, after which it is past the cutoff on its own.
  *
  * Returns whether Redis RECORDED it. Most callers revoke as a side effect and ignore that; the
  * user-facing "Sign out everywhere" must not, because this module fails open — an unrecorded
  * revocation leaves every other device signed in, and telling the user otherwise is the one
  * outcome worse than the outage.
  */
-export async function revokeAllSessionsForUser(userId: string, nowS = Math.floor(Date.now() / 1000)): Promise<boolean> {
+export async function revokeAllSessionsForUser(
+  userId: string,
+  nowS = Math.floor(Date.now() / 1000),
+  options: { exceptSid?: string | null } = {},
+): Promise<boolean> {
   validUntil.clear()
+  const exceptSid = tokenStr(options.exceptSid)
+  const exemption = exceptSid
+    ? await redis(["SET", EXCEPT_KEY(userId), exceptSid, "EX", SESSION_MAX_AGE_S])
+    : await redis(["DEL", EXCEPT_KEY(userId)])
+  const exemptionRecorded = exceptSid ? exemption === "OK" : exemption !== undefined // DEL answers a count; undefined = no answer
   const result = await redis(["SET", USER_KEY(userId), String(nowS), "EX", SESSION_MAX_AGE_S])
-  return result === "OK"
+  return result === "OK" && exemptionRecorded
 }
 
 /**
@@ -145,14 +164,19 @@ export async function isSessionRevoked(token: Token): Promise<boolean> {
   if (sid && (revokedHere.get(sid) ?? 0) > now) return true
   if ((validUntil.get(cacheKey) ?? 0) > now) return false
 
-  const keys = [sid ? SID_KEY(sid) : "af:auth:none", userId ? USER_KEY(userId) : "af:auth:none"]
+  const keys = [
+    sid ? SID_KEY(sid) : "af:auth:none",
+    userId ? USER_KEY(userId) : "af:auth:none",
+    userId ? EXCEPT_KEY(userId) : "af:auth:none",
+  ]
   const result = await redis(["MGET", ...keys])
   if (!Array.isArray(result)) return false // unknown → fail open, uncached so the next read retries
 
   const sidRevoked = Boolean(sid && result[0])
   const cutoff = Number(result[1])
   const iat = tokenNum(token?.iat)
-  const userRevoked = Number.isFinite(cutoff) && cutoff > 0 && iat !== null && iat <= cutoff
+  const exempt = Boolean(sid && result[2] === sid)
+  const userRevoked = !exempt && Number.isFinite(cutoff) && cutoff > 0 && iat !== null && iat <= cutoff
   if (sidRevoked || userRevoked) {
     if (sid) remember(revokedHere, sid, now + SESSION_MAX_AGE_S * 1000)
     return true
