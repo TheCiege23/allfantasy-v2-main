@@ -176,6 +176,59 @@ try {
   if (!ids.length) console.log('   (none)')
   for (const r of ids) console.log(`   ${r.shape}: ${r.players} (added since Oct 1: ${r.added_since_oct})`)
 
+  // 6. Where the rostered players went (added after the second run, 2026-11-14): 5c found only 12
+  //    ACTIVE players across every roster of the stuck season. The sync fetches stats only for
+  //    active players; the finalizer still expects the week's starters. So: what kind of league,
+  //    when were players dropped, and what wrote the drops.
+  const leagues = await prisma.$queryRaw`
+    SELECT l.platform, l."leagueVariant" AS variant, l."leagueType" AS type, l."lifecycleState"::text AS lifecycle,
+           l."bestBallMode" AS best_ball, l."guillotineMode" AS guillotine, l."survivorMode" AS survivor,
+           DATE(l."createdAt") AS created,
+           (SELECT COUNT(*)::int FROM redraft_rosters r WHERE r."seasonId" = s.id) AS rosters
+    FROM redraft_seasons s JOIN leagues l ON l.id = s."leagueId"
+    WHERE s.sport = ANY(${sports}) AND s.season = ${season}
+      AND EXISTS (SELECT 1 FROM redraft_matchups m WHERE m."seasonId" = s.id)`
+  console.log('\n6a. Seasons with matchups — league settings:')
+  for (const r of leagues) {
+    console.log(`   platform ${r.platform}, variant ${r.variant ?? '-'}, type ${r.type ?? '-'}, lifecycle ${r.lifecycle}, bestBall ${r.best_ball}, guillotine ${r.guillotine}, survivor ${r.survivor}, created ${String(r.created instanceof Date ? r.created.toISOString().slice(0, 10) : r.created)}, ${r.rosters} rosters`)
+  }
+
+  const players = await prisma.$queryRaw`
+    SELECT COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE rp."droppedAt" IS NULL)::int AS active,
+           COUNT(*) FILTER (WHERE rp."droppedAt" IS NOT NULL)::int AS dropped
+    FROM redraft_roster_players rp
+    JOIN redraft_rosters r ON r.id = rp."rosterId"
+    JOIN redraft_seasons s ON s.id = r."seasonId"
+    WHERE s.sport = ANY(${sports}) AND s.season = ${season}
+      AND EXISTS (SELECT 1 FROM redraft_matchups m WHERE m."seasonId" = s.id)`
+  const p0 = players[0] ?? {}
+  console.log(`\n6b. Roster player rows: ${p0.total ?? 0} total, ${p0.active ?? 0} active, ${p0.dropped ?? 0} dropped`)
+
+  const drops = await prisma.$queryRaw`
+    SELECT DATE(rp."droppedAt") AS day, rp."acquisitionType" AS acquired, COUNT(*)::int AS dropped
+    FROM redraft_roster_players rp
+    JOIN redraft_rosters r ON r.id = rp."rosterId"
+    JOIN redraft_seasons s ON s.id = r."seasonId"
+    WHERE s.sport = ANY(${sports}) AND s.season = ${season} AND rp."droppedAt" IS NOT NULL
+      AND EXISTS (SELECT 1 FROM redraft_matchups m WHERE m."seasonId" = s.id)
+    GROUP BY 1, 2 ORDER BY 3 DESC, 1 LIMIT 15`
+  console.log('6c. Drops by day / how the player was acquired (top 15):')
+  if (!drops.length) console.log('   (none)')
+  for (const r of drops) console.log(`   ${String(r.day instanceof Date ? r.day.toISOString().slice(0, 10) : r.day)} ${String(r.acquired).padEnd(12)} ${r.dropped}`)
+
+  const moves = await prisma.$queryRaw`
+    SELECT DATE(h."createdAt") AS day, h.source, COUNT(*)::int AS moves,
+           COUNT(*) FILTER (WHERE h."actorUserId" IS NULL)::int AS no_actor,
+           COUNT(*) FILTER (WHERE h."actorUserId" LIKE 'system%' OR h."actorUserId" LIKE 'cron%' OR h."actorUserId" LIKE 'ai%')::int AS system_actor
+    FROM redraft_roster_move_history h JOIN redraft_seasons s ON s.id = h."seasonId"
+    WHERE s.sport = ANY(${sports}) AND s.season = ${season}
+      AND EXISTS (SELECT 1 FROM redraft_matchups m WHERE m."seasonId" = s.id)
+    GROUP BY 1, 2 ORDER BY 3 DESC, 1 LIMIT 15`
+  console.log('6d. Roster move history by day / source (top 15) — moves, with no actor, with a system/cron/ai actor:')
+  if (!moves.length) console.log('   (none)')
+  for (const r of moves) console.log(`   ${String(r.day instanceof Date ? r.day.toISOString().slice(0, 10) : r.day)} ${String(r.source).padEnd(24)} ${r.moves} (no actor ${r.no_actor}, system ${r.system_actor})`)
+
   console.log('\nPaste everything above back. It contains counts only.')
 } catch (err) {
   console.error('diagnose-week-finalization failed:', err instanceof Error ? err.message.split('\n').slice(-1)[0] : err)
