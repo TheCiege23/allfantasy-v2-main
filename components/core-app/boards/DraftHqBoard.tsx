@@ -116,10 +116,10 @@ function isNative(platform: string | null): boolean {
 }
 
 /** When a not-started draft happens, in ET like the rest of /core — or where its date lives. */
-function dateOf(r: DraftHqAllRow, m: Copy, language: string | null): string | null {
+function dateOf(r: DraftHqAllRow, m: Copy): string | null {
   if (r.phase !== 'upcoming') return null
   if (r.draftAt) {
-    const when = new Date(r.draftAt).toLocaleString(language === 'es' ? 'es-US' : 'en-US', {
+    const when = new Date(r.draftAt).toLocaleString(m.dateLocale, {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
@@ -293,10 +293,10 @@ function Card({ row, picks, m }: { row: DraftHqAllRow; picks?: LiveDraftPicks; m
 }
 
 /** A draft with nothing ticking — not started, finished, or an unreadable status: one line. */
-function Row({ row, m, language }: { row: DraftHqAllRow; m: Copy; language: string | null }) {
+function Row({ row, m }: { row: DraftHqAllRow; m: Copy }) {
   const status = statusOf(row, m)
   const facts = m.rowFacts(slotOf(row, m), row.rounds)
-  const date = dateOf(row, m, language)
+  const date = dateOf(row, m)
   return (
     <li className="af-dh-row" data-phase={row.phase}>
       <LeagueCrest imageUrl={row.imageUrl} name={row.leagueName} platform={row.platform} size="sm" />
@@ -387,7 +387,7 @@ function DraftHqBoard({ data, allHref, totalLeagues, picks, language = null }: D
           <SectionHead id="af-dh-coming" label={m.secComingUp} count={String(groups.comingUp.length)} />
           <ul className="af-dh-rows">
             {groups.comingUp.map((r) => (
-              <Row key={r.leagueId} row={r} m={m} language={language} />
+              <Row key={r.leagueId} row={r} m={m} />
             ))}
           </ul>
         </section>
@@ -398,7 +398,7 @@ function DraftHqBoard({ data, allHref, totalLeagues, picks, language = null }: D
           <SectionHead id="af-dh-finished" label={m.secFinished} tone="good" count={String(groups.finished.length)} />
           <ul className="af-dh-rows">
             {groups.finished.map((r) => (
-              <Row key={r.leagueId} row={r} m={m} language={language} />
+              <Row key={r.leagueId} row={r} m={m} />
             ))}
           </ul>
         </section>
