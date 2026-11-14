@@ -96,12 +96,20 @@ describe('overviewHeadline', () => {
 })
 
 describe('<LeagueHome /> — the guide', () => {
-  it('a head-to-head league leads with place, record and opponent, and says the win chance once, on the Matchup cell', () => {
+  it('a head-to-head league leads with place and record, and says this week once, on the line under it', () => {
     const { getByTestId, container } = render(<LeagueHome data={page()} otherLeagueIssueCount={0} identityInShell />)
     const head = getByTestId('league-overview-guide')
-    expect(head.querySelector('.af-lho-title')?.textContent).toBe('6th of 12 · 5-4 · this week vs Wounded Warriors Project')
+    expect(head.querySelector('.af-lho-title')?.textContent).toBe('6th of 12 · 5-4')
     expect(head.querySelector('[data-chip=win]')).toBeNull()
-    expect(container.querySelector('.af-lh-week-summary')?.textContent).toContain('54% to win')
+    const week = getByTestId('league-overview-week')
+    expect(week.textContent).toBe('This week vs Wounded Warriors Project · 54% to win →')
+    expect(week.getAttribute('href')).toBe('/core/matchup?league=' + encodeURIComponent(page().league.id))
+    // The opponent and the win chance are not said again under "Your next steps".
+    expect(container.querySelector('.af-lh-week-summary')?.textContent).not.toContain('54% to win')
+    expect(container.querySelector('.af-lh-week-summary')?.textContent).not.toContain('Wounded Warriors Project')
+    expect(container.querySelector('.af-lh-week-summary a[href^="/core/matchup"]')).toBeNull()
+    // Where official moves happen is said by the banner above every tab, not again here.
+    expect(head.textContent).not.toMatch(/Official moves|Why it matters/)
     // The guide comes before the KPI row and the week summary.
     const order = [...container.querySelectorAll('[data-testid=league-overview-guide], [data-testid=league-home-kpis], .af-lh-week-summary')].map(
       (e) => e.getAttribute('data-testid') ?? 'week',
@@ -113,10 +121,13 @@ describe('<LeagueHome /> — the guide', () => {
     const { getByTestId, container } = render(<LeagueHome data={page()} otherLeagueIssueCount={0} identityInShell rail={railStanding()} />)
     expect(getByTestId('league-overview-guide').querySelector('.af-lho-title')?.textContent).toBe('6th of 7 still alive · 12.4 points over the cut')
     expect(container.querySelector('[data-kpi=record]')).toBeNull()
-    const cut = container.querySelector('.af-lh-week-summary [data-cell=cut]')
-    // The headline says the points; the cell says the places — each number once.
-    expect(cut?.textContent).toContain('3 places clear of the cut')
-    expect(cut?.textContent).not.toContain('12.4')
+    const cut = getByTestId('league-overview-week')
+    // The headline says the points; the line says the places — each number once.
+    expect(cut.getAttribute('data-week')).toBe('cut')
+    expect(cut.textContent).toContain('3 places clear of the cut')
+    expect(cut.textContent).not.toContain('12.4')
+    expect(cut.getAttribute('href')).toMatch(/^\/core\/standings/)
+    expect(container.querySelector('.af-lh-week-summary [data-cell=cut]')).toBeNull()
     expect(container.querySelector('.af-lh-week-summary a[href^="/core/matchup"]')).toBeNull()
   })
 
