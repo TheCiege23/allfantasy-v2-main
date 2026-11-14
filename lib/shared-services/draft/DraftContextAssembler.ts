@@ -137,7 +137,10 @@ export interface DraftDecisionContext {
   /** Real 2QB flag (Phase 31), mutually exclusive with isSF — see resolveLeagueScoringFlags(). */
   is2QB: boolean
   round: number
+  /** Pick within the round (1..totalTeams) — what the engine expects. */
   pick: number
+  /** Overall pick number in the draft. */
+  overallPick: number
   totalTeams: number
   status: string | null
   draftType: string | null
@@ -277,6 +280,13 @@ export interface AssembleEngineInputParams {
   /** All picks already made, as of the point in time being evaluated — the exclusion/roster source. Live: every pick in the in-progress session. Backtest: every pick with overall < the historical pick being replayed. */
   picksSoFar: DraftPickRow[]
   targetRosterId: string
+  /**
+   * Other ids the target's picks may be filed under. A draft mirrored from Sleeper stores the
+   * SLEEPER USER ID in `DraftPick.rosterId` (lib/draft/sleeperSync.ts), so matching on the AF
+   * `Roster.id` alone found none of the user's own picks and every mirrored draft scored an empty
+   * roster. See `resolveTargetRosterAliases`.
+   */
+  targetRosterAliases?: readonly string[]
   adpEntries: Array<{ playerName: string; position: string; team: string | null; adp: number }>
   poolByKey: ReadonlyMap<string, PoolPlayerRecord>
   rosterSlots: string[]
@@ -327,8 +337,9 @@ export function assembleEngineInputFromPicks(params: AssembleEngineInputParams):
   for (const locked of params.keeperLockedPlayers ?? []) {
     draftedKeys.add(playerKey(locked.playerName, locked.position))
   }
+  const ownIds = new Set([params.targetRosterId, ...(params.targetRosterAliases ?? [])].filter(Boolean))
   const teamRoster = params.picksSoFar
-    .filter((p) => p.rosterId === params.targetRosterId)
+    .filter((p) => ownIds.has(p.rosterId))
     .map((p) => ({ position: p.position ?? '', team: p.team ?? null, byeWeek: p.byeWeek ?? null }))
 
   const playerIdByKey = new Map<string, string>()
@@ -384,6 +395,32 @@ export function assembleEngineInputFromPicks(params: AssembleEngineInputParams):
   }
 }
 
+/**
+ * The ids a roster's draft picks can be filed under, beyond its AF `Roster.id`: the roster's own
+ * `platformUserId`, and — for a draft mirrored from Sleeper, which files picks by Sleeper user id —
+ * the Sleeper user id linked to the AF user who holds the roster (`UserProfile.sleeperUserId`).
+ * Fails closed to what it already has: a lookup error never blocks the decision.
+ */
+export async function resolveTargetRosterAliases(args: {
+  platformUserId: string | null
+  isSleeperMirror: boolean
+}): Promise<string[]> {
+  const aliases = new Set<string>()
+  if (args.platformUserId) aliases.add(args.platformUserId)
+  if (args.isSleeperMirror && args.platformUserId) {
+    try {
+      const profile = await prisma.userProfile.findUnique({
+        where: { userId: args.platformUserId },
+        select: { sleeperUserId: true },
+      })
+      if (profile?.sleeperUserId) aliases.add(profile.sleeperUserId)
+    } catch {
+      // Keep the ids already known.
+    }
+  }
+  return [...aliases]
+}
+
 export async function buildDraftDecisionContext(input: BuildDraftDecisionContextInput): Promise<DraftDecisionContext> {
   const assembledAt = new Date().toISOString()
 
@@ -423,16 +460,30 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
   const poolByKey = new Map(pool.map((p) => [playerKey(p.full_name, p.position), p]))
   const rosterSlots = template.slots.flatMap((slot) => Array(Math.max(0, slot.starterCount)).fill(slot.slotName))
 
-  const round = session.currentRoundNum ?? 1
-  const pick = session.nextOverallPick ?? 1
   const totalTeams = session.teamCount ?? Math.max(1, new Set(picks.map((p) => p.rosterId)).size || 1)
+  /*
+   * 🛑 THE ENGINE'S `pick` IS THE PICK WITHIN THE ROUND, NOT THE OVERALL PICK (fixed 2026-11-14).
+   * `computeDraftPlayerRankings` computes `overall = (round - 1) * totalTeams + pick`, and the draft
+   * room posts `pick: currentPick.slot`. This passed `nextOverallPick`, so round 4 pick 64 of a
+   * 16-team draft was scored as pick 112: every ADP edge, reach/value warning and VORP horizon in the
+   * Decision OS card was ~a round and a half late.
+   */
+  const overallPick = Math.max(1, session.nextOverallPick ?? 1)
+  const round = session.currentRoundNum ?? Math.ceil(overallPick / Math.max(1, totalTeams))
+  const pick = ((overallPick - 1) % Math.max(1, totalTeams)) + 1
   const keeperLockedPlayers = extractKeeperLockedPlayers(session.keeperSelections)
-  const targetRosterPickCount = picks.filter((p) => p.rosterId === input.rosterId).length
+  const targetRosterAliases = await resolveTargetRosterAliases({
+    platformUserId: targetRoster.platformUserId ?? null,
+    isSleeperMirror: Boolean(session.sleeperDraftId),
+  })
+  const ownPickIds = new Set([input.rosterId, ...targetRosterAliases])
+  const targetRosterPickCount = picks.filter((p) => ownPickIds.has(p.rosterId)).length
   const auctionContext = resolveAuctionContext(session, input.rosterId, rosterSlots, targetRosterPickCount)
 
   const assembled = assembleEngineInputFromPicks({
     picksSoFar: picks,
     targetRosterId: input.rosterId,
+    targetRosterAliases,
     adpEntries: adpResult.entries,
     poolByKey,
     rosterSlots,
@@ -461,6 +512,7 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     is2QB,
     round,
     pick,
+    overallPick,
     totalTeams,
     status: session.status,
     draftType: session.draftType ?? null,

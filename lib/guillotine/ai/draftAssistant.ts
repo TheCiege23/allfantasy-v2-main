@@ -67,7 +67,8 @@ function engineInput(
     available,
     teamRoster: currentRoster.map((p) => ({ position: p.pos, team: p.team ?? null, byeWeek: p.byeWeek ?? null })),
     round: Math.ceil(overall / totalTeams),
-    pick: overall,
+    // The engine's `pick` is the pick WITHIN the round; it derives the overall pick itself.
+    pick: ((overall - 1) % totalTeams) + 1,
     totalTeams,
     sport,
     mode,

@@ -27,7 +27,11 @@ const FOOTBALL_POSITION_TARGETS: Record<string, { starter: number; ideal: number
 // lib/multi-sport/RosterTemplateService.ts's own FLEX_SLOT_NAMES set (and
 // NFL_IDP_FLEX_SLOTS) already recognizes (DL: DE+DT, DB: CB+S, IDP_FLEX: any
 // IDP position). This engine's copy of the set was missing them.
-const FLEX_SLOT_NAMES = new Set(['FLEX', 'SUPER_FLEX', 'OP', 'UTIL', 'BENCH', 'BN', 'IR', 'G', 'F', 'DL', 'DB', 'IDP_FLEX'])
+// 2026-11-14: WRRB_FLEX and REC_FLEX added. Imported Sleeper templates emit both
+// (lib/league/importedLineupTemplate.ts), and without them here each became a fake position with its
+// own target while RB/WR (or WR/TE) got no flex credit — so a league with two RB/WR flex spots was
+// scored as if it had a position nobody can draft.
+const FLEX_SLOT_NAMES = new Set(['FLEX', 'SUPER_FLEX', 'OP', 'UTIL', 'BENCH', 'BN', 'IR', 'G', 'F', 'DL', 'DB', 'IDP_FLEX', 'WRRB_FLEX', 'REC_FLEX'])
 
 export interface RecommendationPlayer {
   name: string
@@ -409,6 +413,16 @@ export function computeNeeds(
     const slot = normalizeSlot(s, sport)
     if (slot === 'FLEX') {
       for (const pos of ['RB', 'WR', 'TE']) {
+        if (needs[pos] != null) needs[pos] = clamp((needs[pos] || 20) + 8, 0, 100)
+      }
+    }
+    if (slot === 'WRRB_FLEX') {
+      for (const pos of ['RB', 'WR']) {
+        if (needs[pos] != null) needs[pos] = clamp((needs[pos] || 20) + 8, 0, 100)
+      }
+    }
+    if (slot === 'REC_FLEX') {
+      for (const pos of ['WR', 'TE']) {
         if (needs[pos] != null) needs[pos] = clamp((needs[pos] || 20) + 8, 0, 100)
       }
     }
