@@ -96,45 +96,43 @@ describe('Settings hub', () => {
     expect(onTabChange).toHaveBeenCalledWith('security')
   })
 
-  it('flags notifications OFF only when the saved preferences say so', () => {
+  it('says notifications are off only when the saved preferences say so', () => {
     const off = hub(profile({ notificationPreferences: { globalEnabled: false } }))
     const offCard = screen.getByTestId('settings-hub-card-notifications')
     expect(offCard.dataset.tone).toBe('warn')
-    expect(within(offCard).getByText('OFF')).toBeTruthy()
+    expect(within(offCard).getByTestId('settings-hub-state-notifications').textContent).toBe('Off: nothing reaches you')
     off.unmount()
 
     hub(profile({ notificationPreferences: { globalEnabled: true } }))
     const card = screen.getByTestId('settings-hub-card-notifications')
     expect(card.dataset.tone).toBeUndefined()
-    expect(within(card).queryByText('OFF')).toBeNull()
+    expect(within(card).getByTestId('settings-hub-state-notifications').textContent).toBe('On')
   })
 
-  it('counts connected accounts from the profile, and shows no badge for none', () => {
+  it('names the linked accounts from the profile, and says so when there are none', () => {
     const none = hub()
-    expect(within(screen.getByTestId('settings-hub-card-connected')).queryByText('0')).toBeNull()
+    expect(screen.getByTestId('settings-hub-state-connected').textContent).toBe('Nothing linked yet')
     none.unmount()
 
     hub(profile({ sleeperUserId: 's1', discordUserId: 'd1' }))
-    expect(within(screen.getByTestId('settings-hub-card-connected')).getByText('2')).toBeTruthy()
+    expect(screen.getByTestId('settings-hub-state-connected').textContent).toBe('Sleeper, Discord')
   })
 
-  it('names the plan and its renewal, and never prints a price it does not hold', () => {
+  it('names the plan and its renewal once, on its own card, and never prints a price it does not hold', () => {
     ents.value = SUPREME
     hub()
-    const banner = screen.getByRole('region', { name: /current plan/i })
-    expect(banner.textContent).toContain('AF Supreme')
-    expect(banner.textContent).not.toMatch(/\$\s?\d/)
-    expect(banner.textContent).not.toMatch(/tokens\/mo/i)
-    expect(within(banner).getByTestId('settings-hub-manage-billing').getAttribute('href')).toBe(
-      '/api/subscription/billing-portal',
-    )
+    const state = screen.getByTestId('settings-hub-state-billing')
+    expect(state.textContent).toBe(`AF Supreme · renews ${new Date('2027-01-15T00:00:00Z').toLocaleDateString()}`)
+    const page = screen.getByTestId('settings-hub').textContent ?? ''
+    expect(page.split('AF Supreme').length - 1).toBe(1)
+    expect(page).not.toMatch(/\$\s?\d/)
+    expect(page).not.toMatch(/tokens\/mo/i)
   })
 
-  it('sends an admin bypass to pricing — it has no Stripe customer to open', () => {
+  it('says an admin bypass is not billed — it has no Stripe subscription behind it', () => {
     ents.value = { ...SUPREME, isAdminBypassAccount: true }
     hub()
-    expect(screen.queryByTestId('settings-hub-manage-billing')).toBeNull()
-    expect(screen.getByTestId('settings-hub-pricing').getAttribute('href')).toBe('/pricing')
+    expect(screen.getByTestId('settings-hub-state-billing').textContent).toBe('AF Supreme · admin access, not billed')
   })
 
   it('searches card descriptions as well as titles', () => {
@@ -145,17 +143,16 @@ describe('Settings hub', () => {
     ])
   })
 
-  it('nudges for the first empty field the completion score counts', () => {
-    // Avatar and timezone both empty: the nudge names the earlier one, and the
-    // percentage counts both — the two read one list, so they cannot drift.
+  it('asks for the first empty profile field, on the headline and the Profile card alike', () => {
+    // Avatar and timezone both empty: both lines name the earlier one — they read one list.
     const both = hub(profile({ timezone: null }))
-    expect(screen.getByText('Next: add an avatar.')).toBeTruthy()
-    expect(screen.getByText('60%')).toBeTruthy()
+    expect(screen.getByTestId('settings-guide-headline').textContent).toBe('Add a picture to finish your profile')
+    expect(screen.getByTestId('settings-hub-state-profile').textContent).toBe('Add a picture')
     both.unmount()
 
     hub(profile({ timezone: null, avatarPreset: 'fox' }))
-    expect(screen.getByText('Next: add a timezone.')).toBeTruthy()
-    expect(screen.getByText('80%')).toBeTruthy()
+    expect(screen.getByTestId('settings-guide-headline').textContent).toBe('Set your timezone to finish your profile')
+    expect(screen.getByTestId('settings-hub-state-profile').textContent).toBe('Set your timezone')
   })
 
   it('keeps the sidebar on a tab, with a way back to the hub', () => {
