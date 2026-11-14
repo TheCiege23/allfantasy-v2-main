@@ -1,6 +1,9 @@
--- Two indexes for the /core Trades screen's history reads. WRITTEN, NOT APPLIED — see
--- prisma/migrations-pending/README.md. Nothing in the code depends on them: every query below runs
--- the same without them, only slower, so the code ships safely ahead of this file.
+-- Two indexes for the /core Trades screen's history reads. Written 2026-11-06 (#3310) and parked in
+-- prisma/migrations-pending/ as 20261106150000_trade_history_indexes; moved here 2026-11-14 on the
+-- owner's instruction, after the post-deploy drift check reported both declared indexes missing in
+-- production. Renamed to a timestamp after the last applied migration so it applies in order.
+-- Nothing in the code depends on them: every query below runs the same without them, only slower.
+-- Check dw_transaction_facts' size first: `railway run node scripts/check-table-sizes.mjs`.
 --
 -- ── WHAT EACH ONE IS FOR, BY THE QUERY THAT USES IT ─────────────────────────────────────────
 --
