@@ -26,6 +26,7 @@ import { buildDraftDecisionContext } from '@/lib/shared-services/draft/DraftCont
 import { computeDraftRecommendation, type RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
 import { buildAuctionDecision } from '@/lib/shared-services/draft/auctionDecision'
 import { runDraftPickDecision } from '@/lib/decision-os/draft'
+import { scheduleDraftRecommendationRecord } from '@/lib/shared-services/draft/recommendationRecorder'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,17 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     // League, session or roster vanished between the reads above and this one.
     return NextResponse.json({ error: 'The draft could not be loaded.', reason: 'context_unavailable' }, { status: 409 })
   }
+  // Forward test of replacement value — background only, never awaited (recommendationRecorder.ts).
+  scheduleDraftRecommendationRecord({
+    surface: 'decision_card',
+    sport: context.sport,
+    leagueId,
+    sessionKey: context.sessionId ?? leagueId,
+    rosterKey: rosterId,
+    overallPick: context.pick,
+    round: context.round,
+    input: context.engineInput,
+  })
   const existingPicks = snapshot.picks.map((p) => ({ rosterId: p.rosterId, position: p.position }))
   // Captured so the response can carry the engine's draft-context lines alongside the decision.
   let engineResult: RecommendationResult | null = null

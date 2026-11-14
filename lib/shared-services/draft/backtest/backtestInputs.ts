@@ -1,6 +1,6 @@
 import type { RecommendationPlayer } from '@/lib/draft-helper/RecommendationEngine'
 import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
-import { replayKey } from './draftReplay'
+import { replayKey, type ReplayRow } from './draftReplay'
 
 /**
  * Draft backtest inputs (2026-11-14) — the PURE half of `scripts/draft-backtest.ts`.
@@ -211,4 +211,96 @@ export function preDraftProjections(args: {
 /** The market a draft saw: preseason ADP, plus pre-draft projections where policy allows them. */
 export function marketWithProjections(market: readonly RecommendationPlayer[], projections: ReadonlyMap<string, number>): RecommendationPlayer[] {
   return market.map((p) => ({ ...p, projectedPoints: projections.get(replayKey(p.name, p.position)) ?? null }))
+}
+
+/** The last week whose games are all over: its Thursday kickoff plus five days (Monday night) has passed. */
+export function completedThroughWeek(seasonOpener: Date, now: Date, maxWeek = 18): number {
+  let done = 0
+  for (let w = 1; w <= maxWeek; w++) if (weekKickoff(seasonOpener, w).getTime() + 5 * 86_400_000 <= now.getTime()) done = w
+  return done
+}
+
+/**
+ * Whether a DraftPick row is a manager's own choice. Live-draft sources: `user` (the manager), and
+ * for a mirrored/imported draft `sleeper` / `import` (a person on that platform — its own autopick
+ * cannot be told apart). Not the manager's choice: `auto` (timer), `commissioner`, `keeper` and the
+ * devy/college promotions. A null source predates the column and defaults to `user`.
+ */
+export function isManagerPick(source: string | null | undefined): boolean {
+  const s = String(source ?? 'user').trim().toLowerCase()
+  return s === 'user' || s === 'sleeper' || s === 'import'
+}
+
+/** A pick the engine could have been asked about: not a keeper slotted in before the draft. */
+export function isReplayablePick(source: string | null | undefined): boolean {
+  return String(source ?? '').trim().toLowerCase() !== 'keeper'
+}
+
+export type GameStatRow = { playerId: string; weekOrRound: number; fantasyPoints: number; normalizedStatMap: unknown }
+
+/**
+ * PlayerGameStat rows → weekly rows. A row whose `normalizedStatMap.scored` is false was never
+ * scored — its 0 is the column default, not a measurement (lib/sports-data/rollingInsightsGameLogs.ts)
+ * — so it is dropped, never read as zero points. Games in one week are summed.
+ */
+export function gameRowsToWeekly(rows: readonly GameStatRow[]): { rows: WeeklyScoreRow[]; unscored: number } {
+  const sums = new Map<string, WeeklyScoreRow>()
+  let unscored = 0
+  for (const r of rows) {
+    const map = r.normalizedStatMap && typeof r.normalizedStatMap === 'object' ? (r.normalizedStatMap as Record<string, unknown>) : {}
+    if (map.scored === false) {
+      unscored++
+      continue
+    }
+    const k = `${r.playerId}|${r.weekOrRound}`
+    const prev = sums.get(k)
+    const pts = Number(r.fantasyPoints) || 0
+    if (prev) prev.fantasyPts += pts
+    else sums.set(k, { playerId: r.playerId, week: r.weekOrRound, fantasyPts: pts })
+  }
+  return { rows: [...sums.values()], unscored }
+}
+
+export type RecordedRecommendation = {
+  createdAt: Date
+  round: number
+  overallPick: number
+  observeName: string | null
+  observePosition: string | null
+  activeName: string | null
+  activePosition: string | null
+}
+
+/**
+ * Recorded forward-test rows → replay rows, so `compareModes` scores them exactly as it scores a
+ * replay. Each record is judged from the first week that had not kicked off when it was written.
+ * Records whose window has no finished week yet are counted as `pending`, not scored.
+ */
+export function recordedToReplayRows(args: {
+  records: readonly RecordedRecommendation[]
+  byKey: ReadonlyMap<string, ReadonlyMap<number, number>>
+  seasonOpener: Date
+  throughWeek: number
+}): { rows: ReplayRow[]; pending: number } {
+  const rows: ReplayRow[] = []
+  let pending = 0
+  const cache = new Map<number, Map<string, number>>()
+  for (const r of args.records) {
+    const from = firstUnplayedWeek(args.seasonOpener, r.createdAt)
+    if (from == null || from > args.throughWeek) {
+      pending++
+      continue
+    }
+    let points = cache.get(from)
+    if (!points) cache.set(from, (points = windowPoints(args.byKey, from, args.throughWeek)))
+    const at = (name: string | null, pos: string | null) => (name ? { name: backtestName(name), points: points!.get(backtestKey(name, pos)) ?? null } : undefined)
+    rows.push({
+      draftId: 'recorded',
+      overall: r.overallPick,
+      round: r.round,
+      actual: { name: '', points: null },
+      byMode: { observe: at(r.observeName, r.observePosition), active: at(r.activeName, r.activePosition) },
+    })
+  }
+  return { rows, pending }
 }

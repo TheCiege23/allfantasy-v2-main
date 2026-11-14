@@ -1,6 +1,7 @@
 import {
   computeDraftRecommendation,
   computeNeeds,
+  type RecommendationInput,
   type RecommendationPlayer,
   type RecommendationResult,
 } from '@/lib/draft-helper/RecommendationEngine'
@@ -117,8 +118,7 @@ export function groundingFromEngine(args: {
   }
 }
 
-/** Run the engine for one roster on one board — the same call the draft room's recommendation makes. */
-export function runEngineForGrounding(args: {
+export type GroundingEngineArgs = {
   available: RecommendationPlayer[]
   teamRoster: Array<{ position: string; team?: string | null; byeWeek?: number | null }>
   overallPick: number
@@ -127,9 +127,12 @@ export function runEngineForGrounding(args: {
   /** This draft's scoring window and recent picks, when known — see draftContextSignals.ts. */
   scoringWindow?: ScoringWindow | null
   recentPickPositions?: string[]
-}): DraftEngineGrounding {
+}
+
+/** The engine input Chimmy's tips are grounded in — exported so the recorder sees the same one. */
+export function groundingEngineInput(args: GroundingEngineArgs): RecommendationInput {
   const { available, teamRoster, overallPick, totalTeams, sport } = args
-  const result = computeDraftRecommendation({
+  return {
     available,
     teamRoster,
     scoringWindow: args.scoringWindow ?? null,
@@ -140,7 +143,13 @@ export function runEngineForGrounding(args: {
     totalTeams,
     sport,
     mode: 'needs',
-  })
+  }
+}
+
+/** Run the engine for one roster on one board — the same call the draft room's recommendation makes. */
+export function runEngineForGrounding(args: GroundingEngineArgs): DraftEngineGrounding {
+  const { available, teamRoster, overallPick, totalTeams, sport } = args
+  const result = computeDraftRecommendation(groundingEngineInput(args))
   const needs = computeNeeds(teamRoster, [], false, available, sport)
   return groundingFromEngine({ result, available, needs, overallPick, totalTeams })
 }
