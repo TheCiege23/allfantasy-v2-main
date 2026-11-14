@@ -1,0 +1,127 @@
+/*
+ * A league's Schedule tab guide (components/core-app/screens/LeagueSchedule.tsx, 2026-11-13): the
+ * "What's next" list and the compact week switcher over the shared scoreboard panel.
+ */
+
+.af-core .af-sg-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.af-core .af-sg-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+  min-height: 48px;
+  box-sizing: border-box;
+}
+.af-core .af-sg-item + .af-sg-item {
+  border-top: 1px solid var(--line);
+}
+
+.af-core .af-sg-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.af-core .af-sg-label {
+  font: 700 14px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+}
+.af-core .af-sg-item[data-state='now'] .af-sg-label {
+  color: var(--accent);
+}
+
+.af-core .af-sg-weeks {
+  font: 500 12px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+.af-core .af-sg-detail {
+  font: 400 12px/1.45 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+}
+
+.af-core .af-sg-badge {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font: 700 11px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2, var(--text));
+  white-space: nowrap;
+}
+.af-core .af-sg-badge[data-tone='now'] {
+  border-color: var(--accent-line, var(--accent));
+  color: var(--accent);
+  background: var(--accent-soft, transparent);
+}
+
+.af-core .af-sg-links {
+  margin-top: 8px;
+}
+
+.af-core .af-sg-games-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-core .af-sg-games-head h2 {
+  margin: 0;
+}
+
+.af-core .af-sg-weeknav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-core .af-sg-step {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: 700 18px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+.af-core .af-sg-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.af-core .af-sg-step:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-core .af-sg-select select {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: 600 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-sg-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.af-core .af-sg-note {
+  margin: 8px 0;
+  font: 400 12px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
