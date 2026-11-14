@@ -17,6 +17,11 @@ export const draftHqGuideMessages = defineMessages({
     headYourPick: (league: string, n: number) => (n === 1 ? `You’re on the clock in ${league}` : `You’re on the clock in ${n} drafts`),
     headRunning: (league: string, n: number) =>
       n === 1 ? `${league} is drafting — it’s not your pick yet` : `${n} drafts are running — none is waiting on you`,
+    /** Your slot in a running draft could not be read: say it is drafting, not that it is "not your pick". */
+    headRunningUnknown: (league: string, n: number) =>
+      n === 1 ? `${league} is drafting — open it to see when you pick` : `${n} drafts are running`,
+    /** Added to the running headline when a paused draft is waiting on you (2026-11-13). */
+    headPausedYours: (league: string) => ` · you pick next in ${league} (paused)`,
     headPaused: (league: string, n: number, yours: boolean) =>
       n === 1 ? `${league} is paused${yours ? ' — you pick next' : ''}` : `${n} drafts are paused — none is running`,
     headUpcoming: (n: number) => `No draft is running · ${n} coming up`,
@@ -31,6 +36,9 @@ export const draftHqGuideMessages = defineMessages({
     statRound: 'Round',
     statOnClock: 'On the clock',
     statQueued: 'Queued',
+    statNextPick: 'Your next pick',
+    nextPick: (round: number, inRound: number, away: number) =>
+      `${round}.${String(inRound).padStart(2, '0')} · ${away} ${away === 1 ? 'pick' : 'picks'} away`,
     of: (a: number, b: number) => `${a} of ${b}`,
     you: 'You',
     tagPaused: 'PAUSED',
@@ -45,8 +53,13 @@ export const draftHqGuideMessages = defineMessages({
     linePaused: 'Paused — the pick timer is stopped.',
     lineOnClock: (name: string) => `${name} is on the clock.`,
     lineRunning: 'This draft is running.',
+    lineSlotUnknown: 'We can’t see which team is yours in this draft, so we can’t say when you pick — open the board.',
     rowFacts: (slot: string | null, rounds: number | null) =>
       [slot ? `Slot ${slot}` : null, rounds != null ? `${rounds} rounds` : null].filter(Boolean).join(' · '),
+    /** A not-started draft's date (ET, as the rest of /core) — or where its date lives (2026-11-13). */
+    draftsOn: (when: string) => `Drafts ${when} ET`,
+    noDateSet: 'No draft date set',
+    dateOnPlatform: (platform: string) => `Draft date is on ${platform}`,
     queueNote:
       'No queue built in AllFantasy? That’s fine — if you keep your queue on Sleeper or another platform, it stays there and we can’t see it.',
     lastPicks: 'Last picks',
@@ -56,11 +69,12 @@ export const draftHqGuideMessages = defineMessages({
     youTag: 'YOU',
     queueUnchecked: 'This does not check whether they are still available — read the picks beside them.',
     noDraftYet: (n: number) => (n > 0 ? `No draft is set up in any of your ${n} leagues yet.` : 'No draft to show yet.'),
-    foot: (shown: number, withDraft: number, without: number) =>
-      `${shown < withDraft ? `Showing the ${shown} most urgent of ${withDraft} drafts.` : `${withDraft} ${withDraft === 1 ? 'draft' : 'drafts'} in all.`}${
-        without > 0 ? ` ${without} ${without === 1 ? 'league has' : 'leagues have'} no draft we can read.` : ''
-      }`,
-    footAll: (total: number) => `See all ${total} leagues`,
+    /** One count on the footer line (2026-11-13); the leagues with no draft move behind its "?". */
+    foot: (shown: number, withDraft: number) =>
+      shown < withDraft ? `Showing the ${shown} most urgent of ${withDraft} drafts.` : `${withDraft} ${withDraft === 1 ? 'draft' : 'drafts'} in all.`,
+    footWithout: (without: number) => `${without} ${without === 1 ? 'league has' : 'leagues have'} no draft we can read.`,
+    footWhy: 'About these numbers',
+    footAll: (_total: number) => 'See every league',
     pastDrafts: 'Past drafts — every draft you’ve been in, searchable',
   },
   es: {
@@ -69,6 +83,9 @@ export const draftHqGuideMessages = defineMessages({
     headYourPick: (league, n) => (n === 1 ? `Te toca elegir en ${league}` : `Te toca elegir en ${n} drafts`),
     headRunning: (league, n) =>
       n === 1 ? `${league} está en pleno draft — aún no es tu turno` : `${n} drafts en curso — ninguno espera por ti`,
+    headRunningUnknown: (league, n) =>
+      n === 1 ? `${league} está en pleno draft — ábrelo para ver cuándo eliges` : `${n} drafts en curso`,
+    headPausedYours: (league) => ` · eliges tú después en ${league} (en pausa)`,
     headPaused: (league, n, yours) =>
       n === 1 ? `${league} está en pausa${yours ? ' — eliges tú después' : ''}` : `${n} drafts en pausa — ninguno en curso`,
     headUpcoming: (n) => `Ningún draft en curso · ${n} por empezar`,
@@ -83,6 +100,9 @@ export const draftHqGuideMessages = defineMessages({
     statRound: 'Ronda',
     statOnClock: 'Eligiendo',
     statQueued: 'En tu cola',
+    statNextPick: 'Tu próxima selección',
+    nextPick: (round, inRound, away) =>
+      `${round}.${String(inRound).padStart(2, '0')} · faltan ${away} ${away === 1 ? 'selección' : 'selecciones'}`,
     of: (a, b) => `${a} de ${b}`,
     you: 'Tú',
     tagPaused: 'EN PAUSA',
@@ -97,8 +117,12 @@ export const draftHqGuideMessages = defineMessages({
     linePaused: 'En pausa: el reloj de selección está detenido.',
     lineOnClock: (name) => `Elige ${name}.`,
     lineRunning: 'Este draft está en curso.',
+    lineSlotUnknown: 'No vemos cuál es tu equipo en este draft, así que no podemos decir cuándo eliges: abre el tablero.',
     rowFacts: (slot, rounds) =>
       [slot ? `Turno ${slot}` : null, rounds != null ? `${rounds} rondas` : null].filter(Boolean).join(' · '),
+    draftsOn: (when) => `Draft el ${when} ET`,
+    noDateSet: 'Sin fecha de draft',
+    dateOnPlatform: (platform) => `La fecha del draft está en ${platform}`,
     queueNote:
       '¿Sin cola creada en AllFantasy? No pasa nada: si tienes tu cola en Sleeper u otra plataforma, se queda allí y no podemos verla.',
     lastPicks: 'Últimas selecciones',
@@ -108,11 +132,11 @@ export const draftHqGuideMessages = defineMessages({
     youTag: 'TÚ',
     queueUnchecked: 'Esto no comprueba si siguen disponibles: revisa las selecciones de al lado.',
     noDraftYet: (n) => (n > 0 ? `Aún no hay draft en ninguna de tus ${n} ligas.` : 'Aún no hay draft que mostrar.'),
-    foot: (shown, withDraft, without) =>
-      `${shown < withDraft ? `Mostrando los ${shown} más urgentes de ${withDraft} drafts.` : `${withDraft} ${withDraft === 1 ? 'draft' : 'drafts'} en total.`}${
-        without > 0 ? ` ${without} ${without === 1 ? 'liga no tiene' : 'ligas no tienen'} un draft que podamos leer.` : ''
-      }`,
-    footAll: (total) => `Ver las ${total} ligas`,
+    foot: (shown, withDraft) =>
+      shown < withDraft ? `Mostrando los ${shown} más urgentes de ${withDraft} drafts.` : `${withDraft} ${withDraft === 1 ? 'draft' : 'drafts'} en total.`,
+    footWithout: (without) => `${without} ${without === 1 ? 'liga no tiene' : 'ligas no tienen'} un draft que podamos leer.`,
+    footWhy: 'Sobre estas cifras',
+    footAll: () => 'Ver todas las ligas',
     pastDrafts: 'Drafts anteriores: todos en los que has estado, con búsqueda',
   },
 })
