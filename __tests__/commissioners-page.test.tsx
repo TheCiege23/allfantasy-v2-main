@@ -41,6 +41,19 @@ describe('/commissioners', () => {
     expect(out.querySelector('[data-testid="commissioners-hero-pricing"]')?.getAttribute('href')).toBe('/pricing')
   })
 
+  it('header shows Sign in beside the import button on desktop and phone, and hides it when signed in', async () => {
+    const out = await renderCommissioners(false)
+    for (const id of ['commissioners-nav-sign-in', 'commissioners-mobile-sign-in']) {
+      const a = out.querySelector(`[data-testid="${id}"]`)
+      expect(a?.getAttribute('href'), id).toBe('/login')
+      expect(a?.textContent, id).toBe('Sign in')
+      expect(a?.closest('details'), id).toBeNull()
+    }
+    expect(out.querySelector('.af-lp-mobile-actions [data-testid="commissioners-mobile-sign-in"]')).not.toBeNull()
+    const signedIn = await renderCommissioners(true)
+    expect(signedIn.querySelector('a[href="/login"]')).toBeNull()
+  })
+
   it('renders all five features, each with a screenshot slot that has alt text', async () => {
     const doc = await renderCommissioners()
     for (const f of COMMISSIONER_FEATURES) {
