@@ -213,7 +213,8 @@ const INLINE_EXEMPT: Record<string, { n: number; why: string }> = {
   'components/dynasty/DynastyProjectionPanel.tsx': { n: 2, why: 'SVG axis labels inside a viewBox' },
   'components/ai-confidence/ConfidenceBadge.tsx': { n: 1, why: 'AF crest glyph, viewBox 0 0 24 24' },
   'components/core-app/screens/AuthV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
-  'components/core-app/screens/Career.tsx': { n: 2, why: 'AF crest glyph, aria-hidden SVG' },
+  // The AF crest left Career's header on 2026-11-14 (the page now opens on its headline); the gauge label stays.
+  'components/core-app/screens/Career.tsx': { n: 1, why: 'GM prestige gauge label inside an SVG viewBox' },
   'components/core-app/screens/ImportV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'components/core-app/screens/LandingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'components/core-app/screens/PricingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
