@@ -113,13 +113,11 @@ describe('the "?" is a control now', () => {
   })
 })
 
-describe('the lock banner’s fix is a button', () => {
-  it('styles "Fix it in Sleeper" as af-btn when a starting slot is empty', () => {
+describe('the kickoff is the top number, not a banner (2026-11-14)', () => {
+  it('draws no countdown banner in season; the next kickoff is the top number', () => {
     const lock = { available: true, data: { at: new Date(Date.now() + 3_600_000 * 20), anyEmptySlot: true, week: 4, season: 2026, daysAway: 0 } }
     const { container } = render(<MyTeam data={page({ lock })} />)
-    const fix = container.querySelector('a.af-mt-lock-fix')!
-    expect(fix.classList.contains('af-btn')).toBe(true)
-    expect(fix.getAttribute('href')).toBe('https://sleeper.com/leagues/1/team')
-    expect(inQuery('.af-core a.af-btn.af-mt-lock-fix', '')).toMatchObject({ 'text-transform': 'none', 'font-size': '13px' })
+    expect(container.querySelector('.af-mt-lock')).toBeNull()
+    expect(container.querySelector('[data-chip=kickoff]')).not.toBeNull()
   })
 })

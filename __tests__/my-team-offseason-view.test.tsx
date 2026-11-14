@@ -78,7 +78,8 @@ describe('My Team between seasons', () => {
         })}
       />,
     )
-    expect(container.querySelector('.af-mt-dynasty')?.textContent).toContain('2027')
+    // Between seasons the future picks still show, in their own section (2026-11-14).
+    expect(container.querySelector('[data-testid=my-team-future-picks]')?.textContent).toContain('2027')
     expect(container.querySelector('.af-mt-moves')).not.toBeNull()
   })
 })
