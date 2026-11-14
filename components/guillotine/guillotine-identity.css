@@ -1,0 +1,96 @@
+/* Guillotine identity (2026-11-06) — ember, the colour of the chop. Two layers:
+ *
+ * 1. The WORKSPACE: a native guillotine league's `.af-core.nl-workspace[data-format=guillotine]` maps
+ *    /core's own accent names to ember, so every existing accent use on the page (the nav's active item,
+ *    the beta chip, focus rings, links) follows it with no per-tab edit — the redraft identity's mechanism
+ *    (components/league/native/redraft-identity.css). The banner art and its dark scrim stay in
+ *    native-league.css.
+ *
+ * 2. The GUILLY HUB: `.gl` is the scope class on GuillotineTab, GuillotineHome and every part of them that
+ *    can render on its own (GuillotineAIPanel also lives in IntelligenceTab). These components were styled
+ *    with inline Tailwind and hardcoded DARK colours (`text-white/60`, `bg-black/20`, pink `#ff3d81`, cyan
+ *    utilities), and the root forced `text-[#e6edf3]`, so in light mode the numbers inherited near-white
+ *    text on a white card and the selected sub-tab's label vanished. Every colour is now a `--gl-*` token:
+ *      - from /core (`--text`, `--surface`…) when a /core palette is in scope, which already flips per mode;
+ *      - otherwise a literal for the active mode, so a host with no /core palette still reads in both.
+ *
+ * ⚠ LIGHT IS NOT DARK INVERTED. #ff7a45 reads at 5.85–7.77:1 on the dark grounds (and on its own tint) and
+ *   at ~2.6:1 on white, so light mode uses #9e3509: same hue, lightness lowered until it clears 5.1:1 on
+ *   --surface, --surface2 and --bg, on its own 10% tint over each, and with white text on it as a fill.
+ *   __tests__/guillotine/guillotineIdentity.test.ts measures both.
+ * ⚠ The light-mode clamp in globals.css `!important`-overrides `text-white*` utilities; nothing here may
+ *   use one, or light mode renders dark-on-dark again (af-core.css says the same).
+ * ⚠ No @media blocks in this file. If one is ever needed: ONE top-level block per band, at the END. */
+
+/* ── Ember, per mode ─────────────────────────────────────────────────── */
+:is(.gl,.af-core.nl-workspace[data-format=guillotine]){
+  --gl-ember:#ff7a45;--gl-ember-text:#ff7a45;--gl-ember-ink:#1a0703;
+  --gl-ember-soft:rgba(255,122,69,.14);--gl-ember-line:rgba(255,122,69,.4);
+}
+html[data-mode='light'] :is(.gl,.af-core.nl-workspace[data-format=guillotine]){
+  --gl-ember:#9e3509;--gl-ember-text:#9e3509;--gl-ember-ink:#ffffff;
+  --gl-ember-soft:rgba(158,53,9,.1);--gl-ember-line:rgba(158,53,9,.32);
+}
+
+/* ── 1. The workspace follows ember ──────────────────────────────────── */
+.af-core.nl-workspace[data-format=guillotine]{
+  --accent:var(--gl-ember-text);--accent-ink:var(--gl-ember-ink);--accent-soft:var(--gl-ember-soft);--accent-line:var(--gl-ember-line);
+}
+
+/* ── 2. The Guilly hub ───────────────────────────────────────────────── */
+.gl{
+  --gl-text:var(--text,#eef0fa);--gl-text2:var(--text2,#c3c9e6);--gl-muted:var(--muted,#989fc2);
+  --gl-surface:var(--surface,#0d1020);--gl-surface2:var(--surface2,#0a0c1a);
+  --gl-line:var(--line,rgba(255,255,255,.07));--gl-line2:var(--line2,rgba(255,255,255,.13));
+  --gl-good:var(--good,#34d399);--gl-warn:var(--warn,#fbbf24);--gl-bad:var(--bad,#fb5b78);
+  --gl-good-soft:var(--good-soft,rgba(52,211,153,.12));--gl-warn-soft:var(--warn-soft,rgba(251,191,36,.12));--gl-bad-soft:var(--bad-soft,rgba(251,91,120,.12));
+  --gl-hover:color-mix(in srgb,var(--gl-text) 7%,transparent);
+  color:var(--gl-text);
+}
+html[data-mode='light'] .gl{
+  --gl-text:var(--text,#0b1020);--gl-text2:var(--text2,#333c5c);--gl-muted:var(--muted,#484f69);
+  --gl-surface:var(--surface,#ffffff);--gl-surface2:var(--surface2,#eef1f9);
+  --gl-line:var(--line,rgba(11,16,32,.09));--gl-line2:var(--line2,rgba(11,16,32,.16));
+  --gl-good:var(--good,#097352);--gl-warn:var(--warn,#8d5905);--gl-bad:var(--bad,#ba2c4b);
+  --gl-good-soft:var(--good-soft,rgba(9,115,82,.1));--gl-warn-soft:var(--warn-soft,rgba(141,89,5,.1));--gl-bad-soft:var(--bad-soft,rgba(186,44,75,.1));
+}
+
+/* Text. Two classes on purpose: `.nl-workspace a{color:inherit}` is (0,1,1), and a link carrying
+ * gl-accent-text has to beat it. The `.gl.gl-x` half covers a root that is its own scope. */
+.gl .gl-text,.gl.gl-text{color:var(--gl-text)}
+.gl .gl-text2,.gl.gl-text2{color:var(--gl-text2)}
+.gl .gl-muted,.gl.gl-muted{color:var(--gl-muted)}
+.gl .gl-accent-text,.gl.gl-accent-text{color:var(--gl-ember-text)}
+.gl .gl-good,.gl.gl-good{color:var(--gl-good)}
+.gl .gl-warn,.gl.gl-warn{color:var(--gl-warn)}
+.gl .gl-bad,.gl.gl-bad{color:var(--gl-bad)}
+
+/* Grounds and lines */
+.gl-card{background:var(--gl-surface);border-color:var(--gl-line2)}
+.gl-well{background:var(--gl-surface2);border-color:var(--gl-line)}
+.gl-line{border-color:var(--gl-line)}
+.gl-me{background:var(--gl-ember-soft)}
+.gl-hover:hover{background:var(--gl-hover)}
+.gl-card-accent{background:color-mix(in srgb,var(--gl-ember) 5%,var(--gl-surface));border-color:var(--gl-ember-line)}
+.gl-card-good{background:var(--gl-good-soft);border-color:color-mix(in srgb,var(--gl-good) 35%,transparent);color:var(--gl-text)}
+.gl-card-warn{background:var(--gl-warn-soft);border-color:color-mix(in srgb,var(--gl-warn) 35%,transparent);color:var(--gl-warn)}
+
+/* Sub-tabs: the selected one is an ember tint with ember text, never white on a pale fill. */
+.gl-subnav{border-color:var(--gl-line)}
+.gl-subtab{background:var(--gl-surface2);color:var(--gl-muted);box-shadow:inset 0 0 0 1px var(--gl-line)}
+.gl-subtab:hover{color:var(--gl-text);background:var(--gl-hover)}
+.gl-subtab[aria-pressed=true]{background:var(--gl-ember-soft);color:var(--gl-ember-text);box-shadow:inset 0 0 0 1px var(--gl-ember-line)}
+
+/* Buttons and chips */
+.gl-chip{background:var(--gl-surface2);border-color:var(--gl-line2);color:var(--gl-text)}
+.gl-chip:hover{background:var(--gl-hover)}
+.gl-chip[data-tone=accent]{background:var(--gl-ember-soft);border-color:var(--gl-ember-line);color:var(--gl-ember-text)}
+.gl-chip[data-tone=warn]{background:var(--gl-warn-soft);border-color:color-mix(in srgb,var(--gl-warn) 35%,transparent);color:var(--gl-warn)}
+.gl-btn-primary{background:var(--gl-ember);color:var(--gl-ember-ink)}
+.gl-btn-primary:hover:not(:disabled){filter:brightness(1.08)}
+.gl-btn-good{border-color:color-mix(in srgb,var(--gl-good) 45%,transparent);color:var(--gl-good)}
+.gl-btn-good:hover:not(:disabled){background:var(--gl-good-soft)}
+.gl-field{background:var(--gl-surface2);border-color:var(--gl-line2);color:var(--gl-text)}
+.gl-pill{background:var(--gl-surface2);border:1px solid var(--gl-line2);color:var(--gl-text2)}
+.gl-pill:hover{background:var(--gl-hover)}
+.gl-pill[aria-pressed=true]{background:var(--gl-ember);border-color:var(--gl-ember);color:var(--gl-ember-ink)}
