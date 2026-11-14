@@ -1125,23 +1125,31 @@
  * ── Language switch ───────────────────────────────────────────────────────
  *
  * Two links, not a toggle: the active one is the current document, the other is
- * a real navigation. Styled as a segmented control so it reads as one control
- * rather than two stray nav links.
+ * a real navigation. Styled as a segmented control the SAME height and radius as
+ * the Sign in / Sign up buttons beside it (2026-11-13). It was 11px text in a
+ * pill half their height and read as a stray label, not a control.
  */
 .af-lp-lang {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  height: 36px;
+  padding: 3px;
+  box-sizing: border-box;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
   background: var(--chip);
 }
 
-.af-lp-nav-right .af-lp-lang-opt {
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 11px;
+.af-core .af-lp-lang .af-lp-lang-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 100%;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.06em;
   line-height: 1;
@@ -1150,38 +1158,20 @@
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.af-lp-nav-right .af-lp-lang-opt:hover {
+.af-core .af-lp-lang .af-lp-lang-opt:hover {
   color: var(--text);
 }
 
-.af-lp-nav-right .af-lp-lang-opt[data-active='true'] {
+.af-core .af-lp-lang .af-lp-lang-opt[data-active='true'] {
   background: var(--accent);
   color: var(--accent-ink);
 }
 
-/*
- * The switch stays visible on phones. It is the one nav control a Spanish
- * reader needs before anything else on the page makes sense to them, so it is
- * explicitly exempt from whatever the mobile nav hides.
- */
-@media (max-width: 720px) {
-  /*
-   * ⚠ `order: -1` here used to mean "first INSIDE .af-lp-nav-right". That group
-   * is now `display: contents` on this breakpoint, so its children are direct
-   * flex items of `.af-lp-nav` and -1 would have hoisted the switch above the
-   * brand. It keeps its place at the head of the third row instead — the order
-   * values are assigned in the nav block above, and this file is read in source
-   * order, so a stray -1 down here silently overrides them.
-   */
-  .af-lp-lang {
-    order: 4;
-  }
-
-  .af-lp-nav-right .af-lp-lang-opt {
-    padding: 5px 10px;
-    font-size: 12px;
-  }
+/* The menu copy of the switch only exists for the narrowest phones (see below). */
+.af-lp-lang--menu {
+  display: none;
 }
+
 
 /* Content link out of the B2B band into 30b, the retention case at /core/business. */
 .af-lp-crosslink {
@@ -1379,5 +1369,654 @@
     min-height: 44px;
     display: inline-flex;
     align-items: center;
+  }
+}
+
+/* ══ 2026-11-13 simplification: header pair, commissioner band, what you get, game day, demo ══ */
+
+/* ── Header: Sign in + Sign up as a pair, language pill at the same height ── */
+
+.af-lp-nav-right {
+  gap: 10px;
+}
+.af-core .af-btn.af-lp-signin {
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+@media (max-width: 1100px) {
+  .af-lp-mobile-actions {
+    gap: 6px;
+  }
+  .af-lp-lang--bar {
+    height: 44px;
+  }
+  .af-core .af-btn.af-lp-mobile-signin {
+    min-height: 44px;
+    padding-inline: 12px;
+    font-size: 12px;
+    color: var(--text);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .af-core .af-btn.af-lp-mobile-primary {
+    padding-inline: 12px;
+  }
+}
+
+/* The crest alone carries the brand on a phone, so Sign in and Sign up both fit beside it. */
+@media (max-width: 600px) {
+  .af-lp-nav .af-lp-wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* The narrowest phones: the switch moves into the menu so the two account buttons keep their room. */
+@media (max-width: 359px) {
+  .af-lp-lang--bar {
+    display: none;
+  }
+  .af-lp-mobile-panel .af-lp-lang--menu {
+    display: inline-flex;
+  }
+}
+
+/* ── Hero: the returning-user line ── */
+
+.af-lp-have-account {
+  margin: 14px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.af-core .af-lp-have-account a {
+  font-weight: 800;
+  color: var(--accent);
+  text-decoration: none;
+}
+.af-core .af-lp-have-account a:hover {
+  text-decoration: underline;
+}
+
+/* ── For commissioners: the bold band ── */
+
+.af-lp-commish {
+  padding: 72px 40px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-lp-commish-label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.af-lp-commish-h2 {
+  margin: 14px 0 0;
+  max-width: 920px;
+  font-size: clamp(34px, 5.4vw, 68px);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+.af-lp-commish-body {
+  margin: 18px 0 0;
+  max-width: 660px;
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.af-lp-commish-grid {
+  list-style: none;
+  margin: 36px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.af-lp-commish-card {
+  padding: 22px;
+  border-radius: 16px;
+  background: var(--bg);
+  color: var(--text);
+}
+.af-lp-commish-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+.af-lp-commish-card-title {
+  margin: 12px 0 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.af-lp-commish-card-body {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-lp-commish-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+.af-core .af-lp-commish-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 12px;
+  border: 2px solid var(--bg);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.af-core .af-lp-commish-btn--ghost {
+  border-color: var(--accent-ink);
+  background: transparent;
+  color: var(--accent-ink);
+}
+.af-core .af-lp-commish-btn:focus-visible {
+  outline: 3px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+/* ── What you get (#how) ── */
+
+.af-lp-get {
+  padding: 64px 40px 24px;
+}
+.af-lp-get-body {
+  margin: 10px 0 0;
+  max-width: 620px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.af-lp-get-grid {
+  list-style: none;
+  margin: 28px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.af-lp-get-card {
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-lp-get-title {
+  margin: 10px 0 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.af-lp-get-card-body {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Game day (#game-day) ── */
+
+.af-lp-gameday {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 40px;
+  align-items: start;
+  padding: 56px 40px;
+}
+.af-lp-gameday-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+.af-lp-gameday-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.af-lp-gameday-steps {
+  list-style: none;
+  margin: 20px 0 24px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-lp-gameday-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--text2);
+}
+.af-lp-gameday-step-n {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.af-lp-gd-card {
+  margin: 0;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-lp-gd-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--surface2);
+  color: var(--muted);
+}
+.af-lp-gd-search-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.af-lp-gd-search-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-lp-gd-example {
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-lp-gd-main {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.af-lp-gd-player {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface2);
+}
+.af-lp-gd-player-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.af-lp-gd-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text2);
+}
+.af-lp-gd-player-text,
+.af-lp-gd-league-text,
+.af-lp-gd-lock-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.af-lp-gd-player-text strong {
+  font-size: 16px;
+  color: var(--text);
+}
+.af-lp-gd-player-text span,
+.af-lp-gd-lock-text span,
+.af-lp-gd-league-text span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.af-lp-gd-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--bad);
+}
+.af-lp-gd-lock {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+}
+.af-lp-gd-ring {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: conic-gradient(var(--warn) var(--pct, 35%), var(--line2) 0);
+}
+.af-lp-gd-ring-value {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--surface2);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-lp-gd-lock-text strong {
+  font-size: 15px;
+  color: var(--text);
+}
+/* A three-point track from the injury report to the lock: the picture of the last hours. */
+.af-lp-gd-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-lp-gd-track::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  right: 5px;
+  height: 2px;
+  background: var(--line2);
+}
+.af-lp-gd-track li {
+  position: relative;
+  padding-top: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.af-lp-gd-track li:nth-child(2) {
+  text-align: center;
+}
+.af-lp-gd-track li:last-child {
+  text-align: right;
+}
+.af-lp-gd-track li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.af-lp-gd-track li:nth-child(2)::before {
+  left: calc(50% - 5px);
+}
+.af-lp-gd-track li:last-child::before {
+  left: auto;
+  right: 0;
+}
+.af-lp-gd-track li[data-tone='bad']::before {
+  background: var(--bad);
+}
+.af-lp-gd-track li[data-tone='now']::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.af-lp-gd-track li[data-tone='lock']::before {
+  background: var(--warn);
+}
+.af-lp-gd-leagues ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-lp-gd-league {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+.af-lp-gd-league[data-tone='bad'] {
+  border-color: var(--bad-soft);
+}
+.af-lp-gd-league-text strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.af-lp-gd-swap {
+  flex: none;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.af-lp-gd-chimmy {
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.af-lp-gd-chimmy .af-label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* ── Demo (#demo) ── */
+
+.af-lp-demo {
+  padding: 56px 40px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface2);
+}
+.af-lp-demo-head {
+  margin-bottom: 20px;
+}
+.af-lp-demo-tablist {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-lp-demo-tab {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-lp-demo-tab:hover {
+  color: var(--text);
+}
+.af-lp-demo-tab[data-active='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-lp-demo-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-lp-demo-panel {
+  margin-top: 14px;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-lp-demo-panel[hidden] {
+  display: none;
+}
+.af-lp-demo .af-lp-trade-market {
+  padding: 0;
+}
+.af-lp-demo-pane-body {
+  margin: 0 0 14px;
+  max-width: 640px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-lp-demo-rows,
+.af-lp-demo-types {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+.af-lp-demo-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+}
+.af-lp-demo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface2);
+  font-size: 14px;
+  color: var(--text);
+}
+.af-lp-demo-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-lp-demo-types li {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-lp-demo-panel p[data-testid='landing-league-types-link'] {
+  margin: 0;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 1080px) {
+  .af-lp-get-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .af-lp-gameday {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+}
+
+@media (max-width: 860px) {
+  .af-lp-commish-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .af-lp-commish {
+    padding: 44px 16px;
+  }
+  .af-lp-commish-body {
+    font-size: 16px;
+  }
+  .af-lp-get {
+    padding: 40px 16px 8px;
+  }
+  .af-lp-get-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-lp-gameday,
+  .af-lp-demo {
+    padding: 40px 16px;
+  }
+  .af-lp-demo-tablist {
+    display: flex;
+  }
+  .af-lp-demo-tab {
+    flex: 1 1 auto;
+    padding: 0 10px;
+  }
+  .af-lp-demo-panel {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .af-lp-gd-main {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

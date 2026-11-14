@@ -11,6 +11,10 @@
  *
  * The language therefore lives in the URL (`/?lang=es`), which also makes it a
  * real, shareable, indexable address rather than a per-browser preference.
+ *
+ * 2026-11-13 SIMPLIFICATION. The page said "every league in one place" four times (hero, the
+ * Chimmy band, the three steps, the three reasons). Those four sections are now one: "What you
+ * get". Added: the commissioner band, game-day player search and a three-tab demo.
  */
 
 import type { MonthlyPriceRange } from '@/lib/monetization/planPresentation'
@@ -51,10 +55,9 @@ function joinList(items: string[], lang: LandingLang): string {
 }
 
 const LIVE_PLATFORMS = getLandingLivePlatformNames()
-const OTHER_PLATFORMS = LIVE_PLATFORMS.filter((p) => p !== 'Sleeper')
 
-type Reason = { n: string; title: [string, string]; body: string }
-type Step = { n: string; title: string; body: string }
+type Item = { title: string; body: string }
+type GameDayLeague = { name: string; meta: string; state: string; tone: 'bad' | 'good'; action: string | null }
 /**
  * `aboutPrice`: the answer quotes plan prices, so LandingV4 keeps it out of the iOS app, which
  * sells nothing (App Store 3.1.1). The FAQPage structured data still carries it — crawlers are
@@ -70,14 +73,24 @@ type LandingCopy = {
   meta: { title: string; description: string; ogTitle: string; ogDescription: string }
   nav: {
     how: string
+    gameDay: string
+    demo: string
     pricing: string
     forCommissioners: string
     signIn: string
     /** Primary CTA when the reader is already signed in. */
     goToDashboard: string
     partners: string
+    /** The signed-out primary CTA. Says "sign up" so it reads as a pair with "Sign in". */
     getStarted: string
+    /**
+     * The phone bar's labels. Measured 2026-11-13: «Iniciar sesión» + «Regístrate gratis» pushed
+     * the menu button off a 390px screen, so the bar carries short forms in both languages.
+     */
+    signInShort: string
+    getStartedShort: string
     langLabel: string
+    menuLabel: string
   }
   hero: {
     eyebrow: string
@@ -85,23 +98,75 @@ type LandingCopy = {
     h1b: string
     sub: string
     ctaPrimary: string
-    ctaSecondary: string
     /** Opens the public, anonymized demo league (/demo). No account needed. */
     ctaDemo: string
-    reassure: string
-    /** The commissioner line under the hero, linking to /commissioners. */
-    commishLine: string
-    commishLink: string
+    /** "Already have an account?" — followed by the Sign in link. */
+    haveAccount: string
     cardTitle: string
     cardWeek: string
     /** Precedes the example uplift figure, e.g. "Two fixes worth " + "+13.0". */
     cardFootBefore: string
     /** Second line under it — who produced the figure and over what. */
     cardFootMeta: string
-    /** The no-import way in, under the hero CTAs: links to /trade-evaluator. */
-    tradeLink: string
-    /** Opens /demo/formats: an example league for every league type. No account needed. */
-    leagueTypesLink: string
+  }
+  /**
+   * The commissioner band. Every tool named here is LIVE on /commissioners (commissionersCopy.ts):
+   * the dues tracker, league-aware trade grades and the pre-kickoff lineup check. Nothing from that
+   * page's roadmap belongs here.
+   */
+  commish: {
+    label: string
+    /** The bold headline. Rendered as a link-carrying line with data-testid="landing-commish-line". */
+    h2: string
+    body: string
+    items: Item[]
+    ctaPrimary: string
+    ctaSecondary: string
+  }
+  /** "What you get" — the #how anchor. Four things, said once each. */
+  get: { h2: string; body: string; items: Item[] }
+  /**
+   * Game day: the player finder's game-day mode (PlayerFinder.tsx — pregameInactive, LockClock,
+   * SwapCandidates). The card is an EXAMPLE and says so; every element in it is something the
+   * finder really shows: injury status and report time, Inactive inside the last two hours, the
+   * lock clock, every league he is in, and the swap.
+   */
+  gameDay: {
+    badge: string
+    h2: string
+    body: string
+    steps: string[]
+    cta: string
+    exampleLabel: string
+    searchLabel: string
+    playerName: string
+    playerMeta: string
+    status: string
+    statusNote: string
+    lockValue: string
+    lockLabel: string
+    lockMeta: string
+    trackReport: string
+    trackNow: string
+    trackLock: string
+    leaguesLabel: string
+    leagues: GameDayLeague[]
+    chimmyLabel: string
+    chimmy: string
+  }
+  /** "See it before you sign up" — three tabs, each opening a real no-account surface. */
+  demo: {
+    h2: string
+    body: string
+    tabsLabel: string
+    tabLeagues: string
+    tabTrade: string
+    tabTypes: string
+    leaguesBody: string
+    leaguesRows: { name: string; tag: string; tone: 'bad' | 'warn' | 'good' }[]
+    leaguesCta: string
+    typesBody: string
+    typesCta: string
   }
   /** The live AllFantasy trade market board — values from completed trades in connected leagues. */
   tradeMarket: {
@@ -124,19 +189,6 @@ type LandingCopy = {
      */
     soonNotes: Partial<Record<ImportProvider, string>>
   }
-  /** The "How it works" anchor target: what a new account actually does, in order. */
-  steps: { h2: string; items: Step[] }
-  chimmy: {
-    label: string
-    h2: string
-    body: string
-    /** The exchange is illustrative, and says so, like the hero card. */
-    exampleLabel: string
-    question: string
-    answer: string
-    free: string
-  }
-  reasons: { h2: string; items: Reason[] }
   pricing: { h2: string; body: string; ctaPrimary: string; ctaSecondary: string }
   faq: { h2: string; items: Faq[] }
   /** A single footer line now — a full section of links to other products sat before the last CTA. */
@@ -166,33 +218,120 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       ogDescription: 'Create or connect fantasy leagues, manage your teams and get AI help for your next move.',
     },
     nav: {
-      how: 'How it works',
+      how: 'What you get',
+      gameDay: 'Game day',
+      demo: 'Demo',
       pricing: 'Pricing',
       forCommissioners: 'For commissioners',
       signIn: 'Sign in',
       goToDashboard: 'Go to dashboard',
       partners: 'Partners',
-      getStarted: 'Create free account',
+      getStarted: 'Sign up free',
+      signInShort: 'Sign in',
+      getStartedShort: 'Sign up',
       langLabel: 'Language',
+      menuLabel: 'Open navigation menu',
     },
     hero: {
       // What it IS first. "Fantasy sports only · no gambling" told a stranger what it was not.
       eyebrow: 'Your fantasy sports home',
       h1a: 'Play fantasy sports.',
       h1b: 'All in one place.',
-      sub: 'Create a league or connect the ones you already play. Manage teams, drafts, trades and waivers in one place, with AI help from Chimmy.',
-      ctaPrimary: 'Create free account',
-      ctaSecondary: 'See how it works',
+      sub: `Bring in your leagues from ${platforms}, or create a new one. Free for every league.`,
+      ctaPrimary: 'Sign up free',
       ctaDemo: 'Try the demo',
-      reassure: 'Free for every league · Read-only — we never change your league · Sleeper needs just your username',
-      commishLine: 'Built by a commissioner, for commissioners.',
-      commishLink: 'See Commissioner OS →',
+      haveAccount: 'Already have an account?',
       cardTitle: 'Your leagues',
       cardWeek: 'Week 12 · example',
       cardFootBefore: 'Two fixes worth ',
       cardFootMeta: 'Chimmy, across all 4 leagues',
-      tradeLink: 'Or grade a trade right now — no import needed →',
-      leagueTypesLink: 'See an example of every league type — Guilly, Survivor, Zombie and more →',
+    },
+    commish: {
+      label: 'For commissioners',
+      h2: 'Built by a long-time commissioner, for commissioners.',
+      body: 'Years of running leagues taught us what breaks: chasing dues, lopsided trades and empty lineups at kickoff. AllFantasy handles all three.',
+      items: [
+        {
+          title: 'Dues tracker',
+          body: 'Set the amount and due date and see who has paid at a glance. AllFantasy never holds or moves league money.',
+        },
+        {
+          title: 'Trade grades for your league',
+          body: 'Trades are graded on how your league actually works, not a generic value chart.',
+        },
+        {
+          title: 'Lineup checks before kickoff',
+          body: 'A manager with an empty slot or a starter ruled out gets a check from Chimmy before the game, so you do not have to chase them.',
+        },
+      ],
+      ctaPrimary: 'See commissioner tools',
+      ctaSecondary: 'Start a league free',
+    },
+    get: {
+      h2: 'What you get, free',
+      body: 'Every league you bring in or create is free, with drafts, trades, waivers and live scoring.',
+      items: [
+        {
+          title: 'Every league on one board',
+          body: 'One Sunday view instead of a tab per app, with what needs you first.',
+        },
+        {
+          title: 'Game-day player search',
+          body: 'Check a player right before kickoff and see every league you have him in.',
+        },
+        {
+          title: 'Trade grades from real trades',
+          body: 'Values come from trades managers actually made, not votes, and update daily.',
+        },
+        {
+          title: 'Chimmy, your AI assistant',
+          body: `Ask about your real rosters. Free accounts get ${FREE_CHIMMY_QUESTIONS_PER_DAY} questions a day.`,
+        },
+      ],
+    },
+    gameDay: {
+      badge: 'Game day',
+      h2: 'Is he playing? Know before kickoff.',
+      body: 'Search any player in the hours before his game. See his latest status, every league you have him in, and the swap to make if he is out.',
+      steps: ['Search a name', 'See his status and the time left to lock', 'Make the swap in each league'],
+      cta: 'Search a player',
+      exampleLabel: 'Example',
+      searchLabel: 'Player search',
+      playerName: 'Theo Banks',
+      playerMeta: 'RB · kickoff 1:00 PM',
+      status: 'Inactive',
+      statusNote: 'Ruled out at 11:40 AM',
+      lockValue: '41m',
+      lockLabel: 'to lineup lock',
+      lockMeta: 'Locks at kickoff, 1:00 PM',
+      trackReport: 'Out · 11:40',
+      trackNow: 'Now · 12:19',
+      trackLock: 'Lock · 1:00',
+      leaguesLabel: 'In your leagues',
+      leagues: [
+        { name: 'Dynasty Dragons', meta: 'Sleeper · RB2', state: 'Starting', tone: 'bad', action: 'Swap in Cole' },
+        { name: 'Gridiron Gang', meta: 'ESPN · FLEX', state: 'Starting', tone: 'bad', action: 'Swap in Ruiz' },
+        { name: 'End Zone Elites', meta: 'Fantrax · Bench', state: 'On bench', tone: 'good', action: null },
+      ],
+      chimmyLabel: 'Chimmy',
+      chimmy: 'He is out. Two of your lineups start him, and your bench has a healthy RB for each one.',
+    },
+    demo: {
+      h2: 'See it before you sign up',
+      body: 'Example leagues and live trade values. No account needed.',
+      tabsLabel: 'Demo views',
+      tabLeagues: 'Your leagues',
+      tabTrade: 'Trade grade',
+      tabTypes: 'League types',
+      leaguesBody: 'A full demo league: your board, lineups, waivers and trades, with what needs you first.',
+      leaguesRows: [
+        { name: 'Empty flex in Dynasty Dragons', tag: 'Set lineup', tone: 'bad' },
+        { name: 'Waivers run tonight in Gridiron Gang', tag: 'Waivers', tone: 'warn' },
+        { name: 'End Zone Elites is ready', tag: 'All set', tone: 'good' },
+      ],
+      leaguesCta: 'Open the demo league',
+      typesBody: 'See an example league for every league type before you start one.',
+      typesCta: 'See every league type',
     },
     tradeMarket: {
       heading: 'Trade values built from real trades',
@@ -207,65 +346,15 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       // Yahoo gates its Fantasy Sports API behind an approval (provider-ui-config.ts records it).
       soonNotes: { yahoo: 'Yahoo is coming soon — we’re waiting on Yahoo to approve our access.' },
     },
-    steps: {
-      h2: 'Set up in three steps',
-      items: [
-        {
-          n: '01',
-          title: 'Create a free account',
-          body: 'No card needed. Every league you bring in stays free.',
-        },
-        {
-          n: '02',
-          title: 'Create or connect a league',
-          body: `Start a new league here, or connect existing leagues. Sleeper takes just your username — no password. ${joinList(OTHER_PLATFORMS, 'en')} connect from the same screen. Imports are read-only.`,
-        },
-        {
-          n: '03',
-          title: 'See what needs you',
-          body: 'Every league on one board, most urgent first: empty lineup slots, injured starters, waiver runs and trades on the clock.',
-        },
-      ],
-    },
-    chimmy: {
-      label: 'Every league + Chimmy',
-      h2: `All your leagues from ${platforms}, in one place.`,
-      body: 'Then ask Chimmy about any of them. Chimmy is the AllFantasy assistant: it reads the rosters you connect, so the answer is about your teams — not generic advice.',
-      exampleLabel: 'Example',
-      question: 'Who’s hurt across all my leagues?',
-      answer:
-        'Two starters need you. Your RB1 is Out in Dynasty Dragons and Gridiron Gang — your bench RB is the swap in both. Your WR in Waiver Warriors is Questionable and his game has not started, so you can still wait on him.',
-      free: `Free accounts get ${FREE_CHIMMY_QUESTIONS_PER_DAY} Chimmy questions a day.`,
-    },
-    reasons: {
-      h2: 'Three things you can’t do anywhere else',
-      items: [
-        {
-          n: '01',
-          title: ['All your leagues,', 'one board.'],
-          body: 'Every platform you play on, with your real rosters and history. One Sunday view instead of a tab per app.',
-        },
-        {
-          n: '02',
-          title: ['One player,', 'every league.'],
-          body: 'Search a name and see every team you have him on, his injury status, and the swap or waiver that follows in each one.',
-        },
-        {
-          n: '03',
-          title: ['Know what', 'needs you.'],
-          body: 'Unset lineups, waiver runs, trades on the clock — each tagged with the league and the deadline it belongs to.',
-        },
-      ],
-    },
     pricing: {
       // ⚠ NOT "Upgrade to act on it" and NOT "free for players": creating, importing and
       // RUNNING leagues is free for players and commissioners alike (the Oct 15 paywall rule),
       // so the paid line is the edge on top — never the league itself.
       h2: 'Every league is free. Upgrade for the edge.',
       body: prices
-        ? `Create, import and run as many leagues as you want — drafts, trades, waivers and live scoring included, free. Paid plans from ${prices.min}/mo add Chimmy, deeper trade and player analysis, and commissioner automation.`
-        : 'Create, import and run as many leagues as you want — drafts, trades, waivers and live scoring included, free. Paid plans add Chimmy, deeper trade and player analysis, and commissioner automation.',
-      ctaPrimary: 'Start free',
+        ? `Create, import and run as many leagues as you want, free. Paid plans from ${prices.min}/mo add more Chimmy, deeper trade and player analysis, and commissioner automation.`
+        : 'Create, import and run as many leagues as you want, free. Paid plans add more Chimmy, deeper trade and player analysis, and commissioner automation.',
+      ctaPrimary: 'Sign up free',
       ctaSecondary: 'Compare plans',
     },
     faq: {
@@ -276,8 +365,8 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
           a: `${platforms} — read-only, and Sleeper needs only your username. We copy your real rosters, matchups and scoring, and never change anything on the platform. You can also start a new league here, free.`,
         },
         {
-          q: 'How does the cross-league player finder work?',
-          a: 'Search a player once and see every league you roster him in, his slot and injury status, and what to do about him in each.',
+          q: 'How does the game-day player search work?',
+          a: 'Search a player once and see every league you roster him in, his slot and injury status, the time left before lineups lock, and the swap to make in each.',
         },
         {
           q: 'Is AllFantasy gambling or DFS?',
@@ -344,32 +433,119 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       ogDescription: 'Crea o conecta ligas de fantasy, maneja tus equipos y recibe ayuda de IA para tu siguiente jugada.',
     },
     nav: {
-      how: 'Cómo funciona',
+      how: 'Qué incluye',
+      gameDay: 'Día de juego',
+      demo: 'Demo',
       pricing: 'Precios',
       forCommissioners: 'Para comisionados',
       signIn: 'Iniciar sesión',
       goToDashboard: 'Ir al panel',
       partners: 'Socios',
-      getStarted: 'Crea tu cuenta gratis',
+      getStarted: 'Regístrate gratis',
+      signInShort: 'Entrar',
+      getStartedShort: 'Regístrate',
       langLabel: 'Idioma',
+      menuLabel: 'Abrir el menú',
     },
     hero: {
       eyebrow: 'Tu hogar para fantasy',
       h1a: 'Juega fantasy.',
       h1b: 'Todo en un lugar.',
-      sub: 'Crea una liga o conecta las que ya juegas. Maneja equipos, drafts, cambios y agentes libres en un solo lugar, con ayuda de Chimmy.',
-      ctaPrimary: 'Crea tu cuenta gratis',
-      ctaSecondary: 'Mira cómo funciona',
+      sub: `Trae tus ligas de ${platforms}, o crea una nueva. Gratis para todas tus ligas.`,
+      ctaPrimary: 'Regístrate gratis',
       ctaDemo: 'Prueba la demo',
-      reassure: 'Gratis para todas tus ligas · Solo lectura: nunca cambiamos tu liga · En Sleeper basta con tu usuario',
-      commishLine: 'Hecho por un comisionado, para comisionados.',
-      commishLink: 'Conoce Commissioner OS →',
+      haveAccount: '¿Ya tienes cuenta?',
       cardTitle: 'Tus ligas',
       cardWeek: 'Semana 12 · ejemplo',
       cardFootBefore: 'Dos ajustes que valen ',
       cardFootMeta: 'Chimmy, en las 4 ligas',
-      tradeLink: 'O evalúa un intercambio ahora, sin importar nada →',
-      leagueTypesLink: 'Mira un ejemplo de cada tipo de liga — Guilly, Survivor, Zombie y más →',
+    },
+    commish: {
+      label: 'Para comisionados',
+      h2: 'Hecho por un comisionado de muchos años, para comisionados.',
+      body: 'Años dirigiendo ligas nos enseñaron qué falla: cobrar las cuotas, los cambios desiguales y los lineups vacíos a la hora del partido. AllFantasy se encarga de los tres.',
+      items: [
+        {
+          title: 'Control de cuotas',
+          body: 'Pon el monto y la fecha límite y mira quién ya pagó de un vistazo. AllFantasy nunca guarda ni mueve el dinero de la liga.',
+        },
+        {
+          title: 'Calificación de cambios para tu liga',
+          body: 'Los cambios se califican según cómo funciona tu liga, no con una tabla de valores genérica.',
+        },
+        {
+          title: 'Revisión de lineups antes del partido',
+          body: 'Si un manager tiene un lugar vacío o un titular descartado, Chimmy le avisa antes del partido, y tú no tienes que perseguirlo.',
+        },
+      ],
+      ctaPrimary: 'Ver herramientas para comisionados',
+      ctaSecondary: 'Crea una liga gratis',
+    },
+    get: {
+      h2: 'Qué incluye, gratis',
+      body: 'Todas las ligas que traigas o crees son gratis, con drafts, cambios, agentes libres y marcadores en vivo.',
+      items: [
+        {
+          title: 'Todas tus ligas en un tablero',
+          body: 'Una sola vista el domingo en vez de una pestaña por app, con lo que te necesita primero.',
+        },
+        {
+          title: 'Búsqueda de jugadores el día de juego',
+          body: 'Revisa a un jugador justo antes del partido y mira todas las ligas donde lo tienes.',
+        },
+        {
+          title: 'Calificaciones con cambios reales',
+          body: 'Los valores salen de cambios que los managers sí hicieron, no de votos, y se actualizan a diario.',
+        },
+        {
+          title: 'Chimmy, tu asistente de IA',
+          body: `Pregunta sobre tus rosters reales. Las cuentas gratis tienen ${FREE_CHIMMY_QUESTIONS_PER_DAY} preguntas al día.`,
+        },
+      ],
+    },
+    gameDay: {
+      badge: 'Día de juego',
+      h2: '¿Va a jugar? Sábelo antes del partido.',
+      body: 'Busca a cualquier jugador en las horas antes de su partido. Mira su estado más reciente, todas las ligas donde lo tienes y el cambio que debes hacer si no juega.',
+      steps: ['Busca un nombre', 'Mira su estado y cuánto falta para el cierre', 'Haz el cambio en cada liga'],
+      cta: 'Buscar un jugador',
+      exampleLabel: 'Ejemplo',
+      searchLabel: 'Buscar jugador',
+      playerName: 'Theo Banks',
+      playerMeta: 'RB · partido 1:00 PM',
+      status: 'Inactivo',
+      statusNote: 'Descartado a las 11:40 AM',
+      lockValue: '41m',
+      lockLabel: 'para el cierre del lineup',
+      lockMeta: 'Cierra al inicio del partido, 1:00 PM',
+      trackReport: 'Out · 11:40',
+      trackNow: 'Ahora · 12:19',
+      trackLock: 'Cierre · 1:00',
+      leaguesLabel: 'En tus ligas',
+      leagues: [
+        { name: 'Dynasty Dragons', meta: 'Sleeper · RB2', state: 'Titular', tone: 'bad', action: 'Poner a Cole' },
+        { name: 'Gridiron Gang', meta: 'ESPN · FLEX', state: 'Titular', tone: 'bad', action: 'Poner a Ruiz' },
+        { name: 'End Zone Elites', meta: 'Fantrax · Banca', state: 'En la banca', tone: 'good', action: null },
+      ],
+      chimmyLabel: 'Chimmy',
+      chimmy: 'No va a jugar. Dos de tus lineups lo tienen de titular, y tu banca tiene un RB sano para cada uno.',
+    },
+    demo: {
+      h2: 'Míralo antes de registrarte',
+      body: 'Ligas de ejemplo y valores de cambios en vivo. Sin cuenta.',
+      tabsLabel: 'Vistas de la demo',
+      tabLeagues: 'Tus ligas',
+      tabTrade: 'Calificar un cambio',
+      tabTypes: 'Tipos de liga',
+      leaguesBody: 'Una liga de demo completa: tu tablero, lineups, agentes libres y cambios, con lo que te necesita primero.',
+      leaguesRows: [
+        { name: 'FLEX vacío en Dynasty Dragons', tag: 'Pon tu lineup', tone: 'bad' },
+        { name: 'Reclamos esta noche en Gridiron Gang', tag: 'Reclamos', tone: 'warn' },
+        { name: 'End Zone Elites está lista', tag: 'Todo listo', tone: 'good' },
+      ],
+      leaguesCta: 'Abrir la liga de demo',
+      typesBody: 'Mira una liga de ejemplo de cada tipo antes de crear la tuya.',
+      typesCta: 'Ver todos los tipos de liga',
     },
     tradeMarket: {
       heading: 'Valores de intercambio basados en intercambios reales',
@@ -383,62 +559,12 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       soccer: 'FÚTBOL',
       soonNotes: { yahoo: 'Yahoo llega pronto: estamos esperando que Yahoo apruebe nuestro acceso.' },
     },
-    steps: {
-      h2: 'Listo en tres pasos',
-      items: [
-        {
-          n: '01',
-          title: 'Crea tu cuenta gratis',
-          body: 'Sin tarjeta. Todas las ligas que traigas siguen siendo gratis.',
-        },
-        {
-          n: '02',
-          title: 'Crea o conecta una liga',
-          body: `Empieza una liga nueva aquí o conecta tus ligas actuales. En Sleeper basta con tu usuario — sin contraseña. ${joinList(OTHER_PLATFORMS, 'es')} se conectan desde la misma pantalla. Las importaciones son de solo lectura.`,
-        },
-        {
-          n: '03',
-          title: 'Mira qué te necesita',
-          body: 'Todas tus ligas en un solo tablero, lo más urgente primero: lugares vacíos en el lineup, titulares lesionados, procesamientos de reclamos y cambios contra reloj.',
-        },
-      ],
-    },
-    chimmy: {
-      label: 'Todas tus ligas + Chimmy',
-      h2: `Todas tus ligas de ${platforms}, en un solo lugar.`,
-      body: 'Luego pregúntale a Chimmy sobre cualquiera de ellas. Chimmy es el asistente de AllFantasy: lee los rosters que conectas, así que la respuesta es sobre tus equipos — no un consejo genérico.',
-      exampleLabel: 'Ejemplo',
-      question: '¿Quién está lesionado en todas mis ligas?',
-      answer:
-        'Dos titulares te necesitan. Tu RB1 está Out en Dynasty Dragons y Gridiron Gang — tu RB de la banca es el cambio en las dos. Tu WR en Waiver Warriors está Questionable y su partido no ha empezado, así que todavía puedes esperar.',
-      free: `Las cuentas gratis tienen ${FREE_CHIMMY_QUESTIONS_PER_DAY} preguntas a Chimmy al día.`,
-    },
-    reasons: {
-      h2: 'Tres cosas que no puedes hacer en ningún otro lado',
-      items: [
-        {
-          n: '01',
-          title: ['Todas tus ligas,', 'un solo tablero.'],
-          body: 'Cada plataforma donde juegas, con tus rosters y tu historial reales. Una sola vista el domingo en vez de una pestaña por app.',
-        },
-        {
-          n: '02',
-          title: ['Un jugador,', 'todas tus ligas.'],
-          body: 'Busca un nombre y mira en qué equipos lo tienes, su estado de lesión, y el cambio o el reclamo que corresponde en cada liga.',
-        },
-        {
-          n: '03',
-          title: ['Sabe qué', 'te necesita.'],
-          body: 'Lineups sin poner, procesamientos de reclamos, cambios contra reloj — cada uno marcado con su liga y su fecha límite.',
-        },
-      ],
-    },
     pricing: {
       h2: 'Todas las ligas son gratis. Mejora tu plan para tener ventaja.',
       body: prices
-        ? `Crea, importa y dirige todas las ligas que quieras — drafts, cambios, agentes libres y marcadores en vivo incluidos, gratis. Los planes de pago desde ${prices.min}/mes agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.`
-        : 'Crea, importa y dirige todas las ligas que quieras — drafts, cambios, agentes libres y marcadores en vivo incluidos, gratis. Los planes de pago agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.',
-      ctaPrimary: 'Empieza gratis',
+        ? `Crea, importa y dirige todas las ligas que quieras, gratis. Los planes de pago desde ${prices.min}/mes agregan más Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.`
+        : 'Crea, importa y dirige todas las ligas que quieras, gratis. Los planes de pago agregan más Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.',
+      ctaPrimary: 'Regístrate gratis',
       ctaSecondary: 'Comparar planes',
     },
     faq: {
@@ -449,8 +575,8 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
           a: `${platforms} — en modo solo lectura, y en Sleeper basta con tu usuario. Copiamos tus rosters, enfrentamientos y reglas de puntuación reales, y nunca cambiamos nada en la plataforma original. También puedes crear una liga nueva aquí, gratis.`,
         },
         {
-          q: '¿Cómo funciona el buscador de jugadores entre ligas?',
-          a: 'Busca a un jugador una vez y mira en qué ligas lo tienes, su lugar en el roster y su estado de lesión, y qué hacer con él en cada una.',
+          q: '¿Cómo funciona la búsqueda de jugadores el día de juego?',
+          a: 'Busca a un jugador una vez y mira en qué ligas lo tienes, su lugar en el roster y su estado de lesión, cuánto falta para el cierre del lineup, y el cambio que corresponde en cada una.',
         },
         {
           q: '¿AllFantasy es apuestas o DFS?',
