@@ -94,6 +94,13 @@ lineup was complete. The ADP "tier cliff" made drafts worse in every form tried 
 a position still needed. This is a sanity check, not proof of better picks: the real-outcome
 backtest needs production data. Roll back with `DRAFT_VORP_MODE=observe`.
 
+**Projections reach every draft surface (2026-11-14).** The decision card, Chimmy's league
+grounding and the `/draft` room tips read season projections from the league's WARM draft pool
+(`getWarmDraftPoolSnapshotFast`, allowing a stale row), the same rows and rule the draft room uses
+(`lib/draft-room/poolProjections.ts`). The pool is never built for a decision; a cold build takes
+60–522 s. A cold pool means no projections, which was the behaviour before. Mock rooms have no
+league, so they have no projections.
+
 Sleeper's `start_week` is imported since 2026-11-14 (GAPS S-11). Still open: Sleeper does not
 share auction bid amounts.
 
@@ -182,8 +189,8 @@ portal, with:
    signal source rather than in the page.
 2. **Prove the draft engine on real outcomes (§2.2).** Run the draft backtest
    (`lib/shared-services/draft/backtest/`) against completed drafts to confirm replacement value
-   improves picks, not just keeps them sane. Feed projections to the decision card and Chimmy
-   (today only the draft room passes them), so replacement value reaches those surfaces too.
+   improves picks, not just keeps them sane. Projections reach every draft surface since
+   2026-11-14.
    Draft season is when most new users arrive.
 3. **A "what changed since you looked" feed** driven by the sports-os reaction events. Injuries,
    trades and waiver results get pushed instead of polled, using the notification outbox and the
