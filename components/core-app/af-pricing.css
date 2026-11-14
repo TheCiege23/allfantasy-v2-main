@@ -624,3 +624,105 @@
     justify-content: center;
   }
 }
+
+/* ── Phone header: the landing page's pattern (2026-11-14) ─────────────
+ *
+ * The desktop row (For commissioners · Sign in · Start free) wrapped onto three
+ * lines at 390px inside this 62px bar, so "Start free" sat on the bar's bottom
+ * border. Below 780px it is replaced by Sign in + Start free + a menu, the same
+ * sizes as `.af-lp-mobile-*` on `/`. `.af-core .af-btn.x` (0,3,0) is used so the
+ * sizes win over `.af-core .af-btn` (0,2,0) wherever it is declared.
+ */
+.af-pr-mobile-actions {
+  display: none;
+}
+
+@media (max-width: 780px) {
+  .af-pr-nav {
+    position: relative;
+  }
+  .af-pr-nav-right {
+    display: none;
+  }
+  .af-pr-mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .af-core .af-btn.af-pr-mobile-signin,
+  .af-core .af-btn.af-pr-mobile-primary {
+    min-height: 44px;
+    padding-inline: 12px;
+    font-size: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .af-core .af-btn.af-pr-mobile-signin {
+    color: var(--text);
+  }
+  .af-pr-mobile-menu summary {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line2);
+    border-radius: 10px;
+    color: var(--text);
+    background: var(--surface);
+    cursor: pointer;
+    list-style: none;
+  }
+  .af-pr-mobile-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .af-pr-mobile-menu summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .af-pr-mobile-panel {
+    position: absolute;
+    top: calc(100% + 1px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 0 0 14px 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .af-core .af-pr-mobile-panel > a {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 9px;
+    color: var(--text2);
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .af-core .af-pr-mobile-panel > a:hover,
+  .af-core .af-pr-mobile-panel > a:focus-visible {
+    background: var(--chip);
+    color: var(--text);
+  }
+}
+
+/* The narrowest phones: the crest alone carries the brand so both buttons and the menu fit. */
+@media (max-width: 374px) {
+  .af-pr-nav .af-pr-wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
