@@ -321,7 +321,9 @@
 .nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-art{filter:grayscale(.85) brightness(.8)}
 .nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-line{color:#d2bdb0}
 @media(max-width:767px){
-  .nl-league-heading[data-format=guillotine]{padding:14px;border:1px solid rgba(255,122,69,.34);border-radius:12px;margin-bottom:16px}
+  /* .nl-workspace raises this above the generic phone `.nl-workspace .nl-league-heading{padding-top:0}` further down,
+     which is right for the borderless headings and put this bordered card's title on its top edge. */
+  .nl-workspace .nl-league-heading[data-format=guillotine]{padding:14px;border:1px solid rgba(255,122,69,.34);border-radius:12px;margin-bottom:16px}
   .nl-league-heading[data-format=guillotine] .nl-heading-name h1{font-size:22px;margin:0 0 4px}
   .nl-heading-name .nl-guillotine-line{order:2;font-size:12px;margin:0 0 4px}
   .nl-league-heading[data-format=guillotine] .nl-heading-name>p:not(.nl-guillotine-line){order:2}
