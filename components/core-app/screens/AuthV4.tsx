@@ -242,16 +242,199 @@ function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: 
             <Link href="/disclaimer?from=signup">State notice</Link> · <Link href="/terms">Terms</Link> ·{' '}
             <Link href="/privacy">Privacy</Link>
           </p>
-          <div className="af-au-divider">
-            <span className="af-label">Or sign up with email</span>
-          </div>
+          {/* Only when a provider button is actually shown above it; otherwise "Or" divides nothing. */}
+          {PROVIDERS.some((p) => isSocialProviderEnabled(p.id)) ? (
+            <div className="af-au-divider">
+              <span className="af-label">Or sign up with email</span>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>
   )
 }
 
+/*
+ * Sign in with a text code — no password. Step one asks /api/auth/phone/login/start to
+ * text a code (it only does so for a number on a verified account, and answers the same
+ * either way); step two hands the code to the `phone-code` next-auth provider.
+ */
+function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; onUsePassword: () => void }) {
+  const router = useRouter()
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function sendCode(e?: React.FormEvent) {
+    e?.preventDefault()
+    setError(null)
+    if (phone.replace(/\D/g, '').length < 10) {
+      setError('Enter your phone number, including the area code.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/phone/login/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() }),
+      })
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      if (!res.ok) {
+        setError(readableApiError(data, 'We could not send a code. Please try again.'))
+        return
+      }
+      setSentTo(phone.trim())
+      setCode('')
+    } catch {
+      setError('We could not send a code. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function verify(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!/^\d{4,10}$/.test(code.replace(/\s/g, ''))) {
+      setError('Enter the 6-digit code from the text.')
+      return
+    }
+    setLoading(true)
+    try {
+      const result = await signIn('phone-code', {
+        phone: sentTo ?? phone.trim(),
+        code: code.replace(/\s/g, ''),
+        redirect: false,
+        callbackUrl,
+      })
+      if (result?.error) {
+        setError(
+          result.error === 'CredentialsSignin'
+            ? 'That code didn’t work. Check it, or send a new one.'
+            : resolveLoginErrorMessage(result.error),
+        )
+      } else {
+        router.replace(callbackUrl)
+      }
+    } catch {
+      setError('Something went wrong signing in. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      {sentTo === null ? (
+        <form className="af-au-form" onSubmit={sendCode} data-testid="signin-phone-form">
+          <div className="af-au-field">
+            <label htmlFor="signin-phone" className="af-label">Phone number</label>
+            <input
+              id="signin-phone"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              aria-describedby="signin-phone-hint"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <span id="signin-phone-hint" className="af-au-hint">
+              We’ll text you a 6-digit code. Use the number saved on your account.
+            </span>
+          </div>
+          {error ? (
+            <p className="af-au-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="af-btn af-au-submit" disabled={loading}>
+            {loading ? 'Sending…' : 'Text me a code'}
+          </button>
+        </form>
+      ) : (
+        <form className="af-au-form" onSubmit={verify} data-testid="signin-code-form">
+          <p className="af-au-hint" role="status">
+            If {sentTo} is on an AllFantasy account, we’ve texted it a code. It may take a minute.
+          </p>
+          <label className="af-au-field">
+            <span className="af-label">Code</span>
+            <input
+              name="code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              maxLength={10}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          </label>
+          {error ? (
+            <p className="af-au-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="af-btn af-au-submit" disabled={loading}>
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+          <p className="af-au-alt">
+            <button type="button" className="af-au-linkbtn" onClick={() => void sendCode()} disabled={loading}>
+              Send a new code
+            </button>
+            {' · '}
+            <button
+              type="button"
+              className="af-au-linkbtn"
+              onClick={() => {
+                setSentTo(null)
+                setError(null)
+              }}
+            >
+              Use a different number
+            </button>
+          </p>
+        </form>
+      )}
+      <p className="af-au-alt">
+        <button type="button" className="af-au-linkbtn" onClick={onUsePassword} data-testid="signin-use-password">
+          Sign in with a password instead
+        </button>
+      </p>
+    </>
+  )
+}
+
 function SignIn({ callbackUrl }: { callbackUrl: string }) {
+  const [method, setMethod] = useState<'password' | 'code'>('password')
+
+  return (
+    <div className="af-au-card">
+      <header className="af-au-head">
+        <div>
+          <h1 className="af-au-title">Welcome back</h1>
+          <p className="af-au-sub">Sign in to your leagues.</p>
+        </div>
+      </header>
+
+      {method === 'code' ? (
+        <PhoneCodeSignIn callbackUrl={callbackUrl} onUsePassword={() => setMethod('password')} />
+      ) : (
+        <PasswordSignIn callbackUrl={callbackUrl} onUseCode={() => setMethod('code')} />
+      )}
+
+      <DevBypassSignIn callbackUrl={callbackUrl} />
+
+      <OAuthGrid callbackUrl={callbackUrl} />
+    </div>
+  )
+}
+
+function PasswordSignIn({ callbackUrl, onUseCode }: { callbackUrl: string; onUseCode: () => void }) {
   const router = useRouter()
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -288,14 +471,7 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
   }
 
   return (
-    <div className="af-au-card">
-      <header className="af-au-head">
-        <div>
-          <h1 className="af-au-title">Welcome back</h1>
-          <p className="af-au-sub">Sign in to your leagues.</p>
-        </div>
-      </header>
-
+    <>
       <form className="af-au-form" onSubmit={onSubmit}>
         <label className="af-au-field">
           <span className="af-label">Email, username or phone</span>
@@ -335,11 +511,12 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
-
-      <DevBypassSignIn callbackUrl={callbackUrl} />
-
-      <OAuthGrid callbackUrl={callbackUrl} />
-    </div>
+      <p className="af-au-alt">
+        <button type="button" className="af-au-linkbtn" onClick={onUseCode} data-testid="signin-use-code">
+          Text me a code instead
+        </button>
+      </p>
+    </>
   )
 }
 
@@ -621,10 +798,31 @@ function AuthModeSwitch({ mode }: { mode: AuthMode }) {
   const callback = requested ? safeRedirectPath(requested) : null
   const destination = mode === 'signup' ? '/login' : '/signup'
   const href = callback ? `${destination}?callbackUrl=${encodeURIComponent(callback)}` : destination
-  return <span className="af-au-switch">
-    {mode === 'signup' ? <>Already have an account? <Link href={href}>Sign in</Link></> : <>New here? <Link href={href}>Create account</Link></>}
-    {mode === 'signup' ? <> · Just looking? <Link href="/demo" data-testid="signup-try-demo">Try the demo</Link></> : null}
-  </span>
+  /*
+   * The landing page's header pair, minus the half you are already on: /signup offers
+   * Sign in (outlined), /login offers Sign up (filled). The other links sit behind the
+   * menu so the row fits a 320px phone. `details` keeps the menu working without JS.
+   */
+  return <div className="af-au-nav">
+    {mode === 'signup' ? (
+      <Link href={href} className="af-btn af-btn--ghost af-au-switch" data-testid="auth-switch">Sign in</Link>
+    ) : (
+      <Link href={href} className="af-btn af-au-switch" data-testid="auth-switch">Sign up</Link>
+    )}
+    <details className="af-au-menu">
+      <summary aria-label="Open navigation menu">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden focusable="false">
+          <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </summary>
+      <div className="af-au-menu-panel">
+        <Link href="/">Home</Link>
+        <Link href="/demo" data-testid="signup-try-demo">Try the demo</Link>
+        <Link href="/pricing" data-hide-in-ios-app>Pricing</Link>
+        <Link href="/commissioners">For commissioners</Link>
+      </div>
+    </details>
+  </div>
 }
 
 export function AuthV4({ mode }: { mode: AuthMode }) {

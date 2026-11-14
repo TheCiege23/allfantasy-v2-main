@@ -332,6 +332,23 @@ const providers: NextAuthOptions["providers"] = [
     },
   }),
   /*
+   * Sign in with a text code (no password). The code was sent by
+   * /api/auth/phone/login/start; this checks it with Twilio Verify. Only a VERIFIED
+   * phone number is a way in — see lib/auth/phoneCodeSignIn.ts.
+   */
+  CredentialsProvider({
+    id: "phone-code",
+    name: "Text code",
+    credentials: {
+      phone: { label: "Phone number", type: "tel" },
+      code: { label: "Code", type: "text" },
+    },
+    async authorize(credentials) {
+      const { authorizePhoneCode } = await import("@/lib/auth/phoneCodeSignIn");
+      return authorizePhoneCode(credentials?.phone, credentials?.code);
+    },
+  }),
+  /*
    * 🛑 THERE IS NO SLEEPER SIGN-IN, AND THERE MUST NOT BE ONE BY USERNAME.
    *
    * A `sleeper` credentials provider lived here: it took a Sleeper USERNAME and nothing
