@@ -44,7 +44,16 @@ function Row({ row, showLeague }: { row: OverviewQueueRow; showLeague: boolean }
   )
 }
 
-export function OverviewQueue({ rows, limit = 8 }: { rows: OverviewQueueRow[]; limit?: number }) {
+export function OverviewQueue({
+  rows,
+  limit = 8,
+  title = 'Needs a commissioner',
+}: {
+  rows: OverviewQueueRow[]
+  limit?: number
+  /** The panel's name; the all-leagues guide calls it "Your to-do list" (2026-11-13). */
+  title?: string
+}) {
   const [mode, setMode] = useState<'urgent' | 'league'>('urgent')
   const [expanded, setExpanded] = useState(false)
 
@@ -65,7 +74,7 @@ export function OverviewQueue({ rows, limit = 8 }: { rows: OverviewQueueRow[]; l
     <section className="afh-panel" aria-labelledby="afh-queue">
       <div className="afh-panel-head">
         <h2 id="afh-queue" className="afh-label" style={{ margin: 0 }}>
-          Needs a commissioner
+          {title}
         </h2>
         {rows.length > 1 ? (
           <div className="afh-seg" role="group" aria-label="Order">

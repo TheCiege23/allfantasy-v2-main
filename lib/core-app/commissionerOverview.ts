@@ -52,6 +52,7 @@ import { buildInactiveLadder, ladderApplies, type LadderEntry, type LadderLeague
  */
 
 const CARD_CAP = 12
+const OFF_SEASON_REASON = 'Not judged: this league is not in season, when a quiet manager is normal'
 /** Past this many stale leagues the queue says it once — see `stale:aggregate` in outstandingIssues. */
 const STALE_ROW_LIMIT = 3
 
@@ -67,6 +68,13 @@ export type OverviewLeagueCard = {
   activity: { active: number; total: number; tone: OverviewTone } | { reason: string }
   needsYou: number
   worst: TaskCard['severity'] | null
+  /** The most urgent thing waiting in this league, said on its card (2026-11-13 guide). */
+  topItem: string | null
+  /**
+   * Not in season (setup, pre-draft, completed …). A quiet manager then is normal, so the card mutes
+   * its activity meter and the league raises no "no moves" item — the same rule as the ladder.
+   */
+  offSeason: boolean
   sync: { label: string; tone: OverviewTone }
   href: string
 }
@@ -95,6 +103,11 @@ export type CommissionerOverviewData = {
   ladder: LadderEntry[]
   /** How many in-season leagues the ladder covers — the card says "in the N leagues checked". */
   ladderLeagues: number
+  /**
+   * The headline's facts (2026-11-13 guide): what is waiting, by kind. `quiet` is the ladder's own
+   * length — quiet managers in IN-SEASON leagues — so the headline and the ladder cannot disagree.
+   */
+  summary: { todo: number; trades: number; quiet: number; resync: number; leaguesWithNothing: number }
 }
 
 const RANK: Record<TaskCard['severity'], number> = { bad: 0, warn: 1, info: 2 }
@@ -114,6 +127,8 @@ type LeagueRow = {
   lifecycleState: string | null
   lastSyncedAt: Date | null
   syncStatus: string | null
+  season?: number | null
+  createdAt?: Date | null
 }
 
 function worstOf(cards: TaskCard[]): TaskCard['severity'] | null {
@@ -185,6 +200,8 @@ export async function getCommissionerOverview(input: {
               lifecycleState: true,
               lastSyncedAt: true,
               syncStatus: true,
+              season: true,
+              createdAt: true,
             },
           }) as Promise<LeagueRow[]>,
           [],
@@ -291,13 +308,41 @@ export async function getCommissionerOverview(input: {
     }),
   )
 
+  /*
+   * Leagues drawn under the same name (four "12-Team NFL Redraft League"s on the owner's account) get
+   * one more word on the card: the season when that tells them apart, else the day each was created.
+   */
+  const sameNameNote = new Map<string, string>()
+  const byName = new Map<string, Built[]>()
+  for (const b of shown) byName.set(b.name, [...(byName.get(b.name) ?? []), b])
+  for (const group of byName.values()) {
+    if (group.length < 2) continue
+    const seasons = new Set(group.map((b) => b.row.season ?? null))
+    for (const b of group) {
+      const note =
+        seasons.size === group.length && b.row.season != null
+          ? String(b.row.season)
+          : b.row.createdAt
+            ? `created ${new Date(b.row.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+            : null
+      if (note) sameNameNote.set(b.row.id, note)
+    }
+  }
+
   const inCard = new Map<string, Built>()
   const leagues: OverviewLeagueCard[] = shown.map((b, i) => {
     const members = activity[i]
     const leagueTeams = teamsByLeague.get(b.row.id) ?? []
+    /*
+     * ⚠ OFF-SEASON LEAGUES ARE NOT JUDGED ON QUIET (2026-11-13 guide). On the owner's account 22 of the
+     * 23 "need a commissioner" rows were "No manager has made a move in 14 days" on leagues not in
+     * season — while the ladder, on the same leagues, correctly said nobody was on it. Unowned seats
+     * still count: a team with nobody in it needs filling before the draft too.
+     */
+    const inSeason = ladderApplies(b.row)
     const flag = abandonedTeamsFlag({
-      managers: members && members.available ? members.data.rows : null,
-      activityReason: members && !members.available ? members.reason : null,
+      managers: inSeason && members && members.available ? members.data.rows : null,
+      activityReason: !inSeason ? OFF_SEASON_REASON : members && !members.available ? members.reason : null,
       orphanTeams: unownedTeamNames(leagueTeams),
       totalTeams: leagueTeams.length,
       action: b.native
@@ -312,7 +357,7 @@ export async function getCommissionerOverview(input: {
     inCard.set(b.row.id, full)
 
     const art = leagueHubArt(b.row)
-    const sub = [platformLabel(b.row.platform), b.row.leagueSize ? `${b.row.leagueSize} managers` : null, art.label]
+    const sub = [platformLabel(b.row.platform), b.row.leagueSize ? `${b.row.leagueSize} managers` : null, art.label, sameNameNote.get(b.row.id) ?? null]
       .filter(Boolean)
       .join(' · ')
     const measured =
@@ -320,9 +365,16 @@ export async function getCommissionerOverview(input: {
         ? {
             active: members.data.active,
             total: members.data.total,
-            tone: (members.data.inactive === 0 ? 'good' : members.data.inactive * 4 >= members.data.total ? 'bad' : 'warn') as OverviewTone,
+            tone: (!inSeason
+              ? 'muted'
+              : members.data.inactive === 0
+                ? 'good'
+                : members.data.inactive * 4 >= members.data.total
+                  ? 'bad'
+                  : 'warn') as OverviewTone,
           }
         : null
+    const top = [...full.cards].sort((x, y) => RANK[x.severity] - RANK[y.severity])[0] ?? null
     return {
       leagueId: b.row.id,
       variant: b.row.leagueVariant,
@@ -342,6 +394,8 @@ export async function getCommissionerOverview(input: {
         },
       needsYou: full.cards.length,
       worst: worstOf(full.cards),
+      topItem: top ? top.title : null,
+      offSeason: !inSeason,
       sync: syncState(b.row, b.native, now),
       href: `/core/commissioner?league=${encodeURIComponent(b.row.id)}`,
     }
@@ -406,8 +460,9 @@ export async function getCommissionerOverview(input: {
   queue.sort((a, b) => RANK[a.severity] - RANK[b.severity])
 
   // ── Hero numbers ──────────────────────────────────────────────────────────
-  const inactive = activity.reduce((sum, a) => sum + (a && a.available ? a.data.inactive : 0), 0)
-  const checked = activity.filter((a) => a && a.available).length
+  // In-season leagues only — the ladder's set. An off-season league's quiet managers are not inactive.
+  const inactive = activity.reduce((sum, a, i) => sum + (a && a.available && ladderApplies(shown[i]!.row) ? a.data.inactive : 0), 0)
+  const checked = activity.filter((a, i) => a && a.available && ladderApplies(shown[i]!.row)).length
   const trades = rows.reduce((sum, r) => sum + (signals.byLeague.get(r.id)?.tradesAwaitingReview ?? 0), 0)
   const neverSynced = staleLeagues.filter((b) => b.neverSynced).length
   const staleOnly = staleLeagues.length - neverSynced
@@ -442,5 +497,12 @@ export async function getCommissionerOverview(input: {
     partial: flags.partial,
     ladder,
     ladderLeagues: ladderInput.length,
+    summary: {
+      todo: queue.length,
+      trades,
+      quiet: ladder.length,
+      resync: staleLeagues.length,
+      leaguesWithNothing: leagues.filter((l) => l.needsYou === 0).length,
+    },
   }
 }
