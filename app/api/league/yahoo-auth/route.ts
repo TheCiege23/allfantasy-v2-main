@@ -11,7 +11,12 @@ import {
   YAHOO_FANTASY_SCOPE,
   YAHOO_RETURN_TO_COOKIE,
 } from '@/lib/yahoo/oauthConfig';
-import { isYahooImportLive, YAHOO_COMING_SOON_ERROR } from '@/lib/yahoo/yahooAvailability';
+import {
+  isYahooImportLive,
+  isYahooOpenForUser,
+  isYahooPreviewConfigured,
+  YAHOO_COMING_SOON_ERROR,
+} from '@/lib/yahoo/yahooAvailability';
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { relativeRedirect } from '@/lib/http/relative-redirect';
 
@@ -21,14 +26,22 @@ export async function GET(request: NextRequest) {
    * so nobody signs in only to be refused. Lands on the sanitized returnTo (default /import) with a
    * notice rather than on Yahoo's consent screen.
    */
+  type SessionLike = { user?: { id?: string } } | null;
+  const readSession = async () => (await getServerSession(authOptions as any)) as SessionLike;
+  let session: SessionLike | undefined;
   if (!isYahooImportLive()) {
-    // sanitizeYahooReturnTo only ever returns an internal path, which may already carry a query.
-    const back = sanitizeYahooReturnTo(request.nextUrl.searchParams.get('returnTo'));
-    const joiner = back.includes('?') ? '&' : '?';
-    return relativeRedirect(`${back}${joiner}yahoo_error=${YAHOO_COMING_SOON_ERROR}`);
+    // Owner preview (YAHOO_PREVIEW_USER_IDS) — see lib/yahoo/yahooAvailability.ts. No list → no
+    // session read, exactly as before.
+    session = isYahooPreviewConfigured() ? await readSession() : null;
+    if (!isYahooOpenForUser(session?.user?.id)) {
+      // sanitizeYahooReturnTo only ever returns an internal path, which may already carry a query.
+      const back = sanitizeYahooReturnTo(request.nextUrl.searchParams.get('returnTo'));
+      const joiner = back.includes('?') ? '&' : '?';
+      return relativeRedirect(`${back}${joiner}yahoo_error=${YAHOO_COMING_SOON_ERROR}`);
+    }
   }
 
-  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
+  if (session === undefined) session = await readSession();
   const userId = session?.user?.id;
 
   if (!userId) {
