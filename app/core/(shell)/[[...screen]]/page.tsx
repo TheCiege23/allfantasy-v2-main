@@ -5106,19 +5106,52 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             {/* Only when AllFantasy is running a draft here. Without one, every section of the board
                 said "no draft has been set up" — three times above Draft HQ's own record of the
                 draft the league already ran. */}
-            {draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
             {/*
               ⚠ THE ARCHIVE GOES LAST UNLESS ONE OF ITS DRAFTS IS OPEN. Above Draft HQ it put
               ~2,400px of past-draft records between the live board and this league's own picks
               (live /core, 2026-11-05). A `?draft=` link asks for the archive, so it leads then.
             */}
             {draftArchiveFirst ? draftArchiveSlot : null}
-            <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
-            {draftArchiveFirst ? null : draftArchiveSlot}
+            {/*
+              2026-11-13: the live board moved INSIDE Draft HQ, under its headline. It sat above the
+              page's own h1 (1,500–2,200px of grid first, "Draft HQ" after), and before a draft starts
+              it was a full empty grid. DraftHq places it by phase: open while the draft runs, folded
+              before and after.
+            */}
+            <DraftHq
+              data={draftHq}
+              edge={draftEdge}
+              edgeAccess={draftEdgeAccess}
+              live={
+                draftBoard?.session.available
+                  ? {
+                      picksMade: draftBoard.session.data.picksMade,
+                      totalPicks: draftBoard.session.data.totalPicks,
+                      currentPickOverall: draftBoard.session.data.currentPickOverall,
+                      yoursOnClock: draftBoard.clock.available ? draftBoard.clock.data.yoursOnClock : false,
+                    }
+                  : null
+              }
+              board={draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
+            />
+            {draftArchiveFirst || !draftArchiveSlot ? null : (
+              <details className="af-dh-past" data-testid="draft-hq-past-drafts">
+                <summary>{messagesFor(draftHqGuideMessages, language).pastDrafts}</summary>
+                {draftArchiveSlot}
+              </details>
+            )}
           </>
         ) : selectedLeagueId && draftArchive ? (
-          /* No Draft HQ data of its own (the draft ran on the platform): the archive is the screen, so it carries the title. */
-          <DraftArchive {...draftArchive} asDraftHq />
+          /*
+            No Draft HQ data of its own (the draft ran on the platform): the archive is the screen, so it
+            carries the title — now a headline from its current draft ("Drafting on Sleeper · 38 picks
+            made") and one line saying the picks are made on that platform.
+          */
+          <DraftArchive
+            {...draftArchive}
+            asDraftHq
+            platformName={platformLabel(playedLeagues.find((l) => l.id === selectedLeagueId)?.platform ?? null)}
+          />
         ) : draftHqLoadFailed ? (
           <ScreenLoadError screen={navLabel('draft-hq')} retryHref={retryHref} language={language} />
         ) : showAllLeagues || !homeDrafts ? (

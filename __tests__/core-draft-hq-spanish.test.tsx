@@ -63,7 +63,9 @@ describe('Draft HQ Spanish view', () => {
 
     render(<DraftHq data={data} />)
 
-    expect(screen.getByRole('heading', { name: 'Centro del draft' })).toBeTruthy()
+    // The h1 says where you stand now (2026-11-13); the page's name moved to the eyebrow above it.
+    expect(screen.getByRole('heading', { level: 1, name: 'Sin empezar · eliges 2.º de 3' })).toBeTruthy()
+    expect(document.body.textContent).toContain('Centro del draft · Liga')
     expect(document.body.textContent).toContain('Tus selecciones')
     expect(document.body.textContent).toContain('no se sincronizan')
     expect(document.body.textContent).toContain('No se ha importado ningún draft completado')

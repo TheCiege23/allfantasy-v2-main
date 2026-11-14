@@ -61,10 +61,26 @@ const detail = () =>
 const props = { choices: [], leagueId: 'L1', page: 1, more: false, total: 1 }
 
 describe('the archive as Draft HQ', () => {
-  it('carries the Draft HQ title and says which draft this is', () => {
-    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
+  /*
+   * 2026-11-13: the title says where this league's draft is and where it is made, instead of the word
+   * "Draft HQ" — and the status and pick count are said once, in it, not again in the line under it.
+   */
+  it('leads with where the draft is and where it is made, and says which draft this is', () => {
+    render(<DraftArchive {...props} detail={detail()} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2026 draft done on Sleeper · 2 picks')
+    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL · snake')
+    expect(document.querySelector('.af-archive-hq-intro')?.textContent).toContain('This draft runs on Sleeper — make your picks there.')
+  })
+
+  it('a draft still running reads as drafting, with its pick count', () => {
+    const d = detail()
+    render(<DraftArchive {...props} detail={{ ...d, choice: { ...d.choice, status: 'drafting' } } as ArchiveDetail} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Drafting on Sleeper · 2 picks made')
+  })
+
+  it('with no draft open it is still titled Draft HQ', () => {
+    render(<DraftArchive {...props} detail={null} asDraftHq />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft HQ')
-    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL · snake · complete · 2 picks')
   })
 
   it('folds the source id, UTC clock and coverage notes into a closed details section', () => {
@@ -166,8 +182,8 @@ describe('the archive as Draft HQ', () => {
 
   it('reads Spanish', () => {
     h.language = 'es'
-    render(<DraftArchive {...props} detail={detail()} asDraftHq />)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Centro del draft')
+    render(<DraftArchive {...props} detail={detail()} asDraftHq platformName="Sleeper" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft 2026 terminado en Sleeper · 2 selecciones')
     expect(document.querySelector('details.af-archive-tech summary')?.textContent).toBe('Detalles de horario y origen')
   })
 })
