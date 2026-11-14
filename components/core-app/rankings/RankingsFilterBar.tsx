@@ -129,4 +129,3 @@ function Select({
   )
 }
 
-export default RankingsFilterBar

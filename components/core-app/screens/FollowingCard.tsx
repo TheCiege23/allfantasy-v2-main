@@ -87,4 +87,3 @@ export function FollowingCard({ data, help }: { data: FollowingCardData | null; 
   )
 }
 
-export default FollowingCard

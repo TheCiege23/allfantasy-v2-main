@@ -1,10 +1,6 @@
 // lib/trade-engine/index.ts
 export { runTradeEngine } from "./trade-engine";
 
-export type {
-  GuardrailReasonCode,
-} from "./guardrails";
-
 export {
   runNewsImpactEngine,
   scoreNewsItems,
@@ -18,9 +14,6 @@ export type {
 } from "./news-impact-engine";
 
 export { computeTeamManagerContext } from "./team-manager-context-engine";
-export type {
-  TeamManagerContextResult,
-} from "./team-manager-context-engine";
 
 export {
   getAgeCurve,

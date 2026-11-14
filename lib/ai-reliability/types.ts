@@ -2,7 +2,7 @@
  * AI reliability layer types (Prompt 127).
  */
 
-export type ProviderStatus = 'ok' | 'failed' | 'timeout' | 'invalid_response';
+type ProviderStatus = 'ok' | 'failed' | 'timeout' | 'invalid_response';
 
 export interface ProviderResultMeta {
   provider: string;

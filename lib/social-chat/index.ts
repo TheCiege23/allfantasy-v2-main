@@ -32,7 +32,6 @@ export {
 } from "./PinnedMessageService"
 
 export {
-  isPollMessage,
   parsePollBody,
   getVoteUrl,
   getVotePayload,

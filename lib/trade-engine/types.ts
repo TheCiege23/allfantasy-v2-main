@@ -3,7 +3,7 @@
 type Sport = 'nfl' | 'nba'
 
 type AssetType = 'PLAYER' | 'PICK' | 'FAAB'
-export type PickProjected = 'early' | 'mid' | 'late' | 'unknown'
+type PickProjected = 'early' | 'mid' | 'late' | 'unknown'
 type RosterSlot = 'Starter' | 'Bench' | 'IR' | 'Taxi'
 
 // NEW (non-breaking)
@@ -178,7 +178,7 @@ export const DEFAULT_CONSTRAINTS: Constraints = {
   banOneForOneCornerstoneForNon: true,
 }
 
-export type AcceptanceLabel = 'Strong' | 'Aggressive' | 'Speculative' | 'Long Shot'
+type AcceptanceLabel = 'Strong' | 'Aggressive' | 'Speculative' | 'Long Shot'
 type VetoLikelihood = 'Low' | 'Medium' | 'High'
 
 export type TradeCandidate = {

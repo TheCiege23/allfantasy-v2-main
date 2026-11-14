@@ -194,4 +194,3 @@ export function PlayerSharesBoard({
   )
 }
 
-export default PlayerSharesBoard

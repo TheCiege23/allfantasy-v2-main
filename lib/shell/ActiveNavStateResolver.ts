@@ -1,4 +1,3 @@
-import type { ProductId } from "./ShellRouteResolver"
 import {
   PRIMARY_NAV_ITEMS,
   PRODUCT_NAV_ITEMS,
@@ -65,4 +64,3 @@ export function getActiveNavHref(pathname: string | null): string | null {
   return null
 }
 
-export type { ProductId }

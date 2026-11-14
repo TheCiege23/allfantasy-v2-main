@@ -190,4 +190,3 @@ export function LeagueInfoRail({
   )
 }
 
-export default LeagueInfoRail

@@ -27,11 +27,8 @@ export {
 } from './BracketLeaderboardResolver'
 
 export {
-  SCORING_MODE_INFO,
-  pointsForRound,
   getRoundPointsSummary,
   SCORING_INFO_LABEL,
-  type ScoringMode,
 } from './BracketScoringInfoResolver'
 
 export {

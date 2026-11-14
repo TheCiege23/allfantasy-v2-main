@@ -204,4 +204,3 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
   )
 }
 
-export default GameDayTriage

@@ -760,4 +760,3 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
   )
 }
 
-export default VerifyEmailV4

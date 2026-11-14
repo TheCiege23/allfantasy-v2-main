@@ -39,6 +39,4 @@ export { getSafeMessageMediaUrl, isSafeToRenderMedia } from "./safeMedia"
 
 export {
   resolveMediaViewerUrl,
-  canOpenInMediaViewer,
-  getMediaViewerAriaLabel,
 } from "./MediaViewerController"

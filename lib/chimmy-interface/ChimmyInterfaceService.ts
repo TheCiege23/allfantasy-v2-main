@@ -8,7 +8,6 @@ import {
   mapAIContextSourceToToolContextSource,
 } from './ToolContextToChimmyRouter'
 import type { ChimmySuggestedChip } from './types'
-import type { ToolContextSource } from './ToolContextToChimmyRouter'
 
 /**
  * Default suggested prompts (chips) for Chimmy chat. Sport-agnostic; can be extended per league/sport.
@@ -177,4 +176,3 @@ export function buildChimmyToolDisplayContext(input: {
  * Get tool context for Chimmy from a given source and payload (e.g. from matchup or draft).
  */
 export { getToolContextForChimmy }
-export type { ToolContextSource }

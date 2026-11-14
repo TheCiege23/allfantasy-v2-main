@@ -125,4 +125,3 @@ export function DashScheduleBandView({ week, kickoff, total, visible, overflow, 
   )
 }
 
-export default DashScheduleBandView

@@ -95,4 +95,3 @@ export function GameDayAlertsBanner() {
   )
 }
 
-export default GameDayAlertsBanner

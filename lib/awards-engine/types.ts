@@ -59,13 +59,6 @@ export interface SeasonPerformanceInput {
   >
 }
 
-export interface AwardCandidate {
-  managerId: string
-  score: number
-  /** Optional human-readable reason for explain */
-  reason?: string
-}
-
 export interface AwardRecordView {
   awardId: string
   leagueId: string

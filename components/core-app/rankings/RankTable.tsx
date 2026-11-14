@@ -388,4 +388,3 @@ function PhoneMore({ row, columns }: { row: RankRow; columns: RankColumn[] }) {
   )
 }
 
-export default RankTable

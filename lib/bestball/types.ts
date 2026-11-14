@@ -1,5 +1,3 @@
-import type { BestBallOptimizedLineup, BestBallSportTemplate } from '@prisma/client'
-
 export type LineupSlotDef = {
   slot: string
   eligible: string[]
@@ -29,4 +27,3 @@ export type OptimizerResult = {
   optimizerLog: Record<string, unknown>
 }
 
-export type { BestBallOptimizedLineup, BestBallSportTemplate }

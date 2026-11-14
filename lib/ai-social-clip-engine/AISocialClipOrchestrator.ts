@@ -296,4 +296,3 @@ export async function runAISocialClipPipeline(
   return { success: true, result: final, providerStatus };
 }
 
-export { isXaiConfigured, isOpenAIConfigured, isDeepSeekConfigured };

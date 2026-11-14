@@ -52,4 +52,3 @@ export function QuotedMessage({
   return <span className="af-cm-quote">{inner}</span>
 }
 
-export default QuotedMessage

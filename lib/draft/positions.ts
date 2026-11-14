@@ -1,4 +1,4 @@
-export const POSITION_COLORS: Record<string, string> = {
+const POSITION_COLORS: Record<string, string> = {
   QB: '#e17e44',
   RB: '#4ec9b0',
   WR: '#569cd6',

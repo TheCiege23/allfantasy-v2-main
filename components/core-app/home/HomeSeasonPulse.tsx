@@ -90,4 +90,3 @@ export function HomeSeasonPulse({ pulse }: { pulse: SeasonPulse }) {
   )
 }
 
-export default HomeSeasonPulse

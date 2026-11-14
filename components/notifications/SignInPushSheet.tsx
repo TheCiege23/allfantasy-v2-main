@@ -262,4 +262,3 @@ const secondaryButton = {
   cursor: 'pointer',
 } as const
 
-export default SignInPushSheet

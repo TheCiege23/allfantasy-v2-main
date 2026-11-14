@@ -148,4 +148,3 @@ export function TriageFreeAgentCta({
   )
 }
 
-export default TriageFreeAgentCta

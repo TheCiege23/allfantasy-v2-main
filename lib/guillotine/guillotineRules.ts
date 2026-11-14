@@ -117,7 +117,7 @@ export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOr
   dangerMarginPoints: 10,
 }
 
-export type RulesPatchError = { field: GuillotineRuleField | null; message: string }
+type RulesPatchError = { field: GuillotineRuleField | null; message: string }
 
 const ENDGAMES = new Set(ENDGAME_OPTIONS.map((o) => o.value))
 const TIEBREAKS = new Set(TIEBREAK_OPTIONS.map((o) => o.value))

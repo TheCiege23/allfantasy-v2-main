@@ -7,7 +7,6 @@ export * from './types'
 export {
   getWeekVolumeProfile,
   getSeasonVolumeProfiles,
-  classifyDay,
 } from './NbaGameVolumeService'
 export {
   getNbaScheduleConfig,

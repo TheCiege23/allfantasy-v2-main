@@ -32,4 +32,3 @@ export function MessageTime({ value }: { value: string | number | Date | null | 
   )
 }
 
-export default MessageTime

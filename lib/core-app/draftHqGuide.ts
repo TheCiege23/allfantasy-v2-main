@@ -73,7 +73,7 @@ export function draftHqHeadline(rows: ReadonlyArray<Row>): DraftHqHeadline {
   return rows.length > 0 ? { kind: 'allDone' } : { kind: 'none' }
 }
 
-export type DraftGroups<R> = { yourPick: R[]; drafting: R[]; comingUp: R[]; finished: R[] }
+type DraftGroups<R> = { yourPick: R[]; drafting: R[]; comingUp: R[]; finished: R[] }
 
 /**
  * The board's sections, in urgency order, from the `limit` most urgent rows.

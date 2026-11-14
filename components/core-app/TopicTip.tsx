@@ -22,4 +22,3 @@ export function TopicTip({ topic }: { topic: HelpTopicId }) {
   )
 }
 
-export default TopicTip

@@ -116,7 +116,7 @@ type ContractPick = {
   result: "correct" | "incorrect" | "pending" | null
 }
 
-export type ContractLeaderboardRow = {
+type ContractLeaderboardRow = {
   rank: number
   displayName: string
   score: number
@@ -125,7 +125,7 @@ export type ContractLeaderboardRow = {
   isTied: boolean
 }
 
-export type ContractFixture = {
+type ContractFixture = {
   matchId: string
   homeTeam: string
   awayTeam: string

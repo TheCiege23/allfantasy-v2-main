@@ -28,8 +28,6 @@ export const DEFAULT_TOURNAMENT_SETTINGS: TournamentSettings = {
   eliminationAdvancementPerLeague: 6,
 }
 
-export const BLACK_VS_GOLD_CONFERENCE_NAMES = ['Black', 'Gold'] as const
-
 /** Feeder round league name pool (Black vs Gold style). */
 export const FEEDER_LEAGUE_NAMES = [
   'BEAST', 'GOAT', 'GRIZZ', 'KINGS', 'REBELS', 'SMOKE', 'STEALTH', 'SWAMP', 'THUNDER', 'WARRIOR',

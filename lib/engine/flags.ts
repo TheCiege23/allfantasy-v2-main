@@ -13,13 +13,3 @@ export const ENGINE_FLAGS = {
   enableMLAcceptance: false,
 } as const
 
-const CACHE_TTL = {
-  rankings: 15 * 60 * 1000,
-  trade: 5 * 60 * 1000,
-  simulation: 30 * 60 * 1000,
-  waiver: 10 * 60 * 1000,
-} as const
-
-export function getCacheTTL(mode: keyof typeof CACHE_TTL): number {
-  return CACHE_TTL[mode]
-}

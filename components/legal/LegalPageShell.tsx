@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import "./legal-page.css"
 
 // The stamps (and the versions users agree to) live in lib/legal/legalVersions — see there.
-import { legalLastUpdated, LEGAL_LAST_UPDATED_BY_PAGE, type LegalPageKey } from "@/lib/legal/legalVersions"
+import { legalLastUpdated } from "@/lib/legal/legalVersions"
 
 /**
  * The one shell every legal route renders through — handoff 17a's build note
@@ -127,5 +127,4 @@ export function LegalCallout({
   )
 }
 
-export { legalLastUpdated, LEGAL_LAST_UPDATED_BY_PAGE }
-export type { LegalPageKey }
+export { legalLastUpdated }

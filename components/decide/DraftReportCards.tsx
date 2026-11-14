@@ -250,4 +250,3 @@ export function DraftReportCards({ leagueId }: { leagueId: string }) {
   )
 }
 
-export default DraftReportCards

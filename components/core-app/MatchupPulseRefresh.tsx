@@ -221,4 +221,3 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
   )
 }
 
-export default MatchupPulseRefresh

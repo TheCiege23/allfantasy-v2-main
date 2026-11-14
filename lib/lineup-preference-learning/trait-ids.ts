@@ -15,6 +15,3 @@ export const LINEUP_PREFERENCE_TRAIT_IDS = [
 
 export type LineupPreferenceTraitId = (typeof LINEUP_PREFERENCE_TRAIT_IDS)[number]
 
-/** Auxiliary rows (same table; used for rates / position aggregation). */
-export const AUX_LINEUP_TRAIT_IDS = ['allows_auto_sub', 'injury_contingency_trust', 'position_trust'] as const
-

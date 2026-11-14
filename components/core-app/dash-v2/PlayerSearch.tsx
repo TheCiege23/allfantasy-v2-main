@@ -207,4 +207,3 @@ export function PlayerSearch({ leagueCount = null }: { leagueCount?: number | nu
   )
 }
 
-export default PlayerSearch

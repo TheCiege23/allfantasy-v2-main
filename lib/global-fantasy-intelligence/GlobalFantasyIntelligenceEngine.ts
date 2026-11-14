@@ -38,8 +38,6 @@ import type {
   TrendInsights,
 } from './types'
 
-export { buildWeatherContextForAI }
-
 const TREND_FEED_TYPES: TrendFeedType[] = [
   'hot_streak',
   'cold_streak',

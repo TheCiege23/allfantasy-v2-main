@@ -48,4 +48,3 @@ export function SurvivorVoteWindowCard({
   )
 }
 
-export default SurvivorVoteWindowCard

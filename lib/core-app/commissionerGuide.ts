@@ -7,14 +7,14 @@
  */
 import type { CommissionerOverviewData } from '@/lib/core-app/commissionerOverview'
 
-export type CommissionerGuideChip = {
+type CommissionerGuideChip = {
   key: 'trades' | 'quiet' | 'resync' | 'clear'
   label: string
   href: string
   tone: 'bad' | 'warn' | 'good'
 }
 
-export type CommissionerGuide = {
+type CommissionerGuide = {
   eyebrow: string
   headline: string
   intro: string

@@ -238,4 +238,3 @@ export function RedraftCommishHealth({
   )
 }
 
-export default RedraftCommishHealth

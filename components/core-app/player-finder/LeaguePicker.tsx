@@ -129,4 +129,3 @@ export function LeaguePicker({
   )
 }
 
-export default LeaguePicker

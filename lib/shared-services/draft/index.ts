@@ -1,6 +1,4 @@
 export type {
-  RecommendationPlayer,
-  RecommendationResult,
   LegacyDraftGraderResult,
   DraftGraderDivergence,
   ManagerTendencyContext,

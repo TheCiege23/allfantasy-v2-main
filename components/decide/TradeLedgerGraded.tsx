@@ -422,4 +422,3 @@ export function TradeLedgerGraded({ leagueId }: { leagueId: string }) {
   )
 }
 
-export default TradeLedgerGraded

@@ -9,7 +9,7 @@ import type { DayClassification, DayVolume, WeekVolumeProfile } from './types'
 import { DEFAULT_NBA_SCHEDULE_CONFIG } from './types'
 
 /** Classify a day by its game count. */
-export function classifyDay(
+function classifyDay(
   gameCount: number,
   thresholdHeavy = DEFAULT_NBA_SCHEDULE_CONFIG.volumeThresholdHeavy,
   thresholdModerate = DEFAULT_NBA_SCHEDULE_CONFIG.volumeThresholdModerate

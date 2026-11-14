@@ -26,7 +26,7 @@ type DraftChatReactionWire = {
   userIds: string[]
 }
 
-export type DraftPickMetaWire = {
+type DraftPickMetaWire = {
   playerName: string | null
   position: string | null
   rosterDisplayName: string | null

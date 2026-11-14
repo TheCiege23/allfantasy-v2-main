@@ -19,6 +19,5 @@ export {
 export type {
   EngagementEventType,
   EngagementEventMeta,
-  EngagementNotificationType,
   WeeklyRecapPayload,
 } from "./types"

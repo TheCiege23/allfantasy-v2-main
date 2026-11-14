@@ -113,4 +113,3 @@ function PlayerRow({ player, sign, bid }: { player: LeagueMovePlayer; sign: '+' 
   )
 }
 
-export default LeagueMoveCard

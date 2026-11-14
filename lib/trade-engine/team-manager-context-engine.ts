@@ -97,7 +97,7 @@ interface ContextAdjustment {
   category: 'team' | 'manager' | 'fit' | 'style'
 }
 
-export interface TeamManagerContextResult {
+interface TeamManagerContextResult {
   sideA: {
     teamProfile: TeamProfile
     managerProfile: ManagerProfile

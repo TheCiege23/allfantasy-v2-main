@@ -489,4 +489,3 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
   )
 }
 
-export default OutlookScenarioPanel

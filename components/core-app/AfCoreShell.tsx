@@ -1340,7 +1340,7 @@ export function syncChipText(ageLabel: string, language = 'en'): string {
   return never ? m.syncNever : m.synced(ageLabel)
 }
 
-export function AfCoreShell(incoming: AfCoreShellProps) {
+function AfCoreShell(incoming: AfCoreShellProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const msg = useMessages(coreShellMessages)

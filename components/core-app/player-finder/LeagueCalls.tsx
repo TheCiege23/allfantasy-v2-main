@@ -81,4 +81,3 @@ export function LeagueCalls({ calls, playerName }: { calls: LeagueCall[]; player
   )
 }
 
-export default LeagueCalls

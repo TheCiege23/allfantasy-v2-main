@@ -48,4 +48,3 @@ export function IosAppPushRegistrar() {
   return null
 }
 
-export default IosAppPushRegistrar

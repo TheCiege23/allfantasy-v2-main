@@ -32,4 +32,3 @@ export function ScreenUnavailable({
   )
 }
 
-export default ScreenUnavailable

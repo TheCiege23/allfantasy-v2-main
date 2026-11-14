@@ -989,7 +989,7 @@ const PATTERNS: Array<[RegExp, (m: RegExpExecArray, tr: Tr) => string]> = [
   [/^([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (\d{1,2}):(\d{2}) (AM|PM)$/, (m) => `${m[2]} ${MONTHS_ES[m[1]!] ?? m[1]} ${m[3]}, ${m[4]}:${m[5]} ${m[6] === 'AM' ? 'a. m.' : 'p. m.'}`],
 ]
 
-export function isSpanish(lang: string | null | undefined): boolean {
+function isSpanish(lang: string | null | undefined): boolean {
   return String(lang ?? '').toLowerCase().startsWith('es')
 }
 

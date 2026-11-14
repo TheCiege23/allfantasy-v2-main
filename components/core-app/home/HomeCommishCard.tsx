@@ -114,4 +114,3 @@ export function HomeCommishCard({
   )
 }
 
-export default HomeCommishCard

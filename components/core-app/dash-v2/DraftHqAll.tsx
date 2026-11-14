@@ -104,4 +104,3 @@ export function DraftHqAll({ data }: { data: DraftHqAllData | null }) {
   )
 }
 
-export default DraftHqAll

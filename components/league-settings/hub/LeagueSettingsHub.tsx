@@ -44,9 +44,9 @@ import { hubText } from '@/lib/league-settings-hub/hubI18n'
 import type { CorrectionWeek } from '@/lib/league-settings-hub/recordBookModel'
 import { LeagueSettingsHubView, type HubTabId, type HubViewData } from './LeagueSettingsHubView'
 
-export const COMMISSIONER_NOTES_KEY = 'commissioner_notes'
+const COMMISSIONER_NOTES_KEY = 'commissioner_notes'
 
-export type LeagueSettingsHubLeague = {
+type LeagueSettingsHubLeague = {
   id: string
   name?: string | null
   avatarUrl?: string | null

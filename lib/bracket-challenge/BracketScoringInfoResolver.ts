@@ -3,14 +3,7 @@
  * Re-exports and extends lib/brackets/scoring for challenge-specific copy.
  */
 
-import {
-  SCORING_MODE_INFO,
-  pointsForRound,
-  type ScoringMode,
-} from '@/lib/brackets/scoring'
-
-export { SCORING_MODE_INFO, pointsForRound }
-export type { ScoringMode }
+import { pointsForRound } from '@/lib/brackets/scoring'
 
 /**
  * Short summary of round points for tooltip or "How scoring works" panel.

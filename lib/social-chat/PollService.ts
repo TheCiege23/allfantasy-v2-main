@@ -14,10 +14,6 @@ export type PollPayload = {
   closed?: boolean
 }
 
-export function isPollMessage(messageType: string): boolean {
-  return messageType === "poll"
-}
-
 export function parsePollBody(body: string): PollPayload | null {
   try {
     const parsed = JSON.parse(body || "{}")

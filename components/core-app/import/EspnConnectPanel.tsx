@@ -754,4 +754,3 @@ function LockGlyph() {
   )
 }
 
-export default EspnConnectPanel

@@ -43,8 +43,6 @@ import { dynastyView, keeperView, nextSeasonEngineFor, type NextSeasonView } fro
  * Season Outlook prices its waiver moves (seasonOutlookFocus.ts).
  */
 
-export type { WarTradesView }
-
 type WarLeagueStrategy = {
   leagueId: string
   /**

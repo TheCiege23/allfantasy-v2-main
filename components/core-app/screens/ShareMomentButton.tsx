@@ -49,4 +49,3 @@ export function ShareMomentButton({
   )
 }
 
-export default ShareMomentButton

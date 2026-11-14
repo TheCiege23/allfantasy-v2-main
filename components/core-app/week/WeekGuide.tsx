@@ -417,4 +417,3 @@ export function WeekToolsDisclosure({ children }: { children: ReactNode }) {
   )
 }
 
-export default WeekGuide

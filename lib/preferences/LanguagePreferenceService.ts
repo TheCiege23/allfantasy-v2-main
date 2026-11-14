@@ -12,8 +12,6 @@ import {
 } from "@/lib/i18n/constants"
 import { applyLanguageToDocument } from "@/lib/preferences/HtmlPreferenceSync"
 
-export type { LanguageCode }
-
 export function getStoredLanguage(): LanguageCode {
   if (typeof window === "undefined") return DEFAULT_LANG
   try {

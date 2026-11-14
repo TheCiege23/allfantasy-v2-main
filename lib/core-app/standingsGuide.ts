@@ -8,7 +8,7 @@
  */
 import type { BoardTeam } from '@/lib/core-app/standingsModel'
 
-export type StandingsHeadline =
+type StandingsHeadline =
   /** We cannot tell which team is yours. */
   | { kind: 'unknown' }
   /** An elimination league: place only — there is no playoff line to be above. */

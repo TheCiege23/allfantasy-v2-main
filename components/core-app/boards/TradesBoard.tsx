@@ -40,7 +40,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  * screen where that distinction is the whole product.
  */
 
-export type TradesBoardProps = {
+type TradesBoardProps = {
   /**
    * Under the /core/trades guide (2026-11-13): no second page title (the guide headline is the page's
    * h1), no Sleeper notice (the "Check a trade" card says it in one line), a plain section heading, and

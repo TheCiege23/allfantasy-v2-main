@@ -90,4 +90,3 @@ export function WeeklyMvpCard({ mvp }: { mvp: WeeklyMvp | null }) {
   )
 }
 
-export default WeeklyMvpCard

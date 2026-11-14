@@ -65,4 +65,3 @@ export function FallbackImg({
   return <img {...img} loading={loading} decoding={decoding} ref={ref} src={src} onError={() => setFailedSrc(src)} />
 }
 
-export default FallbackImg

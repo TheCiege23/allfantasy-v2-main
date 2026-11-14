@@ -121,4 +121,3 @@ export function MobileChrome({
   )
 }
 
-export default MobileChrome

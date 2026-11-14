@@ -110,4 +110,3 @@ export function LivePlays({
   )
 }
 
-export default LivePlays

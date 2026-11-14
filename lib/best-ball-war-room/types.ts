@@ -12,7 +12,7 @@
  * - NFL pools never mix with NCAAF pools (sport carried through).
  */
 
-export type DataState = 'available' | 'stale' | 'missing'
+type DataState = 'available' | 'stale' | 'missing'
 
 export interface BestBallDataAvailability {
   scoringRules: DataState

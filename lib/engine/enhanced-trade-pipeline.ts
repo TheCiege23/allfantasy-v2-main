@@ -47,7 +47,7 @@ interface EnhancedAssetValuation {
   confidence: 'high' | 'medium' | 'low'
 }
 
-export interface EnhancedTradeAnalysis {
+interface EnhancedTradeAnalysis {
   /** Assets with enhanced valuations */
   sideA: EnhancedAssetValuation[]
   sideB: EnhancedAssetValuation[]

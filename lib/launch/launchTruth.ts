@@ -20,11 +20,7 @@ import {
   IMPORT_PROVIDER_UI_OPTIONS,
   type ImportSupportedSport,
 } from "@/lib/league-import/provider-ui-config"
-import {
-  getMonetizationCatalog,
-  type MonetizationCatalog,
-  type MonetizationCatalogItem,
-} from "@/lib/monetization/catalog"
+import { getMonetizationCatalog, type MonetizationCatalog } from "@/lib/monetization/catalog"
 
 type LaunchSport = "NFL" | "NCAAF"
 type LaunchContext = "global" | "team" | "commissioner"
@@ -93,7 +89,6 @@ const LAUNCH_FEATURES = [
 export function getLaunchPricing(): MonetizationCatalog {
   return getMonetizationCatalog()
 }
-export type { MonetizationCatalogItem }
 
 /** The whole launch contract as one object. */
 export const LAUNCH_TRUTH = {

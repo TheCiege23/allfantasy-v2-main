@@ -271,4 +271,3 @@ export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: k
   )
 }
 
-export default PushOptInPrompt

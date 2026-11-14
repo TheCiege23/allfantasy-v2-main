@@ -6,4 +6,3 @@ export type LeagueSettingsTabProps = {
   hasAfCommissionerSub: boolean
 }
 
-export type { SubPanelContext }

@@ -39,4 +39,3 @@ export function LeaguesPortfolioSwitch({ current, language }: { current: Leagues
   )
 }
 
-export default LeaguesPortfolioSwitch

@@ -3,17 +3,11 @@
  * Safe for client usage and public previews.
  */
 
-import { getPublicSiteOrigin } from "@/lib/site-public-origin";
 import type {
   ShareDestination,
   SharePayload,
   ShareTargetDescriptor,
 } from "./types";
-
-function getOrigin(): string {
-  if (typeof window !== "undefined") return window.location.origin;
-  return getPublicSiteOrigin();
-}
 
 function trimToLength(value: string, maxLength: number): string {
   return value.length > maxLength ? value.slice(0, maxLength) : value;
@@ -155,4 +149,3 @@ export function buildShareTargetDescriptors(
   });
 }
 
-export { buildShareText, getOrigin };

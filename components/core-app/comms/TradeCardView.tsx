@@ -283,4 +283,3 @@ function TradeOfferStatusView({ note }: { note: TradeOfferStatusNote }) {
   )
 }
 
-export default TradeCardView

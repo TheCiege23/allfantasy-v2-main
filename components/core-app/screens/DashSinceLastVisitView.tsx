@@ -195,4 +195,3 @@ export function DashSinceLastVisitView(props: SinceLastVisitViewProps) {
   )
 }
 
-export default DashSinceLastVisitView

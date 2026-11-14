@@ -142,4 +142,3 @@ export function ChimmyFab({ unread = 0 }: { unread?: number }) {
   )
 }
 
-export default ChimmyFab

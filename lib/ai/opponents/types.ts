@@ -8,7 +8,7 @@ type AggressionLevel = "off" | "low" | "medium" | "high"
 
 type PersonalityPoolMode = "balanced" | "random" | "commissioner_assigned"
 
-export type TeamStrategyMode = "contend" | "neutral" | "rebuild"
+type TeamStrategyMode = "contend" | "neutral" | "rebuild"
 
 /** Persisted in `league.settings.aiOpponents` — off by default everywhere. */
 export type AiOpponentsLeagueSettings = {

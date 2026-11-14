@@ -11,7 +11,7 @@
  */
 import type { CareerData } from '@/lib/core-app/careerModel'
 
-export type CareerHeadline =
+type CareerHeadline =
   /** Titles won, with playoff trips when there are any. */
   | { kind: 'titles'; titles: number; playoffs: number; since: number | null }
   /** No title yet, but playoff trips. */
@@ -34,7 +34,7 @@ export function careerHeadline(
 }
 
 /** The line under the headline, as parts the screen joins: who, what level, how much history, how fresh. */
-export type CareerSubline = {
+type CareerSubline = {
   handle: string | null
   level: number | null
   levelName: string | null

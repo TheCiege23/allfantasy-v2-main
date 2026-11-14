@@ -211,4 +211,3 @@ export function SwapManagerModal({ leagueId, onClose, onAction }: SwapManagerMod
   )
 }
 
-export default SwapManagerModal

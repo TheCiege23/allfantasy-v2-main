@@ -36,7 +36,7 @@ const HUB_KINDS: readonly HubKind[] = [
   'survivor', 'big_brother', 'zombie', 'tournament', 'idp', 'pirate', 'king_of_the_hill',
 ]
 
-export type HubKindMeta = {
+type HubKindMeta = {
   label: string
   blurb: string
   /** Section title for the format-specific rules card. */
@@ -81,7 +81,7 @@ export function resolveHubKind(input: {
 
 /* ------------------------------------------------------------------ rows */
 
-export type HubScheduleDay = { day: string; mode: string }
+type HubScheduleDay = { day: string; mode: string }
 
 export type HubRow = {
   key: string
@@ -116,7 +116,7 @@ export type HubSettingsPayload = {
   scoringConfig?: { templateId?: string; formatType?: string; rules?: HubScoringRule[] } | null
 }
 
-export type HubTeam = {
+type HubTeam = {
   id: string
   externalId?: string | null
   teamName?: string | null
@@ -130,7 +130,7 @@ export type HubTeam = {
   isCoCommissioner?: boolean | null
 }
 
-export type HubScoringRule = {
+type HubScoringRule = {
   statKey: string
   pointsValue: number
   multiplier?: number
@@ -149,14 +149,14 @@ function str(v: unknown): string | null {
 function bool(v: unknown): boolean | null {
   return typeof v === 'boolean' ? v : null
 }
-export function yesNo(v: unknown): string | null {
+function yesNo(v: unknown): string | null {
   const b = bool(v)
   return b == null ? DASH : b ? 'Yes' : 'No'
 }
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`
 }
-export function humanize(raw: string): string {
+function humanize(raw: string): string {
   return raw
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ')
@@ -165,7 +165,7 @@ export function humanize(raw: string): string {
     .replace(/^./, (c) => c.toUpperCase())
 }
 
-export function waiverTypeText(raw: unknown): string | null {
+function waiverTypeText(raw: unknown): string | null {
   const s = str(raw)?.toLowerCase()
   if (!s) return DASH
   if (s.includes('faab')) return 'FAAB Bidding'
@@ -402,7 +402,7 @@ function conceptSetupRows(snapshot: Record<string, unknown> | null | undefined):
   return rows
 }
 
-export function formatDate(raw: unknown, timeZone?: string | null): string | null {
+function formatDate(raw: unknown, timeZone?: string | null): string | null {
   const s = str(raw)
   if (!s) return DASH
   const d = new Date(s)
@@ -565,7 +565,7 @@ export function groupScoringRules(rules: HubScoringRule[] | null | undefined, sp
 
 /* -------------------------------------------------------- notifications */
 
-export type HubNotificationRow = { id: NotificationCategoryId; label: string; description: string }
+type HubNotificationRow = { id: NotificationCategoryId; label: string; description: string }
 export type HubNotificationGroup = { key: string; label: string; rows: HubNotificationRow[] }
 
 export function buildNotificationGroups(kind: HubKind, isCommissioner: boolean, sport?: string | null): HubNotificationGroup[] {

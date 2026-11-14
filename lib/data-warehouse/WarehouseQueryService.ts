@@ -7,8 +7,6 @@ import { prisma } from '@/lib/prisma'
 import type { LeagueHistorySummary } from './LeagueHistoryAggregator'
 import { getLeagueHistorySummary, getMatchupHistory, getStandingsHistory } from './LeagueHistoryAggregator'
 
-export type { LeagueHistorySummary }
-
 /**
  * AI analytics: summary payload for a league (for prompt injection or narrative).
  */

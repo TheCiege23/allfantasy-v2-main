@@ -119,4 +119,3 @@ export function ImportProgress({ providerLabel, accountLabel, steps, note }: Imp
   )
 }
 
-export default ImportProgress

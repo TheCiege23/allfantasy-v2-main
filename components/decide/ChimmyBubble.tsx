@@ -52,4 +52,3 @@ export function ChimmyBubble(props: ChimmyBubbleProps) {
     chimmyTokenCost={getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null} />
 }
 
-export default ChimmyBubble

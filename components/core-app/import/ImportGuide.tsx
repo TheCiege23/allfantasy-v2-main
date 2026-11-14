@@ -674,4 +674,3 @@ export function ImportGuide({ provider, providerLabel, available, espnConnected,
   )
 }
 
-export default ImportGuide

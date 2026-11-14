@@ -5,7 +5,7 @@ import type { MutableRefObject } from 'react'
 import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { mergeDraftSessionSnapshot } from '@/lib/draft-room/mergeDraftSessionSnapshot'
 
-export type CommissionerControlApiResult =
+type CommissionerControlApiResult =
   | ({ ok: true } & Record<string, unknown>)
   | { ok: false; error: string; cancelled?: boolean }
 

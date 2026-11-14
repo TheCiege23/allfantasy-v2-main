@@ -49,7 +49,7 @@ function linkIdOf(id: string): string {
  * Imported counts-only records retain their separate fallback presentation.
  */
 
-export type TradesProps = {
+type TradesProps = {
   data: TradesData
   /** The Trade Center already renders pending offers above its builder. */
   hidePending?: boolean

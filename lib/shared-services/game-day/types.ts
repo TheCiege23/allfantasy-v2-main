@@ -15,14 +15,8 @@
  * by any live route.
  */
 
-import type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload } from '@/lib/matchup-center/types'
-import type { LineupActionItem } from '@/lib/lineup-actions/types'
+import type { MatchupCenterPayload } from '@/lib/matchup-center/types'
 import type { RosterIdSpace } from '@/lib/core-app/rosterIdSpace'
-import type { PlayerExposure as KnowledgeGraphPlayerExposure } from '@/lib/shared-services/knowledge-graph/types'
-
-export type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload, LineupActionItem }
-/** Re-exported under an unambiguous name — never conflate with this module's own UserPlayerExposure (private, per-user, unrelated persistence/privacy model). See README §"Private user exposure vs Knowledge Graph exposure". */
-export type { KnowledgeGraphPlayerExposure }
 
 /**
  * Richer, provider-neutral matchup state than MatchupCenterPayload's own

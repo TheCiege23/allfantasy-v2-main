@@ -36,7 +36,7 @@ type InsightPick = {
 }
 
 /** One match / game in the competition. */
-export type InsightMatch = {
+type InsightMatch = {
   matchId: string
   homeTeam: string
   awayTeam: string

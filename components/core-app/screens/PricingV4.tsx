@@ -867,4 +867,3 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, acc
   )
 }
 
-export default PricingV4

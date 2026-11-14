@@ -36,4 +36,3 @@ export async function LaunchOfferLayout({ children }: { children: ReactNode }) {
   return <LaunchOfferProvider offer={offer}>{children}</LaunchOfferProvider>
 }
 
-export default LaunchOfferLayout

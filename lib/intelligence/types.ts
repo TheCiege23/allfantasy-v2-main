@@ -16,5 +16,3 @@ export type IntelligencePlatformHealth = {
   computedAt: string
 }
 
-export type LeagueSourceKind = 'native_af' | 'imported' | 'unknown'
-

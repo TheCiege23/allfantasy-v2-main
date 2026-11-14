@@ -150,12 +150,6 @@ export function participationSlices(participation: {
 
 /* ── Reports ──────────────────────────────────────────────────────────────── */
 
-export const REPORT_OUTCOME_SERIES = [
-  { id: 'ready', label: 'Ready' },
-  { id: 'generating', label: 'Generating' },
-  { id: 'failed', label: 'Failed' },
-] as const
-
 /**
  * Report runs per template, split by outcome.
  *
@@ -186,12 +180,6 @@ function sumRow(row: StackedRow): number {
 }
 
 /* ── Automations ──────────────────────────────────────────────────────────── */
-
-export const AUTOMATION_OUTCOME_SERIES = [
-  { id: 'succeeded', label: 'Succeeded' },
-  { id: 'skipped', label: 'Skipped' },
-  { id: 'failed', label: 'Failed' },
-] as const
 
 /**
  * Run outcomes per automation.

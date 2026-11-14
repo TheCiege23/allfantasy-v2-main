@@ -119,4 +119,3 @@ export default function PlayerBadge({
 }
 
 export { headshotUrl as getPlayerHeadshotUrl, teamLogoUrl as getTeamLogoUrl } from '@/lib/media-url'
-export { NFL_TEAM_MAP as NFL_TEAM_ABBREV_MAP } from '@/lib/media-url'

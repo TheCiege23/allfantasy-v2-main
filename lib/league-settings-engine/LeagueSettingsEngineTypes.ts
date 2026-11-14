@@ -382,11 +382,6 @@ export interface ValidateLeagueSettingsResponse {
   canSave: boolean;
 }
 
-export interface ResetLeagueSettingsRequest {
-  resetTo: 'default' | 'created-state';
-  confirmationToken?: string;
-}
-
 export interface ResetLeagueSettingsResponse {
   success: boolean;
   settings: UnifiedLeagueSettings;

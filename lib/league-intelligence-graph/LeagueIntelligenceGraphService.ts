@@ -21,8 +21,6 @@ import {
 } from './GraphQueryService';
 import type { GraphQueryInput } from './GraphQueryService';
 
-export type { BuildGraphInput, BuildGraphResult, RelationshipSummaryInput, GraphQueryInput };
-
 /**
  * Build and persist a full graph snapshot for the league (and optional season).
  */

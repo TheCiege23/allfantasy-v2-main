@@ -41,7 +41,7 @@ import { type Result, err, ok } from './result'
  * already have in scope.
  */
 declare const SECRET_REF_BRAND: unique symbol
-export type SecretRef = string & { readonly [SECRET_REF_BRAND]: true }
+type SecretRef = string & { readonly [SECRET_REF_BRAND]: true }
 
 export function secretRef(handle: string): SecretRef {
   return handle as SecretRef

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type LeagueClass = 'DYN_SF' | 'DYN_1QB' | 'RED_SF' | 'RED_1QB' | 'SPC' | 'UNK'
+type LeagueClass = 'DYN_SF' | 'DYN_1QB' | 'RED_SF' | 'RED_1QB' | 'SPC' | 'UNK'
 
 export interface ComponentWeights {
   market: number

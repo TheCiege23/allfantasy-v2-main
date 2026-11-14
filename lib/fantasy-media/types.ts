@@ -2,8 +2,6 @@
  * Fantasy media (video/podcast) — types for HeyGen and episodes (Prompt 115).
  */
 
-import type { SupportedSport } from '@/lib/sport-scope';
-
 export const MEDIA_TYPES = [
   'weekly_recap',
   'waiver_targets',
@@ -18,8 +16,6 @@ export const MEDIA_TYPES = [
 ] as const;
 
 export type MediaType = (typeof MEDIA_TYPES)[number];
-
-export type Sport = SupportedSport;
 
 export interface VideoScriptSection {
   heading: string;

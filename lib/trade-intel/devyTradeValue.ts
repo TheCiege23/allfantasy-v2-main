@@ -59,7 +59,7 @@
  */
 
 import { pickRoundShare } from '@/lib/pick-curve'
-import { DEVY_GAPS, type DevyOutlook } from './devyOutlook'
+import { type DevyOutlook } from './devyOutlook'
 
 /**
  * What the top devy asset is worth, in devy points.
@@ -316,5 +316,3 @@ export function rankDevyPool<T>(
   return pool.map((p) => ({ item: p.item, devyRank: rankOf.get(p.item) ?? null }))
 }
 
-/** Re-exported so a consumer holding only this module still names the market gap. */
-export { DEVY_GAPS }

@@ -104,4 +104,3 @@ export function AfSavedShare({ tip, es }: { tip: SavedTip; es: boolean }) {
   )
 }
 
-export default AfSavedShare

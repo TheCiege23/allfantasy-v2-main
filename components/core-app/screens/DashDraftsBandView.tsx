@@ -110,4 +110,3 @@ export function DashDraftsBandView({ liveCount, visible, overflow }: { liveCount
   )
 }
 
-export default DashDraftsBandView

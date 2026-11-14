@@ -1,4 +1,4 @@
-import { DEFAULT_SPORT, isSupportedSport, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { isSupportedSport, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
 /** Prisma-backed sports plus optimizer-first extensions (not all are LeagueSport yet). */
 export type ExtendedLineupSport = SupportedSport | 'GOLF' | 'NASCAR'
@@ -17,4 +17,3 @@ export function displaySportLabel(sport: string): string {
   return sport
 }
 
-export { DEFAULT_SPORT }

@@ -6,16 +6,7 @@ import { loadAdpBySleeperId } from '@/lib/adp/resolveAdp'
 import { rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 import { SURVIVOR_TRIBE_CATALOG, type SurvivorTribeSlot } from './survivorTribeIdentity'
 import { assignSurvivorTribes } from './survivorTribeProvisioning'
-import {
-  readLockedTribePlanMapping,
-  readStoredTribePlan,
-  strengthsFromAdp,
-  tribeAnnouncementText,
-  validateTribePlan,
-  type PlanParticipant,
-  type StoredTribePlan,
-  type SurvivorTribePlan,
-} from './survivorTribePlan'
+import { readStoredTribePlan, strengthsFromAdp, tribeAnnouncementText, validateTribePlan, type PlanParticipant, type StoredTribePlan, type SurvivorTribePlan } from './survivorTribePlan'
 
 /**
  * Server half of the pre-draft tribe plan (handoff §5.4). Reads only Postgres:
@@ -33,7 +24,7 @@ import {
  * The plan itself is still frozen in league settings (`survivorTribePlan.lockedAt`).
  */
 
-export { readStoredTribePlan, readLockedTribePlanMapping, type StoredTribePlan }
+export { readStoredTribePlan }
 
 export async function loadTribePlanParticipants(
   leagueId: string,
