@@ -21,7 +21,8 @@ export function isPhoneLoginCandidate(input: string): boolean {
  */
 export async function resolveLoginToUser(login: string): Promise<{
   id: string
-  email: string
+  /** Null for a phone-only account. */
+  email: string | null
   passwordHash: string | null
   displayName: string | null
   username: string

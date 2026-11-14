@@ -65,7 +65,8 @@ export type SocialAccountProvider = "google" | "apple" | "spotify" | "facebook" 
 
 type LinkedSocialAuthUser = {
   id: string;
-  email: string;
+  /** Null for a phone-only account. */
+  email: string | null;
   username: string;
   displayName: string | null;
   avatarUrl: string | null;
@@ -396,7 +397,7 @@ export async function linkSocialAccountToAppUser(
     userUpdates.passwordHash = await hashOAuthOnlyPlaceholder();
   }
 
-  if (user && normalizedEmail && providerVerifiedEmail && user.email.toLowerCase() !== normalizedEmail) {
+  if (user && normalizedEmail && providerVerifiedEmail && user.email?.toLowerCase() !== normalizedEmail) {
     const conflictingEmailOwner = await prisma.appUser.findFirst({
       where: {
         email: { equals: normalizedEmail, mode: "insensitive" },

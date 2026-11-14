@@ -14,7 +14,18 @@ describe("register route — blocks signup for an email that already has an acco
   const src = readFileSync(resolve(process.cwd(), "app/api/auth/register/route.ts"), "utf-8")
 
   it("looks up any existing AppUser by email (case-insensitive) before creating a new one", () => {
-    expect(src).toContain('{ email: { equals: email, mode: "insensitive" } }')
+    // Only when an email was given: a phone sign-up may have none (2026-11-14).
+    expect(src).toContain('...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : [])')
+  })
+
+  it("a phone sign-up whose number is already on an account gets a 409 pointing at text-code sign-in", () => {
+    const block = src.match(/where: \{ phone: normalizedPhone \}[\s\S]{0,400}/)
+    expect(block?.[0]).toContain("An account already uses this phone number. Sign in with a text code instead.")
+    expect(block?.[0]).toContain("409")
+  })
+
+  it("email is optional ONLY for a phone sign-up", () => {
+    expect(src).toContain('if (email ? !email.includes("@") : !isPhoneSignup) {')
   })
 
   it("rejects the signup with 409 when that email is already taken — never proceeds to create a duplicate AppUser", () => {
