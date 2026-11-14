@@ -18,6 +18,8 @@ import { GuillotineSurvivalHistory } from './GuillotineSurvivalHistory'
 import { GuillotineNextChopPick } from './GuillotineNextChopPick'
 import type { NextChopPickState } from '@/lib/guillotine/nextChopPickStore'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
+import { RELEASE_OPTIONS } from '@/lib/guillotine/guillotineRules'
+import { guillotineRuleRows } from './guillotineHomeModel'
 
 function leagueQueryPath(leagueId: string, params: Record<string, string>) {
   const q = new URLSearchParams(params)
@@ -265,8 +267,10 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           Released players from chopped rosters enter the waiver pool. Next processing per league settings.
         </p>
         {summary?.config?.rosterReleaseTiming && (
-          <p className="mt-2 text-xs text-white/50">
-            Release timing: {summary.config.rosterReleaseTiming.replace(/_/g, ' ')}
+          <p className="mt-2 text-xs text-white/50" data-testid="guillotine-release-timing">
+            Chopped players are released:{' '}
+            {RELEASE_OPTIONS.find((o) => o.value === summary.config?.rosterReleaseTiming)?.label ??
+              summary.config.rosterReleaseTiming.replace(/_/g, ' ')}
           </p>
         )}
         <Link
@@ -307,18 +311,29 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       </section>
 
       {/* Settings / Rules */}
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+      <section data-testid="guillotine-rules" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Settings className="h-5 w-5 text-white/60" />
           Rules & Settings
         </h2>
         {summary?.config ? (
-          <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt className="text-white/50">Elimination start</dt><dd className="text-white/80">Week {summary.config.eliminationStartWeek}</dd></div>
-            <div><dt className="text-white/50">Elimination end</dt><dd className="text-white/80">{summary.config.eliminationEndWeek ?? '—'}</dd></div>
-            <div><dt className="text-white/50">Teams per chop</dt><dd className="text-white/80">{summary.config.teamsPerChop}</dd></div>
-            <div><dt className="text-white/50">Danger margin</dt><dd className="text-white/80">{summary.config.dangerMarginPoints ?? '—'} pts</dd></div>
-            <div><dt className="text-white/50">Tiebreakers</dt><dd className="text-white/80">{summary.config.tiebreakerOrder?.join(' → ') ?? '—'}</dd></div>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            {guillotineRuleRows(summary.config).map((row) => (
+              <div key={row.label} className={Array.isArray(row.value) ? 'sm:col-span-2' : undefined}>
+                <dt className="text-white/50">{row.label}</dt>
+                <dd className="text-white/80">
+                  {Array.isArray(row.value) ? (
+                    <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+                      {row.value.map((v) => (
+                        <li key={v}>{v}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    row.value
+                  )}
+                </dd>
+              </div>
+            ))}
           </dl>
         ) : (
           <p className="text-sm text-white/50">No config loaded.</p>
