@@ -16,8 +16,11 @@ import { DraftPhase4 } from './DraftPhase4';
 import { DraftResultsRefresh } from './DraftResultsRefresh';
 import { DraftRecordView } from './DraftRecordView';
 import '@/components/core-app/af-draft-archive.css';
+import '@/components/core-app/af-draft-hq-league-guide.css';
+import { draftHqLeagueGuideMessages } from '@/lib/core-app/messages/draftHqLeagueGuide';
+import { importedDraftHeadline } from '@/lib/core-app/draftHqLeagueGuide';
 type Choice = Omit<ArchiveChoice, 'createdAt' | 'total'>;
-export function DraftArchive({ choices, detail, leagueId, page, more, total, error, query = '', season = '', timelinePage = 1, asDraftHq = false }: {
+export function DraftArchive({ choices, detail, leagueId, page, more, total, error, query = '', season = '', timelinePage = 1, asDraftHq = false, platformName = null }: {
     choices: Choice[];
     detail: ArchiveDetail | null;
     leagueId?: string | null;
@@ -30,9 +33,26 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
     timelinePage?: number;
     /** The league has no Draft HQ data of its own (its draft ran on the platform), so this archive IS the screen: it carries the title. */
     asDraftHq?: boolean;
+    /** The platform the draft runs on ("Sleeper"), for the Draft HQ headline; the page resolves it. */
+    platformName?: string | null;
 }) {
     const language = useOptionalLanguage().language, router = useRouter();
     const m = useMessages(draftScreensMessages);
+    const g = useMessages(draftHqLeagueGuideMessages);
+    /*
+     * As Draft HQ, the title says where this league's draft is (2026-11-13): "Drafting on Sleeper ·
+     * 38 picks made" rather than the word "Draft HQ" over a search form. The draft itself is made on the
+     * platform, so the intro says so; the record below is ours.
+     */
+    const where = platformName?.trim() || (language === 'es' ? 'la plataforma' : 'the platform');
+    const hqHead = (() => {
+        if (!detail) return m.archiveHqTitle;
+        const h = importedDraftHeadline({ status: detail.choice.status, season: detail.choice.season }, detail.picks.length);
+        if (h.kind === 'drafting') return g.impDrafting(where, h.picks);
+        if (h.kind === 'done') return g.impDone(where, h.picks, h.season);
+        if (h.kind === 'before') return g.impBefore(where);
+        return g.impOther(h.status);
+    })();
     // The picker read "2026 · snake · complete · 1391441779609317376" (live /core, 2026-11-06). The provider's
     // draft id is only worth showing to tell apart two drafts that would otherwise read the same, and then
     // its last four digits do it; the full id stays in Timing and source details.
@@ -63,7 +83,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
     const timelineHref = (next: number) => href(detail?.choice.key, leagueId, page) + '&timelinePage=' + next;
     const sectionHelp = [m.archiveHelpSnapshot, m.archiveHelpClockTimeline, m.archiveHelpCorrections, m.archiveHelpTradePackages, m.archiveHelpExecutedTrades];
     return <section className="af-frame af-archive" aria-label={m.archiveDraftArchive}>
-  {asDraftHq && <header className="af-archive-hq"><h1 className="af-archive-hq-title">{m.archiveHqTitle}</h1>{detail && <p className="af-archive-hq-sub">{detail.choice.season ?? m.archiveUnknownSeason} · {detail.choice.sport} · {detail.choice.format} · <span className="af-archive-row-status" data-status={detail.choice.status}>{detail.choice.status}</span> · {detail.picks.length} {m.archivePicks}</p>}</header>}
+  {asDraftHq && <header className="af-archive-hq"><h1 className="af-archive-hq-title">{hqHead}</h1>{detail && <p className="af-archive-hq-sub">{detail.choice.season ?? m.archiveUnknownSeason} · {detail.choice.sport} · {detail.choice.format}</p>}{detail && <p className="af-archive-hq-intro">{g.impIntro(where)}</p>}</header>}
   <header><h2>{m.archiveDraftArchive} {help(m.archiveDraftIdentity, m.archiveHelpDraftIdentity)}</h2><p>{m.archiveDraftRecords(total)}</p></header>
   <details className="af-archive-search"><summary>{m.archiveSearchAndFilter}</summary><form action="/core/draft-hq" method="get"><input type="hidden" name="league" value={leagueId ?? ''}/><label>{m.archiveSearchLabel}<input name="archiveQuery" defaultValue={query} maxLength={120}/></label><label>{m.archiveSeason}<input name="archiveSeason" type="number" min={1900} max={2100} defaultValue={season}/></label><button>{m.archiveSearch}</button><Link href={leagueId ? '/core/draft-hq?league=' + encodeURIComponent(leagueId) : '/core/draft-hq'}>{m.archiveResetFilters}</Link></form></details>
   {leagueId && <label>{m.archiveIndividualDraft}<select aria-label={m.archiveSelectDraft} value={detail?.choice.key ?? ''} onChange={e => router.push(href(e.target.value))}><option value="">{m.archiveChooseADraft}</option>{detail && !choices.some(c => c.key === detail.choice.key) && <option value={detail.choice.key}>{draftLabel(detail.choice)}</option>}{choices.map(c => <option key={c.key} value={c.key}>{draftLabel(c)}</option>)}</select></label>}
