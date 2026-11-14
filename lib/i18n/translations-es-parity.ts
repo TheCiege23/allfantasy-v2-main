@@ -995,7 +995,6 @@ export const translationsEsParity: Record<string, string> = {
   "leaguePowerRankings.table.sos": "SOS",
   "leaguePowerRankings.teamFallback": "Equipo {{id}}",
   "leaguePowerRankings.weekPowerTitle": "Power rankings semana {{week}}",
-  "powerRankingsPage.backgroundRefresh": "Actualización en segundo plano",
   "powerRankingsPage.badge": "Power rankings",
   "powerRankingsPage.changeLeague": "Cambiar liga",
   "powerRankingsPage.coach.generatePlan": "Generar plan 3-5 años",
@@ -1055,8 +1054,6 @@ export const translationsEsParity: Record<string, string> = {
   "powerRankingsPage.introKicker": "Rankings ligados a liga",
   "powerRankingsPage.introTitle":
     "Lee la tabla completa, expande cada manager y ejecuta trabajos de psicología y hoja de ruta dynasty respaldados por workers.",
-  "powerRankingsPage.job.label": "Trabajo {{kind}}",
-  "powerRankingsPage.job.roadmap": "Hoja de ruta",
   "powerRankingsPage.leagueTeamsLine": "{{n}} equipos · {{scoring}} · Temporada {{season}}",
   "powerRankingsPage.level.high": "Alto",
   "powerRankingsPage.level.low": "Bajo",
