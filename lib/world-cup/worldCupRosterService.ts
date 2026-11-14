@@ -42,7 +42,6 @@ type WorldCupRosterReport = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const INJURY_STATUSES = new Set(["injured", "doubtful", "questionable", "out"])
 const SUSPENSION_STATUSES = new Set(["suspended", "ban", "red card suspension", "accumulated yellows"])
 
 function isSuspension(status: string): boolean {

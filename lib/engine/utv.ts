@@ -11,18 +11,6 @@ import type { SportKey } from './trade-types'
 import { pickRoundTable } from '@/lib/pick-curve'
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface UTVPickEntry {
-  sport: SportKey
-  year: number
-  round: number
-  tier: 'early' | 'mid' | 'late'
-  utv: number
-}
-
-// ---------------------------------------------------------------------------
 // Sport normalization constants — different sports have different value ceilings
 // ---------------------------------------------------------------------------
 
@@ -48,12 +36,6 @@ const SPORT_POSITION_WEIGHTS: Record<string, Record<string, number>> = {
   NCAAB: { PG: 0.90, SG: 0.85, SF: 0.85, PF: 0.80, C: 0.75 },
   SOCCER: { FW: 0.95, MF: 0.85, DF: 0.65, GK: 0.50 },
 }
-
-// ---------------------------------------------------------------------------
-// In-memory cache (precomputed nightly, refreshed on demand)
-// ---------------------------------------------------------------------------
-
-let _utvPickCache: Map<string, UTVPickEntry> = new Map()
 
 // ---------------------------------------------------------------------------
 // Core UTV computation

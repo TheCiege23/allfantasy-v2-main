@@ -54,7 +54,7 @@ function archetypeLabel(health: LeagueHealthResult): LeagueArchetypeSlice {
 /** The file/fixture-backed corpus port. Deterministic pure function of the persisted evidence. */
 export class CorpusEvidencePort implements CompositionEvidencePort {
   private readonly byRef: Map<string, PersistedLeagueEvidence>
-  constructor(private readonly leagues: PersistedLeagueEvidence[]) {
+  constructor(leagues: PersistedLeagueEvidence[]) {
     this.byRef = new Map(leagues.filter((l) => !!l.facts).map((l) => [l.leagueReference, l]))
   }
   listLeagueRefs(): string[] {
