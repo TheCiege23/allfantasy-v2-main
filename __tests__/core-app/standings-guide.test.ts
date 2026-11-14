@@ -34,11 +34,17 @@ describe('ordinalEn', () => {
 
 describe('standings guide copy', () => {
   const en = standingsGuideMessages.en
-  it('says the place, the line and the odds in plain words', () => {
-    expect(en.headIn(4, 12, 72)).toBe('4th of 12 · in a playoff spot · 72% playoff odds')
-    expect(en.headIn(6, 12, 55, true)).toBe('6th of 12 · in a playoff spot, on the bubble · 55% playoff odds')
-    expect(en.headOut(7, 12, 1, 23)).toBe('7th of 12 · 1 game out of a playoff spot · 23% playoff odds')
-    expect(en.headOut(7, 12, null, null, true)).toBe('7th of 12 · just outside the playoff spots')
+  /*
+   * 2026-11-14: one sentence, and no odds — they printed rounded here ("0%") and formatted in the box below
+   * ("<1%"), one fact two ways. The odds now live only in "What is at stake".
+   */
+  it('says the place and the playoff line in one plain sentence, without the odds', () => {
+    expect(en.headIn(4, 12, 72)).toBe('You’re 4th of 12, in a playoff spot')
+    expect(en.headIn(6, 12, 55, true)).toBe('You’re 6th of 12, in a playoff spot but on the bubble')
+    expect(en.headOut(7, 12, 1, 23)).toBe('You’re 7th of 12, 1 game out of the playoffs')
+    expect(en.headOut(12, 14, 3, 0)).toBe('You’re 12th of 14, 3 games out of the playoffs')
+    expect(en.headOut(7, 12, null, null, true)).toBe('You’re 7th of 12, just outside the playoffs')
+    for (const s of [en.headIn(4, 12, 72), en.headOut(7, 12, 1, 23)]) expect(s).not.toMatch(/%/)
     expect(en.ifTheyWin).toBe('if they win')
   })
 
