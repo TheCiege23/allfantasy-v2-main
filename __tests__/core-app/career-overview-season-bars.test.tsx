@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * The Career overview carries "Season by season" (board: Career, 2026-11) between the best seasons
- * and the live half — and only the overview: the Seasons tab is already the same years as a table.
+ * "Season by season" (board: Career, 2026-11-05) left the overview on 2026-11-14: Career progression on
+ * the same page draws the same win rate by year, and its Titles tab the rings, so the page said it
+ * twice. The component stays (career-season-bars.test.tsx); nothing on Overview or Seasons renders it.
  */
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -51,16 +52,13 @@ const screenFor = (view: CareerScreenData['view']): CareerScreenData => ({
 afterEach(cleanup)
 
 describe('Career overview — Season by season', () => {
-  it('renders the bars inside the desktop overview, one per finished season, the title year starred', () => {
+  it('is not on the desktop overview; the progression chart carries win rate by year', () => {
     render(<Career screen={screenFor('overview')} />)
-    const bars = document.querySelector(".af-c13[data-view='overview'] .af-crs")
-    expect(bars).not.toBeNull()
-    const cols = Array.from(bars!.querySelectorAll('.af-crs-col')) as HTMLElement[]
-    expect(cols.map((c) => c.dataset.season)).toEqual(['2022', '2023', '2024'])
-    expect(cols.map((c) => c.dataset.titles ?? null)).toEqual([null, '1', null])
+    expect(document.querySelector(".af-c13[data-view='overview'] .af-crs")).toBeNull()
+    expect(document.querySelector(".af-c13[data-view='overview']")?.textContent).toContain('Career progression')
   })
 
-  it('is not repeated on the Seasons tab', () => {
+  it('is not on the Seasons tab either', () => {
     render(<Career screen={screenFor('seasons')} />)
     expect(document.querySelector('.af-crs')).toBeNull()
   })
