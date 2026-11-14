@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Bell, Loader2, Inbox, Search, ShieldAlert, SlidersHorizontal, X } from "lucide-react"
+import { Bell, ChevronDown, Loader2, Inbox, Search, X } from "lucide-react"
+import { useMessages } from "@/components/i18n/useMessages"
+import { findLeagueGuideMessages } from "@/lib/core-app/messages/findLeagueGuide"
+import { FIND_LEAGUE_PAGE_SIZE, moreFilterCount, showPickedRows } from "@/lib/public-discovery/findLeagueGuide"
 import { FindLeagueCard } from "@/components/discovery/FindLeagueCard"
 import { DiscoveryRailSkeleton } from "@/components/find-league/DiscoveryRail"
 import { getDiscoverySports } from "@/lib/public-discovery/discovery-sports"
@@ -32,12 +35,31 @@ import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { LEAGUE_VIBES, vibeLabel, type LeagueVibeFilter } from "@/lib/public-discovery/vibes"
 
 type RecsStatus = 'ok' | 'anonymous' | 'empty' | 'error'
+type GuideCopy = typeof findLeagueGuideMessages.en
+
+/** A row's heading and note in the reader's language; the server's English is the fallback. */
+function railCopy(rail: FindLeagueRail, m: GuideCopy): { title: string; description: string } {
+  switch (rail.kind) {
+    case "your_level":
+      return { title: m.railYourLevel, description: m.railYourLevelNote }
+    case "step_up":
+      return { title: m.railStepUp, description: m.railStepUpNote }
+    case "drafting_soon":
+      return { title: m.railDraftingSoon, description: m.railDraftingSoonNote }
+    case "filling_fast":
+      return { title: m.railFillingFast, description: m.railFillingFastNote }
+    default:
+      return { title: rail.title, description: rail.description }
+  }
+}
 
 /**
  * "Picked for you" rows: at your level, step up, drafting this week, filling fast.
  * Built server-side from the same discovery list as the grid (lib/public-discovery/findLeagueRails.ts).
+ * Mounted only when the grid has more than one page (showPickedRows): with every league already on
+ * screen, the rows only showed the same leagues a second time.
  */
-function SmartDiscoverySection({ sport }: { sport: string }) {
+function SmartDiscoverySection({ sport, m }: { sport: string; m: GuideCopy }) {
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<RecsStatus | null>(null)
   const [rails, setRails] = useState<FindLeagueRail[]>([])
@@ -79,12 +101,12 @@ function SmartDiscoverySection({ sport }: { sport: string }) {
   return (
     <div className="space-y-8" data-testid="find-league-rails">
       {rails.map((rail) => (
-        <section key={rail.kind} aria-label={rail.title} data-testid={`find-league-rail-${rail.kind}`}>
+        <section key={rail.kind} aria-label={railCopy(rail, m).title} data-testid={`find-league-rail-${rail.kind}`}>
           <h2 className="text-base font-bold" style={{ color: "var(--text)" }}>
-            {rail.title}
+            {railCopy(rail, m).title}
           </h2>
           <p className="mb-3 text-xs" style={{ color: "var(--muted)" }}>
-            {rail.description}
+            {railCopy(rail, m).description}
           </p>
           <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {rail.leagues.map((league) => (
@@ -97,7 +119,7 @@ function SmartDiscoverySection({ sport }: { sport: string }) {
       ))}
       {status === "anonymous" ? (
         <p className="text-xs" style={{ color: "var(--muted)" }} data-testid="find-league-rails-signin">
-          Sign in to see leagues at your level and ones that would stretch you.
+          {m.signInForLevel}
         </p>
       ) : null}
     </div>
@@ -147,11 +169,11 @@ const ENTRY_FEE_OPTIONS: { value: EntryFeeFilter; label: string }[] = [
   { value: "paid", label: "Paid" },
 ]
 
-const SORT_OPTIONS: { value: DiscoverySort; label: string }[] = [
-  { value: "ranking_match", label: "Best rank match" },
-  { value: "popularity", label: "Popularity" },
-  { value: "newest", label: "Newest" },
-  { value: "filling_fast", label: "Filling fast" },
+const sortOptions = (m: GuideCopy): { value: DiscoverySort; label: string }[] => [
+  { value: "ranking_match", label: m.sortRank },
+  { value: "popularity", label: m.sortPopular },
+  { value: "newest", label: m.sortNewest },
+  { value: "filling_fast", label: m.sortFilling },
 ]
 
 const DRAFT_WHEN_OPTIONS = (Object.keys(DRAFT_WHEN_LABELS) as DraftWhenFilter[]).map((value) => ({
@@ -164,11 +186,11 @@ const TZ_REGION_OPTIONS = (Object.keys(TIME_ZONE_REGION_LABELS) as TimeZoneRegio
   label: TIME_ZONE_REGION_LABELS[value],
 }))
 
-const RANK_BAND_OPTIONS: { value: RankBandFilter; label: string }[] = [
-  { value: "all", label: "All levels" },
-  { value: "step_up", label: RANK_BAND_LABELS.step_up },
-  { value: "your_level", label: RANK_BAND_LABELS.your_level },
-  { value: "chill", label: RANK_BAND_LABELS.chill },
+const rankBandOptions = (m: GuideCopy): { value: RankBandFilter; label: string }[] => [
+  { value: "all", label: m.levelsAll },
+  { value: "step_up", label: m.levelsStepUp },
+  { value: "your_level", label: m.levelsYourLevel },
+  { value: "chill", label: m.levelsChill },
 ]
 
 /** "NFL · Dynasty · 12 teams · Snake" — what the search box was read as, so a person can see and undo it. */
@@ -226,6 +248,7 @@ function initialFiltersFrom(searchParams: { get(name: string): string | null } |
 }
 
 export function FindLeagueClient() {
+  const m = useMessages(findLeagueGuideMessages)
   const searchParams = useSearchParams()
   const [initial] = useState(() => initialFiltersFrom(searchParams))
   const { timezone: profileTimeZone } = useUserTimezone()
@@ -255,21 +278,14 @@ export function FindLeagueClient() {
   const [hiddenByTierPolicy, setHiddenByTierPolicy] = useState(0)
   const [paidHiddenMessage, setPaidHiddenMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showFilters, setShowFilters] = useState(false)
 
-  const activeFilterCount = [
-    sport !== '',
-    leagueType !== 'all',
-    draftType !== 'all',
-    draftStatus !== 'all',
-    entryFee !== 'all',
-    aiEnabled,
-    teamCountMin !== '',
-    teamCountMax !== '',
-    draftWhen !== 'any',
-    tzRegion !== 'any',
-    vibe !== 'all',
-  ].filter(Boolean).length
+  // Everything but Sport and Sort lives in "More filters". It opens when a link or a search set one
+  // of them, so a filter in force is never hidden behind a closed fold.
+  const moreCount = moreFilterCount({
+    leagueType, draftType, draftStatus, entryFee, aiEnabled, teamCountMin, teamCountMax, draftWhen, tzRegion, vibe, visibility,
+  })
+  const [moreOpen, setMoreOpen] = useState(moreCount > 0)
+  const activeFilterCount = (sport !== '' ? 1 : 0) + moreCount
 
   /**
    * Every filter, as the query string the server sees — without the page. One string, so one
@@ -316,7 +332,7 @@ export function FindLeagueClient() {
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
-    fetch(`/api/discover/leagues?${filterKey}&page=${page}&limit=12`, { signal: controller.signal })
+    fetch(`/api/discover/leagues?${filterKey}&page=${page}&limit=${FIND_LEAGUE_PAGE_SIZE}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
         setLeagues(d.leagues ?? [])
@@ -356,6 +372,9 @@ export function FindLeagueClient() {
       setTeamCountMax(String(parsed.teamCount))
     }
     setAppliedQuery(parsed.text)
+    if (parsed.style || parsed.draftType || parsed.entryFee || parsed.draftWhen || parsed.tzRegion || parsed.vibe || parsed.teamCount) {
+      setMoreOpen(true)
+    }
     const readAs = describeParsedSearch(parsed)
     // Only worth saying when something was recognised; a plain name search reads as itself.
     setSearchReadAs(readAs.length > 1 || (readAs.length === 1 && !parsed.text) ? readAs : [])
@@ -391,43 +410,16 @@ export function FindLeagueClient() {
   }))
 
   return (
-    <div className="space-y-8">
-      <section
-        className="rounded-2xl border p-4 sm:p-5"
-        style={{
-          borderColor: "var(--border)",
-          background:
-            "linear-gradient(145deg, color-mix(in srgb, var(--accent) 8%, var(--panel)) 0%, color-mix(in srgb, var(--panel2) 15%, var(--panel)) 100%)",
-        }}
-        data-testid="find-league-ranking-banner"
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--muted)" }}>
-              Find leagues at your Career Level
-            </p>
-            <p className="mt-1 text-sm" style={{ color: "var(--text)" }}>
-              Join a fantasy league within three Career Levels. For a bigger gap, you can request commissioner approval.
-            </p>
-            <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-              Class Division helps sort NFL matches by competitive fit.
-            </p>
-          </div>
-          {hiddenByTierPolicy > 0 ? (
-            <div
-              className="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold"
-              style={{
-                borderColor: "rgba(251, 146, 60, 0.35)",
-                background: "rgba(251, 146, 60, 0.12)",
-                color: "rgb(251, 146, 60)",
-              }}
-            >
-              <ShieldAlert className="h-3.5 w-3.5" />
-              {hiddenByTierPolicy} leagues require commissioner invite
-            </div>
-          ) : null}
-        </div>
-      </section>
+    <div className="space-y-6">
+      {/* The Career Level rule, said once, under the header (it had its own box with "Class Division"). */}
+      <div className="-mt-2 space-y-1 text-sm" style={{ color: "var(--muted)" }} data-testid="find-league-career-rule">
+        <p>{m.careerRule}</p>
+        {hiddenByTierPolicy > 0 ? (
+          <p className="font-semibold" style={{ color: "rgb(251, 146, 60)" }} data-testid="find-league-invite-needed">
+            {m.inviteNeeded(hiddenByTierPolicy)}
+          </p>
+        ) : null}
+      </div>
       {paidHiddenMessage ? (
         <p
           className="rounded-xl border px-4 py-3 text-sm"
@@ -437,24 +429,24 @@ export function FindLeagueClient() {
           {paidHiddenMessage}
         </p>
       ) : null}
-      <SmartDiscoverySection sport={sport} />
-      {/* Search — mobile first */}
-      <div className="flex flex-col gap-3">
+
+      {/* Search first: it is what the page is for. Sport and Sort beside it; the rest folded. */}
+      <div className="flex flex-col gap-3" data-testid="find-league-search">
         <div className="flex gap-2">
           <input
             type="search"
-            placeholder='Try "12 team dynasty snake, free, weeknights"'
+            placeholder={m.searchPlaceholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             data-testid="find-league-search-input"
-            className="flex-1 rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500/40 focus:border-cyan-500/40 transition-[box-shadow,border-color]"
+            className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500/40 focus:border-cyan-500/40 transition-[box-shadow,border-color]"
             style={{
               borderColor: "var(--border)",
               background: "var(--panel)",
               color: "var(--text)",
             }}
-            aria-label="Search leagues"
+            aria-label={m.searchLabel}
           />
           <button
             type="button"
@@ -464,293 +456,313 @@ export function FindLeagueClient() {
             style={{ background: "var(--accent)", color: "var(--bg)" }}
           >
             <Search className="h-4 w-4" />
-            Search
+            {m.search}
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowFilters((v) => !v)}
-          className="text-sm font-medium flex items-center gap-2 sm:hidden"
-          style={{ color: "var(--accent)" }}
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          <span>{showFilters ? 'Hide filters' : 'Filters'}</span>
-          {activeFilterCount > 0 && (
-            <span className="rounded-full bg-cyan-500/80 px-1.5 py-0.5 text-[11px] font-bold text-white leading-none">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-        <SavedSearches filterKey={filterKey} label={currentSearchLabel()} hasFilters={activeFilterCount > 0 || appliedQuery.trim() !== ""} />
         {searchReadAs.length > 0 ? (
           <p className="text-xs" style={{ color: "var(--muted)" }} data-testid="find-league-search-read-as">
-            Searching for <span style={{ color: "var(--text)" }}>{searchReadAs.join(" · ")}</span>. Change any of it in
-            the filters below.
+            {m.readAs} <span style={{ color: "var(--text)" }}>{searchReadAs.join(" · ")}</span>. {m.readAsAfter}
           </p>
         ) : null}
-      </div>
-
-      {/* What the league is like — the one thing the format filters can't say. */}
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="League vibe" data-testid="find-league-vibes">
-        {(["all", ...LEAGUE_VIBES.map((v) => v.id)] as LeagueVibeFilter[]).map((value) => {
-          const active = vibe === value
-          return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setVibe(value)}
-              className="min-h-[36px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
-              style={{
-                borderColor: active ? "var(--accent)" : "var(--border)",
-                background: active ? "color-mix(in srgb, var(--accent) 16%, var(--panel))" : "var(--panel)",
-                color: active ? "var(--text)" : "var(--muted)",
-              }}
-            >
-              {value === "all" ? "Any vibe" : vibeLabel(value)}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Filters — collapsible on mobile */}
-      <div
-        className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${showFilters ? "block" : "hidden sm:grid"}`}
-        role="group"
-        aria-label="League filters"
-      >
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Sport
-          </span>
-          <select
-            value={sport}
-            onChange={(e) => {
-              setSport(e.target.value)
-              setPage(1)
-            }}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            <option value="">All sports</option>
-            {sports.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            League type
-          </span>
-          <select
-            value={leagueType}
-            onChange={(e) => {
-              setLeagueType(e.target.value as LeagueStyleFilter)
-            }}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            {LEAGUE_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Draft type
-          </span>
-          <select
-            value={draftType}
-            onChange={(e) => {
-              setDraftType(e.target.value as DraftTypeFilter)
-            }}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            {DRAFT_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Team count
-          </span>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              min={2}
-              max={24}
-              placeholder="Min"
-              value={teamCountMin}
-              onChange={(e) => {
-                setTeamCountMin(e.target.value)
-              }}
-              className="w-20 rounded-lg border px-2 py-2 text-sm"
-              style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-            />
-            <input
-              type="number"
-              min={2}
-              max={24}
-              placeholder="Max"
-              value={teamCountMax}
-              onChange={(e) => {
-                setTeamCountMax(e.target.value)
-              }}
-              className="w-20 rounded-lg border px-2 py-2 text-sm"
-              style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-            />
-          </div>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Draft status
-          </span>
-          <select
-            value={draftStatus}
-            onChange={(e) => {
-              setDraftStatus(e.target.value as DraftStatusFilter)
-            }}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            {DRAFT_STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Entry fee
-          </span>
-          <select
-            value={entryFee}
-            onChange={(e) => {
-              setEntryFee(e.target.value as EntryFeeFilter)
-            }}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            {ENTRY_FEE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            AI features
-          </span>
-          <label className="flex items-center gap-2 mt-1">
-            <input
-              type="checkbox"
-              checked={aiEnabled}
-              onChange={(e) => {
-                setAiEnabled(e.target.checked)
-              }}
-              className="rounded border"
-              style={{ borderColor: "var(--border)" }}
-            />
-            <span className="text-sm" style={{ color: "var(--text)" }}>
-              AI enabled
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+          <label className="block sm:w-48">
+            <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+              {m.sport}
             </span>
+            <select
+              value={sport}
+              onChange={(e) => {
+                setSport(e.target.value)
+                setPage(1)
+              }}
+              data-testid="find-league-sport"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+            >
+              <option value="">{m.allSports}</option>
+              {sports.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </label>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Draft time (your clock)
-          </span>
-          <select
-            value={draftWhen}
-            onChange={(e) => {
-              setDraftWhen(e.target.value as DraftWhenFilter)
-            }}
-            data-testid="find-league-draft-when"
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+          <label className="block sm:w-48">
+            <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+              {m.sort}
+            </span>
+            <select
+              value={sort}
+              onChange={(e) => {
+                setSort(e.target.value as DiscoverySort)
+              }}
+              data-testid="find-league-sort"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+            >
+              {sortOptions(m).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            aria-controls="find-league-more"
+            data-testid="find-league-more-toggle"
+            className="col-span-2 inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium sm:col-span-1"
+            style={{ borderColor: "var(--border)", color: "var(--text)" }}
           >
-            {DRAFT_WHEN_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            League time zone
-          </span>
-          <select
-            value={tzRegion}
-            onChange={(e) => {
-              setTzRegion(e.target.value as TimeZoneRegionFilter)
-            }}
-            data-testid="find-league-tz-region"
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            {TZ_REGION_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Visibility
-          </span>
-          <select
-            value={visibility}
-            onChange={(e) => {
-              setVisibility(e.target.value as VisibilityFilter)
-            }}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            {VISIBILITY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-            Sort
-          </span>
-          <select
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value as DiscoverySort)
-            }}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            {m.moreFilters}
+            {moreCount > 0 ? (
+              <span
+                className="rounded-full px-1.5 py-0.5 text-[11px] font-bold leading-none"
+                style={{ background: "var(--accent)", color: "var(--bg)" }}
+                data-testid="find-league-more-count"
+              >
+                {m.moreFiltersOn(moreCount)}
+              </span>
+            ) : null}
+            <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
       </div>
+
+      {moreOpen ? (
+        <div id="find-league-more" className="space-y-4 rounded-xl border p-3 sm:p-4" style={{ borderColor: "var(--border)" }} data-testid="find-league-more">
+          {/* What the league is like — the one thing the format filters can't say. */}
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="League vibe" data-testid="find-league-vibes">
+            {(["all", ...LEAGUE_VIBES.map((v) => v.id)] as LeagueVibeFilter[]).map((value) => {
+              const active = vibe === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setVibe(value)}
+                  className="min-h-[36px] rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+                  style={{
+                    borderColor: active ? "var(--accent)" : "var(--border)",
+                    background: active ? "color-mix(in srgb, var(--accent) 16%, var(--panel))" : "var(--panel)",
+                    color: active ? "var(--text)" : "var(--muted)",
+                  }}
+                >
+                  {value === "all" ? "Any vibe" : vibeLabel(value)}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="group" aria-label="League filters">
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                League type
+              </span>
+              <select
+                value={leagueType}
+                onChange={(e) => {
+                  setLeagueType(e.target.value as LeagueStyleFilter)
+                }}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+              >
+                {LEAGUE_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                Draft type
+              </span>
+              <select
+                value={draftType}
+                onChange={(e) => {
+                  setDraftType(e.target.value as DraftTypeFilter)
+                }}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+              >
+                {DRAFT_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                Team count
+              </span>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={2}
+                  max={24}
+                  placeholder="Min"
+                  value={teamCountMin}
+                  onChange={(e) => {
+                    setTeamCountMin(e.target.value)
+                  }}
+                  className="w-20 rounded-lg border px-2 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+                />
+                <input
+                  type="number"
+                  min={2}
+                  max={24}
+                  placeholder="Max"
+                  value={teamCountMax}
+                  onChange={(e) => {
+                    setTeamCountMax(e.target.value)
+                  }}
+                  className="w-20 rounded-lg border px-2 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                Draft status
+              </span>
+              <select
+                value={draftStatus}
+                onChange={(e) => {
+                  setDraftStatus(e.target.value as DraftStatusFilter)
+                }}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+              >
+                {DRAFT_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                Entry fee
+              </span>
+              <select
+                value={entryFee}
+                onChange={(e) => {
+                  setEntryFee(e.target.value as EntryFeeFilter)
+                }}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+              >
+                {ENTRY_FEE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                AI features
+              </span>
+              <label className="flex items-center gap-2 mt-1">
+                <input
+                  type="checkbox"
+                  checked={aiEnabled}
+                  onChange={(e) => {
+                    setAiEnabled(e.target.checked)
+                  }}
+                  className="rounded border"
+                  style={{ borderColor: "var(--border)" }}
+                />
+                <span className="text-sm" style={{ color: "var(--text)" }}>
+                  AI enabled
+                </span>
+              </label>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                Draft time (your clock)
+              </span>
+              <select
+                value={draftWhen}
+                onChange={(e) => {
+                  setDraftWhen(e.target.value as DraftWhenFilter)
+                }}
+                data-testid="find-league-draft-when"
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+              >
+                {DRAFT_WHEN_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                League time zone
+              </span>
+              <select
+                value={tzRegion}
+                onChange={(e) => {
+                  setTzRegion(e.target.value as TimeZoneRegionFilter)
+                }}
+                data-testid="find-league-tz-region"
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+              >
+                {TZ_REGION_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
+                Visibility
+              </span>
+              <select
+                value={visibility}
+                onChange={(e) => {
+                  setVisibility(e.target.value as VisibilityFilter)
+                }}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
+              >
+                {VISIBILITY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      ) : null}
+
+      {showPickedRows(total, loading) ? <SmartDiscoverySection sport={sport} m={m} /> : null}
 
       {/* Results */}
       <section>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          {!loading && leagues.length > 0 ? (
+            <p className="pt-2 text-sm font-medium" style={{ color: "var(--muted)" }} data-testid="find-league-found">
+              {m.found(total)}
+            </p>
+          ) : (
+            <span />
+          )}
+          <SavedSearches filterKey={filterKey} label={currentSearchLabel()} hasFilters={activeFilterCount > 0 || appliedQuery.trim() !== ""} m={m} />
+        </div>
         {showRankBands ? (
           <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="Rank level" data-testid="find-league-rank-bands">
-            {RANK_BAND_OPTIONS.map((o) => {
+            {rankBandOptions(m).map((o) => {
               const active = rankBand === o.value
               return (
                 <button
@@ -783,20 +795,14 @@ export function FindLeagueClient() {
           >
             <Inbox className="h-12 w-12 mx-auto mb-3" style={{ color: "var(--muted)" }} />
             <p className="font-medium" style={{ color: "var(--text)" }}>
-              No leagues match your filters
+              {m.noMatch}
             </p>
             <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-              {draftWhen !== "any"
-                ? "Only leagues with a scheduled draft can match a draft time. Try \"Any time\"."
-                : "Try changing sport, league type, or search."}
+              {draftWhen !== "any" ? m.noMatchDraftTime : m.noMatchHint}
             </p>
           </div>
         ) : (
           <>
-            <p className="text-sm font-medium mb-4" style={{ color: "var(--muted)" }}>
-              {total} league{total !== 1 ? "s" : ""} found
-              {sort === "ranking_match" ? " · sorted by rank fit" : ""}
-            </p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {leagues.map((league) => (
                 <FindLeagueCard key={`${league.source}-${league.id}`} league={league} />
@@ -814,10 +820,10 @@ export function FindLeagueClient() {
                   className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
                   style={{ borderColor: "var(--border)", color: "var(--text)" }}
                 >
-                  Previous
+                  {m.previous}
                 </button>
                 <span className="px-3 py-2 text-sm" style={{ color: "var(--muted)" }}>
-                  Page {page} of {totalPages}
+                  {m.pageOf(page, totalPages)}
                 </span>
                 <button
                   type="button"
@@ -826,7 +832,7 @@ export function FindLeagueClient() {
                   className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
                   style={{ borderColor: "var(--border)", color: "var(--text)" }}
                 >
-                  Next
+                  {m.next}
                 </button>
               </nav>
             )}
@@ -844,7 +850,7 @@ type SavedSearch = { id: string; label: string; query: string; lastAlertedAt: st
  * notifications from the daily check (lib/public-discovery/runSavedSearchAlerts.ts). A saved
  * search opens with a full page load so every filter is read back from its URL.
  */
-function SavedSearches({ filterKey, label, hasFilters }: { filterKey: string; label: string; hasFilters: boolean }) {
+function SavedSearches({ filterKey, label, hasFilters, m }: { filterKey: string; label: string; hasFilters: boolean; m: GuideCopy }) {
   const [searches, setSearches] = useState<SavedSearch[]>([])
   const [status, setStatus] = useState("")
   const [busy, setBusy] = useState(false)
@@ -890,19 +896,19 @@ function SavedSearches({ filterKey, label, hasFilters }: { filterKey: string; la
   }
 
   return (
-    <div className="flex flex-col gap-2" data-testid="find-league-saved-searches">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col items-end gap-2" data-testid="find-league-saved-searches">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
           onClick={() => void save()}
           disabled={busy || !hasFilters}
-          title={hasFilters ? undefined : "Pick a filter or search first"}
+          title={hasFilters ? undefined : m.alertNeedsFilter}
           data-testid="find-league-save-search"
           className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50"
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
         >
           <Bell className="h-3.5 w-3.5" />
-          Alert me when new leagues match
+          {m.alert}
         </button>
         {searches.map((s) => (
           <span
