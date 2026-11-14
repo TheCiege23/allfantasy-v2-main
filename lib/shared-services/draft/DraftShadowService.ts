@@ -171,7 +171,7 @@ export async function evaluateDraftShadowFromContext(
     },
     draftValue: {
       adp: top?.player.adp ?? null,
-      overallPickAtEvaluation: ctx.overallPick,
+      overallPickAtEvaluation: ctx.pick,
     },
     scarcityImpact: {
       insight: primary.scarcityInsight,

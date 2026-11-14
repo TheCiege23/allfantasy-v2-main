@@ -31,9 +31,9 @@ function makeContext(overrides: Partial<DraftDecisionContext> = {}): DraftDecisi
     isDynasty: false,
     isSF: false,
     round: 3,
-    // Pick within the round; the overall pick is carried separately (fixed 2026-11-14).
-    pick: 6,
-    overallPick: 30,
+    // Overall pick; the pick within the round is carried separately (fixed 2026-11-14).
+    pick: 30,
+    pickInRound: 6,
     scoringWindow: null,
     totalTeams: 12,
     status: 'in_progress',
