@@ -23,6 +23,13 @@
 .nl-workspace[data-format=redraft] .nls-card { border-radius: 14px; }
 .nl-workspace[data-format=redraft] .nls-card[data-tone=accent] { border-color: var(--rd-accent-line); background: var(--rd-surface-elev); }
 .nl-workspace[data-format=redraft] .nls-card[data-tone=accent] .nls-label { color: var(--rd-accent-text); }
+/* Titles read as words, data reads as data (2026-11-06). Screen eyebrows and card titles are sentence-case
+ * sans; mono caps stay on the data beside them — a card label's right-hand count, table headers, stat
+ * labels, chips. When every label was 11px mono caps nothing stood out, and a long one ("Sunday Night
+ * Redraft · My team") read slowest of all. */
+.nl-workspace[data-format=redraft] .nls-eyebrow,
+.nl-workspace[data-format=redraft] .nls-label { font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif); font-size: 13px; line-height: 1.3; letter-spacing: 0; text-transform: none; }
+.nl-workspace[data-format=redraft] .nls-label > span + span { font: 700 11px/1.2 var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
 .nl-workspace[data-format=redraft] .nls-seg { border-radius: 10px; }
 .nl-workspace[data-format=redraft] .nls-seg button { border-radius: 7px; }
 .nl-workspace[data-format=redraft] .nls-seg button[aria-pressed=true],
