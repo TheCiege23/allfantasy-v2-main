@@ -77,6 +77,7 @@ import {
 } from '@/lib/core-app/homePortfolioSummary'
 import { getChatBadge } from '@/lib/chat-core/chatBadge'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import { createRenderTimer } from '@/lib/core-app/renderTiming'
 import { loadYourGamesLeft } from '@/lib/core-app/remainingScheduleLoader'
 import {
   LeagueDataCoverage,
@@ -2067,6 +2068,21 @@ type CoreScreenContext = {
  * meta refresh to /login.)
  */
 async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
+  /*
+   * One `[render-timing]` line for any screen whose server render takes 1.5s or more, naming the
+   * screen (2026-11-14). Railway's tracing stops at the HTTP request, so "a tab took 7s" had no
+   * answer for WHICH tab; this is that answer. `try/finally` because a throw is still a render that
+   * took time, and the throw itself passes through untouched.
+   */
+  const timer = createRenderTimer('core-screen')
+  try {
+    return await CoreScreenBodyRender({ ctx })
+  } finally {
+    timer.done({ screen: ctx.activeKey, segment: ctx.segment, league: Boolean(ctx.selectedLeagueId) })
+  }
+}
+
+async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
   const {
     chimmyMovesRead,
     toolsViewerPlan,
@@ -2236,6 +2252,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const requestedWeekRaw = Array.isArray(sp.week) ? sp.week[0] : sp.week
   const requestedWeek = requestedWeekRaw != null ? Number.parseInt(requestedWeekRaw, 10) : NaN
 
+  /*
+   * ⚠ THE OVERVIEW'S TWO SIDE READS START WITH THE MAIN ONE (2026-11-14). The trade-deadline chip
+   * and the projected lineups need only the league, but they used to wait for the whole of
+   * `getLeagueHomeData` to finish first, adding their own time to every league switch. They are
+   * still shown only when the home read succeeds, exactly as before. `.catch` on each, so neither
+   * can reject unobserved while the main read is still running.
+   */
+  const homeSideReads = activeKey === 'home' && selectedLeagueId
+  const homeTradeDeadlineRead = homeSideReads
+    ? loadTradeDeadlineCountdown(selectedLeagueId).catch(() => null)
+    : Promise.resolve(null)
+  const homeLineupsRead =
+    homeSideReads && leagueCtx
+      ? leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
+      : Promise.resolve(null)
+
   const leagueHome =
     activeKey === 'home' && selectedLeagueId
       ? await getLeagueHomeData(
@@ -2261,22 +2296,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   // The enforced trade deadline, as a countdown chip on the Overview. A failed read costs the chip only.
-  const homeTradeDeadline = leagueHome
-    ? await loadTradeDeadlineCountdown(leagueHome.league.id).catch(() => null)
-    : null
+  const homeTradeDeadline = leagueHome ? await homeTradeDeadlineRead : null
 
   /*
    * This week's lineups, projected — AF beside API — as two columns on the Overview's Power board.
    * Display only: the power rank is all-play over scored weeks and never reads AF. A failed read
    * costs the columns and nothing else.
    */
-  const homeLineups =
-    activeKey === 'home' && leagueHome && leagueCtx
-      ? await leagueCtx
-          .league()
-          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
-          .catch(() => null)
-      : null
+  const homeLineups = activeKey === 'home' && leagueHome && leagueCtx ? await homeLineupsRead : null
 
   // Player Finder searches and selects entirely through query params — no client
   // fetch and no new API route, which matters because the repo is at the route
