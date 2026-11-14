@@ -20426,3 +20426,35 @@ model SleeperCareerSurvival {
   @@id([userId, platformLeagueId, season])
   @@map("sleeper_career_survival")
 }
+
+/// Phase 0: immutable Gmail captures. No transaction/body-template parsing.
+enum LeagueSafeEmailProcessingStatus {
+  captured
+  parsed
+  unparseable
+  rejected
+}
+
+model LeagueSafeRawEmail {
+  id                 String                         @id @default(cuid())
+  /// Gmail immutable message id, from the single confirmed bot inbox.
+  messageId          String                         @unique
+  /// Sender-supplied RFC Message-ID, preserved for inspection, not deduplication.
+  rfcMessageId       String?
+  /// Gmail internalDate (actual receipt), not the sender's Date header.
+  receivedAt         DateTime
+  from               String
+  to                 String
+  subject            String
+  rawBody            String                         @db.Text
+  authResults        Json
+  processingStatus   LeagueSafeEmailProcessingStatus @default(captured)
+  /// Reserved nullable scalar; the connection model belongs to Phase 1.
+  leagueConnectionId String?
+  rejectionReason    String?
+  createdAt          DateTime                       @default(now())
+
+  @@index([createdAt, id])
+  @@index([processingStatus, createdAt, id])
+  @@index([leagueConnectionId])
+}
