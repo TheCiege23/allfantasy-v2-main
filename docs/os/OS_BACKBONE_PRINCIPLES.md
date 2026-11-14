@@ -65,7 +65,7 @@ The real gap was **other rankers answering the same question their own way**. Wh
 | `draft-queue-engine/reorder-by-need.ts` | **On the engine's need model** (`computeNeeds`), with the league's real slots and superflex/2QB |
 | `bestball/ai/draftAssistant.ts` | **Kept, on purpose.** Best ball has no lineup to set; its depth targets and stack rules are a different question |
 | `ai/opponents/draft`, `mock-draft-simulator/DraftAIManager`, `mock-draft/ai-pick` (`pick`), `predict-board`, `sleeperDraftBoard` | **Kept, on purpose.** They simulate *other drafters* (bots, personalities, ADP-order CPUs). Advice to you and a prediction of them are different jobs |
-| `app/api/draft/ai/*`, `ai/draft-help` | LLM text only. Grounding them in the engine's output is the next step |
+| `app/api/draft/ai/*` (best-pick, roster-fit, scarcity, pick-survival, queue-suggestions) | **Grounded in the engine** (`lib/draft/engineGrounding*.ts`). Claude gets the engine's top choice, the roster needs and the live available list, and recommends only from that list. Off-board names are dropped, and when Claude is down the engine's pick is returned. `grade` and `draft-recap` review a finished draft, and `ai/draft-help` explains settings, so those three are not pick advice |
 
 Still open: auctions (the decision refuses them) and replacement-value scoring
 (`DRAFT_VORP_MODE`, computed but in `observe`).
@@ -153,8 +153,8 @@ portal, with:
    they should be summary-cached, and they depend on an event store that is still thin in
    production. Signal text is English-only today, as it is on `/manager-hub`; localize it at the
    signal source rather than in the page.
-2. **Finish the draft engine (§2.1).** Ground the LLM draft routes in the engine's output, add
-   auction bid advice, and measure `DRAFT_VORP_MODE=active` against observe before switching it on.
+2. **Finish the draft engine (§2.1).** Add auction bid advice, and measure `DRAFT_VORP_MODE=active`
+   against observe before switching it on. The LLM tips were grounded on 2026-11-14.
    Draft season is when most new users arrive.
 3. **A "what changed since you looked" feed** driven by the sports-os reaction events. Injuries,
    trades and waiver results get pushed instead of polled, using the notification outbox and the
