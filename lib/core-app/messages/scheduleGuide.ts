@@ -49,18 +49,36 @@ export const scheduleGuideMessages = defineMessages({
       `${week != null ? `Week ${week} · ` : ''}${label}${next ? ` — ${next}` : ''}`,
     /** "trade deadline next week" — the next item in a headline, lower-cased as part of a sentence. */
     nextInline: (label: string, when: string) => `${label.charAt(0).toLowerCase()}${label.slice(1)} ${when}`,
-    /** The forward headline (2026-11-13 follow-up): what is left, and the next game. */
+    /**
+     * The forward headline. 2026-11-14: it says "after this week" — "4 games left" in week 10 read as if
+     * this week's game were one of them — and names the opponent before the week.
+     */
     headAhead: (n: number, beforePlayoffs: boolean, week: number, opp: string, r: { wins: number; losses: number; ties: number } | null) =>
-      `${n} ${n === 1 ? 'game' : 'games'} left${beforePlayoffs ? ' before the playoffs' : ''} · next: week ${week} vs ${opp}${rec(r) ? ` (${rec(r)})` : ''}`,
-    intro: 'What’s coming up in this league: your game each week, the deadlines, and when the playoffs start.',
+      `After this week: ${n} ${n === 1 ? 'game' : 'games'}${beforePlayoffs ? ' before the playoffs' : ' left'}. Next: ${opp}${rec(r) ? ` (${rec(r)})` : ''} in week ${week}.`,
+    intro: 'Who you play the rest of the way, the deadlines, and when the playoffs start.',
     gamesLeftTitle: 'Your games left',
-    gamesLeftSub: (beforePlayoffs: boolean): string => (beforePlayoffs ? 'Regular season, after this week' : 'After this week'),
+    /** How many of the games left are against top teams; the screen shows nothing when none are. */
+    toughSummary: (tough: number, of: number): string =>
+      tough === of
+        ? of === 1
+          ? 'It’s against a top team.'
+          : `All ${of} are against top teams.`
+        : tough === 1
+          ? `1 of your ${of} is against a top team.`
+          : `${tough} of your ${of} are against top teams.`,
     gameLeftWeek: (week: number) => `Week ${week}`,
     gameLeftRecord: (r: { wins: number; losses: number; ties: number } | null) => rec(r) ?? '',
     tough: 'Tough',
     toughTitle: 'In the top third of the league by record',
+    /** This week's game in words (2026-11-14), the same verbs as the headline: lead, trail, tied. */
     thisWeekScore: (week: number, opp: string, you: number, them: number, started: boolean) =>
-      started ? `This week (week ${week}): you ${pts(you)}, ${opp} ${pts(them)}` : `This week (week ${week}): you vs ${opp}`,
+      !started
+        ? `This week: you vs ${opp}.`
+        : you > them
+          ? `This week you lead ${opp} ${pts(you)} to ${pts(them)}.`
+          : you < them
+            ? `This week you trail ${opp} ${pts(you)} to ${pts(them)}.`
+            : `This week you’re tied with ${opp} at ${pts(you)}.`,
     whatsNext: 'What’s next',
     now: 'Now',
     thisWeek: 'this week',
@@ -74,9 +92,8 @@ export const scheduleGuideMessages = defineMessages({
     rulesWaivers: 'Waiver rules and claims',
     rulesTrades: 'Trade rules and offers',
     /** The games list's heading; the week is already in the switcher and the panel's own label. */
-    games: 'Games',
+    games: 'All games',
     startsWeek: (n: number) => `starts week ${n}`,
-    yourGame: 'Your game is highlighted.',
     prevWeek: 'Previous week',
     nextWeekBtn: 'Next week',
     weekLabel: 'Week',
@@ -92,17 +109,30 @@ export const scheduleGuideMessages = defineMessages({
       }`,
     headPhase: (week, label, next) => `${week != null ? `Semana ${week} · ` : ''}${label}${next ? ` — ${next}` : ''}`,
     nextInline: (label, when) => `${label.charAt(0).toLowerCase()}${label.slice(1)} ${when}`,
-    intro: 'Lo que viene en esta liga: tu partido de cada semana, las fechas límite y cuándo empiezan los playoffs.',
+    intro: 'A quién te enfrentas hasta el final, las fechas límite y cuándo empiezan los playoffs.',
     headAhead: (n, beforePlayoffs, week, opp, r) =>
-      `${n === 1 ? 'Queda 1 partido' : `Quedan ${n} partidos`}${beforePlayoffs ? ' antes de los playoffs' : ''} · próximo: semana ${week} contra ${opp}${rec(r) ? ` (${rec(r)})` : ''}`,
+      `Después de esta semana: ${n === 1 ? 'queda 1 partido' : `quedan ${n} partidos`}${beforePlayoffs ? ' antes de los playoffs' : ''}. Próximo: ${opp}${rec(r) ? ` (${rec(r)})` : ''} en la semana ${week}.`,
     gamesLeftTitle: 'Tus partidos restantes',
-    gamesLeftSub: (beforePlayoffs) => (beforePlayoffs ? 'Temporada regular, después de esta semana' : 'Después de esta semana'),
+    toughSummary: (tough, of) =>
+      tough === of
+        ? of === 1
+          ? 'Es contra un equipo de arriba.'
+          : `Los ${of} son contra equipos de arriba.`
+        : tough === 1
+          ? `1 de tus ${of} es contra un equipo de arriba.`
+          : `${tough} de tus ${of} son contra equipos de arriba.`,
     gameLeftWeek: (week) => `Semana ${week}`,
     gameLeftRecord: (r) => rec(r) ?? '',
     tough: 'Difícil',
     toughTitle: 'En el tercio de arriba de la liga por récord',
     thisWeekScore: (week, opp, you, them, started) =>
-      started ? `Esta semana (semana ${week}): tú ${pts(you)}, ${opp} ${pts(them)}` : `Esta semana (semana ${week}): tú contra ${opp}`,
+      !started
+        ? `Esta semana: tú contra ${opp}.`
+        : you > them
+          ? `Esta semana le ganas a ${opp} ${pts(you)} a ${pts(them)}.`
+          : you < them
+            ? `Esta semana pierdes contra ${opp} ${pts(you)} a ${pts(them)}.`
+            : `Esta semana empatas con ${opp} a ${pts(you)}.`,
     whatsNext: 'Lo que viene',
     now: 'Ahora',
     thisWeek: 'esta semana',
@@ -114,9 +144,8 @@ export const scheduleGuideMessages = defineMessages({
     phaseDetail: (detail) => DETAIL_ES[detail] ?? detail,
     rulesWaivers: 'Reglas de reclamos',
     rulesTrades: 'Reglas de intercambios y ofertas',
-    games: 'Partidos',
+    games: 'Todos los partidos',
     startsWeek: (n) => `empieza en la semana ${n}`,
-    yourGame: 'Tu partido está resaltado.',
     prevWeek: 'Semana anterior',
     nextWeekBtn: 'Semana siguiente',
     weekLabel: 'Semana',
