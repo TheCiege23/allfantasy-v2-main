@@ -127,7 +127,8 @@ export function runEngineForGrounding(args: {
     available,
     teamRoster,
     round: Math.ceil(overallPick / Math.max(1, totalTeams)),
-    pick: overallPick,
+    // The engine's `pick` is the pick WITHIN the round; it derives the overall pick itself.
+    pick: ((overallPick - 1) % Math.max(1, totalTeams)) + 1,
     totalTeams,
     sport,
     mode: 'needs',

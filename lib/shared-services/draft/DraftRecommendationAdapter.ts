@@ -88,7 +88,7 @@ export async function runLegacyDraftGrader(ctx: DraftDecisionContext): Promise<L
       isDevy: ctx.isDevy,
       round: ctx.round,
       pickInRound: ctx.pick,
-      overallPick: ctx.pick,
+      overallPick: ctx.overallPick,
       rosterCounts,
       queue: [],
       available,
