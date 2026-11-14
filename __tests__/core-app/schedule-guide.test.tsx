@@ -42,7 +42,7 @@ describe('weekSpan', () => {
 describe('whatsNext', () => {
   it('drops past phases, counts weeks from now, strips provenance and reads "N teams"', () => {
     const items = whatsNext({ timeline: H2H, calendar: [], currentWeek: 10 })
-    expect(items.map((i) => i.key)).toEqual(['regular-early', 'trade-deadline', 'playoffs', 'offseason-next'])
+    expect(items.map((i) => i.key)).toEqual(['regular-early', 'trade-deadline', 'playoffs'])
     expect(items[1]).toMatchObject({ away: 1, detail: 'No trades accepted after it' })
     expect(items[2]).toMatchObject({ away: 5, teams: 6, detail: null })
     expect(items[0]!.away).toBeNull()
@@ -208,8 +208,8 @@ describe('LeagueSchedule — games left and the forward headline', () => {
 
   it('leads with what is left before the playoffs and the next game; this week’s score is one line under it', () => {
     render(<LeagueSchedule data={withGame} gamesLeft={gamesLeft} />)
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2 games left before the playoffs · next: week 11 vs Three (7-2)')
-    expect(document.querySelector('.af-sg-thisweek')?.textContent).toBe('This week (week 10): you 20.3, Riley 18.1')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('After this week: 2 games before the playoffs. Next: Three (7-2) in week 11.')
+    expect(document.querySelector('.af-sg-thisweek')?.textContent).toBe('This week you lead Riley 20.3 to 18.1.')
     const list = screen.getByTestId('schedule-games-left')
     expect([...list.querySelectorAll('.af-sg-left-opp')].map((e) => e.textContent)).toEqual(['Three', 'Four'])
     expect(list.querySelector('[data-tough] .af-sg-badge')?.textContent).toBe('Tough')
@@ -219,5 +219,91 @@ describe('LeagueSchedule — games left and the forward headline', () => {
     render(<LeagueSchedule data={withGame} gamesLeft={null} />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Week 10 · you vs Riley — you lead 20.3 to 18.1')
     expect(screen.queryByTestId('schedule-games-left')).toBeNull()
+  })
+})
+
+/* ── 2026-11-14: one regular season, the offseason later, this week in words ─────────────────────────── */
+describe('Schedule — simpler (2026-11-14)', () => {
+  const SPLIT: TimelinePhase[] = [
+    { key: 'regular-early', label: 'Regular season', when: 'WK 1-12', state: 'now' },
+    { key: 'trade-deadline', label: 'Trade deadline', when: 'WK 12', state: 'future', detail: 'Read from this league — no trades accepted after it' },
+    { key: 'regular-late', label: 'Run-in', when: 'WK 13-14', state: 'future' },
+    { key: 'playoffs', label: 'Playoffs', when: 'WK 15-16', state: 'future', detail: '8 teams' },
+    { key: 'championship', label: 'Championship', when: 'WK 17', state: 'future' },
+    { key: 'offseason-next', label: 'Offseason', when: null, state: 'future', detail: 'Rookie draft order, keepers and taxi decisions' },
+  ]
+
+  it('says the regular season once, weeks 1–14, and never "Run-in"', () => {
+    const items = whatsNext({ timeline: SPLIT, calendar: [], currentWeek: 10 })
+    expect(items.map((i) => [i.label, i.span, i.state])).toEqual([
+      ['Regular season', { start: 1, end: 14 }, 'now'],
+      ['Trade deadline', { start: 12, end: 12 }, 'future'],
+      ['Playoffs', { start: 15, end: 16 }, 'future'],
+      ['Championship', { start: 17, end: 17 }, 'future'],
+    ])
+    expect(items.find((i) => i.label === 'Trade deadline')?.away).toBe(2)
+  })
+
+  it('after the deadline the regular season is still the one row, and still "now"', () => {
+    const late = SPLIT.map((p) =>
+      p.key === 'regular-early' ? { ...p, state: 'past' as const } : p.key === 'trade-deadline' ? { ...p, state: 'past' as const } : p.key === 'regular-late' ? { ...p, state: 'now' as const } : p,
+    )
+    const items = whatsNext({ timeline: late, calendar: [], currentWeek: 13 })
+    expect(items[0]).toMatchObject({ label: 'Regular season', state: 'now', span: { start: 1, end: 14 } })
+    expect(items.some((i) => i.label === 'Run-in')).toBe(false)
+  })
+
+  it('the offseason shows once the playoffs are under way', () => {
+    const playoffs = SPLIT.map((p) => (p.key === 'playoffs' ? { ...p, state: 'now' as const } : p.key.startsWith('regular') || p.key === 'trade-deadline' ? { ...p, state: 'past' as const } : p))
+    expect(whatsNext({ timeline: playoffs, calendar: [], currentWeek: 15 }).map((i) => i.label)).toEqual(['Playoffs', 'Championship', 'Offseason'])
+  })
+
+  it('renders: no Run-in, no Offseason in week 10, no "Your game is highlighted", the tough count said once', () => {
+    const gamesLeft = [
+      { week: 11, opponentId: 'a', opponentName: 'A', record: { wins: 6, losses: 3, ties: 0 }, tough: true },
+      { week: 12, opponentId: 'b', opponentName: 'B', record: { wins: 5, losses: 4, ties: 0 }, tough: true },
+      { week: 13, opponentId: 'c', opponentName: 'C', record: { wins: 3, losses: 6, ties: 0 }, tough: false },
+      { week: 14, opponentId: 'd', opponentName: 'D', record: { wins: 5, losses: 4, ties: 0 }, tough: true },
+    ]
+    render(
+      <LeagueSchedule
+        data={data({
+          timeline: { available: true, data: SPLIT },
+          matchup: { available: true, data: { week: 10, season: 2026, you: { name: 'Me', points: 0 }, opponent: { name: 'Dolphins', points: 13 }, winProbability: null } },
+          scoreboard: { available: true, data: { seasonYear: 2026, week: 10, games: [], allUnplayed: false, unpaired: [], projectionBasis: null, unpricedReason: null } },
+        } as unknown as Partial<LeagueHomeData>)}
+        gamesLeft={gamesLeft}
+      />,
+    )
+    const text = document.body.textContent ?? ''
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('After this week: 4 games before the playoffs. Next: A (6-3) in week 11.')
+    expect(document.querySelector('.af-sg-thisweek')?.textContent).toBe('This week you trail Dolphins 0.0 to 13.0.')
+    expect(screen.getByTestId('schedule-tough-summary').textContent).toBe('3 of your 4 are against top teams.')
+    expect(text).toContain('weeks 1–14')
+    expect(text).toContain('All games')
+    for (const gone of ['Run-in', 'Offseason', 'Your game is highlighted', 'Regular season, after this week', 'This week (week']) {
+      expect(text).not.toContain(gone)
+    }
+  })
+
+  it('says nothing about tough games when there are none', () => {
+    const easy = [{ week: 11, opponentId: 'c', opponentName: 'C', record: { wins: 3, losses: 6, ties: 0 }, tough: false }]
+    render(<LeagueSchedule data={data()} gamesLeft={easy} />)
+    expect(screen.queryByTestId('schedule-tough-summary')).toBeNull()
+  })
+
+  it('this week and the tough count in plain words, English and Spanish', () => {
+    const en = scheduleGuideMessages.en
+    const es = scheduleGuideMessages.es!
+    expect(en.thisWeekScore(10, 'X', 0, 0, false)).toBe('This week: you vs X.')
+    expect(en.thisWeekScore(10, 'X', 20, 20, true)).toBe('This week you’re tied with X at 20.0.')
+    expect(en.toughSummary(1, 4)).toBe('1 of your 4 is against a top team.')
+    expect(en.toughSummary(4, 4)).toBe('All 4 are against top teams.')
+    expect(en.toughSummary(1, 1)).toBe('It’s against a top team.')
+    expect(en.headAhead(1, true, 14, 'Z', null)).toBe('After this week: 1 game before the playoffs. Next: Z in week 14.')
+    expect(en.headAhead(3, false, 11, 'Z', null)).toBe('After this week: 3 games left. Next: Z in week 11.')
+    expect(es.thisWeekScore!(10, 'X', 0, 13, true)).toBe('Esta semana pierdes contra X 0.0 a 13.0.')
+    expect(es.headAhead!(4, true, 11, 'Z', { wins: 6, losses: 3, ties: 0 })).toBe('Después de esta semana: quedan 4 partidos antes de los playoffs. Próximo: Z (6-3) en la semana 11.')
+    expect(es.toughSummary!(3, 4)).toBe('3 de tus 4 son contra equipos de arriba.')
   })
 })

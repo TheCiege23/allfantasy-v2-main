@@ -81,6 +81,7 @@ export default function LeagueSchedule({
   const playoffStart = items.find((i) => i.label === 'Playoffs')?.span?.start ?? null
   const left = (gamesLeft ?? []).filter((g) => playoffStart == null || g.week < playoffStart)
   const nextGame = left[0] ?? null
+  const toughLeft = left.filter((g) => g.tough).length
   const title = nextGame
     ? m.headAhead(left.length, playoffStart != null, nextGame.week, nextGame.opponentName, nextGame.record)
     : headlineText(headline, m)
@@ -109,7 +110,12 @@ export default function LeagueSchedule({
       {left.length > 0 ? (
         <section className="af-tw-panel af-sg-left" aria-labelledby="af-sg-left-title" data-testid="schedule-games-left">
           <h2 id="af-sg-left-title">{m.gamesLeftTitle}</h2>
-          <p className="af-sg-note">{m.gamesLeftSub(playoffStart != null)}</p>
+          {/* 2026-11-14: the one thing worth saying about the list, or nothing ("Regular season, after this week" said what the headline already had). */}
+          {toughLeft > 0 ? (
+            <p className="af-sg-note" data-testid="schedule-tough-summary">
+              {m.toughSummary(toughLeft, left.length)}
+            </p>
+          ) : null}
           <ol className="af-sg-left-list">
             {left.map((g) => (
               <li key={`${g.week}-${g.opponentId}`} className="af-sg-left-row" data-tough={g.tough || undefined}>
@@ -200,7 +206,6 @@ export default function LeagueSchedule({
         {picker?.isFuture ? <p className="af-sg-note">{m.futureWeek(picker.selected)}</p> : null}
         {data.scoreboard.available ? (
           <>
-            {headline.kind === 'game' ? <p className="af-sg-note">{m.yourGame}</p> : null}
             <LeagueScoreboardPanel board={data.scoreboard.data} />
           </>
         ) : (

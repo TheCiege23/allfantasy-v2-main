@@ -74,7 +74,7 @@ export function whatsNext(input: {
   now?: Date
 }): NextItem[] {
   const items: NextItem[] = []
-  for (const p of input.timeline ?? []) {
+  for (const p of oneRegularSeason(input.timeline ?? [])) {
     if (p.state === 'past') continue
     const span = weekSpan(p.when)
     const away = p.state === 'now' || span == null || input.currentWeek == null ? null : Math.max(0, span.start - input.currentWeek)
@@ -98,7 +98,33 @@ export function whatsNext(input: {
     if (!Number.isFinite(ms) || ms < nowMs) continue
     items.push({ key: `cal-${e.key}`, label: e.label, state: 'future', span: null, away: null, at: e.at, whenText: null, detail: null, teams: null })
   }
-  return items
+  /*
+   * 2026-11-14: the offseason waits until the playoffs are under way. In week 10, "Offseason · Rookie draft
+   * order, keepers and taxi decisions" is a season away and only lengthens the list.
+   */
+  const playoffsAhead = items.some((i) => i.label === 'Playoffs' && i.state === 'future')
+  return playoffsAhead ? items.filter((i) => i.label !== 'Offseason') : items
+}
+
+/**
+ * The regular season as ONE row (2026-11-14).
+ *
+ * ⚠ seasonTimeline.ts splits the regular season around the trade deadline — "Regular season WK 1-12" and
+ * "Run-in WK 13-14" — which is right for the data and wrong on this tab: "Your games left" calls weeks 13
+ * and 14 the regular season, so the page contradicted itself, and "Run-in" is a word nobody uses. Here the
+ * two halves become one "Regular season weeks 1–14"; the trade deadline stays its own row. The timeline
+ * itself is untouched, because other screens read it.
+ */
+function oneRegularSeason(timeline: ReadonlyArray<TimelinePhase>): TimelinePhase[] {
+  const early = timeline.find((p) => p.key === 'regular-early')
+  const late = timeline.find((p) => p.key === 'regular-late')
+  const a = early ? weekSpan(early.when) : null
+  const b = late ? weekSpan(late.when) : null
+  if (!early || !late || !a || !b) return [...timeline]
+  const state: TimelinePhase['state'] =
+    early.state === 'now' || late.state === 'now' ? 'now' : late.state === 'past' ? 'past' : 'future'
+  const merged: TimelinePhase = { ...early, key: 'regular', when: b.end == null ? `week ${a.start} onward` : `WK ${a.start}-${b.end}`, state }
+  return timeline.filter((p) => p !== late).map((p) => (p === early ? merged : p))
 }
 
 export type ScheduleHeadline =
