@@ -9,6 +9,7 @@ import { defineMessages } from '@/lib/i18n/messages'
  * anything unknown falls through unchanged rather than being guessed.
  */
 const pts = (n: number) => n.toFixed(1)
+const rec = (r: { wins: number; losses: number; ties: number } | null) => (r ? (r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties}` : `${r.wins}-${r.losses}`) : null)
 
 const PHASE_ES: Record<string, string> = {
   'Regular season': 'Temporada regular',
@@ -48,7 +49,18 @@ export const scheduleGuideMessages = defineMessages({
       `${week != null ? `Week ${week} · ` : ''}${label}${next ? ` — ${next}` : ''}`,
     /** "trade deadline next week" — the next item in a headline, lower-cased as part of a sentence. */
     nextInline: (label: string, when: string) => `${label.charAt(0).toLowerCase()}${label.slice(1)} ${when}`,
+    /** The forward headline (2026-11-13 follow-up): what is left, and the next game. */
+    headAhead: (n: number, beforePlayoffs: boolean, week: number, opp: string, r: { wins: number; losses: number; ties: number } | null) =>
+      `${n} ${n === 1 ? 'game' : 'games'} left${beforePlayoffs ? ' before the playoffs' : ''} · next: week ${week} vs ${opp}${rec(r) ? ` (${rec(r)})` : ''}`,
     intro: 'What’s coming up in this league: your game each week, the deadlines, and when the playoffs start.',
+    gamesLeftTitle: 'Your games left',
+    gamesLeftSub: (beforePlayoffs: boolean): string => (beforePlayoffs ? 'Regular season, after this week' : 'After this week'),
+    gameLeftWeek: (week: number) => `Week ${week}`,
+    gameLeftRecord: (r: { wins: number; losses: number; ties: number } | null) => rec(r) ?? '',
+    tough: 'Tough',
+    toughTitle: 'In the top third of the league by record',
+    thisWeekScore: (week: number, opp: string, you: number, them: number, started: boolean) =>
+      started ? `This week (week ${week}): you ${pts(you)}, ${opp} ${pts(them)}` : `This week (week ${week}): you vs ${opp}`,
     whatsNext: 'What’s next',
     now: 'Now',
     thisWeek: 'this week',
@@ -81,6 +93,16 @@ export const scheduleGuideMessages = defineMessages({
     headPhase: (week, label, next) => `${week != null ? `Semana ${week} · ` : ''}${label}${next ? ` — ${next}` : ''}`,
     nextInline: (label, when) => `${label.charAt(0).toLowerCase()}${label.slice(1)} ${when}`,
     intro: 'Lo que viene en esta liga: tu partido de cada semana, las fechas límite y cuándo empiezan los playoffs.',
+    headAhead: (n, beforePlayoffs, week, opp, r) =>
+      `${n === 1 ? 'Queda 1 partido' : `Quedan ${n} partidos`}${beforePlayoffs ? ' antes de los playoffs' : ''} · próximo: semana ${week} contra ${opp}${rec(r) ? ` (${rec(r)})` : ''}`,
+    gamesLeftTitle: 'Tus partidos restantes',
+    gamesLeftSub: (beforePlayoffs) => (beforePlayoffs ? 'Temporada regular, después de esta semana' : 'Después de esta semana'),
+    gameLeftWeek: (week) => `Semana ${week}`,
+    gameLeftRecord: (r) => rec(r) ?? '',
+    tough: 'Difícil',
+    toughTitle: 'En el tercio de arriba de la liga por récord',
+    thisWeekScore: (week, opp, you, them, started) =>
+      started ? `Esta semana (semana ${week}): tú ${pts(you)}, ${opp} ${pts(them)}` : `Esta semana (semana ${week}): tú contra ${opp}`,
     whatsNext: 'Lo que viene',
     now: 'Ahora',
     thisWeek: 'esta semana',

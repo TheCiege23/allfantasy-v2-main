@@ -143,3 +143,81 @@ describe('LeagueSchedule with the guide', () => {
     expect((screen.getByRole('button', { name: 'Previous week' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })
+
+/* ── Your games left (2026-11-13 follow-up) ─────────────────────────────────────────────────────────── */
+import { yourGamesLeft } from '@/lib/core-app/remainingSchedule'
+
+describe('yourGamesLeft', () => {
+  const rows = [
+    // week 10 is being played (one side scored) — not "left"
+    { week: 10, rosterId: '1', matchupId: 1, pointsFor: 20.3, pointsAgainst: 18.1 },
+    { week: 10, rosterId: '2', matchupId: 1, pointsFor: 18.1, pointsAgainst: 20.3 },
+    { week: 11, rosterId: '1', matchupId: 1, pointsFor: 0, pointsAgainst: 0 },
+    { week: 11, rosterId: '3', matchupId: 1, pointsFor: 0, pointsAgainst: 0 },
+    { week: 12, rosterId: '4', matchupId: 2, pointsFor: 0, pointsAgainst: 0 },
+    { week: 12, rosterId: '1', matchupId: 2, pointsFor: 0, pointsAgainst: 0 },
+    // a game you are not in
+    { week: 12, rosterId: '2', matchupId: 1, pointsFor: 0, pointsAgainst: 0 },
+    { week: 12, rosterId: '3', matchupId: 1, pointsFor: 0, pointsAgainst: 0 },
+    // a playoff week
+    { week: 15, rosterId: '1', matchupId: 1, pointsFor: 0, pointsAgainst: 0 },
+    { week: 15, rosterId: '2', matchupId: 1, pointsFor: 0, pointsAgainst: 0 },
+  ]
+  const teams = [
+    { rosterId: '1', name: 'Me', wins: 5, losses: 4, ties: 0 },
+    { rosterId: '2', name: 'Two', wins: 8, losses: 1, ties: 0 },
+    { rosterId: '3', name: 'Three', wins: 7, losses: 2, ties: 0 },
+    { rosterId: '4', name: 'Four', wins: 2, losses: 7, ties: 0 },
+    { rosterId: '5', name: 'Five', wins: 4, losses: 5, ties: 0 },
+    { rosterId: '6', name: 'Six', wins: 3, losses: 6, ties: 0 },
+  ]
+
+  it('lists your unplayed games after this week, soonest first, with records and the tough ones marked', () => {
+    const left = yourGamesLeft({ rows, myRosterIds: ['1'], afterWeek: 10, beforeWeek: 15, teams })
+    expect(left).toEqual([
+      { week: 11, opponentId: '3', opponentName: 'Three', record: { wins: 7, losses: 2, ties: 0 }, tough: true },
+      { week: 12, opponentId: '4', opponentName: 'Four', record: { wins: 2, losses: 7, ties: 0 }, tough: false },
+    ])
+  })
+
+  it('stops at the playoffs only when told where they start, and returns nothing without your team', () => {
+    expect(yourGamesLeft({ rows, myRosterIds: ['1'], afterWeek: 10, teams }).map((g) => g.week)).toEqual([11, 12, 15])
+    expect(yourGamesLeft({ rows, myRosterIds: [], afterWeek: 10, teams })).toEqual([])
+  })
+
+  it('leaves out a game already under way, even after the stored current week', () => {
+    const underway = rows.map((r) => (r.week === 11 && r.rosterId === '3' ? { ...r, pointsFor: 4.2 } : r))
+    expect(yourGamesLeft({ rows: underway, myRosterIds: ['1'], afterWeek: 10, beforeWeek: 15, teams }).map((g) => g.week)).toEqual([12])
+  })
+
+  it('marks nobody tough before anyone has played', () => {
+    const fresh = teams.map((t) => ({ ...t, wins: 0, losses: 0, ties: 0 }))
+    expect(yourGamesLeft({ rows, myRosterIds: ['1'], afterWeek: 10, beforeWeek: 15, teams: fresh }).some((g) => g.tough)).toBe(false)
+  })
+})
+
+describe('LeagueSchedule — games left and the forward headline', () => {
+  const gamesLeft = [
+    { week: 11, opponentId: '3', opponentName: 'Three', record: { wins: 7, losses: 2, ties: 0 }, tough: true },
+    { week: 12, opponentId: '4', opponentName: 'Four', record: { wins: 2, losses: 7, ties: 0 }, tough: false },
+    { week: 16, opponentId: '2', opponentName: 'Two', record: null, tough: false },
+  ]
+  const withGame = data({
+    matchup: { available: true, data: { week: 10, season: 2026, you: { name: 'Me', points: 20.3 }, opponent: { name: 'Riley', points: 18.1 }, winProbability: null } },
+  } as Partial<LeagueHomeData>)
+
+  it('leads with what is left before the playoffs and the next game; this week’s score is one line under it', () => {
+    render(<LeagueSchedule data={withGame} gamesLeft={gamesLeft} />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2 games left before the playoffs · next: week 11 vs Three (7-2)')
+    expect(document.querySelector('.af-sg-thisweek')?.textContent).toBe('This week (week 10): you 20.3, Riley 18.1')
+    const list = screen.getByTestId('schedule-games-left')
+    expect([...list.querySelectorAll('.af-sg-left-opp')].map((e) => e.textContent)).toEqual(['Three', 'Four'])
+    expect(list.querySelector('[data-tough] .af-sg-badge')?.textContent).toBe('Tough')
+  })
+
+  it('keeps the old headline when no games are left or they could not be read', () => {
+    render(<LeagueSchedule data={withGame} gamesLeft={null} />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Week 10 · you vs Riley — you lead 20.3 to 18.1')
+    expect(screen.queryByTestId('schedule-games-left')).toBeNull()
+  })
+})
