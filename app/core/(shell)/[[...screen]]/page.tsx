@@ -3139,8 +3139,19 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
   const draftArchiveFirst = Boolean(
     draftArchive && ['draft', 'archivePage', 'archiveQuery', 'archiveSeason'].some((k) => typeof sp[k] === 'string' && sp[k] !== ''),
   )
+  /*
+   * ⚠ THE BOARD STARTS WITH DRAFT HQ, NOT AFTER IT (2026-11-14). Both need only the league, and the
+   * board used to wait for the whole Draft HQ read first. The old gate is kept: a failed Draft HQ
+   * read still means no board, by discarding the board's result below rather than not starting it.
+   */
+  const wantsCurrentDraft =
+    activeKey === 'draft-hq' && Boolean(selectedLeagueId) && !draftHqLoadFailed && draftArchive?.showCurrent !== false
+  const draftBoardRead =
+    wantsCurrentDraft && selectedLeagueId
+      ? getDraftBoardData(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      : Promise.resolve(null)
   const draftHq =
-    activeKey === 'draft-hq' && selectedLeagueId && !draftHqLoadFailed && draftArchive?.showCurrent !== false
+    wantsCurrentDraft && selectedLeagueId
       ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
           console.error('[core/draft-hq] read failed', e)
           draftHqLoadFailed = true
@@ -3159,10 +3170,8 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
    * The per-league draft grid and clock, which Draft HQ now renders above its own
    * board settings — see `draftBoard.ts` for why it moved off the War Room.
    */
-  const draftBoard =
-    activeKey === 'draft-hq' && selectedLeagueId && !draftHqLoadFailed && draftArchive?.showCurrent !== false
-      ? await getDraftBoardData(selectedLeagueId, userId, leagueCtx).catch(() => null)
-      : null
+  const draftBoardResult = await draftBoardRead
+  const draftBoard = draftHqLoadFailed ? null : draftBoardResult
 
   /*
    * The War Room carries two rooms on one screen key, the same way `week` carries
@@ -3301,6 +3310,38 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
     : null
   const liveDefaultSport = liveHeldLeague ? normalizeToLiveSport(String(liveHeldLeague.sport ?? 'NFL')) : 'NFL'
 
+  /*
+   * ⚠ THE LIVE PAGE'S TWO SPORT-WIDE READS START BEFORE YOUR MATCHUP (2026-11-14). The next kickoff
+   * and the slate need only the sport and the viewer, but they used to wait for the held league's
+   * matchup read to finish first. Each keeps its own fallback; they are awaited where they always were.
+   */
+  const liveOpenSport = typeof sp.sport === 'string' ? normalizeToLiveSport(sp.sport) : liveDefaultSport
+  const liveSportNextAtRead =
+    activeKey === 'live' && !liveGameId ? getFirstStatedKickoff(liveOpenSport).catch(() => null) : Promise.resolve(null)
+  const liveScoresRead =
+    activeKey === 'live' && !liveGameId
+      ? getLivePageData({
+          userId,
+          sport: typeof sp.sport === 'string' ? sp.sport : liveDefaultSport,
+          scope: sp.scope === 'all' ? 'all' : 'my',
+          top25: sp.t25 === 'off' ? 'off' : 'on',
+        }).catch((err) => {
+          /*
+           * ⚠ LOG IT. A bare `.catch(() => null)` here is what made the
+           * 2026-08-27 outage take three sessions and two wasted deploys to
+           * find: the screen says "We could not read the slate", which points
+           * at the score fetch, while the actual throw was a missing
+           * `league_player_weekly_scores` table in the roster tie-in read.
+           * The null return is still the right fallback — but silent it is not.
+           */
+          console.error(
+            '[core/live] getLivePageData threw, rendering the read-failure notice:',
+            err instanceof Error ? err.message : err,
+          )
+          return null
+        })
+      : Promise.resolve(null)
+
   /* Your matchup in the held league, through the same loader `/core/matchup` uses. */
   let liveMatchupFailed = false
   const liveMatchup =
@@ -3337,33 +3378,9 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
    * findFirst on SportsGame (seasonPhase.ts, 5-min revalidate); null on any failure, and the page then
    * simply does not name a time.
    */
-  const liveOpenSport = typeof sp.sport === 'string' ? normalizeToLiveSport(sp.sport) : liveDefaultSport
-  const liveSportNextAt =
-    activeKey === 'live' && !liveGameId ? await getFirstStatedKickoff(liveOpenSport).catch(() => null) : null
+  const liveSportNextAt = await liveSportNextAtRead
 
-  const liveScores =
-    activeKey === 'live' && !liveGameId
-      ? await getLivePageData({
-          userId,
-          sport: typeof sp.sport === 'string' ? sp.sport : liveDefaultSport,
-          scope: sp.scope === 'all' ? 'all' : 'my',
-          top25: sp.t25 === 'off' ? 'off' : 'on',
-        }).catch((err) => {
-          /*
-           * ⚠ LOG IT. A bare `.catch(() => null)` here is what made the
-           * 2026-08-27 outage take three sessions and two wasted deploys to
-           * find: the screen says "We could not read the slate", which points
-           * at the score fetch, while the actual throw was a missing
-           * `league_player_weekly_scores` table in the roster tie-in read.
-           * The null return is still the right fallback — but silent it is not.
-           */
-          console.error(
-            '[core/live] getLivePageData threw, rendering the read-failure notice:',
-            err instanceof Error ? err.message : err,
-          )
-          return null
-        })
-      : null
+  const liveScores = await liveScoresRead
 
   /*
    * 38a·7 — the league's points-for board. Reads WeeklyMatchup through the
