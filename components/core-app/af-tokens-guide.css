@@ -1,0 +1,79 @@
+/*
+ * /tokens guide pass (2026-11-14): components/core-app/screens/TokenCentreV4.tsx.
+ * A header (the page had none), the balance as the headline, and one fold for what tokens don't cover.
+ * Tokens only, like af-tokens.css, so dark, light and af modes all resolve now that the root carries
+ * `af-core`.
+ */
+
+/* The page background: af-tokens.css never set one, so it showed whatever sat behind it. */
+.af-core.af-tk { background: var(--bg, transparent); color: var(--text); }
+
+/* ── Header ─────────────────────────────────────────────────────────────────────────────────── */
+.af-tk .af-tkg-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.af-tk .af-tkg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font: 900 17px/1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.af-tk .af-tkg-nav-right { margin-left: auto; display: inline-flex; align-items: center; gap: 14px; }
+.af-tk .af-tkg-nav-link { color: var(--text2); font-size: 13px; font-weight: 600; text-decoration: none; }
+.af-tk .af-tkg-nav-link:hover { color: var(--text); }
+.af-tk .af-tkg-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 700 13px/1 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af-tk .af-tkg-brand:focus-visible,
+.af-tk .af-tkg-nav-link:focus-visible,
+.af-tk .af-tkg-nav-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── The answer ─────────────────────────────────────────────────────────────────────────────── */
+.af-tk .af-tkg-title { max-width: 26ch; font-size: 30px; line-height: 1.15; }
+.af-tk .af-tkg-num { color: var(--accent); }
+.af-tk .af-tkg-rule { font-size: 13px; color: var(--text2); }
+
+/* ── One fold for what tokens don't cover ───────────────────────────────────────────────────── */
+.af-tk .af-tkg-fold {
+  padding: 0 22px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-tk .af-tkg-fold > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--text);
+  font: 800 15px/1.2 'Archivo', system-ui, sans-serif;
+  cursor: pointer;
+  list-style: none;
+}
+.af-tk .af-tkg-fold > summary::-webkit-details-marker { display: none; }
+.af-tk .af-tkg-fold > summary::after { content: '▾'; margin-left: auto; color: var(--text2); }
+.af-tk .af-tkg-fold[open] > summary::after { content: '▴'; }
+.af-tk .af-tkg-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-tk .af-tkg-fold[open] { padding-bottom: 18px; }
+
+.af-tk .af-tkg-date { color: var(--faint); }
+
+@media (max-width: 560px) {
+  .af-tk .af-tkg-title { font-size: 24px; }
+  .af-tk .af-tkg-nav-link { display: none; }
+  .af-tk .af-tkg-nav-cta { min-height: 44px; }
+}

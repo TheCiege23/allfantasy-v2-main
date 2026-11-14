@@ -218,6 +218,7 @@ const INLINE_EXEMPT: Record<string, { n: number; why: string }> = {
   'components/core-app/screens/ImportV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'components/core-app/screens/LandingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'components/core-app/screens/PricingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+  'components/core-app/screens/TokenCentreV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text> (same mark as PricingV4)' },
   'components/core-app/screens/RecoveryChrome.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
   'app/import/[platform]/page.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
 }
