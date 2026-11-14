@@ -8,7 +8,7 @@ import { defineMessages, messagesFor } from '@/lib/i18n/messages'
  * and any other language falls back to the English value — the same result the ternary gave.
  * (`getIntlLocale` is not a substitute: it answers 'es' for Spanish and 'zh-CN' etc. for the rest.)
  */
-const coreLocaleMessages = defineMessages({
+export const coreLocaleMessages = defineMessages({
   en: {
     /** The copy language for an EN/ES-only payload ({ en, es } records, `lang` params). Also a bare Intl locale. */
     code: 'en' as 'en' | 'es',
