@@ -1,0 +1,108 @@
+import { defineMessages } from '@/lib/i18n/messages'
+
+/**
+ * My Leagues guide copy (2026-11-14): the headline that says which leagues need you, the plain-word
+ * reasons on the cards, the group titles and the folds. Numbers come from `myLeaguesHeadline` over the
+ * account's own leagues, never from a fixture.
+ */
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
+const pluralEs = plural
+
+export const myLeaguesGuideMessages = defineMessages({
+  en: {
+    eyebrow: (n: number) => `My leagues · ${n}`,
+    headFix: (n: number) => `${n} ${plural(n, 'league needs', 'leagues need')} a lineup fix`,
+    headQuestionable: (n: number) => `${n} ${plural(n, 'league has', 'leagues have')} a questionable starter`,
+    headDrafting: (n: number) => `You're drafting in ${n} ${plural(n, 'league', 'leagues')}`,
+    headClear: 'Nothing needs you right now',
+    headEmpty: 'No leagues yet',
+    intro: 'Every league you play, with the ones that need you first. Open one to set your lineup or see what changed.',
+    introEmpty: 'Import a league from Sleeper, ESPN, Yahoo, Fantrax, MFL or Fleaflicker, or create one here.',
+    chipQuestionable: (n: number) => `${n} more with a questionable starter`,
+    chipDrafting: (n: number) => `Drafting now in ${n}`,
+    chipPredraft: (n: number) => `${n} waiting on a draft`,
+    whyFix: 'Why it matters: a starter who is out, or an empty slot, scores zero. Swap them before kickoff.',
+    whyQuestionable: 'Why it matters: a questionable starter may sit. Check the news before kickoff and have a backup ready.',
+    whyDrafting: 'Why it matters: a live draft keeps moving. If your pick comes up while you are away, the platform may pick for you.',
+    whyClear: 'Lineups look set everywhere we can see. Check back before kickoff — injury news changes this list.',
+    importLeague: 'Import a league',
+    createLeague: 'Create a league',
+    filterMore: 'Filter & more',
+    // Groups
+    needsTitle: 'Needs you',
+    needsBlurb: 'A starter who is out or questionable, an empty slot, waivers to review, a draft under way, or a lineup we could not check.',
+    playingTitle: 'In season',
+    playingBlurb: 'Nothing to do today. Hurt bench players are noted on the card.',
+    predraftTitle: 'Before the draft',
+    predraftBlurb: 'Nothing to do until the draft. Draft HQ has the date and your pick.',
+    quietTitle: 'Everything else',
+    quietBlurb: 'Season over, or no roster yet.',
+    moreIn: (n: number, tier: 'needs' | 'playing' | 'predraft' | 'quiet') =>
+      tier === 'needs' ? `+${n} more need you` : tier === 'playing' ? `+${n} more in season` : tier === 'predraft' ? `+${n} more before the draft` : `+${n} more`,
+    // Card reasons
+    startersOut: (n: number) => `${n} ${plural(n, 'starter', 'starters')} out`,
+    startersQuestionable: (n: number) => `${n} ${plural(n, 'starter', 'starters')} questionable`,
+    playersHurt: (n: number) => `${n} ${plural(n, 'player', 'players')} hurt`,
+    drafting: 'Drafting now',
+    preDraft: 'Draft not started',
+    lineupUnchecked: 'Lineup not checked',
+    bestBallGap: 'Best ball: a position is short',
+    seeWhoIsHurt: "See who's hurt",
+    // Matchup line
+    weekVs: (week: number, opponent: string) => `Week ${week} vs ${opponent}`,
+    weekScore: (week: number, you: string, them: string, opponent: string) => `Week ${week} · ${you}–${them} vs ${opponent}`,
+    weekPoints: (week: number, points: string) => `Week ${week} · ${points} points`,
+    weekOnly: (week: number) => `Week ${week}`,
+    // Foot fold
+    footSummary: (history: number) => (history > 0 ? `Past seasons (${history}) and what we can't see yet` : "What we can't see yet"),
+    footHistory: 'Finished seasons from your career import are kept out of this list. Turn on “+ history” under Filter & more to search them.',
+    footNoHistory: 'No past seasons imported yet. Import a career history to fill your record book.',
+    notWatched: 'Not watched yet',
+  },
+  es: {
+    eyebrow: (n: number) => `Mis ligas · ${n}`,
+    headFix: (n: number) => `${n} ${pluralEs(n, 'liga necesita', 'ligas necesitan')} arreglar la alineación`,
+    headQuestionable: (n: number) => `${n} ${pluralEs(n, 'liga tiene', 'ligas tienen')} un titular en duda`,
+    headDrafting: (n: number) => `Estás en un draft en ${n} ${pluralEs(n, 'liga', 'ligas')}`,
+    headClear: 'Nada te necesita ahora',
+    headEmpty: 'Aún no tienes ligas',
+    intro: 'Todas tus ligas, con las que te necesitan primero. Abre una para fijar tu alineación o ver qué cambió.',
+    introEmpty: 'Importa una liga de Sleeper, ESPN, Yahoo, Fantrax, MFL o Fleaflicker, o crea una aquí.',
+    chipQuestionable: (n: number) => `${n} más con un titular en duda`,
+    chipDrafting: (n: number) => `Draft en vivo en ${n}`,
+    chipPredraft: (n: number) => `${n} esperando el draft`,
+    whyFix: 'Por qué importa: un titular baja, o un puesto vacío, suma cero. Cámbialo antes del partido.',
+    whyQuestionable: 'Por qué importa: un titular en duda puede no jugar. Revisa las noticias antes del partido y ten un suplente listo.',
+    whyDrafting: 'Por qué importa: un draft en vivo no se detiene. Si te toca y no estás, la plataforma puede elegir por ti.',
+    whyClear: 'Las alineaciones se ven bien en todo lo que vemos. Vuelve antes del partido: las lesiones cambian esta lista.',
+    importLeague: 'Importar una liga',
+    createLeague: 'Crear una liga',
+    filterMore: 'Filtrar y más',
+    needsTitle: 'Te necesitan',
+    needsBlurb: 'Un titular baja o en duda, un puesto vacío, reclamos por revisar, un draft en curso o una alineación que no pudimos revisar.',
+    playingTitle: 'En temporada',
+    playingBlurb: 'Nada que hacer hoy. Los suplentes lesionados se anotan en la tarjeta.',
+    predraftTitle: 'Antes del draft',
+    predraftBlurb: 'Nada que hacer hasta el draft. Draft HQ tiene la fecha y tu turno.',
+    quietTitle: 'Todo lo demás',
+    quietBlurb: 'Temporada terminada o sin plantilla todavía.',
+    moreIn: (n: number, tier: 'needs' | 'playing' | 'predraft' | 'quiet') =>
+      tier === 'needs' ? `+${n} más te necesitan` : tier === 'playing' ? `+${n} más en temporada` : tier === 'predraft' ? `+${n} más antes del draft` : `+${n} más`,
+    startersOut: (n: number) => `${n} ${pluralEs(n, 'titular baja', 'titulares baja')}`,
+    startersQuestionable: (n: number) => `${n} ${pluralEs(n, 'titular en duda', 'titulares en duda')}`,
+    playersHurt: (n: number) => `${n} ${pluralEs(n, 'jugador lesionado', 'jugadores lesionados')}`,
+    drafting: 'Draft en curso',
+    preDraft: 'Draft sin empezar',
+    lineupUnchecked: 'Alineación sin revisar',
+    bestBallGap: 'Best ball: falta cobertura en una posición',
+    seeWhoIsHurt: 'Ver lesionados',
+    weekVs: (week: number, opponent: string) => `Semana ${week} vs ${opponent}`,
+    weekScore: (week: number, you: string, them: string, opponent: string) => `Semana ${week} · ${you}–${them} vs ${opponent}`,
+    weekPoints: (week: number, points: string) => `Semana ${week} · ${points} puntos`,
+    weekOnly: (week: number) => `Semana ${week}`,
+    footSummary: (history: number) => (history > 0 ? `Temporadas pasadas (${history}) y lo que aún no vemos` : 'Lo que aún no vemos'),
+    footHistory: 'Las temporadas terminadas de tu historial quedan fuera de esta lista. Activa “+ historial” en Filtrar y más para buscarlas.',
+    footNoHistory: 'Aún no hay temporadas pasadas. Importa tu historial para llenar tu libro de récords.',
+    notWatched: 'Aún sin seguimiento',
+  },
+})

@@ -24,7 +24,10 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-my-leagues.css'
 // The My Leagues board restyle (2026-11-05): layered on top so the screen's own rules stay the base.
 import '@/components/core-app/af-my-leagues-redesign.css'
-import { myLeaguesRedesignMessages } from '@/lib/core-app/messages/myLeaguesRedesign'
+// The plain-words guide (2026-11-14): the headline, the honest groups and the folds.
+import '@/components/core-app/af-my-leagues-guide.css'
+import { myLeaguesGuideMessages } from '@/lib/core-app/messages/myLeaguesGuide'
+import { extraChips, myLeaguesHeadline, parseReason, type GuideReason } from '@/lib/core-app/myLeaguesGuide'
 
 /**
  * Screen 21a — "My Leagues, at 61 live".
@@ -69,35 +72,20 @@ export type MyLeaguesV4Props = MyLeaguesData & {
 type ChipKey = 'needs' | 'playing' | 'commissioner' | 'drafting' | 'dynasty' | 'quiet'
 type ViewMode = 'grid' | 'list'
 
-const TIER_META: Record<
-  MyLeaguesTier,
-  { title: string; blurb: string; anchor: string }
-> = {
-  needs: {
-    title: 'Needs you',
-    blurb: 'Sorted by what is blocking, not by name.',
-    anchor: 'af-ml-needs',
-  },
-  playing: {
-    title: 'In season',
-    /*
-     * ⚠ THE HANDOFF CALLS THIS TIER "PLAYING NOW" AND PUTS A LIVE SCORE ON IT.
-     * Renaming it is the honest half of omitting the score: "Playing now" beside
-     * a card with no score reads as a broken score, where "In season" is a claim
-     * this data actually supports.
-     */
-    blurb: 'Rosters are connected and nothing needs attention. Latest matchup scores appear when available.',
-    anchor: 'af-ml-playing',
-  },
-  quiet: {
-    title: 'Everything else',
-    blurb: 'Looked at and cleared — nothing here needs you today.',
-    anchor: 'af-ml-quiet',
-  },
+/** Each group's anchor. Titles and blurbs live in myLeaguesGuideMessages, in both languages. */
+const TIER_ANCHOR: Record<MyLeaguesTier, string> = {
+  needs: 'af-ml-needs',
+  /*
+   * ⚠ THE HANDOFF CALLS THIS TIER "PLAYING NOW" AND PUTS A LIVE SCORE ON IT.
+   * "In season" is the claim this data actually supports.
+   */
+  playing: 'af-ml-playing',
+  predraft: 'af-ml-predraft',
+  quiet: 'af-ml-quiet',
 }
 
 /** Grid caps per tier, mirroring the handoff's 3-up / 4-up / 6-up density. */
-const TIER_CAP: Record<MyLeaguesTier, number> = { needs: 6, playing: 8, quiet: 12 }
+const TIER_CAP: Record<MyLeaguesTier, number> = { needs: 6, playing: 8, predraft: 8, quiet: 12 }
 
 function platformLabel(p: string): string {
   const key = p.toLowerCase()
@@ -131,7 +119,7 @@ export function MyLeaguesV4({
 }: MyLeaguesV4Props) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  const rd = useMessages(myLeaguesRedesignMessages)
+  const g = useMessages(myLeaguesGuideMessages)
   const [query, setQuery] = useState('')
   const [platform, setPlatform] = useState<string>('all')
   /** `undefined` = all sports; `null` = the leagues with no sport recorded ("Other"). */
@@ -202,7 +190,7 @@ export function MyLeaguesV4({
     })
   }, [history, showHistory, platform, q])
 
-  const tiers: MyLeaguesTier[] = ['needs', 'playing', 'quiet']
+  const tiers: MyLeaguesTier[] = ['needs', 'playing', 'predraft', 'quiet']
   /*
    * Each Exile Island rides under its Survivor league, in that league's tier, joined by ↕ — it is
    * part of that game, not a league of its own. An island whose league is filtered out keeps its
@@ -216,7 +204,7 @@ export function MyLeaguesV4({
       islandsOf.set(l.exileOf, [...(islandsOf.get(l.exileOf) ?? []), l])
     }
     const paired = new Set([...islandsOf.values()].flat().map((l) => l.id))
-    const map: Record<MyLeaguesTier, MyLeaguesLeague[]> = { needs: [], playing: [], quiet: [] }
+    const map: Record<MyLeaguesTier, MyLeaguesLeague[]> = { needs: [], playing: [], predraft: [], quiet: [] }
     for (const l of groupLeagueHubs(filtered.filter((row) => !paired.has(row.id)))) map[l.tier].push(l)
     return { byTier: map, islandsOf }
   }, [filtered])
@@ -226,6 +214,30 @@ export function MyLeaguesV4({
   }, [sortedFiltered, islandsOf])
 
   const nothingMatches = filtered.length === 0 && filteredHistory.length === 0
+
+  /*
+   * The answer to "which of my leagues needs me right now?", read from every live league (hidden ones
+   * too, as the counts are). See myLeaguesGuide.ts for why "Needs you" no longer means "any warning".
+   */
+  const head = useMemo(() => myLeaguesHeadline(leagues), [leagues])
+  const headline =
+    head.lead === 'fix' ? g.headFix(head.fix)
+      : head.lead === 'questionable' ? g.headQuestionable(head.questionable)
+        : head.lead === 'drafting' ? g.headDrafting(head.drafting)
+          : head.lead === 'empty' ? g.headEmpty
+            : g.headClear
+  const headChips = [
+    head.lead === 'fix' && head.questionable > 0 ? { key: 'questionable', text: g.chipQuestionable(head.questionable), href: '#af-ml-needs' } : null,
+    head.lead !== 'drafting' && head.drafting > 0 ? { key: 'drafting', text: g.chipDrafting(head.drafting), href: '#af-ml-needs' } : null,
+    head.predraft > 0 ? { key: 'predraft', text: g.chipPredraft(head.predraft), href: '#af-ml-predraft' } : null,
+  ].filter((c): c is { key: string; text: string; href: string } => c !== null)
+  const why =
+    head.lead === 'fix' ? g.whyFix
+      : head.lead === 'questionable' ? g.whyQuestionable
+        : head.lead === 'drafting' ? g.whyDrafting
+          : head.lead === 'clear' ? g.whyClear
+            : null
+  const filtersOn = [platform !== 'all', effectiveSort !== 'default', showHistory, view !== 'grid', chip !== null].filter(Boolean).length
 
   const CHIPS: Array<{ key: ChipKey; label: string; count: number }> = [
     { key: 'needs', label: 'Needs you', count: counts.needs },
@@ -239,74 +251,45 @@ export function MyLeaguesV4({
   return (
     <div className="af-core af-ml">
       <PageHeader
-        className="af-ml-head"
+        className="af-ml-head af-mlg-head"
         headlineClassName="af-ml-headline"
-        titleClassName="af-ml-title"
-        subClassName="af-ml-sub"
+        titleClassName="af-ml-title af-mlg-title"
+        subClassName="af-ml-sub af-mlg-sub"
         actionsClassName="af-ml-actions"
         eyebrowTestId="my-leagues-eyebrow"
-        /*
-          The board's eyebrow: the account summed in one mono line. Sports come from the same
-          tabs the filter uses, so the two can never disagree; a zero part is left out rather than
-          printed as "0 need you".
-        */
-        eyebrow={[
-          rd.leagues(counts.live),
-          sportTabs.length > 1 ? rd.sports(sportTabs.length) : null,
-          counts.needs > 0 ? rd.needYou(counts.needs) : null,
-          counts.commissioner > 0 ? rd.commissioner(counts.commissioner) : null,
-        ]
-          .filter(Boolean)
-          .join(' · ')}
-        title={copy('My leagues')}
+        testId="my-leagues-guide"
+        /* The page's name and the one count of live leagues, said once. */
+        eyebrow={g.eyebrow(counts.live)}
+        title={headline}
         sub={
           <>
-            <strong>{counts.live}</strong> live
-            {counts.history > 0 ? (
-              <>
-                {' '}· <strong>{counts.history}</strong> finished season
-                {counts.history === 1 ? '' : 's'} in history
-              </>
+            <span className="af-mlg-intro">{counts.live === 0 ? g.introEmpty : g.intro}</span>
+            {headChips.length > 0 ? (
+              <span className="af-mlg-chips">
+                {headChips.map((c) => (
+                  <a key={c.key} className="af-mlg-chip" data-chip={c.key} href={c.href}>
+                    {c.text}
+                  </a>
+                ))}
+              </span>
             ) : null}
+            {why ? <span className="af-mlg-why" data-testid="my-leagues-why">{why}</span> : null}
           </>
         }
         actions={
           <>
-          <Link href="/brackets/my" className="af-ml-btn af-ml-btn--ghost">
-            {language?.startsWith('es') ? 'Mis cuadros' : 'My brackets'}
-          </Link>
-          <Link href="/create-league" className="af-ml-btn">
-            Create a league
-          </Link>
-          {/*
-            ⚠ ONLY WHEN THERE IS SOMEWHERE TO GO. /leagues/sync is retired, so
-            this renders nothing rather than pointing at /import beside a button
-            that already says "Import more".
-          */}
-          {syncHref ? (
-            <Link href={syncHref} className="af-ml-btn af-ml-btn--ghost">
-              {copy('Sync & connect')}
+            <Link href="/create-league" className="af-ml-btn af-ml-btn--ghost">
+              {g.createLeague}
             </Link>
-          ) : null}
-          {/*
-            ⚠ OUTSIDE THE `syncHref` CONDITIONAL, deliberately. Pairing two
-            already-imported leagues has nothing to do with whether a sync
-            destination exists, and nesting it there would hide the only entry
-            point to the franchise flow from every user whose leagues cannot be
-            synced — which is most of them.
-          */}
-          <Link href="/core/connect-leagues" className="af-ml-btn af-ml-btn--ghost">
-            {copy('Connect two leagues')}
-          </Link>
-          <Link href={importHref} className="af-ml-btn">
-            {copy('Import more')}
-          </Link>
+            <Link href={importHref} className="af-ml-btn">
+              {g.importLeague}
+            </Link>
           </>
         }
       />
 
-      {/* ── Controls: search · platform · live/history · grid/list ───────── */}
-      <div className="af-ml-controls">
+      {/* ── Search and sport stay in view; everything else folds ─────────── */}
+      <div className="af-ml-controls af-mlg-controls">
         <label className="af-ml-search">
           <span className="af-ml-search-icon" aria-hidden>
             ⌕
@@ -324,72 +307,6 @@ export function MyLeaguesV4({
             className="af-ml-search-input"
           />
         </label>
-
-        <label className="af-ml-select">
-          <span className="af-ml-select-label">{copy('Platform')}</span>
-          <select
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value)}
-            aria-label="Filter by platform"
-          >
-            <option value="all">{copy('All platforms')}</option>
-            {platforms.map((p) => (
-              <option key={p} value={p}>
-                {platformLabel(p)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="af-ml-select">
-          <span className="af-ml-select-label">{copy('Sort')}</span>
-          <select
-            value={effectiveSort}
-            onChange={(event) => changeSort(event.target.value as LeagueSortMode)}
-            aria-label={copy('Sort leagues')}
-          >
-            {LEAGUE_SORT_OPTIONS.map((option) => {
-              const available = hasLeagueSortMetric(leagues, option.value)
-              return (
-                <option key={option.value} value={option.value} disabled={!available}>
-                  {copy(option.value === 'default' ? 'Needs you first' : option.label)}
-                  {available ? '' : ` (${copy('data unavailable')})`}
-                </option>
-              )
-            })}
-          </select>
-        </label>
-
-        <button
-          type="button"
-          className="af-ml-toggle"
-          data-on={showHistory}
-          onClick={() => setShowHistory((v) => !v)}
-          aria-pressed={showHistory}
-        >
-          {copy(showHistory ? 'Live + history' : '+ history')}
-        </button>
-
-        <div className="af-ml-view" role="group" aria-label={copy('View mode')}>
-          <button
-            type="button"
-            className="af-ml-view-btn"
-            data-on={view === 'grid'}
-            onClick={() => setView('grid')}
-            aria-pressed={view === 'grid'}
-          >
-            {copy('Grid')}
-          </button>
-          <button
-            type="button"
-            className="af-ml-view-btn"
-            data-on={view === 'list'}
-            onClick={() => setView('list')}
-            aria-pressed={view === 'list'}
-          >
-            {copy('List')}
-          </button>
-        </div>
       </div>
 
       {sportTabs.length > 1 ? (
@@ -401,7 +318,7 @@ export function MyLeaguesV4({
             onClick={() => setSport(undefined)}
             aria-pressed={sport === undefined}
           >
-            {copy('All sports')} <span className="af-ml-chip-n af-num">{leagues.length}</span>
+            {copy('All sports')}
           </button>
           {sportTabs.map((s) => (
             <button
@@ -418,26 +335,121 @@ export function MyLeaguesV4({
         </div>
       ) : null}
 
-      {/* Filter chips — counts are the whole account, so they stay stable as you filter. */}
-      <div className="af-ml-chips">
-        {CHIPS.map((c) => (
+      <details className="af-mlg-filters" data-testid="my-leagues-filters">
+        <summary>
+          {g.filterMore}
+          {filtersOn > 0 ? <span className="af-mlg-on af-num">{filtersOn}</span> : null}
+        </summary>
+        <div className="af-mlg-filters-body">
+          <div className="af-ml-controls">
+          <label className="af-ml-select">
+            <span className="af-ml-select-label">{copy('Platform')}</span>
+            <select
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value)}
+              aria-label="Filter by platform"
+            >
+              <option value="all">{copy('All platforms')}</option>
+              {platforms.map((p) => (
+                <option key={p} value={p}>
+                  {platformLabel(p)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="af-ml-select">
+            <span className="af-ml-select-label">{copy('Sort')}</span>
+            <select
+              value={effectiveSort}
+              onChange={(event) => changeSort(event.target.value as LeagueSortMode)}
+              aria-label={copy('Sort leagues')}
+            >
+              {LEAGUE_SORT_OPTIONS.map((option) => {
+                const available = hasLeagueSortMetric(leagues, option.value)
+                return (
+                  <option key={option.value} value={option.value} disabled={!available}>
+                    {copy(option.value === 'default' ? 'Needs you first' : option.label)}
+                    {available ? '' : ` (${copy('data unavailable')})`}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
           <button
-            key={c.key}
             type="button"
-            className="af-ml-chip"
-            data-on={chip === c.key}
-            onClick={() => setChip((cur) => (cur === c.key ? null : c.key))}
-            aria-pressed={chip === c.key}
+            className="af-ml-toggle"
+            data-on={showHistory}
+            onClick={() => setShowHistory((v) => !v)}
+            aria-pressed={showHistory}
           >
-            {copy(c.label)} <span className="af-ml-chip-n af-num">{c.count}</span>
+            {copy(showHistory ? 'Live + history' : '+ history')}
           </button>
-        ))}
-        {chip ? (
-          <button type="button" className="af-ml-chip af-ml-chip--clear" onClick={() => setChip(null)}>
-            {copy('Clear filter')}
-          </button>
-        ) : null}
-      </div>
+          <div className="af-ml-view" role="group" aria-label={copy('View mode')}>
+            <button
+              type="button"
+              className="af-ml-view-btn"
+              data-on={view === 'grid'}
+              onClick={() => setView('grid')}
+              aria-pressed={view === 'grid'}
+            >
+              {copy('Grid')}
+            </button>
+            <button
+              type="button"
+              className="af-ml-view-btn"
+              data-on={view === 'list'}
+              onClick={() => setView('list')}
+              aria-pressed={view === 'list'}
+            >
+              {copy('List')}
+            </button>
+          </div>
+          </div>
+          {/* Filter chips — counts are the whole account, so they stay stable as you filter. */}
+          <div className="af-ml-chips">
+            {CHIPS.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                className="af-ml-chip"
+                data-on={chip === c.key}
+                onClick={() => setChip((cur) => (cur === c.key ? null : c.key))}
+                aria-pressed={chip === c.key}
+              >
+                {copy(c.label)} <span className="af-ml-chip-n af-num">{c.count}</span>
+              </button>
+            ))}
+            {chip ? (
+              <button type="button" className="af-ml-chip af-ml-chip--clear" onClick={() => setChip(null)}>
+                {copy('Clear filter')}
+              </button>
+            ) : null}
+          </div>
+          <div className="af-mlg-links">
+            <Link href="/brackets/my" className="af-ml-btn af-ml-btn--ghost">
+              {language?.startsWith('es') ? 'Mis cuadros' : 'My brackets'}
+            </Link>
+            {/*
+              ⚠ ONLY WHEN THERE IS SOMEWHERE TO GO. /leagues/sync is retired, so
+              this renders nothing rather than pointing at /import beside a button
+              that already says "Import a league".
+            */}
+            {syncHref ? (
+              <Link href={syncHref} className="af-ml-btn af-ml-btn--ghost">
+                {copy('Sync & connect')}
+              </Link>
+            ) : null}
+            {/*
+              ⚠ OUTSIDE THE `syncHref` CONDITIONAL, deliberately: pairing two
+              already-imported leagues has nothing to do with whether a sync
+              destination exists.
+            */}
+            <Link href="/core/connect-leagues" className="af-ml-btn af-ml-btn--ghost">
+              {copy('Connect two leagues')}
+            </Link>
+          </div>
+        </div>
+      </details>
 
       {/*
         The account-wide "nothing has ever been read" notice — one fact about the
@@ -527,15 +539,16 @@ export function MyLeaguesV4({
         const isOpen = expanded[tier] === true
         const shown = isOpen ? all : all.slice(0, cap)
         const rest = all.length - shown.length
-        const meta = TIER_META[tier]
+        const title = tier === 'needs' ? g.needsTitle : tier === 'playing' ? g.playingTitle : tier === 'predraft' ? g.predraftTitle : g.quietTitle
+        const blurb = tier === 'needs' ? g.needsBlurb : tier === 'playing' ? g.playingBlurb : tier === 'predraft' ? g.predraftBlurb : g.quietBlurb
 
         return (
-          <section key={tier} className="af-ml-tier" id={meta.anchor} data-tier={tier}>
+          <section key={tier} className="af-ml-tier" id={TIER_ANCHOR[tier]} data-tier={tier}>
             <div className="af-ml-tier-head">
               <h2 className="af-ml-tier-title">
-                {copy(meta.title)} <span className="af-ml-tier-n af-num">{all.reduce((n, l) => n + 1 + (islandsOf.get(l.id)?.length ?? 0), 0)}</span>
+                {title} <span className="af-ml-tier-n af-num">{all.reduce((n, l) => n + 1 + (islandsOf.get(l.id)?.length ?? 0), 0)}</span>
               </h2>
-              <p className="af-ml-tier-blurb">{meta.blurb}</p>
+              <p className="af-ml-tier-blurb">{blurb}</p>
             </div>
 
             <div className="af-ml-grid" data-tier={tier} data-view={view}>
@@ -567,10 +580,7 @@ export function MyLeaguesV4({
                   className="af-ml-more"
                   onClick={() => setExpanded((e) => ({ ...e, [tier]: true }))}
                 >
-                  <span className="af-ml-more-n af-num">+{rest}</span>
-                  <span className="af-ml-more-l">
-                    more {tier === 'needs' ? 'need you' : tier === 'playing' ? 'in season' : 'quiet'}
-                  </span>
+                  <span className="af-ml-more-l">{g.moreIn(rest, tier)}</span>
                 </button>
               ) : null}
             </div>
@@ -624,51 +634,40 @@ export function MyLeaguesV4({
         </section>
       ) : null}
 
-      {/* ── Footer banner ────────────────────────────────────────────────── */}
-      <footer className="af-ml-foot">
-        <div>
-          <strong className="af-ml-foot-t">
-            {counts.history > 0
-              ? `${counts.history} past season${counts.history === 1 ? '' : 's'} on the board`
-              : 'No past seasons imported yet'}
-          </strong>
-          <p className="af-ml-foot-p">
-            {counts.history > 0
-              ? 'Career imports are kept out of the live list so they cannot drown it. Search them with “+ history”.'
-              : 'Import a career history to fill the board.'}
-          </p>
-        </div>
-        <div className="af-ml-foot-actions">
-          <Link href="/core/career" className="af-ml-btn af-ml-btn--ghost">
-            {copy('Browse history')}
-          </Link>
-          <Link href={importHref} className="af-ml-btn">
-            {copy('Import more')}
-          </Link>
-        </div>
-      </footer>
-
       {/*
-        ⚠ THE WITHHELD LIST IS PART OF THE SCREEN, NOT A DEV NOTE. The handoff's
-        cards carry scores, win probability and records; this says plainly which
-        of those are not wired, so a reader can tell "we have nothing to show" from
-        "nothing is happening". Fed straight from the 34a coverage list so the two
-        surfaces cannot disagree about what is missing.
+        ── Past seasons and what we can't see yet, folded at the foot ──────────
+        ⚠ THE WITHHELD LIST STAYS PART OF THE SCREEN, NOT A DEV NOTE: it says
+        plainly which things are not wired, so a reader can tell "we have nothing
+        to show" from "nothing is happening". It is reference, so it folds.
       */}
-      {coverage.length > 0 ? (
-        <section className="af-ml-cover" aria-labelledby="af-ml-cover-h">
-          <h2 className="af-ml-cover-h" id="af-ml-cover-h">
-            {copy('Not yet watched')}
-          </h2>
-          <ul className="af-ml-cover-list">
-            {coverage.map((c) => (
-              <li key={c.label}>
-                <strong>{c.label}</strong> — {c.reason}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <details className="af-mlg-foot" data-testid="my-leagues-foot">
+        <summary>{g.footSummary(counts.history)}</summary>
+        <div className="af-mlg-foot-body">
+          <p className="af-ml-foot-p">{counts.history > 0 ? g.footHistory : g.footNoHistory}</p>
+          <div className="af-ml-foot-actions">
+            <Link href="/core/career" className="af-ml-btn af-ml-btn--ghost">
+              {copy('Browse history')}
+            </Link>
+            <Link href={importHref} className="af-ml-btn af-ml-btn--ghost">
+              {copy('Import more')}
+            </Link>
+          </div>
+          {coverage.length > 0 ? (
+            <section className="af-ml-cover" aria-labelledby="af-ml-cover-h">
+              <h2 className="af-ml-cover-h" id="af-ml-cover-h">
+                {g.notWatched}
+              </h2>
+              <ul className="af-ml-cover-list">
+                {coverage.map((c) => (
+                  <li key={c.label}>
+                    <strong>{c.label}</strong> — {c.reason}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      </details>
     </div>
   )
 }
@@ -686,12 +685,19 @@ function LeagueCard({
   exile?: boolean
 }) {
   const m = useMessages(coreWidgetsMessages)
+  const g = useMessages(myLeaguesGuideMessages)
   const { language } = useOptionalLanguage()
-  const chips = league.chips ?? []
-  const tone = league.priority === 'urgent' ? 'bad' : league.reason ? 'warn' : null
-  const dashboardLabel = league.actionLabel && league.actionLabel !== 'Open league'
-    ? league.actionLabel
-    : m.myLeaguesDashboard
+  // The reason line says it once; the COMMISH badge says the other — neither repeats as a chip.
+  const chips = extraChips(league.chips, league.reason)
+  // Only a league in "Needs you" is tinted; a hurt bench player is a note, not a warning.
+  const tone = league.priority === 'urgent' ? 'bad' : league.reason && tier === 'needs' ? 'warn' : null
+  const reason = reasonText(parseReason(league.reason), g)
+  const matchupLine = league.matchup ? matchupText(league.matchup, g) : league.matchupNote ?? null
+  const dashboardLabel = league.actionLabel === 'See who is flagged'
+    ? g.seeWhoIsHurt
+    : league.actionLabel && league.actionLabel !== 'Open league'
+      ? league.actionLabel
+      : m.myLeaguesDashboard
 
   return (
     <article className="af-ml-card" data-tier={tier} data-tone={tone ?? undefined} data-view={view} data-exile={exile ? 'true' : undefined}>
@@ -726,9 +732,9 @@ function LeagueCard({
       */}
       {tier !== 'quiet' ? (
         <div className="af-ml-card-body">
-          {league.reason ? (
+          {reason ? (
             <p className="af-ml-reason" data-tone={tone ?? undefined}>
-              {league.reason}
+              {reason}
             </p>
           ) : null}
           {chips.length > 0 ? (
@@ -745,7 +751,7 @@ function LeagueCard({
             ("No scores read yet" / "No roster imported yet"), not a placeholder
             number.
           */}
-          {league.matchupNote ? <p className="af-ml-note">{league.matchupNote}</p> : null}
+          {matchupLine && tier !== 'predraft' ? <p className="af-ml-note">{matchupLine}</p> : null}
         </div>
       ) : null}
 
@@ -756,6 +762,32 @@ function LeagueCard({
       </div>
     </article>
   )
+}
+
+type GuideCopy = (typeof myLeaguesGuideMessages)['en']
+
+/** A card's reason in plain words — "1 starter questionable", not "1 STARTER FLAGGED". */
+function reasonText(r: GuideReason | null, g: GuideCopy): string | null {
+  if (!r) return null
+  switch (r.key) {
+    case 'startersOut': return g.startersOut(r.n)
+    case 'startersQuestionable': return g.startersQuestionable(r.n)
+    case 'playersHurt': return g.playersHurt(r.n)
+    case 'drafting': return g.drafting
+    case 'preDraft': return g.preDraft
+    case 'lineupUnchecked': return g.lineupUnchecked
+    case 'bestBallGap': return g.bestBallGap
+    default: return r.label
+  }
+}
+
+/** "Week 10 · 20.3–18.1 vs Wounded Warriors", "Week 10 vs Hustead", or "Week 10 · 0.0 points" with no pairing. */
+function matchupText(mu: NonNullable<MyLeaguesLeague['matchup']>, g: GuideCopy): string {
+  if (mu.unpaired) return mu.scored ? g.weekPoints(mu.week, mu.yourScore.toFixed(1)) : g.weekOnly(mu.week)
+  const opponent = mu.opponent?.trim() || '—'
+  return mu.scored
+    ? g.weekScore(mu.week, mu.yourScore.toFixed(1), mu.opponentScore.toFixed(1), opponent)
+    : g.weekVs(mu.week, opponent)
 }
 
 export default MyLeaguesV4
