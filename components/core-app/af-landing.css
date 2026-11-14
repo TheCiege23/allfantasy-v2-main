@@ -1421,13 +1421,39 @@
   }
 }
 
-/* The narrowest phones: the switch moves into the menu so the two account buttons keep their room. */
-@media (max-width: 359px) {
+/*
+ * The narrowest phones: the switch moves into the menu so the two account buttons keep their room.
+ * ⚠ 380px, not 359px, since the phone header's controls went to 44px wide (below): the crest and both
+ * EN / ES options gained 32px between them, and at 360px the menu button then sat 5px past the edge.
+ * Measured, the row needs 381px to keep its 16px gutter with the switch in it.
+ */
+@media (max-width: 380px) {
   .af-lp-lang--bar {
     display: none;
   }
   .af-lp-mobile-panel .af-lp-lang--menu {
     display: inline-flex;
+  }
+}
+
+/*
+ * ── 44px WIDTH on the phone header, too (2026-11-14) ────────────────────
+ *
+ * The floor above is a HEIGHT floor, and both of these met it at 44px tall while
+ * failing it across: e2e/mobile/phone-smoke measured the crest link at 28px wide
+ * (the wordmark is visually hidden below 600px, leaving the 28px mark) and each
+ * EN / ES option at 36px (its desktop min-width), in Mobile Chrome and Mobile
+ * Safari. Phone-only, so the desktop header is byte-identical.
+ */
+@media (max-width: 600px) {
+  .af-lp-nav .af-lp-brand,
+  .af-core .af-lp-nav .af-lp-brand {
+    min-width: 44px;
+  }
+}
+@media (max-width: 1100px) {
+  .af-core .af-lp-lang .af-lp-lang-opt {
+    min-width: 44px;
   }
 }
 
