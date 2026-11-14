@@ -89,6 +89,25 @@ describe('myLeaguesHeadline', () => {
     expect(myLeaguesHeadline([{ chips: [chip('2 FLAGGED')] }]).lead).toBe('clear')
     expect(myLeaguesHeadline([]).lead).toBe('empty')
   })
+
+  // Live 2026-11-14: "17 waiting on a draft" above a "Before the draft" group of 19 — two pre-draft
+  // Survivor leagues each carried an Exile Island, and the group counts the island under its league.
+  it('counts an Exile Island in its Survivor league’s group, as the screen shows it', () => {
+    const h = myLeaguesHeadline([
+      { id: 'sv', chips: [chip('PRE DRAFT')] },
+      { id: 'ex', exileOf: 'sv', chips: [chip('1 STARTER FLAGGED')] },
+      { id: 'other', chips: [chip('PRE DRAFT')] },
+    ])
+    expect(h.predraft).toBe(3)
+    // Shown under "Before the draft", so it is not also counted as needing you.
+    expect(h.questionable).toBe(0)
+    expect(h.needs).toBe(0)
+  })
+
+  it('an island whose league is not in the list keeps its own group, and a league is never its own island', () => {
+    expect(myLeaguesHeadline([{ id: 'ex', exileOf: 'gone', chips: [chip('1 STARTER FLAGGED')] }])).toMatchObject({ questionable: 1, needs: 1 })
+    expect(myLeaguesHeadline([{ id: 'sv', exileOf: 'sv', chips: [chip('PRE DRAFT')] }]).predraft).toBe(1)
+  })
 })
 
 function league(id: string, over: Partial<MyLeaguesLeague>): MyLeaguesLeague {
