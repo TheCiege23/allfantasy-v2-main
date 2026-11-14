@@ -52,6 +52,7 @@ import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSessio
 import { resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { picksUntilNextTurn, type ScoringWindow } from '@/lib/draft-helper/draftContextSignals'
+import { projectionKey, projectionsFromPoolEntries } from '@/lib/draft-room/poolProjections'
 
 /**
  * Real keeper-lock extraction (Phase 30) from DraftSession.keeperSelections
@@ -334,6 +335,8 @@ export interface AssembleEngineInputParams {
   tePremiumValue?: number | null
   /** Team abbreviation → bye week for the league's season (lib/schedule/teamByeWeeks.ts). */
   byeByTeam?: ReadonlyMap<string, number>
+  /** `projectionKey(name, position)` → season projection, from the league's warm draft pool. */
+  projectionByKey?: ReadonlyMap<string, number>
   /** The weeks this draft's rosters score, when it is an in-season / tournament-stage draft. */
   scoringWindow?: ScoringWindow | null
   /** This draft's most recent pick positions, oldest first. */
@@ -392,6 +395,8 @@ export function assembleEngineInputFromPicks(params: AssembleEngineInputParams):
         adp: e.adp,
         // The schedule-derived bye for the player's team; null when the team or schedule is unknown.
         byeWeek: byeFor(poolMatch?.team_abbreviation ?? poolMatch?.team ?? e.team ?? null),
+        // The draft room's own season projection, so replacement value runs here too (2026-11-14).
+        projectedPoints: params.projectionByKey?.get(projectionKey(e.playerName, e.position)) ?? null,
         // Phase 29: real age, already resolved by the shared player pool
         // resolver (PoolPlayerRecord.age) -- reused directly, not refetched.
         age: poolMatch?.age ?? null,
@@ -505,6 +510,23 @@ async function resolveTournamentScoringWindow(leagueId: string): Promise<Scoring
 }
 
 /**
+ * Season projections for a league's draft, from the WARM draft pool the room itself reads
+ * (`getWarmDraftPoolSnapshotFast`, allowing a stale row). Never builds the pool: a cold build is
+ * 60–522 s, and a decision must not wait on it. Cold or failing → an empty map, and the engine
+ * simply has no projection signal, exactly as before. Imported dynamically so this assembler's
+ * other callers and tests do not load the pool resolver.
+ */
+export async function loadWarmPoolProjections(leagueId: string): Promise<Map<string, number>> {
+  try {
+    const { getWarmDraftPoolSnapshotFast } = await import('@/lib/draft-room/ensureDraftPoolReady')
+    const snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
+    return snap.warm ? projectionsFromPoolEntries(snap.payload.entries) : new Map()
+  } catch {
+    return new Map()
+  }
+}
+
+/**
  * The positions each team picking before the target's next turn has drafted so far — read off this
  * draft's picks by DRAFT SLOT, so it works for a draft mirrored from Sleeper, whose pick rows carry a
  * Sleeper user id rather than an AF roster id. The target's slot is the slot of its own first pick;
@@ -565,13 +587,14 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
   const rosterFormatType = (await isIdpLeague(input.leagueId)) ? 'IDP' : 'standard'
 
   const isFootball = league.sport === 'NFL' || league.sport === 'NCAAF'
-  const [adpResult, template, pool, byeByTeam, scoringWindow] = await Promise.all([
+  const [adpResult, template, pool, byeByTeam, scoringWindow, projectionByKey] = await Promise.all([
     readAllFantasyAdpForLeague(input.leagueId),
     getRosterTemplate(league.sport, rosterFormatType, input.leagueId),
     getPlayerPoolForLeague(input.leagueId, league.sport as LeagueSport, { limit: 800 }).catch(() => []),
     // Byes and the scoring window (2026-11-14): the specifics that separate this draft from a generic one.
     isFootball ? resolveTeamByeWeeks(league.sport, league.season).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
     resolveDraftScoringWindow(input.leagueId),
+    loadWarmPoolProjections(input.leagueId),
   ])
 
   const poolByKey = new Map(pool.map((p) => [playerKey(p.full_name, p.position), p]))
@@ -602,6 +625,7 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     targetRosterId: input.rosterId,
     targetRosterAliases,
     byeByTeam,
+    projectionByKey,
     scoringWindow,
     recentPickPositions: picks.map((p) => p.position ?? '').filter(Boolean).slice(-Math.max(6, totalTeams)),
     teamsAheadPositions: teamsAheadFromPicks({

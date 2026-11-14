@@ -99,7 +99,9 @@ describe('buildDraftDecisionContext', () => {
     expect(ctx.engineInput.pick).toBe(6)
     expect(ctx.totalTeams).toBe(12)
     expect(ctx.managerKey).toBe('manager-1')
-    expect(ctx.engineInput.available).toEqual([{ name: 'Player One', position: 'RB', team: 'KC', adp: 25, byeWeek: null, age: 24 }])
+    expect(ctx.engineInput.available).toEqual([
+      { name: 'Player One', position: 'RB', team: 'KC', adp: 25, byeWeek: null, projectedPoints: null, age: 24 },
+    ])
     expect(ctx.playerIdByKey.get('player one|rb')).toBe('p1')
   })
 

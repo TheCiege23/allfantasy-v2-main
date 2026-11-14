@@ -5,7 +5,8 @@ import { parseSessionKey } from '@/lib/draft/session-key'
 import { loadSleeperAdpBoard, MAX_BOARD_SIZE } from '@/lib/draft/sleeperDraftBoard'
 import type { RecommendationPlayer } from '@/lib/draft-helper/RecommendationEngine'
 import { runEngineForGrounding, unavailableGrounding, type DraftEngineGrounding } from './engineGrounding'
-import { resolveDraftScoringWindow } from '@/lib/shared-services/draft/DraftContextAssembler'
+import { loadWarmPoolProjections, resolveDraftScoringWindow } from '@/lib/shared-services/draft/DraftContextAssembler'
+import { projectionKey } from '@/lib/draft-room/poolProjections'
 import { resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
@@ -49,7 +50,7 @@ export async function loadDraftEngineGrounding(args: {
     if (!state || !board || board.length === 0) return unavailableGrounding()
 
     // A league draft (live:<leagueId>) knows its scoring window and season; a mock room does not.
-    const [scoringWindow, byeByTeam] =
+    const [scoringWindow, byeByTeam, projections] =
       parsed.mode === 'live'
         ? await Promise.all([
             resolveDraftScoringWindow(parsed.id),
@@ -57,8 +58,10 @@ export async function loadDraftEngineGrounding(args: {
               .findUnique({ where: { id: parsed.id }, select: { season: true } })
               .then((l) => resolveTeamByeWeeks('NFL', l?.season))
               .catch(() => new Map<string, number>()),
+            // The league's warm draft pool, so replacement value runs in Chimmy's tips too.
+            loadWarmPoolProjections(parsed.id),
           ])
-        : [null, new Map<string, number>()]
+        : [null, new Map<string, number>(), new Map<string, number>()]
     const byeFor = (team: string | null | undefined): number | null =>
       team ? byeByTeam.get(normalizeTeamAbbrev(team) ?? team.toUpperCase()) ?? null : null
 
@@ -66,7 +69,14 @@ export async function loadDraftEngineGrounding(args: {
     const takenNames = new Set(picks.map((p) => p.playerName?.trim().toLowerCase()).filter((n): n is string => Boolean(n)))
     const available: RecommendationPlayer[] = board
       .filter((p) => !takenIds.has(p.id) && !takenNames.has(p.name.trim().toLowerCase()))
-      .map((p) => ({ name: p.name, position: p.position, team: p.team || null, adp: p.adp, byeWeek: byeFor(p.team) }))
+      .map((p) => ({
+        name: p.name,
+        position: p.position,
+        team: p.team || null,
+        adp: p.adp,
+        byeWeek: byeFor(p.team),
+        projectedPoints: projections.get(projectionKey(p.name, p.position)) ?? null,
+      }))
 
     const teamRoster = picks
       .filter((p) => p.currentOwnerId === args.userId && p.position)
