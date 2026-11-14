@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Bot, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Bot, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type AppShellProps = {

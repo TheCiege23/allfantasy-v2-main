@@ -33,7 +33,6 @@ import {
   NFL_C2C_COLLEGE_DRAFT_ROUNDS,
   NFL_C2C_COLLEGE_POSITIONS,
 } from '@/lib/merged-devy-c2c/constants'
-import { getC2CAdapterForSport } from '@/lib/merged-devy-c2c/types'
 
 // ── Sport eligibility ─────────────────────────────────────────────────────────
 
@@ -95,16 +94,8 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.max(min, Math.min(max, Math.floor(n)))
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
-}
-
 function starterCount(slots: Record<string, number>): number {
   return Object.values(slots).reduce((t, n) => t + n, 0)
-}
-
-function pickOrderForEngine(core: C2CEngineCore): 'snake' | 'linear' | 'auction' {
-  return core
 }
 
 // ── Scoring helpers ───────────────────────────────────────────────────────────

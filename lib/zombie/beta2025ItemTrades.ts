@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { itemRole, WEAPON_POINTS } from './beta2025Items'
 import { lastStarterDeadline, loadBetaItemScoreReceipt, lockItemLeague } from './beta2025ItemService'

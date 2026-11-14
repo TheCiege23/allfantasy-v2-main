@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Lock, Unlock, Check, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Lock, Unlock, Check } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 // ---------------------------------------------------------------------------

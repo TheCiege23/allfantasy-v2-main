@@ -1,29 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import {
-  Settings,
-  Play,
-  RotateCcw,
-  Search,
-  ChevronDown,
-  Clock,
-  Shuffle,
-  X,
-  GripVertical,
-  Zap,
-  MessageCircle,
-  Users,
-  ListOrdered,
-  LayoutGrid,
-  User,
-  Maximize2,
-  Minimize2,
-  Lock,
-} from 'lucide-react'
+import { Settings, Play, RotateCcw, Search, ChevronDown, Clock, X, GripVertical, Zap, MessageCircle, Users, ListOrdered, LayoutGrid, User, Maximize2, Minimize2, Lock } from 'lucide-react'
 import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
 import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
-import { getPositionFilterOptionsForSport } from '@/lib/draft-room'
 
 interface DraftRoomProps {
   leagueName: string

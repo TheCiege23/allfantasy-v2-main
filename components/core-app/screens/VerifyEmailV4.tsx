@@ -8,20 +8,7 @@ import { useResendCooldown } from '@/hooks/useResendCooldown'
 import { SmsConsentCheckbox } from '@/components/legal/SmsConsentCheckbox'
 import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import { EMAIL_VERIFY_LINK_LIFETIME } from '@/lib/auth/emailVerifyLink'
-import {
-  BangGlyph,
-  CheckGlyph,
-  MailGlyph,
-  RecoveryAlert,
-  RecoveryCard,
-  RecoveryIcon,
-  RecoveryNote,
-  RecoveryShell,
-  RecoverySub,
-  RecoveryTitle,
-  ShieldGlyph,
-  WarnGlyph,
-} from './RecoveryChrome'
+import { BangGlyph, CheckGlyph, MailGlyph, RecoveryAlert, RecoveryCard, RecoveryIcon, RecoveryNote, RecoveryShell, RecoverySub, RecoveryTitle, WarnGlyph } from './RecoveryChrome'
 
 /**
  * Screen 16b — post-signup email verification.

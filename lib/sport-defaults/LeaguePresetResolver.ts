@@ -3,7 +3,6 @@
  * For NFL + IDP/DYNASTY_IDP returns roster with IDP slots and IDP scoring; otherwise uses sport defaults.
  */
 import type { LeagueSport } from '@prisma/client'
-import { getFullLeaguePreset } from './SportLeaguePresetService'
 import { getRosterOverlayForVariant, getFormatTypeForVariant } from './LeagueVariantRegistry'
 import { getRosterDefaults } from './SportDefaultsRegistry'
 import type { SportType, RosterDefaults } from './types'

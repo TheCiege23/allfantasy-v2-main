@@ -4,7 +4,6 @@
  * Modes: score-based, seeded random, hybrid (AI theme + deterministic outcome). PROMPT 3.
  */
 
-import { prisma } from '@/lib/prisma'
 import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
 import { getBigBrotherSeasonPoints as getSeasonPointsFromRosterPerformance } from './BigBrotherScores'
 import type { ChallengeMode } from './types'

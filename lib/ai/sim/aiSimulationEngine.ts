@@ -3,22 +3,10 @@
  * Safe to import from API routes and (tree-shaken) client bundles.
  */
 
-import { simulateDraft, simulateNextPicks } from '@/lib/ai/sim/draftSimulator'
-import { simulateMatchup } from '@/lib/ai/sim/matchupSimulator'
 import { rosterStrengthIndex } from '@/lib/ai/sim/playerModel'
 import { simulateSeason } from '@/lib/ai/sim/seasonSimulator'
 import { simulateTrade } from '@/lib/ai/sim/tradeSimulator'
-import type {
-  FranchiseSimResult,
-  MatchupSimResult,
-  MonteCarloOptions,
-  SeasonSimResult,
-  SimPlayerInput,
-  SimTeamInput,
-  TradeSimResult,
-  WaiverSimResult,
-} from '@/lib/ai/sim/types'
-import type { DraftSimResult } from '@/lib/ai/sim/types'
+import type { FranchiseSimResult, MonteCarloOptions, SeasonSimResult, SimPlayerInput, SimTeamInput, WaiverSimResult } from '@/lib/ai/sim/types'
 
 export { simulateDraft, simulateNextPicks } from '@/lib/ai/sim/draftSimulator'
 export { simulateMatchup } from '@/lib/ai/sim/matchupSimulator'

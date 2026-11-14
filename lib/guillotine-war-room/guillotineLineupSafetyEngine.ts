@@ -9,7 +9,7 @@
 
 import { playerValue, isInjured, type ValueSource } from './guillotineValue'
 import { evaluateSurvivalRisk } from './guillotineSurvivalRiskEngine'
-import type { GuillotinePlayerFact, GuillotineWarRoomContext } from './types'
+import type { GuillotineWarRoomContext } from './types'
 
 interface GuillotineLineupSlot {
   position: string

@@ -18,12 +18,6 @@ interface LeagueSettingsShellProps {
   hasAfCommissionerSub: boolean
 }
 
-const TAB_META: Record<SettingsTabId, { label: string; icon: typeof Settings; description: string }> = {
-  league: { label: 'League', icon: Settings, description: 'Basic league info and rules' },
-  commissioner: { label: 'Commissioner', icon: ShieldCheck, description: 'Commissioner tools and controls' },
-  format: { label: '', icon: Sparkles, description: 'Format-specific settings' },
-}
-
 /**
  * 3-tab settings shell for all league types.
  *

@@ -1,4 +1,3 @@
-import type { AcceptDriver, NegotiationToolkit } from './types'
 import type { TradeDriverData } from './trade-engine'
 
 type NegotiationGptContract = {

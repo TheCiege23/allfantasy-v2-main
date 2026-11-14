@@ -34,12 +34,7 @@ import {
   type StarterGroup,
 } from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
-import {
-  connectionDetail,
-  connectionLabel,
-  isConnectionFault,
-  resolveConnectionState,
-} from '@/lib/live/connectionState'
+import { connectionDetail, connectionLabel, resolveConnectionState } from '@/lib/live/connectionState'
 import { useOnlineStatus } from '@/lib/live/useOnlineStatus'
 import { LOW_DATA_POLL_MULTIPLIER } from '@/lib/live/lowDataMode'
 import { activeFlashes, diffScores, mergeFlashes } from '@/lib/live/scoreChanges'
@@ -127,15 +122,6 @@ import {
  *  the server-side engine uses. Polling every 20s on a Tuesday burns requests
  *  re-fetching a slate that cannot change. */
 const LIVE_POLL_MS = 20_000
-function upNextTime(value: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return value
-  const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return 'Start time unavailable'
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-  }).format(date)
-}
 const IDLE_POLL_MS = 120_000
 /** Starters listed under a slate card before "Show all" — see `MyStarters`. */
 const STARTERS_SHOWN = 3
@@ -2332,7 +2318,6 @@ function EmptySlate({
 }
 
 export default LiveScores
-
 
 /**
  * "Kicks off in 12m" -- the warning that a lineup decision is closing.

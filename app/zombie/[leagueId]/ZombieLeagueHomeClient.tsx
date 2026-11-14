@@ -4,22 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { zombieThemeForLeague } from '@/lib/zombie/zombieHomeSummary'
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  Biohazard,
-  Bomb,
-  Crosshair,
-  FlaskConical,
-  Globe,
-  MessageSquare,
-  Shield,
-  Skull,
-  Sparkles,
-  Swords,
-  Trophy,
-  Wallet,
-} from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, Bomb, Crosshair, FlaskConical, Globe, MessageSquare, Shield, Skull, Sparkles, Swords, Trophy, Wallet } from 'lucide-react'
 import { ZombieStatusBadge } from '@/app/zombie/components/ZombieStatusBadge'
 import { ZombieEventFeed } from '@/app/zombie/components/ZombieEventFeed'
 import { ZombieHordeBar } from '@/app/zombie/components/ZombieHordeBar'

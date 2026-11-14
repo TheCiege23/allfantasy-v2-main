@@ -4,7 +4,7 @@
  */
 
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
-import type { GeneratedVideoScript, VideoScriptSection, MediaType, Sport } from './types';
+import type { GeneratedVideoScript, VideoScriptSection, MediaType } from './types';
 
 export interface ScriptBuildOptions {
   sport?: string;

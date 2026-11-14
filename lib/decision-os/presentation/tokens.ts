@@ -5,13 +5,7 @@
  * No UI imports, no side effects.
  */
 
-import type {
-  ColorToken,
-  IconToken,
-  SeverityToken,
-  SeverityDefinition,
-  AnimationToken,
-} from './types'
+import type { ColorToken, IconToken, SeverityToken, SeverityDefinition } from './types'
 
 export const PRESENTATION_VERSION = '7.0.0' as const
 

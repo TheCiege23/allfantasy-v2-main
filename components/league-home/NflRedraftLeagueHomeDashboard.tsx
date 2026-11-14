@@ -5,20 +5,7 @@ import '@/components/league/league-overview.css'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import {
-  Activity,
-  CalendarClock,
-  CheckCircle2,
-  ClipboardList,
-  Gauge,
-  HeartPulse,
-  Lock,
-  MessageSquare,
-  ShieldCheck,
-  Sparkles,
-  Users,
-  type LucideIcon,
-} from 'lucide-react'
+import { Activity, CalendarClock, ClipboardList, HeartPulse, Lock, MessageSquare, ShieldCheck, Users, type LucideIcon } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { RedraftCommunicationPanel } from '@/components/redraft/RedraftCommunicationPanel'

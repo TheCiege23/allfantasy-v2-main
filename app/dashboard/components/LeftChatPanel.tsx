@@ -2,11 +2,10 @@
 
 import { Bot, ChevronDown, ChevronRight, Inbox, MessageCircle, Users, VolumeX, ArrowUp } from 'lucide-react'
 import { toast } from 'sonner'
-import { RichMessageRenderer, resolveMediaViewerUrl, canOpenInMediaViewer, getMediaViewerAriaLabel } from '@/lib/rich-message'
+import { RichMessageRenderer, resolveMediaViewerUrl } from '@/lib/rich-message'
 import { QUICK_REACTIONS, getAddReactionUrl, getRemoveReactionUrl, getReactionsFromMetadata } from '@/lib/social-chat/ReactionService'
 import { EmojiPicker } from './chat/EmojiPicker'
-import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useInterval } from '@/hooks/useInterval' // Assume you have/use a polling hook
 import { Send } from 'lucide-react'
 import type { PlatformChatThread, PlatformChatMessage } from '@/types/platform-shared'
@@ -206,54 +205,6 @@ function initialLeftTab(
   if (initialOpenChat) return initialOpenChat
   return selectedLeague ? 'league' : 'chimmy'
 }
-
-/** Position-style avatar fallback colors (aligned with `PlayerImage` positionBgClass). */
-function dmAvatarBgClass(name: string, index: number): string {
-  const p = name.trim()
-  let h = 0
-  for (let i = 0; i < p.length; i++) h = (h + p.charCodeAt(i) * (i + 1)) % 7
-  h = (h + index) % 7
-  const classes = [
-    'bg-red-500/80',
-    'bg-green-500/80',
-    'bg-blue-500/80',
-    'bg-orange-500/80',
-    'bg-purple-500/80',
-    'bg-indigo-500/80',
-    'bg-slate-500/80',
-  ]
-  return classes[h] ?? 'bg-slate-500/80'
-}
-
-function initialsFromDisplayName(name: string): string {
-  const n = name.trim()
-  if (!n) return '?'
-  const parts = n.split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
-  if (n.length >= 2) return n.slice(0, 2).toUpperCase()
-  return (n[0]! + n[0]!).toUpperCase()
-}
-
-const DM_STUB_ROWS = [
-  {
-    name: 'TheCiege24',
-    preview: 'You seeing these waiver moves?',
-    time: '2m ago',
-    unread: 2 as number | null,
-  },
-  {
-    name: 'PoloGlizzy',
-    preview: 'Bro that trade was robbery',
-    time: '1h ago',
-    unread: null as number | null,
-  },
-  {
-    name: 'tomwh',
-    preview: 'Running it back next year 🔥',
-    time: 'Yesterday',
-    unread: null as number | null,
-  },
-] as const
 
 export function LeftChatPanel({
   selectedLeague,

@@ -32,7 +32,7 @@
 
 import type { ActorContext } from './actorContext'
 import type { Tx } from './db'
-import { type DomainError, forbidden, invariant } from './errors'
+import { type DomainError, invariant } from './errors'
 import { type Result, err, ok } from './result'
 import { validateReason } from './reason'
 import { type Authorize, type WriteAudit, denyAll, refuseAudit } from './ports'

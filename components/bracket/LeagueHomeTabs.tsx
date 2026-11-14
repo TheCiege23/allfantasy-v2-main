@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useMemo, useEffect } from "react"
 import dynamic from "next/dynamic"
-import { Trophy, ChevronDown, MessageCircle, Pin, Send, X, Share2, Copy, Check, Settings, Zap, Crown, Shield } from "lucide-react"
+import { Trophy, ChevronDown, Share2, Copy, Check, Settings, Zap, Crown, Shield } from "lucide-react"
 import { BracketTreeView } from "./BracketTreeView"
 import { PoolStandings } from "./PoolStandings"
 import { GameScores } from "./GameScores"

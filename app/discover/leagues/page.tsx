@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { PublicLeagueDiscoveryPage } from "@/components/discovery"
-import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 
 export const dynamic = "force-dynamic"
 

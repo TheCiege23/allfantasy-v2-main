@@ -1,10 +1,6 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
-import {
-  getWorldCupLeagueId,
-  fetchWorldCupTeams,
-  fetchWorldCupFixtures,
-} from "./apiSportsWorldCup"
+import { getWorldCupLeagueId, fetchWorldCupTeams } from "./apiSportsWorldCup"
 
 export type WorldCupDiagnosticsResult = {
   apiKeyConfigured: boolean

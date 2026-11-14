@@ -15,7 +15,6 @@ import { LeagueRecentActivity } from '@/app/league/[leagueId]/components/LeagueR
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { StandingsPresentation } from '@/app/league/[leagueId]/league-dashboard-types'
 import { getDraftIdFromSettings, getSleeperLikeBundle } from '@/app/league/[leagueId]/components/league-settings-modal-utils'
-import { IDPDraftFilters } from '@/app/idp/components/IDPDraftFilters'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { openDraftFromEmbeddedLeague } from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo } from '@/lib/league/ncaaf-beta-guard'

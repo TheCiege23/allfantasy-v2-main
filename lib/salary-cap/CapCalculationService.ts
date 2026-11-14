@@ -3,7 +3,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getSalaryCapConfig } from './SalaryCapLeagueConfig'
 import type { SalaryCapConfig } from './types'
 import type { CapLegalityResult, TeamLedgerRow } from './types'
 
@@ -47,8 +46,6 @@ export async function getTotalCapHitForRoster(
   }
   return { totalCapHit, deadMoneyHit }
 }
-
-import { Prisma } from '@prisma/client'
 
 /** Get or create ledger row for roster + cap year; recompute cap space. */
 export async function getOrCreateLedger(

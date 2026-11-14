@@ -8,12 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import {
-  getNbaScheduleConfig,
-  updateNbaScheduleConfig,
-  resolveNbaFantasyWeek,
-  getWeekVolumeProfile,
-} from '@/lib/nba-schedule'
+import { getNbaScheduleConfig, updateNbaScheduleConfig, resolveNbaFantasyWeek } from '@/lib/nba-schedule'
 import type { NbaScheduleConfig } from '@/lib/nba-schedule'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
 import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'

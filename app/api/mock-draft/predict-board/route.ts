@@ -131,7 +131,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-
 type ScenarioMultipliers = {
   adpMul: number
   needMul: number
@@ -197,10 +196,6 @@ function pickWeightedIdx(weights: number[]): number {
     if (r <= 0) return i
   }
   return weights.length - 1
-}
-
-function pickWeighted(candidates: ADPEntry[], weights: number[]): ADPEntry {
-  return candidates[pickWeightedIdx(weights)]
 }
 
 function computeVolatility(outcomeMap: Map<string, number>, simulations: number, managerName: string): VolatilityMeter {

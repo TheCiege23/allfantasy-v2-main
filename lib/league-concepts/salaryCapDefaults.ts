@@ -117,15 +117,6 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.max(min, Math.min(max, Math.floor(n)))
 }
 
-function asBoolean(value: unknown, fallback: boolean): boolean {
-  if (value === true || value === false) return value
-  return fallback
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
-}
-
 // ── Sub-types ─────────────────────────────────────────────────────────────────
 
 interface SalaryCapRosterTemplate {

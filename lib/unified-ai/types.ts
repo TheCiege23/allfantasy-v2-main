@@ -3,7 +3,6 @@
  * AllFantasy AI is information-driven: deterministic-first, fact-grounded, no invented claims.
  */
 
-import type { LeagueSport } from "@prisma/client"
 import type { DeterministicContextEnvelope } from '@/lib/ai-context-envelope/schema'
 
 /** Orchestration mode for AI execution. */

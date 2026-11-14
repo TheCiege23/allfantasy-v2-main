@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Check, ClipboardCheck, Copy, MessageSquare, Users } from "lucide-react"
+import { Check, ClipboardCheck, MessageSquare, Users } from "lucide-react"
 import {
   buildWorldCupCommissionerChecklist,
   type BuildChecklistInput,

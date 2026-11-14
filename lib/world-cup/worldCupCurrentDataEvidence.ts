@@ -22,15 +22,6 @@ export type WorldCupCurrentDataEvidenceSnapshot = Record<
   { rows: WorldCupCurrentDataEvidenceRow[] }
 >
 
-const ALL_KEYS: WorldCupCurrentDataKey[] = [
-  "injuries",
-  "player_stats",
-  "team_stats",
-  "squad_news",
-  "lineups",
-  "odds",
-]
-
 function emptySnapshot(): WorldCupCurrentDataEvidenceSnapshot {
   return {
     injuries: { rows: [] },

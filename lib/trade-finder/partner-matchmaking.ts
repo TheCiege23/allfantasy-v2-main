@@ -1,9 +1,5 @@
 import type { ManagerTendencyProfile } from '@/lib/trade-engine/manager-tendency-engine'
-import type {
-  ManagerProfile,
-  Asset,
-  LeagueIntelligence,
-} from '@/lib/trade-engine/types'
+import type { ManagerProfile, LeagueIntelligence } from '@/lib/trade-engine/types'
 import type { PricedAsset } from './candidate-generator'
 
 export type MatchmakingGoal =

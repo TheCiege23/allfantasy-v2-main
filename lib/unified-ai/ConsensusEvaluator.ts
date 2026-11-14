@@ -3,7 +3,7 @@
  * Used in consensus and unified_brain modes; prefers OpenAI for final text when available.
  */
 
-import type { ModelOutput, OrchestrationResult } from "./types"
+import type { ModelOutput } from "./types"
 import type { AIModelRole } from "./types"
 
 interface ConsensusInput {

@@ -1,8 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
-import { resolveLeagueClass, type LeagueClass } from './adaptive-weight-learning'
-import type { CompositeWeightProfile } from './composite-weights'
-import { getCompositeWeightConfig, resolveWeightProfile, computeCompositeFromWeights } from './composite-weights'
 
 export interface LearnedCompositeParams {
   injuryInfluence: number

@@ -6,14 +6,6 @@ import type {
   MatchupPredictionScoringRulesInput,
 } from './types'
 
-const DEFAULT_RULES: Required<MatchupPredictionScoringRulesInput> = {
-  pointMultiplier: 1,
-  teamABonus: 0,
-  teamBBonus: 0,
-  varianceMultiplier: 1,
-  preset: 'standard',
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }

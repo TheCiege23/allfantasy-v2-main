@@ -1,5 +1,3 @@
-import type { PrismaClient } from '@prisma/client'
-
 import type { PricedAsset } from '@/lib/hybrid-valuation'
 import { applyDevyPricing, heldDevyOptionValue, type HeldDevyPlayer } from '@/lib/decision-os/trade/leagueAssetRules'
 import { normalizeDevyName } from '@/lib/devy/devyPlayerReads'

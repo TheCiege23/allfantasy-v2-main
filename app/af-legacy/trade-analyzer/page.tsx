@@ -353,10 +353,6 @@ function extractPlayerNamesFromAssets(assetsA: TradeAsset[], assetsB: TradeAsset
   return Array.from(new Set(names)).slice(0, 20)
 }
 
-function hasAtLeastOnePlayerAsset(assetsA: TradeAsset[], assetsB: TradeAsset[]) {
-  return [...assetsA, ...assetsB].some((a) => a?.type === 'player' && (a as any)?.player?.name)
-}
-
 function extractPlayerContextFromAssets(assetsA: TradeAsset[], assetsB: TradeAsset[]) {
   const players = [...assetsA, ...assetsB]
     .filter((a): a is { type: 'player'; player: RosteredPlayer } => a?.type === 'player' && !!(a as any).player)

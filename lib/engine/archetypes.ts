@@ -1,4 +1,4 @@
-import type { ArchetypeId, TeamPhase } from './types'
+import type { ArchetypeId } from './types'
 
 export interface ArchetypeClassification {
   archetype: ArchetypeId

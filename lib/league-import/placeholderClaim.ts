@@ -80,15 +80,6 @@ function claimDisplayName(candidate: ClaimCandidate): string {
   return emailLocal || 'Manager'
 }
 
-function sourceManagerIdFromPlatformField(platformUserId: string): string | null {
-  if (platformUserId.startsWith('import:')) {
-    // "import:<provider>:<teamId>" — teamId is stable; prefer matching on
-    // source_manager_id via playerData.import.sourceManagerId instead.
-    return null
-  }
-  return platformUserId
-}
-
 /**
  * Find and claim the best-matching placeholder roster for this user. Caller
  * runs this inside the join transaction BEFORE creating a fresh roster.

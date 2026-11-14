@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Home, Calendar, Vote, Users, Settings, MessageSquare, Sparkles, ChevronDown } from 'lucide-react'
+import { Home, Settings, MessageSquare, Sparkles, ChevronDown } from 'lucide-react'
 import type { BigBrotherView } from './types'
 import { BigBrotherStatusBadge } from './BigBrotherStatusBadge'
 import { BigBrotherCeremonyCenter } from './BigBrotherCeremonyCenter'

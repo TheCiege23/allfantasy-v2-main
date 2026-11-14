@@ -4,11 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { aggregateCareerForManager } from './CareerProgressionAggregator'
-import {
-  GM_PROGRESSION_EVENT_TYPES,
-  type GMProgressionEventType,
-  type ManagerFranchiseProfileInput,
-} from './types'
+import { GM_PROGRESSION_EVENT_TYPES, type GMProgressionEventType } from './types'
 import { normalizeSportForGMCareer } from './SportCareerResolver'
 import { getMergedHistoricalSeasonResultsForManager } from '@/lib/season-results/HistoricalSeasonResultService'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'

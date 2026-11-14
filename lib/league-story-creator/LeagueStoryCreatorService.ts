@@ -7,7 +7,7 @@
 import { assembleNarrativeContext } from "./NarrativeContextAssembler"
 import { buildDeterministicStoryFallback, composeOneBrainStory } from "./OneBrainNarrativeComposer"
 import { validateStoryOutput } from "./StoryFactGuard"
-import { formatStoryToSections, getStoryVariant } from "./NarrativeOutputFormatter"
+import { formatStoryToSections } from "./NarrativeOutputFormatter"
 import type { NarrativeContextPackage, StoryOutput, StoryStyle, StoryType } from "./types"
 
 export interface CreateStoryInput {

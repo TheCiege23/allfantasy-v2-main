@@ -13,7 +13,6 @@ import {
   normalizeNflRedraftProviderPlayerIdentity,
   type NflRedraftPlayerIdentityProviderId,
 } from '@/lib/nfl-provider/nflRedraftPlayerIdentity'
-import type { NflRedraftProviderId } from '@/lib/nfl-provider/nflRedraftProviderFoundation'
 import { normalizeNflRedraftProviderGameContext } from '@/lib/player-data/nflRedraftGameContext'
 import { normalizeNflRedraftProviderLiveScoringContext } from '@/lib/player-data/nflRedraftLiveScoringContext'
 import { normalizeNflRedraftProviderPlayerIntelligence } from '@/lib/player-data/nflRedraftPlayerIntelligence'

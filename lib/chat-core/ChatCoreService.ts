@@ -9,7 +9,7 @@ import {
   getLeagueIdFromVirtualRoom,
   type ResolvedChatRoom,
 } from "./ChatRoomResolver"
-import type { PlatformChatMessage, PlatformChatThread } from "@/types/platform-shared"
+import type { PlatformChatMessage } from "@/types/platform-shared"
 
 export type { ResolvedChatRoom }
 

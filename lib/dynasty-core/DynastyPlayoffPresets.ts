@@ -6,7 +6,6 @@ import type { DynastyPlayoffPresetDto } from './types'
 
 /** NFL: title week 17 so playoff start 15; 14-week regular season default. */
 const NFL_PLAYOFF_START_WEEK = 15
-const NFL_TITLE_WEEK = 17
 
 /**
  * Get playoff preset DTOs for UI.

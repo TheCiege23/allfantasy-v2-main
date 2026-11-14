@@ -7,19 +7,13 @@ import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
 import { Check, Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage, useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
+import { applyDraftFilters, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
 import type { DraftStatPlayerSource } from '@/lib/draft-room/draftSportStatColumns'
 import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
 import { compactDraftPlayerStats } from '@/lib/draft-room/compactDraftPlayerStats'
 import { DraftPlayerCard } from './DraftPlayerCard'
 import { SleeperPoolTable } from './SleeperPoolTable'
-import {
-  applyPoolSort,
-  nextSortState,
-  sortKeyForColumn,
-  type PoolSortKey,
-  type PoolSortState,
-} from './SleeperPoolSort'
+import { applyPoolSort, nextSortState, sortKeyForColumn, type PoolSortKey } from './SleeperPoolSort'
 // NflDraftPoolStatsGroupHeader import removed in Slice D.1.5 Path B; re-add when D.2 ships the
 // Sleeper-style table mode and rows actually align to those columns.
 import { PlayerDetailModal, type DraftAssistantRoomContext } from './PlayerDetailModal'

@@ -1,4 +1,3 @@
-import { coreUiCopy } from './coreUiCopy'
 import { infoReasonText } from './finderPlayerInfoCopy'
 import { designationText } from './playerFinderCopy'
 import { ageText } from './shellCopy'

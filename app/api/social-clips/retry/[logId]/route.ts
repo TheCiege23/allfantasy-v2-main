@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { canPublish, retryPublish } from '@/lib/social-clips-grok';
+import { retryPublish } from '@/lib/social-clips-grok';
 
 export const dynamic = 'force-dynamic';
 

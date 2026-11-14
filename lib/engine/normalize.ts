@@ -1,4 +1,4 @@
-import type { EngineLeagueContext, DepthRole, TeamPhase, ArchetypeId } from './types'
+import type { EngineLeagueContext } from './types'
 
 export function normalizeLeagueContext(raw: {
   league_id?: string

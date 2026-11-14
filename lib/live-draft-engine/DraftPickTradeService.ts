@@ -4,7 +4,6 @@ import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/to
  */
 
 import { prisma } from '@/lib/prisma'
-import { buildSessionSnapshot } from './DraftSessionService'
 import type { TradedPickRecord } from './types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { updateSessionWithArchive } from '@/lib/draft-archive/events'

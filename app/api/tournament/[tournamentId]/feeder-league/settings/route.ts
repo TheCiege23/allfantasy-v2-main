@@ -10,7 +10,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
-import { feederSettingsSnapshot, normalizeEditableLeagueSettings, type EditableFeederLeagueSettings } from '@/lib/tournament/feederLeagueSettings'
+import { feederSettingsSnapshot, normalizeEditableLeagueSettings } from '@/lib/tournament/feederLeagueSettings'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 

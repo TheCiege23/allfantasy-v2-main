@@ -4,7 +4,7 @@
  */
 
 import { buildCommissionerTrustContext } from './CommissionerTrustBridge'
-import { getUnifiedManagerSummary, getUnifiedManagerSummaries } from './UnifiedPrestigeQueryService'
+import { getUnifiedManagerSummaries } from './UnifiedPrestigeQueryService'
 import { buildAIPrestigeContext } from './AIPrestigeContextResolver'
 import type { CommissionerTrustContext, UnifiedManagerSummary, AIPrestigeContextPayload } from './types'
 

@@ -15,7 +15,7 @@
  * in docs/g15-3-relay-and-projection.md. The default in-process bus is single-node.
  */
 import { randomUUID } from 'node:crypto'
-import type { DomainEvent, EventConsumer, IEventBus, IOutboxStore } from './types'
+import type { EventConsumer, IEventBus, IOutboxStore } from './types'
 
 export type RelayLogLevel = 'debug' | 'info' | 'warn' | 'error'
 export type RelayLogger = (level: RelayLogLevel, message: string, meta?: Record<string, unknown>) => void

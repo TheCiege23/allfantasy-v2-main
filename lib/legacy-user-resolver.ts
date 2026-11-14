@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getSleeperUser, SleeperUser } from '@/lib/sleeper-client';
+import { getSleeperUser } from '@/lib/sleeper-client';
 
 export interface ResolvedLegacyUser {
   id: string;

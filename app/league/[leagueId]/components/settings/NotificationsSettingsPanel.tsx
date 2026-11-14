@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { SettingsPanelHeading, SettingsSectionLabel, SettingsHelper, SettingsToggleRow } from './settings-ui'
+import { SettingsPanelHeading, SettingsSectionLabel, SettingsToggleRow } from './settings-ui'
 
 type Prefs = {
   tradeAlerts?: boolean

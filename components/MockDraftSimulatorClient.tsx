@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Play, Pause, SkipForward, RefreshCw, Download, RotateCcw, Users, Loader2, Link, ArrowUp, ArrowDown, X, TrendingUp, TrendingDown, Minus, Star, Handshake, Check, Newspaper, Beaker, Zap, Clock3, Bot } from 'lucide-react'
+import { Play, Pause, SkipForward, RefreshCw, Download, RotateCcw, Users, Loader2, Link, ArrowUp, ArrowDown, X, TrendingUp, TrendingDown, Minus, Star, Handshake, Check, Newspaper, Beaker, Zap, Clock3 } from 'lucide-react'
 import { useAI } from '@/hooks/useAI'
 import { toast } from 'sonner'
 import { AIDraftAssistantPanel } from '@/components/mock-draft'
@@ -1445,8 +1445,6 @@ export default function MockDraftSimulatorClient({
     toast.success('Draft board saved as PDF!')
   }
 
-
-
   const simulateTrade = async (direction: 'up' | 'down', pickNumber: number) => {
     if (draftResults.length === 0 || !selectedLeagueId) return
     if (!requireNflAdvancedTool()) return
@@ -1479,7 +1477,6 @@ export default function MockDraftSimulatorClient({
     }
     setIsTrading(false)
   }
-
 
   const handleTradeAction = async (pickNumber: number, action: 'accept' | 'reject') => {
     if (!requireNflAdvancedTool()) return

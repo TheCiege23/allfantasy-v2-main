@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
-import { getServerSession } from "next-auth"
 
-import { authOptions } from "@/lib/auth"
 import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { isOwnerOrLeagueCommissioner } from "@/lib/commissioner/leagueCommissionerAccount"
 import { getLeagueRole } from "@/lib/league/permissions"

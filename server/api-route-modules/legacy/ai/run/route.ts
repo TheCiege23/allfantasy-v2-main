@@ -455,7 +455,6 @@ type LegacyAudit = {
   dataFreshness: Record<string, string>
 }
 
-
 type LegacyCitation = {
   claim: string
   source: string
@@ -500,11 +499,6 @@ function toStringArray(value: unknown, max = 8): string[] {
     .map((v) => v.trim())
     .filter(Boolean)
     .slice(0, max)
-}
-
-function toBoundedNumber(value: unknown, min: number, max: number, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback
-  return Math.max(min, Math.min(max, value))
 }
 
 function normalizeCitations(value: unknown, audit: LegacyAudit): LegacyCitation[] {
@@ -1107,5 +1101,4 @@ Generate a comprehensive rating and analysis.`
     )
   }
 })
-
 

@@ -50,10 +50,6 @@ type SkippedTeam = { teamId: string; reason: 'empty_roster' }
 /** Player values fed to the engine are heuristic estimates, not market (FantasyCalc/KTC) values. */
 const PLAYER_VALUE_SOURCE = 'estimated' as const
 
-type DraftSessionLite = {
-  tradedPicks: unknown
-}
-
 /**
  * Heuristic base value by SPORT, then position. This used to be one flat table keyed by label, so
  * MLB catcher, NBA center and NHL center were all "C" = 6300, NBA guard and NHL goalie were both

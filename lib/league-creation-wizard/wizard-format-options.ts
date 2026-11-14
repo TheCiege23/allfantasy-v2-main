@@ -4,7 +4,6 @@ import { defaultTribeSlots, type SurvivorTribeSlot } from '@/lib/survivor/surviv
  * Deeper tuning stays in League settings after the league exists.
  */
 
-import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { clampSurvivorCastSize } from '@/lib/league-creation-wizard/sport-team-limits'
 import type { ZombieUniverseTierId } from '@/lib/zombie/zombie-universe-tier'
 

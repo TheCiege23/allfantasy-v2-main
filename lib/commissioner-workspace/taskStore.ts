@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { detectLeagueTasks, type WorkspaceTaskCandidate } from './taskSources'
+import { detectLeagueTasks } from './taskSources'
 
 /**
  * The persisted half of Commissioner Workspace: reconcile detected conditions against stored rows,

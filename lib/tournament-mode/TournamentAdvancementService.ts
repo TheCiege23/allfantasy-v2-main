@@ -35,12 +35,6 @@ function resolveNextPhase(totalAdvancing: number): 'elimination' | 'elite_eight'
   return 'elimination'
 }
 
-function resolveNextLeagueSize(totalAdvancing: number, leagueCount: number): number {
-  if (leagueCount <= 0) return totalAdvancing
-  const base = Math.floor(totalAdvancing / leagueCount)
-  return Math.max(base, 4)
-}
-
 /**
  * Condense a completed round into fewer leagues for the next round.
  * Collects standings from all leagues in `fromRoundIndex`, advances top N per league,

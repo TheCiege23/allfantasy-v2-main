@@ -1,6 +1,5 @@
 import { dispatchNotification } from "@/lib/notifications/NotificationDispatcher"
 import { getDeepLinkRedirect } from "@/lib/routing/DeepLinkHandler"
-import type { EngagementNotificationType } from "./types"
 
 /**
  * Sends engagement notifications (daily digest, league reminder, AI insight, weekly recap).

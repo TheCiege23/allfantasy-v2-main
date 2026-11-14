@@ -5,13 +5,9 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { normalizeIdpPosition } from '@/lib/idp-kicker-values'
-import { isPositionEligibleForIdpSlot } from './IDPEligibility'
 import type { IdpPositionMode } from './types'
-import { IDP_SPLIT_TO_GROUP } from './types'
 
 const IDP_SPLIT_POSITIONS = ['DE', 'DT', 'LB', 'CB', 'S'] as const
-const IDP_GROUPED = ['DL', 'DB'] as const
 
 function normalizeTag(tag: string): string {
   const u = (tag || '').trim().toUpperCase()

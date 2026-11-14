@@ -20,7 +20,6 @@ import { isExcludedFromHomeHero, resolveLeagueAccent } from '@/lib/league-home/a
 import { resolveLeagueMedia } from '@/lib/league-home/league-media-resolver'
 import { LeagueManagersStandingsSection } from '@/app/league/[leagueId]/components/LeagueManagersStandingsSection'
 import { LeagueRecentActivity } from '@/app/league/[leagueId]/components/LeagueRecentActivity'
-import type { LeagueActivityItem, LeagueActivityLine } from '@/components/league/types'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
 import { buildLeagueHomePulse } from '@/lib/decision-os/league-pulse'
@@ -253,112 +252,6 @@ function teamInitials(team: LeagueTeamSlot): string {
     return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
   }
   return raw.slice(0, 2).toUpperCase()
-}
-
-function normalizeActivityLine(value: unknown): LeagueActivityLine | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const r = value as Record<string, unknown>
-  const typeRaw = String(r.type ?? '').trim().toLowerCase()
-  const type: LeagueActivityLine['type'] =
-    typeRaw === 'add' ? 'add' : typeRaw === 'drop' ? 'drop' : 'note'
-  return {
-    type,
-    label: String(r.label ?? ''),
-    playerName: typeof r.playerName === 'string' ? r.playerName : null,
-    playerMeta: typeof r.playerMeta === 'string' ? r.playerMeta : null,
-  }
-}
-
-function normalizeLeagueActivityItem(value: unknown): LeagueActivityItem | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const r = value as Record<string, unknown>
-  const typeRaw = String(r.type ?? '').trim().toLowerCase()
-  const type: LeagueActivityItem['type'] =
-    typeRaw === 'waiver' || typeRaw === 'trade' || typeRaw === 'message' ? typeRaw : 'message'
-  const lines = Array.isArray(r.lines)
-    ? r.lines.map(normalizeActivityLine).filter((x): x is LeagueActivityLine => x != null)
-    : []
-  return {
-    id: String(r.id ?? `evt-${Math.random().toString(36).slice(2)}`),
-    type,
-    managerName: String(r.managerName ?? 'League'),
-    badge: String(r.badge ?? ''),
-    badgeTone: 'neutral',
-    timestamp: String(r.timestamp ?? ''),
-    amountLabel: typeof r.amountLabel === 'string' ? r.amountLabel : null,
-    summary: typeof r.summary === 'string' ? r.summary : null,
-    lines,
-  }
-}
-
-function mapActivityRow(item: LeagueActivityItem): LeagueActivityFeedRow {
-  const lines = Array.isArray(item.lines) ? item.lines : []
-  const addCount = lines.filter((l) => l.type === 'add').length
-  const dropCount = lines.filter((l) => l.type === 'drop').length
-  const summary = String(item.summary ?? '').trim()
-  const combined = `${summary} ${item.badge} ${lines.map((l) => `${l.label} ${l.playerName ?? ''}`).join(' ')}`.toLowerCase()
-
-  if (item.type === 'trade') {
-    return {
-      id: item.id,
-      category: 'trade',
-      title: summary.length > 0 ? summary : `${item.managerName} completed a trade`,
-      subtitle: 'Recent trade activity',
-      timestamp: item.timestamp,
-    }
-  }
-
-  if (item.type === 'waiver') {
-    const kind = item.badge.toLowerCase().includes('free') ? 'Free-agent move' : 'Waiver claim'
-    return {
-      id: item.id,
-      category: addCount > 0 || dropCount > 0 ? 'add_drop' : 'waiver',
-      title: `${item.managerName} ${kind.toLowerCase()}`,
-      subtitle:
-        addCount > 0 || dropCount > 0
-          ? `${addCount > 0 ? `${addCount} add${addCount > 1 ? 's' : ''}` : '0 adds'}${dropCount > 0 ? ` · ${dropCount} drop${dropCount > 1 ? 's' : ''}` : ''}`
-          : (item.amountLabel ?? kind),
-      timestamp: item.timestamp,
-    }
-  }
-
-  if (combined.includes('draft') || combined.includes('pick')) {
-    return {
-      id: item.id,
-      category: 'draft',
-      title: summary.length > 0 ? summary : `${item.managerName} draft pick update`,
-      subtitle: 'Draft / pick movement',
-      timestamp: item.timestamp,
-    }
-  }
-
-  if (combined.includes('announcement') || combined.includes('commissioner') || combined.includes('commish')) {
-    return {
-      id: item.id,
-      category: 'announcement',
-      title: summary.length > 0 ? summary : `${item.managerName} posted an announcement`,
-      subtitle: 'Commissioner / league message',
-      timestamp: item.timestamp,
-    }
-  }
-
-  if (combined.includes('matchup') || combined.includes('score') || combined.includes('scoring')) {
-    return {
-      id: item.id,
-      category: 'scoring',
-      title: summary.length > 0 ? summary : 'Scoring update',
-      subtitle: 'Matchup / scoring activity',
-      timestamp: item.timestamp,
-    }
-  }
-
-  return {
-    id: item.id,
-    category: 'generic',
-    title: summary.length > 0 ? summary : `${item.managerName} activity update`,
-    subtitle: 'League feed event',
-    timestamp: item.timestamp,
-  }
 }
 
 function activityDotClass(category: LeagueActivityFeedRow['category']): string {

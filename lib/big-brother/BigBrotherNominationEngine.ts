@@ -4,10 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getBigBrotherConfig } from './BigBrotherLeagueConfig'
 import { getExcludedRosterIds } from './bigBrotherGuard'
-
-const FINAL_NOMINEE_COUNT = 2
 
 /**
  * Set initial nominations (nominee1, nominee2). HOH cannot be nominated.

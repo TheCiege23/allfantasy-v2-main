@@ -8,12 +8,6 @@ interface TrustTimelineProps {
   size?: 'sm' | 'md'
 }
 
-const phaseColors: Record<TrustTimelinePoint['phase'], { dot: string; line: string; label: string }> = {
-  before: { dot: 'bg-white/40', line: 'bg-white/15', label: 'text-white/40' },
-  after: { dot: '', line: '', label: '' },
-  longterm: { dot: '', line: '', label: '' },
-}
-
 function getScoreColor(score: number): string {
   if (score >= 70) return 'bg-emerald-400'
   if (score >= 45) return 'bg-amber-400'

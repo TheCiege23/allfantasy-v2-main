@@ -6,7 +6,6 @@
  */
 
 import type { Badge, ColorToken, IconToken } from './types'
-import { PRESENTATION_VERSION } from './tokens'
 
 // ── Badge catalog ─────────────────────────────────────────────────────────────
 

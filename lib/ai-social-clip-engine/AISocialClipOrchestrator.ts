@@ -28,7 +28,6 @@ import {
   buildOpenAIUserPrompt,
 } from "./prompts";
 import { moderateAIClipResult } from "./moderation";
-import { CLIP_INPUT_TYPES, CLIP_OUTPUT_TYPES } from "./types";
 
 const MAX_RETRIES = 2;
 

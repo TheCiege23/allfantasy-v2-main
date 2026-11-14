@@ -2,7 +2,7 @@ import { prisma } from './prisma';
 import { X_SEARCH_ALLOWED_HANDLES } from '@/lib/news/beatReporterHandles'
 import { xaiChatJson, parseTextFromXaiChatCompletion } from './xai-client';
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard';
-import { findPlayerByName, getPickValue, FantasyCalcPlayer } from './fantasycalc';
+import { findPlayerByName, getPickValue } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
@@ -787,7 +787,6 @@ If the trade is unbalanced:
 
 ## OUTPUT
 Be comprehensive but honest. The user trusts you. Don't tell them what they want to hear - tell them the truth. A fair trade is a good trade.`;
-
 
 export async function generateAIGMAnalysis(
   context: ComprehensiveTradeContext

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { getZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { ZombieSceneBackground } from './ZombieSceneBackground'

@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckCircle2 } from "lucide-react"
-import type { SignInProviderId, ProviderStatus } from "@/lib/connected-accounts"
+import type { ProviderStatus } from "@/lib/connected-accounts"
 
 export interface ConnectedIdentityRendererProps {
   provider: ProviderStatus

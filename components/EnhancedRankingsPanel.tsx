@@ -98,13 +98,6 @@ const POS_BAR_COLORS: Record<string, string> = {
   TE: 'bg-amber-400',
 }
 
-const POS_BG: Record<string, string> = {
-  QB: 'bg-rose-500/15 border-rose-500/20',
-  RB: 'bg-cyan-500/15 border-cyan-500/20',
-  WR: 'bg-emerald-500/15 border-emerald-500/20',
-  TE: 'bg-amber-500/15 border-amber-500/20',
-}
-
 const VIEW_CONFIG: { key: EnhancedView; label: string; desc: string; emoji: string }[] = [
   { key: 'this_year', label: 'This Year', desc: 'Impact-heavy contender ranking', emoji: '&#x1F3C6;' },
   { key: 'dynasty_horizon', label: 'Dynasty 3-5yr', desc: 'Value + demand for the future', emoji: '&#x1F4C8;' },

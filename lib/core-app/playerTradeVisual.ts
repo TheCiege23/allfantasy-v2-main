@@ -28,7 +28,6 @@ import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import type { TeamStance } from '@/lib/trade-value/types'
-import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextService'
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
@@ -36,7 +35,6 @@ import { lineupSeatsFromSettings } from './slotEligibility'
 import { lineupGainCalculator } from '@/lib/trade-intel/faabLineupGain'
 import { FOREIGN_IDS_UNREADABLE } from './foreignIdSpaceCopy'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
-import { leagueVariantFor } from './valueBook'
 /*
  * Moved to `lib/trade-intel/marketContext.ts` (2026-09-24) so the trade analysis engine can use the
  * same rule without importing this module's whole graph. Re-exported so every importer — and every
@@ -423,7 +421,6 @@ export function rosterSlotsOf(settings: unknown): string[] | null {
   const s = (settings ?? {}) as Record<string, unknown>
   return Array.isArray(s.roster_positions) ? s.roster_positions.map(String) : null
 }
-
 
 function toAssets(list: TradePackage['giveAssets']): TradeVisualAsset[] {
   return list.map((a) => ({

@@ -38,10 +38,6 @@ function avgAge(players: RoadmapPlayer[]): number {
   return ages.length > 0 ? ages.reduce((s, a) => s + a, 0) / ages.length : 26
 }
 
-function countBySlot(players: RoadmapPlayer[], slot: string): number {
-  return players.filter(p => p.slot === slot).length
-}
-
 function topValuePlayers(players: RoadmapPlayer[], n: number): RoadmapPlayer[] {
   return [...players].sort((a, b) => b.value - a.value).slice(0, n)
 }

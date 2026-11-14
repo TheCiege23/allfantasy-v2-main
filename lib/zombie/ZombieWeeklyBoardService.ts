@@ -2,7 +2,6 @@
  * Zombie weekly board: deterministic data for "On the Chompin' Block", standings deltas, movement watch (PROMPT 353).
  */
 
-import { prisma } from '@/lib/prisma'
 import { getWhispererRosterId, getAllStatuses } from './ZombieOwnerStatusService'
 import { getMovementProjections } from './ZombieMovementEngine'
 

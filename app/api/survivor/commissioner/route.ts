@@ -13,7 +13,6 @@ import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { enqueueNotification } from '@/lib/survivor/notificationEngine'
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch } from '@/lib/survivor/lateSeasonSettings'
-import { maybeTriggerSurvivorTribeShuffleRecommendation } from '@/lib/survivor/SurvivorSitOutEngine'
 import {
   applySurvivorReward,
   chooseSurvivorRewardTarget,

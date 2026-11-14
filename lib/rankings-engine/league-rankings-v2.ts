@@ -20,7 +20,7 @@ import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import { resolveLeagueKickerValue, type LeagueKickerValue } from '@/lib/kicker-values/leagueKickerValue'
 import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
-import { getCompositeWeightConfig, resolveWeightProfile, computeCompositeFromWeights, type CompositeWeightConfig } from './composite-weights'
+import { getCompositeWeightConfig, resolveWeightProfile, computeCompositeFromWeights } from './composite-weights'
 import { getActiveCompositeParams, type LearnedCompositeParams } from './composite-param-learning'
 import { getActiveWeightsForSegment } from './weekly-weight-learning'
 import type { ComponentWeights } from './adaptive-weight-learning'
@@ -319,7 +319,6 @@ export interface LDIChip {
   type: 'hot' | 'cold'
 }
 
-
 interface LeagueSettings {
   leagueId: string
   name: string
@@ -540,7 +539,6 @@ async function fetchRosterRecords(leagueId: string): Promise<Map<number, RosterR
   }
   return m
 }
-
 
 function computeExpectedWins(
   rosterId: string,
@@ -1607,55 +1605,6 @@ function projectPortfolioFromPercentiles(
   }
 }
 
-function computeComposite(
-  ws: number,
-  ps: number,
-  ls: number,
-  mvs: number,
-  mss: number,
-  draftGainP: number,
-  phase: string,
-  isDynasty: boolean,
-  futureCapitalScore: number = 0,
-): number {
-  const w = ws / 100
-  const p = ps / 100
-  const l = ls / 100
-  const m = mvs / 100
-  const s = mss / 100
-  const dg = draftGainP / 100
-  const fc = futureCapitalScore / 100
-
-  if (phase === 'offseason') {
-    if (isDynasty) {
-      return Math.round(100 * clamp01(0.45 * m + 0.25 * p + 0.10 * s + 0.10 * fc + 0.10 * (1 - l)))
-    }
-    return Math.round(100 * clamp01(0.50 * p + 0.20 * s + 0.20 * m + 0.10 * w))
-  }
-
-  if (phase === 'post_draft') {
-    if (isDynasty) {
-      return Math.round(100 * clamp01(0.35 * m + 0.25 * p + 0.15 * dg + 0.15 * s + 0.10 * fc))
-    }
-    return Math.round(100 * clamp01(0.55 * p + 0.20 * dg + 0.15 * s + 0.10 * m))
-  }
-
-  if (phase === 'post_season') {
-    if (isDynasty) {
-      return Math.round(100 * clamp01(0.50 * w + 0.20 * p + 0.10 * s + 0.10 * m + 0.10 * fc))
-    }
-    return Math.round(100 * clamp01(0.55 * w + 0.20 * p + 0.10 * s + 0.15 * m))
-  }
-
-  if (isDynasty) {
-    const luckTerm = 1 - Math.abs(l - 0.5) * 2
-    return Math.round(100 * clamp01(0.20 * w + 0.30 * p + 0.08 * luckTerm + 0.17 * m + 0.15 * s + 0.10 * fc))
-  }
-
-  const luckTerm = 1 - Math.abs(l - 0.5) * 2
-  return Math.round(100 * clamp01(0.45 * p + 0.30 * w + 0.15 * luckTerm + 0.10 * s))
-}
-
 const DRIVER_ALLOWLIST = new Set([
   'record_surge', 'record_slide',
   'points_for_spike', 'points_for_dip',
@@ -2255,11 +2204,6 @@ function buildRankExplanation(
     nextActions,
     valid,
   }
-}
-
-function getWeekValue(arr: number[], week: number): number | null {
-  const idx = week - 1
-  return Number.isFinite(arr?.[idx]) ? arr[idx] : null
 }
 
 interface CachedWeekStat {

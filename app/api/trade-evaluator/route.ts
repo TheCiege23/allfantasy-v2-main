@@ -10,7 +10,6 @@ import {
   clampNegotiationToAllowed,
 } from '@/lib/trade-finder/negotiation-helpers'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { consumeRateLimit } from '@/lib/rate-limit'
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
 import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, isEvidencedPrice, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
@@ -2005,7 +2004,6 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       acceptBullets: tradeDriverData.acceptBullets,
       sensitivitySentence: tradeDriverData.sensitivitySentence,
     } : null
-
 
     let negotiationToolkit: import('@/lib/trade-engine/types').NegotiationToolkit | null = null
     if (tradeDriverData) {

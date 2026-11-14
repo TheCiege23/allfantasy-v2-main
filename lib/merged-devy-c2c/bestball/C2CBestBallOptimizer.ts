@@ -3,7 +3,7 @@
  * Pro side reuses devy optimizer (college players excluded until promoted). College side optimizes college lineup when enabled.
  */
 
-import type { C2CLeagueConfigShape, C2CLineupSlots } from '../types'
+import type { C2CLeagueConfigShape } from '../types'
 import {
   optimizeNflBestBallLineup,
   optimizeNbaBestBallLineup,

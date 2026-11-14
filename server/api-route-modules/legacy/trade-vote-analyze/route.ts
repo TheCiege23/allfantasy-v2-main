@@ -1,6 +1,6 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
-import { pricePlayer, priceAssets, ValuationContext } from '@/lib/hybrid-valuation'
+import { priceAssets, ValuationContext } from '@/lib/hybrid-valuation'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-vote-analyze", tool: "LegacyTradeVoteAnalyze" })(async (request: Request) => {
   try {

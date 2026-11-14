@@ -1,5 +1,4 @@
 import type { OptimizerPlayerInput, OptimizerSlotInput } from '@/lib/lineup-optimizer-engine/types'
-import type { ExtendedLineupSport } from './lineup-sport'
 
 export type LineupDecisionMode =
   | 'Best Lineup'

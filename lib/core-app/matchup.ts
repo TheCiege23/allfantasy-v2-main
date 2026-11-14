@@ -15,7 +15,7 @@ import { forecastSidesFor, projectedFinalFor, winProbabilityFor, type Unavailabl
 import { BEST_BALL_REASON, matchupStarted, SCORING_TYPE_REASON, STATES_UNKNOWN_REASON } from './matchupForecast'
 import { weeklyFormat } from './weeklyCapabilities'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
-import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
@@ -77,7 +77,6 @@ const EMPTY_SLOT = '0'
  * production: 415 Wide Receiver, 216 Running Back, 135 Quarterback and so on,
  * so this is the common spelling rather than an edge case.
  */
-
 
 /**
  * Slot labels in the order fantasy lineups conventionally read.

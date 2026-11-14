@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { DEFAULT_LANG, resolveLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/constants"
+import { DEFAULT_LANG, resolveLanguage } from "@/lib/i18n/constants"
 import { translations } from "@/lib/i18n/translations"
 import { translateMissingEnglishKeysWithGoogle } from "@/lib/i18n/google-translate-server"
 import { getServerSession } from 'next-auth'

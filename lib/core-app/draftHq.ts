@@ -16,8 +16,6 @@ import {
   normalizeDraftedNameSet,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine/queue-utils'
-import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -238,7 +236,6 @@ export type DraftHqData = {
 }
 
 type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
-
 
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',

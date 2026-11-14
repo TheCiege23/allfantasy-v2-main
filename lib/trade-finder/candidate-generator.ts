@@ -18,12 +18,7 @@
  *   → TradeCandidate[]
  */
 
-import {
-  LeagueDecisionContext,
-  TeamDecisionProfile,
-  PartnerFitScore,
-  Position,
-} from '@/lib/league-decision-context'
+import { LeagueDecisionContext, TeamDecisionProfile, Position } from '@/lib/league-decision-context'
 
 export type TradeObjective = 'WIN_NOW' | 'REBUILD' | 'BALANCED'
 export type FinderMode = 'FAST' | 'DEEP'
@@ -96,7 +91,6 @@ interface CandidateGeneratorOutput {
   prunedTo: number
 }
 
-const SKILL_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE']
 const SCORE_THRESHOLD = 55
 const FAIRNESS_WINDOW = 0.25
 

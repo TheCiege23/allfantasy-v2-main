@@ -32,7 +32,6 @@ import type {
 import { getConceptIntroVideoUrl } from '@/lib/league-creation/concept-intro-videos'
 import { PlatformStyleSelector } from './PlatformStyleSelector'
 import { clampTeamCountForSport } from '@/lib/league-creation-wizard/sport-team-limits'
-import { COLLEGE_PAIR_WIZARD_PRIMARY_SPORTS } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
 import { readFetchJson } from '@/lib/http/readFetchJson'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'

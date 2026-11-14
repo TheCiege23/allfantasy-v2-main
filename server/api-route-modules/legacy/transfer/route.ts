@@ -1,6 +1,5 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import {
   getDraftPicks,
@@ -12,7 +11,7 @@ import {
   getLeagueUsers,
   type SleeperTransaction,
 } from '@/lib/sleeper-client'
-import { computeRivalryWeek, type RivalryWeekData } from '@/lib/rivalry-engine'
+import { computeRivalryWeek } from '@/lib/rivalry-engine'
 import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
 
 const openai = getOpenAIRouteClient()

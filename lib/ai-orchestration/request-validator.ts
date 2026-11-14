@@ -3,7 +3,6 @@
  */
 
 import type { AIContextEnvelope } from '@/lib/unified-ai/types'
-import type { UnifiedAIRequest } from './types'
 import type { AIErrorCode } from './types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeOrchestrationToolKey } from './tool-key-normalizer'

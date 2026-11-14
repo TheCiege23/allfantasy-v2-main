@@ -60,7 +60,6 @@ import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
  * for why a shared threshold cannot live in this `server-only` module.
  */
 
-
 /*
  * The coin-flip threshold lives in `weekBoardRules.ts`, not here.
  *
@@ -72,7 +71,6 @@ import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
  * here so server-side callers still have one obvious place to find it.
  */
 export { COIN_FLIP_POINTS } from './weekBoardRules'
-import { COIN_FLIP_POINTS } from './weekBoardRules'
 
 /**
  * Guillotine and survivor leagues eliminate the LOWEST score each week, so the
