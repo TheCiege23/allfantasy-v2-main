@@ -424,7 +424,7 @@ export default function MockDraftSimulatorClient({
   const [autopickMode, setAutopickMode] = useState<'queue-first' | 'bpa' | 'need-based'>('queue-first')
   const [draftPool, setDraftPool] = useState<'rookie' | 'vet' | 'combined'>('combined')
   const [casualMode, setCasualMode] = useState(false)
-  const [onClockPick, setOnClockPick] = useState<number | null>(null)
+  const [, setOnClockPick] = useState<number | null>(null)
   const [tradeResult, setTradeResult] = useState<any>(null)
   const [isTrading, setIsTrading] = useState(false)
   const [adpData, setAdpData] = useState<ADPPlayer[]>([])
@@ -467,13 +467,13 @@ export default function MockDraftSimulatorClient({
   const [retroLoading, setRetroLoading] = useState(false)
   const [retroData, setRetroData] = useState<any>(null)
   const [retroCalibration, setRetroCalibration] = useState<any>(null)
-  const [livePlayback, setLivePlayback] = useState(true)
+  const [livePlayback] = useState(true)
   const [isLivePlaying, setIsLivePlaying] = useState(false)
-  const [secondsPerPick, setSecondsPerPick] = useState(10)
+  const [secondsPerPick] = useState(10)
   const [clockSecondsLeft, setClockSecondsLeft] = useState(10)
   const [completedPicks, setCompletedPicks] = useState(0)
-  const [replaceAbsentWithAi, setReplaceAbsentWithAi] = useState(true)
-  const [absentManagers, setAbsentManagers] = useState<Set<string>>(new Set())
+  const [replaceAbsentWithAi] = useState(true)
+  const [absentManagers] = useState<Set<string>>(new Set())
   const [livePredictions, setLivePredictions] = useState<Array<{ manager: string; predictedPlayer: string; position: string; probability: number; reason: string }>>([])
   const [liveSuggestion, setLiveSuggestion] = useState<any>(null)
   const [liveIntelLoading, setLiveIntelLoading] = useState(false)
@@ -540,7 +540,6 @@ export default function MockDraftSimulatorClient({
     toast.error('This advanced AI tool is currently available for NFL mock drafts only.')
     return false
   }, [selectedSport])
-  const managerNames = useMemo(() => Array.from(new Set(draftResults.map((p) => p.manager))).filter(Boolean), [draftResults])
 
   useEffect(() => {
     if (initialLeagueId && selectedLeagueId !== initialLeagueId) setSelectedLeagueId(initialLeagueId)
@@ -1060,14 +1059,6 @@ export default function MockDraftSimulatorClient({
     setClockSecondsLeft(secondsPerPick)
   }, [draftResults.length, secondsPerPick])
 
-  const toggleAbsentManager = useCallback((manager: string) => {
-    setAbsentManagers((prev) => {
-      const next = new Set(prev)
-      if (next.has(manager)) next.delete(manager)
-      else next.add(manager)
-      return next
-    })
-  }, [])
   const startMockDraft = async () => {
     if (!selectedLeagueId) return toast.error('Select a league first')
     setIsSimulating(true)
@@ -3045,7 +3036,6 @@ export default function MockDraftSimulatorClient({
               const baseTop = base.topTargets[0]
               const scenTop = scen.topTargets[0]
               const changed = baseTop?.player !== scenTop?.player
-              const probDelta = (scenTop?.probability || 0) - (baseTop?.probability || 0)
               const borderStyle: Record<string, string> = {
                 yes: 'border-violet-500/30 bg-violet-500/[0.03]',
                 no: 'border-gray-800 bg-white/[0.01]',

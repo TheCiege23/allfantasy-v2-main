@@ -96,7 +96,6 @@ export async function saveLeagueNflRosterConfig(leagueId: string, config: { temp
 
   // 3. Update league-level roster size fields for quick access
   try {
-    const size = calculateRosterSize(config.slots)
     await prisma.league.update({
       where: { id: leagueId },
       data: { leagueSize: (league?.settings as Record<string, unknown>)?.league_size as number ?? undefined },

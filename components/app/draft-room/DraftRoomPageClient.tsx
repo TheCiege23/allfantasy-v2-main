@@ -478,7 +478,7 @@ export function DraftRoomPageClient({
   const warRoomCacheRef = useRef<Map<string, DraftWarRoomSnapshot>>(new Map())
   const [warRoomData, setWarRoomData] = useState<DraftWarRoomSnapshot | null>(null)
   const [warRoomLoading, setWarRoomLoading] = useState(false)
-  const [warRoomError, setWarRoomError] = useState<string | null>(null)
+  const [, setWarRoomError] = useState<string | null>(null)
   const [liveBrainEnvelope, setLiveBrainEnvelope] = useState<LiveDraftBrainEnvelope | null>(null)
   const [runAiPickLoading, setRunAiPickLoading] = useState(false)
   const [resyncLoading, setResyncLoading] = useState(false)
@@ -535,7 +535,7 @@ export function DraftRoomPageClient({
     orderedSlotLabels?: string[]
   } | null>(null)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
-  const [claimableRosterIds, setClaimableRosterIds] = useState<string[]>([])
+  const [, setClaimableRosterIds] = useState<string[]>([])
   const [tradeHistoryOpen, setTradeHistoryOpen] = useState(false)
   const [tradeHistoryFocus, setTradeHistoryFocus] = useState<{
     round: number
@@ -555,12 +555,11 @@ export function DraftRoomPageClient({
     (session as { orphanAiProviderAvailable?: boolean } | null)?.orphanAiProviderAvailable ??
     orphanAiProviderAvailableState ??
     true
-  const [claimSlotLoadingRosterId, setClaimSlotLoadingRosterId] = useState<string | null>(null)
   const [auctionNominateLoading, setAuctionNominateLoading] = useState(false)
   const [auctionBidLoading, setAuctionBidLoading] = useState(false)
   const [auctionResolveLoading, setAuctionResolveLoading] = useState(false)
   const [autopickExpiredLoading, setAutopickExpiredLoading] = useState(false)
-  const [helperSelectedPlayer, setHelperSelectedPlayer] = useState<{ name: string; position: string; team?: string | null } | null>(null)
+  const [helperSelectedPlayer] = useState<{ name: string; position: string; team?: string | null } | null>(null)
 
   const localPrefsKey = `${DRAFT_ROOM_LOCAL_PREFS_KEY_PREFIX}${leagueId}`
 
@@ -1197,8 +1196,8 @@ export function DraftRoomPageClient({
   }, [fetchRosterConfig])
 
   const [idpRosterSummary, setIdpRosterSummary] = useState<{ starterSlots: Record<string, number>; benchSlots: number } | null>(null)
-  const [idpScoringPreset, setIdpScoringPreset] = useState<string>('balanced')
-  const [idpPositionMode, setIdpPositionMode] = useState<string>('standard')
+  const [idpScoringPreset] = useState<string>('balanced')
+  const [idpPositionMode] = useState<string>('standard')
   const effectiveRosterSlots = useMemo(() => {
     if (formatType === 'IDP' && idpRosterSummary) {
       const slots: string[] = []
@@ -1226,43 +1225,6 @@ export function DraftRoomPageClient({
       normalizedSlots.filter((slot) => slot === 'QB').length >= 2
     )
   }, [effectiveRosterSlots])
-
-  const warRoomBrainInput = useMemo(() => {
-    if (!session) return null
-    const aiAdpByKey =
-      draftUISettings?.aiAdpEnabled && leagueAiAdp?.entries?.length
-        ? expandAiAdpKeysForLookup(leagueAiAdp.entries)
-        : {}
-    return buildLiveDraftBrainPayload({
-      session,
-      effectiveDraftSport,
-      isDynasty,
-      formatType,
-      isIdpLeague: Boolean(draftPool?.isIdp),
-      isSuperflexFormat,
-      isTePremium: effectiveRosterSlots.some((s) => /TE\+|PREM|PREMIUM|TE\s*PREM/i.test(String(s))),
-      leagueSiteDraftCount: leagueAiAdp?.totalDrafts,
-      currentUserRosterId,
-      players,
-      draftedNames,
-      effectiveRosterSlots,
-      aiAdpByKey: Object.keys(aiAdpByKey).length ? aiAdpByKey : undefined,
-    })
-  }, [
-    session,
-    effectiveDraftSport,
-    isDynasty,
-    formatType,
-    draftPool?.isIdp,
-    isSuperflexFormat,
-    effectiveRosterSlots,
-    leagueAiAdp?.entries,
-    leagueAiAdp?.totalDrafts,
-    draftUISettings?.aiAdpEnabled,
-    currentUserRosterId,
-    players,
-    draftedNames,
-  ])
 
   const fetchDraftSettings = useCallback(async () => {
     try {
@@ -2436,31 +2398,6 @@ export function DraftRoomPageClient({
     [inviteLink, leagueId],
   )
 
-  const handleClaimSlot = useCallback(
-    async (rosterId: string) => {
-      setClaimSlotLoadingRosterId(rosterId)
-      try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/claim-roster`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rosterId }),
-        })
-        const ok = res.ok
-        sendProductAnalyticsBeacon(DRAFT_ROOM.CLAIM_SLOT, { leagueId, rosterId, ok })
-        if (ok) {
-          await fetchSession()
-          await fetchDraftChromeData()
-          setClaimableRosterIds([])
-        }
-      } catch {
-        sendProductAnalyticsBeacon(DRAFT_ROOM.CLAIM_SLOT, { leagueId, rosterId, ok: false })
-      } finally {
-        setClaimSlotLoadingRosterId(null)
-      }
-    },
-    [leagueId, fetchSession, fetchDraftChromeData],
-  )
-
   const openPickTradePanel = useCallback(() => {
     setTradeInitialDraft(null)
     setTradePanelGeneration((g) => g + 1)
@@ -2727,19 +2664,6 @@ export function DraftRoomPageClient({
       fetchSession,
       fetchDraftAssistantContext,
     ],
-  )
-
-  const handlePoolPreviewSelect = useCallback(
-    (rawId: string) => {
-      const player = players.find(
-        (p) =>
-          (p.display?.playerId && p.display.playerId === rawId) ||
-          (p.id && p.id === rawId) ||
-          p.name === rawId
-      )
-      if (player) void handleMakePick(player)
-    },
-    [players, handleMakePick],
   )
 
   const handleDraftIntelPick = useCallback(() => {
@@ -3589,13 +3513,6 @@ export function DraftRoomPageClient({
     }
   }, [aiOverlaySignals, recommendationResult?.recommendation])
 
-  const recommendedPlayerResolved = useMemo(() => {
-    const r = recommendationResult?.recommendation
-    if (!r) return null
-    if (!isAiRecommendationPlayerAvailable(r.player.name, r.player.position)) return null
-    return resolvePlayerFromPool(r.player.name, r.player.position)
-  }, [recommendationResult?.recommendation, resolvePlayerFromPool, isAiRecommendationPlayerAvailable])
-
   const handleAddIntelQueueSuggestion = useCallback(
     (entry: DraftIntelQueueEntry) => {
       if (entry.isTaken) return
@@ -4266,18 +4183,6 @@ export function DraftRoomPageClient({
     }
     return map
   }, [slotOrder, leagueTeams, orphanRosterIds, aiArchetypeByRoster])
-
-  const onClockSpotlight = useMemo(() => {
-    const rid = currentPick?.rosterId
-    if (!rid) return null
-    const m = teamMetaByRoster[rid]
-    if (!m) return null
-    return {
-      teamName: m.teamName ?? null,
-      ownerName: m.ownerName ?? null,
-      avatarUrl: m.avatarUrl ?? null,
-    }
-  }, [currentPick?.rosterId, teamMetaByRoster])
 
   if (loading && !session) {
     return (

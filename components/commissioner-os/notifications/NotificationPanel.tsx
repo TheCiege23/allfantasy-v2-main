@@ -43,7 +43,7 @@ type FilterMode = 'all' | 'unread'
 export function NotificationPanel({ notifications, errorMessage }: NotificationPanelProps) {
   const { openServiceId, closeService } = useCommissionerPlatform()
   const { markRead, markAllRead, isRead } = useNotificationReadState()
-  const { mutedModuleIds, toggleMuted, isMuted } = useNotificationPreferences()
+  const { toggleMuted, isMuted } = useNotificationPreferences()
   const [filter, setFilter] = useState<FilterMode>('all')
   const [showPreferences, setShowPreferences] = useState(false)
   const open = openServiceId === 'notifications'

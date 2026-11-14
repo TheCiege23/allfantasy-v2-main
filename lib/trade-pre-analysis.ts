@@ -346,7 +346,6 @@ async function computeDraftPickInventory(
     
     const originalPickPos = pickPositionMap.get(originalRosterId) || Math.ceil(numTeams / 2);
     const originalOwnerName = rosterNameMap.get(originalRosterId) || `Team ${originalRosterId}`;
-    const currentOwnerName = rosterNameMap.get(currentOwnerId) || `Team ${currentOwnerId}`;
     
     const roundName = round === 1 ? '1st' : round === 2 ? '2nd' : round === 3 ? '3rd' : '4th';
     const isTraded = originalRosterId !== currentOwnerId;

@@ -95,9 +95,6 @@ export default function DraftRoom(props: DraftRoomProps) {
   const {
     leagueName,
     username,
-    leagues,
-    selectedLeagueId,
-    onLeagueChange,
     draftType,
     onDraftTypeChange,
     draftRounds,
@@ -124,8 +121,6 @@ export default function DraftRoom(props: DraftRoomProps) {
     importedRosters,
     tradedPicks,
     isRookieDraft = false,
-    isDynasty = false,
-    isSF = false,
     aiAutoPickMode = 'off',
     onAiAutoPickModeChange,
     isFullscreen = false,
@@ -489,15 +484,6 @@ export default function DraftRoom(props: DraftRoomProps) {
     const pickInRound = ((overall - 1) % teamCount) + 1
     return `${round}.${pickInRound.toString().padStart(2, '0')}`
   }
-
-  const picksByCell = useMemo(() => {
-    const map: Record<string, typeof draftPicks[0]> = {}
-    for (const pick of draftPicks) {
-      const key = `${pick.round}-${pick.slot}`
-      map[key] = pick
-    }
-    return map
-  }, [draftPicks])
 
   const headerBar = (
     <div style={{ background: '#1a1d26', borderBottom: '1px solid rgba(255,255,255,0.08)' }} className="px-3 py-2.5 flex items-center gap-3 flex-wrap">

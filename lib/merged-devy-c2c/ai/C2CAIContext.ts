@@ -430,8 +430,6 @@ export async function buildC2CHybridStrategyContext(args: {
   if (!config || config.standingsModel !== 'hybrid') return null
 
   const hybrid = await getC2CHybridStandings(args.leagueId)
-  const proWeight = (config as any).hybridProWeight ?? 60
-  const collegeWeight = 100 - proWeight
 
   const myRow = hybrid.rows.find((r) => r.rosterId === args.rosterId)
   if (!myRow) return null

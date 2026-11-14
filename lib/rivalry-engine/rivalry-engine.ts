@@ -174,8 +174,6 @@ function detectRivalries(input: RivalryInput): RivalryPair[] {
     // Label
     const label = intensity >= 75 ? 'Heated Rivalry' : intensity >= 50 ? 'Growing Rivalry' : 'Budding Rivalry'
 
-    // Origin story
-    const earliest = pair.keyMoments[0] ?? 'Multiple close matchups over time'
     const originStory = pair.championshipMeetings >= 1
       ? `Born in the championship — ${pair.managerA} and ${pair.managerB} have met on the biggest stage.`
       : pair.eliminationCount >= 1

@@ -94,7 +94,7 @@ export function TradePartnerSuggestions(props: {
   /** How many cards to show. The chip row below lists everyone. */
   limit?: number
 }) {
-  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(props.ranking)
+  const {copy,language,translationState,retryTranslation}=useTradeVisualCopy(props.ranking)
 
   const ranking = props.ranking
   if (!ranking) return null

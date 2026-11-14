@@ -904,7 +904,7 @@ export default function TradeFinderV2({
   const [currentCardIndex, setCurrentCardIndex] = useState(0)
   const [showAll, setShowAll] = useState(false)
   const [deepDiveOpen, setDeepDiveOpen] = useState(false)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [, setCopiedId] = useState<string | null>(null)
   const [chatTradeContext, setChatTradeContext] = useState<string | null>(null)
   const [userRosterId, setUserRosterId] = useState<number | null>(externalRosterId || null)
   const [negOpen, setNegOpen] = useState(false)
@@ -1087,8 +1087,6 @@ export default function TradeFinderV2({
     const receives = candidate?.teamA?.receives?.map(a => a.name).join(', ') || ''
     setChatTradeContext(`I'm considering this trade: I send ${gives} and receive ${receives}. ${rec.summary}. What do you think?`)
   }
-
-  const currentLeague = leagues.find(l => l.league_id === selectedLeague)
 
   const activeRec = recommendations.find(r => r.tradeId === activeTradeId)
   const activeCandidate = activeRec ? matchCandidateToRec(activeRec) : undefined

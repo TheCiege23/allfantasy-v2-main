@@ -178,7 +178,7 @@ function detectPlayStyle(
     return 'balanced'
   }
 
-  const { riskTolerance, consolidationBias, starterPremium, positionBias } = prefs
+  const { riskTolerance, starterPremium, positionBias } = prefs
 
   // Aggressive: high risk tolerance + high trade count + not picky about fairness
   if (riskTolerance > 0.4 && prefs.fairnessTolerance > 0.3) return 'aggressive_trader'

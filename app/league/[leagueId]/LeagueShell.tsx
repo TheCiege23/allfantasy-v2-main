@@ -427,7 +427,7 @@ export function LeagueShell({
   const { rosterId: capRosterId } = useRedraftRosterId(league.id)
   const { summary: capSummary } = useIdpCapSummary(league.id, capRosterId)
   const idpCapEnabled = Boolean(capSummary)
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const shouldUseMatchupPrimary = shouldUseMatchupInsteadOfDraft(league)
   const isPredraftLifecycle = useMemo(() => {
     const state = String(league.lifecycleState ?? '').trim().toLowerCase()

@@ -58,7 +58,6 @@ export function rosterAgingRiskScore(
   for (const p of players) {
     const base = Math.max(0, p.dynastyValue)
     totalValue += base
-    const mNext = ageMultiplier(sport, p.position, p.age ?? null, 'next')
     const mFive = ageMultiplier(sport, p.position, p.age ?? null, 'five')
     const decline = 1 - mFive
     riskSum += base * decline

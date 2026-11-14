@@ -108,7 +108,6 @@ export function runMonteCarloSimulation(
   const baseChampProb = 8
 
   const valueDelta = totalReceiving - totalGiving
-  const valueRatio = totalReceiving / Math.max(totalGiving, 1)
 
   const winChanges: number[] = []
   const playoffChanges: number[] = []

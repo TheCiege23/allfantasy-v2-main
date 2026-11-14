@@ -313,7 +313,7 @@ export function LeftChatPanel({
   const [dmLoading, setDmLoading] = useState(false)
   const [dmSending, setDmSending] = useState(false)
   const [dmInput, setDmInput] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
+  const [, setIsTyping] = useState(false)
   const [otherTyping, setOtherTyping] = useState(false)
   const [lastReadLabel, setLastReadLabel] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)

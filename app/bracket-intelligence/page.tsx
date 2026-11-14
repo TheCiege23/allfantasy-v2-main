@@ -68,7 +68,7 @@ function BracketIntelligenceInner() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [sim, setSim] = useState<SimulationResponse | null>(null)
   const [aiReview, setAiReview] = useState<AiReview>(null)
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [story, setStory] = useState<string | null>(null)
 

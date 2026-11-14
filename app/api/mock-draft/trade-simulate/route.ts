@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     if (gated) return gated
 
     const body = await req.json()
-    const { leagueId, currentPick, direction, rounds = 18, tradePartnerPick } = body
+    const { leagueId, currentPick, direction, tradePartnerPick } = body
 
     if (!leagueId || !currentPick || !direction) {
       return NextResponse.json({ error: 'leagueId, currentPick, and direction are required' }, { status: 400 })
@@ -86,7 +86,6 @@ export async function POST(req: NextRequest) {
 
       tradePartner = candidates[0]
     }
-    const partnerIdx = tradePartner._idx
     const userPick = originalDraft[userPickIdx]
     const userManager = userPick.manager
     const userAvatar = userPick.managerAvatar || null

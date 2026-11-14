@@ -49,7 +49,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [waiverPending, setWaiverPending] = useState<unknown[]>([])
-  const [waiverSettings, setWaiverSettings] = useState<Record<string, unknown> | null>(null)
+  const [, setWaiverSettings] = useState<Record<string, unknown> | null>(null)
   const [invite, setInvite] = useState<{
     inviteCode: string | null
     inviteLink: string | null
@@ -169,27 +169,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
       toast.error(e?.message || 'Waiver run failed')
     } finally {
       setRunningWaiver(false)
-    }
-  }
-
-  const regenerateInvite = async () => {
-    setSaving('invite')
-    try {
-      const res = await fetch(`${base}/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ regenerate: true }) })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed')
-      setInvite({
-        inviteCode: data.inviteCode,
-        inviteLink: data.inviteLink,
-        joinUrl: data.joinUrl,
-        inviteExpiresAt: data.inviteExpiresAt ?? null,
-        inviteExpired: !!data.inviteExpired,
-      })
-      toast.success('Invite link regenerated')
-    } catch (e: any) {
-      toast.error(e?.message || 'Regenerate failed')
-    } finally {
-      setSaving(null)
     }
   }
 

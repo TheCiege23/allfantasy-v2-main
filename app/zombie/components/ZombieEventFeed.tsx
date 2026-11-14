@@ -117,7 +117,6 @@ export function ZombieEventFeed({
 
 function formatAnimationTitle(type: string, meta: Record<string, unknown>): string {
   const victim = typeof meta.victimName === 'string' ? meta.victimName : null
-  const infector = typeof meta.infectorName === 'string' ? meta.infectorName : null
   const winner = typeof meta.winnerName === 'string' ? meta.winnerName : null
   const loser = typeof meta.loserName === 'string' ? meta.loserName : null
 

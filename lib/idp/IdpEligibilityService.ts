@@ -41,7 +41,7 @@ export async function resolveEligibility(
   fallbackPosition: string | null,
   options: { leagueId?: string; positionMode?: IdpPositionMode } = {}
 ): Promise<string[]> {
-  const { leagueId, positionMode = 'standard' } = options
+  const { leagueId } = options
   const rows = await prisma.idpPlayerEligibility.findMany({
     where: {
       sportsPlayerId,

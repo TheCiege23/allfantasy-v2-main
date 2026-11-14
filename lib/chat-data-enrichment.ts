@@ -51,7 +51,6 @@ function extractPlayerAndTeamMentions(message: string): { players: string[]; tea
   }
 
   const foundTeams: Set<string> = new Set()
-  const upper = message.toUpperCase()
   const lower = message.toLowerCase()
 
   for (const t of teamPatterns) {

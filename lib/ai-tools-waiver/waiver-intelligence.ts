@@ -616,7 +616,6 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
   teamNeeds: string[]
   leagueNormCtx: NormalizedLeagueContext | null
 }> {
-  const input = args
   const dataGaps = args.dataGaps
   const sportStr = args.sportStr
 
@@ -1658,7 +1657,6 @@ export async function runWaiverIntelligenceAnalysis(input: {
       teamNeeds: part.teamNeeds,
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
     if (e instanceof LeagueToolAccessDeniedError) {
       const code = e.code
       const m = leagueToolAccessUserMessage(code)

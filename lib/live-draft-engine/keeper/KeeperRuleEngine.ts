@@ -33,7 +33,6 @@ export function validateKeeperSelection(input: ValidateKeeperInput): ValidateKee
   }
 
   const forRoster = existingSelections.filter((s) => s.rosterId === newSelection.rosterId)
-  const withOverride = [...forRoster].filter((s) => s.commissionerOverride)
   const withoutOverride = forRoster.filter((s) => !s.commissionerOverride)
 
   if (!commissionerOverride && forRoster.length >= config.maxKeepers) {

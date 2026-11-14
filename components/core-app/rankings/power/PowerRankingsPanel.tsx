@@ -658,7 +658,7 @@ function LoadingCard() {
 }
 
 function LoginRequiredState() {
-  const { t, tInterpolate } = useLanguage();
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
       <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
@@ -1316,7 +1316,7 @@ function TeamRow({
   onRoadmap: (team: TeamRanking) => void;
   kickerValuation: KickerValuationView | null;
 }) {
-  const { t, tInterpolate } = useLanguage();
+  const { t } = useLanguage();
   const avatarUrl = buildAvatarUrl(team.avatar);
   const phaseLabel = t(phaseTranslationKey(team.phase));
 
@@ -1454,7 +1454,7 @@ export default function PowerRankingsPanel({
   /** The hub's selected league (`League.id`), preselected once the list loads. */
   initialLeagueId?: string | null;
 } = {}) {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const { t, tInterpolate, language } = useLanguage();
   const [leagues, setLeagues] = useState<UserLeague[]>([]);
   const [leagueLoading, setLeagueLoading] = useState(false);

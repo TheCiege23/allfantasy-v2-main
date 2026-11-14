@@ -234,11 +234,6 @@ export function CommissionerControlPanel({ leagueId }: Props) {
     }
   }, [leagueId, selectedWeek])
 
-  const selectedTeam = useMemo(
-    () => teams.find((t) => t.id === selectedTeamId),
-    [teams, selectedTeamId]
-  )
-
   // Slot grouping
   const slotGroups = useMemo(() => {
     const starters = rosterPlayers.filter((p) => p.slotType === 'starter')

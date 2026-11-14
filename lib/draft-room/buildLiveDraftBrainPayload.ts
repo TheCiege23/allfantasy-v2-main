@@ -175,7 +175,6 @@ export function buildLiveDraftBrainPayload(args: {
     const siteTrendMomentum =
       ext != null && site != null && ext > 0 ? clamp((ext - site) / 45, -1, 1) : undefined
 
-    const sportNorm = normalizeToSupportedSport(args.effectiveDraftSport)
     const coverageConf = siteCoverageConfidence(
       p.aiAdpSampleSize ?? 0,
       p.aiAdpLowSample,

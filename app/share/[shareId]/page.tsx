@@ -2,8 +2,6 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { Trophy, Zap, Target } from 'lucide-react';
-import { ACHIEVEMENT_SHARE_TYPES } from '@/lib/social-sharing/types';
-import type { AchievementShareType } from '@/lib/social-sharing/types';
 import { DraftSharePageContent } from '@/components/draft-sharing/DraftSharePageContent';
 import type { DraftShareCardPayload } from '@/lib/draft-sharing/types';
 import { MatchupSharePageContent } from '@/components/matchup-sharing/MatchupSharePageContent';
@@ -62,9 +60,6 @@ export default async function ShareMomentPage({ params }: { params: Promise<{ sh
     return <LeagueStoryPageContent payload={leagueStoryPayload} />;
   }
 
-  const validType = ACHIEVEMENT_SHARE_TYPES.includes(moment.shareType as AchievementShareType)
-    ? moment.shareType
-    : 'winning_matchup';
   const Icon = TYPE_ICONS[moment.shareType] ?? Trophy;
 
   return (

@@ -157,7 +157,7 @@ export function TradeLeagueStrip(props: {
    */
   waitingOnly?: boolean
 }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy}=useTradeVisualCopy()
   const guide = useMessages(tradesGuideMessages)
 
   const [visibleCount, setVisibleCount] = useState(MAX_LEAGUES_READ)

@@ -408,7 +408,7 @@ Return JSON:
     
     // Create a lookup from Sleeper players data for team info fallback
     const sleeperPlayerLookup: Record<string, any> = {}
-    for (const [id, player] of Object.entries(players as Record<string, any>)) {
+    for (const [, player] of Object.entries(players as Record<string, any>)) {
       if (player && player.full_name) {
         sleeperPlayerLookup[player.full_name.toLowerCase()] = player
       }

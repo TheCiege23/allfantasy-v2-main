@@ -6,7 +6,6 @@
 import { xaiChatJson, parseTextFromXaiChatCompletion } from "@/lib/xai-client";
 import { openaiChatText } from "@/lib/openai-client";
 import { deepseekChat } from "@/lib/deepseek-client";
-import { normalizeToSupportedSport } from "@/lib/sport-scope";
 import {
   isOpenAIAvailable,
   isXaiAvailable,
@@ -180,7 +179,6 @@ interface OrchestratorResult {
 export async function runAISocialClipPipeline(
   input: AIClipGenerateInput
 ): Promise<OrchestratorResult> {
-  const sport = normalizeToSupportedSport(input.sport);
   const providerStatus = {
     xai: isXaiConfigured(),
     openai: isOpenAIConfigured(),

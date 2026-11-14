@@ -265,7 +265,6 @@ export async function computeHealthScore(
 
   const currentPoints = entry.picks.reduce((s, p) => s + p.points, 0)
 
-  const maxRound = Math.max(...allNodes.map(n => n.round))
   const roundPoints: Record<number, number> = { 1: 1, 2: 2, 3: 5, 4: 10, 5: 18, 6: 30 }
   let maxPossiblePoints = currentPoints
   for (const pick of entry.picks) {
@@ -285,7 +284,6 @@ export async function computeHealthScore(
   const leaderScore = entryScores[0] ?? 0
   const upside = maxPossiblePoints - leaderScore
 
-  const undecidedPicks = entry.picks.filter(p => p.isCorrect === null).length
   const totalPicks = entry.picks.length
   const riskExposure = totalPicks > 0 ? Math.round(((teamsTotal - teamsAlive) / Math.max(teamsTotal, 1)) * 100) / 100 : 0
 

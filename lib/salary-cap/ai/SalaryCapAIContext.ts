@@ -92,7 +92,7 @@ export async function buildSalaryCapAIContext(args: {
   userId: string
   type: SalaryCapAIContextType
 }): Promise<SalaryCapAIDeterministicContext | null> {
-  const { leagueId, userId, type } = args
+  const { leagueId, userId } = args
   const config = await getSalaryCapConfig(leagueId)
   if (!config) return null
 

@@ -849,7 +849,7 @@ function AFLegacyContent() {
   const [importNotice, setImportNotice] = useState<LegacyDataStatus | null>(null)
   // One impression beacon per distinct notice (state+reason), never per status poll.
   const firedNoticeBeacons = useRef<Set<string>>(new Set())
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [, setJobId] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState<ProfileStats | null>(null)
   const [specialtyStats, setSpecialtyStats] = useState<SpecialtyStats | null>(null)
@@ -864,7 +864,7 @@ function AFLegacyContent() {
   const [trustSheetOpen, setTrustSheetOpen] = useState(false)
   const [trustSheetData, setTrustSheetData] = useState<TrustData | null>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
-  const [aiLoading, setAiLoading] = useState(false)
+  const [, setAiLoading] = useState(false)
   const [shareText, setShareText] = useState('')
   const [shareStyle, setShareStyle] = useState<'balanced' | 'humble' | 'trash_talk'>('balanced')
   const [sharePlatform, setSharePlatform] = useState<'x' | 'threads' | 'instagram' | 'tiktok'>('x')
@@ -885,7 +885,7 @@ function AFLegacyContent() {
   const [sharePlayerLoading, setSharePlayerLoading] = useState(false)
   const [sharePlayerError, setSharePlayerError] = useState('')
   const [showTutorial, setShowTutorial] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
+  const [, setShowFeedback] = useState(false)
 
   const [backfillLoading, setBackfillLoading] = useState(false)
   const [backfillResult, setBackfillResult] = useState<string>('')
@@ -899,7 +899,6 @@ function AFLegacyContent() {
   const [aiCoachLoading, setAiCoachLoading] = useState(false)
   const [aiCoachError, setAiCoachError] = useState('')
   const [showAiExplain, setShowAiExplain] = useState(false)
-  const [insightExpanded, setInsightExpanded] = useState(false)
   const [rankLastRefreshed, setRankLastRefreshed] = useState<number>(0)
   const [autoHydrateTriggered, setAutoHydrateTriggered] = useState(false)
   const [rankChangeDrivers, setRankChangeDrivers] = useState<any[]>([])
@@ -946,14 +945,6 @@ function AFLegacyContent() {
     fantasyPoints?: number
   }>>([])
 
-  // Trade History state
-  const [historyLeagueId, setHistoryLeagueId] = useState('')
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyProgress, setHistoryProgress] = useState(0)
-  const [historyTrades, setHistoryTrades] = useState<Array<any>>([])
-  const [historyGradedTrades, setHistoryGradedTrades] = useState<Record<string, any>>({})
-  const [historyError, setHistoryError] = useState('')
-  const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null)
   const [c2cDevyLoading, setC2cDevyLoading] = useState(false)
   const [c2cDevyLeague, setC2cDevyLeague] = useState<{ name: string; season: number; teamCount: number } | null>(null)
 
@@ -1066,7 +1057,7 @@ function AFLegacyContent() {
   const [reportCardTradesByYear, setReportCardTradesByYear] = useState<Record<string, any[]>>({})
   const [reportCardSummary, setReportCardSummary] = useState<any>(null)
   const [tradeAnalytics, setTradeAnalytics] = useState<any>(null)
-  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [, setAnalyticsLoading] = useState(false)
   const [valuationMode, setValuationMode] = useState<'atTime' | 'hindsight'>('atTime')
   const [analyticsTradesCache, setAnalyticsTradesCache] = useState<any>(null)
   const [tradeFilter, setTradeFilter] = useState<'all' | 'wins' | 'losses' | 'even'>('all')
@@ -1100,21 +1091,15 @@ function AFLegacyContent() {
   
   // Trade Notifications state
   const [tradeNotifications, setTradeNotifications] = useState<any[]>([])
-  const [tradeNotifLoading, setTradeNotifLoading] = useState(false)
-  const [showTradeNotifs, setShowTradeNotifs] = useState(false)
-  const [newTradeCount, setNewTradeCount] = useState(0)
-  const [highlightedTradeId, setHighlightedTradeId] = useState<string | null>(null)
+  const [, setTradeNotifLoading] = useState(false)
+  const [, setShowTradeNotifs] = useState(false)
+  const [, setNewTradeCount] = useState(0)
+  const [, setHighlightedTradeId] = useState<string | null>(null)
   
   // URL params for deep linking from email notifications
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname() ?? '/af-legacy'
-
-  // Email signup state
-  const [emailForAlerts, setEmailForAlerts] = useState('')
-  const [emailSignupLoading, setEmailSignupLoading] = useState(false)
-  const [emailSignupSuccess, setEmailSignupSuccess] = useState(false)
-  const [emailSignupError, setEmailSignupError] = useState('')
 
   // Waiver AI state
   const [waiverDynastyLeagues, setWaiverDynastyLeagues] = useState<any[]>([])
@@ -1125,7 +1110,7 @@ function AFLegacyContent() {
   const [waiverLeaguesLoading, setWaiverLeaguesLoading] = useState(false)
   const [expandedWaivers, setExpandedWaivers] = useState<Record<number, boolean>>({})
   const [waiverGoal, setWaiverGoal] = useState<'win-now' | 'balanced' | 'rebuild' | ''>('')
-  const [waiverRiskTolerance, setWaiverRiskTolerance] = useState(50)
+  const [waiverRiskTolerance] = useState(50)
 
   // League Rankings state
   const [rankingsDynastyLeagues, setRankingsDynastyLeagues] = useState<any[]>([])
@@ -1252,13 +1237,10 @@ function AFLegacyContent() {
   const [mockTimerNow, setMockTimerNow] = useState<number>(Date.now())
   const [mockDraftFormat, setMockDraftFormat] = useState<'snake' | 'linear' | 'auction'>('snake')
   const [mockEnable3RR, setMockEnable3RR] = useState(false)
-  const [mockAllowAiTrades, setMockAllowAiTrades] = useState(true)
-  const [mockAllowFuturePickTrades, setMockAllowFuturePickTrades] = useState(true)
-  const [mockTimezone, setMockTimezone] = useState('America/New_York')
   const [mockManagers, setMockManagers] = useState<Array<{ id: string; displayName: string; avatar?: string; draftSlot?: number | null }>>(() =>
     Array.from({ length: 12 }, (_, i) => ({ id: `default-${i + 1}`, displayName: `Team ${i + 1}`, draftSlot: i + 1 }))
   )
-  const [mockManagersLoading, setMockManagersLoading] = useState(false)
+  const [, setMockManagersLoading] = useState(false)
   const [mockSleeperImportLoading, setMockSleeperImportLoading] = useState(false)
   const [mockImportedLeagueName, setMockImportedLeagueName] = useState<string>('')
   const [mockDraftPicks, setMockDraftPicks] = useState<Array<{ overall: number; round: number; slot: number; manager: string; playerName: string; position: string; pickedAt: string }>>([])
@@ -2106,25 +2088,6 @@ function AFLegacyContent() {
     } finally {
       setInlineTradeLoading(false)
     }
-  }
-
-  // Analyze team needs based on roster composition
-  const analyzeTeamNeeds = (manager: any) => {
-    const posCount: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 }
-    manager.players?.forEach((p: any) => {
-      if (posCount[p.pos] !== undefined) posCount[p.pos]++
-    })
-    
-    const needs: string[] = []
-    if (posCount.QB < 2) needs.push('QB')
-    if (posCount.RB < 4) needs.push('RB')
-    if (posCount.WR < 4) needs.push('WR')
-    if (posCount.TE < 2) needs.push('TE')
-    
-    const isContending = manager.record.wins > manager.record.losses
-    const status = isContending ? 'contending' : 'rebuilding'
-    
-    return { needs, status, record: manager.record, posCount }
   }
 
   const triggerHighlight = (id: string) => {
@@ -3013,7 +2976,7 @@ function AFLegacyContent() {
   }
 
   const handlePreview = async () => {
-    const { data, error } = await callLegacyAI('/api/legacy/ai-report', {}, {
+    const { data } = await callLegacyAI('/api/legacy/ai-report', {}, {
       successMessage: 'Legacy snapshot generated!',
     })
     if (data?.report) {
@@ -3291,33 +3254,6 @@ function AFLegacyContent() {
       console.error('Failed to check trades:', String(e))
     } finally {
       setTradeNotifLoading(false)
-    }
-  }
-
-  const signUpForTradeAlerts = async () => {
-    if (!emailForAlerts || !username) return
-    setEmailSignupLoading(true)
-    setEmailSignupError('')
-    try {
-      const res = await fetch('/api/legacy/email-preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailForAlerts,
-          sleeper_username: username,
-          trade_alerts: true,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setEmailSignupSuccess(true)
-      } else {
-        setEmailSignupError(data.error || 'Failed to sign up')
-      }
-    } catch (e) {
-      setEmailSignupError('Network error - please try again')
-    } finally {
-      setEmailSignupLoading(false)
     }
   }
 
@@ -4207,8 +4143,6 @@ function AFLegacyContent() {
   ]
 
   const isShareLocked = shareCooldownMs > 0
-  const isRankLocked = rankCooldownMs > 0
-  const isCoachLocked = aiCoachCooldownMs > 0
 
   const mainTabGroups: Record<MainTab, Tab[]> = {
     home: ['overview'],
@@ -5968,15 +5902,6 @@ function AFLegacyContent() {
               null
 
             const letterGrade = toLetterGrade(gradeVal)
-
-            const letterTone =
-              letterGrade?.startsWith('A')
-                ? 'text-green-300 border-green-400/30'
-                : letterGrade?.startsWith('B')
-                ? 'text-cyan-300 border-cyan-400/30'
-                : letterGrade?.startsWith('C')
-                ? 'text-yellow-300 border-yellow-400/30'
-                : 'text-red-300 border-red-400/30'
 
             return (
               <>
@@ -8511,7 +8436,6 @@ function AFLegacyContent() {
                                       const partnerMap: Record<string, { name: string; trades: number; netValue: number; grades: string[] }> = {}
                                       
                                       allTrades.forEach((trade: any) => {
-                                        const userParty = trade.parties?.find((p: any) => p.rosterId === trade.userRosterId)
                                         const otherParties = trade.parties?.filter((p: any) => p.rosterId !== trade.userRosterId) || []
                                         
                                         otherParties.forEach((partner: any) => {
@@ -13737,7 +13661,6 @@ function AFLegacyContent() {
                                               const positions = leagueFormatData.scatterData?.filter((p: any) => p.position === curve.position).slice(0, 20)
                                               if (!positions?.length) return null
                                               
-                                              const avgX = positions.reduce((sum: number, p: any) => sum + p.marketValue, 0) / positions.length
                                               const avgY = positions.reduce((sum: number, p: any) => sum + p.war, 0) / positions.length
                                               
                                               return (

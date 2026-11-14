@@ -55,7 +55,7 @@ function money(v: number | null): string {
 export function TradeFinderPanel(props: { leagueId: string | null }) {
 
   const [data, setData] = useState<FinderResponse | null>(null)
-  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(data)
+  const {copy,language,translationState,retryTranslation}=useTradeVisualCopy(data)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {

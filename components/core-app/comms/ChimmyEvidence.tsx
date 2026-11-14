@@ -205,7 +205,6 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
   const detailId = useId()
 
   const {
-    confidencePct,
     level,
     rationale,
     leagueContext,

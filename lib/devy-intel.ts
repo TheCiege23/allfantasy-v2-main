@@ -622,7 +622,6 @@ export function computeAvailabilityPctV2(
   let baseAvailability: number
 
   if (adp != null && adp > 0) {
-    const adpPosition = adp / totalTeams
     if (pickNumber <= adp) {
       baseAvailability = Math.min(95, 50 + (adp - pickNumber) * 5)
     } else {

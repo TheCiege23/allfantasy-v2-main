@@ -1291,8 +1291,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     const sleeperB = String(reqData.sleeper_username_b || '').trim()
 
     const clientLeagueContext = reqData.leagueContext
-    const clientMarketContext = reqData.marketContext
-    const clientNflContext = reqData.nflContext
 
     console.log('[TradeAnalyze] incoming roster ids', {
       leagueId,

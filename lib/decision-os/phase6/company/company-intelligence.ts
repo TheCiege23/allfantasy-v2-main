@@ -181,7 +181,6 @@ function assembleRetentionDrivers(input: CompanyIntelligenceInput): RetentionDri
   const drivers: RetentionDriverInsight[] = []
   const dist = input.archetypeDistribution
   const signals = input.leagueSignals
-  const total = signals?.totalLeagues ?? dist?.totalClassified ?? 0
 
   // Driver 1: high-engagement format prevalence
   if (dist && dist.totalClassified > 0) {
@@ -383,7 +382,6 @@ function assembleFeatureAdoptionOpportunities(
 ): FeatureAdoptionOpportunity[] {
   const opps: FeatureAdoptionOpportunity[] = []
   const signals = input.leagueSignals
-  const dist = input.archetypeDistribution
 
   // Opportunity 1: waiver wire engagement gap
   if (signals && signals.totalLeagues > 0) {

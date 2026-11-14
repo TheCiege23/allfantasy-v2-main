@@ -70,7 +70,6 @@ export function DraftGrid({ state, bigScreen = false }: DraftGridProps) {
                   {state.slotOrder.map((team) => {
                     const overallBase = roundIndex * state.teamCount
                     const visualSlot = team.slot
-                    const overall = overallBase + visualSlot
                     const actualOverall = overallBase + getSlotForOverall(state, overallBase + visualSlot)
                     const pick = picksByOverall.get(actualOverall)
                     return (

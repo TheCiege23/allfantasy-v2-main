@@ -58,7 +58,7 @@ type FeedFlavorInput = {
  * Returns flavor line + stable template key for history / dedupe.
  */
 export function generateFeedFlavorLine(input: FeedFlavorInput): { flavor: string; templateKey: string; contentHash: string } {
-  const { personality, kind, teamName, playerName, position, round, pick, opponentName, salt = "" } = input
+  const { personality, kind, teamName, playerName, position, salt = "" } = input
   const base = `${kind}|${personality.archetypeId}|${teamName}|${playerName ?? ""}|${salt}`
   const seed = hash(base)
 

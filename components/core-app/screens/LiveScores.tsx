@@ -14,7 +14,6 @@ import { gameStage, groupByStage } from '@/lib/live/gameStage'
 import type { MatchupStrip } from '@/lib/live/matchupStrip'
 import type { LiveLeagueGames as LiveLeagueGamesData } from '@/lib/core-app/liveLeagueScoreboard'
 import { LiveLeagueGames } from '@/components/core-app/screens/LiveLeagueGames'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import LocalDateTime from '@/components/core-app/LocalDateTime'
 import { liveWorkspace, playBelongsToGame } from '@/lib/live/liveWorkspace'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
@@ -192,9 +191,6 @@ export function scopeLiveGamesToLeague(
 export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null, leagueGames = null, sportNextKickoff = null }: LiveScoresProps) {
   const guide = useMessages(liveGuideMessages)
   const [playsOpen, setPlaysOpen] = useState(false)
-  const router = useRouter()
-  const pathname = usePathname()
-  const params = useSearchParams()
   const { language } = useOptionalLanguage()
   const [data, setData] = useState<LivePageData>(initial)
   const [scope, setScope] = useState<'my' | 'all'>(initial.scope)
@@ -461,12 +457,6 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     return () => window.clearInterval(id)
   }, [])
 
-  const updateUrl = (key: string, value: string) => {
-    const next = new URLSearchParams(params?.toString() ?? '')
-    next.set(key, value)
-    router.replace(`${pathname ?? '/core/live'}?${next}`, { scroll: false })
-    etagRef.current = null
-  }
   const pickSport = (next: string) => {
     setSport(next)
     setLiveOnly(false)

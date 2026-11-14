@@ -15,7 +15,6 @@ export type ZombieStatusCadence = {
 export function getZombieStatusCadence(sportInput: string | undefined | null): ZombieStatusCadence {
   const sport = normalizeToSupportedSport(sportInput ?? 'NFL') as LeagueSport
 
-  const weeklySports: LeagueSport[] = ['NFL', 'NCAAF', 'NCAAB']
   const dailyCluster: LeagueSport[] = ['NBA', 'NHL', 'MLB']
   const hybrid: LeagueSport[] = ['SOCCER']
 

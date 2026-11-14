@@ -18,7 +18,6 @@ export function buildRelativeCalendarHints(args: {
   const todayInUserTz = formatInTimeZone(args.serverNowUTC, tz, 'yyyy-MM-dd')
   const tomorrowDateInUserTz = formatInTimeZone(addDays(args.serverNowUTC, 1), tz, 'yyyy-MM-dd')
   const dow = formatInTimeZone(args.serverNowUTC, tz, 'EEEE')
-  const weekStart = formatInTimeZone(args.serverNowUTC, tz, "wo 'week' yyyy-MM-dd")
   return {
     todayInUserTz,
     tomorrowDateInUserTz,

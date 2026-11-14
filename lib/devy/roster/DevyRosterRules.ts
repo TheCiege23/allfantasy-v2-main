@@ -40,7 +40,7 @@ export function validateDevyRosterSlots(args: {
   /** Count of players in devy slots that are graduated (illegal). */
   devySlotsGraduated: number
 }): LineupLegalityResult {
-  const { config, devySlotCount, devySlotsFilled, devySlotsGraduated } = args
+  const { devySlotCount, devySlotsFilled, devySlotsGraduated } = args
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -106,7 +106,7 @@ export function validateTaxiEligibility(args: {
   /** Commissioner-configured max years a player may remain on taxi (default 1). */
   taxiYears?: number
 }): TaxiEligibilityResult {
-  const { playerProEntryYear, leagueYear, isDevyPromoted, taxiYears = 1 } = args
+  const { playerProEntryYear, leagueYear, taxiYears = 1 } = args
   const yearsInPro = leagueYear - playerProEntryYear
   // Always eligible in the entry year (year 0)
   if (yearsInPro < 0) {

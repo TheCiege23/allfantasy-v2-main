@@ -354,7 +354,6 @@ function computeManagerAlignFromProfile(
 
 export function computeAcceptProbability(input: AcceptProbabilityInput): AcceptProbabilityResult {
   const {
-    deltaThem, teamNeedFit, marketFairness, perceivedLossByMarket,
     marketDeltaOppPct,
     dealShapeOpp,
     volDeltaOpp,

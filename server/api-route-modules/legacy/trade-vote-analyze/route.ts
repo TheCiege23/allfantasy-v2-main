@@ -5,7 +5,7 @@ import { priceAssets, ValuationContext } from '@/lib/hybrid-valuation'
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-vote-analyze", tool: "LegacyTradeVoteAnalyze" })(async (request: Request) => {
   try {
     const body = await request.json()
-    const { side_a, side_b, league_type, is_superflex = true } = body
+    const { side_a, side_b, is_superflex = true } = body
 
     if (!side_a?.length || !side_b?.length) {
       return NextResponse.json({ error: 'Both sides must have players' }, { status: 400 })

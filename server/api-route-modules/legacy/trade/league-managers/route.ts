@@ -261,7 +261,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trade/league-managers",
 
       // Calculate draft picks owned by this roster
       const draftPicks: { season: string; round: number; slot: number | null; originalOwner: string; originalRosterId: number }[] = []
-      const numTeams = rosters.length
       
       // Start with default picks for future years
       futureYears.forEach(year => {

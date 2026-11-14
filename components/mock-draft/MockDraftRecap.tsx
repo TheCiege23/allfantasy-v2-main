@@ -150,15 +150,6 @@ export function MockDraftRecap({
     [results],
   )
 
-  const byRound = useMemo(() => {
-    const maxRound = Math.max(0, ...results.map((p) => p.round))
-    const map: Record<number, MockDraftPick[]> = {}
-    for (let r = 1; r <= maxRound; r++) {
-      map[r] = results.filter((p) => p.round === r).sort((a, b) => a.pick - b.pick)
-    }
-    return map
-  }, [results])
-
   const teamGrades = useMemo(() => {
     const grades: Record<string, ReturnType<typeof getTeamGrade>> = {}
     for (const mgr of managers) {

@@ -136,13 +136,6 @@ function translateDraftType(draftType: string, t: (key: string) => string): stri
   return draftType
 }
 
-function translateTimerMode(mode: TimerMode, t: (key: string) => string): string {
-  const key = `draftRoom.timerMode.${mode}`
-  const out = t(key)
-  if (out !== key) return out
-  return mode.replace(/_/g, ' ')
-}
-
 export function resolveDraftFormatLabel(
   draftType: string,
   thirdRoundReversal: boolean,
@@ -377,14 +370,6 @@ export function DraftTopBar({
       ? liveRemaining
       : timerRemainingSeconds
 
-  const resumeInSeconds =
-    timerPauseReason === 'overnight_window' && overnightResumeAtIso
-      ? Math.max(
-          0,
-          Math.ceil((new Date(overnightResumeAtIso).getTime() - Date.now()) / 1000),
-        )
-      : null
-
   const timerDisplay =
     timerStatus === 'none' || (effectiveRemaining == null && timerStatus !== 'paused' && timerStatus !== 'expired')
       ? '-'
@@ -426,7 +411,6 @@ export function DraftTopBar({
   const statusLabel = translateDraftStatus(draftStatus, t)
   const draftTypeLabel = translateDraftType(draftType, t)
   const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal, t)
-  const timerModeLabel = translateTimerMode(timerMode, t)
   const poolReadinessLabel = formatPoolReadinessLabel(sport, poolReadiness, t)
 
   const centerCta = (() => {

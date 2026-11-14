@@ -166,7 +166,6 @@ function DraftBoardCellInner({
   onCommissionerEditPick,
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
-  const rs = presentationVariant === 'redraft_snake'
   const { tInterpolate, t } = useOptionalLanguage()
   const sportNorm = normalizeToSupportedSport(pick.sport ?? sport ?? DEFAULT_SPORT)
 

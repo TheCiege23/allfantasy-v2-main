@@ -69,7 +69,7 @@ export function TradeAssetSheet(props: {
   openerRef: RefObject<HTMLElement | null>
   children: ReactNode
 }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy}=useTradeVisualCopy()
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   useOverlayContainment({

@@ -56,7 +56,7 @@ function needScore(position: string, counts: Record<string, number>): number {
  * Preserves all entries; only order changes.
  */
 export function reorderQueueByNeed(input: ReorderQueueInput): ReorderQueueResult {
-  const { queue, rosterPositions, sport, availableNames } = input
+  const { queue, rosterPositions, availableNames } = input
   const counts = getNeedCounts(rosterPositions)
   const needByPosition: Record<string, number> = {}
   const normalizedAvailable = availableNames ?? null

@@ -316,7 +316,6 @@ async function generatePositionBoomBust(
 
     if (!user || user.leagues.length === 0) return
 
-    const positionCounts: Record<string, number> = {}
     let totalPlayers = 0
 
     for (const league of user.leagues) {

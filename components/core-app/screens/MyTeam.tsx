@@ -1325,7 +1325,6 @@ function fillTokens(template: string, nodes: Record<string, React.ReactNode>): R
 }
 
 function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: string }) {
-  const gap = check.benchProjected - check.starterProjected
   const m = useMessages(myTeamScreenMessages)
   return (
     <div className="af-mt-bench-check" data-verdict={check.verdict}>
