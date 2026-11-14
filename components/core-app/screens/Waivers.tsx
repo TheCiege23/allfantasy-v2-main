@@ -195,9 +195,8 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         titleClassName="af-wv-title"
         eyebrow={guide.eyebrow(data.league.name)}
         title={<span data-testid="waiver-headline" aria-live="polite">{headline}</span>}
-        sub={guide.intro(data.league.name)}
-        subClassName="af-wvg-intro"
       />
+      {/* The intro ("Find a free agent who'd improve your starting lineup…") is gone (2026-11-14): the headline says it. */}
       {/*
         The deadline first, when there is a real one: a manager opening this tab is usually checking
         it. Only leagues whose schedule we actually imported — a Sleeper league's is not on file and
@@ -383,14 +382,10 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             ) : null}
 
           </div>
-          {/* A league AllFantasy runs takes its claims here; an imported one is only read. */}
-          <p className="af-wv-footnote">
-            {data.league.platform === 'manual'
-              ? copy('Claims are made on your platform. AllFantasy only reads your league.')
-              : claimsHere
-                ? copy('Claims for this league are made here, on AllFantasy.')
-                : m.claimsMadeOn(platformLabel(data.league.platform))}
-          </p>
+          {/*
+            Where claims are made is the button above and the banner over every league tab (2026-11-14).
+            The line that said it again here — "AllFantasy only reads your league" — contradicted that banner.
+          */}
 
           {/*
             2026-11-13 guide: decide (Worth adding, bid pricing) → act (the claim button above) → then the

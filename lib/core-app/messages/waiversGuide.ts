@@ -24,6 +24,12 @@ export const waiversGuideMessages = defineMessages({
     boardTeach:
       'A pickup only helps if he’d start for you. That’s why this list is ranked by what each player adds to your lineup, not by name or raw projection.',
     afTitle: (af: string) => `AllFantasy’s own projection: ${af}`,
+    rivalLeft: (amount: string) => `${amount} left`,
+    rivalNoClaims: 'no claims won',
+    rivalClaims: (n: number, zero: number, spent: string | null) =>
+      `${n} ${n === 1 ? 'claim' : 'claims'}${zero > 0 && zero === n ? (n === 1 ? ', at $0' : ', all at $0') : `${spent ? `, ${spent} spent` : ''}${zero > 0 ? `, ${zero} at $0` : ''}`}`,
+    rivalBiggest: (bid: string, position: string | null) => `biggest bid ${bid}${position ? ` (${position})` : ''}`,
+    rivalPosition: (count: number, position: string) => `${count} ${/S$/.test(position) || count === 1 ? position : `${position}s`}`,
   },
   es: {
     eyebrow: (league: string) => `Agentes libres · ${league}`,
@@ -41,5 +47,11 @@ export const waiversGuideMessages = defineMessages({
     boardTeach:
       'Un fichaje solo ayuda si sería titular para ti. Por eso la lista se ordena por lo que cada jugador suma a tu alineación, no por nombre ni por proyección bruta.',
     afTitle: (af: string) => `Proyección propia de AllFantasy: ${af}`,
+    rivalLeft: (amount: string) => `${amount} restantes`,
+    rivalNoClaims: 'ningún reclamo ganado',
+    rivalClaims: (n: number, zero: number, spent: string | null) =>
+      `${n} ${n === 1 ? 'reclamo' : 'reclamos'}${zero > 0 && zero === n ? (n === 1 ? ', a $0' : ', todos a $0') : `${spent ? `, ${spent} gastados` : ''}${zero > 0 ? `, ${zero} a $0` : ''}`}`,
+    rivalBiggest: (bid: string, position: string | null) => `oferta más alta ${bid}${position ? ` (${position})` : ''}`,
+    rivalPosition: (count: number, position: string) => `${count} ${position}`,
   },
 })

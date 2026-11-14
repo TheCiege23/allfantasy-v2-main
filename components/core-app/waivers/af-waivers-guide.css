@@ -36,3 +36,12 @@
 .af-core .af-wlb .af-wlb-notes-toggle::after { content: '▾' / ''; color: var(--accent); }
 .af-core .af-wlb .af-wlb-notes-toggle[aria-expanded='true']::after { content: '▴' / ''; }
 .af-core .af-wlb .af-wlb-notes:not([data-open]) { display: none; }
+
+/* 2026-11-14: a manager's Competitive Edge facts in one line ("$1,001 left · 8 claims, all at $0 · 3 RBs"). */
+.af-core .af-wv-edge-line {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+  overflow-wrap: anywhere;
+}

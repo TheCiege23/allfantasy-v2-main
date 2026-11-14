@@ -152,7 +152,8 @@ describe('"Worth adding" in Spanish', () => {
 
 describe('Waiver Intelligence in Spanish', () => {
   const intelText = () => {
-    const view = render(<WaiverIntel leagueId="lg1" surface="core" />)
+    // The deck surface: /core hides the reasons and the subtitle (2026-11-14), the deck still shows both.
+    const view = render(<WaiverIntel leagueId="lg1" />)
     const text = screen.getByTestId('waiver-intel').textContent ?? ''
     view.unmount()
     return text

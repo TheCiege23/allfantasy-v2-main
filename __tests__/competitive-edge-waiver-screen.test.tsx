@@ -61,9 +61,11 @@ describe('WaiverCompetitiveEdge', () => {
     expect(screen.getByTestId('waiver-edge-waiver.outbid_by').textContent).toBe(
       '1 of the 1 other managers has more FAAB left than your $40.',
     )
+    // One line per manager (2026-11-14); the comparison with yours is said once, in the league line above.
     const tasha = screen.getByTestId('waiver-edge-rival-2').textContent ?? ''
-    expect(tasha).toContain('Tasha has $72 of FAAB left — more than your $40.')
-    expect(tasha).toContain('Their biggest winning bid was $18 (RB).')
+    expect(tasha).toContain('$72 left')
+    expect(tasha).toContain('biggest bid $18 (RB)')
+    expect(tasha).not.toContain('more than your')
     const basis = screen.getByTestId('waiver-competitive-edge-basis').textContent ?? ''
     expect(basis).toContain('2026 season')
     expect(basis).toContain('wins only')
