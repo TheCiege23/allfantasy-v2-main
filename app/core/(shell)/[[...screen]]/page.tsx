@@ -260,7 +260,8 @@ import { getCareerWire } from '@/lib/core-app/careerWire'
 import { getWeeklyStory } from '@/lib/core-app/weeklyStory'
 import { getDecisionRecord } from '@/lib/core-app/decisionRecord'
 import { parseCareerFilter } from '@/lib/core-app/careerModel'
-import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
+import { isEnabled } from '@/lib/sports-os/rollout'
+import { resolveRollouts } from '@/lib/sports-os/rolloutConfig'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
 import { classifyDevice } from '@/lib/observability/requestContext'
@@ -2307,7 +2308,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * unrelated surfaces both reasonably called "portfolio"; the collision was a redeclare error
    * rather than a silent shadow only because both are `const` in one function scope.
    */
-  const portfolioScreenOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  const portfolioScreenOnSummary = isEnabled('sports-os.screen-summaries', userId, resolveRollouts())
 
   /*
    * ── THE CROSS-LEAGUE BOARD ─────────────────────────────────────────────
@@ -2378,7 +2379,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * (`careerScreen.ts`).
    *
    * ⚠ THIS REPLACES TWO SUMMARIES. `careerSummary` cached the default view per platform behind the
-   * 10% `sports-os.screen-summaries` flag and rebuilt on a league-list fingerprint; the profile is
+   * `sports-os.screen-summaries` flag (10% at the time) and rebuilt on a league-list fingerprint; the profile is
    * for everyone, keyed on the history tables themselves rather than on the league list (which
    * never covered `legacy_leagues`). `careerRecordsSummary` still serves the unfiltered weekly book
    * under that flag, from inside `careerScreen`.
@@ -3031,7 +3032,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         .catch(() => null)
     : null
 
-  const tradesBoardOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  const tradesBoardOnSummary = isEnabled('sports-os.screen-summaries', userId, resolveRollouts())
 
   const tradesBoardFresh =
     wantsTradesBoard && tradesBoardOnSummary
@@ -3374,7 +3375,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * from an unpicked league, and a summary rebuild can fail for exactly the reasons the direct read
    * could. Letting it reject here would replace that message with a Suspense error boundary.
    */
-  const standingsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  const standingsOnSummary = isEnabled('sports-os.screen-summaries', userId, resolveRollouts())
   /*
    * ⚠ THE SAME FLAG AND THE SAME SUBJECT AS STANDINGS, SO A USER IS WHOLLY ON SUMMARIES OR WHOLLY
    * OFF. A second flag would put one user on a cached standings board and a live week board, which

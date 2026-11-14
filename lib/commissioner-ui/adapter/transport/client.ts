@@ -54,6 +54,19 @@ export async function callDecisionOS<T>(
   init: RequestInit = {},
   config: DecisionOSTransportConfig = getDecisionOSTransportConfig()
 ): Promise<DecisionOSCallResult<T>> {
+  /*
+   * In-process first (2026-11-14). The intelligence reads Commissioner OS makes are served by this
+   * same deployment, so they now run as a function call instead of an HTTP request back to
+   * ourselves — no DECISION_OS_BASE_URL, API key or public-API flag required, and no round trip.
+   * See lib/decision-os/behavioral/api/in-process.ts for the trust boundary. A path it does not
+   * serve falls through to the HTTP transport below, unchanged. DECISION_OS_TRANSPORT=http forces
+   * the old behaviour, as a rollback lever.
+   */
+  if (shouldTryInProcess(path, init)) {
+    const inProcess = await callInProcess<T>(moduleId, path)
+    if (inProcess) return inProcess
+  }
+
   if (!isDecisionOSConfigured(config)) {
     return { data: null, error: notConfiguredError(moduleId) }
   }
@@ -113,6 +126,88 @@ export async function callDecisionOS<T>(
         message,
         moduleId,
         retryable: category === 'upstream_unavailable' && !isTimeout,
+        timestamp: new Date().toISOString(),
+      },
+    }
+  }
+}
+
+const IN_PROCESS_PREFIX = '/api/v1/intelligence/'
+
+function shouldTryInProcess(path: string, init: RequestInit): boolean {
+  if (process.env.DECISION_OS_TRANSPORT?.trim().toLowerCase() === 'http') return false
+  const method = (init.method ?? 'GET').toUpperCase()
+  return method === 'GET' && path.startsWith(IN_PROCESS_PREFIX)
+}
+
+/**
+ * `null` when the path is not served in-process (the caller then uses HTTP). A non-2xx result is
+ * mapped through the same `categorizeStatus` the HTTP path uses, so a module cannot tell which
+ * transport answered — only that it was faster.
+ */
+async function callInProcess<T>(
+  moduleId: CommissionerErrorAttributableId,
+  path: string,
+): Promise<DecisionOSCallResult<T> | null> {
+  const timer = createTimer()
+  try {
+    const { runIntelligenceInProcess } = await import('@/lib/decision-os/behavioral/api/in-process')
+    const result = await runIntelligenceInProcess(path)
+    if (!result) return null
+
+    if (result.status >= 200 && result.status < 300) {
+      logStructured('info', 'commissioner-os-transport', 'decision_os_call_success', {
+        moduleId,
+        path,
+        transport: 'in-process',
+        durationMs: timer.elapsedMs(),
+      })
+      return { data: result.body as T, error: null }
+    }
+
+    const category = categorizeStatus(result.status, false)
+    const body = result.body as { message?: unknown; error?: unknown } | null
+    const message =
+      typeof body?.message === 'string' ? body.message
+      : typeof body?.error === 'string' ? body.error
+      : `Decision OS returned ${result.status}.`
+    logStructured('warn', 'commissioner-os-transport', 'decision_os_call_failed', {
+      moduleId,
+      path,
+      transport: 'in-process',
+      durationMs: timer.elapsedMs(),
+      status: result.status,
+      category,
+      error: message,
+    })
+    return {
+      data: null,
+      error: {
+        category,
+        message,
+        moduleId,
+        retryable: category === 'upstream_unavailable',
+        timestamp: new Date().toISOString(),
+      },
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred inside Decision OS.'
+    logStructured('error', 'commissioner-os-transport', 'decision_os_call_failed', {
+      moduleId,
+      path,
+      transport: 'in-process',
+      durationMs: timer.elapsedMs(),
+      status: null,
+      category: 'upstream_unavailable',
+      error: message,
+    })
+    return {
+      data: null,
+      error: {
+        category: 'upstream_unavailable',
+        message,
+        moduleId,
+        retryable: true,
         timestamp: new Date().toISOString(),
       },
     }

@@ -146,10 +146,17 @@ export const DEFAULT_ROLLOUTS: Readonly<Record<string, RolloutRule>> = Object.fr
     percentage: 100,
     note: 'Stamps budget verdicts on spans already being sampled. No extra queries, no extra spans.',
   },
+  /*
+   * Widened 10 → 100 on 2026-11-14 (owner's call). Every summary behind this flag is read-through
+   * and keyed on its own inputs (a league-list fingerprint or an input digest — see
+   * tradesBoardSummary.ts and homePortfolioSummary.ts), so a miss costs one compute and a changed
+   * input is a new key rather than a stale read. Pull it back without a commit by setting
+   * SPORTS_OS_SCREEN_SUMMARIES_ROLLOUT (`off`, or a percentage) — see rolloutConfig.ts.
+   */
   'sports-os.screen-summaries': {
     enabled: true,
-    percentage: 10,
-    note: 'Serves screens from precomputed summaries. Read-through, so a miss costs one compute — widen once hit rate is observable.',
+    percentage: 100,
+    note: 'Serves screens from precomputed summaries. Read-through, so a miss costs one compute. Override: SPORTS_OS_SCREEN_SUMMARIES_ROLLOUT.',
   },
   /*
    * ⚠ THE TWO HALVES OF A REACTION ARE SEPARATE FLAGS BECAUSE THEIR RISK PROFILES ARE NOT
@@ -157,9 +164,15 @@ export const DEFAULT_ROLLOUTS: Readonly<Record<string, RolloutRule>> = Object.fr
    * one extra summary rebuild. Enqueueing multiplies load on a worker that is a single JavaScript
    * thread. One flag covering both would price the cheap half at the expensive half's risk.
    */
+  /*
+   * Widened 10 → 100 together with screen-summaries, and for a correctness reason rather than a
+   * speed one: summaries are bucketed on the USER, invalidation on the LEAGUE, so at 100% / 10% a
+   * summary for most leagues would wait out its TTL after an event instead of being dropped.
+   * Override: SPORTS_OS_REACTION_INVALIDATION_ROLLOUT.
+   */
   'sports-os.reaction-invalidation': {
     enabled: true,
-    percentage: 10,
+    percentage: 100,
     note: 'Event-driven summary invalidation. Cheap: a memory delete plus a league-bounded prefix delete. Worst case is one rebuild on the next read, because summaries are read-through.',
   },
   'sports-os.ingest-reactions': {

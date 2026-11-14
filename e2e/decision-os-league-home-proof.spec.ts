@@ -156,25 +156,21 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 
 async function expectDecisionOsCards(page: Page, variant: 'league' | 'commissioner'): Promise<void> {
   const pulse = page.getByTestId(`league-pulse-card-${variant}`)
-  const manager = page.getByTestId(`manager-dna-card-${variant}`)
-  const moves = page.getByTestId(`decision-recommendations-card-${variant}`)
 
   await expect(pulse).toBeVisible({ timeout: 45_000 })
-  await expect(manager).toBeVisible({ timeout: 45_000 })
-  await expect(moves).toBeVisible({ timeout: 45_000 })
 
   await expect(pulse.getByText(/confidence/i).first()).toBeVisible()
   await expect(pulse.getByText('Why am I seeing this?')).toBeVisible()
   await expect(pulse.getByText('Based on')).toBeVisible()
   await expect(pulse.getByText('Decision path')).toBeVisible()
 
-  await expect(manager.getByText(/confidence/i).first()).toBeVisible()
-  await expect(manager.getByText('Why am I seeing this?')).toBeVisible()
-  await expect(manager.getByText('Supporting evidence')).toBeVisible()
-
-  await expect(moves.getByText(/confidence/i).first()).toBeVisible()
-  await expect(moves.getByText('Why am I seeing this?')).toBeVisible()
-  await expect(moves.getByText('Evidence checked')).toBeVisible()
+  /*
+   * The Manager DNA and recommendations cards were removed from League Home on 2026-11-14 —
+   * their source has returned null since the Competitive Edge privacy pass, so they could only
+   * ever render a placeholder. Assert they stay gone rather than silently dropping the check.
+   */
+  await expect(page.getByTestId(`manager-dna-card-${variant}`)).toHaveCount(0)
+  await expect(page.getByTestId(`decision-recommendations-card-${variant}`)).toHaveCount(0)
 }
 
 test.describe('G29 Decision OS authenticated theme SSR proof', () => {
