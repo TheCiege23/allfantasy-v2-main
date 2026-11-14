@@ -33,6 +33,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 import type { LucideIcon } from 'lucide-react'
 import {
   Anchor,
@@ -378,32 +379,45 @@ export function LeagueShell({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
     let pendingSave = false
+    let alive = true
+    void primeDeployBaseline()
     const refresh = () => {
       if (document.visibilityState === 'hidden') return
       clearTimeout(timer)
       timer = setTimeout(() => {
         if (document.querySelector('input:focus, textarea:focus, select:focus')) return
-        pendingSave = false
-        router.refresh()
+        // A save the reader just made refreshes unconditionally; focus, visibility and the
+        // timer go through the deploy guard, because after a deploy a refresh is a full
+        // page reload landing on the reader's next tap (lib/core-app/deployGuard).
+        if (pendingSave) {
+          pendingSave = false
+          router.refresh()
+          return
+        }
+        void refreshInBackground(() => {
+          if (alive) router.refresh()
+        })
       }, 600)
     }
+    const backgroundRefresh = () => refresh()
     const saved = (event: Event) => {
       if ((event as CustomEvent<{ leagueId?: string }>).detail?.leagueId === league.id) { pendingSave = true; refresh() }
     }
     const onBlur = () => { if (pendingSave) refresh() }
     document.addEventListener('focusout', onBlur)
     window.addEventListener('af:league-settings-saved', saved)
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', backgroundRefresh)
+    document.addEventListener('visibilitychange', backgroundRefresh)
     const interval = setInterval(() => {
       if (isNativePlatform(league.platform) && !document.querySelector('input:focus, textarea:focus, select:focus')) refresh()
     }, 30000)
     return () => {
+      alive = false
       clearTimeout(timer)
       clearInterval(interval)
       window.removeEventListener('af:league-settings-saved', saved)
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', backgroundRefresh)
+      document.removeEventListener('visibilitychange', backgroundRefresh)
       document.removeEventListener('focusout', onBlur)
     }
   }, [league.id, league.platform, router])

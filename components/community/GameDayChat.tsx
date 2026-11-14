@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { REPLY_BODY_MAX } from '@/lib/community/validation'
 import type { ChatMessage } from '@/lib/community/service'
@@ -89,8 +90,10 @@ export function GameDayChat({
     if (!document.hidden) start()
     document.addEventListener('visibilitychange', onVisibility)
     // The slate above is server-rendered; refresh it on a slower clock than the chat.
+    void primeDeployBaseline()
+    // Guarded: after a deploy a background refresh is a full page reload (lib/core-app/deployGuard).
     const scores = setInterval(() => {
-      if (!document.hidden) router.refresh()
+      if (!document.hidden) void refreshInBackground(() => router.refresh())
     }, SCORES_REFRESH_MS)
     return () => {
       stop()

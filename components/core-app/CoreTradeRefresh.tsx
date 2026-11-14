@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 
 /** Cheap change detection; expensive Home reads run only when the trade feed changes. */
 export default function CoreTradeRefresh() {
@@ -22,11 +23,13 @@ export default function CoreTradeRefresh() {
         if (typeof next !== 'string' || controller.signal.aborted) return
         if (version !== next) {
           version = next
-          startRefresh(() => router.refresh())
+          // Guarded: after a deploy a background refresh is a full page reload (lib/core-app/deployGuard).
+          void refreshInBackground(() => startRefresh(() => router.refresh()))
         }
       } catch { /* Existing shell refresh remains the fallback. */ }
       finally { checking = false }
     }
+    void primeDeployBaseline()
     const timer = window.setInterval(check, 5000)
     document.addEventListener('visibilitychange', check)
     return () => { controller.abort(); window.clearInterval(timer); document.removeEventListener('visibilitychange', check) }

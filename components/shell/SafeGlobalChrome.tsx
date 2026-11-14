@@ -6,6 +6,7 @@ import Script from "next/script"
 import { AuthRouteGlobalChrome } from "@/components/auth/AuthRouteGlobalChrome"
 import AgeConfirmationPrompt from "@/components/legal/AgeConfirmationPrompt"
 import { OfflineLineupSync } from "@/components/pwa/OfflineLineupSync"
+import { NewVersionPill } from "@/components/shell/NewVersionPill"
 import { shouldRegisterServiceWorker } from "@/lib/pwa/shouldRegisterServiceWorker"
 import { initPWA } from "@/lib/pwa"
 import { isInIosAppClient } from "@/lib/platform/iosApp"
@@ -238,6 +239,7 @@ export function SafeGlobalChrome({
     <>
       <ServiceWorkerLifecycle />
       {isAuthPath(pathname) ? null : <OfflineLineupSync />}
+      {isAuthPath(pathname) ? null : <NewVersionPill />}
 
       {renderFacebookSdk ? <div id="fb-root" /> : null}
       {renderFacebookSdk ? <FacebookSdkScript appId={fbAppId} /> : null}
