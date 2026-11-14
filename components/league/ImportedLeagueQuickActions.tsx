@@ -5,6 +5,8 @@ import { useOverlayContainment } from '@/components/core-app/useOverlayContainme
 import { useRouter } from 'next/navigation'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SUPPORT_WIDGET_OPEN_EVENT } from '@/lib/support/support-widget'
+import { leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 
 type Props = {
   leagueId: string
@@ -12,12 +14,19 @@ type Props = {
   platform: string
   canRemove: boolean
   supportEvent?: string
+  /**
+   * Inside the league workspace (the layout native leagues use): one slim line that also carries the
+   * hosting note, replacing both this full-width banner and the legacy workspace navigation bar.
+   */
+  strip?: boolean
 }
 
 /** A visible, mobile-sized path to the existing per-user import removal API. */
-export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, canRemove, supportEvent = SUPPORT_WIDGET_OPEN_EVENT }: Props) {
+export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, canRemove, supportEvent = SUPPORT_WIDGET_OPEN_EVENT, strip = false }: Props) {
   const router = useRouter()
-  const { t, tInterpolate } = useOptionalLanguage()
+  const { t, tInterpolate, language } = useOptionalLanguage()
+  // "Sleeper", not the raw `sleeper` the platform column stores.
+  const platformName = sourcePlatformLabel(platform) ?? platform
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -53,12 +62,51 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
     }
   }
 
+  const removeButton = canRemove ? (
+    <button
+      type="button"
+      onClick={() => { setError(null); setConfirmOpen(true) }}
+      className="af-imported-actions-remove inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-400/40 bg-rose-400/10 px-4 text-sm font-semibold text-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+      data-testid="delete-imported-league-open"
+    >
+      {t('league.importedActions.remove')}
+    </button>
+  ) : null
+  const supportButton = (
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new Event(supportEvent))}
+      className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-[var(--badge-text-cyan)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+    >
+      {t('league.importedActions.contactSupport')}
+    </button>
+  )
+
   return (
     <section
       aria-label={t('league.importedActions.aria')}
-      className="af-imported-actions shrink-0 border-b border-white/10 bg-[#0b1328] px-4 py-3"
+      className={strip
+        ? 'af-imported-actions af-imported-strip mx-4 mt-4 shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 lg:mx-6'
+        : 'af-imported-actions shrink-0 border-b border-white/10 bg-[#0b1328] px-4 py-3'}
       data-testid="imported-league-quick-actions"
+      data-variant={strip ? 'strip' : undefined}
     >
+      {strip ? (
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <p className="af-imported-actions-text flex min-w-0 items-start gap-2 text-xs leading-5 text-white/70">
+            <span aria-hidden className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+            <span>
+              <strong className="font-semibold text-white">{tInterpolate('league.importedActions.importedFrom', { platform: platformName })}.</strong>{' '}
+              {leagueWorkspaceMode(platform, language).description}
+            </span>
+          </p>
+          {/* Side by side on a phone too, so the strip stays two lines tall above the league home. */}
+          <div className="grid shrink-0 grid-cols-2 gap-2 md:flex [&>button]:px-3 [&>button]:text-[13px]">
+            {removeButton}
+            {supportButton}
+          </div>
+        </div>
+      ) : (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         {/*
           ⚠ NOT FRAMED AS HELP. This strip used to open with "Need help with this imported league?",
@@ -69,25 +117,11 @@ export function ImportedLeagueQuickActions({ leagueId, leagueName, platform, can
           {tInterpolate('league.importedActions.importedFrom', { platform })}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
-          {canRemove ? (
-            <button
-              type="button"
-              onClick={() => { setError(null); setConfirmOpen(true) }}
-              className="af-imported-actions-remove inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-400/40 bg-rose-400/10 px-4 text-sm font-semibold text-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
-              data-testid="delete-imported-league-open"
-            >
-              {t('league.importedActions.remove')}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event(supportEvent))}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 text-sm font-semibold text-[var(--badge-text-cyan)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
-          >
-            {t('league.importedActions.contactSupport')}
-          </button>
+          {removeButton}
+          {supportButton}
         </div>
       </div>
+      )}
       {error ? <p role="alert" className="af-imported-actions-error mx-auto mt-2 max-w-5xl text-sm text-rose-200">{error}</p> : null}
 
       {confirmOpen ? (

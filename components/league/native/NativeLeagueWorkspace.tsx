@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
-import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight, Landmark, CarTaxiFront, Ticket, CalendarDays, Skull, Radio, BookOpen, Eye, Crown, ShieldCheck, Vote, Scale, Shuffle, History, Wallet, Gauge, FileText, Hammer, Gavel, ScrollText, GraduationCap } from 'lucide-react'
+import { Award, Axe, BarChart3, Bot, ChevronDown, ExternalLink, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight, Landmark, CarTaxiFront, Ticket, CalendarDays, Skull, Radio, BookOpen, Eye, Crown, ShieldCheck, Vote, Scale, Shuffle, History, Wallet, Gauge, FileText, Hammer, Gavel, ScrollText, GraduationCap } from 'lucide-react'
 import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -17,7 +17,8 @@ import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
 import type { RedraftSeasonFacts } from '@/lib/league-media/redraftSeasonTrack'
 import { RedraftSeasonTrack } from './RedraftSeasonTrack'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
-import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref } from '@/lib/league/league-workspace-navigation'
+import { ALL_LEAGUES_DASHBOARD_HREF, leagueDashboardHref, leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
 import { buildNativeLeagueNavigation, leagueSectionHref, nativeLeaguePhase, nativeLeagueRecordLinks, nativeLeagueRecordTitle, type WorkspaceTab } from '@/lib/league/nativeLeagueNavigation'
 import { adjacentLeagueId, unreadBadgeText } from '@/lib/league/leagueRailStatus'
 import { LeagueRailRow, useLeagueRail, type LeagueRailData, type LeagueRailRowView } from './LeagueRail'
@@ -47,7 +48,16 @@ import './zombie-workspace.css'
 import './redraft-identity.css'
 
 type Props = AppShellProps & {
+  /** The league is hosted on AllFantasy. Decides hosting copy and native-only reads, not the layout. */
   native: boolean
+  /**
+   * Draw the league workspace (rail, sidebar, header) rather than the legacy three-panel AppShell.
+   * Defaults to `native`. Imported leagues pass true so they open in the same layout as a native one
+   * (user call, 2026-11-09): the header then names the host platform instead of "Native on AllFantasy".
+   */
+  workspaceShell?: boolean
+  /** Imported leagues: the league on its own platform, for the header's "Open in …" link. */
+  sourceLink?: { href: string; platformLabel: string } | null
   league: UserLeague
   leagues: UserLeague[]
   tabs: WorkspaceTab[]
@@ -81,6 +91,8 @@ const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word
 const PHASE_KEYS: Record<string, string> = { Setup: 'setup', Draft: 'draft', 'Regular season': 'regularSeason', Playoffs: 'playoffs', Offseason: 'offseason', Island: 'island', Finale: 'finale', Complete: 'complete' }
 const SWITCHER_FILTER_KEYS: Record<string, string> = { 'On AF': 'onAf', Synced: 'synced', Live: 'live' }
 const BOTTOM_NAV_KEYS = ['league', 'matchup', 'team', 'players', 'chat']
+/** The nav icon each bottom slot stands for (buildNativeLeagueNavigation), for leagues whose tab ids differ. */
+const BOTTOM_NAV_ICONS = ['home', 'matchup', 'team', 'players', 'chat']
 
 const zombieScenes: Record<string, { label: string; detail: string }> = {
   native_home: { label: 'Outbreak headquarters', detail: 'Your league, your team, and the next move.' },
@@ -124,7 +136,9 @@ function useLeagueUnread(enabled: boolean, refreshKey: unknown) {
 
 const SWITCHER_GROUP_ORDER = ['needs', 'live', 'other'] as const
 
-export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, rail, guillotineBanner = null, seasonFacts = null, seasonClock: seasonClockProp, children, ...shell }: Props) {
+export function NativeLeagueWorkspace({ native, workspaceShell, sourceLink = null, league, leagues, tabs, activeTab, isCommissioner, onSelectTab, onOpenSettings, rail, guillotineBanner = null, seasonFacts = null, seasonClock: seasonClockProp, children, ...shell }: Props) {
+  // The layout. `native` alone still decides hosting copy and the AF-only scoring read below.
+  const shellOn = workspaceShell ?? native
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [savedScoring, setSavedScoring] = useState<string | null>(null)
@@ -160,7 +174,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   const searchRef = useRef<HTMLInputElement>(null)
   const switcherRef = useRef<HTMLDialogElement>(null)
   const survivor = league.leagueVariant === 'survivor' || league.format.toLowerCase() === 'survivor'
-  const { t } = useOptionalLanguage()
+  const { t, language } = useOptionalLanguage()
   const groups = buildNativeLeagueNavigation(tabs, isCommissioner, survivor, t)
   const primary = groups[0]?.items ?? []
   const restoredLeague = useRef<string | null>(null)
@@ -188,9 +202,9 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   }, [])
   const railExpanded = wide && !railCollapse.collapsed
   // Poll live scores only while an expanded list is on screen — /core's `railOpen` gate.
-  const railView = useLeagueRail(leagues, rail, native && !shell.embedCenterOnly && (railExpanded || switcherOpen))
+  const railView = useLeagueRail(leagues, rail, shellOn && !shell.embedCenterOnly && (railExpanded || switcherOpen))
   // Reading the current league's chat marks it read, so refresh the badges when the section changes too.
-  const unread = useLeagueUnread(native && !shell.embedCenterOnly, `${switcherOpen}:${league.id}:${activeTab}`)
+  const unread = useLeagueUnread(shellOn && !shell.embedCenterOnly, `${switcherOpen}:${league.id}:${activeTab}`)
 
   /*
    * The league list the way /core's rail arranges it (user call, 2026-10-30): favorites pinned on top,
@@ -239,7 +253,7 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
   })
 
   useEffect(() => {
-    if (!native) return
+    if (!shellOn) return
     try {
       if (restoredLeague.current !== league.id) {
         restoredLeague.current = league.id
@@ -249,22 +263,27 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       }
       localStorage.setItem(memoryKey(league.id), activeTab)
     } catch { /* storage is optional */ }
-  }, [native, league.id, activeTab, tabs, onSelectTab])
+  }, [shellOn, league.id, activeTab, tabs, onSelectTab])
   useEffect(() => {
     const dialog = switcherRef.current
     if (switcherOpen && dialog && !dialog.open) { dialog.showModal(); searchRef.current?.focus() }
     if (!switcherOpen && dialog?.open) dialog.close()
   }, [switcherOpen])
   useEffect(() => {
-    if (!native) return
+    if (!shellOn) return
     const shortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSwitcherOpen(true) }
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
-  }, [native])
+  }, [shellOn])
 
-  if (!native) return <AppShell {...shell}>{children}</AppShell>
+  if (!shellOn) return <AppShell {...shell}>{children}</AppShell>
+  // Imported leagues: name the host where a native league says "Native on AllFantasy" / "Hosted on AF · Beta".
+  const hosting = leagueWorkspaceMode(league.platform, language)
+  const sourceName = sourceLink?.platformLabel ?? sourcePlatformLabel(league.platform) ?? (language === 'es' ? 'tu plataforma' : 'your platform')
+  const importedFromLabel = language === 'es' ? `Importada de ${sourceName}` : `Imported from ${sourceName}`
+  const openInSourceLabel = language === 'es' ? `Abrir en ${sourceName}` : `Open in ${sourceName}`
   const choose = (id: string) => { onSelectTab(id); setMenuOpen(false) }
   const openSwitcher = () => { setQuery(''); setSwitcherOpen(true) }
   const visibleLeagues = leagues.filter(row => {
@@ -360,9 +379,9 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       <header className="nl-mobile-top"><button type="button" onClick={() => setMenuOpen(value => !value)} aria-expanded={menuOpen} aria-label={menuOpen ? tNl('nativeLeague.mobile.closeNav') : tNl('nativeLeague.mobile.openNav')}>{menuOpen ? <X aria-hidden /> : <Menu aria-hidden />}</button><div className="nl-mobile-pill">{prevLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(prevLeague, activeTab)} aria-label={tNlVars('nativeLeague.mobile.previousLeague', { name: prevLeague.name })}><ChevronLeft size={18} aria-hidden /></Link> : null}<button type="button" className="nl-mobile-league" onClick={openSwitcher} aria-label={tNlVars('nativeLeague.mobile.switchLeague', { name: league.name })} data-ring={currentView.status.tone ?? undefined}><span className="nl-mobile-crest" data-ring={currentView.status.tone ?? undefined}><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><span className="nl-mobile-name">{league.name}</span><span className="nl-rail-tag nl-mobile-tag" data-platform={currentView.platform}>{currentView.platformLabel}</span><ChevronDown size={16} aria-hidden /></button>{nextLeague ? <Link className="nl-mobile-step" href={leagueSectionHref(nextLeague, activeTab)} aria-label={tNlVars('nativeLeague.mobile.nextLeague', { name: nextLeague.name })}><ChevronRight size={18} aria-hidden /></Link> : null}</div></header>
     </>}
     <div className="nl-main">
-      {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>{tNl('nativeLeague.topbar.viewing')}</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>{tNl('nativeLeague.topbar.jump')}</span><kbd>⌘K</kbd></button><span className="nl-chip nl-accent">{tNl('nativeLeague.topbar.hostedBeta')}</span><span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · ${tNlVars('nativeLeague.topbar.week', { week: league.currentWeek })}` : ` · ${league.season ?? ''}`}</span></header>}
+      {!shell.embedCenterOnly && <header className="nl-topbar"><button type="button" className="nl-viewing" onClick={openSwitcher}><span>{tNl('nativeLeague.topbar.viewing')}</span><strong>{league.name}</strong><ChevronDown size={14} aria-hidden /></button><button type="button" className="nl-search" onClick={openSwitcher}><Search size={16} aria-hidden /><span>{tNl('nativeLeague.topbar.jump')}</span><kbd>⌘K</kbd></button>{native ? <span className="nl-chip nl-accent">{tNl('nativeLeague.topbar.hostedBeta')}</span> : <span className="nl-chip nl-imported-chip" data-testid="imported-league-hosting-chip">{hosting.badge}</span>}<span className="nl-sport-week">{league.sport}{league.currentWeek ? ` · ${tNlVars('nativeLeague.topbar.week', { week: league.currentWeek })}` : ` · ${league.season ?? ''}`}</span></header>}
       <div className="nl-content">
-        <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : zombieBanner ? 'zombie' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : zombieBanner ? 'zombie-league-banner' : undefined}>{zombieBanner && <img className="nl-zombie-art" src="/zombie/universe-outbreak.webp" alt="" aria-hidden />}{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar"><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><div className="nl-heading-name"><div className="nl-badges">{redraft ? <><span className="nl-chip nl-rd-chip" data-testid="redraft-season-chip">{tNl('nativeLeague.heading.redraft')}{league.season ? ` · ${league.season}` : ''}</span><span className="nl-chip nl-rd-sport-chip">{redraft.sportLabel}</span></> : <span className="nl-chip nl-accent">{tNl('nativeLeague.heading.native')}</span>}{zombieBanner && <span className="nl-chip nl-zombie-chip">Zombie league</span>}{seasonClock && <span className="nl-chip nl-dyn-clock" data-testid="dynasty-season-clock" aria-label={`${tLang('dynastyEra.seasonClock.label')}: ${seasonClockText}`}>{seasonClockText}</span>}{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guilly</span>}{isCommissioner && <span className="nl-chip nl-gold">{tNl('nativeLeague.heading.commissioner')}</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {tNlVars('nativeLeague.heading.teams', { count: league.teamCount })} · {savedScoring || league.scoring || league.format}</p></div><button type="button" className="nl-button" aria-label={tNl('nativeLeague.heading.leagueSettings')} onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>{tNl('nativeLeague.heading.leagueSettings')}</span></button>{redraft ? <RedraftSeasonTrack phase={phase} facts={{ ...seasonFacts, currentWeek: seasonFacts?.currentWeek ?? league.currentWeek ?? null, tradeDeadlineWeek: seasonFacts?.tradeDeadlineWeek ?? league.tradeDeadlineWeek ?? null, draftComplete: seasonFacts?.draftComplete ?? ['Regular season', 'Playoffs', 'Offseason'].includes(phase), drafting: phase === 'Draft' }} /> : <ol className="nl-phase" aria-label={tNl('nativeLeague.phase.aria')}>{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{phaseLabel(label)}</li>)}</ol>}</header>
+        <header className="nl-league-heading" data-format={guillotineBanner ? 'guillotine' : zombieBanner ? 'zombie' : undefined} data-testid={guillotineBanner ? 'guillotine-league-banner' : zombieBanner ? 'zombie-league-banner' : undefined}>{zombieBanner && <img className="nl-zombie-art" src="/zombie/universe-outbreak.webp" alt="" aria-hidden />}{guillotineBanner && <img className="nl-guillotine-art" src="/artwork/tournaments/specialty/guillotine/assets/banner.svg" alt="" aria-hidden />}<span className="nl-heading-avatar"><LeagueMark src={currentView.imageUrl ?? league.logoUrl} letter={initials(league.name)} className="nl-heading-image" /></span><div className="nl-heading-name"><div className="nl-badges">{redraft ? <><span className="nl-chip nl-rd-chip" data-testid="redraft-season-chip">{tNl('nativeLeague.heading.redraft')}{league.season ? ` · ${league.season}` : ''}</span><span className="nl-chip nl-rd-sport-chip">{redraft.sportLabel}</span></> : native ? <span className="nl-chip nl-accent">{tNl('nativeLeague.heading.native')}</span> : null}{!native && <span className="nl-chip nl-imported-chip" data-testid="imported-league-heading-chip">{importedFromLabel}</span>}{zombieBanner && <span className="nl-chip nl-zombie-chip">Zombie league</span>}{seasonClock && <span className="nl-chip nl-dyn-clock" data-testid="dynasty-season-clock" aria-label={`${tLang('dynastyEra.seasonClock.label')}: ${seasonClockText}`}>{seasonClockText}</span>}{guillotineBanner && <span className="nl-chip nl-guillotine-chip">Guilly</span>}{isCommissioner && <span className="nl-chip nl-gold">{tNl('nativeLeague.heading.commissioner')}</span>}</div><h1>{league.name}</h1>{guillotineBanner?.line && <p className="nl-guillotine-line" data-testid="guillotine-banner-line">{guillotineBanner.line}</p>}<p>{league.sport} · {league.season} · {tNlVars('nativeLeague.heading.teams', { count: league.teamCount })} · {savedScoring || league.scoring || league.format}</p></div>{!native && sourceLink ? <a className="nl-button" href={sourceLink.href} target="_blank" rel="noopener noreferrer" aria-label={openInSourceLabel} data-testid="imported-league-open-source"><ExternalLink size={16} aria-hidden /><span>{openInSourceLabel}</span></a> : null}<button type="button" className="nl-button" aria-label={tNl('nativeLeague.heading.leagueSettings')} onClick={onOpenSettings}><Settings size={16} aria-hidden /><span>{tNl('nativeLeague.heading.leagueSettings')}</span></button>{redraft ? <RedraftSeasonTrack phase={phase} facts={{ ...seasonFacts, currentWeek: seasonFacts?.currentWeek ?? league.currentWeek ?? null, tradeDeadlineWeek: seasonFacts?.tradeDeadlineWeek ?? league.tradeDeadlineWeek ?? null, draftComplete: seasonFacts?.draftComplete ?? ['Regular season', 'Playoffs', 'Offseason'].includes(phase), drafting: phase === 'Draft' }} /> : <ol className="nl-phase" aria-label={tNl('nativeLeague.phase.aria')}>{(survivor ? ['Setup', 'Draft', 'Island', 'Finale', 'Complete'] : ['Setup', 'Draft', 'Regular season', 'Playoffs', 'Offseason']).map(label => <li key={label} aria-current={(survivor ? ({ 'Regular season': 'Island', Playoffs: 'Finale', Offseason: 'Complete' } as Record<string, string>)[phase] ?? phase : phase) === label ? 'step' : undefined}>{phaseLabel(label)}</li>)}</ol>}</header>
         <label className="nl-section-picker"><span>{tNl('nativeLeague.section.label')}</span><select aria-label={tNl('nativeLeague.section.aria')} value={activeTab} onChange={event => choose(event.target.value)}>{!groups.some(group => group.items.some(item => item.id === activeTab)) && <option value={activeTab}>{tNl('nativeLeague.section.current')}</option>}{groups.map(group => <optgroup key={group.id} label={group.title}>{group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
         <nav className="nl-mobile-tabs" aria-label={tNl('nativeLeague.section.tabsAria')}>{primary.map(item => <button key={item.id} type="button" aria-current={activeTab === item.id ? 'page' : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}</nav>
         <div className="nl-tab-content" data-view={activeTab}>
@@ -385,7 +404,8 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
       Draft HQ instead, which says what is missing and carries the explicit "Enter" button.
     */}
     {!shell.embedCenterOnly && <nav className="nl-bottom-nav" aria-label={tNl('nativeLeague.bottom.aria')}>{['native_home', draftSlot ? 'draft' : 'matchups', 'roster', 'waivers', 'league_chat'].map((id, index) => {
-      const item = primary.find(row => row.id === id) ?? (index === 3 ? primary.find(row => row.id === 'players') : undefined)
+      // By id first, then by the slot's icon: an imported league's home is `decide` or `home`, its team `team`.
+      const item = primary.find(row => row.id === id) ?? primary.find(row => row.icon === BOTTOM_NAV_ICONS[index])
       if (!item) return null
       const Icon = icons[item.icon as keyof typeof icons] ?? Home
       const label = id === 'draft' ? tNl('nativeLeague.bottom.draft') : tNl(`nativeLeague.bottom.${BOTTOM_NAV_KEYS[index]}`)
