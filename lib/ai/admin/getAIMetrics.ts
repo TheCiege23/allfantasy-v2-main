@@ -892,4 +892,3 @@ export async function getAdminAIMetricsBundle(filters: AIDashboardFilters, timeR
   }
 }
 
-export type AdminAIMetricsBundle = Awaited<ReturnType<typeof getAdminAIMetricsBundle>>

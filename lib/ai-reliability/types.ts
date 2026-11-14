@@ -26,11 +26,3 @@ export interface ReliabilityMetadata {
   hardViolation: boolean;
 }
 
-export interface DeterministicFallbackPayload {
-  verdict: string;
-  winner?: string;
-  confidence: number;
-  reasons: string[];
-  warnings: string[];
-  dataQualityTier: 'FULL' | 'PARTIAL' | 'MINIMAL';
-}

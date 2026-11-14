@@ -69,8 +69,14 @@ const GUARD_CALL = /\b(assertAiSpendAllowed|isAiSpendEnabled)\s*\(/
  * the rest of `app/api/start-sit/` and `components/StartSitPopup/`, its only fetcher, which nothing
  * mounted (0 production requests in 7 days). Measured: 38 on origin/main, 37 on the branch, and
  * the guarded sets differ by that one file only.
+ *
+ * Lowered to 35 on 2026-11-14, a DELETION: `lib/ai/imageGenerator.ts` and `lib/trade-engine/ai-layer.ts`
+ * were removed with the rest of the unreachable code — nothing imported either, by any path, dynamic
+ * import or mock (the test's own entry for imageGenerator already said "deleting the file would be the
+ * stronger fix"). Measured: 37 on origin/main, 35 on the branch, and the guarded sets differ by exactly
+ * those two files.
  */
-const MINIMUM = 37
+const MINIMUM = 35
 
 const ROOTS = ['lib', 'app', 'server', 'components']
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '.git'])

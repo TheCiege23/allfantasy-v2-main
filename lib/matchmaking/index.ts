@@ -4,5 +4,4 @@
 
 export * from "./types"
 export * from "./weights"
-export * from "./compatibility"
 export * from "./explain"

@@ -14,7 +14,6 @@ import { describe, expect, it } from 'vitest'
 const ALLOWED: Record<string, string> = {
   'lib/trade-block/importedTradeBlock.ts': 'the reader and the writer',
   'lib/core-app/playerCard.ts': 'one findUnique, then currentListings over the rosters it already loaded',
-  'lib/trade-engine/otb-persistence.ts': 'keyed rosterId:playerId, so a moved player never matches',
 }
 
 const ROOTS = ['lib', 'app', 'components', 'server']
@@ -54,6 +53,6 @@ describe('trade_block_entries readers', () => {
   })
 
   it('the scan sees a known reader (control)', () => {
-    expect(readers()).toContain('lib/trade-engine/otb-persistence.ts')
+    expect(readers()).toContain('lib/core-app/playerCard.ts')
   })
 })

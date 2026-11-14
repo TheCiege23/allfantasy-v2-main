@@ -151,17 +151,6 @@ export interface EngineContext {
   timestamp: number
 }
 
-export interface EngineOutput<T = any> {
-  data: T
-  capabilities: EngineCapabilities
-  confidence: ConfidenceState
-  meta: {
-    computedAt: number
-    engineVersion: string
-    computeTimeMs: number
-  }
-}
-
 export type ConfidenceState = 'HIGH' | 'MODERATE' | 'LEARNING' | 'INSUFFICIENT'
 
 export interface EngineCapabilities {
@@ -177,4 +166,3 @@ export interface EngineCapabilities {
   devyIntelligence: boolean
 }
 
-export const ENGINE_VERSION = '1.0.0'

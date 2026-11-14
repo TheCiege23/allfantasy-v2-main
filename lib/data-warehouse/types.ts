@@ -2,15 +2,7 @@
  * Fantasy Data Warehouse — shared types and sport constants.
  * Supports: NFL, NHL, NBA, MLB, NCAA Basketball, NCAA Football, Soccer.
  */
-import {
-  DEFAULT_SPORT,
-  SUPPORTED_SPORTS,
-  isSupportedSport,
-  normalizeToSupportedSport,
-  type SupportedSport,
-} from '@/lib/sport-scope'
-
-export const WAREHOUSE_SPORTS: readonly SupportedSport[] = [...SUPPORTED_SPORTS]
+import { DEFAULT_SPORT, isSupportedSport, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
 export type WarehouseSport = SupportedSport
 

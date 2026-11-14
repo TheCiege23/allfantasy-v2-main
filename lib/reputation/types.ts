@@ -18,16 +18,6 @@ const LEAGUE_PRESTIGE_TIERS = [
 ] as const
 export type LeaguePrestigeTier = (typeof LEAGUE_PRESTIGE_TIERS)[number]
 
-const COMMISSIONER_PRESTIGE_TIERS = [
-  'legendary',
-  'elite',
-  'trusted',
-  'standard',
-  'new_commissioner',
-  'flagged',
-] as const
-export type CommissionerPrestigeTier = (typeof COMMISSIONER_PRESTIGE_TIERS)[number]
-
 // ── Tier thresholds ───────────────────────────────────────────────────────────
 
 // ── Anti-abuse constants ──────────────────────────────────────────────────────

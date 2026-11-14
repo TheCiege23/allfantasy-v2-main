@@ -2,7 +2,6 @@ export type {
   IntelligenceChipState,
   IntelligencePlatformHealth,
   LeagueSourceKind,
-  ResolvedLeagueIntelligenceContext,
 } from '@/lib/intelligence/types'
 
 export { computeIntelligencePlatformHealth } from '@/lib/intelligence/computePlatformHealth'
