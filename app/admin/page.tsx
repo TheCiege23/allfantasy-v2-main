@@ -376,6 +376,13 @@ function AdminOverviewDeck({
             <span className="text-cyan-100/65">Open</span>
           </a>
           <a
+            href="/admin/leaguesafe/raw"
+            className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/35"
+          >
+            <span>LeagueSafe email capture</span>
+            <span className="text-cyan-100/65">Open</span>
+          </a>
+          <a
             href="/api/admin/status"
             className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white/78 transition hover:border-white/25"
           >
