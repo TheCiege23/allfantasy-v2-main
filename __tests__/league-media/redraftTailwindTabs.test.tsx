@@ -32,6 +32,20 @@ describe('ScheduleView season calendar', () => {
     expect(screen.getByText('Trade deadline · Wk 4')).toBeTruthy()
   })
 
+  it('every tagged tile has a spoken name and a short form for narrow tiles', () => {
+    render(<ScheduleView schedule={schedule as never} totalWeeks={6} tradeDeadlineWeek={4} />)
+    const tile = (w: number) => screen.getByTestId(`redraft-schedule-cal-week-${w}`)
+    expect(tile(1).getAttribute('aria-label')).toBe('W1')
+    expect(tile(3).getAttribute('aria-label')).toBe('W3, now')
+    expect(tile(4).getAttribute('aria-label')).toBe('W4, trade deadline')
+    expect(tile(5).getAttribute('aria-label')).toBe('W5, playoffs start')
+    expect(tile(6).getAttribute('aria-label')).toBe('W6, final')
+    // Narrow tiles swap .rdt-cal-tag-full for .rdt-cal-tag-short (a container query); playoff weeks have none.
+    expect(tile(4).querySelector('.rdt-cal-tag-full')!.textContent).toBe('Deadline')
+    expect(tile(4).querySelector('.rdt-cal-tag-short')!.textContent).toBe('Trade')
+    expect(tile(5).querySelector('.rdt-cal-tag-short')).toBeNull()
+  })
+
   it('without totalWeeks or a deadline (the legacy Season Hub caller) draws neither', () => {
     render(<ScheduleView schedule={schedule as never} />)
     expect(screen.queryByTestId('redraft-schedule-cal-week-5')).toBeNull()
