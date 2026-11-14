@@ -79,7 +79,7 @@ describe('🛑 a 0–0 placeholder before anyone has played is not a score', () 
   it('never puts "Level" beside a 99% win probability', () => {
     render(<Matchup data={data()} />)
     expect(screen.queryByText('Level')).toBeNull()
-    expect(screen.getByText(/Projected ahead by/)).toBeTruthy()
+    expect(document.getElementById('af-mug-title')?.textContent ?? '').toMatch(/^Projected to win/)
   })
 
   it('keeps a real 0–0 once a starter has actually played', () => {
@@ -87,7 +87,7 @@ describe('🛑 a 0–0 placeholder before anyone has played is not a score', () 
     if (d.lineups.available) d.lineups.data[0].opponent = cell('2', 'Monday Guy', { actual: 0, gameState: 'final' })
     const { container } = render(<Matchup data={d} />)
     expect(scores(container)).toEqual(['0.0', '0.0'])
-    expect(screen.getByText('Level')).toBeTruthy()
+    expect(document.getElementById('af-mug-title')?.textContent ?? '').toMatch(/^Level so far/)
   })
 
   it('a ruled-out starter does not count as having played', () => {
