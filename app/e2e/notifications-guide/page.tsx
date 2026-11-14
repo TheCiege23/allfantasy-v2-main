@@ -48,7 +48,8 @@ function news(mins: number, sport: string, headline: string, over: Partial<Notif
     platform: null,
     severity: 'info',
     meta: { ...DELIVERED, sport, source: 'ESPN' },
-    action: { label: 'Read on ESPN', href: 'https://www.espn.com/', external: true },
+    // A stand-in link: sample rows must not name a real outlet's host (the outbound-host census reads this file).
+    action: { label: 'Read on ESPN', href: '#sample-story', external: true },
     ...over,
   })
 }
