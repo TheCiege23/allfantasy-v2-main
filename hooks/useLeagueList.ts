@@ -23,34 +23,53 @@ function useLeagueList(enabled: boolean = true): UseLeagueListResult {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const lastFocusRefetch = useRef(0)
+  /*
+   * ⚠ A REFETCH MUST NOT BLANK THE LIST. Focus, visibility and state events all refetch;
+   * `loading` used to flip on each one, so coming back to the window swapped the list for
+   * its skeleton mid-click. Once a list has loaded, later fetches update it in place and a
+   * failed background fetch keeps what is on screen.
+   */
+  const hasLoaded = useRef(false)
+  const requestSeq = useRef(0)
 
   const fetchList = useCallback(async () => {
+    const seq = ++requestSeq.current
     if (!enabled) {
+      hasLoaded.current = false
       setLeagues([])
       setLoading(false)
       return
     }
-    setLoading(true)
-    setError(null)
+    const background = hasLoaded.current
+    if (!background) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const res = await fetchWithRetry('/api/league/list', { cache: 'no-store' }, { context: 'league-list' })
+      if (seq !== requestSeq.current) return
       if (res.status === 401) {
         setLeagues([])
         return
       }
       const data = await res.json().catch(() => ({}))
+      if (seq !== requestSeq.current) return
+      hasLoaded.current = true
+      setError(null)
       setLeagues(Array.isArray(data?.leagues) ? data.leagues : [])
     } catch (e) {
+      if (seq !== requestSeq.current) return
       const err = e as Error & { status?: number }
       if (err.status === 401) {
         setLeagues([])
         return
       }
-      setError(getErrorMessage(e, { context: 'league-list' }))
       logError(e, { context: 'useLeagueList' })
+      if (background) return
+      setError(getErrorMessage(e, { context: 'league-list' }))
       setLeagues([])
     } finally {
-      setLoading(false)
+      if (seq === requestSeq.current) setLoading(false)
     }
   }, [enabled])
 
