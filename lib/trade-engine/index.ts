@@ -2,14 +2,9 @@
 export { runTradeEngine } from "./trade-engine";
 
 export type {
-  GuardrailsConfig,
   GuardrailReasonCode,
-  GuardrailCandidateDebug,
 } from "./guardrails";
 
-export { guardrailCodesToUiList } from "./guardrailCopy";
-
-export { enrichTradeCandidateWithGrok } from "./grok-enrichment";
 export {
   runNewsImpactEngine,
   scoreNewsItems,

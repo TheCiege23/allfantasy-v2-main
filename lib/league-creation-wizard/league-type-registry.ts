@@ -58,16 +58,8 @@ export const DRAFT_TYPE_IDS: readonly string[] = listCreateLeagueWireDraftTypeId
 /** League types that imply dynasty (multi-year roster). */
 const DYNASTY_LEAGUE_TYPES: LeagueTypeId[] = ['dynasty', 'devy', 'c2c']
 
-/** League types that support keeper config. */
-const KEEPER_LEAGUE_TYPES: LeagueTypeId[] = ['keeper', 'dynasty']
-
 export function isDynastyLeagueType(leagueType: LeagueTypeId): boolean {
   return DYNASTY_LEAGUE_TYPES.includes(leagueType)
-}
-
-/** Keeper or dynasty: supports keeper retention config (max keepers, round cost, etc.). */
-export function isKeeperLeagueType(leagueType: LeagueTypeId): boolean {
-  return KEEPER_LEAGUE_TYPES.includes(leagueType)
 }
 
 export function getAllowedLeagueTypesForSport(sport: LeagueSport | string): LeagueTypeId[] {

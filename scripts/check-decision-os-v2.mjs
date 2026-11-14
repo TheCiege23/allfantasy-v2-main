@@ -48,7 +48,7 @@ const seams = [
   'app/api/leagues/[leagueId]/psychological-profiles/explain/route.ts',
   'app/api/leagues/[leagueId]/psychological-profiles/run/route.ts',
   'app/api/leagues/[leagueId]/psychological-profiles/run-all/route.ts',
-  'components/app/settings/BehaviorProfilesPanel.tsx', 'components/app/tabs/LeagueSettingsTab.tsx',
+  'components/app/settings/BehaviorProfilesPanel.tsx',
   'app/app/league/[leagueId]/psychological-profiles/page.tsx',
   'app/app/league/[leagueId]/psychological-profiles/compare/page.tsx',
   'app/app/league/[leagueId]/psychological-profiles/[profileId]/page.tsx',

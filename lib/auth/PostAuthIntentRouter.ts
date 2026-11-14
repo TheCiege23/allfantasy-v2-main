@@ -1,9 +1,4 @@
-import {
-  isSafeInternalPath,
-  loginUrlWithIntent,
-  safeRedirectPath,
-  signupUrlWithIntent,
-} from "@/lib/auth/auth-intent-resolver"
+import { isSafeInternalPath, loginUrlWithIntent, safeRedirectPath } from "@/lib/auth/auth-intent-resolver"
 import {
   isAllowedSignupPostAuthDestination,
   isAuthEntrySurfacePathname,
@@ -125,10 +120,6 @@ export function resolvePostAuthIntentDestination(input: PostAuthIntentInput): st
 
 export function buildLoginHrefWithIntent(redirectPath: string): string {
   return loginUrlWithIntent(redirectPath)
-}
-
-export function buildSignupHrefWithIntent(redirectPath: string): string {
-  return signupUrlWithIntent(redirectPath)
 }
 
 export function rememberAuthIntent(path: string | null | undefined): void {

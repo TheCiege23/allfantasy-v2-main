@@ -227,24 +227,6 @@ export type TradeCandidate = {
   priorityPill?: string
 }
 
-export type LeagueIntelSnapshot = {
-  league: LeagueContext
-  constraints: Constraints
-  assetsByRosterId: Record<number, Asset[]>
-  profilesByRosterId: Record<number, ManagerProfile>
-  tradeBlockIndex: Set<string>
-  idpConfig: {
-    enabled: boolean
-    startersRequired: number
-    poolEstimate: number
-    scoringWeight: number
-  }
-  pickFutures: {
-    enabled: boolean
-    daysToDraft: number
-  }
-}
-
 // Legacy compatibility
 export type LeagueSettings = LeagueContext & {
   sport?: Sport

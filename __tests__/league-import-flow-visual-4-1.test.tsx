@@ -15,10 +15,6 @@ const flowSrc = readFileSync(
   resolve(root, 'components/unified-import-ui/LeagueImportFlow.tsx'),
   'utf8',
 )
-const loadingSrc = readFileSync(
-  resolve(root, 'components/unified-import-ui/LegacyImportLoadingScreen.tsx'),
-  'utf8',
-)
 
 describe('LeagueImportFlow — Phase 4.1 visual upgrade (structural)', () => {
   it('preserves the provider-tab data-testids downstream QA depends on', () => {
@@ -63,20 +59,5 @@ describe('LeagueImportFlow — Phase 4.1 visual upgrade (structural)', () => {
     // "Step 2 of 2" belonged to the legacy Sleeper username form, which the
     // canonical discovery flow replaces; the step-1 eyebrow is retained.
     expect(flowSrc).toContain('Step 1 · Choose Platform')
-  })
-})
-
-describe('LegacyImportLoadingScreen — Phase 4.1 visual upgrade (structural)', () => {
-  it('preserves loading + progress testids', () => {
-    expect(loadingSrc).toContain('data-testid="legacy-import-loading-screen"')
-    expect(loadingSrc).toContain('data-testid="legacy-import-progress-bar"')
-  })
-
-  it('uses shared motion tokens (--dash-ease) + warroom-fade-in-stagger entrance', () => {
-    expect(loadingSrc).toContain('warroom-fade-in-stagger')
-    expect(loadingSrc).toContain('--dash-ease')
-    // Predict-blue accent replaces the old cyan-only active step ring so it
-    // aligns with the color-grammar's Predict category.
-    expect(loadingSrc).toContain('ring-blue-400/40')
   })
 })

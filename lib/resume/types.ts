@@ -36,18 +36,6 @@ import type { RankingSport } from "@/lib/ranking/types"
 /* 5. Snapshot cards (consumer contracts)                                     */
 /* -------------------------------------------------------------------------- */
 
-export interface ResumePublicCard {
-  userId: string
-  username: string | null
-  overallRating: number | null
-  percentile: number | null
-  topSport: RankingSport | null
-  championships: number
-  seasons: number
-  archetypeLabel: string | null
-  verified: boolean
-}
-
 export interface ResumeMatchmakingProfile {
   userId: string
   preferredSports: RankingSport[]

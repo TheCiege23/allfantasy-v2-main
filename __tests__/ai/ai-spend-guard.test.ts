@@ -172,15 +172,6 @@ describe('AI spend guard — provider boundary coverage', () => {
     // already guarded, so the two halves of three-brain disagreed.
     'lib/decision-os/three-brain/anthropicClient.ts',
     /*
-     * Guarded 2026-08-27, but read this before treating the -1 as progress:
-     * NOTHING CALLS THIS FILE. Zero callers by module path, relative path,
-     * dynamic import, or any exported name; the only other mention in the repo
-     * was its own ratchet entry. Guarding it removed no live spend — it is
-     * insurance against someone wiring up a DALL-E path that was never
-     * metered. Deleting the file would be the stronger fix.
-     */
-    'lib/ai/imageGenerator.ts',
-    /*
      * Two providers in one module: it imports the GUARDED xai-client and also
      * builds its own OpenAI client. Ask what a file CONSTRUCTS, never what it
      * imports — a census on imports marks this one covered and moves on.
@@ -225,7 +216,6 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/smart-trade-recommendations.ts',
     'lib/social-sharing/GrokShareCopyService.ts',
     'lib/survivor/ai/SurvivorAIService.ts',
-    'lib/trade-engine/ai-layer.ts',
     'lib/zombie/ai/ZombieAIService.ts',
     // Found by the census scan below rather than by any list — it was on no
     // ratchet and in no GUARDED entry. That find is why the scan exists.
@@ -318,7 +308,10 @@ describe('AI spend guard — provider boundary coverage', () => {
     // Then 30 on 2026-11-06: lib/integrity/TankingDetectionEngine.ts is no longer a provider boundary —
     // its direct Anthropic verdict (a model id that returned 404) was deleted for code-computed rules
     // (lib/integrity/tankingRules.ts), the same move collusion made. A deletion, not a silent revert.
-    expect(GUARDED.length).toBeGreaterThanOrEqual(30)
+    // Then 28 on 2026-11-14: lib/ai/imageGenerator.ts and lib/trade-engine/ai-layer.ts were DELETED with
+    // the rest of the unreachable code — nothing imported either by any path, dynamic import or mock.
+    // A deletion, not a silent revert.
+    expect(GUARDED.length).toBeGreaterThanOrEqual(28)
   })
 
   it('the unguarded ratchet has not grown', () => {

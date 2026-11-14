@@ -4,7 +4,6 @@ export type {
   EngineAsset,
   EngineManagerProfile,
   EngineContext,
-  EngineOutput,
   EngineCapabilities,
   ConfidenceState,
   TeamPhase,
@@ -13,17 +12,9 @@ export type {
   DepthRole,
 } from './types'
 
-export { ENGINE_VERSION } from './types'
-
 export {
   normalizeLeagueContext,
 } from './normalize'
-
-export {
-  resolveCapabilities,
-  resolveConfidence,
-  gracefulDowngrade,
-} from './capabilities'
 
 export {
   computeScoringAdjustments,
@@ -31,27 +22,23 @@ export {
 } from './scoring'
 
 export {
-  computePositionalScarcity,
   type PositionalScarcity,
 } from './scarcity'
 
 export {
-  classifyAllTeams,
   type ContenderClassification,
 } from './contender'
 
 export {
-  classifyAllArchetypes,
   archetypeAcceptanceModifier,
   type ArchetypeClassification,
 } from './archetypes'
 
 export {
-  computeLDIAcceptance,
   type LDIAcceptResult,
 } from './ldi-accept'
 
-export { ENGINE_FLAGS, isEnabled, getCacheTTL } from './flags'
+export { ENGINE_FLAGS, getCacheTTL } from './flags'
 
 export type {
   SportKey,
@@ -77,9 +64,6 @@ export { computeLiquidity, computeLiquidity as computeEngineLiquidity } from './
 export { computeAcceptanceProbability as computeEngineAcceptance } from './acceptance'
 
 export {
-  computeContextHash,
-  getCachedResult,
-  setCachedResult,
   type CacheType,
 } from './cache'
 

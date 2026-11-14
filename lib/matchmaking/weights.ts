@@ -45,10 +45,3 @@ export const FIT_CONFIDENCE = {
  */
 export const COMMISSIONER_REJECT_BUFFER = 0.02
 
-/** Discovery rail caps. */
-export const DISCOVERY_RAIL_CAPS = {
-  perRailMax: 10,
-  candidatePoolMax: 60,
-  minFitToInclude: 0.45,
-} as const
-

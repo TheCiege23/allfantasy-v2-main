@@ -253,4 +253,3 @@ export interface SportPlugin<
 // Registry
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type PluginRegistry = Map<SportKey, SportPlugin<unknown, unknown, unknown>>

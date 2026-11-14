@@ -2,7 +2,7 @@
 // LAYER A: LEAGUE INTELLIGENCE (Deterministic)
 // ============================================
 
-import { Asset, LeagueSettings, Thresholds, DEFAULT_THRESHOLDS, PickProjected } from './types'
+import { Asset, LeagueSettings, Thresholds, DEFAULT_THRESHOLDS } from './types'
 
 // ============================================
 // HELPERS
@@ -113,14 +113,6 @@ export function classifyCornerstone(
 // PICK PROJECTIONS
 // ============================================
 
-export function inferPickProjection(teamRank: number, numTeams: number): PickProjected {
-  if (!Number.isFinite(teamRank) || teamRank <= 0) return 'unknown'
-  const third = Math.ceil(numTeams / 3)
-  if (teamRank > numTeams - third) return 'early'
-  if (teamRank > third) return 'mid'
-  return 'late'
-}
-
 // ============================================
 // CONTENDER TIER
 // ============================================
@@ -196,59 +188,9 @@ export function computeNeedsSurplus(
 // PICK VALUE
 // ============================================
 
-export function estimatePickValue(round: number, projected: PickProjected, seasonOffset: number = 0): number {
-  const baseValues: Record<number, Record<PickProjected, number>> = {
-    1: { early: 8500, mid: 6500, late: 5000, unknown: 6500 },
-    2: { early: 4000, mid: 3000, late: 2000, unknown: 3000 },
-    3: { early: 1800, mid: 1400, late: 1000, unknown: 1400 },
-    4: { early: 800, mid: 600, late: 400, unknown: 600 }
-  }
-
-  let value = baseValues[round]?.[projected] || 500
-  if (seasonOffset > 0) value = Math.round(value * Math.pow(0.90, seasonOffset))
-  else if (seasonOffset < 0) value = Math.round(value * 0.5)
-  return value
-}
-
 // ============================================
 // BUILD LEAGUE INTELLIGENCE
 // ============================================
-
-export type SleeperRosterInput = {
-  rosterId: number
-  ownerId: string
-  ownerUsername?: string
-  ownerName: string
-  avatar?: string
-  players: Array<{
-    id: string
-    name: string
-    pos: string
-    team?: string
-    age?: number
-    slot: 'Starter' | 'Bench' | 'IR' | 'Taxi'
-  }>
-  picks: Array<{
-    season: number
-    round: number
-    originalOwner: string
-    isOwnPick: boolean
-    displayName: string
-  }>
-  faabRemaining?: number
-  wins: number
-  losses: number
-  ties?: number
-  pointsFor: number
-  tradeHistory?: {
-    totalTrades: number
-    prefersYouth: boolean
-    prefersPicks: boolean
-    prefersConsolidation: boolean
-  }
-}
-
-export type FantasyCalcValueMap = Record<string, { value: number; overallRank?: number; trend30Day?: number }>
 
 // ============================================
 // LEAGUE INTEL SNAPSHOT (Simplified)

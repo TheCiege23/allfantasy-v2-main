@@ -30,15 +30,6 @@ const NextPickPredictionSchema = z.object({
   reason: z.string(),
 })
 
-export const PostDraftGradeSchema = z.object({
-  teamName: z.string(),
-  letterGrade: z.string(),
-  numericScore: z.number(),
-  bestPick: z.string(),
-  biggestReach: z.string(),
-  summary: z.string(),
-})
-
 const CombinedAdpDataSchema = z.object({
   playerKey: z.string(),
   playerName: z.string(),
