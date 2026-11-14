@@ -56,11 +56,11 @@ describe('a trade card on a phone', () => {
   it('folds the grade explanations behind one toggle that marks the card open', () => {
     const { container } = render(<Trades data={data(true)} hidePending />)
     const card = container.querySelector('.af-tr-card')!
-    const toggle = screen.getByRole('button', { name: 'Why these grades' })
+    const toggle = screen.getByRole('button', { name: 'How these were graded' })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(card.hasAttribute('data-why-open')).toBe(false)
     fireEvent.click(toggle)
-    expect(screen.getByRole('button', { name: 'Hide grade details' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Hide how these were graded' }).getAttribute('aria-expanded')).toBe('true')
     expect(card.getAttribute('data-why-open')).toBe('true')
   })
 

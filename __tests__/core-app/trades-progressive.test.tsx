@@ -76,13 +76,13 @@ describe('the Trade Center paints before the history', () => {
         completedHistory={completedHistoryOf(pending)}
       />,
     )
-    // The header.
-    expect(screen.getByRole('heading', { level: 1, name: 'Trade Center' })).toBeTruthy()
-    // The summary strip: league, format, team count, deadline.
+    // The header: the trade deadline is the headline (2026-11-13), said once.
+    expect(screen.getByRole('heading', { level: 1, name: 'Trade deadline: week 11' })).toBeTruthy()
+    // The summary strip: league, format, team count.
     const strip = document.querySelector('.af-tc-context')
     expect(strip?.textContent).toContain('Last League Left')
     expect(strip?.textContent).toContain('Dynasty · PPR · 12 teams')
-    expect(strip?.textContent).toContain('Deadline · week 11')
+    expect(strip?.textContent).not.toContain('Deadline · week 11')
     // The slot holds the shaped placeholder, and nothing of the history yet.
     const skeleton = screen.getByTestId('trades-history-skeleton')
     expect(skeleton.getAttribute('aria-busy')).toBe('true')
@@ -146,7 +146,7 @@ describe('the streamed history renders what the page rendered before', () => {
       />,
     )
     expect(screen.getByRole('alert').textContent).toContain('Trades did not load')
-    expect(screen.getByRole('heading', { level: 1, name: 'Trade Center' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Build a trade and get it graded' })).toBeTruthy()
     expect(document.querySelector('.af-tc-context')?.textContent).toContain('Last League Left')
   })
 })
