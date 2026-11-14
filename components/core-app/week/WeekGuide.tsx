@@ -20,6 +20,7 @@ import {
 } from '@/lib/core-app/weekGuide'
 import { weekGuideMessages } from '@/lib/core-app/messages/weekGuide'
 import { WeekDateRange } from '@/components/core-app/WeekDateRange'
+import type { WeekNeed } from '@/lib/core-app/weekNeeds'
 // The card and button primitives (af3a-card, af3a-btn) live with the home dashboard's styles; load them
 // here rather than relying on another screen's import having put them on the page.
 import '@/components/core-app/af-dash-3a.css'
@@ -353,6 +354,45 @@ function Kickoffs({ calendar, t }: { calendar: WeeklyCalendar | null; t: Text })
   )
 }
 
+/**
+ * The Command Center's signals that nothing else on this page says — today the Survivor ones (votes,
+ * challenges, trade windows, side games). Built server-side by `weekNeedsFromSignals`; renders nothing
+ * when there are none, so an account without a Survivor league sees the guide exactly as before.
+ * The signal's own title and detail are passed through as written.
+ */
+function AlsoNeeds({ needs, t }: { needs: readonly WeekNeed[]; t: Text }) {
+  if (needs.length === 0) return null
+  return (
+    <section className="af3a-card af-hg-card" aria-labelledby="af-wg-needs" data-testid="week-guide-needs">
+      <header className="af-hg-cardhead">
+        <h2 id="af-wg-needs">{t.needsTitle}</h2>
+        <span>{t.needsSub}</span>
+      </header>
+      <ul className="af-wg-rows">
+        {needs.map((n) => (
+          <li key={n.id}>
+            <div className="af-wg-row-main">
+              <p className="af-wg-row-title">
+                <Link className="af-wg-row-name" href={n.href}>
+                  {n.leagueName}
+                </Link>
+                <span> · {n.title}</span>
+              </p>
+              <p className="af-wg-row-sub">{n.detail}</p>
+            </div>
+            <Link className={`af3a-btn${n.tone === 'urgent' ? ' af3a-btn-accent' : ''}`} href={n.href}>
+              {t.needsOpen}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <p className="af-decision-why af-hg-why">
+        <b>{t.why}</b> {t.needsTeach}
+      </p>
+    </section>
+  )
+}
+
 export function WeekGuide({
   board,
   calendar,
@@ -360,6 +400,7 @@ export function WeekGuide({
   allHref,
   isCommissioner,
   lineups = [],
+  needs = [],
 }: {
   board: WeekBoard
   /** The 7-day calendar the Blueprint already builds; null when it could not be read. */
@@ -374,6 +415,8 @@ export function WeekGuide({
    * the one move to make. Empty when the lineups could not be read: buttons then fall back to "Check lineup".
    */
   lineups?: LineupFact[]
+  /** Command Center signals this page did not already cover (lib/core-app/weekNeeds.ts). */
+  needs?: readonly WeekNeed[]
 }) {
   const t = useMessages(weekGuideMessages)
   const facts = new Map(lineups.map((f) => [f.leagueId, f]))
@@ -381,6 +424,7 @@ export function WeekGuide({
     <div className="af-wg">
       <Headline board={board} totalLeagues={totalLeagues} facts={facts} t={t} />
       <CloseGames board={board} allHref={allHref} facts={facts} t={t} />
+      <AlsoNeeds needs={needs} t={t} />
       <div className="af-wg-pair">
         <Survival board={board} t={t} />
         <Kickoffs calendar={calendar} t={t} />
