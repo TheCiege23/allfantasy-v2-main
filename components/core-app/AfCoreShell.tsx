@@ -1568,7 +1568,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
       if (routeRefreshClaimed()) return
       lastRefreshAt=Date.now()
       // 🛑 After a deploy this refresh would be a FULL PAGE RELOAD under the reader — see
-      // lib/core-app/deployGuard. The guard skips it and offers "New version ready" instead.
+      // lib/core-app/deployGuard. The guard skips it; NewVersionReload picks the build up unseen.
       void canRefreshInBackground().then((ok)=>{
         if (!ok || !alive || navPendingRef.current || shellRefreshPendingRef.current) return
         startShellRefresh(() => router.refresh())
