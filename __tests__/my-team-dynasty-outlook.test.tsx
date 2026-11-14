@@ -126,9 +126,13 @@ describe('the Dynasty outlook card', () => {
         })}
       />,
     )
+    // The picks are their own section in the roster column (2026-11-14); the side card is lineup age.
+    const picks = container.querySelector('[data-testid=my-team-future-picks]')!
+    expect(picks.querySelector('.af-mt-picks-season')?.textContent).toBe('2027')
+    expect([...picks.querySelectorAll('.af-mt-pick')].map((p) => p.textContent)).toEqual(['1st', '3rdvia Wichita Windigos'])
+    expect(picks.querySelector('[data-testid=my-team-picks-count]')?.textContent).toBe('2 picks · 1 first-rounder')
     const card = container.querySelector('.af-mt-dynasty')!
-    expect(card.textContent).toContain('2027')
-    expect(card.textContent).toContain('1st · 3rd (via Wichita Windigos)')
+    expect(card.textContent).not.toContain('2027')
     expect(card.textContent).toContain('27.5')
     expect(card.textContent).toContain('14 of 16 with an age on file')
     expect(card.textContent).toContain('Juwan Johnson')
@@ -144,8 +148,8 @@ describe('the Dynasty outlook card', () => {
         })}
       />,
     )
+    expect(container.querySelector('[data-testid=my-team-future-picks]')?.textContent).toContain('future picks are not synced for this platform yet')
     const card = container.querySelector('.af-mt-dynasty')!
-    expect(card.textContent).toContain('future picks are not synced for this platform yet')
     expect(card.textContent).toContain('No starter is past the age his position usually declines')
   })
 

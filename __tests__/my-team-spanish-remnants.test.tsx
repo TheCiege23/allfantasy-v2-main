@@ -51,8 +51,8 @@ describe('My Team in Spanish', () => {
     lang.language = 'es'
     const c = render(<MyTeam data={data} />).container
     expect(c.textContent).toContain('Nadie es titular en esta posición')
-    expect(c.textContent).toContain('con 8 de 9')
-    expect(c.textContent).not.toContain('from 8 of 9')
+    // The matchup's numbers are the top number now (2026-11-14), labelled in Spanish.
+    expect(c.querySelector('[data-chip=projected] span')?.textContent).toBe('Proyección, tú contra ellos')
     expect(c.querySelector('.af-mt-status[data-tone="warn"]')?.getAttribute('aria-label')).toBe('dudoso')
     lang.language = 'en'
   })
@@ -67,7 +67,6 @@ describe('My Team in Spanish', () => {
       'Sin designación de lesión reportada, que no es lo mismo que confirmado sano',
       'Estadio cubierto',
       'Estadio al aire libre, pronóstico aún no disponible',
-      'Proyección de AllFantasy ajustada a la puntuación de esta liga',
     ]) expect(a).toContain(s)
     for (const s of ['Indoor stadium', 'Outdoor stadium, forecast not available yet', 'standard PPR']) {
       expect(a.some((x) => x.includes(s))).toBe(false)
@@ -86,7 +85,6 @@ describe('My Team in Spanish', () => {
     lang.language = 'en'
     r.rerender(<MyTeam data={data} />)
     expect(r.container.textContent).toContain('Nobody is starting in this slot')
-    expect(r.container.textContent).toContain('from 8 of 9')
   })
 })
 

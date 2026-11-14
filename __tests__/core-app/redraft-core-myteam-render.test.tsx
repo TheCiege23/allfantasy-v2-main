@@ -128,11 +128,10 @@ describe('My team — the table footer, the alert card and the matchup link (des
     expect(h2?.querySelector('.af-mt-check-icon')?.getAttribute('aria-hidden')).toBe('true')
     expect(h2?.textContent).toBe('Lineup check')
   })
-  it('the matchup card links through to this league’s Matchup screen', () => {
+  it('the projection at the top links through to this league’s Matchup screen (2026-11-14)', () => {
     const { container } = render(<MyTeam data={myTeamFixture('NFL')} />)
-    const go = container.querySelector('.af-mt-matchup a.af-mt-mu-go')
-    expect(go?.getAttribute('href')).toBe('/core/matchup?league=e2e-redraft-core')
-    expect(go?.textContent).toBe('Go to matchup')
+    expect(container.querySelector('[data-chip=projected]')?.getAttribute('href')).toBe('/core/matchup?league=e2e-redraft-core')
+    expect(container.querySelector('.af-mt-matchup')).toBeNull()
   })
 })
 

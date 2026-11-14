@@ -124,15 +124,15 @@ describe('phone: the countdown above the Sleeper check strip', () => {
     expect(inQuery(MT_CSS, '.af-core .af-mt > .af-mt-lock', '').order).toBeUndefined()
   })
 
-  it('keeps team context first and the countdown above verification on phones', () => {
-    /* Context stays first; the narrow CSS then puts the countdown ahead of verification. */
+  it('keeps team context first, with the Sleeper check as one line inside it (2026-11-14)', () => {
     const { container } = render(<MyTeam data={page()} />)
     const kids = [...container.querySelector('.af-mt')!.children].map((c) => c.classList)
-    // 2026-11-13: the My team guide (what to do, in one sentence) leads; the team header follows it.
+    // The My team guide (what to do, in one sentence) leads; the team header follows it.
     expect(kids[0].contains('af-mtg-head')).toBe(true)
     expect(kids[1].contains('af-mt-head')).toBe(true)
     expect(inQuery(MT_CSS, '.af-core .af-mt > .af-mt-head', NARROW_PAGE).order).toBe('-2')
-    expect(kids[2].contains('af-lv')).toBe(true)
-    expect(kids[3].contains('af-mt-lock')).toBe(true)
+    // The Sleeper card is no longer a page-level block.
+    expect(kids.some((k) => k.contains('af-lv'))).toBe(false)
+    expect(container.querySelector('.af-mt-head .af-lv-line')).not.toBeNull()
   })
 })
