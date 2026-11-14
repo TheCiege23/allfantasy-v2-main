@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   context: vi.fn(),
   fit: vi.fn(),
   recommend: vi.fn(),
+  auction: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
@@ -20,6 +21,7 @@ vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ buildSessionSnap
 vi.mock('@/lib/live-draft-engine/RosterFitValidation', () => ({ validateRosterFitForDraftPick: h.fit }))
 vi.mock('@/lib/shared-services/draft/DraftContextAssembler', () => ({ buildDraftDecisionContext: h.context }))
 vi.mock('@/lib/draft-helper/RecommendationEngine', () => ({ computeDraftRecommendation: h.recommend }))
+vi.mock('@/lib/shared-services/draft/auctionDecision', () => ({ buildAuctionDecision: h.auction }))
 
 import { GET } from '@/app/api/leagues/[leagueId]/draft/decision/route'
 
@@ -93,15 +95,41 @@ describe('GET /api/leagues/[leagueId]/draft/decision', () => {
     expect(noRoster.status).toBe(409)
     expect((await noRoster.json()).reason).toBe('no_roster')
 
-    h.snapshot.mockResolvedValueOnce({ draftType: 'auction', picks: [], currentPick: null })
-    const auction = await GET(req, params)
-    expect((await auction.json()).reason).toBe('auction_unsupported')
-
     h.snapshot.mockResolvedValueOnce(null)
     expect((await (await GET(req, params)).json()).reason).toBe('no_draft')
 
     h.context.mockRejectedValueOnce(new Error('Roster not found'))
     expect((await (await GET(req, params)).json()).reason).toBe('context_unavailable')
     expect(h.recommend).not.toHaveBeenCalled()
+  })
+
+  it('an auction returns auction advice instead of a 409 (2026-11-14)', async () => {
+    h.snapshot.mockResolvedValueOnce({ draftType: 'auction', picks: [], currentPick: null })
+    h.auction.mockResolvedValueOnce({
+      advice: { maxLegalBid: 186, budgetEdge: 1, nominated: null, targets: [], nominate: null, summary: 'Your maximum legal bid is $186.', caveats: [] },
+      scoringWindowInsight: null,
+    })
+    const res = await GET(req, params)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { auction?: { maxLegalBid: number; summary: string } }
+    expect(body.auction?.maxLegalBid).toBe(186)
+    expect(h.auction).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'me' })
+    expect(h.recommend).not.toHaveBeenCalled()
+  })
+
+  it('carries the engine’s draft-context lines with the decision', async () => {
+    h.recommend.mockReturnValueOnce({
+      recommendation: { player: { name: 'Atlas Runner', position: 'RB', team: 'NYJ', adp: 13 }, reason: 'r', confidence: 81, needScore: 70, adpEdge: 1, adpIsReal: true },
+      alternatives: [],
+      scoringWindowInsight: 'Scoring window: KBI round 2 (weeks 11–12).',
+      runInsight: 'Run on WR (5 of the last 8 picks).',
+      teamsAheadInsight: '6 picks before your next turn: 4 of 6 still need a starting TE.',
+    })
+    const body = (await (await GET(req, params)).json()) as { decision: { context: Record<string, string | null> } }
+    expect(body.decision.context).toEqual({
+      scoringWindow: 'Scoring window: KBI round 2 (weeks 11–12).',
+      run: 'Run on WR (5 of the last 8 picks).',
+      teamsAhead: '6 picks before your next turn: 4 of 6 still need a starting TE.',
+    })
   })
 })

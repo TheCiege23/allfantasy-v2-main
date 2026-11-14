@@ -80,4 +80,46 @@ describe('DraftDecisionOsCard', () => {
     rerender(<DraftDecisionOsCard leagueId="lg1" refreshKey="15:in_progress:14" />)
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   })
+
+  it('shows this draft’s context lines (2026-11-14)', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        decision: decision({
+          context: {
+            scoringWindow: 'Scoring window: KBI round 2 (weeks 11–12). Atlas Runner’s bye (week 7) is already played.',
+            run: 'Run on WR (5 of the last 8 picks).',
+            teamsAhead: null,
+          },
+        }),
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    const ctx = await screen.findByTestId('draft-decision-os-context')
+    expect(ctx.textContent).toContain('KBI round 2 (weeks 11–12)')
+    expect(ctx.textContent).toContain('Run on WR')
+  })
+
+  it('renders auction advice instead of hiding an auction (2026-11-14)', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        auction: {
+          maxLegalBid: 143,
+          budgetEdge: 0.9,
+          nominated: {
+            playerName: 'Atlas Runner', position: 'RB', team: 'NYJ', marketPrice: 41, yourPrice: 46, surplus: 5,
+            reason: 'fills an open RB starter', currentBid: 30, verdict: 'bid', bidUpTo: 46,
+          },
+          targets: [{ playerName: 'Blaze Catcher', position: 'WR', team: 'DAL', marketPrice: 20, yourPrice: 26, surplus: 6, reason: 'r' }],
+          nominate: null,
+          summary: 'Bid on Atlas Runner up to $46 (market ~$41).',
+          caveats: [],
+          scoringWindowInsight: null,
+        },
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    expect((await screen.findByTestId('draft-decision-os-auction-summary')).textContent).toBe('Bid on Atlas Runner up to $46 (market ~$41).')
+    expect(screen.getByTestId('draft-decision-os-auction').textContent).toContain('Max legal bid $143')
+    expect(screen.getByTestId('draft-decision-os-auction-targets').textContent).toContain('Blaze Catcher')
+  })
 })

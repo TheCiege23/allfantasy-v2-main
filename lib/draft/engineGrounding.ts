@@ -4,6 +4,7 @@ import {
   type RecommendationPlayer,
   type RecommendationResult,
 } from '@/lib/draft-helper/RecommendationEngine'
+import type { ScoringWindow } from '@/lib/draft-helper/draftContextSignals'
 
 /**
  * Ground Chimmy's draft tips (`/api/draft/ai/*`) in the ONE draft engine (2026-11-14).
@@ -98,10 +99,12 @@ export function groundingFromEngine(args: {
     topPick ? `Top choice: ${describe(topPick)} — ${topPick.reason}` : 'Top choice: none could be ranked.',
     ...(alternatives.length ? ['Alternatives:', ...alternatives.map((a) => `- ${describe(a)} — ${a.reason}`)] : []),
     ...(needLine ? [`Roster need (0-100, higher = more needed): ${needLine}`] : []),
+    ...(result.scoringWindowInsight ? [result.scoringWindowInsight] : []),
+    ...(result.runInsight ? [result.runInsight] : []),
     ...(result.scarcityInsight ? [`Scarcity: ${result.scarcityInsight}`] : []),
     ...(result.byeNote ? [`Bye weeks: ${result.byeNote}`] : []),
     `Available now (best ADP first, ${Math.min(GROUNDING_POOL_LIMIT, byAdp.length)} of ${byAdp.length}):`,
-    ...byAdp.slice(0, GROUNDING_POOL_LIMIT).map((p) => `- ${describe(p)}`),
+    ...byAdp.slice(0, GROUNDING_POOL_LIMIT).map((p) => `- ${describe(p)}${p.byeWeek != null ? `, bye wk ${p.byeWeek}` : ''}`),
   ]
 
   return {
@@ -117,15 +120,20 @@ export function groundingFromEngine(args: {
 /** Run the engine for one roster on one board — the same call the draft room's recommendation makes. */
 export function runEngineForGrounding(args: {
   available: RecommendationPlayer[]
-  teamRoster: Array<{ position: string; team?: string | null }>
+  teamRoster: Array<{ position: string; team?: string | null; byeWeek?: number | null }>
   overallPick: number
   totalTeams: number
   sport: string
+  /** This draft's scoring window and recent picks, when known — see draftContextSignals.ts. */
+  scoringWindow?: ScoringWindow | null
+  recentPickPositions?: string[]
 }): DraftEngineGrounding {
   const { available, teamRoster, overallPick, totalTeams, sport } = args
   const result = computeDraftRecommendation({
     available,
     teamRoster,
+    scoringWindow: args.scoringWindow ?? null,
+    recentPickPositions: args.recentPickPositions,
     round: Math.ceil(overallPick / Math.max(1, totalTeams)),
     // The engine's `pick` is the pick WITHIN the round; it derives the overall pick itself.
     pick: ((overallPick - 1) % Math.max(1, totalTeams)) + 1,
