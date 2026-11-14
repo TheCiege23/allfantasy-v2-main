@@ -1,0 +1,148 @@
+/* My Leagues guide (2026-11-14): components/core-app/screens/MyLeaguesV4.tsx. */
+
+/* ── The answer headline ───────────────────────────────────────────────────────────────────────── */
+.af-core.af-ml .af-mlg-head {
+  align-items: flex-start;
+}
+.af-core.af-ml .af-mlg-head .af-mlg-title {
+  max-width: 30ch;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.af-core.af-ml .af-mlg-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 72ch;
+}
+.af-core.af-ml .af-mlg-intro {
+  color: var(--text2, var(--muted));
+  font-size: 14px;
+  line-height: 1.45;
+}
+.af-core.af-ml .af-mlg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-core.af-ml .af-mlg-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--surface2, transparent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core.af-ml .af-mlg-chip[data-chip='questionable'],
+.af-core.af-ml .af-mlg-chip[data-chip='drafting'] {
+  border-color: var(--warn, #f5c451);
+}
+.af-core.af-ml .af-mlg-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-core.af-ml .af-mlg-why {
+  color: var(--text2, var(--muted));
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── Search stays; the rest folds ──────────────────────────────────────────────────────────────── */
+.af-core.af-ml .af-mlg-controls .af-ml-search {
+  flex: 1 1 100%;
+}
+.af-core.af-ml .af-mlg-filters,
+.af-core.af-ml .af-mlg-foot {
+  margin: 0 0 16px;
+}
+.af-core.af-ml .af-mlg-filters > summary,
+.af-core.af-ml .af-mlg-foot > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core.af-ml .af-mlg-filters > summary::-webkit-details-marker,
+.af-core.af-ml .af-mlg-foot > summary::-webkit-details-marker {
+  display: none;
+}
+.af-core.af-ml .af-mlg-filters > summary::after,
+.af-core.af-ml .af-mlg-foot > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--muted);
+}
+.af-core.af-ml .af-mlg-filters[open] > summary::after,
+.af-core.af-ml .af-mlg-foot[open] > summary::after {
+  content: '▴';
+}
+.af-core.af-ml .af-mlg-on {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--on-accent, #04131a);
+  background: var(--accent);
+  font-size: 12px;
+}
+.af-core.af-ml .af-mlg-filters-body,
+.af-core.af-ml .af-mlg-foot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0 0;
+}
+.af-core.af-ml .af-mlg-filters-body .af-ml-chips {
+  margin: 0;
+}
+.af-core.af-ml .af-mlg-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.af-core.af-ml .af-mlg-foot {
+  margin-top: 8px;
+}
+.af-core.af-ml .af-mlg-foot-body .af-ml-foot-p {
+  margin: 0;
+}
+.af-core.af-ml .af-mlg-foot-body .af-ml-cover {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .af-core.af-ml .af-mlg-head .af-mlg-title {
+    font-size: 23px;
+  }
+  .af-core.af-ml .af-mlg-links > * {
+    flex: 1 1 auto;
+  }
+}
+
+/* ── Before the draft: the in-season density (the base sheet keys its grids by tier) ──────────── */
+.af-core.af-ml .af-ml-grid[data-view='grid'][data-tier='predraft'] {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+@media (max-width: 720px) {
+  .af-core.af-ml .af-ml-grid[data-view='grid'][data-tier='predraft'] {
+    grid-template-columns: 1fr;
+  }
+}

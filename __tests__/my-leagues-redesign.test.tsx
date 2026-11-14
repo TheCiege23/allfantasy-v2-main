@@ -1,6 +1,7 @@
 /**
- * My Leagues board restyle (2026-11-05): the eyebrow over the title sums the account from the
- * server's counts and the sport tabs — and leaves a zero part out rather than printing "0 need you".
+ * My Leagues board restyle (2026-11-05). Since the guide (2026-11-14) the eyebrow names the page and says
+ * the live-league count once; the headline below it says which leagues need you, so the eyebrow no longer
+ * repeats the needs/commissioner counts the filter chips already carry.
  */
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -47,13 +48,13 @@ function renderList(leagues: MyLeaguesLeague[], over: Partial<typeof COUNTS> = {
 }
 
 describe('My Leagues eyebrow', () => {
-  it('sums leagues, sports, the ones that need you and the ones you run', () => {
+  it('names the page and the live-league count, once', () => {
     renderList([league('a', 'NFL'), league('b', 'NBA'), league('c', 'NFL')], { needs: 2, commissioner: 1 })
-    expect(screen.getByTestId('my-leagues-eyebrow').textContent).toBe('3 leagues · 2 sports · 2 need you · 1 you run')
+    expect(screen.getByTestId('my-leagues-eyebrow').textContent).toBe('My leagues · 3')
   })
 
-  it('leaves zero parts and a single sport out', () => {
+  it('works for a single league', () => {
     renderList([league('a', 'NFL')])
-    expect(screen.getByTestId('my-leagues-eyebrow').textContent).toBe('1 league')
+    expect(screen.getByTestId('my-leagues-eyebrow').textContent).toBe('My leagues · 1')
   })
 })

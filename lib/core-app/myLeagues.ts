@@ -1,4 +1,5 @@
 import 'server-only'
+import { leagueTier, type GuideMatchup, type GuideTier } from '@/lib/core-app/myLeaguesGuide'
 import { attachLeagueHubs } from './attachLeagueHubs'
 import { attachSurvivorExileLinks } from '@/lib/core-app/attachSurvivorExileLinks'
 import { attachLeagueAudience } from './attachLeagueAudience'
@@ -71,7 +72,7 @@ export type MyLeaguesHistoryRow = {
   season: string | null
 }
 
-export type MyLeaguesTier = 'needs' | 'playing' | 'quiet'
+export type MyLeaguesTier = GuideTier
 
 export type MyLeaguesLeague = Dash34League & {
   hub?: LeagueHub
@@ -88,6 +89,8 @@ export type MyLeaguesLeague = Dash34League & {
   reason: string | null
   /** Public or private for a league made here; null for a league on another platform. */
   audience?: LeagueAudience | null
+  /** This week's game as parts, so the screen phrases it; null when nothing is on file. */
+  matchup?: GuideMatchup | null
 }
 
 export type MyLeaguesData = {
@@ -101,6 +104,8 @@ export type MyLeaguesData = {
     needs: number
     playing: number
     quiet: number
+    /** Waiting on a draft that has not started (2026-11-14). Optional: older callers predate it. */
+    predraft?: number
     commissioner: number
     drafting: number
     dynasty: number
@@ -130,28 +135,18 @@ function seasonOf(row: RawRow): string | null {
 }
 
 /**
- * The tier a league belongs to.
+ * The tier a league belongs to — `leagueTier` in myLeaguesGuide.ts (2026-11-14).
  *
  * ⚠ THE HANDOFF'S MIDDLE TIER IS "PLAYING NOW" AND IT IS NOT A LIVE-SCORE TIER
  * HERE, BECAUSE THERE ARE NO LIVE SCORES. What survives of that idea is
  * "in season, roster on file, nothing blocking" — a real state, distinct from
- * both "needs you" and "quiet", and the tier header says which of the two claims
- * it is making. Folding it into "quiet" would have been the easier lie: it would
- * report 50 leagues as needing nothing when half of them are mid-season.
+ * both "needs you" and "quiet".
+ *
+ * ⚠ AND "NEEDS YOU" USED TO MEAN "ANY WARN CHIP", WHICH PUT 70 OF 82 LEAGUES IN IT.
+ * A hurt bench player and a draft that has not started are not things to do today;
+ * the guide module keeps them out and gives pre-draft leagues their own group.
  */
-function tierOf(l: Dash34League): MyLeaguesTier {
-  const chips = l.chips ?? []
-  const has = (label: string) => chips.some((c) => c.label === label)
-
-  // Anything the 34a ranker treats as a call to action.
-  if (l.priority === 'urgent' || l.priority === 'draft') return 'needs'
-  if (chips.some((c) => c.tone === 'bad' || c.tone === 'warn')) return 'needs'
-
-  // In season with a roster read, nothing blocking.
-  if (has('SEASON OVER')) return 'quiet'
-  if (l.matchupNote === 'No roster imported yet') return 'quiet'
-  return 'playing'
-}
+const tierOf = (l: Dash34League): MyLeaguesTier => leagueTier(l)
 
 /**
  * The specific cause, never a generic "action needed" — the handoff's copy
@@ -235,6 +230,16 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
       matchupNote: matchup
         ? `Week ${matchup.week} · ${matchup.yourTeam ?? 'Your team'} ${matchup.scored ? matchup.yourScore.toFixed(1) : ''}${matchup.unpaired ? ' · league scoreboard' : ` vs ${matchup.opponentTeam ?? 'Opponent'} ${matchup.scored ? matchup.opponentScore.toFixed(1) : ''}`}`
         : l.matchupNote,
+      matchup: matchup
+        ? {
+            week: matchup.week,
+            scored: Boolean(matchup.scored),
+            yourScore: Number(matchup.yourScore ?? 0),
+            opponentScore: Number(matchup.opponentScore ?? 0),
+            opponent: matchup.opponentTeam ?? null,
+            unpaired: Boolean(matchup.unpaired),
+          }
+        : null,
       tier: tierOf(l),
       isDynasty: Boolean(row?.isDynasty),
       isCommissioner: Boolean(row?.isCommissioner),
@@ -267,6 +272,7 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
     needs: leagues.filter((l) => l.tier === 'needs').length,
     playing: leagues.filter((l) => l.tier === 'playing').length,
     quiet: leagues.filter((l) => l.tier === 'quiet').length,
+    predraft: leagues.filter((l) => l.tier === 'predraft').length,
     commissioner: leagues.filter((l) => l.isCommissioner).length,
     drafting: leagues.filter((l) => l.priority === 'draft' || (l.chips ?? []).some((c) => c.label === 'PRE DRAFT')).length,
     dynasty: leagues.filter((l) => l.isDynasty).length,
