@@ -4808,6 +4808,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           identityInShell={leagueHeaderShown}
           tradeDeadline={homeTradeDeadline}
           lineups={homeLineups}
+          /* The rail's row for this league, so the Overview's headline and the rail say the same standing (2026-11-13). */
+          rail={ctx.weekLineups?.byLeague[leagueHome.league.id] ?? null}
           /*
            * "What's on file", streamed. Its nine counts wait behind their own boundary so the rest
            * of the Overview never waits on them; the skeleton holds the panel's height.

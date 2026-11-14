@@ -115,9 +115,13 @@ describe('Overview commissioner card', () => {
     expect(text(el)).not.toContain('Inactive')
   })
 
-  it('gives anyone else the reason and no link', () => {
-    const el = card({ available: false, reason: 'the commissioner hub is visible to this league’s commissioner and co-commissioners' })
-    expect(el.querySelector('a[href^="/core/commissioner"]')).toBeNull()
+  // 2026-11-13 guide: someone who does not run the league is not shown the card at all — a panel
+  // explaining that it is for commissioners was a section of the Overview about nothing they can use.
+  it('shows anyone else no commissioner card, and no link to the hub', () => {
+    const reason = 'the commissioner hub is visible to this league’s commissioner and co-commissioners'
+    const { queryByText, container } = render(<LeagueHome data={page({ available: false, reason })} otherLeagueIssueCount={0} identityInShell />)
+    expect(queryByText('Commissioner Hub')).toBeNull()
+    expect(container.querySelector('a[href^="/core/commissioner"]')).toBeNull()
   })
 })
 

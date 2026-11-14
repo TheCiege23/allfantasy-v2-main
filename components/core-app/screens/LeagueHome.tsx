@@ -41,6 +41,10 @@ import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { useMessages } from '@/components/i18n/useMessages'
 import { leagueHomeMessages } from '@/lib/core-app/messages/leagueHome'
+import { leagueOverviewGuideMessages } from '@/lib/core-app/messages/leagueOverviewGuide'
+import { isEliminationLeague, overviewHeadline, type OverviewHeadline } from '@/lib/core-app/leagueOverviewGuide'
+import type { RailMatchup } from '@/lib/core-app/railMatchups'
+import '@/components/core-app/af-league-overview-guide.css'
 
 /**
  * "Your season at a glance": record and rank, points for, FAAB left, trade deadline (the redesign's KPI
@@ -51,12 +55,19 @@ import { leagueHomeMessages } from '@/lib/core-app/messages/leagueHome'
 function HomeKpiRow({
   data,
   tradeDeadline,
+  elimination = false,
 }: {
   data: LeagueHomeData
   tradeDeadline: TradeDeadlineCountdown | null
+  /**
+   * Leave the record tile out: an elimination league has no matchups (a W-L record and a rank counting chopped
+   * teams is noise there), and a head-to-head headline already says the record and the place.
+   */
+  elimination?: boolean
 }) {
   const m = useMessages(leagueHomeMessages)
-  const kpis = buildHomeKpis(data)
+  const built = buildHomeKpis(data)
+  const kpis = elimination ? { ...built, record: null } : built
   const deadlineText = useTradeDeadlineCountdownText(tradeDeadline)
   const deadline = tradeDeadline && tradeDeadline.state !== 'none' && deadlineText ? tradeDeadline : null
   if (!kpis.record && !kpis.pointsFor && !kpis.faab && !deadline) return null
@@ -245,6 +256,12 @@ export type LeagueHomeProps = {
    * platform named the same way, and saying it twice is noise.
    */
   coverageSlot?: React.ReactNode
+  /**
+   * The rail's row for THIS league (lib/core-app/railMatchups.ts) — the same standing the left rail draws.
+   * The guide's headline reads it so an elimination league says "6th of 7 alive · 12.4 over the cut" on
+   * both surfaces, never "0-0 · 2nd of 18" on one of them. Null keeps the head-to-head headline.
+   */
+  rail?: RailMatchup | null
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -554,6 +571,7 @@ export function LeagueHome({
   coverageSlot,
   lineups = null,
   tradeDeadline = null,
+  rail = null,
 }: LeagueHomeProps) {
   const { language } = useOptionalLanguage()
   const m = useMessages(leagueHomeMessages)
@@ -579,7 +597,12 @@ export function LeagueHome({
    * support card stood between the manager and their week. Same controls, same behaviour, moved
    * below the league's content. Every other format keeps its layout.
    */
-  const toolsAtFoot = Boolean(data.redraft) && identityInShell
+  /*
+   * 2026-11-13 guide: EVERY format inside the shell puts the page tools at the foot, not only redraft. The
+   * top of the Overview carried "Imported from Sleeper · Remove from my leagues (red) · Contact support"
+   * above anything about the league; the guide's answer goes there now.
+   */
+  const toolsAtFoot = identityInShell
   const headActions = (
     <>
       <CustomizeLeagueLink returnTo={`/core?league=${encodeURIComponent(league.id)}`} className="af-btn af-btn--ghost" />
@@ -612,155 +635,49 @@ export function LeagueHome({
     />
   ) : null
 
-  return (
-    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined} data-dynasty={data.dynasty ? 'true' : undefined}>
-      {/* ── League identity ─────────────────────────────────────────── */}
-      <header className="af-lh-head">
-        <div className="af-lh-ident">
-          <h1 className={identityInShell ? 'af-lh-name--hidden' : 'af-display af-lh-name'}>{league.name}</h1>
-          <div className="af-lh-sub">
-            {identityInShell ? null : (
-              <span className="af-platform af-platform-chip" data-platform={league.platform}>
-                {league.platform}
-              </span>
-            )}
-            {/* A redraft deck names the format and season in its own chip ("Redraft · 2026"); saying it twice is noise. */}
-            {/* So does the dynasty deck's era band ("Year 5 · 2026 season"). */}
-            {league.format && !data.redraft && !data.dynasty ? <span>{league.format}</span> : null}
-            {league.season && !data.redraft && !data.dynasty ? <span className="af-num">{league.season}</span> : null}
-            {/* Record, rank and the trade deadline live in the KPI row below; the header does not repeat them. */}
-            {data.yourTeam.available && !kpis.record ? (
-              <>
-                <span className="af-num">{data.yourTeam.data.record}</span>
-                {data.yourTeam.data.rank != null ? (
-                  <span className="af-num">#{data.yourTeam.data.rank}</span>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        </div>
+  /* ── The guide (2026-11-13): the answer first, then this week, then everything else folded. ── */
+  const g = useMessages(leagueOverviewGuideMessages)
+  const elimination = isEliminationLeague(rail, league.variant)
+  const preDraft = data.preSeason && rosteredPlayerCount === 0
+  const pWin = data.matchup?.available ? data.matchup.data.winProbability?.pWin ?? null : null
+  const head: OverviewHeadline = overviewHeadline({
+    rail,
+    variant: league.variant,
+    preDraft,
+    record: kpis.record,
+    matchup: data.matchup?.available ? { opponent: data.matchup.data.opponent.name, pWin } : null,
+  })
+  const headline =
+    head.kind === 'chopped'
+      ? g.headChopped(head.week)
+      : head.kind === 'alive'
+        ? g.headAlive(head.rank, head.outOf, head.overCut)
+        : head.kind === 'aliveUnranked'
+          ? g.headAliveUnranked(head.outOf)
+          : head.kind === 'preDraft'
+            ? g.headPreDraft
+            : head.kind === 'h2h'
+              ? g.headH2h(head.rank, head.teams, head.record, head.opponent)
+              : league.name
+  const winPct = pWin != null ? Math.round(Math.max(0, Math.min(1, pWin)) * 100) : null
+  const chips: Array<{ key: string; label: string; href: string }> = []
+  // The win chance is said once, on the week's Matchup cell below — not again as a chip here.
+  if (attention.length > 0) chips.push({ key: 'todo', label: g.chipToDo(issues.length), href: '#af-lh-attention-title' })
+  const cutText =
+    head.kind === 'chopped'
+      ? g.cutChopped
+      : head.kind === 'alive'
+        ? /* The headline says the points; the cell says the places — each number once. */
+          head.placesAboveCut != null && head.placesAboveCut > 0
+          ? g.chipPlaces(head.placesAboveCut)
+          : head.overCut != null
+            ? g.cutClear(head.overCut)
+            : g.cutAt
+        : g.cutUnranked
 
-        {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
-      </header>
-      {/* When the draft is and what you owe — renders nothing when neither applies (components/league-home). */}
-      <MemberStatusCard leagueId={league.id} />
-
-      {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
-      {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
-
-      {/* Dynasty Era deck — dynasty leagues only (lib/core-app/dynastyLeagueHome.ts); absent otherwise. */}
-      {data.dynasty ? <DynastyHomeDeck deck={data.dynasty} leagueId={league.id} /> : null}
-
-      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} />
-
-      {toolsAtFoot ? null : importedActions}
-
-      {league.variant === 'survivor_guillotine' && (
-        <section className="af-card" aria-label="Survivor Guilly league">
-          <span className="af-label">Survivor Guilly</span>
-          <h2>Enter the island</h2>
-          <p>Your lineup, tribe race, private powers, and Chop Night are ready in the league hub.</p>
-          <Link className="af-btn" href={`/survivor-guillotine/${encodeURIComponent(league.id)}`}>Open league island →</Link>
-        </section>
-      )}
-
-      <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
-        <div className="af-lh-week-summary-head">
-          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
-          <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
-        </div>
-        <div className="af-lh-week-summary-grid">
-          <Link href={`/core/my-team?league=${league.id}`}>
-            <span className="af-label">{copy('Lineup')}</span>
-            <strong>{data.preSeason && rosteredPlayerCount === 0 ? copy('Your roster is awaiting the draft') : urgent ? urgent.title : copy('Review your starters')}</strong>
-            <span>{data.preSeason && rosteredPlayerCount === 0 ? `${teamDirectory.length} ${copy('teams imported')}` : urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
-          </Link>
-          <Link href={`/core/matchup?league=${league.id}`}>
-            <span className="af-label">{copy('Matchup')}</span>
-            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : data.preSeason ? copy('Matchups begin after the draft') : copy('Open matchup')}</strong>
-            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : data.preSeason ? copy('No games have been scored yet') : copy('Matchup data is not ready')} →</span>
-          </Link>
-          <div className="af-lh-week-summary-moves">
-            <span className="af-label">{copy('Moves')}</span>
-            <strong>{copy('Plan your next move')}</strong>
-            <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
-          </div>
-        </div>
-      </section></LeagueSection>
-
-      {/*
-        ── What this import could not bring across ───────────────────
-        Top of the screen, above everything, because it changes how to read every
-        number below it — a standings table with no schedule behind it is a
-        different object from one with.
-
-        ⚠ ONLY WHEN THERE IS SOMETHING TO SAY. `sentence` is null both when
-        everything arrived and when the league predates coverage being persisted,
-        and those must both stay silent: a banner on every league is one nobody
-        reads by the second week.
-
-        ⚠ AND IT NAMES THE PLATFORM, WITHOUT BLAMING IT. The sentence used to read
-        "Fleaflicker doesn't publish trade history"; a `missing` bucket only means
-        this import did not bring it across, so it now says exactly that and still
-        names where the league came from (see importCoverageSummary's header).
-      */}
-      {coverageSlot !== undefined ? (
-        coverageSlot
-      ) : data.importCoverage.sentence ? (
-        <section className="af-card af-lh-coverage" role="status" aria-label={copy('Import coverage')}>
-          <span className="af-lh-coverage-glyph" aria-hidden>
-            ◑
-          </span>
-          <p className="af-lh-coverage-text">{data.importCoverage.sentence}</p>
-        </section>
-      ) : null}
-
-      {teamDirectory.length > 0 ? (
-        <LeagueSection id="managers"><details className="af-card af-lh-team-directory" open={data.preSeason}>
-          <summary>{copy('Teams in this league')} · {teamDirectory.length}</summary>
-          {rosteredPlayerCount === 0 ? (
-            <p>{copy('All teams are on file. Player rosters are empty until the draft or a later sync, so player trades cannot be analyzed yet.')}</p>
-          ) : null}
-          <ol>
-            {teamDirectory.map((team) => (
-              <li key={team.id}>
-                <strong>{team.name}</strong>
-                {team.ownerName && team.ownerName !== team.name ? <span>{team.ownerName}</span> : null}
-                {team.isYou ? <small>{copy('you')}</small> : null}
-              </li>
-            ))}
-          </ol>
-        </details></LeagueSection>
-      ) : null}
-
-      {/* ── The other half of this franchise ────────────────────────── */}
-      <LeagueSection id="pairing"><PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} /></LeagueSection>
-
-      {/* ── Season timeline ─────────────────────────────────────────── */}
-      {/* A redraft league's deck above carries the season track instead (same settings, same weeks). */}
-      {data.redraft ? null : <LeagueSection id="timeline"><StatePanel
-        title={`${copy('Season timeline')} · ${league.name}`}
-        help={
-          league.currentWeek != null ? (
-            <span className="af-lh-here">{copy('You are here')} · {copy('week')} {league.currentWeek}</span>
-          ) : undefined
-        }
-        className="af-lh-timeline-panel"
-        state={data.timeline}
-      >
-        {(stages) => (
-          <ol className="af-timeline">
-            {stages.map((s) => (
-              <li key={s.key} className="af-timeline-stage" data-state={s.state}>
-                <span className="af-timeline-bar" aria-hidden />
-                <span className="af-timeline-label">{s.label}</span>
-                <span className="af-timeline-when af-label">{s.state === 'now' ? copy('NOW') : s.when}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </StatePanel></LeagueSection>}
-
+  const showCommish = data.commissioner.available || 'href' in data.commissioner
+  const scoreboardSection = (
+    <>
       {/* ── Every game in the league ────────────────────────────────── */}
       {/*
         ⚠ THE PAGE SHOWED ONE MATCHUP — THE VIEWER'S. On a screen whose whole
@@ -812,142 +729,10 @@ export function LeagueHome({
         )}
       </StatePanel></LeagueSection>
 
-      {/* ── Power board: all-play + movement ────────────────────────── */}
-      {/*
-        ⚠ STANDINGS LIE EARLY. A team can post the second-highest score in the
-        league and be 0-2 because it drew the top scorer twice. All-play asks
-        what the record would be against EVERYONE every week, and the gap
-        between that and the real record is the schedule's contribution —
-        measured rather than argued about.
-      */}
-      <LeagueSection id="insights"><StatePanel
-        title={copy('Power board')}
-        help={
-          data.powerBoard.available ? (
-            <span className="af-lh-here">
-              {copy('through')} {data.powerBoard.data.weeksCounted}{' '}
-              {copy(data.powerBoard.data.weeksCounted === 1 ? 'week' : 'weeks')}
-              {lineups ? ` · AF / ${PROJECTION_PROVIDER_LABEL} ${copy('projected, week')} ${lineups.week}` : ''}
-            </span>
-          ) : undefined
-        }
-        className="af-lh-power-panel"
-        state={data.powerBoard}
-      >
-        {(pb) => (
-          <ol className="af-pb-list" data-proj={lineups ? 'true' : undefined}>
-            {pb.rows.map((r) => (
-              <li key={r.rosterId} className="af-pb-row">
-                <span className="af-pb-rank af-num">{r.powerRank}</span>
-                {/*
-                  Null movement renders as nothing at all. "Unchanged" for a
-                  team that has never been ranked is an invented history.
-                */}
-                {r.powerRankChange != null && r.powerRankChange !== 0 ? (
-                  <span
-                    className="af-pb-move af-num"
-                    data-dir={r.powerRankChange > 0 ? 'up' : 'down'}
-                    title={m.powerMoveTitle(Math.abs(r.powerRankChange), r.powerRankChange > 0)}
-                  >
-                    {r.powerRankChange > 0 ? '▲' : '▼'}
-                    {Math.abs(r.powerRankChange)}
-                  </span>
-                ) : (
-                  <span className="af-pb-move af-pb-move--none" aria-hidden />
-                )}
-                <span className="af-pb-name">
-                  {rosterLabel([r.teamName, r.managerName], r.rosterId)}
-                </span>
-                <span className="af-pb-rec af-num" title={copy('Real head-to-head record')}>
-                  {r.wins}-{r.losses}
-                  {r.ties > 0 ? `-${r.ties}` : ''}
-                </span>
-                <span
-                  className="af-pb-allplay af-num"
-                  title={copy('What the record would be playing everyone every week')}
-                >
-                  {r.allPlayWins}-{r.allPlayLosses}
-                  {r.allPlayTies > 0 ? `-${r.allPlayTies}` : ''}
-                </span>
-                {/*
-                  Luck in WINS, because that is the unit people argue in.
-                  Rounded to a tenth and only shown when it is worth a mention —
-                  a 0.2-win swing is noise dressed as an insight.
-                */}
-                {Math.abs(r.luckWins) >= 0.5 ? (
-                  <span
-                    className="af-pb-luck af-num"
-                    data-dir={r.luckWins > 0 ? 'lucky' : 'unlucky'}
-                    title={
-                      r.luckWins > 0
-                        ? m.luckBetter(r.luckWins.toFixed(1))
-                        : m.luckWorse(Math.abs(r.luckWins).toFixed(1))
-                    }
-                  >
-                    {r.luckWins > 0 ? '+' : ''}
-                    {r.luckWins.toFixed(1)}
-                  </span>
-                ) : (
-                  <span className="af-pb-luck af-pb-move--none" aria-hidden />
-                )}
-                {lineups ? <ProjectedCells row={lineupFor(lineups, r.rosterId)} /> : null}
-              </li>
-            ))}
-          </ol>
-        )}
-      </StatePanel></LeagueSection>
-
-      {/* ── Main / side ─────────────────────────────────────────────── */}
-      <div className="af-lh-grid">
-        <div className="af-lh-main">
-          {/*
-            ⚠ THE "THIS WEEK'S MATCHUP" PANEL WAS HERE AND HAS BEEN DELETED.
-            The scoreboard above shows every game in the league with yours
-            marked and sorted first, so this panel printed week 1 a second time
-            a few hundred pixels lower.
-
-            The one thing it had that the scoreboard did not is the win
-            probability, which now renders on your own game up there rather
-            than being lost with the panel.
-          */}
-
-          {/* Needs your attention — up to three, each with the verb that fixes it */}
-          {attention.length > 0 ? (
-            <section className="af-lh-attention" aria-labelledby="af-lh-attention-title" data-testid="league-home-attention">
-              <h2 id="af-lh-attention-title" className="af-label af-lh-attention-title">
-                {m.attentionTitle}
-              </h2>
-              <ul className="af-lh-attention-list">
-                {attention.map((issue, i) => (
-                  <li
-                    key={`${issue.title}-${i}`}
-                    className={`af-card af-issue af-lh-urgent${i > 0 ? ' af-lh-urgent--minor' : ''}`}
-                    data-severity={issue.severity}
-                  >
-                    <span className="af-lh-urgent-glyph" aria-hidden>
-                      {issue.glyph}
-                    </span>
-                    <div className="af-lh-urgent-body">
-                      <h3 className="af-lh-urgent-title">{issue.title}</h3>
-                      <p className="af-lh-urgent-meta">{issue.meta}</p>
-                    </div>
-                    {issue.action ? (
-                      <Link
-                        href={issue.action.href}
-                        className={i === 0 ? 'af-btn af-lh-urgent-cta' : 'af-btn af-btn--ghost af-lh-urgent-cta'}
-                        {...(issue.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                      >
-                        {copy(issue.action.label)}
-                      </Link>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {/* Draft HQ + Commissioner Hub, two-up */}
-          <div className="af-lh-two">
+    </>
+  )
+  const draftSection = (
+    <>
             <LeagueSection id="draft"><StatePanel title={copy('Draft HQ')} state={data.draftHq}>
             {(d) => (
               <div className="af-ch">
@@ -962,6 +747,10 @@ export function LeagueHome({
             )}
           </StatePanel></LeagueSection>
 
+    </>
+  )
+  const commishSection = (
+    <>
             <LeagueSection id="commissioner"><StatePanel
             title={copy('Commissioner Hub')}
             help={<span className="af-lh-scope">{copy('Commissioners only')}</span>}
@@ -1027,6 +816,168 @@ export function LeagueHome({
               </div>
             )}
           </StatePanel></LeagueSection>
+    </>
+  )
+
+  return (
+    <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined} data-dynasty={data.dynasty ? 'true' : undefined}>
+      {/* ── League identity ─────────────────────────────────────────── */}
+      <header className="af-lh-head">
+        <div className="af-lh-ident">
+          <h1 className={identityInShell ? 'af-lh-name--hidden' : 'af-display af-lh-name'}>{league.name}</h1>
+          <div className="af-lh-sub">
+            {identityInShell ? null : (
+              <span className="af-platform af-platform-chip" data-platform={league.platform}>
+                {league.platform}
+              </span>
+            )}
+            {/* A redraft deck names the format and season in its own chip ("Redraft · 2026"); saying it twice is noise. */}
+            {/* So does the dynasty deck's era band ("Year 5 · 2026 season"). */}
+            {league.format && !data.redraft && !data.dynasty ? <span>{league.format}</span> : null}
+            {league.season && !data.redraft && !data.dynasty ? <span className="af-num">{league.season}</span> : null}
+            {/* Record, rank and the trade deadline live in the KPI row below; the header does not repeat them. */}
+            {data.yourTeam.available && !kpis.record ? (
+              <>
+                <span className="af-num">{data.yourTeam.data.record}</span>
+                {data.yourTeam.data.rank != null ? (
+                  <span className="af-num">#{data.yourTeam.data.rank}</span>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
+      </header>
+      <section className="af-lho-head" data-testid="league-overview-guide" data-format={elimination ? 'elimination' : 'h2h'}>
+        <span className="af-label">{g.eyebrow}</span>
+        <p className="af-display af-lho-title">{headline}</p>
+        <p className="af-lho-intro">{g.intro(platformLabel, elimination)}</p>
+        {chips.length > 0 ? (
+          <div className="af-lho-chips">
+            {chips.map((c) => (
+              <Link key={c.key} className="af-lho-chip" data-chip={c.key} href={c.href}>
+                {c.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+        {preDraft ? null : (
+          <p className="af-lho-why">
+            <b>{g.why}</b> {elimination ? g.whyElim : g.whyH2h}
+          </p>
+        )}
+      </section>
+      {/* When the draft is and what you owe — renders nothing when neither applies (components/league-home). */}
+      <MemberStatusCard leagueId={league.id} />
+
+      {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
+      {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
+
+      {/* Dynasty Era deck — dynasty leagues only (lib/core-app/dynastyLeagueHome.ts); absent otherwise. */}
+      {data.dynasty ? <DynastyHomeDeck deck={data.dynasty} leagueId={league.id} /> : null}
+
+      {/* The record tile only when the headline does not already say it ("say each number once"). */}
+      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />
+
+      {toolsAtFoot ? null : importedActions}
+
+      {league.variant === 'survivor_guillotine' && (
+        <section className="af-card" aria-label="Survivor Guilly league">
+          <span className="af-label">Survivor Guilly</span>
+          <h2>Enter the island</h2>
+          <p>Your lineup, tribe race, private powers, and Chop Night are ready in the league hub.</p>
+          <Link className="af-btn" href={`/survivor-guillotine/${encodeURIComponent(league.id)}`}>Open league island →</Link>
+        </section>
+      )}
+
+      <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
+        <div className="af-lh-week-summary-head">
+          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
+          <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
+        </div>
+        <div className="af-lh-week-summary-grid">
+          <Link href={`/core/my-team?league=${league.id}`}>
+            <span className="af-label">{copy('Lineup')}</span>
+            <strong>{data.preSeason && rosteredPlayerCount === 0 ? copy('Your roster is awaiting the draft') : urgent ? urgent.title : copy('Review your starters')}</strong>
+            <span>{data.preSeason && rosteredPlayerCount === 0 ? `${teamDirectory.length} ${copy('teams imported')}` : urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
+          </Link>
+          {elimination ? (
+            <Link href={`/core/standings?league=${league.id}`} data-cell="cut">
+              <span className="af-label">{g.cutLabel}</span>
+              <strong>{cutText}</strong>
+              <span>{g.cutSub}</span>
+            </Link>
+          ) : (
+          <Link href={`/core/matchup?league=${league.id}`}>
+            <span className="af-label">{copy('Matchup')}</span>
+            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : data.preSeason ? copy('Matchups begin after the draft') : copy('Open matchup')}</strong>
+            <span>{data.matchup?.available ? (winPct != null ? g.winSub(data.matchup.data.week, winPct) : `Week ${data.matchup.data.week} · ${copy('league scoring')} →`) : `${data.preSeason ? copy('No games have been scored yet') : copy('Matchup data is not ready')} →`}</span>
+          </Link>
+          )}
+          <div className="af-lh-week-summary-moves">
+            <span className="af-label">{copy('Moves')}</span>
+            <strong>{copy('Plan your next move')}</strong>
+            <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
+          </div>
+        </div>
+      </section></LeagueSection>
+
+      {elimination ? null : scoreboardSection}
+
+      {/* ── Main / side ─────────────────────────────────────────────── */}
+      <div className="af-lh-grid">
+        <div className="af-lh-main">
+          {/*
+            ⚠ THE "THIS WEEK'S MATCHUP" PANEL WAS HERE AND HAS BEEN DELETED.
+            The scoreboard above shows every game in the league with yours
+            marked and sorted first, so this panel printed week 1 a second time
+            a few hundred pixels lower.
+
+            The one thing it had that the scoreboard did not is the win
+            probability, which now renders on your own game up there rather
+            than being lost with the panel.
+          */}
+
+          {/* Needs your attention — up to three, each with the verb that fixes it */}
+          {attention.length > 0 ? (
+            <section className="af-lh-attention" aria-labelledby="af-lh-attention-title" data-testid="league-home-attention">
+              <h2 id="af-lh-attention-title" className="af-label af-lh-attention-title">
+                {m.attentionTitle}
+              </h2>
+              <ul className="af-lh-attention-list">
+                {attention.map((issue, i) => (
+                  <li
+                    key={`${issue.title}-${i}`}
+                    className={`af-card af-issue af-lh-urgent${i > 0 ? ' af-lh-urgent--minor' : ''}`}
+                    data-severity={issue.severity}
+                  >
+                    <span className="af-lh-urgent-glyph" aria-hidden>
+                      {issue.glyph}
+                    </span>
+                    <div className="af-lh-urgent-body">
+                      <h3 className="af-lh-urgent-title">{issue.title}</h3>
+                      <p className="af-lh-urgent-meta">{issue.meta}</p>
+                    </div>
+                    {issue.action ? (
+                      <Link
+                        href={issue.action.href}
+                        className={i === 0 ? 'af-btn af-lh-urgent-cta' : 'af-btn af-btn--ghost af-lh-urgent-cta'}
+                        {...(issue.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                      >
+                        {copy(issue.action.label)}
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {/* Draft HQ + Commissioner Hub, two-up — Draft HQ only before the draft (else folded), the hub only for a commissioner. */}
+          <div className="af-lh-two">
+            {preDraft ? draftSection : null}
+            {showCommish ? commishSection : null}
           </div>
 
           {/* Standings */}
@@ -1137,6 +1088,180 @@ export function LeagueHome({
             </p>
           </Panel></LeagueSection>
 
+        </aside>
+      </div>
+
+      {/*
+        ── More about this league (2026-11-13 guide) ──────────────────
+        Reference, history and league-wide boards: one tap away, not the page. The import coverage panel,
+        the team directory, the paired-league offer, the season timeline, the power board, league buzz,
+        rivalry radar and the prediction leaderboard — plus Draft HQ once the draft is done, and the
+        league's every-game board in an elimination league, which has no head-to-head games.
+      */}
+      <details className="af-lho-more" data-testid="league-overview-more">
+        <summary>{g.more}</summary>
+        <div className="af-lho-more-body">
+      {/*
+        ── What this import could not bring across ───────────────────
+        Top of the screen, above everything, because it changes how to read every
+        number below it — a standings table with no schedule behind it is a
+        different object from one with.
+
+        ⚠ ONLY WHEN THERE IS SOMETHING TO SAY. `sentence` is null both when
+        everything arrived and when the league predates coverage being persisted,
+        and those must both stay silent: a banner on every league is one nobody
+        reads by the second week.
+
+        ⚠ AND IT NAMES THE PLATFORM, WITHOUT BLAMING IT. The sentence used to read
+        "Fleaflicker doesn't publish trade history"; a `missing` bucket only means
+        this import did not bring it across, so it now says exactly that and still
+        names where the league came from (see importCoverageSummary's header).
+      */}
+      {coverageSlot !== undefined ? (
+        coverageSlot
+      ) : data.importCoverage.sentence ? (
+        <section className="af-card af-lh-coverage" role="status" aria-label={copy('Import coverage')}>
+          <span className="af-lh-coverage-glyph" aria-hidden>
+            ◑
+          </span>
+          <p className="af-lh-coverage-text">{data.importCoverage.sentence}</p>
+        </section>
+      ) : null}
+
+      {teamDirectory.length > 0 ? (
+        <LeagueSection id="managers"><details className="af-card af-lh-team-directory" open={data.preSeason}>
+          <summary>{copy('Teams in this league')} · {teamDirectory.length}</summary>
+          {rosteredPlayerCount === 0 ? (
+            <p>{copy('All teams are on file. Player rosters are empty until the draft or a later sync, so player trades cannot be analyzed yet.')}</p>
+          ) : null}
+          <ol>
+            {teamDirectory.map((team) => (
+              <li key={team.id}>
+                <strong>{team.name}</strong>
+                {team.ownerName && team.ownerName !== team.name ? <span>{team.ownerName}</span> : null}
+                {team.isYou ? <small>{copy('you')}</small> : null}
+              </li>
+            ))}
+          </ol>
+        </details></LeagueSection>
+      ) : null}
+
+      {/* ── The other half of this franchise ────────────────────────── */}
+      <LeagueSection id="pairing"><PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} /></LeagueSection>
+
+      {/* ── Season timeline ─────────────────────────────────────────── */}
+      {/* A redraft league's deck above carries the season track instead (same settings, same weeks). */}
+      {data.redraft ? null : <LeagueSection id="timeline"><StatePanel
+        title={`${copy('Season timeline')} · ${league.name}`}
+        help={
+          league.currentWeek != null ? (
+            <span className="af-lh-here">{copy('You are here')} · {copy('week')} {league.currentWeek}</span>
+          ) : undefined
+        }
+        className="af-lh-timeline-panel"
+        state={data.timeline}
+      >
+        {(stages) => (
+          <ol className="af-timeline">
+            {stages.map((s) => (
+              <li key={s.key} className="af-timeline-stage" data-state={s.state}>
+                <span className="af-timeline-bar" aria-hidden />
+                <span className="af-timeline-label">{s.label}</span>
+                <span className="af-timeline-when af-label">{s.state === 'now' ? copy('NOW') : s.when}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </StatePanel></LeagueSection>}
+
+      {elimination ? scoreboardSection : null}
+
+      {/* ── Power board: all-play + movement ────────────────────────── */}
+      {/*
+        ⚠ STANDINGS LIE EARLY. A team can post the second-highest score in the
+        league and be 0-2 because it drew the top scorer twice. All-play asks
+        what the record would be against EVERYONE every week, and the gap
+        between that and the real record is the schedule's contribution —
+        measured rather than argued about.
+      */}
+      <LeagueSection id="insights"><StatePanel
+        title={copy('Power board')}
+        help={
+          data.powerBoard.available ? (
+            <span className="af-lh-here">
+              {copy('through')} {data.powerBoard.data.weeksCounted}{' '}
+              {copy(data.powerBoard.data.weeksCounted === 1 ? 'week' : 'weeks')}
+              {lineups ? ` · AF / ${PROJECTION_PROVIDER_LABEL} ${copy('projected, week')} ${lineups.week}` : ''}
+            </span>
+          ) : undefined
+        }
+        className="af-lh-power-panel"
+        state={data.powerBoard}
+      >
+        {(pb) => (
+          <ol className="af-pb-list" data-proj={lineups ? 'true' : undefined}>
+            {pb.rows.map((r) => (
+              <li key={r.rosterId} className="af-pb-row">
+                <span className="af-pb-rank af-num">{r.powerRank}</span>
+                {/*
+                  Null movement renders as nothing at all. "Unchanged" for a
+                  team that has never been ranked is an invented history.
+                */}
+                {r.powerRankChange != null && r.powerRankChange !== 0 ? (
+                  <span
+                    className="af-pb-move af-num"
+                    data-dir={r.powerRankChange > 0 ? 'up' : 'down'}
+                    title={m.powerMoveTitle(Math.abs(r.powerRankChange), r.powerRankChange > 0)}
+                  >
+                    {r.powerRankChange > 0 ? '▲' : '▼'}
+                    {Math.abs(r.powerRankChange)}
+                  </span>
+                ) : (
+                  <span className="af-pb-move af-pb-move--none" aria-hidden />
+                )}
+                <span className="af-pb-name">
+                  {rosterLabel([r.teamName, r.managerName], r.rosterId)}
+                </span>
+                <span className="af-pb-rec af-num" title={copy('Real head-to-head record')}>
+                  {r.wins}-{r.losses}
+                  {r.ties > 0 ? `-${r.ties}` : ''}
+                </span>
+                <span
+                  className="af-pb-allplay af-num"
+                  title={copy('What the record would be playing everyone every week')}
+                >
+                  {r.allPlayWins}-{r.allPlayLosses}
+                  {r.allPlayTies > 0 ? `-${r.allPlayTies}` : ''}
+                </span>
+                {/*
+                  Luck in WINS, because that is the unit people argue in.
+                  Rounded to a tenth and only shown when it is worth a mention —
+                  a 0.2-win swing is noise dressed as an insight.
+                */}
+                {Math.abs(r.luckWins) >= 0.5 ? (
+                  <span
+                    className="af-pb-luck af-num"
+                    data-dir={r.luckWins > 0 ? 'lucky' : 'unlucky'}
+                    title={
+                      r.luckWins > 0
+                        ? m.luckBetter(r.luckWins.toFixed(1))
+                        : m.luckWorse(Math.abs(r.luckWins).toFixed(1))
+                    }
+                  >
+                    {r.luckWins > 0 ? '+' : ''}
+                    {r.luckWins.toFixed(1)}
+                  </span>
+                ) : (
+                  <span className="af-pb-luck af-pb-move--none" aria-hidden />
+                )}
+                {lineups ? <ProjectedCells row={lineupFor(lineups, r.rosterId)} /> : null}
+              </li>
+            ))}
+          </ol>
+        )}
+      </StatePanel></LeagueSection>
+
+            {preDraft ? null : draftSection}
           <LeagueSection id="activity"><StatePanel title={copy('League buzz')} state={data.buzz}>
             {(items) => (
               <ul className="af-buzz">
@@ -1260,11 +1385,11 @@ export function LeagueHome({
               </div>
             )}
           </StatePanel></LeagueSection>
-        </aside>
-      </div>
-
       {/* The league chat's prediction polls, scored over the season. AF-hosted leagues only. */}
       <LeagueSection id="insights">{isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}</LeagueSection>
+
+        </div>
+      </details>
 
       {/*
         ── All leagues ──────────────────────────────────────────────────
