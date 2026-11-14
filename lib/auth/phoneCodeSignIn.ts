@@ -23,7 +23,8 @@ import { activeAccountRestriction, ACCOUNT_SUSPENDED_ERROR } from '@/lib/moderat
 
 export type PhoneCodeAccount = {
   id: string
-  email: string
+  /** Null for a phone-only account. */
+  email: string | null
   displayName: string | null
   username: string
   avatarUrl: string | null

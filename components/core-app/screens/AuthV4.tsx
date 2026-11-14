@@ -162,7 +162,7 @@ const PROVIDERS: { id: SocialProvider; label: string }[] = [
 ]
 
 /** Which way someone chose to sign up — counted so the Google-first layout can be judged. */
-function trackSignupMethod(method: SocialProvider | 'email'): void {
+function trackSignupMethod(method: SocialProvider | 'email' | 'phone'): void {
   if (typeof window === 'undefined') return
   void fetch('/api/analytics/track', {
     method: 'POST',
@@ -183,7 +183,15 @@ function trackSignupMethod(method: SocialProvider | 'email'): void {
  * same facts with the same links; it records nothing — the buttons' consent handling is
  * unchanged by this (see signupConsentCookie.ts for the separate, pre-existing gap there).
  */
-function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: boolean }) {
+function OAuthGrid({
+  callbackUrl,
+  lead = false,
+  leadDivider = 'Or sign up with email',
+}: {
+  callbackUrl: string
+  lead?: boolean
+  leadDivider?: string
+}) {
   const [pending, setPending] = useState<SocialProvider | null>(null)
 
   return (
@@ -245,7 +253,7 @@ function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: 
           {/* Only when a provider button is actually shown above it; otherwise "Or" divides nothing. */}
           {PROVIDERS.some((p) => isSocialProviderEnabled(p.id)) ? (
             <div className="af-au-divider">
-              <span className="af-label">Or sign up with email</span>
+              <span className="af-label">{leadDivider}</span>
             </div>
           ) : null}
         </>
@@ -583,6 +591,23 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
   const [terms, setTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  /*
+   * Sign up with a phone number instead of an email (2026-11-14). The number is proven by a
+   * texted code BEFORE the account exists (/api/auth/phone/signup/start, then the code goes to
+   * /api/auth/register as phoneVerificationCode), so a phone account is born verified and can
+   * sign in later with a text code. Email becomes optional on this path.
+   */
+  const [method, setMethod] = useState<'email' | 'phone'>('email')
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [codeSentTo, setCodeSentTo] = useState<string | null>(null)
+
+  function switchMethod(next: 'email' | 'phone') {
+    setMethod(next)
+    setCodeSentTo(null)
+    setCode('')
+    setError(null)
+  }
 
   // Names the missing agreement rather than failing generically — with two
   // boxes, "please accept the terms" does not say which one was skipped.
@@ -598,7 +623,16 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       setError(`Please accept ${missing.join(' and ')} to continue.`)
       return
     }
-    if (!email.trim() || !password || !displayName.trim()) {
+    if (method === 'phone') {
+      if (!displayName.trim() || !password) {
+        setError('Fill in your name, phone number and a password.')
+        return
+      }
+      if (phone.replace(/\D/g, '').length < 10) {
+        setError('Enter your phone number, including the area code.')
+        return
+      }
+    } else if (!email.trim() || !password || !displayName.trim()) {
       setError('Fill in your name, email and a password.')
       return
     }
@@ -607,14 +641,41 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       return
     }
 
-    trackSignupMethod('email')
+    // Phone, step one: text the code. The account is created only once the code comes back.
+    if (method === 'phone' && codeSentTo === null) {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/auth/phone/signup/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phone.trim() }),
+        })
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+        if (!res.ok) {
+          setError(readableApiError(data, 'We could not text a code. Please try again.'))
+          return
+        }
+        setCodeSentTo(phone.trim())
+      } catch {
+        setError('We could not text a code. Please try again.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+    if (method === 'phone' && !/^\d{4,10}$/.test(code.replace(/\s/g, ''))) {
+      setError('Enter the 6-digit code from the text.')
+      return
+    }
+
+    trackSignupMethod(method)
     setLoading(true)
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: email.trim(),
+          ...(email.trim() ? { email: email.trim() } : {}),
           password,
           displayName: displayName.trim(),
           // The disclaimer box states 18+ explicitly, so it carries both flags.
@@ -622,7 +683,10 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           ageConfirmed: disclaimer,
           disclaimerAgreed: disclaimer,
           termsAgreed: terms,
-          verificationMethod: 'EMAIL',
+          verificationMethod: method === 'phone' ? 'PHONE' : 'EMAIL',
+          ...(method === 'phone'
+            ? { phone: codeSentTo ?? phone.trim(), phoneVerificationCode: code.replace(/\s/g, '') }
+            : {}),
           ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
         }),
       })
@@ -657,11 +721,11 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
        */
       const createdUserId = typeof data.userId === 'string' ? data.userId : null
       if (createdUserId) {
-        trackOnce(`sign_up:${createdUserId}`, { event: 'sign_up', method: 'email' })
+        trackOnce(`sign_up:${createdUserId}`, { event: 'sign_up', method })
       }
 
       const signedIn = await signIn('credentials', {
-        login: email.trim(),
+        login: method === 'phone' ? (codeSentTo ?? phone.trim()) : email.trim(),
         password,
         redirect: false,
         callbackUrl,
@@ -687,11 +751,19 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       <header className="af-au-head">
         <div>
           <h1 className="af-au-title">Create your account</h1>
-          <p className="af-au-sub">Free to create or connect leagues. Next: verify your email, then choose how to start.</p>
+          <p className="af-au-sub">
+            {method === 'phone'
+              ? 'Free to create or connect leagues. We’ll text you a code to confirm your number.'
+              : 'Free to create or connect leagues. Next: verify your email, then choose how to start.'}
+          </p>
         </div>
       </header>
 
-      <OAuthGrid callbackUrl={callbackUrl} lead />
+      <OAuthGrid
+        callbackUrl={callbackUrl}
+        lead
+        leadDivider={method === 'phone' ? 'Or sign up with your phone' : 'Or sign up with email'}
+      />
 
       <form className="af-au-form" onSubmit={onSubmit}>
         <label className="af-au-field">
@@ -705,8 +777,24 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           />
         </label>
 
+        {method === 'phone' ? (
+          <label className="af-au-field">
+            <span className="af-label">Phone number</span>
+            <input
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              value={phone}
+              readOnly={codeSentTo !== null}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </label>
+        ) : null}
+
         <label className="af-au-field">
-          <span className="af-label">Email</span>
+          <span className="af-label">{method === 'phone' ? 'Email (optional)' : 'Email'}</span>
           <input
             type="email"
             autoComplete="email"
@@ -738,7 +826,9 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             onChange={(e) => setSleeperHandle(e.target.value)}
           />
           <span className="af-au-hint">
-            Link it now and, once your email is verified, your Sleeper leagues import in one click.
+            {method === 'phone'
+              ? 'Link it now and your Sleeper leagues import in one click.'
+              : 'Link it now and, once your email is verified, your Sleeper leagues import in one click.'}
           </span>
         </label>
 
@@ -764,6 +854,31 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           </span>
         </label>
 
+        {method === 'phone' && codeSentTo !== null ? (
+          <div className="af-au-field" data-testid="signup-code-step">
+            <p className="af-au-hint" role="status">
+              We texted a code to {codeSentTo}. It may take a minute.{' '}
+              <button type="button" className="af-au-linkbtn" onClick={() => switchMethod('phone')}>
+                Change number
+              </button>
+            </p>
+            <label htmlFor="signup-code" className="af-label">
+              Code
+            </label>
+            <input
+              id="signup-code"
+              name="code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              maxLength={10}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          </div>
+        ) : null}
+
         {error ? (
           <p className="af-au-error" role="alert">
             {error}
@@ -771,8 +886,25 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
         ) : null}
 
         <button type="submit" className="af-btn af-au-submit" disabled={loading}>
-          {loading ? 'Creating account…' : 'Create account'}
+          {loading
+            ? method === 'phone' && codeSentTo === null
+              ? 'Sending…'
+              : 'Creating account…'
+            : method === 'phone' && codeSentTo === null
+              ? 'Text me a code'
+              : 'Create account'}
         </button>
+        <p className="af-au-alt">
+          {method === 'phone' ? (
+            <button type="button" className="af-au-linkbtn" onClick={() => switchMethod('email')} data-testid="signup-use-email">
+              Sign up with email instead
+            </button>
+          ) : (
+            <button type="button" className="af-au-linkbtn" onClick={() => switchMethod('phone')} data-testid="signup-use-phone">
+              Sign up with your phone number instead
+            </button>
+          )}
+        </p>
       </form>
     </div>
   )

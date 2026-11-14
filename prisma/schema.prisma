@@ -3979,7 +3979,7 @@ model PlayerAnalyticsSnapshot {
 
 model AppUser {
   id                                       String                                 @id @default(uuid())
-  email                                    String                                 @unique
+  email                                    String?                                @unique
   emailVerified                            DateTime?
   username                                 String                                 @unique
   passwordHash                             String?
