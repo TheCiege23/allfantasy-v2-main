@@ -84,3 +84,27 @@ describe('PricingV4 account layer', () => {
     expect(screen.queryByText('Your plan')).toBeNull()
   })
 })
+
+describe('PricingV4 phone header', () => {
+  it('a visitor gets Sign in and Start free outside the menu, and the menu reaches home, commissioners and the demo', () => {
+    const { container } = render(<PricingV4 plans={PLANS} packs={[]} savingsHeadline={null} />)
+    const bar = container.querySelector('.af-pr-mobile-actions') as HTMLElement
+    const signIn = within(bar).getByTestId('pricing-mobile-sign-in')
+    const primary = within(bar).getByTestId('pricing-mobile-primary')
+    expect(signIn.getAttribute('href')).toBe('/login')
+    expect(primary.getAttribute('href')).toBe('/signup')
+    expect(primary.textContent).toBe('Start free')
+    expect(signIn.closest('details')).toBeNull()
+    expect(primary.closest('details')).toBeNull()
+    const menu = [...bar.querySelectorAll('details a')].map((a) => a.getAttribute('href'))
+    expect(menu).toEqual(['/', '/commissioners', '/demo'])
+  })
+
+  it('a signed-in viewer gets Back to app and no Sign in', () => {
+    const { container } = render(<PricingV4 plans={PLANS} packs={[]} savingsHeadline={null} signedIn />)
+    const bar = container.querySelector('.af-pr-mobile-actions') as HTMLElement
+    expect(within(bar).getByTestId('pricing-mobile-primary').getAttribute('href')).toBe('/core')
+    expect(within(bar).queryByTestId('pricing-mobile-sign-in')).toBeNull()
+    expect(container.querySelector('a[href="/login"]')).toBeNull()
+  })
+})

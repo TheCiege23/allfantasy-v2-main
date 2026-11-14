@@ -517,6 +517,45 @@ export function PricingV4({ plans, packs, savingsHeadline, signedIn = false, acc
             </>
           ) : null}
         </div>
+
+        {/*
+          Phones (≤780px): the landing page's header pattern — Sign in and Start free side by
+          side, the other links behind a menu. The desktop row above wrapped onto three lines
+          here and pushed "Start free" down onto the header's border. `details` keeps the menu
+          working in the server-rendered page and without JavaScript.
+        */}
+        <div className="af-pr-mobile-actions">
+          {signedIn ? (
+            <Link href="/core" className="af-btn af-pr-mobile-primary" data-testid="pricing-mobile-primary">
+              Back to app
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="af-btn af-btn--ghost af-pr-mobile-signin"
+                data-testid="pricing-mobile-sign-in"
+              >
+                Sign in
+              </Link>
+              <Link href="/signup" className="af-btn af-pr-mobile-primary" data-testid="pricing-mobile-primary">
+                Start free
+              </Link>
+            </>
+          )}
+          <details className="af-pr-mobile-menu">
+            <summary aria-label="Open navigation menu">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden focusable="false">
+                <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </summary>
+            <div className="af-pr-mobile-panel">
+              <Link href={signedIn ? '/core' : '/'}>{signedIn ? 'Your leagues' : 'Home'}</Link>
+              <Link href="/commissioners">For commissioners</Link>
+              <Link href="/demo">Try the demo</Link>
+            </div>
+          </details>
+        </div>
       </nav>
 
       {/*
