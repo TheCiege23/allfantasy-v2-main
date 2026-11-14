@@ -1,7 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
-
-const openai = getOpenAIRouteClient()
 
 export interface SimulationScenario {
   type: 'trade' | 'roster_move' | 'draft_pick'

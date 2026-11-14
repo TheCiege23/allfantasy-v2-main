@@ -344,7 +344,6 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   let weeklyWeeksUsed = 0
   let idpBreakdown: IdpScoringBreakdown | null = null
   let kickerBreakdown: KickerScoringBreakdown | null = null
-  let categoryBreakdown: Record<string, number> | null = null
 
   if (kickerSleeper) {
     /*
@@ -399,7 +398,6 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
      */
     baselineProjection = categorySeason.perGame
     basis = 'season_category_components'
-    categoryBreakdown = categorySeason.breakdown
   } else {
     return {
       ok: false,

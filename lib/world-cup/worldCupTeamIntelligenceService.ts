@@ -61,8 +61,6 @@ export type WorldCupTeamIntelligenceReport = {
   lastUpdatedAt: string | null
 }
 
-const FINAL_STATUSES = new Set(["FT", "AET", "PEN", "final"])
-
 // ── Main function ─────────────────────────────────────────────────────────────
 
 export async function getWorldCupTeamIntelligence(

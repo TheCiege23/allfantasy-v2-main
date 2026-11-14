@@ -137,7 +137,7 @@ import {
   WorldCupChatEmptyState,
   WorldCupAiPromptChips,
 } from "./chat"
-import type { WorldCupChatMode as WcChatMode, WorldCupPoolChatMessage as WcPoolChatMsg, WorldCupChatGifAttachment as WcGifAttachment, WorldCupChatImageAttachment as WcImageAttachment, WorldCupChatPollOption as WcPollOption, WorldCupDmMember as WcDmMember, WorldCupMentionSuggestion as WcMentionSuggestion, WorldCupDmThread as WcDmThread, WorldCupDmMessage as WcDmMsg, WorldCupComposerPanel as WcComposerPanel } from "./chat"
+import type { WorldCupChatMode as WcChatMode, WorldCupPoolChatMessage as WcPoolChatMsg, WorldCupChatGifAttachment as WcGifAttachment, WorldCupChatImageAttachment as WcImageAttachment, WorldCupDmMember as WcDmMember, WorldCupMentionSuggestion as WcMentionSuggestion, WorldCupDmThread as WcDmThread, WorldCupDmMessage as WcDmMsg, WorldCupComposerPanel as WcComposerPanel } from "./chat"
 type Tab = WorldCupBracketTab
 // Chat types are now imported from ./chat — local aliases kept for zero-diff usages below
 type WorldCupPoolChatMessage = WcPoolChatMsg
@@ -147,7 +147,6 @@ type WorldCupDmThread = WcDmThread
 type WorldCupDmMessage = WcDmMsg
 type WorldCupChatGifAttachment = WcGifAttachment
 type WorldCupChatImageAttachment = WcImageAttachment
-type WorldCupChatPollOption = WcPollOption
 type WorldCupComposerPanel = WcComposerPanel
 type WorldCupChatMode = WcChatMode
 type WorldCupAdminSimulationRound =
@@ -5507,11 +5506,6 @@ function WorldCupCommunityFoundationPanel({
   }, [pendingChimmyPrompt, onPendingChimmyPromptConsumed])
 
   const isChimmyPrompt = chatMode === "ai" || /(^|[\s*_~\]])@chimmy\b/i.test(chatBody)
-  const chatModeOptions: Array<{ mode: WorldCupChatMode; label: string; icon: typeof MessageSquare }> = [
-    { mode: "ai", label: tChat("wc.chat.mode.ai"), icon: Bot },
-    { mode: "pool", label: tChat("wc.chat.mode.pool"), icon: MessageSquare },
-    { mode: "dm", label: tChat("wc.chat.mode.dm"), icon: Users },
-  ]
   const aiPromptActions = useMemo(() => {
     const availability = promptAvailability ?? {
       hasLeaderboard: true,

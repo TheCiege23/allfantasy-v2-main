@@ -381,10 +381,6 @@ function normalizePositionForMapKey(pos: string | null | undefined): string {
   return POSITION_FULL_TO_ABBREV[lower] ?? lower
 }
 
-const LOOSE_NAME_ALIASES: Record<string, string> = {
-  cam: 'cameron',
-}
-
 /**
  * Phase 2 â delegated to shared `canonicalName`. The previous body turned
  * apostrophes into spaces and special-cased only `de von â devon`, missing
@@ -1831,7 +1827,6 @@ async function buildResolvedDraftPoolForLeague(
 
   // F.1: Fallback PlayerSeasonStats loader for rows without RI identity
   let fallbackSeasonByPoolKey = new Map<string, RollingInsightsSeasonSlice>()
-  let playerSeasonStatsDiagnostics = { exactIdHits: 0, namePositionHits: 0, ambiguousSkips: 0, misses: 0 }
   if (sport === 'NFL' && rawListFiltered.length > 0) {
     const fallbackRows = rawListFiltered.map((r: RawRow) => {
       const nk = normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')
@@ -1849,7 +1844,6 @@ async function buildResolvedDraftPoolForLeague(
     const fallbackResult = await loadPlayerSeasonStatsFallback({ rows: fallbackRows })
     perfFallback()
     fallbackSeasonByPoolKey = fallbackResult.seasonByPoolKey
-    playerSeasonStatsDiagnostics = fallbackResult.diagnostics
   }
 
   /*

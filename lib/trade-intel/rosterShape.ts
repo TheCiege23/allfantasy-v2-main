@@ -6,9 +6,6 @@
  * are properties of the ROSTER and the CALENDAR rather than of the assets.
  */
 
-/** Slot names that are not a playing position. */
-const NON_PLAYING = new Set(['BN', 'IR', 'TAXI', 'RES', 'BENCH'])
-
 /** Reserve assignments free active spots; incoming players require active space
  * until the manager explicitly assigns them to an eligible reserve slot. */
 export function activeRosterCapacity(args: {

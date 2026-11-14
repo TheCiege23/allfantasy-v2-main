@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic'
 import { GracefulImage } from '@/components/media/GracefulImage'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { XP_PER_LEVEL, TIERS } from "@/lib/ranking/config"
 import FeedbackModal from "@/app/components/FeedbackModal"
 import LegacyTutorial from "@/app/components/LegacyTutorial"
 import HeroMetricAI from "@/app/components/HeroMetricAI"
@@ -111,16 +110,6 @@ function HeroMetric({ value, label, helper, accent = 'cyan' }: { value: string; 
     </div>
   )
 }
-
-const tier_xp_thresholds = TIERS
-  .slice()
-  .sort((a, b) => a.tier - b.tier)
-  .map((t) => ({
-    tier: t.tier,
-    name: t.name,
-    minLevel: t.minLevel,
-    minXp: t.minLevel * XP_PER_LEVEL,
-  }))
 
 type Tab = 'overview' | 'trade' | 'finder' | 'player-finder' | 'waiver' | 'rankings' | 'pulse' | 'compare' | 'chat' | 'mock-draft' | 'share' | 'transfer' | 'strategy' | 'shop' | 'ideas'
 
