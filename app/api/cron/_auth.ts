@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { constantTimeEqual } from '@/lib/http/machineCredential'
+import { adminPasswordAsMachineKey, constantTimeEqual } from '@/lib/http/machineCredential'
 
 function cleanSecret(value?: string | null): string | undefined {
   const trimmed = value?.trim()
@@ -23,8 +23,9 @@ export function requireCronAuth(req: NextRequest, preferredSecretEnv?: string): 
     cleanSecret(preferredSecretEnv ? process.env[preferredSecretEnv] : undefined) ??
     cleanSecret(process.env.CRON_SECRET) ??
     cleanSecret(process.env.LEAGUE_CRON_SECRET)
-  const adminSecret =
-    cleanSecret(process.env.BRACKET_ADMIN_SECRET) ?? cleanSecret(process.env.ADMIN_PASSWORD)
+  // ADMIN_PASSWORD is accepted only outside production (adminPasswordAsMachineKey): it was the
+  // shared human login password, and as a key it opened admin routes with no authenticator code.
+  const adminSecret = cleanSecret(process.env.BRACKET_ADMIN_SECRET) ?? adminPasswordAsMachineKey()
   const importWorkerSecret = cleanSecret(process.env.IMPORT_WORKER_SECRET)
 
   // Constant-time, and every candidate is compared (no short-circuit on the first match).

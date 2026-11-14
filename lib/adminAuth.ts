@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { isAllFantasyTestEmail, isAllFantasyTestUsername } from "@/lib/auth/admin";
 import { prisma } from "@/lib/prisma";
 import { adminTotpRequired } from "@/lib/security/adminTotp";
+import { adminPasswordAsMachineKey } from "@/lib/http/machineCredential";
 
 /**
  * Whether a VERIFIED admin_session cookie may still be used. Two ways a genuine,
@@ -72,13 +73,30 @@ function timingSafeCompare(a: string, b: string): boolean {
   }
 }
 
+/**
+ * Machine admin keys. 🛑 ADMIN_PASSWORD is one ONLY outside production — see
+ * adminPasswordAsMachineKey in lib/http/machineCredential.ts. In production it was a
+ * human-known password that opened every admin route as a bearer key, bypassing the
+ * authenticator-code requirement entirely.
+ */
+function machineAdminKeys(): string[] {
+  return [process.env.BRACKET_ADMIN_SECRET?.trim(), adminPasswordAsMachineKey()].filter(
+    (v): v is string => Boolean(v),
+  );
+}
+
+/** Constant-time against every key; no short-circuit on the first match. */
+function matchesMachineAdminKey(presented: string): boolean {
+  if (!presented) return false;
+  let ok = false;
+  for (const key of machineAdminKeys()) ok = timingSafeCompare(presented, key) || ok;
+  return ok;
+}
+
 function checkBearerToken(request: Request): boolean {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return false;
-  const token = authHeader.slice(7);
-  const adminPassword = process.env.ADMIN_PASSWORD || "";
-  if (!adminPassword || !token) return false;
-  return timingSafeCompare(token, adminPassword);
+  return matchesMachineAdminKey(authHeader.slice(7).trim());
 }
 
 function checkAdminSecret(request: Request): boolean {
@@ -86,11 +104,7 @@ function checkAdminSecret(request: Request): boolean {
     request.headers.get("x-admin-secret") ??
     request.headers.get("x-cron-secret") ??
     "";
-  if (!headerSecret) return false;
-  const adminSecret =
-    process.env.BRACKET_ADMIN_SECRET || process.env.ADMIN_PASSWORD || "";
-  if (!adminSecret) return false;
-  return timingSafeCompare(headerSecret, adminSecret);
+  return matchesMachineAdminKey(headerSecret.trim());
 }
 
 async function getCookieAdminAccessState(): Promise<AdminAccessState | null> {
