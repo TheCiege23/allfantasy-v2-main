@@ -63,13 +63,19 @@ describe('LeagueHome redraft deck', () => {
     expect(text(foot)).toContain('Sleeper')
   })
 
-  it('leaves the header tools where they were outside a redraft Home', () => {
+  // 2026-11-13 guide: inside the shell EVERY format puts the page tools at the foot (the guide's answer
+  // takes the top); outside the shell (/dashboard?league=) the header keeps them.
+  it('puts the page tools at the foot in the shell for every format, and in the header outside it', () => {
     for (const opts of [{ identity: false }, { identity: true, leagueType: 'dynasty' }]) {
       const { data } = homeFixture('nfl', opts)
       const { container, unmount } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
-      expect(container.querySelector('.af-lh-head .af-lh-headside .af-lh-back')).not.toBeNull()
-      expect(container.querySelector('[data-testid=league-home-foot]')).toBeNull()
+      expect(container.querySelector('.af-lh-head .af-lh-headside')).toBeNull()
+      expect(container.querySelector('[data-testid=league-home-foot] .af-lh-back')).not.toBeNull()
       unmount()
+      const outside = render(<LeagueHome data={data} otherLeagueIssueCount={0} />)
+      expect(outside.container.querySelector('.af-lh-head .af-lh-headside .af-lh-back')).not.toBeNull()
+      expect(outside.container.querySelector('[data-testid=league-home-foot]')).toBeNull()
+      outside.unmount()
     }
   })
 

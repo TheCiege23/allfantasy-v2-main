@@ -1,0 +1,99 @@
+/* League Overview guide (2026-11-13): components/core-app/screens/LeagueHome.tsx. */
+
+.af-core .af-lho-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.af-core .af-lho-title {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--text);
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.af-core .af-lho-intro {
+  margin: 0;
+  max-width: 70ch;
+  color: var(--text2, var(--muted));
+  font-size: 14px;
+  line-height: 1.45;
+}
+.af-core .af-lho-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-core .af-lho-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--surface2, transparent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-lho-chip[data-chip='todo'] {
+  border-color: var(--warn, #f5c451);
+}
+.af-core .af-lho-why {
+  margin: 0;
+  max-width: 78ch;
+  color: var(--text2, var(--muted));
+  font-size: 13px;
+  line-height: 1.5;
+}
+.af-core .af-lho-why b {
+  color: var(--text);
+}
+
+/* ── More about this league ─────────────────────────────────────────────────────────────────────── */
+.af-core .af-lho-more {
+  margin: 16px 0 0;
+}
+.af-core .af-lho-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-lho-more > summary::-webkit-details-marker {
+  display: none;
+}
+.af-core .af-lho-more > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--muted);
+}
+.af-core .af-lho-more:not([open]) > summary::after {
+  transform: rotate(-90deg);
+}
+.af-core .af-lho-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+@media (max-width: 720px) {
+  .af-core .af-lho-title {
+    font-size: 22px;
+  }
+  .af-core .af-lho-intro {
+    font-size: 13px;
+  }
+}
