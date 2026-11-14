@@ -13513,6 +13513,40 @@ model RankingsBacktestResult {
   @@map("rankings_backtest_results")
 }
 
+/// Draft recommendation record (2026-11-14): what the ONE draft engine recommended at the moment
+/// advice was served, in BOTH replacement-value modes, with the projections each one saw. A
+/// forward test: FantasyProjection is upserted in place, so draft-day projections cannot be
+/// recovered later — these rows are the point-in-time record a backtest cannot rebuild. Written
+/// fire-and-forget by lib/shared-services/draft/recommendationRecorder.ts; scored by
+/// scripts/draft-backtest.ts --recorded. One row per pick moment per surface (dedupeKey).
+model DraftRecommendationRecord {
+  id              String   @id @default(cuid())
+  dedupeKey       String   @unique @map("dedupe_key") @db.VarChar(191)
+  surface         String   @db.VarChar(32)
+  sport           String   @db.VarChar(16)
+  leagueId        String?  @map("league_id")
+  sessionKey      String   @map("session_key") @db.VarChar(191)
+  rosterKey       String   @map("roster_key") @db.VarChar(191)
+  overallPick     Int      @map("overall_pick")
+  round           Int
+  servedMode      String   @map("served_mode") @db.VarChar(16)
+  observeName     String?  @map("observe_name")
+  observePosition String?  @map("observe_position") @db.VarChar(8)
+  activeName      String?  @map("active_name")
+  activePosition  String?  @map("active_position") @db.VarChar(8)
+  agree           Boolean
+  projectionCount Int      @map("projection_count")
+  poolSize        Int      @map("pool_size")
+  detail          Json
+  engineVersion   String   @map("engine_version") @db.VarChar(32)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([leagueId])
+  @@index([sport, agree])
+  @@map("draft_recommendation_records")
+}
+
 model DraftPredictionSnapshot {
   id             String               @id @default(uuid())
   leagueId       String

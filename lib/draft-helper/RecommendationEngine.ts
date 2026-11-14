@@ -607,7 +607,7 @@ export type DraftPlayerRankingRow = {
 
 export type VorpMode = 'off' | 'observe' | 'active'
 
-function resolveVorpMode(explicit: VorpMode | undefined, env: NodeJS.ProcessEnv = process.env): VorpMode {
+export function resolveVorpMode(explicit?: VorpMode, env: NodeJS.ProcessEnv = process.env): VorpMode {
   if (explicit === 'off' || explicit === 'observe' || explicit === 'active') return explicit
   const raw = String(env['DRAFT_VORP_MODE'] ?? '').trim().toLowerCase()
   if (raw === 'off' || raw === 'observe' || raw === 'active') return raw

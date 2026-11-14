@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { parseSessionKey } from '@/lib/draft/session-key'
 import { loadSleeperAdpBoard, MAX_BOARD_SIZE } from '@/lib/draft/sleeperDraftBoard'
 import type { RecommendationPlayer } from '@/lib/draft-helper/RecommendationEngine'
-import { runEngineForGrounding, unavailableGrounding, type DraftEngineGrounding } from './engineGrounding'
+import { groundingEngineInput, runEngineForGrounding, unavailableGrounding, type DraftEngineGrounding } from './engineGrounding'
+import { scheduleDraftRecommendationRecord } from '@/lib/shared-services/draft/recommendationRecorder'
 import { loadWarmPoolProjections, resolveDraftScoringWindow } from '@/lib/shared-services/draft/DraftContextAssembler'
 import { projectionKey } from '@/lib/draft-room/poolProjections'
 import { resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
@@ -82,7 +83,7 @@ export async function loadDraftEngineGrounding(args: {
       .filter((p) => p.currentOwnerId === args.userId && p.position)
       .map((p) => ({ position: p.position as string, team: p.team ?? null, byeWeek: byeFor(p.team) }))
 
-    return runEngineForGrounding({
+    const engineArgs = {
       available,
       teamRoster,
       overallPick: picks.length + 1,
@@ -90,7 +91,20 @@ export async function loadDraftEngineGrounding(args: {
       sport,
       scoringWindow,
       recentPickPositions: picks.map((p) => p.position ?? '').filter(Boolean).slice(-16),
+    }
+    // Forward test of replacement value — background only, never awaited (recommendationRecorder.ts).
+    const input = groundingEngineInput(engineArgs)
+    scheduleDraftRecommendationRecord({
+      surface: 'chimmy',
+      sport,
+      leagueId: parsed.mode === 'live' ? parsed.id : null,
+      sessionKey: sessionId,
+      rosterKey: args.userId,
+      overallPick: engineArgs.overallPick,
+      round: input.round,
+      input,
     })
+    return runEngineForGrounding(engineArgs)
   } catch (error) {
     console.warn('[draft-ai] engine grounding unavailable', error instanceof Error ? error.message : error)
     return unavailableGrounding()

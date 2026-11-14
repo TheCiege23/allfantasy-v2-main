@@ -3,7 +3,12 @@ import {
   backtestKey,
   buildIdSpaces,
   chooseIdSpace,
+  completedThroughWeek,
   firstUnplayedWeek,
+  gameRowsToWeekly,
+  isManagerPick,
+  isReplayablePick,
+  recordedToReplayRows,
   marketWithProjections,
   parseAdpCsv,
   preDraftProjections,
@@ -147,5 +152,67 @@ describe('preDraftProjections', () => {
       new Map([[backtestKey('Saquon Barkley', 'RB'), 306]]),
     )
     expect(m.map((p) => p.projectedPoints)).toEqual([306, null])
+  })
+})
+
+describe('script fixes (2026-11-14, after the first production run)', () => {
+  const opener = new Date('2026-09-10T00:00:00Z')
+
+  it('judges only weeks whose Monday night has passed', () => {
+    // Saturday 14 Nov: week 10 kicked off Thursday the 12th and is not over; week 9 is.
+    expect(completedThroughWeek(opener, new Date('2026-11-14T21:00:00Z'))).toBe(9)
+    expect(completedThroughWeek(opener, new Date('2026-09-14T00:00:00Z'))).toBe(0)
+  })
+
+  it('counts Sleeper and imported picks as the manager’s own, and never a timer, commissioner or keeper', () => {
+    // The first run found 0 manager picks: mirrored drafts write `sleeper`, which a `user`-only test missed.
+    for (const s of ['user', 'sleeper', 'import', null]) expect(isManagerPick(s)).toBe(true)
+    for (const s of ['auto', 'commissioner', 'keeper', 'devy']) expect(isManagerPick(s)).toBe(false)
+    expect(isReplayablePick('keeper')).toBe(false)
+    expect(isReplayablePick('sleeper')).toBe(true)
+  })
+
+  it('drops never-scored box scores instead of reading their 0 as points, and sums a week', () => {
+    const { rows, unscored } = gameRowsToWeekly([
+      { playerId: '1', weekOrRound: 3, fantasyPoints: 0, normalizedStatMap: { scored: false } },
+      { playerId: '1', weekOrRound: 4, fantasyPoints: 12, normalizedStatMap: {} },
+      { playerId: '1', weekOrRound: 4, fantasyPoints: 3, normalizedStatMap: { scored: true } },
+    ])
+    expect(unscored).toBe(1)
+    expect(rows).toEqual([{ playerId: '1', week: 4, fantasyPts: 15 }])
+  })
+
+  it('scores recorded picks from the first unplayed week, and holds back ones with nothing played yet', () => {
+    const space = buildIdSpaces([
+      { id: 'a', externalId: null, sleeperId: '1', source: 's', name: 'Saquon Barkley', position: 'RB' },
+      { id: 'b', externalId: null, sleeperId: '2', source: 's', name: 'Justin Jefferson', position: 'WR' },
+    ]).find((s) => s.name === 'sleeperId')!
+    const { byKey } = weeklyByKey(
+      [
+        { playerId: '1', week: 1, fantasyPts: 50 },
+        { playerId: '1', week: 2, fantasyPts: 10 },
+        { playerId: '2', week: 2, fantasyPts: 20 },
+      ],
+      space,
+    )
+    const rec = (createdAt: string) => ({
+      createdAt: new Date(createdAt),
+      round: 3,
+      overallPick: 30,
+      observeName: 'Saquon Barkley',
+      observePosition: 'RB',
+      activeName: 'Justin Jefferson',
+      activePosition: 'WR',
+    })
+    const { rows, pending } = recordedToReplayRows({
+      records: [rec('2026-09-12T00:00:00Z'), rec('2026-11-13T00:00:00Z')],
+      byKey,
+      seasonOpener: opener,
+      throughWeek: 2,
+    })
+    expect(pending).toBe(1)
+    // Recorded after week 1 kicked off: week 1's 50 points are NOT counted for anyone.
+    expect(rows[0]!.byMode.observe).toEqual({ name: 'saquon barkley', points: 10 })
+    expect(rows[0]!.byMode.active).toEqual({ name: 'justin jefferson', points: 20 })
   })
 })
