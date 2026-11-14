@@ -34,3 +34,53 @@
 .af-core .af-stg-deeper[open] > summary { border-bottom: 1px solid var(--line); }
 .af-core .af-stg-deeper > :not(summary) { margin-left: 16px; margin-right: 16px; }
 .af-core .af-stg-deeper > :last-child { margin-bottom: 16px; }
+
+/* ── 2026-11-14: the board's controls, folded to what a reader needs first ─────────────────────────── */
+
+/* "If scores held", "More columns" and "Back to the league table": plain toggles, 44px tall on a phone. */
+.af-core .af-stg-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line2, var(--line));
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-stg-btn[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft, var(--surface2));
+  color: var(--accent);
+}
+.af-core .af-stg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* "More views": AF Power and the playoff picture, one tap away. */
+.af-core .af-stg-views { display: inline-block; }
+.af-core .af-stg-views > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-stg-views > summary::-webkit-details-marker { display: none; }
+.af-core .af-stg-views > summary::after { content: '▾'; }
+.af-core .af-stg-views[open] > summary::after { content: '▴'; }
+.af-core .af-stg-views[open] > .af-stb-seg { margin-top: 8px; }
+
+/* The status key on one line of marks. */
+.af-core .af-stg-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+
+@media (max-width: 640px) {
+  .af-core .af-stg-btn,
+  .af-core .af-stg-views > summary { min-height: 44px; }
+}

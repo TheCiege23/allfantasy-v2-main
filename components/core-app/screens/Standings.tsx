@@ -139,23 +139,6 @@ function moveOf(value: number | null | undefined, copy: (english: string) => str
   return { direction: up ? 'up' : 'down', amount: abs, label: `${copy(up ? 'up' : 'down')} ${abs} ${copy(abs === 1 ? 'place' : 'places')}` }
 }
 
-function lineText(t: BoardTeam, field: number, language: string): string {
-  if (t.gamesBack == null) return 'no head-to-head games'
-  /*
-   * Zero games back is three different places. "On the playoff line" was printed for all of them,
-   * including a 0-1 team sitting 14th of 14 behind seven other 0-1 teams — true by record, and read by
-   * its manager as "I'm in".
-   */
-  if (t.gamesBack === 0) {
-    if (t.seed === field) return 'holding the last playoff spot'
-    return t.seed < field ? 'level with the last playoff spot' : 'level with the last playoff spot, out on the tiebreak'
-  }
-  const m = messagesFor(standingsScreenMessages, language)
-  const abs = Math.abs(t.gamesBack)
-  const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${m.gamesUnit(abs)}`
-  return t.gamesBack < 0 ? m.gamesClearOfLine(games) : m.gamesBehindLine(games)
-}
-
 /** The magic numbers, as one sentence about you. */
 function pathSentence(t: BoardTeam, language = 'en'): string {
   const { winsToClinch: w, lossesToElimination: l, gamesLeft } = t.path
@@ -218,11 +201,10 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
       {showPath ? <p className="af-st-stakes-path">{pathSentence(me, language)}</p> : null}
       {you && !settled ? <p className="af-st-stakes-why">{seasonOutlookSentence(you.whatDecidesIt, language)}</p> : null}
 
-      {me.next?.inProgress ? (
-        <p className="af-st-stakes-note">
-          {m.stakesInProgress(me.next.week, me.next.opponentName)}
-        </p>
-      ) : null}
+      {/*
+        2026-11-14: the "week N is still being played" note lives once, above the table
+        (StandingsBoardView). It used to be said here too, two sentences apart.
+      */}
 
       {stakes ? (
         <div className="af-st-stakes-grid">
@@ -538,26 +520,40 @@ export function Standings({
         <StatStrip
           className="af-st-tiles"
           items={[
-            {
-              key: 'seed',
-              className: 'af-st-tile',
-              label: copy('Table position'),
-              value: m.seedPlace(me.seed, ordinal(me.seed)),
-              /* Null movement is the first final week — no prior position, which is not "no change". */
-              movement: moveOf(me.seedMove, copy),
-              sub: (
-                <>
-                  {copy('of')} {n}
-                  {zoneLine(me, elimination) ? ` · ${copy(zoneLine(me, elimination))}` : ''}
-                </>
-              ),
-            },
+            /*
+             * An elimination league's headline is the place alone ("You're 12th of 14") — there is no
+             * playoff line — so its tile keeps the week's status ("on the bubble this week"), which nothing
+             * else on the page says.
+             */
+            ...(elimination
+              ? [
+                  {
+                    key: 'seed',
+                    className: 'af-st-tile',
+                    label: copy('Table position'),
+                    value: m.seedPlace(me.seed, ordinal(me.seed)),
+                    movement: moveOf(me.seedMove, copy),
+                    sub: (
+                      <>
+                        {copy('of')} {n}
+                        {zoneLine(me, elimination) ? ` · ${copy(zoneLine(me, elimination))}` : ''}
+                      </>
+                    ),
+                  },
+                ]
+              : []),
+            /*
+             * 2026-11-14: no "Table position" tile — the headline says "You're 12th of 14, 3 games out of the
+             * playoffs", so the tile said 12th, of 14 and the games back a second time. The record keeps its
+             * tile without a sub-line for the same reason.
+             */
             {
               key: 'record',
               className: 'af-st-tile',
               label: copy('Record'),
               value: board.hasHeadToHead ? formatRecord(me.record) : '—',
-              sub: copy(lineText(me, Math.min(board.rules.playoffTeams, n), language)),
+              /* Null movement is the first final week — no prior position, which is not "no change". */
+              movement: moveOf(me.seedMove, copy),
             },
             {
               key: 'power',
@@ -570,11 +566,8 @@ export function Standings({
               value: ordinal(me.powerRank),
               tone: 'accent',
               movement: moveOf(me.powerMove, copy),
-              sub: (
-                <span className="af-num">
-                  {copy('score')} {me.powerScore.toFixed(1)} · {copy('all-play')} {formatRecord(me.allPlay)}
-                </span>
-              ),
+              /* "score 37.0 · all-play 40-77" was two terms a reader had to look up; this is what all-play means. */
+              sub: <span className="af-num">{g.allPlay(formatRecord(me.allPlay))}</span>,
             },
             {
               key: 'pf',
@@ -602,7 +595,16 @@ export function Standings({
 
       {draftOrder ? <DraftOrderSection order={draftOrder} /> : null}
 
-      {dynasty ? <DynastyStandingsHistory history={dynasty} /> : null}
+      {/*
+        Folded (2026-11-14): thirty franchises of history under this season's table pushed everything
+        below it out of reach. It is one tap away; offseason (the branch above) it stays open.
+      */}
+      {dynasty ? (
+        <details className="af-stg-deeper" data-testid="standings-record-book">
+          <summary>{g.recordBook(Math.max(1, dynasty.recordSeasons.length))}</summary>
+          <DynastyStandingsHistory history={dynasty} />
+        </details>
+      ) : null}
 
       {/*
         Folded (2026-11-13 guide): this week's projected lineups (Week and Matchup carry those) and your

@@ -2,6 +2,7 @@
 
 import AfCoreShell from '@/components/core-app/AfCoreShell'
 import { Standings } from '@/components/core-app/screens/Standings'
+import { shownName, type DynastyStandingsHistory } from '@/lib/core-app/dynastyStandingsHistory'
 import type { LeagueStandingsResult } from '@/lib/core-app/leagueStandings'
 import type { StandingsOdds } from '@/lib/core-app/standingsOdds'
 import { DEFAULT_STANDINGS_VIEW } from '@/lib/core-app/standingsView'
@@ -92,6 +93,44 @@ function data(): LeagueStandingsResult {
   } as unknown as LeagueStandingsResult
 }
 
+/*
+ * A small dynasty record book (2026-11-14), so the fold shows. One franchise carries a deleted Sleeper
+ * account's name as the platform reports it; the loader's `shownName` prints it as "Former manager".
+ */
+const franchise = (key: string, name: string, w: number, l: number, titles: number[] = [], isYou = false) => ({
+  key,
+  name: shownName(name),
+  manager: null,
+  isYou,
+  seasons: [2023, 2024, 2025],
+  wins: w,
+  losses: l,
+  ties: 0,
+  winPct: w / Math.max(1, w + l),
+  pointsFor: null,
+  titles: titles.length,
+  titleSeasons: titles,
+  runnerUps: null,
+  playoffs: null,
+})
+const DYNASTY: DynastyStandingsHistory = {
+  rafters: null,
+  franchises: [
+    franchise('f1', 'Sample Champs', 30, 12, [2023, 2025]),
+    franchise('f2', 'Sample Contenders', 25, 17, [2024]),
+    franchise('f3', 'Sample Middle', 21, 21, [], true),
+    franchise('f4', 'DELETED-RD0j0D3ZJl1k', 14, 28),
+  ],
+  recordSeasons: [2023, 2024, 2025],
+  inProgressSeason: null,
+  titleOnlySeasons: [],
+  unattributedTitles: [],
+  unmatchedRows: 0,
+  hasRunnerUps: false,
+  hasPlayoffs: false,
+  status: 'records',
+}
+
 export default function StandingsGuideHarnessClient() {
   return (
     <AfCoreShell
@@ -103,7 +142,7 @@ export default function StandingsGuideHarnessClient() {
       comms={{ leagues: [], chimmyTokenCost: null, dockable: false, supportEmail: null }}
     >
       <div data-testid="standings-guide-harness">
-        <Standings data={data()} odds={ODDS} view={DEFAULT_STANDINGS_VIEW} />
+        <Standings data={data()} odds={ODDS} view={DEFAULT_STANDINGS_VIEW} dynasty={DYNASTY} />
       </div>
     </AfCoreShell>
   )
