@@ -85,7 +85,7 @@ export function extractKeeperLockedPlayers(keeperSelectionsJson: unknown): Array
  * engine treats as "no auction adjustment" (snake/linear drafts unaffected).
  */
 export function resolveAuctionContext(
-  session: { draftType: string | null; auctionBudgetPerTeam: number | null; auctionBudgets: unknown; slotOrder: unknown },
+  session: { draftType: string | null; auctionBudgetPerTeam: number | null; auctionBudgets: unknown; slotOrder: unknown; rounds?: number | null },
   targetRosterId: string,
   rosterSlots: string[],
   teamRosterCount: number
@@ -94,7 +94,13 @@ export function resolveAuctionContext(
   try {
     const budgets = getBudgetsFromSession(session)
     const remainingBudget = budgets[targetRosterId] ?? session.auctionBudgetPerTeam ?? 200
-    const rosterSlotsRemaining = Math.max(0, rosterSlots.length - teamRosterCount)
+    /*
+     * ⚠ OPEN SLOTS ARE THE DRAFT'S ROUNDS, NOT THE STARTING SLOTS (fixed 2026-11-14). The bid engine
+     * (AuctionEngine) counts open slots as `session.rounds − picks`; `rosterSlots` is starters only,
+     * so this used to report ~7 open slots where the bid engine saw ~15 and misjudged affordability.
+     */
+    const totalSlots = session.rounds != null && session.rounds > 0 ? session.rounds : rosterSlots.length
+    const rosterSlotsRemaining = Math.max(0, totalSlots - teamRosterCount)
     return { remainingBudget, rosterSlotsRemaining }
   } catch {
     return undefined

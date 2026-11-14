@@ -67,8 +67,27 @@ The real gap was **other rankers answering the same question their own way**. Wh
 | `ai/opponents/draft`, `mock-draft-simulator/DraftAIManager`, `mock-draft/ai-pick` (`pick`), `predict-board`, `sleeperDraftBoard` | **Kept, on purpose.** They simulate *other drafters* (bots, personalities, ADP-order CPUs). Advice to you and a prediction of them are different jobs |
 | `app/api/draft/ai/*` (best-pick, roster-fit, scarcity, pick-survival, queue-suggestions) | **Grounded in the engine** (`lib/draft/engineGrounding*.ts`). Claude gets the engine's top choice, the roster needs and the live available list, and recommends only from that list. Off-board names are dropped, and when Claude is down the engine's pick is returned. `grade` and `draft-recap` review a finished draft, and `ai/draft-help` explains settings, so those three are not pick advice |
 
-Still open: auctions (the decision refuses them) and replacement-value scoring
-(`DRAFT_VORP_MODE`, computed but in `observe`).
+### 2.2 Draft advice is specific to THIS draft (2026-11-14)
+
+The engine now scores what separates one draft from another, not only value and need
+(`lib/draft-helper/draftContextSignals.ts`, `auctionAdvice.ts`):
+
+| Specific | Where it comes from |
+|---|---|
+| **Scoring window.** A bye inside the weeks this draft scores costs that share of the window, and a bye already played is a plus | `TournamentRound.weekStart/weekEnd` via `resolveDraftScoringWindow`. The KBI redraft drafts in week 10 and scores from 11 |
+| **Bye weeks**, for every player | the schedule (`resolveTeamByeWeeks`). Before this, byes were never data |
+| **Position runs** | this draft's last half round of picks |
+| **Teams picking before you** | their own picks in this draft, by draft slot (so it works for Sleeper mirrors), against the league's starting slots. Counts only — no labels, no predicted picks |
+| **Auctions** | room-money market prices, your price adjusted for need and the window, a bid/let-go verdict on the player up for bid, value targets, and a player to nominate. Previously a 409 |
+| **League shape** | superflex/2QB, PPR, TE premium, and now WRRB_FLEX/REC_FLEX |
+
+**Manager psychology stays inside the Competitive Edge rule.** Persistent personality profiles
+of other managers were retired for privacy. In-draft roster facts are allowed; labels and
+predictions about a person are not. Revisiting that is an owner decision, not a code change.
+
+Still open: replacement-value scoring (`DRAFT_VORP_MODE`, computed but in `observe`); a
+non-tournament league drafted mid-season has no stored scoring start week (Sleeper's
+`start_week` is not imported); and Sleeper does not share auction bid amounts.
 
 ## 3. The rules
 
@@ -153,8 +172,9 @@ portal, with:
    they should be summary-cached, and they depend on an event store that is still thin in
    production. Signal text is English-only today, as it is on `/manager-hub`; localize it at the
    signal source rather than in the page.
-2. **Finish the draft engine (§2.1).** Add auction bid advice, and measure `DRAFT_VORP_MODE=active`
-   against observe before switching it on. The LLM tips were grounded on 2026-11-14.
+2. **Finish the draft engine (§2.1–2.2).** Measure `DRAFT_VORP_MODE=active` against observe before
+   switching it on. Import Sleeper's `start_week` so mid-season leagues get a scoring window.
+   Auctions and the LLM tips were done on 2026-11-14.
    Draft season is when most new users arrive.
 3. **A "what changed since you looked" feed** driven by the sports-os reaction events. Injuries,
    trades and waiver results get pushed instead of polled, using the notification outbox and the
