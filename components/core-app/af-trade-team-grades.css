@@ -1,0 +1,75 @@
+/*
+ * A grade for each team on a /core/trades card (2026-11-14): components/core-app/boards/TradesBoard.tsx.
+ * The verdict line, a letter badge beside each side's name, one line of numbers, and the details folded.
+ * Tokens only, so dark, light and af modes resolve.
+ */
+
+/* Who won, in one line, above the two sides. */
+.af-core .af-tg-verdict {
+  margin: 0 0 10px;
+  font: 900 16px/1.3 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.af-core .af-tg-verdict[data-tone='warn'] { color: var(--text); }
+
+/* "<team> got" with that team's grade right beside it. */
+.af-core .af-tg-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
+}
+.af-core .af-tg-grade {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2, var(--line));
+  background: var(--chip, transparent);
+  letter-spacing: 0;
+}
+.af-core .af-tg-grade-k {
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-core .af-tg-grade-v {
+  font: 900 20px/1 'Archivo', system-ui, sans-serif;
+  color: var(--text);
+}
+.af-core .af-tg-grade[data-tone='good'] { border-color: color-mix(in srgb, var(--good) 55%, transparent); }
+.af-core .af-tg-grade[data-tone='good'] .af-tg-grade-v { color: var(--good); }
+.af-core .af-tg-grade[data-tone='warn'] { border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+.af-core .af-tg-grade[data-tone='warn'] .af-tg-grade-v { color: var(--warn); }
+.af-core .af-tg-grade[data-tone='bad'] { border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
+.af-core .af-tg-grade[data-tone='bad'] .af-tg-grade-v { color: var(--bad); }
+
+/* One line of numbers and the date, then the fold. */
+.af-core .af-tg-foot { flex-direction: column; align-items: stretch; gap: 8px; }
+.af-core .af-tg-values {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-core .af-tg-when { color: var(--muted); }
+.af-core .af-tg-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-tg-fold > summary::-webkit-details-marker { display: none; }
+.af-core .af-tg-fold > summary::after { content: '▾'; }
+.af-core .af-tg-fold[open] > summary::after { content: '▴'; }
+.af-core .af-tg-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
