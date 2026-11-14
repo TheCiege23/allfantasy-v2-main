@@ -50,11 +50,13 @@ describe('pricingCardStatus', () => {
 })
 
 describe('PricingV4 account layer', () => {
-  it('names the plan, its renewal and tokens, marks the card, and leaves its checkout button alone', () => {
+  it('names the plan in the headline, its renewal and tokens below, marks the card, and leaves its checkout button alone', () => {
     const account: PricingAccount = { planIds: ['commissioner'], planName: 'AF Commissioner', renewsAt: '2026-12-14T12:00:00.000Z', tokenBalance: 120 }
     render(<PricingV4 plans={PLANS} packs={[]} savingsHeadline={null} signedIn account={account} />)
+    // 2026-11-14: the headline names the plan, so the strip under it no longer repeats it.
+    expect(screen.getByTestId('pricing-headline').textContent).toBe('You’re on AF Commissioner')
     const banner = screen.getByTestId('pricing-account')
-    expect(within(banner).getByText('You’re on AF Commissioner')).toBeTruthy()
+    expect(within(banner).queryByText('You’re on AF Commissioner')).toBeNull()
     expect(within(banner).getByText(/Renews Dec 14, 2026 · 120 tokens left/)).toBeTruthy()
     expect(within(banner).getByRole('link', { name: 'Manage billing' }).getAttribute('href')).toBe('/settings?tab=billing')
 
@@ -64,18 +66,24 @@ describe('PricingV4 account layer', () => {
     expect(cta.disabled).toBe(false)
   })
 
-  it('a free viewer is told so, has no billing to manage, and the Free card is theirs', () => {
+  it('a free viewer is told every league is free, has no billing to manage, and the Free card is theirs', () => {
     render(<PricingV4 plans={PLANS} packs={[]} savingsHeadline={null} signedIn account={{ planIds: [], planName: null, renewsAt: null, tokenBalance: 5 }} />)
+    expect(screen.getByTestId('pricing-headline').textContent).toBe('Every league is free. Plans from $4.99 a month')
     const banner = screen.getByTestId('pricing-account')
-    expect(within(banner).getByText('You’re on the free plan')).toBeTruthy()
+    expect(within(banner).getByText('5 tokens left')).toBeTruthy()
     expect(within(banner).queryByRole('link', { name: 'Manage billing' })).toBeNull()
     expect(within(screen.getByRole('heading', { name: 'Free' }).closest('section') as HTMLElement).getByText('Your plan')).toBeTruthy()
   })
 
-  it('a Supreme holder sees Pro and Commissioner as included', () => {
+  it('a Supreme holder sees Pro and Commissioner as included, and is not offered them for sale', () => {
     render(<PricingV4 plans={PLANS} packs={[]} savingsHeadline={null} signedIn account={{ planIds: ['supreme'], planName: 'AF Supreme', renewsAt: null, tokenBalance: null }} />)
     expect(within(cardOf('AF Pro')).getByText('Included in AF Supreme')).toBeTruthy()
     expect(within(cardOf('AF Supreme')).getByText('Your plan')).toBeTruthy()
+    expect(screen.queryByTestId('pricing-subscription-cta-af_pro_monthly')).toBeNull()
+    expect(screen.queryByTestId('pricing-subscription-cta-af_commissioner_monthly')).toBeNull()
+    expect(within(cardOf('AF Pro')).getByTestId('pricing-included-af_pro').textContent).toBe('In your plan')
+    // Their own card keeps its button: on the yearly view that is a real purchase.
+    expect(screen.getByTestId('pricing-subscription-cta-af_supreme_monthly')).toBeTruthy()
   })
 
   it('a visitor (no account) gets no banner and no plan chips', () => {
