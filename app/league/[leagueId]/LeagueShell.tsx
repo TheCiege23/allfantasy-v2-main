@@ -2659,7 +2659,7 @@ function LeagueTabRouter({
                     ? 'history'
                     : 'house'
       return (
-        <BigBrotherHome leagueId={leagueId} initialView={bbView} isCommissioner={isCommissioner} />
+        <BigBrotherHome leagueId={leagueId} initialView={bbView} isCommissioner={isCommissioner} shellNav />
       )
     }
     case 'salary_cap':
