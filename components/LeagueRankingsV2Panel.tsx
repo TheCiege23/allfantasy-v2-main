@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { readPlanRefusal } from '@/lib/monetization/planRefusal'
+import { buildDynastyRoadmapRequest } from '@/lib/rankings-engine/dynastyRoadmapRequest'
 import DemandHeatmap from './DemandHeatmap'
 import { WhatChangedPanel, TierLabel, WinWindowPanel } from './RankingsMicroPanels'
 import ManagerPsychology from './ManagerPsychology'
@@ -629,51 +630,17 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
     setYearPlanLoading(true)
     setYearPlanError('')
     try {
-      const positionValues = team.positionValues || {}
-      const exposure = team.rosterExposure || {}
-      const posStrengths: Record<string, number> = {}
-      const weakPositions: string[] = []
-      const allPos = Object.keys(positionValues)
-      const maxTotal = Math.max(...allPos.map(p => positionValues[p]?.total ?? 0), 1)
-      for (const pos of allPos) {
-        const score = Math.round(((positionValues[pos]?.total ?? 0) / maxTotal) * 100)
-        posStrengths[pos] = score
-        if (score < 40) weakPositions.push(pos)
-      }
-      const topAssets = allPos
-        .sort((a, b) => (positionValues[b]?.total ?? 0) - (positionValues[a]?.total ?? 0))
-        .slice(0, 3)
-        .map(p => `${p} group (${(exposure[p] ?? 0).toFixed(0)}% exposure)`)
-
-      const rosterSignals = allPos.map(pos => ({
-        position: pos,
-        playerName: `${pos} group`,
-        age: null,
-        marketValue: positionValues[pos]?.total ?? 0,
-        impactScore: posStrengths[pos] ?? 50,
-        trend30Day: 0,
-      }))
-
-      const portfolio = team.portfolioProjection || { year1: 50, year3: 45, year5: 40 }
-      const avgAge = portfolio.year5 >= portfolio.year1 ? 23 : portfolio.year5 < 30 ? 28 : 30
-      const isContending = team.composite >= 60
-
       const res = await fetch('/api/rankings/dynasty-roadmap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sport: data?.sport,
-          leagueType: data?.isDynasty ? 'Dynasty' : 'Redraft',
-          isSF: data?.isSuperFlex ?? false,
-          goal: isContending ? 'compete' : 'rebuild',
-          rosterSignals,
-          avgAge,
-          totalValue: team.totalRosterValue ?? 0,
-          positionStrengths: posStrengths,
-          weakPositions,
-          topAssets,
-          leagueName: data?.leagueName,
-        }),
+        body: JSON.stringify(
+          buildDynastyRoadmapRequest(team, {
+            sport: data?.sport,
+            isDynasty: data?.isDynasty,
+            isSuperFlex: data?.isSuperFlex,
+            leagueName: data?.leagueName,
+          }),
+        ),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => null)

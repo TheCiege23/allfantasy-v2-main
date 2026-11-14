@@ -3668,7 +3668,6 @@ export const translations: Record<string, Record<string, string>> = {
     "powerRankingsPage.refreshRankings": "Refresh Rankings",
     "powerRankingsPage.refreshingRankings": "Refreshing Rankings...",
     "powerRankingsPage.changeLeague": "Change League",
-    "powerRankingsPage.backgroundRefresh": "Background refresh",
     "powerRankingsPage.introKicker": "League-Gated Rankings",
     "powerRankingsPage.introTitle":
       "Read the full rankings table, expand each manager, and run worker-backed psychology and dynasty roadmap jobs.",
@@ -3757,8 +3756,6 @@ export const translations: Record<string, Record<string, string>> = {
     "powerRankingsPage.coach.scoreFallback": "{{n}} score",
     "powerRankingsPage.coach.generatePlan": "Generate 3-5 Year Plan",
     "powerRankingsPage.coach.generatingPlan": "Generating 3-5 Year Plan...",
-    "powerRankingsPage.job.roadmap": "Roadmap",
-    "powerRankingsPage.job.label": "{{kind}} job",
     "powerRankingsPage.roadmap.title": "Dynasty Roadmap",
     "powerRankingsPage.roadmap.year": "Year {{n}}",
     "powerRankingsPage.sport.NFL": "NFL",
