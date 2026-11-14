@@ -40,6 +40,8 @@ export const draftHqLeagueGuideMessages = defineMessages({
       `${season != null ? `${season} draft` : 'Draft'} done on ${platform} · ${picks} ${picks === 1 ? 'pick' : 'picks'}`,
     impBefore: (platform: string) => `Not started on ${platform}`,
     impOther: (status: string) => `Draft status: ${status}`,
+    /** When the page could not name the platform the draft runs on. */
+    impPlatformFallback: 'the platform',
     impIntro: (platform: string) =>
       `This draft runs on ${platform} — make your picks there. Here is our record of it: every pick, who made it, and how it compares.`,
   },
@@ -71,6 +73,7 @@ export const draftHqLeagueGuideMessages = defineMessages({
       `${season != null ? `Draft ${season}` : 'Draft'} terminado en ${platform} · ${picks} ${picks === 1 ? 'selección' : 'selecciones'}`,
     impBefore: (platform) => `Sin empezar en ${platform}`,
     impOther: (status) => `Estado del draft: ${status}`,
+    impPlatformFallback: 'la plataforma',
     impIntro: (platform) =>
       `Este draft se juega en ${platform}: haz tus selecciones allí. Aquí está nuestro registro: cada selección, quién la hizo y cómo se compara.`,
   },

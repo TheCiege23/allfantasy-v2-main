@@ -44,7 +44,8 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
      * 38 picks made" rather than the word "Draft HQ" over a search form. The draft itself is made on the
      * platform, so the intro says so; the record below is ours.
      */
-    const where = platformName?.trim() || (language === 'es' ? 'la plataforma' : 'the platform');
+    // The fallback name comes from the catalog — an inline language ternary here tripped __tests__/core-app/i18n-ternary-ratchet.
+    const where = platformName?.trim() || g.impPlatformFallback;
     const hqHead = (() => {
         if (!detail) return m.archiveHqTitle;
         const h = importedDraftHeadline({ status: detail.choice.status, season: detail.choice.season }, detail.picks.length);
