@@ -23,6 +23,9 @@ export type GuideLeagueInput = {
   priority?: 'urgent' | 'draft' | null
   chips?: ReadonlyArray<{ label: string; tone?: string | null }> | null
   matchupNote?: string | null
+  /** For `exileOf`: an Exile Island names the Survivor league it belongs to by id. */
+  id?: string
+  exileOf?: string | null
 }
 
 export type GuideTier = 'needs' | 'playing' | 'predraft' | 'quiet'
@@ -103,19 +106,36 @@ export type MyLeaguesHeadline = {
   lead: 'fix' | 'questionable' | 'drafting' | 'clear' | 'empty'
 }
 
+/**
+ * The group each league is SHOWN in. Usually its own tier — but an Exile Island rides under its
+ * Survivor league, in that league's group (MyLeaguesV4 pairs them with ↕), because it is part of that
+ * game. The headline counts the same way, or its chips disagree with the groups they point at: live on
+ * 2026-11-14, "17 waiting on a draft" sat above a "Before the draft" group of 19 — two pre-draft
+ * Survivor leagues, each carrying its island.
+ */
+export function shownTier(l: GuideLeagueInput, byId: ReadonlyMap<string, GuideLeagueInput>): GuideTier {
+  // A league naming itself finds itself here, which gives its own tier — so no self-check is needed.
+  const host = l.exileOf ? byId.get(l.exileOf) : undefined
+  return leagueTier(host ?? l)
+}
+
 export function myLeaguesHeadline(leagues: ReadonlyArray<GuideLeagueInput & { reason?: string | null }>): MyLeaguesHeadline {
+  const byId = new Map<string, GuideLeagueInput>()
+  for (const l of leagues) if (l.id) byId.set(l.id, l)
   let fix = 0
   let questionable = 0
   let drafting = 0
   let predraft = 0
   let needs = 0
   for (const l of leagues) {
-    const tier = leagueTier(l)
+    const tier = shownTier(l, byId)
     if (tier === 'needs') needs++
     if (tier === 'predraft') predraft++
+    // Only a league shown under "Needs you" can be counted as needing you.
+    if (tier !== 'needs') continue
     if (l.priority === 'urgent') fix++
     else if (l.priority === 'draft') drafting++
-    else if (tier === 'needs' && (l.chips ?? []).some((c) => STARTERS_FLAGGED.test(c.label))) questionable++
+    else if ((l.chips ?? []).some((c) => STARTERS_FLAGGED.test(c.label))) questionable++
   }
   const lead = leagues.length === 0 ? 'empty' : fix > 0 ? 'fix' : questionable > 0 ? 'questionable' : drafting > 0 ? 'drafting' : 'clear'
   return { fix, questionable, drafting, predraft, needs, lead }
