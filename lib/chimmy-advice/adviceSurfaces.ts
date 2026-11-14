@@ -10,4 +10,14 @@
  */
 export const AF_TIP_SURFACE = 'triage_swap' as const
 
-export const isChimmyAdvice = (a: { surface: string }): boolean => a.surface !== AF_TIP_SURFACE
+/**
+ * My Team's bench check — "start X over Y" (lib/core-app/myTeam.ts), the app's designated start/sit
+ * answer — recorded for the advice ledger since 2026-11-14. AllFantasy's rule-based call, not
+ * Chimmy's, and kept OUT of every existing reader (Receipts, the decision record, Chimmy's learning
+ * loop): the store's reads skip it, and this predicate says no. It is graded by the ledger report
+ * (scripts/advice-ledger-report.mjs) until a user-facing place for it is decided.
+ */
+export const MY_TEAM_BENCH_SURFACE = 'my_team_bench' as const
+
+export const isChimmyAdvice = (a: { surface: string }): boolean =>
+  a.surface !== AF_TIP_SURFACE && a.surface !== MY_TEAM_BENCH_SURFACE

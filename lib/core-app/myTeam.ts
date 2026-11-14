@@ -26,6 +26,7 @@ import { getByeWeeks } from './byeWeeks'
 import { getGameWeather, type GameWeather } from './gameWeather'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
+import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
 import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
@@ -1449,6 +1450,7 @@ async function loadMyTeamData(
 
   const checkBySlot = new Map<number, BenchCheck>()
   const claimedBench = new Set<string>()
+  const ledgerCalls: BenchLedgerCall[] = []
   for (const c of benchCandidates) {
     if (checkBySlot.has(c.slotIndex) || claimedBench.has(c.bench.sleeperId)) continue
     claimedBench.add(c.bench.sleeperId)
@@ -1459,6 +1461,34 @@ async function loadMyTeamData(
       starterName: c.starter.name,
       starterProjected: c.starterProj,
     })
+    if (c.gap >= BENCH_SWAP_POINTS) {
+      ledgerCalls.push({
+        slot: starterSlots[c.slotIndex]?.slotLabel ?? null,
+        rec: { key: c.bench.sleeperId, name: c.bench.name, projected: c.benchProj },
+        alt: { key: c.starter.sleeperId, name: c.starter.name, projected: c.starterProj },
+      })
+    }
+  }
+
+  // The advice ledger (benchCheckLedger.ts): the swaps this render shows, recorded so they can be
+  // graded once the games are played. Background only — never awaited, never thrown into the page.
+  if (!base.league.bestBall) {
+    const rosterNow = [...starterSlots.map((sl) => sl.player).filter((pl): pl is LineupPlayer => Boolean(pl)), ...benchPlayers]
+    scheduleBenchCheckLedger(
+      {
+        userId,
+        leagueId,
+        platform: league.platform ?? null,
+        sport,
+        projectionWeek,
+        sportsWeek,
+        fullRender: !savedRosterOnly,
+      },
+      ledgerCalls,
+      rosterNow
+        .filter((pl) => pl.onBye || (pl.kickoff != null && pl.kickoff.getTime() > adviceAt))
+        .map((pl) => pl.sleeperId),
+    )
   }
 
   const starters: LineupSlot[] = starterSlots.map((slot, i) => ({
