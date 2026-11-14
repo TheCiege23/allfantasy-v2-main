@@ -85,6 +85,17 @@ Two things the later writer must respect, read from code on `main`:
   or copy Sleeper's value onto the linked RI row (`PlayerIdentityMap.rollingInsightsId` +
   `sleeperId`) rather than writing a second opinion.
 
+## League settings — first scoring week (`/league/{id}` → `settings.start_week`) (recorded 2026-11-14, no probe)
+
+Stored from 2026-11-14 by `SleeperLeagueMapper` as `League.settings.start_week` (kept only as an
+integer 1–18), and read by `resolveDraftScoringWindow` (lib/shared-services/draft/DraftContextAssembler.ts):
+a league starting after week 1 gives the draft engine a scoring window from that week to the end
+of the season, so a bye already played is not counted against a player.
+
+| ID | Gap | Status | Blocks | How the code copes today |
+|---|---|---|---|---|
+| `S-11` | **Is `settings.start_week` the first week the league scores, 1-based, NFL week numbering?** The name is taken from code already in the repo (`lib/league-import/sleeper/survivalEvidence.ts`, which reads it as the first week of a survival league), not from a fixture. Also unknown: whether it is absent or `1` for an ordinary league, and whether a mid-season league's `leg` starts counting from it. | **UNVERIFIED — no fixture** | Trusting the window for mid-season leagues | Only values 2–18 create a window; absent, `1` or anything outside 1–18 means "no window", which is today's behaviour. A tournament round's `weekStart/weekEnd` always wins over it. Leagues imported before 2026-11-14 carry nothing until their next import or settings refresh. **To resolve:** capture `/league/{id}` for one league started mid-season in a committed fixture, via a Sleeper `scripts/probe.sh` (none exists yet). |
+
 ## League settings — median game (`/league/{id}` → `settings.league_average_match`) (recorded 2026-10-29, no probe)
 
 Stored from 2026-10-29 by `SleeperLeagueMapper` as `League.settings.league_average_match`, and read by
