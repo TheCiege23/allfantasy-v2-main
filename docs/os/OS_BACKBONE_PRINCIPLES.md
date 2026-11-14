@@ -46,7 +46,7 @@ and a decision engine never renders anything.
 | Waivers | `lib/decision-os/waiver/` | `/core/waivers`, `/waiver-wire` | ✅ wired |
 | Lineup | `lib/decision-os/lineup/` | `/core/my-team` | ✅ wired |
 | Commissioner | `commissioner-health/` plus the behavioural API | `/core/commissioner`, `/commissioner-os` | ✅ in-process since 2026-11-14 |
-| Cross-league "what needs me" | `managerCommandCenter.ts`, `attentionQueue.ts` | **Your week** (`/core/week`) | ⚠ lives on a separate page (`/manager-hub`) — fold it in (§5, idea 1) |
+| Cross-league "what needs me" | `managerCommandCenter.ts`, `attentionQueue.ts` | **Your week** (`/core/week`) | ✅ Survivor signals fold into the week guide since 2026-11-14; `/manager-hub` kept for white-label tenants |
 | Draft | **none** — feed only (`draft-os/`) | Draft HQ | ❌ the biggest gap |
 | Chat | `grounding/` packet | Chimmy | ✅ on in production per 2026-09-12 note |
 | Speed | `lib/sports-os/` summaries | every `/core` screen | ✅ 100% since 2026-11-14 |
@@ -127,11 +127,13 @@ portal, with:
 
 ## 5. Ideas, ordered by value
 
-1. **Fold the Command Center into Your week.** The attention queue's survivor deadlines,
-   trade/waiver priorities and career line become actions in `buildWeeklyBlueprint`, and
-   `/manager-hub` stays for white-label tenants. The user gets one cross-league screen, and the
-   backbone stays invisible. This is the owner-approved item 1, done the backbone way; it needs a
-   decision because it changes the owner's most-curated screen.
+1. **Finish folding the Command Center into Your week.** Started 2026-11-14 with the Survivor
+   signals ("Also needs you", `lib/core-app/weekNeeds.ts`). Two pieces remain. The career title
+   stake ("win X and it's ring #3") needs the Career read and would ride the summaries cache. The
+   lineup, trade and waiver priorities need the per-league User OS read on the hot week page, so
+   they should be summary-cached, and they depend on an event store that is still thin in
+   production. Signal text is English-only today, as it is on `/manager-hub`; localize it at the
+   signal source rather than in the page.
 2. **A draft engine.** It is the only domain with no engine, and draft season is when most new
    users arrive. Start with pick recommendations from the existing value plus roster-need
    primitives (`value-v2` marginal roster value, `lineup` optimal matching).
@@ -155,3 +157,6 @@ portal, with:
 - Sports OS screen summaries and league invalidation went from 10% to **100%**, with per-flag env
   pull-backs (`SPORTS_OS_SCREEN_SUMMARIES_ROLLOUT=off`).
 - The league page no longer renders the always-empty Manager DNA and recommendations cards.
+- Your week's all-leagues guide carries an "Also needs you" card with the Command Center's Survivor
+  signals: votes, challenges, trade windows and side games. The card renders nothing when there are
+  none.

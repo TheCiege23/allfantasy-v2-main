@@ -69,6 +69,12 @@ export const weekGuideMessages = defineMessages({
     kickTeach:
       'A player locks when their game starts, unless your league locks the whole lineup at once. Make changes before the first kickoff that involves them.',
 
+    needsTitle: 'Also needs you',
+    needsSub: 'Votes, challenges and windows closing in your Survivor leagues.',
+    needsOpen: 'Open league',
+    needsTeach:
+      'These close on their own clock, not at kickoff — a vote or a challenge answer missed is gone for the week.',
+
     runTitle: 'Leagues you run this week',
     runBody: 'Check inactive managers, empty lineups and trades waiting on you before kickoff.',
     runOpen: 'Open Commissioner Hub',
@@ -140,6 +146,12 @@ export const weekGuideMessages = defineMessages({
     otherDeadlines: 'Otras fechas límite',
     kickTeach:
       'Un jugador se bloquea cuando empieza su partido, salvo que tu liga bloquee toda la alineación a la vez. Haz los cambios antes del primer partido que le afecte.',
+
+    needsTitle: 'También te necesita',
+    needsSub: 'Votaciones, retos y plazos que cierran en tus ligas Survivor.',
+    needsOpen: 'Abrir liga',
+    needsTeach:
+      'Estos plazos cierran a su propia hora, no al inicio del partido: un voto o una respuesta a un reto que se pasa se pierde esa semana.',
 
     runTitle: 'Ligas que diriges esta semana',
     runBody: 'Revisa mánagers inactivos, alineaciones vacías e intercambios pendientes antes del inicio.',

@@ -216,6 +216,8 @@ import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
 import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
 import { WeekGuide, WeekToolsDisclosure } from '@/components/core-app/week/WeekGuide'
+import { weekNeedsFromSignals } from '@/lib/core-app/weekNeeds'
+import { loadSurvivorFormatSignals } from '@/lib/survivor/survivorFormatSignals'
 import { lineupFacts } from '@/lib/core-app/weekGuide'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
 import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
@@ -3697,6 +3699,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       }) : outlook
   const weeklyCalendar = activeKey === 'week' && !rivalriesView
     ? await getWeeklyCalendar(weekLeagues,myTeamPulse,ctx.now,selectedLeagueId,playedLeagues.filter(l=>l.isCommissioner).map(l=>l.id)).catch(()=>null) : null
+  /*
+   * The Command Center's Survivor signals, folded into the all-leagues guide (2026-11-14, owner's
+   * call — see lib/core-app/weekNeeds.ts for which signals and why only these). Same loader and the
+   * same league ids the Manager Hub route uses; each source fails closed to [], so a failure here
+   * only drops the card. Its queries are bounded to `survivorMode` leagues, so an account without one
+   * pays a single indexed lookup.
+   */
+  const weekNeeds =
+    activeKey === 'week' && !rivalriesView && !selectedLeagueId && !showAllLeagues
+      ? weekNeedsFromSignals(
+          await loadSurvivorFormatSignals({ userId, leagueIds: weekLeagues.map((l) => l.id), now: ctx.now }).catch(
+            (error) => {
+              console.error('[core/week] survivor signals failed', error)
+              return []
+            },
+          ),
+          weekLeagues,
+        )
+      : []
   const weeklyBlueprint = activeKey === 'week' && !rivalriesView && weekBoard ? buildWeeklyBlueprint({
     name: ctx.viewerName, leagues: weekLeagues, board: weekBoard, pulse: myTeamPulse, outlook: weeklyOutlook, calendar: weeklyCalendar ?? undefined,
     lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
@@ -5473,6 +5494,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   allHref="/core/week?all=1"
                   isCommissioner={playedLeagues.some((l) => Boolean(l.isCommissioner))}
                   lineups={[...lineupFacts(myTeamPulse).values()]}
+                  needs={weekNeeds}
                 />
                 <WeekBoard
                   priorityLeagueIds={weeklyBlueprint?.attentionLeagueIds}
