@@ -18,7 +18,7 @@
  * other sports return no lineup recommendations rather than NFL-shaped
  * fabrications.
  */
-import type { UserOsContext, RosterPlayerEntry } from '../userOsContext'
+import type { UserOsContext } from '../userOsContext'
 import { buildRecommendation, isFreshnessSafeForPriority } from '../userOsRecommendationHelpers'
 import type { LeagueRecommendation } from '../types'
 
@@ -119,4 +119,3 @@ export function generateLineupRecommendations(context: UserOsContext, generatedA
   return recommendations
 }
 
-export type { RosterPlayerEntry }

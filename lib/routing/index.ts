@@ -9,10 +9,6 @@ export {
 } from "./ProductSwitchController"
 export {
   safeRedirectPath,
-  getRedirectAfterLogin,
-  getRedirectAfterSignup,
-  loginUrlWithIntent,
-  signupUrlWithIntent,
 } from "./PostAuthIntentRouter"
 export {
   getLoginRedirectUrl,

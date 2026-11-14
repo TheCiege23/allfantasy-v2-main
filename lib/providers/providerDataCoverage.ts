@@ -2,8 +2,6 @@
  * Read-only aggregates for sports_players cache rows — provider coverage audits.
  */
 
-import type { LeagueSport } from '@prisma/client'
-
 import {
   isDraftEligibleCollegeClass,
   isFreshmanClass,
@@ -621,4 +619,3 @@ export function formatCoverageReport(
   return lines.join('\n')
 }
 
-export type { LeagueSport }

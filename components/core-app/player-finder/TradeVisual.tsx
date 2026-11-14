@@ -250,4 +250,3 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
   )
 }
 
-export default TradeVisual

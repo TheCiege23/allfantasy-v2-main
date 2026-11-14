@@ -11,9 +11,6 @@ import type {
   WarehouseOverview,
   WarehouseSimulationAnalytics,
 } from './types'
-import { type LeagueHistorySummary } from './LeagueHistoryAggregator'
-
-export type { LeagueHistorySummary }
 
 function roundTo(value: number, digits = 2): number {
   return Number(value.toFixed(digits))

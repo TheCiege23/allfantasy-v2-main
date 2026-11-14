@@ -37,8 +37,6 @@ const IMPORT_TABS: ReadonlyArray<{
   { id: 'fleaflicker', label: 'Fleaflicker' },
 ]
 
-export type { LegacyPlatformTab }
-
 type LeagueImportFlowProps = {
   userId: string
   defaultProvider?: LegacyPlatformTab

@@ -1,6 +1,6 @@
 import type { RuleSnapshot } from '@/lib/league-rules-explainer/types'
 
-export type EditableFeederLeagueSettings = {
+type EditableFeederLeagueSettings = {
   scoring: string
   rosterSize: number
   benchSize: number

@@ -49,4 +49,3 @@ export function PhoneSearchDock() {
   )
 }
 
-export default PhoneSearchDock

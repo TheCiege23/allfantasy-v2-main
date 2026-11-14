@@ -13,7 +13,6 @@ export {
 } from './player-outlook-prompt'
 
 export {
-  PlayerOutlookRequestSchema,
   PlayerOutlookBatchRequestSchema,
   TIER_LABELS,
 } from './player-outlook-types'

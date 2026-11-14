@@ -44,4 +44,3 @@ export function CoreLanguageChip({ className }: { className?: string }) {
   )
 }
 
-export default CoreLanguageChip

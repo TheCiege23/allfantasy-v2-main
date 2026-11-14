@@ -334,4 +334,3 @@ export function CoreNavIcon({ navKey, size = 18 }: { navKey: CoreNavKey | ShellI
   )
 }
 
-export default CoreNavIcon

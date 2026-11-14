@@ -1,4 +1,3 @@
-import { getRedraftAIContext } from './redraft-tiers';
 import { legacyPromptSeason, nflDraftClassReminder } from '@/lib/legacy/promptSeason';
 
 /*
@@ -161,4 +160,3 @@ export function getUniversalAIContext(now: Date = new Date()): string {
   return `${currentDateContext(now)}\n\n${UNIVERSAL_PLAYER_VALUE_RULES}`;
 }
 
-export { getRedraftAIContext };

@@ -405,4 +405,3 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   )
 }
 
-export default ReceiptsCard

@@ -1,7 +1,3 @@
-import type { LineupDecisionMode } from '@/lib/lineup-decision-engine/types'
-
-export type { LineupDecisionMode }
-
 /** Client-side roster row for optimizer API + UI enrichment */
 export interface LineupRosterPlayer {
   id: string

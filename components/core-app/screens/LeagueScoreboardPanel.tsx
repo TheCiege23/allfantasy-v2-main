@@ -209,4 +209,3 @@ export function LeagueScoreboardPanel({
   )
 }
 
-export default LeagueScoreboardPanel

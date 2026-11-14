@@ -8,7 +8,7 @@
  */
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
 
-export type TradesSummary = {
+type TradesSummary = {
   /** Offers someone sent you that you have not answered (AllFantasy-native; Sleeper never shares these). */
   offersWaiting: number
   /** Leagues whose newest trade landed this week or last (the loader's `freshTrade`). */
@@ -20,7 +20,7 @@ export type TradesSummary = {
 }
 
 /** "Soon" is this week or next: weeksLeft 0 or 1. Matches the board's own "THIS WEEK" / "1W LEFT" tags. */
-export const DEADLINE_SOON_WEEKS = 1
+const DEADLINE_SOON_WEEKS = 1
 
 export function summarizeTrades(board: Pick<TradesBoardData, 'pending' | 'windows'> | null | undefined): TradesSummary | null {
   if (!board) return null
@@ -33,7 +33,7 @@ export function summarizeTrades(board: Pick<TradesBoardData, 'pending' | 'window
 }
 
 /** Which sentence leads: an offer to answer beats news, news beats a quiet week, and no data says so. */
-export type TradesHeadline =
+type TradesHeadline =
   | { kind: 'offers'; n: number }
   | { kind: 'new'; n: number }
   | { kind: 'quiet' }

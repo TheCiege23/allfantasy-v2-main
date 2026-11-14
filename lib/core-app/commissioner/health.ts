@@ -115,7 +115,7 @@ function namesPreview(names: string[], max = 4, language?: string): string {
 
 // ── Abandoned teams ─────────────────────────────────────────────────────────
 
-export type AbandonedInput = {
+type AbandonedInput = {
   /**
    * Per-manager status from `resolveMemberActivity` (./activity.ts). Null when
    * activity could not be judged — `activityReason` then says why, which is not

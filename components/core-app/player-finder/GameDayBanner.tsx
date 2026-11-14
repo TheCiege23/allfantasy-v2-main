@@ -173,4 +173,3 @@ export function GameDayBanner({
   )
 }
 
-export default GameDayBanner

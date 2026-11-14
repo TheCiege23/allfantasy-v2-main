@@ -9,7 +9,7 @@
  * row carries per-position totals, which is all the roadmap prompt reads.
  */
 
-export type DynastyRoadmapTeamInput = {
+type DynastyRoadmapTeamInput = {
   composite: number
   totalRosterValue?: number | null
   positionValues?: Record<string, { total?: number | null } | undefined> | null
@@ -17,14 +17,14 @@ export type DynastyRoadmapTeamInput = {
   portfolioProjection?: { year1: number; year3: number; year5: number } | null
 }
 
-export type DynastyRoadmapLeagueInput = {
+type DynastyRoadmapLeagueInput = {
   sport?: string | null
   isDynasty?: boolean | null
   isSuperFlex?: boolean | null
   leagueName?: string | null
 }
 
-export type DynastyRoadmapRequestBody = {
+type DynastyRoadmapRequestBody = {
   sport?: string
   leagueType: 'Dynasty' | 'Redraft'
   isSF: boolean

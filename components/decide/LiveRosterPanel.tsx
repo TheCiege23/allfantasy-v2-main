@@ -184,4 +184,3 @@ export function LiveRosterPanel({ leagueId }: { leagueId: string }) {
   )
 }
 
-export default LiveRosterPanel

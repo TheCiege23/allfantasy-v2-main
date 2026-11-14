@@ -103,4 +103,3 @@ export function ImportInviteCard({ provider, providerLabel, sourceId, leagueName
   )
 }
 
-export default ImportInviteCard

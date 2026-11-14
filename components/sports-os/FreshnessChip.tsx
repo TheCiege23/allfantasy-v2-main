@@ -99,4 +99,3 @@ export function FreshnessChip({ meta, initialLabel, initialWarn, prefix = 'Updat
   )
 }
 
-export default FreshnessChip

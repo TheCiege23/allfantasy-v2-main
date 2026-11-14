@@ -51,7 +51,7 @@ const PRESET_BY_SECONDS: Record<number, TimerPreset> = Object.fromEntries(
 )
 
 /** Custom amount validation bounds, by unit. Min 1 in any unit; cap maps to 24h total. */
-export const CUSTOM_BOUNDS: Record<TimerUnit, { min: number; max: number }> = {
+const CUSTOM_BOUNDS: Record<TimerUnit, { min: number; max: number }> = {
   seconds: { min: 1, max: 86400 },
   minutes: { min: 1, max: 1440 },
   hours: { min: 1, max: 24 },

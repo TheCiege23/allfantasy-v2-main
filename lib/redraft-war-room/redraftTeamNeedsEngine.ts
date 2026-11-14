@@ -7,7 +7,7 @@
  */
 
 import { playerValue as sharedPlayerValue } from './playerValue'
-import type { RedraftPlayerFact, RedraftTeamSummary, RedraftWarRoomContext } from './types'
+import type { RedraftPlayerFact, RedraftWarRoomContext } from './types'
 
 interface TeamNeed {
   position: string
@@ -34,7 +34,6 @@ function countByPosition(players: RedraftPlayerFact[]): Record<string, RedraftPl
   }
   return map
 }
-
 
 export function evaluateTeamNeeds(
   context: RedraftWarRoomContext,
@@ -183,4 +182,3 @@ export function evaluateUserTeamNeeds(context: RedraftWarRoomContext): TeamNeeds
   return evaluateTeamNeeds(context, context.userRosterId)
 }
 
-export type { RedraftTeamSummary }

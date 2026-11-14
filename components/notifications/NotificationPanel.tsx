@@ -16,7 +16,6 @@ import {
   Pause,
   Play,
 } from "lucide-react"
-import { useNotifications } from "@/hooks/useNotifications"
 import type { PlatformNotification } from "@/types/platform-shared"
 import {
   groupNotifications,
@@ -287,7 +286,3 @@ export function NotificationPanelView({
   )
 }
 
-export default function NotificationPanel({ onClose }: { onClose?: () => void }) {
-  const state = useNotifications(40, { usePlaceholders: false })
-  return <NotificationPanelView state={state} onClose={onClose} />
-}

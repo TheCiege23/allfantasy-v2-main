@@ -34,7 +34,7 @@ export type LeagueDraftHeadline =
   | { kind: 'before'; slot: number | null; teams: number | null }
   | { kind: 'done'; drafted: number | null }
 
-export type LeagueDraftHeadlineInput = {
+type LeagueDraftHeadlineInput = {
   status: string | null
   /** From the live board (getDraftBoardData.clock); false when unknown. */
   yoursOnClock: boolean
@@ -79,7 +79,7 @@ export function leagueDraftHeadline(input: LeagueDraftHeadlineInput): LeagueDraf
 }
 
 /** An imported draft (it runs on the platform; the archive is our record of it). */
-export type ImportedDraftHeadline =
+type ImportedDraftHeadline =
   | { kind: 'drafting'; picks: number }
   | { kind: 'done'; picks: number; season: number | null }
   | { kind: 'before' }

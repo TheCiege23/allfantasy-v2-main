@@ -12,7 +12,7 @@
  */
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
 
-export type TradesLeagueHeadline =
+type TradesLeagueHeadline =
   /** A week-only deadline in season. `weeksLeft` 0 = this is the last week to trade. */
   | { kind: 'weeks'; week: number; weeksLeft: number }
   /** A close time ahead — the screen says it with the live countdown text. */

@@ -221,4 +221,3 @@ export function ImportDone({
   )
 }
 
-export default ImportDone

@@ -4,7 +4,7 @@
  */
 
 import type { RivalryTier } from './types'
-import { RIVALRY_TIERS, DEFAULT_TIER_THRESHOLDS } from './types'
+import { DEFAULT_TIER_THRESHOLDS } from './types'
 
 interface TierThresholds {
   Emerging: { min: number; max?: number }
@@ -53,4 +53,3 @@ export function getRivalryTierBadgeColor(tier: RivalryTier): string {
   }
 }
 
-export { RIVALRY_TIERS, DEFAULT_TIER_THRESHOLDS }

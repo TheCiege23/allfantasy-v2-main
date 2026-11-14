@@ -308,4 +308,3 @@ export function SetPasswordV4() {
   )
 }
 
-export default SetPasswordV4

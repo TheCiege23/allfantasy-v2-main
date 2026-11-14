@@ -142,4 +142,3 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
   )
 }
 
-export default YourWeekRoutine

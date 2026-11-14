@@ -53,7 +53,7 @@ type DecisionFormatBlock = {
  * The trade rule lives in `lib/league-rules/tradeLegality.ts`, shared with the Player Finder so the two
  * surfaces cannot disagree about whether a league trades. Re-exported for this module's callers.
  */
-export { leagueForbidsTrades, tradeBanReason }
+export { leagueForbidsTrades }
 
 export function decisionFormatBlock(league: DecisionFormatInput, kind: ChimmyDecisionKind): DecisionFormatBlock | null {
   // Classic Best Ball (the column) OR best ball Guilly (`guillotineMode`/`leagueType: 'guillotine'` +

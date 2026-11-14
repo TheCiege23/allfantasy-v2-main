@@ -542,4 +542,3 @@ export function CommissionerIntelligenceHub({ leagueId }: { leagueId: string }) 
   )
 }
 
-export default CommissionerIntelligenceHub

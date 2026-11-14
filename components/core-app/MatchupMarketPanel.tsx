@@ -159,4 +159,3 @@ export function MatchupMarketPanel({ data }: { data: MatchupData }) {
   return <MarketEnvironmentView state={{ status: 'ready', rows, withoutRead }} />
 }
 
-export default MatchupMarketPanel

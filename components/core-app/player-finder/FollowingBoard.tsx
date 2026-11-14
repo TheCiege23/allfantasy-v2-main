@@ -110,4 +110,3 @@ export function FollowingBoard({ data }: { data: FollowingCardData | null }) {
   )
 }
 
-export default FollowingBoard

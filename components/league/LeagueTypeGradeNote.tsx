@@ -51,4 +51,3 @@ export function LeagueTypeGradeNote({
   )
 }
 
-export default LeagueTypeGradeNote

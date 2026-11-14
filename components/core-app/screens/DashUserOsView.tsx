@@ -60,4 +60,3 @@ export function DashUserOsView({
   )
 }
 
-export default DashUserOsView

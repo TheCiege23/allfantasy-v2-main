@@ -69,4 +69,3 @@ export function CheckBox({
   )
 }
 
-export default CheckBox

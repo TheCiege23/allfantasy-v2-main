@@ -11,7 +11,7 @@ import 'server-only'
  */
 import { CertifiedLineupIntegrationService, type PlayerRef, type CertifiedScheduleDescription } from './lineupIntegration'
 
-export type { PlayerRef, CertifiedScheduleDescription }
+export type { CertifiedScheduleDescription }
 
 type WaiverClaimSafety = {
   block: boolean

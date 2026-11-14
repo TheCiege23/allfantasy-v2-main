@@ -126,4 +126,3 @@ export function SwapCandidates({ impact, kickoffs = {}, nowIso = null }: { impac
   )
 }
 
-export default SwapCandidates

@@ -345,4 +345,3 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
   )
 }
 
-export default ChimmyEvidenceBlock

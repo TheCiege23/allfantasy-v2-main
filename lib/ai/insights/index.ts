@@ -14,11 +14,10 @@ export { computeLeaderboardMovement } from "./leaderboardMovement"
 export { computeMaxPossiblePoints } from "./maxPossiblePoints"
 export { computeChampionPickLeverage } from "./championPickLeverage"
 export { computeMatchupSwingScores } from "./matchupSwingScore"
-export { computeRootingGuide } from "./rootingGuide"
 export { computeIncompletePicks } from "./incompletePicks"
 export { computeCommissionerRecap } from "./commissionerRecap"
 export { computePoolParity } from "./poolParity"
 export { computeUpsetImpact } from "./upsetImpact"
 
 // ── Shared input types ─────────────────────────────────────────────────────────
-export type { InsightEntry, InsightMatch, InsightPool } from "./types"
+export type { InsightEntry, InsightPool } from "./types"

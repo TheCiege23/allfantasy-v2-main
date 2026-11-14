@@ -111,4 +111,3 @@ export function ChimmyBrief({ data }: { data: Dash34Data | null }) {
   )
 }
 
-export default ChimmyBrief

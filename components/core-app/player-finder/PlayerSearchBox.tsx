@@ -320,4 +320,3 @@ export function PlayerSearchBox({
   )
 }
 
-export default PlayerSearchBox

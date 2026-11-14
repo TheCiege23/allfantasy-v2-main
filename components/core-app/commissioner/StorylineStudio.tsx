@@ -390,4 +390,3 @@ function HookCard({
   )
 }
 
-export default StorylineStudio

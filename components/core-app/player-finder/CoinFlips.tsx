@@ -135,4 +135,3 @@ export function CoinFlips({ flips, linkFor }: { flips: CoinFlip[]; linkFor: (lea
   )
 }
 
-export default CoinFlips

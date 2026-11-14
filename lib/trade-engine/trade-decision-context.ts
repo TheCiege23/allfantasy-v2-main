@@ -169,7 +169,7 @@ const SourceFreshnessSchema = z.object({
 
 type FreshnessGrade = z.infer<typeof FreshnessGradeEnum>
 type SingleSourceFreshness = z.infer<typeof SingleSourceFreshnessSchema>
-export type SourceFreshness = z.infer<typeof SourceFreshnessSchema>
+type SourceFreshness = z.infer<typeof SourceFreshnessSchema>
 
 export const TradeDecisionContextV1Schema = z.object({
   version: z.literal(TRADE_DECISION_CONTEXT_VERSION),
@@ -234,7 +234,7 @@ const LeagueTeamSnapshotSchema = TeamSnapshotSchema.extend({
 
 type DataCoverageTier = 'FULL' | 'PARTIAL' | 'MINIMAL'
 
-export interface DataCoverageResult {
+interface DataCoverageResult {
   tier: DataCoverageTier
   score: number
   confidenceAdjustment: number

@@ -102,4 +102,3 @@ function compareSemver(a: string, b: string): number {
   return 0
 }
 
-export { templateKey }

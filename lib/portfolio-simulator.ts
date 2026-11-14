@@ -11,7 +11,7 @@ export interface PortfolioAsset {
   pickYear?: number
 }
 
-export interface PortfolioSimResult {
+interface PortfolioSimResult {
   projectedValue: number
   volatilityBand: number
   year1: number

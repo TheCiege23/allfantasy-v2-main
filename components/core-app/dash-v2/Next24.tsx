@@ -67,4 +67,3 @@ export function Next24({ rows }: { rows: Next24Row[] }) {
   )
 }
 
-export default Next24

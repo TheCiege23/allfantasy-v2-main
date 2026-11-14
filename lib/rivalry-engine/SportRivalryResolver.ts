@@ -4,7 +4,6 @@
  */
 
 import type { RivalrySport } from './types'
-import { RIVALRY_SPORTS } from './types'
 import { isSupportedSport } from '@/lib/sport-scope'
 
 const MAP: Record<string, RivalrySport> = {
@@ -45,4 +44,3 @@ export function isSupportedRivalrySport(sport: string | null | undefined): boole
   return normalizeSportForRivalry(sport) != null
 }
 
-export { RIVALRY_SPORTS }

@@ -12,7 +12,7 @@ import crypto from "crypto"
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 export const TOTP_STEP_SECONDS = 30
-export const TOTP_DIGITS = 6
+const TOTP_DIGITS = 6
 
 export function base32Encode(buf: Buffer): string {
   let bits = 0

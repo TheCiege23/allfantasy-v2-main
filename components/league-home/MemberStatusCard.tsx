@@ -80,4 +80,3 @@ export function MemberStatusCard({ leagueId }: { leagueId: string }) {
   )
 }
 
-export default MemberStatusCard

@@ -347,4 +347,3 @@ export function HandoffPreviewClient({
   )
 }
 
-export default HandoffPreviewClient

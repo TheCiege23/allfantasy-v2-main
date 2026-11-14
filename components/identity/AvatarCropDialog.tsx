@@ -379,4 +379,3 @@ export function AvatarCropDialog({ file, open, busy, onCancel, onConfirm }: Avat
   )
 }
 
-export default AvatarCropDialog

@@ -109,4 +109,3 @@ export function LaunchCountdown({
   )
 }
 
-export default LaunchCountdown

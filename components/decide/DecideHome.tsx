@@ -613,4 +613,3 @@ function TradeCard({
   )
 }
 
-export default DecideHome

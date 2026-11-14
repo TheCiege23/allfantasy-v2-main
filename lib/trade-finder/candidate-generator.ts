@@ -71,7 +71,7 @@ interface CandidateGeneratorInput {
 
 type OpportunityType = 'NEED_FIT' | 'CONSOLIDATION' | 'VOLATILITY_SWAP' | 'PICK_ARBITRAGE' | 'MONITOR'
 
-export interface TradeOpportunity {
+interface TradeOpportunity {
   type: OpportunityType
   title: string
   description: string

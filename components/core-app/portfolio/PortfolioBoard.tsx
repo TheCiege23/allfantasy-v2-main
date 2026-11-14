@@ -1196,4 +1196,3 @@ export function PortfolioBoard({
 
 export type { PortfolioViewKey }
 
-export default PortfolioBoard

@@ -105,4 +105,3 @@ function GameChip({ chip, hasRosterData }: { chip: SlateChip; hasRosterData: boo
   )
 }
 
-export default LiveNowStrip

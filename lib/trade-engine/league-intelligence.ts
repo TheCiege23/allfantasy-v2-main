@@ -8,7 +8,7 @@ import { Asset, LeagueSettings, Thresholds, DEFAULT_THRESHOLDS } from './types'
 // HELPERS
 // ============================================
 
-export function isIdpPos(pos?: string): boolean {
+function isIdpPos(pos?: string): boolean {
   const p = (pos || '').toUpperCase()
   return (
     p === 'DL' || p === 'LB' || p === 'DB' || p === 'EDGE' || p === 'IDP' ||

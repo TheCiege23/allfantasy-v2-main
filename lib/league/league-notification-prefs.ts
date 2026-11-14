@@ -23,16 +23,3 @@ export function isLeaguePrefEnabled(prefs: LeagueNotificationPrefs, key: keyof L
   return prefs[key] !== false
 }
 
-/**
- * Whether a league fanout notification should be dispatched for this event type.
- * Unknown / unlisted event types remain enabled so we do not silently drop new flows.
- */
-export function leagueFanoutNotificationsAllowed(eventType: string, prefs: LeagueNotificationPrefs): boolean {
-  const t = String(eventType)
-  if (t.startsWith('af_trade_')) return isLeaguePrefEnabled(prefs, 'tradeAlerts')
-  if (t === 'waiver_processed') return isLeaguePrefEnabled(prefs, 'waiverResults')
-  if (t === 'settings_changed') return isLeaguePrefEnabled(prefs, 'commissionerBroadcasts')
-  if (t === 'playoff_advancement' || t.startsWith('playoff_')) return isLeaguePrefEnabled(prefs, 'playoffRace')
-  return true
-}
-

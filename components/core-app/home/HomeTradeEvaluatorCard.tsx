@@ -57,4 +57,3 @@ export function HomeTradeEvaluatorCard({ leagues, viewerId }: { leagues: StripLe
   )
 }
 
-export default HomeTradeEvaluatorCard

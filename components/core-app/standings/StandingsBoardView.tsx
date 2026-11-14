@@ -147,7 +147,7 @@ function ZoneChip({ team }: { team: BoardTeam }) {
   )
 }
 
-export function Move({ value }: { value: number | null }) {
+function Move({ value }: { value: number | null }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
   if (value == null) {

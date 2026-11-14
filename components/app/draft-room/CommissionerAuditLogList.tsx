@@ -253,4 +253,3 @@ export function CommissionerAuditLogList(props: CommissionerAuditLogListProps) {
   )
 }
 
-export default CommissionerAuditLogList

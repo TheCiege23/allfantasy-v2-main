@@ -184,4 +184,3 @@ export function EspnLeagueCheck({ leagueInput, espnConnected, onStatus }: EspnLe
   )
 }
 
-export default EspnLeagueCheck

@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react'
 import type { ConfidenceRating } from './ConfidencePill'
 
-export interface ConfidenceBreakdown {
+interface ConfidenceBreakdown {
   rating: ConfidenceRating
   score: number
   drivers: string[]

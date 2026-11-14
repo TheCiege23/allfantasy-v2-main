@@ -27,7 +27,6 @@ export {
 } from './LeagueHistoryAggregator'
 export {
   getLeagueWarehouseSummaryForAI,
-  type LeagueHistorySummary as WarehouseLeagueHistorySummary,
 } from './WarehouseQueryService'
 export {
   buildWarehouseStoreBundleResult,

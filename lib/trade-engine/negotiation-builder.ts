@@ -62,7 +62,7 @@ function pickTheme(drivers: AcceptDriver[]): { theme: NegotiationTheme; driver: 
   return { theme: DRIVER_TO_THEME[strongest.id], driver: strongest }
 }
 
-export type NegotiationBuilderInput = {
+type NegotiationBuilderInput = {
   drivers: TradeDriverData
   give: Asset[]
   receive: Asset[]

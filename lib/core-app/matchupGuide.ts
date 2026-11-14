@@ -6,9 +6,9 @@
  *
  * Pure, so the rule is testable and the screen stays a renderer.
  */
-export type MatchupWeekState = 'upcoming' | 'live' | 'final'
+type MatchupWeekState = 'upcoming' | 'live' | 'final'
 
-export type MatchupHeadline =
+type MatchupHeadline =
   | { kind: 'final'; result: 'won' | 'lost' | 'tied'; you: number; them: number }
   | { kind: 'live'; leader: 'you' | 'them' | 'level'; margin: number; pWin: number | null }
   | { kind: 'projected'; leader: 'you' | 'them' | 'level'; you: number; them: number; pWin: number | null }

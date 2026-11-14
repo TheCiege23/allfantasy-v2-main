@@ -1089,4 +1089,3 @@ export function LeagueConversation({
   )
 }
 
-export default LeagueConversation

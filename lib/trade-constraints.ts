@@ -74,7 +74,7 @@ interface TradeConstraints {
   };
 }
 
-export const DEFAULT_TRADE_CONSTRAINTS: TradeConstraints = {
+const DEFAULT_TRADE_CONSTRAINTS: TradeConstraints = {
   max_assets_per_side: 3,
   no_filler_threshold_value: 800,
   cornerstone_premium_required: 0.15,
@@ -107,29 +107,6 @@ interface RuntimeConstraints extends TradeConstraints {
   untouchables_teamB: string[];
   tradeable_assets_teamA: TradeableAsset[];
   tradeable_assets_teamB: TradeableAsset[];
-}
-
-export function getPickRange(slot: number | undefined): 'early' | 'mid' | 'late' {
-  if (!slot) return 'mid';
-  if (slot <= 4) return 'early';
-  if (slot <= 8) return 'mid';
-  return 'late';
-}
-
-export function getPickValueWithRange(
-  round: number,
-  slot: number | undefined,
-  constraints: TradeConstraints = DEFAULT_TRADE_CONSTRAINTS
-): number {
-  const roundKey = String(round) as '1' | '2' | '3' | '4';
-  const range = getPickRange(slot);
-  const baseValues = constraints.pick_round_base_values[roundKey];
-  
-  if (!baseValues) {
-    return round === 1 ? 5000 : round === 2 ? 2500 : round === 3 ? 1200 : 600;
-  }
-  
-  return baseValues[range];
 }
 
 export function identifyCornerstones(

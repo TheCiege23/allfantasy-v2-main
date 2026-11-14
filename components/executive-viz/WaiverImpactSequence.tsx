@@ -27,7 +27,7 @@ import {
   ExecutiveVisualizationShell,
 } from './ExecutiveVisualizationShell'
 
-export function WaiverImpactSequence({
+function WaiverImpactSequence({
   snapshot,
   loading = false,
 }: {

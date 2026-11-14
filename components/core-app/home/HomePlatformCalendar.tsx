@@ -111,4 +111,3 @@ export function HomePlatformCalendar({
   )
 }
 
-export default HomePlatformCalendar

@@ -241,4 +241,3 @@ export function ThisWeekStrip({
   )
 }
 
-export default ThisWeekStrip

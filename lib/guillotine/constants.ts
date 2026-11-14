@@ -41,8 +41,6 @@ export const DEFAULT_TIEBREAKER_ORDER = [
   TIEBREAK_RANDOM,
 ] as const
 
-/** Correction window modes. */
-export const CORRECTION_IMMEDIATE = 'immediate'
 export const CORRECTION_AFTER_STAT = 'after_stat_corrections'
 
 export const RELEASE_NEXT_WAIVER = 'next_waiver_run'

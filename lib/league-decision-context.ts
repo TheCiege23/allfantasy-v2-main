@@ -50,7 +50,7 @@ interface LeagueMarketContext {
   rebuildingTeamIds: string[]
 }
 
-export interface PartnerFitScore {
+interface PartnerFitScore {
   teamId: string
   fitScore: number
   reasons: string[]

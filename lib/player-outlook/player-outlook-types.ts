@@ -167,16 +167,6 @@ export interface OutlookScoringResult {
 // API Request Schemas
 // ---------------------------------------------------------------------------
 
-export const PlayerOutlookRequestSchema = z.object({
-  playerName: z.string().optional(),
-  playerId: z.string().optional(),
-  sport: z.string().default('NFL'),
-  narrative: z.boolean().optional().default(false),
-}).refine(
-  (data) => data.playerName || data.playerId,
-  { message: 'Either playerName or playerId is required' },
-)
-
 export const PlayerOutlookBatchRequestSchema = z.object({
   players: z.array(z.object({
     playerName: z.string(),

@@ -161,4 +161,3 @@ export function computePickUTV(inputs: {
 // Exports for trade engine integration
 // ---------------------------------------------------------------------------
 
-export { SPORT_VALUE_CEILING, SPORT_POSITION_WEIGHTS }

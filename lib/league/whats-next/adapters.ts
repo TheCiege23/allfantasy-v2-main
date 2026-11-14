@@ -16,7 +16,7 @@ import { resolveSourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import { getImportProviderLabel } from '@/lib/league-import/provider-ui-config'
 import type { ImportProvider } from '@/lib/league-import/types'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
-import { isEngineFormat, type EngineFormat } from './formatPhaseGuides'
+import { type EngineFormat } from './formatPhaseGuides'
 import type { WhatsNextFacts, WhatsNextFormatId } from './types'
 
 type Obj = Record<string, unknown>
@@ -438,4 +438,3 @@ export function engineFacts(format: EngineFormat, payload: unknown, now = Date.n
   }
 }
 
-export { isEngineFormat }

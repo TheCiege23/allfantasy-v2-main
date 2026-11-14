@@ -298,4 +298,3 @@ export function DashTradeBandView({
   )
 }
 
-export default DashTradeBandView

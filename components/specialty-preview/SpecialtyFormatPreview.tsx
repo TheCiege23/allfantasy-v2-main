@@ -43,4 +43,3 @@ export function SpecialtyFormatPreview({ format }: { format: SpecialtyPreviewFor
   )
 }
 
-export default SpecialtyFormatPreview

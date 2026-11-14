@@ -2,8 +2,6 @@
  * Unified AI Interface — reusable frontend components for AI hub, result cards, and Chimmy shell.
  */
 
-export { default as AILayoutContainer } from './AILayoutContainer'
-
 export { default as AIModeSelector } from './AIModeSelector'
 export type { AIMode } from './AIModeSelector'
 
@@ -25,10 +23,6 @@ export { default as AILoadingSkeleton } from './AILoadingSkeleton'
 export { default as CompareProvidersView } from './CompareProvidersView'
 
 export { default as UnifiedBrainResultView } from './UnifiedBrainResultView'
-
-export { default as AIResultCard } from './AIResultCard'
-
-export { default as StickyAIActions } from './StickyAIActions'
 
 /** PROMPT 127 — Deterministic evidence layer components (re-exports from ai-evidence). */
 export {

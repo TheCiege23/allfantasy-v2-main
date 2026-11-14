@@ -106,4 +106,3 @@ export function DraftReportShareCard({ card }: { card: DraftReportCard }) {
   )
 }
 
-export default DraftReportShareCard

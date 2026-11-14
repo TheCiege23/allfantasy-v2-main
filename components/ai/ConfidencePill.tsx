@@ -4,7 +4,7 @@ import React from 'react'
 
 export type ConfidenceRating = 'HIGH' | 'MEDIUM' | 'LEARNING'
 
-export interface Confidence {
+interface Confidence {
   rating: ConfidenceRating
   score: number
 }

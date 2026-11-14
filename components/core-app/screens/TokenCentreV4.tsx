@@ -270,4 +270,3 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
   )
 }
 
-export default TokenCentreV4

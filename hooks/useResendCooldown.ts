@@ -98,4 +98,3 @@ export function useResendCooldown(initialSeconds = 0): ResendCooldown {
   }
 }
 
-export default useResendCooldown

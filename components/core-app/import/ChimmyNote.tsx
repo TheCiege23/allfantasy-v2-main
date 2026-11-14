@@ -40,4 +40,3 @@ export function ChimmyNote({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default ChimmyNote

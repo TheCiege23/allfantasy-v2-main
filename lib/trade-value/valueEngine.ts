@@ -61,7 +61,7 @@ export {
 export const SUPERFLEX_QB_MULTIPLIER = 1.6
 export const TWO_QB_MULTIPLIER = 1.8
 /** Per full point of TE premium, capped so an extreme setting can't run away. */
-export const TE_PREMIUM_PER_POINT = 0.18
+const TE_PREMIUM_PER_POINT = 0.18
 const TE_PREMIUM_MAX_MULTIPLIER = 1.5
 /** Full-PPR lift by position (half-PPR applies half of it). */
 export const PPR_POSITION_LIFT: Record<string, number> = { WR: 0.08, TE: 0.10, RB: 0.04 }

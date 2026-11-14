@@ -27,13 +27,10 @@
 
 import type { MissionControlSnapshot } from '@/lib/decision-os/missionControl'
 import type { LeagueAnalyticsSnapshot } from '@/lib/decision-os/leagueAnalytics'
-import type { DecisionOsAttentionSignal } from '@/lib/decision-os/attentionSignals'
 import type { PowerRankingsOutput } from '@/lib/league-power-rankings/types'
 import type { LineupAttentionItem } from '@/lib/shared-services/game-day/types'
 import type { ManagerBehaviorProfile } from '@/lib/shared-services/knowledge-graph/types'
 import type { LeagueRole } from '@/lib/league/permissions'
-
-export type { MissionControlSnapshot, LeagueAnalyticsSnapshot, DecisionOsAttentionSignal, PowerRankingsOutput }
 
 interface SourceAttribution {
   source: string

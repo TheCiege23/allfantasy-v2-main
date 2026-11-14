@@ -39,8 +39,6 @@ import {
   type RedraftDraftType,
 } from '@/lib/league-concepts/redraftDefaults'
 
-export type { DailyRedraftSport }
-
 const DAILY_REDRAFT_DEFAULTS_VERSION = 1
 
 interface DailyRedraftRosterTemplate {

@@ -10,7 +10,7 @@ type VerifiedNcaafReserve = {
  historicalSchool: string | null; season: number; availability: NcaafReserveAvailability;
  reason: string; evidenceUrl: string; verifiedAt: string
 }
-export const VERIFIED_NCAAF_RESERVES: readonly VerifiedNcaafReserve[] = [
+const VERIFIED_NCAAF_RESERVES: readonly VerifiedNcaafReserve[] = [
   {
     "fantraxId": "05khp",
     "name": "E.J. Smith",

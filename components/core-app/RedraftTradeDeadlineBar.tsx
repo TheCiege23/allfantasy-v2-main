@@ -70,4 +70,3 @@ export function RedraftTradeDeadlineBar({
   )
 }
 
-export default RedraftTradeDeadlineBar

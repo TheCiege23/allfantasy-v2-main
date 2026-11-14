@@ -134,4 +134,3 @@ export function LeagueActionCards({
   )
 }
 
-export default LeagueActionCards

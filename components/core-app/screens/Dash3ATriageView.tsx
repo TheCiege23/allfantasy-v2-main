@@ -612,4 +612,3 @@ export function Dash3ATriageView({
   )
 }
 
-export default Dash3ATriageView

@@ -255,4 +255,3 @@ export function SafeGlobalChrome({
   )
 }
 
-export { isAuthPath }

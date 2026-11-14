@@ -70,4 +70,3 @@ export function LaunchBanner({
   )
 }
 
-export default LaunchBanner

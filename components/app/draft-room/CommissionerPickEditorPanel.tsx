@@ -560,4 +560,3 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
   )
 }
 
-export default CommissionerPickEditorPanel

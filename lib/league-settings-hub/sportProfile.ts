@@ -29,7 +29,7 @@ import {
 } from '@/lib/soccer-scoring/SoccerScoringPresets'
 import { SCORING_STAT_LABELS } from '@/lib/commissioner-settings/scoringStatLabels'
 
-export type HubSport = 'NFL' | 'NCAAF' | 'NBA' | 'NCAAB' | 'MLB' | 'NHL' | 'SOCCER'
+type HubSport = 'NFL' | 'NCAAF' | 'NBA' | 'NCAAB' | 'MLB' | 'NHL' | 'SOCCER'
 export type SportFamily = 'football' | 'basketball' | 'baseball' | 'hockey' | 'soccer'
 
 const SPORT_ALIASES: Record<string, HubSport> = {
@@ -70,7 +70,7 @@ export function sportDisplayName(raw: string | null | undefined): string | null 
 
 /* -------------------------------------------------------------- scoring */
 
-export type ScoringCategoryDef = { key: string; label: string; test: (k: string) => boolean }
+type ScoringCategoryDef = { key: string; label: string; test: (k: string) => boolean }
 
 const inSet = (keys: readonly string[]) => {
   const set = new Set(keys)
@@ -224,10 +224,10 @@ export const SPORT_SLOT_NAMES: Record<Exclude<SportFamily, 'football'>, Record<s
 
 /* ----------------------------------------------------- record-book copy */
 
-export type MatchupLegendRow = { tag: string; name: 'Easy' | 'Neutral' | 'Tough'; d: string }
-export type InjuredTag = { tag: string; name: string; d: string }
+type MatchupLegendRow = { tag: string; name: 'Easy' | 'Neutral' | 'Tough'; d: string }
+type InjuredTag = { tag: string; name: string; d: string }
 
-export type SportCopy = {
+type SportCopy = {
   /** Heading over the matchup legend. */
   matchupTitle: string
   matchup: MatchupLegendRow[]

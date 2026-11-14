@@ -31,10 +31,3 @@ export function liquidityTier(score: number): LiquidityTier {
   return 'VERY_HIGH'
 }
 
-export interface LiquidityResult {
-  score: number
-  tier: LiquidityTier
-  acceptanceModifier: number
-  counterRequired: boolean
-}
-

@@ -18,7 +18,7 @@ interface UseLeagueListResult {
   refetch: () => Promise<void>
 }
 
-export function useLeagueList(enabled: boolean = true): UseLeagueListResult {
+function useLeagueList(enabled: boolean = true): UseLeagueListResult {
   const [leagues, setLeagues] = useState<LeagueForGrouping[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

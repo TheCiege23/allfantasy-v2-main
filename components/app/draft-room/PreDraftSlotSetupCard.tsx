@@ -158,4 +158,3 @@ export function PreDraftSlotSetupCard(props: PreDraftSlotSetupCardProps) {
   )
 }
 
-export default PreDraftSlotSetupCard

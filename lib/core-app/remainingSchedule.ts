@@ -20,7 +20,7 @@ export type GameLeft = {
   tough: boolean
 }
 
-export type TeamRecordRow = { rosterId: string; name: string | null; wins: number; losses: number; ties: number }
+type TeamRecordRow = { rosterId: string; name: string | null; wins: number; losses: number; ties: number }
 
 const isScored = (r: Pick<WeekRow, 'pointsFor' | 'pointsAgainst'>) => r.pointsFor > 0 || r.pointsAgainst > 0
 

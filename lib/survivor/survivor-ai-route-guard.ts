@@ -53,9 +53,6 @@ const PLAYER_STRATEGY_TYPES: readonly SurvivorAIType[] = [
   'weekly_plan',
 ]
 
-/** Token rule per AI type — one table, shared with the command centre's price list. */
-export { SURVIVOR_AI_TYPE_RULE_CODE }
-
 function ruleCodeForType(type: SurvivorAIType): TokenSpendRuleCode | null {
   if (SURVIVOR_AI_UNGATED_TYPES.includes(type as (typeof SURVIVOR_AI_UNGATED_TYPES)[number])) return null
   return SURVIVOR_AI_TYPE_RULE_CODE[type as keyof typeof SURVIVOR_AI_TYPE_RULE_CODE] ?? 'survivor_ai_vote_risk_quick'

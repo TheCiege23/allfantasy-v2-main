@@ -4,7 +4,7 @@
 import type { ZombieBoardEntry, ZombieTurnMoment } from '@/lib/zombie/zombieHomeSummary'
 import type { ZombieMatchupView } from '@/lib/zombie/zombieMatchupBoard'
 
-export type { ZombieBoardEntry, ZombieTurnMoment, ZombieMatchupView }
+export type { ZombieBoardEntry, ZombieTurnMoment }
 
 interface ZombieSummaryConfig {
   whispererSelection: string

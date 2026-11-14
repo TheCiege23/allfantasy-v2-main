@@ -66,4 +66,3 @@ export function CardFreshness({ stamps }: { stamps: CardFreshnessStamp[] | null 
   )
 }
 
-export default CardFreshness

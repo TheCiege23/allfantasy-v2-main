@@ -30,7 +30,7 @@ import { sportCopy, sportDisplayName } from '@/lib/league-settings-hub/sportProf
 
 export type HubTabId = 'my' | 'setup' | 'members' | 'record'
 
-export type HubMember = {
+type HubMember = {
   id: string
   name: string
   teamName: string | null
@@ -40,7 +40,7 @@ export type HubMember = {
   isYou: boolean
 }
 
-export type HubCoOwner = { id: string; name: string; accepted: boolean }
+type HubCoOwner = { id: string; name: string; accepted: boolean }
 
 /** `undefined` = still loading, `null` = not available for this league / viewer. */
 export type HubViewData = {
@@ -288,7 +288,7 @@ function EditButton({ show, onClick, label = 'Edit' }: { show: boolean; onClick:
   return <button type="button" className="af-lsh-btn" data-size="sm" onClick={onClick}>{t(label)}</button>
 }
 
-export function Switch({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: (next: boolean) => void }) {
+function Switch({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: (next: boolean) => void }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} className="af-lsh-switch" disabled={disabled} onClick={() => onChange(!on)}>
       <span><span /></span>
