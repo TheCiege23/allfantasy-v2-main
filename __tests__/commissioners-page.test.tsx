@@ -88,14 +88,15 @@ describe('/commissioners', () => {
 })
 
 describe('/ — every "For commissioners" link goes to /commissioners', () => {
-  it('nav, mobile menu and footer link to /commissioners, the hero carries the line, and none goes to /pricing', async () => {
+  it('nav, mobile menu and footer link to /commissioners, the commissioner band carries the line, and none goes to /pricing', async () => {
     const { LandingV4 } = await import('@/components/core-app/screens/LandingV4')
     const doc = new DOMParser().parseFromString(renderToStaticMarkup(<LandingV4 lang="en" launch={null} />), 'text/html')
     const commishLinks = [...doc.querySelectorAll('a')].filter((a) => /for commissioners/i.test(a.textContent ?? ''))
     expect(commishLinks.length).toBeGreaterThanOrEqual(3)
     commishLinks.forEach((a) => expect(a.getAttribute('href')).toBe('/commissioners'))
     const line = doc.querySelector('[data-testid="landing-commish-line"]')
-    expect(line?.textContent).toMatch(/Built by a commissioner, for commissioners\./)
+    // The owner's wording for the landing band (2026-11-13): a LONG-TIME commissioner, in bold.
+    expect(line?.textContent).toMatch(/Built by a long-time commissioner, for commissioners\./)
     expect(line?.querySelector('a')?.getAttribute('href')).toBe('/commissioners')
   })
 })

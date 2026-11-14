@@ -11,9 +11,10 @@ import {
   getLandingCreateSports,
   getLandingImportSports,
 } from '@/components/core-app/screens/landingConnectPlatforms'
-import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
+import { LandingDemoTabs } from '@/components/core-app/screens/LandingDemoTabs'
 import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
+import { FORMAT_DEMO_META } from '@/lib/demo-league/formats/registry'
 import type { FoundingOfferView } from '@/lib/monetization/foundingMember'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
 // AfCoreShell imports it for every screen inside the shell — but this one renders
@@ -33,22 +34,16 @@ import '@/components/core-app/af-landing.css'
  * drift. See af-core.css for why the scope exists at all.
  *
  * MOUNTED AT `/` — app/page.tsx renders this component, so it carries the SEO
- * and every acquisition link. (This note previously claimed the opposite; it
- * was left behind when the cut-over happened.)
+ * and every acquisition link.
  *
- * ⚠ THE B2B BAND SELLS "WE RUN DECISION OS AND CHIMMY OVER YOUR DATA" — a business
- * connects its own league data and we return decisions and signals, through their
- * surface or ours. It is NOT "send your users to our consumer app". Keep that
- * distinction when editing: the two readings are different products, and copy
- * neutral enough to mean either lets a reader book a call for the wrong one.
+ * 2026-11-13 SIMPLIFICATION — the order is now: hero → connects → the commissioner band →
+ * what you get (#how) → game day (#game-day) → demo (#demo) → pricing → FAQ. Four sections that
+ * each said "every league in one place" (the Chimmy band, the three steps, the three reasons and
+ * the standalone trade board) became "What you get"; the live trade board moved into the demo's
+ * "Trade grade" tab, and the hero's two extra text links moved into the demo with it.
  *
- * It previously described
- * "the cross-platform layer, as an API" with a partner sign-in button and a
- * "sandbox keys same day" note — none of which exist: there is no partner surface
- * in this codebase and nothing issues a sandbox key. Every capability now listed is
- * something that ships and runs, and the single CTA is the one thing this page can
- * The B2B band and its demo form now live in Partners.tsx, served at
- * /core/partners. This page is B2C only.
+ * The B2B band and its demo form live in Partners.tsx, served at /core/partners. This page is
+ * B2C only.
  */
 
 /*
@@ -60,19 +55,16 @@ import '@/components/core-app/af-landing.css'
  *
  * 🛑 SO THIS NO LONGER KEEPS ITS OWN LIST. It reads `lib/league-import/provider-ui-config.ts`, the
  * same flag that decides whether the import screen lets someone in, through
- * `getLandingConnectPlatforms`. The hardcoded list that stood here said "MFL · Fantrax — soon" for
- * over two weeks after both went live (2026-08-27), and never listed Fleaflicker at all. Two lists
- * about one fact drift; one does not.
- *
- * The standard for flipping a provider lives beside its flag now, not here. Yahoo's entry records
- * why it is off (Yahoo has not approved AllFantasy's Fantasy Sports API access yet) and what has to be
- * true before it is switched back on.
+ * `getLandingConnectPlatforms`. Two lists about one fact drift; one does not.
  */
 const PLATFORMS = getLandingConnectPlatforms()
 
 /* Both read from the config that decides them — see landingConnectPlatforms.ts. */
 const IMPORT_SPORTS = getLandingImportSports()
 const CREATE_SPORTS = getLandingCreateSports()
+
+/** The league types in the "League types" demo tab: the same registry /demo/formats renders. */
+const LEAGUE_TYPES = FORMAT_DEMO_META.map((f) => f.title)
 
 /** League codes stay as codes (the strip is mono caps); only soccer has a word to translate. */
 function sportLabel(code: string, c: { connects: { soccer: string } }): string {
@@ -85,10 +77,15 @@ function sportLabel(code: string, c: { connects: { soccer: string } }): string {
  * Illustrative, like the four example leagues above it — the card is labelled
  * "example" in its own header for exactly this reason. It is a constant rather
  * than two typed-out strings because the handoff shows the number twice, in the
- * sentence and again as the large figure beside it, and those are the two places
- * a later edit would change one and miss the other.
+ * sentence and again as the large figure beside it.
  */
 const EXAMPLE_UPLIFT = '+13.0'
+
+/*
+ * The game-day example's countdown ring: 41 of the last 120 minutes left before lock. A constant
+ * beside the "41m" copy rather than computed from it, so a translator cannot break the drawing.
+ */
+const GAME_DAY_RING_PCT = Math.round((41 / 120) * 100)
 
 // Hrefs are language-independent; the descriptions come from the copy module.
 const NETWORK_HREFS: Record<string, string> = {
@@ -108,10 +105,14 @@ const NETWORK_HREFS: Record<string, string> = {
  * on English no matter what the reader picked. These render as `<a>` in the
  * server response, so both languages are reachable and indexable without
  * JavaScript, and `hreflang` on each one tells a crawler what it will get.
+ *
+ * Styled as a segmented control the same height and radius as the Sign in / Sign up buttons
+ * beside it (2026-11-13: it was 11px mono text in a pill half their height, and read as a stray
+ * label rather than a control).
  */
-function LangSwitch({ lang, label }: { lang: LandingLang; label: string }) {
+function LangSwitch({ lang, label, className }: { lang: LandingLang; label: string; className?: string }) {
   return (
-    <div className="af-lp-lang" role="group" aria-label={label}>
+    <div className={className ? `af-lp-lang ${className}` : 'af-lp-lang'} role="group" aria-label={label}>
       {LANDING_LANGS.map((code) => {
         const active = code === lang
         return (
@@ -155,6 +156,21 @@ export function Shield() {
   )
 }
 
+/* Stroke icons for the commissioner band — decorative, the card title carries the meaning. */
+const COMMISH_ICONS = [
+  <svg key="dues" width="26" height="26" viewBox="0 0 26 26" aria-hidden focusable="false">
+    <rect x="3" y="6" width="20" height="14" rx="3" fill="none" stroke="currentColor" strokeWidth="2" />
+    <path d="M3 11h20M8 16h5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>,
+  <svg key="trade" width="26" height="26" viewBox="0 0 26 26" aria-hidden focusable="false">
+    <path d="M5 9h15l-4-4M21 17H6l4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>,
+  <svg key="lineup" width="26" height="26" viewBox="0 0 26 26" aria-hidden focusable="false">
+    <circle cx="13" cy="13" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+    <path d="M13 8v5l3 2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>,
+]
+
 export function LandingV4({
   lang = DEFAULT_LANDING_LANG,
   signedIn = false,
@@ -169,32 +185,26 @@ export function LandingV4({
   launch?: { startsAt: string; founding: FoundingOfferView | null } | null
 } = {}) {
   /*
-   * ⚠ THE PRICES ARE READ FROM THE CATALOG HERE, NOT TYPED INTO THE COPY.
-   *
-   * This page quoted "paid plans run $9.99–$29.99/mo" in both languages. $29.99
-   * was AF Legacy's price before it dropped to $9.99, so the top of that range
-   * had not been real for some time — on the page most new visitors see first.
-   * getLandingCopy now REQUIRES the range, so the strings cannot be rendered
-   * without the live catalog and the next price change reaches them for free.
-   *
-   * This is a plain synchronous read of a committed constant — no database, no
-   * await — so it is free to do inside a server component.
+   * ⚠ THE PRICES ARE READ FROM THE CATALOG HERE, NOT TYPED INTO THE COPY. getLandingCopy
+   * REQUIRES the range, so the strings cannot be rendered without the live catalog and the
+   * next price change reaches them for free. A plain synchronous read of a committed constant.
    */
   const c = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
 
   /*
    * Every "sign up" affordance on this page has a second meaning once the reader
-   * already has an account. `/` now serves this page to signed-in visitors too
-   * (it used to redirect them to /dashboard, which is what made the domain land
-   * people on /login — see app/page.tsx), so "Get started free" pointing at
-   * /signup would be asking a customer to register twice.
+   * already has an account. `/` serves this page to signed-in visitors too, so
+   * "Sign up free" pointing at /signup would be asking a customer to register twice.
    *
-   * Defined once and used for all three CTAs — nav, hero and pricing band — so
+   * Defined once and used for every primary CTA — nav, hero and pricing band — so
    * they cannot drift into disagreeing about who the reader is.
    */
   const primaryCta = signedIn
     ? { href: '/core', label: c.nav.goToDashboard }
     : { href: '/signup', label: c.nav.getStarted }
+
+  /* The player finder needs an account; a stranger signs up and lands on it. */
+  const gameDayHref = signedIn ? '/core/players' : '/signup?next=%2Fcore%2Fplayers'
 
   return (
     /*
@@ -211,20 +221,9 @@ export function LandingV4({
         </Link>
 
         <div className="af-lp-nav-links">
-          {/*
-            ⚠ ALL THREE OF THESE WERE BROKEN AND TWO WERE SILENT ABOUT IT.
-            `#how` pointed at the hero — measured, it scrolled to y=74, i.e. the
-            top of the page you are already on — so "How it works" did nothing.
-            The id now sits on the three-reasons section, which is the content
-            that actually answers it. `#faq` was labelled "For commissioners"
-            and landed on "Questions managers ask", which has no commissioner
-            content; this page is player-only by handoff rule 1, so there is
-            nothing here to link to. It went to /pricing for a while, which put
-            a price in front of a commissioner before a single feature; it now
-            goes to /commissioners, the Commissioner OS page, which shows what
-            the product does first and links to pricing second.
-          */}
           <a href="#how">{c.nav.how}</a>
+          <a href="#game-day">{c.nav.gameDay}</a>
+          <a href="#demo">{c.nav.demo}</a>
           {/* Out of the iOS app with the #pricing section it scrolls to. */}
           <a href="#pricing" data-hide-in-ios-app>
             {c.nav.pricing}
@@ -232,11 +231,15 @@ export function LandingV4({
           <Link href="/commissioners">{c.nav.forCommissioners}</Link>
         </div>
 
+        {/*
+          ⚠ SIGN IN AND SIGN UP ARE A PAIR, AND BOTH ARE BUTTONS. Before 2026-11-13 the bar said
+          only "Create free account": on desktop "Sign in" was a plain grey text link, and below
+          1100px it was folded into the menu, so a returning user on a phone saw no way in.
+        */}
         <div className="af-lp-nav-right">
           <LangSwitch lang={lang} label={c.nav.langLabel} />
-          {/* "Sign in" is noise to someone already signed in. */}
           {signedIn ? null : (
-            <Link href="/login" className="af-lp-signin" data-testid="landing-nav-sign-in">
+            <Link href="/login" className="af-btn af-btn--ghost af-lp-signin" data-testid="landing-nav-sign-in">
               {c.nav.signIn}
             </Link>
           )}
@@ -246,27 +249,37 @@ export function LandingV4({
         </div>
 
         {/*
-          Phones get one compact header row instead of promoting every desktop
-          control into three stacked rows. `details` keeps this usable in the
-          server-rendered document and without JavaScript; the primary CTA stays
-          outside the menu because it is the page's main conversion action.
+          Below 1100px: language, Sign in, Sign up and the menu in one row. `details` keeps the
+          menu usable in the server-rendered document and without JavaScript.
         */}
         <div className="af-lp-mobile-actions">
+          <LangSwitch lang={lang} label={c.nav.langLabel} className="af-lp-lang--bar" />
+          {signedIn ? null : (
+            <Link
+              href="/login"
+              className="af-btn af-btn--ghost af-lp-mobile-signin"
+              data-testid="landing-mobile-sign-in"
+            >
+              {c.nav.signInShort}
+            </Link>
+          )}
           <Link
             href={primaryCta.href}
             className="af-btn af-lp-mobile-primary"
             data-testid="landing-mobile-primary"
           >
-            {primaryCta.label}
+            {signedIn ? primaryCta.label : c.nav.getStartedShort}
           </Link>
           <details className="af-lp-mobile-menu">
-            <summary aria-label="Open navigation menu">
+            <summary aria-label={c.nav.menuLabel}>
               <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden focusable="false">
                 <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </summary>
             <div className="af-lp-mobile-panel">
               <a href="#how">{c.nav.how}</a>
+              <a href="#game-day">{c.nav.gameDay}</a>
+              <a href="#demo">{c.nav.demo}</a>
               <a href="#pricing" data-hide-in-ios-app>
                 {c.nav.pricing}
               </a>
@@ -275,33 +288,20 @@ export function LandingV4({
                 {c.nav.partners}
                 <span className="af-lp-api-chip af-num">API</span>
               </Link>
-              {signedIn ? null : (
-                <Link href="/login" data-testid="landing-mobile-sign-in">
-                  {c.nav.signIn}
-                </Link>
-              )}
-              <LangSwitch lang={lang} label={c.nav.langLabel} />
+              {/* Only shown on the narrowest phones, where the bar drops its own switch. */}
+              <LangSwitch lang={lang} label={c.nav.langLabel} className="af-lp-lang--menu" />
             </div>
           </details>
         </div>
       </nav>
-
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
       <header className="af-lp-hero">
         <div className="af-lp-hero-text">
           <span className="af-lp-eyebrow af-num">{c.hero.eyebrow}</span>
           {/*
-            THE PERFORMANCE GATE LOOKS FOR THIS, AND IT WAS NOT HERE.
-            `landing-hero-headline` lives on LandingHero and ArrivalSection —
-            both retired. `/` renders THIS component, so the gate waited 20
-            seconds for a selector that is not on the page and failed every
-            build. It reported as a budget failure for weeks and was a missing
-            attribute.
-
-            A test id rather than the class: `af-lp-h1` is a styling hook and
-            renaming it during a redesign is legitimate, which is exactly how
-            this broke the first time.
+            THE PERFORMANCE GATE LOOKS FOR THIS TEST ID. A test id rather than the class:
+            `af-lp-h1` is a styling hook and renaming it during a redesign is legitimate.
           */}
           <h1 className="af-lp-h1" data-testid="landing-hero-headline">
             {c.hero.h1a}
@@ -309,35 +309,23 @@ export function LandingV4({
             <span className="af-lp-h1-accent">{c.hero.h1b}</span>
           </h1>
           <p className="af-lp-sub">{c.hero.sub}</p>
+          {/* Two buttons, not three: "See how it works" was a scroll the nav already offers. */}
           <div className="af-lp-hero-ctas">
             <Link href={primaryCta.href} className="af-btn af-lp-cta-lg" data-testid="landing-hero-primary">
               {signedIn ? primaryCta.label : c.hero.ctaPrimary}
             </Link>
-            <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">
-              {c.hero.ctaSecondary}
-            </a>
             <Link href="/demo" className="af-btn af-btn--ghost af-lp-cta-lg" data-testid="landing-try-demo">
               {c.hero.ctaDemo}
             </Link>
           </div>
-          <p className="af-lp-reassure" data-testid="landing-hero-trade-link">
-            <Link href="/trade-evaluator">{c.hero.tradeLink}</Link>
-          </p>
-          <p className="af-lp-reassure" data-testid="landing-hero-league-types-link">
-            <Link href="/demo/formats">{c.hero.leagueTypesLink}</Link>
-          </p>
-          <p className="af-lp-reassure">{c.hero.reassure}</p>
-          {/*
-            The commissioner line sits under the player hero rather than replacing it: `/`
-            stays player-first (handoff rule 1), and this is the one door to the
-            commissioner story for the visitors who run the league.
-          */}
-          <p className="af-lp-commish-line" data-testid="landing-commish-line">
-            <span className="af-lp-commish-line-text">{c.hero.commishLine}</span>{' '}
-            <Link href="/commissioners" className="af-lp-commish-line-link">
-              {c.hero.commishLink}
-            </Link>
-          </p>
+          {signedIn ? null : (
+            <p className="af-lp-have-account">
+              {c.hero.haveAccount}{' '}
+              <Link href="/login" data-testid="landing-hero-sign-in">
+                {c.nav.signIn}
+              </Link>
+            </p>
+          )}
         </div>
 
         {/*
@@ -353,8 +341,6 @@ export function LandingV4({
           {[
             { mark: 'S', platform: 'sleeper', name: 'Dynasty Dragons', meta: 'Sleeper · Dynasty PPR', score: '96.2', against: '–88.4', tag: 'Set flex', tone: 'bad' },
             { mark: 'E', platform: 'espn', name: 'Gridiron Gang', meta: 'ESPN · 0.5 PPR', score: '74.0', against: '–91.6', tag: 'Waivers', tone: 'warn' },
-            /* Was a Yahoo league. The card is labelled "example", but an example is still a
-               claim about what you can connect — and Yahoo has never imported one. */
             { mark: 'S', platform: 'sleeper', name: 'Waiver Warriors', meta: 'Sleeper · Standard', score: '110.8', against: '–102.1', tag: 'Trade', tone: 'warn' },
             { mark: 'E', platform: 'espn', name: 'End Zone Elites', meta: 'ESPN · Keeper', score: '88.4', against: '–71.9', tag: 'All set', tone: 'good' },
           ].map((row) => (
@@ -392,8 +378,6 @@ export function LandingV4({
               </strong>
               <span className="af-lp-card-foot-meta">{c.hero.cardFootMeta}</span>
             </span>
-            {/* Same constant as the sentence above it, so the headline figure and
-                the one written into the copy line cannot drift apart. */}
             <span className="af-lp-card-foot-value af-num">{EXAMPLE_UPLIFT}</span>
           </div>
         </aside>
@@ -401,12 +385,8 @@ export function LandingV4({
 
       {/*
         ── Launch banner ──────────────────────────────────────────────
-        ⚠ BELOW THE HERO, NOT ABOVE IT — moved 2026-09-29. It sat above the hero "so nobody
-        scrolls past it", and on a 390px phone that meant its ~400px filled the top half of the
-        first screen: the first bold line a stranger read was "Pro analysis is free until Oct 15",
-        a pricing note about a product nobody had described yet, and the headline began ~510px
-        down. The hero now says what AllFantasy IS first; the countdown follows directly after the
-        hero's CTA, which is still well inside the first scroll on every width.
+        ⚠ BELOW THE HERO, NOT ABOVE IT — moved 2026-09-29. On a 390px phone it filled the top half
+        of the first screen with a pricing note about a product nobody had described yet.
       */}
       {launch ? (
         <LaunchBanner startsAt={launch.startsAt} lang={lang} signedIn={signedIn} founding={launch.founding} />
@@ -448,66 +428,229 @@ export function LandingV4({
         ))}
       </section>
 
-      {/* ── Every league + Chimmy ─────────────────────────────────── */}
+      {/* ── For commissioners — the bold band ──────────────────────── */}
       {/*
-        The one thing reviewers said mattered most: every league from every platform in one place,
-        with Chimmy across all of them. Right under the platform strip so it is read in the first
-        scroll. Platforms and their status come from the import config (AllLeaguesChimmy); the
-        leagues and the exchange are an EXAMPLE and labelled as one.
+        Was one quiet line under the hero ("Built by a commissioner, for commissioners. See
+        Commissioner OS →"). The owner asked for it bold: a full-width accent band. Every tool it
+        names is live on /commissioners; nothing from that page's roadmap is named here.
       */}
-      <AllLeaguesChimmy copy={{ ...c.chimmy, soon: c.connects.soon }} />
-
-      {/* ── Trade values from real trades ───────────────────────────── */}
-      {/*
-        The free, no-import way in: grade any trade on values measured from completed trades in
-        AllFantasy-connected leagues. The board is live data (risers/fallers), not an example.
-      */}
-      <section className="af-lp-trade-market" id="trade-values" data-testid="landing-trade-market">
-        <TradeMarketMovers
-          limit={4}
-          lang={lang}
-          heading={c.tradeMarket.heading}
-          ctaHref="/trade-evaluator"
-          ctaLabel={c.tradeMarket.cta}
-          testId="landing-trade-market-movers"
-        />
+      <section className="af-lp-commish" id="commissioners" data-testid="landing-commish-line" aria-labelledby="af-lp-commish-h2">
+        <span className="af-lp-commish-label af-num">{c.commish.label}</span>
+        <h2 className="af-lp-commish-h2" id="af-lp-commish-h2">
+          {c.commish.h2}
+        </h2>
+        <p className="af-lp-commish-body">{c.commish.body}</p>
+        <ul className="af-lp-commish-grid">
+          {c.commish.items.map((item, i) => (
+            <li key={item.title} className="af-lp-commish-card">
+              <span className="af-lp-commish-icon">{COMMISH_ICONS[i]}</span>
+              <h3 className="af-lp-commish-card-title">{item.title}</h3>
+              <p className="af-lp-commish-card-body">{item.body}</p>
+            </li>
+          ))}
+        </ul>
+        <div className="af-lp-commish-ctas">
+          <Link href="/commissioners" className="af-lp-commish-btn" data-testid="landing-commish-primary">
+            {c.commish.ctaPrimary}
+          </Link>
+          {signedIn ? null : (
+            <Link href="/signup" className="af-lp-commish-btn af-lp-commish-btn--ghost">
+              {c.commish.ctaSecondary}
+            </Link>
+          )}
+        </div>
       </section>
 
-      {/* ── How it works: what a new account actually does ─────────── */}
-      {/*
-        The nav's "How it works" used to land on the three-reasons section, which says why, not
-        how. A stranger deciding whether to sign up wants to know what happens next and how much
-        it asks of them — so the anchor now lands here.
-      */}
-      <section className="af-lp-reasons af-lp-steps" id="how">
-        <h2 className="af-lp-h2">{c.steps.h2}</h2>
-        <ol className="af-lp-reason-grid">
-          {c.steps.items.map((s) => (
-            <li key={s.n} className="af-lp-reason">
-              <span className="af-lp-reason-n af-num">{s.n}</span>
-              <h3 className="af-lp-reason-title">{s.title}</h3>
-              <p className="af-lp-reason-body">{s.body}</p>
+      {/* ── What you get — the #how anchor ──────────────────────────── */}
+      <section className="af-lp-get" id="how">
+        <h2 className="af-lp-h2">{c.get.h2}</h2>
+        <p className="af-lp-get-body">{c.get.body}</p>
+        <ol className="af-lp-get-grid">
+          {c.get.items.map((item, i) => (
+            <li key={item.title} className="af-lp-get-card">
+              <span className="af-lp-reason-n af-num">{String(i + 1).padStart(2, '0')}</span>
+              <h3 className="af-lp-get-title">{item.title}</h3>
+              <p className="af-lp-get-card-body">{item.body}</p>
             </li>
           ))}
         </ol>
       </section>
 
-      {/* ── Three reasons ───────────────────────────────────────────── */}
-      <section className="af-lp-reasons">
-        <h2 className="af-lp-h2">{c.reasons.h2}</h2>
-        <div className="af-lp-reason-grid">
-          {c.reasons.items.map((r) => (
-            <article key={r.n} className="af-lp-reason">
-              <span className="af-lp-reason-n af-num">{r.n}</span>
-              <h3 className="af-lp-reason-title">
-                {r.title[0]}
-                <br />
-                {r.title[1]}
-              </h3>
-              <p className="af-lp-reason-body">{r.body}</p>
-            </article>
-          ))}
+      {/* ── Game day: player search before kickoff ──────────────────── */}
+      {/*
+        The player finder's game-day mode (PlayerFinder.tsx): injury status with its report time,
+        "Inactive" inside the last two hours (pregameInactive.ts), the lock clock per league
+        (LockClock) and the swap (SwapCandidates). The card is an EXAMPLE and labelled as one.
+      */}
+      <section className="af-lp-gameday" id="game-day">
+        <div className="af-lp-gameday-copy">
+          <span className="af-lp-gameday-badge af-num">
+            <span className="af-lp-gameday-dot" aria-hidden />
+            {c.gameDay.badge}
+          </span>
+          <h2 className="af-lp-h2">{c.gameDay.h2}</h2>
+          <p className="af-lp-get-body">{c.gameDay.body}</p>
+          <ol className="af-lp-gameday-steps">
+            {c.gameDay.steps.map((s, i) => (
+              <li key={s}>
+                <span className="af-lp-gameday-step-n af-num" aria-hidden>
+                  {i + 1}
+                </span>
+                {s}
+              </li>
+            ))}
+          </ol>
+          <Link href={gameDayHref} className="af-btn af-lp-cta-lg" data-testid="landing-game-day-cta">
+            {c.gameDay.cta}
+          </Link>
         </div>
+
+        <figure className="af-lp-gd-card" aria-label={`${c.gameDay.exampleLabel}: ${c.gameDay.playerName}, ${c.gameDay.status}`}>
+          <div className="af-lp-gd-search">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden focusable="false">
+              <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M12.5 12.5 16 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            <span className="af-lp-gd-search-label">{c.gameDay.searchLabel}</span>
+            <span className="af-lp-gd-search-value">{c.gameDay.playerName}</span>
+            <span className="af-lp-gd-example af-num">{c.gameDay.exampleLabel}</span>
+          </div>
+
+          <div className="af-lp-gd-main">
+            <div className="af-lp-gd-player">
+              <div className="af-lp-gd-player-head">
+                <span className="af-lp-gd-avatar af-num" aria-hidden>
+                  TB
+                </span>
+                <span className="af-lp-gd-player-text">
+                  <strong>{c.gameDay.playerName}</strong>
+                  <span>{c.gameDay.playerMeta}</span>
+                </span>
+                <span className="af-lp-card-tag af-num" data-tone="bad">
+                  {c.gameDay.status}
+                </span>
+              </div>
+              <p className="af-lp-gd-note">{c.gameDay.statusNote}</p>
+
+              <div className="af-lp-gd-lock">
+                <span
+                  className="af-lp-gd-ring"
+                  style={{ ['--pct' as string]: `${GAME_DAY_RING_PCT}%` }}
+                  aria-hidden
+                >
+                  <span className="af-lp-gd-ring-value af-num">{c.gameDay.lockValue}</span>
+                </span>
+                <span className="af-lp-gd-lock-text">
+                  <strong>
+                    {c.gameDay.lockValue} {c.gameDay.lockLabel}
+                  </strong>
+                  <span>{c.gameDay.lockMeta}</span>
+                </span>
+              </div>
+
+              <ol className="af-lp-gd-track" aria-hidden>
+                <li data-tone="bad">{c.gameDay.trackReport}</li>
+                <li data-tone="now">{c.gameDay.trackNow}</li>
+                <li data-tone="lock">{c.gameDay.trackLock}</li>
+              </ol>
+            </div>
+
+            <div className="af-lp-gd-leagues">
+              <span className="af-label">{c.gameDay.leaguesLabel}</span>
+              <ul>
+                {c.gameDay.leagues.map((l) => (
+                  <li key={l.name} className="af-lp-gd-league" data-tone={l.tone}>
+                    <span className="af-lp-gd-league-text">
+                      <strong>{l.name}</strong>
+                      <span>
+                        {l.meta} · {l.state}
+                      </span>
+                    </span>
+                    {l.action ? <span className="af-lp-gd-swap">{l.action}</span> : null}
+                  </li>
+                ))}
+              </ul>
+              <p className="af-lp-gd-chimmy">
+                <span className="af-label">{c.gameDay.chimmyLabel}</span>
+                {c.gameDay.chimmy}
+              </p>
+            </div>
+          </div>
+        </figure>
+      </section>
+
+      {/* ── Demo: try before you sign up ────────────────────────────── */}
+      <section className="af-lp-demo" id="demo">
+        <div className="af-lp-demo-head">
+          <h2 className="af-lp-h2">{c.demo.h2}</h2>
+          <p className="af-lp-get-body">{c.demo.body}</p>
+        </div>
+        <LandingDemoTabs
+          label={c.demo.tabsLabel}
+          tabs={[
+            {
+              id: 'leagues',
+              label: c.demo.tabLeagues,
+              panel: (
+                <div className="af-lp-demo-pane">
+                  <p className="af-lp-demo-pane-body">{c.demo.leaguesBody}</p>
+                  <ul className="af-lp-demo-rows">
+                    {c.demo.leaguesRows.map((r) => (
+                      <li key={r.name} className="af-lp-demo-row">
+                        <span>{r.name}</span>
+                        <span className="af-lp-card-tag af-num" data-tone={r.tone}>
+                          {r.tag}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href="/demo" className="af-btn af-lp-cta-lg" data-testid="landing-demo-league-link">
+                    {c.demo.leaguesCta}
+                  </Link>
+                </div>
+              ),
+            },
+            {
+              id: 'trade',
+              label: c.demo.tabTrade,
+              /*
+                The generic trade demo: live values from completed trades, and the free, no-import
+                trade grader behind its button. Live data, not an example.
+              */
+              panel: (
+                <div className="af-lp-trade-market" id="trade-values" data-testid="landing-trade-market">
+                  <TradeMarketMovers
+                    limit={4}
+                    lang={lang}
+                    heading={c.tradeMarket.heading}
+                    ctaHref="/trade-evaluator"
+                    ctaLabel={c.tradeMarket.cta}
+                    testId="landing-trade-market-movers"
+                  />
+                </div>
+              ),
+            },
+            {
+              id: 'types',
+              label: c.demo.tabTypes,
+              panel: (
+                <div className="af-lp-demo-pane">
+                  <p className="af-lp-demo-pane-body">{c.demo.typesBody}</p>
+                  <ul className="af-lp-demo-types">
+                    {LEAGUE_TYPES.map((t) => (
+                      <li key={t}>{t}</li>
+                    ))}
+                  </ul>
+                  <p data-testid="landing-league-types-link">
+                    <Link href="/demo/formats" className="af-btn af-lp-cta-lg">
+                      {c.demo.typesCta}
+                    </Link>
+                  </p>
+                </div>
+              ),
+            },
+          ]}
+        />
       </section>
 
       {/* ── Pricing line ────────────────────────────────────────────── */}
@@ -533,13 +676,9 @@ export function LandingV4({
       <section className="af-lp-faq" id="faq">
         <h2 className="af-lp-h2">{c.faq.h2}</h2>
         {/*
-          ⚠ OPEN CARDS IN A 2×2 GRID, NOT <details> ACCORDIONS — this is what
-          the handoff draws, and the reason is not only visual. Three of these
-          four answers are the ones a hesitant visitor needs BEFORE deciding
-          ("is this gambling?", "what does it cost?"), and an accordion hides
-          every one of them behind a click. The same four Q&A pairs are also
-          emitted as FAQPage structured data from app/page.tsx, off this exact
-          array, so the copy and the schema cannot drift apart.
+          ⚠ OPEN CARDS, NOT <details> ACCORDIONS: three of these four answers are the ones a
+          hesitant visitor needs BEFORE deciding. The same pairs are emitted as FAQPage structured
+          data from app/page.tsx, off this exact array, so the copy and the schema cannot drift.
         */}
         <div className="af-lp-faq-grid">
           {c.faq.items.map((f) => (
@@ -552,12 +691,6 @@ export function LandingV4({
       </section>
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
-      {/*
-        ⚠ THE BROWN PIG NETWORK IS A FOOTER LINE, NOT A SECTION — moved 2026-09-29. It was a full
-        ~485px band of six cards linking out to other products, placed right before the footer: on
-        desktop a fifth of the page, spent sending a visitor who has not signed up yet somewhere
-        else. The links stay (below, with each product's one-liner as its tooltip); the band goes.
-      */}
       <footer className="af-lp-footer">
         <div className="af-lp-footer-top">
           <span className="af-lp-brand">
@@ -593,10 +726,6 @@ export function LandingV4({
             </span>
           </span>
         </div>
-        {/*
-          Jurisdiction copy is a compliance statement, not decoration — it stays
-          in the footer verbatim.
-        */}
         <p className="af-lp-footer-network">
           <span className="af-label">{c.network.label}</span>
           {c.network.cards.map((n) => {
@@ -609,6 +738,7 @@ export function LandingV4({
             )
           })}
         </p>
+        {/* Jurisdiction copy is a compliance statement, not decoration — it stays verbatim. */}
         <p className="af-lp-footer-compliance">{c.footer.compliance}</p>
       </footer>
     </div>

@@ -22,7 +22,7 @@ describe('live landing copy (LandingV4)', () => {
 
   it.each(['en', 'es'] as const)('%s: leads with free leagues, never "free for players" or "upgrade to act"', (lang) => {
     const c = getLandingCopy(lang, prices)
-    const text = [c.hero.reassure, c.pricing.h2, c.pricing.body, ...c.faq.items.map((i) => i.a)].join(' ')
+    const text = [c.hero.sub, c.get.body, c.pricing.h2, c.pricing.body, ...c.faq.items.map((i) => i.a)].join(' ')
     expect(text).not.toMatch(/for players|para jugadores/i)
     expect(text).not.toMatch(/act on it|para actuar/i)
     expect(c.pricing.body).toMatch(lang === 'en' ? /Create, import and run/ : /Crea, importa y dirige/)
