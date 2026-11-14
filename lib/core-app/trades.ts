@@ -21,6 +21,7 @@ import { collapseMirroredTradeRows } from './tradeHistorySelection'
 import { leagueContextFor, type ClaimedTeamRow, type LeagueContext, type LeagueContextRow } from './leagueContext'
 import { loadPickTradeDeadlineView, loadTradeDeadlineCountdown, type PickTradeDeadlineView } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
+import { createRenderTimer, type RenderTimer } from './renderTiming'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
@@ -721,6 +722,8 @@ export async function startTradesRead(
   ctx?: LeagueContext | null,
 ): Promise<TradesRead | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
+  // Spans the whole read, shell and sections; logged once `data` lands (see `readTradesSections`).
+  const timer = createRenderTimer('trades')
   /* The shared row. `sport` matters to the pending-offer scan: Sleeper's player
      dictionary is NFL-only, so a non-NFL league must not be handed one. */
   const league = await lc.league()
@@ -756,7 +759,7 @@ export async function startTradesRead(
       pickTradeDeadline,
     }),
   )
-  const data = teamRead.then(([, myTeam]) => readTradesSections(league, lc, leagueId, userId, myTeam, shellRead))
+  const data = teamRead.then(([, myTeam]) => readTradesSections(league, lc, leagueId, userId, myTeam, shellRead, timer))
   /*
    * ⚠ When the shell read fails, the caller gets that failure and never sees `data` — which then
    * rejects with the same error and nobody listening. Marking it handled here stops one failure being
@@ -773,6 +776,7 @@ async function readTradesSections(
   userId: string,
   myTeam: ClaimedTeamRow | null,
   shellRead: Promise<TradesShell>,
+  timer: RenderTimer,
 ): Promise<TradesData> {
   const sleeperHistory = String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId
 
@@ -788,7 +792,7 @@ async function readTradesSections(
    * together, which surface's letter becomes a trade's permanent original would be a race. In order,
    * the grade list freezes first and the history reuses it, exactly as before.
    */
-  const gradesThenHistory = (async () => {
+  const gradesThenHistory = timer.time('gradesThenHistory', (async () => {
     const grades = await resolveGrades(
       league.id,
       league.platformLeagueId ?? null,
@@ -805,12 +809,104 @@ async function readTradesSections(
         ).catch(() => null)
       : null
     return { grades, current }
-  })()
+  })())
+
+  /*
+   * ⚠ THE NON-SLEEPER HISTORY'S OWN READS START WITH THE SECTIONS, NOT AFTER THEM (2026-11-14). The
+   * warehouse facts, the league's teams and the mirrored `LeagueTrade` rows used to wait for the grade
+   * list, the offer scan and the ideas above, then run one after another — although they need only the
+   * league row, and the trade rows need only the facts (for their transaction ids). None of the sections
+   * writes a table these read: grading freezes into `trade_analysis_snapshots` and receipts, never into
+   * `TransactionFact`, `LeagueTeam` or `LeagueTrade`. Each is still awaited where it was used, in the
+   * same order, so the values and the error that surfaces first are unchanged; only the waiting
+   * overlaps. A Sleeper league returns from its own branch below and never starts them, as before.
+   * The player-name read stays after the trade rows, because it reads their ids.
+   *
+   * ⚠ A read started here and awaited later must never reject unobserved: `timer.time` attaches a
+   * handler, which is why every early read goes through it. `facts` and `teams` keep their original
+   * lack of a `.catch` — a failure still throws out of this loader at the await, as it did before.
+   */
+  const factsRead = sleeperHistory
+    ? null
+    : timer.time('facts', prisma.transactionFact.findMany({
+        where: { leagueId, type: 'trade' },
+        orderBy: [{ season: 'desc' }, { weekOrPeriod: 'desc' }],
+        take: 400,
+        select: {
+          transactionId: true,
+          managerId: true,
+          season: true,
+          weekOrPeriod: true,
+          payload: true,
+          createdAt: true,
+        },
+      }))
+  const teamsRead = sleeperHistory
+    ? null
+    : timer.time('teams', prisma.leagueTeam.findMany({
+        where: { leagueId },
+        select: { externalId: true, platformUserId: true, teamName: true, ownerName: true, claimedByUserId: true },
+      }))
+  const tradeRowsRead = factsRead
+    ? timer.time('tradeRows', factsRead.then((facts) => {
+        /*
+         * Name the players each trade moved.
+         *
+         * `dw_transaction_facts` carries counts only; `LeagueTrade` carries the Sleeper
+         * id arrays. Two bounded queries for the whole page — one for the trades, one
+         * to resolve every referenced id to a name — rather than a lookup per row.
+         */
+        const txIds = [...groupFactsBySleeperTx(facts).keys()]
+        /*
+         * Completed history and grades now share LeagueTrade as a source. Transaction
+         * facts remain the richer warehouse path for every provider, but a Sleeper
+         * league whose historical importer populated LeagueTrade first must not show
+         * "no trades" above grades created from those exact rows.
+         */
+        return league.platformLeagueId || txIds.length
+          ? prisma.leagueTrade
+              .findMany({
+                where: league.platformLeagueId
+                  ? {
+                      OR: [
+                        ...(txIds.length ? [{ transactionId: { in: txIds } }] : []),
+                        { history: { sleeperLeagueId: league.platformLeagueId } },
+                      ],
+                    }
+                  : { transactionId: { in: txIds } },
+                /*
+                 * ⚠ ORDERED BEFORE IT IS GROUPED, DELIBERATELY. The two mirror rows for
+                 * one trade tie on every payload field, so without a deterministic key
+                 * the order Postgres happens to return decides which manager appears
+                 * first — and a trade could read one way round on one render and the
+                 * other way on the next. `historyId` is stable and unique per side.
+                 */
+                orderBy: [{ transactionId: 'asc' }, { historyId: 'asc' }],
+                select: {
+                  transactionId: true,
+                  season: true,
+                  week: true,
+                  playersGiven: true,
+                  playersReceived: true,
+                  picksGiven: true,
+                  picksReceived: true,
+                  partnerName: true,
+                  tradeDate: true,
+                  createdAt: true,
+                  history: { select: { sleeperUsername: true } },
+                },
+                take: 400,
+              })
+              .catch(() => [])
+          : []
+      }))
+    : null
+
   // The shell (header fields and the two deadline reads) rides along; its values are reused below.
   const [{ grades, current }, pendingOffers, agentIdeas, shell] = await Promise.all([
     gradesThenHistory,
-    resolvePendingOffers(league, userId, lc),
-    resolveAgentIdeas(league.id, userId),
+    timer.time('pendingOffers', resolvePendingOffers(league, userId, lc)),
+    timer.time('agentIdeas', resolveAgentIdeas(league.id, userId)),
     shellRead,
   ])
 
@@ -840,6 +936,7 @@ async function readTradesSections(
   }
 
   if (sleeperHistory) {
+    timer.done({ platform: 'sleeper' })
     return {
       ...base,
       canonicalHistory: true,
@@ -850,24 +947,10 @@ async function readTradesSections(
     }
   }
 
-  const facts = await prisma.transactionFact.findMany({
-    where: { leagueId, type: 'trade' },
-    orderBy: [{ season: 'desc' }, { weekOrPeriod: 'desc' }],
-    take: 400,
-    select: {
-      transactionId: true,
-      managerId: true,
-      season: true,
-      weekOrPeriod: true,
-      payload: true,
-      createdAt: true,
-    },
-  })
+  // Both started above under `!sleeperHistory`, which the early return just established, so never null here.
+  const facts = await factsRead!
 
-  const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId },
-    select: { externalId: true, platformUserId: true, teamName: true, ownerName: true, claimedByUserId: true },
-  })
+  const teams = await teamsRead!
   const teamByExternal = new Map(teams.map((t) => [String(t.externalId), t.teamName]))
   /*
    * ⚠ KEYED ON `platformUserId`, NOT `externalId`. `LeagueTradeHistory.sleeperUsername`
@@ -881,69 +964,12 @@ async function readTradesSections(
     ),
   )
 
-  // Each trade writes one fact PER SIDE, so collapse on the sleeper transaction
-  // id to get one row per trade rather than listing every deal twice.
-  const bySleeperTx = new Map<string, typeof facts>()
-  for (const f of facts) {
-    const payload = (f.payload ?? {}) as Record<string, unknown>
-    const key = String(payload.sleeperTransactionId ?? f.transactionId.split(':')[0])
-    const bucket = bySleeperTx.get(key) ?? []
-    bucket.push(f)
-    bySleeperTx.set(key, bucket)
-  }
+  const bySleeperTx = groupFactsBySleeperTx(facts)
 
   const mine = myTeam?.externalId != null ? String(myTeam.externalId) : null
 
-  /*
-   * Name the players each trade moved.
-   *
-   * `dw_transaction_facts` carries counts only; `LeagueTrade` carries the Sleeper
-   * id arrays. Two bounded queries for the whole page — one for the trades, one
-   * to resolve every referenced id to a name — rather than a lookup per row.
-   */
-  const txIds = [...bySleeperTx.keys()]
-  /*
-   * Completed history and grades now share LeagueTrade as a source. Transaction
-   * facts remain the richer warehouse path for every provider, but a Sleeper
-   * league whose historical importer populated LeagueTrade first must not show
-   * "no trades" above grades created from those exact rows.
-   */
-  const tradeRows = league.platformLeagueId || txIds.length
-    ? await prisma.leagueTrade
-        .findMany({
-          where: league.platformLeagueId
-            ? {
-                OR: [
-                  ...(txIds.length ? [{ transactionId: { in: txIds } }] : []),
-                  { history: { sleeperLeagueId: league.platformLeagueId } },
-                ],
-              }
-            : { transactionId: { in: txIds } },
-          /*
-           * ⚠ ORDERED BEFORE IT IS GROUPED, DELIBERATELY. The two mirror rows for
-           * one trade tie on every payload field, so without a deterministic key
-           * the order Postgres happens to return decides which manager appears
-           * first — and a trade could read one way round on one render and the
-           * other way on the next. `historyId` is stable and unique per side.
-           */
-          orderBy: [{ transactionId: 'asc' }, { historyId: 'asc' }],
-          select: {
-            transactionId: true,
-            season: true,
-            week: true,
-            playersGiven: true,
-            playersReceived: true,
-            picksGiven: true,
-            picksReceived: true,
-            partnerName: true,
-            tradeDate: true,
-            createdAt: true,
-            history: { select: { sleeperUsername: true } },
-          },
-          take: 400,
-        })
-        .catch(() => [])
-    : []
+  // Started above with the sections, from the same facts (see `tradeRowsRead`).
+  const tradeRows = await tradeRowsRead!
 
   const asIds = (v: unknown): string[] =>
     Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))).filter(Boolean) : []
@@ -1085,9 +1111,26 @@ async function readTradesSections(
 
   history.sort((a, b) => b.at.getTime() - a.at.getTime())
 
+  timer.done({ platform: String(league.platform ?? '') })
   if (history.length === 0) {
     return { ...base, history: { available: false, reason: 'no completed trades are on file for this league' } }
   }
 
   return { ...base, history: { available: true, data: history } }
+}
+
+/**
+ * Each trade writes one fact PER SIDE, so collapse on the sleeper transaction
+ * id to get one row per trade rather than listing every deal twice.
+ */
+function groupFactsBySleeperTx<F extends { transactionId: string; payload: unknown }>(facts: F[]): Map<string, F[]> {
+  const bySleeperTx = new Map<string, F[]>()
+  for (const f of facts) {
+    const payload = (f.payload ?? {}) as Record<string, unknown>
+    const key = String(payload.sleeperTransactionId ?? f.transactionId.split(':')[0])
+    const bucket = bySleeperTx.get(key) ?? []
+    bucket.push(f)
+    bySleeperTx.set(key, bucket)
+  }
+  return bySleeperTx
 }
