@@ -37,7 +37,7 @@ const data = (rows: DraftHqAllRow[]): DraftHqAllData => ({ rows, counts: { live:
 describe('draftHqHeadline', () => {
   it('your pick beats everything; a paused one does not count as your pick', () => {
     expect(draftHqHeadline([row({ leagueId: 'B', phase: 'live' }), row({ leagueId: 'A', phase: 'live', yoursOnClock: true })])).toEqual({ kind: 'yourPick', league: 'A', n: 1 })
-    expect(draftHqHeadline([row({ leagueId: 'P', phase: 'live', yoursOnClock: true, rawStatus: 'paused' }), row({ leagueId: 'R', phase: 'live' })])).toEqual({ kind: 'running', league: 'R', n: 1 })
+    expect(draftHqHeadline([row({ leagueId: 'P', phase: 'live', yoursOnClock: true, rawStatus: 'paused' }), row({ leagueId: 'R', phase: 'live' })])).toEqual({ kind: 'running', league: 'R', n: 1, known: true, pausedYours: 'P' })
   })
 
   it('paused only, then not started, then finished, then nothing', () => {
@@ -112,8 +112,10 @@ describe('draft HQ guide copy', () => {
     expect(en.headRunning('Club', 1)).toBe('Club is drafting — it’s not your pick yet')
     expect(en.headRunning('Club', 3)).toBe('3 drafts are running — none is waiting on you')
     expect(en.headPaused('Hoops', 1, true)).toBe('Hoops is paused — you pick next')
-    expect(en.foot(10, 35, 47)).toBe('Showing the 10 most urgent of 35 drafts. 47 leagues have no draft we can read.')
-    expect(en.foot(3, 3, 0)).toBe('3 drafts in all.')
+    // One count on the line (2026-11-13); the leagues with no draft sit behind the footer's "?".
+    expect(en.foot(10, 35)).toBe('Showing the 10 most urgent of 35 drafts.')
+    expect(en.footWithout(47)).toBe('47 leagues have no draft we can read.')
+    expect(en.foot(3, 3)).toBe('3 drafts in all.')
   })
 
   it('has Spanish for every key and never says «waiver»', () => {

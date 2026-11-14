@@ -86,6 +86,20 @@ export type DraftHqAllRow = {
   modeLabel: string | null
   /** First transition to in_progress, ISO. Null for a draft that has never run. */
   startedAt: string | null
+  /**
+   * Your next pick in a live draft (2026-11-13 follow-up): the number you wait for while someone else
+   * is on the clock. `away` counts the picks before yours (0 = you are up). Null when your team is not
+   * in the order, the draft is not live, or no later pick in it is yours.
+   */
+  yourNextPick?: { overall: number; round: number; inRound: number; away: number } | null
+  /**
+   * When the draft is scheduled, ISO — `LeagueSettings.draftDateUtc`.
+   *
+   * ⚠ ONLY AN ALLFANTASY LEAGUE HAS ONE. Sleeper's fetch carries `start_time` and the importer drops it
+   * (commissioner/calendar.ts), so an imported draft's date lives on its platform, and the board says so
+   * rather than "no date set".
+   */
+  draftAt?: string | null
 }
 
 export type DraftHqAllData = {
@@ -129,7 +143,7 @@ export async function getDraftHqAll(
 
   const leagueIds = leagues.map((l) => l.id)
 
-  const [allSessions, myTeams] = await Promise.all([
+  const [allSessions, myTeams, draftDates] = await Promise.all([
     prisma.draftSession.findMany({
       where: { leagueId: { in: leagueIds } },
       select: {
@@ -154,7 +168,16 @@ export async function getDraftHqAll(
       where: { leagueId: { in: leagueIds }, claimedByUserId: userId },
       select: { leagueId: true, externalId: true },
     }),
+    // Soft: a missing date only means the row says where its date lives.
+    Promise.resolve()
+      .then(() =>
+        prisma.leagueSettings.findMany({ where: { leagueId: { in: leagueIds }, draftDateUtc: { not: null } }, select: { leagueId: true, draftDateUtc: true } }),
+      )
+      .catch(() => [] as Array<{ leagueId: string; draftDateUtc: Date | null }>),
   ])
+  const draftAtByLeague = new Map(
+    (draftDates ?? []).flatMap((d) => (d.draftDateUtc ? [[d.leagueId, d.draftDateUtc.toISOString()] as const] : [])),
+  )
 
   const sessions = latestDraftsByLeague(allSessions)
   if (sessions.length === 0) {
@@ -248,6 +271,25 @@ export async function getDraftHqAll(
       }
     }
 
+    /*
+     * Your next pick: walk the order from the pick on the clock to the first one your roster owns,
+     * through the same owner resolver (traded picks included) — at most rounds × teams steps.
+     */
+    let yourNextPick: DraftHqAllRow['yourNextPick'] = null
+    if (phase === 'live' && nextPick != null && externalId != null && session.teamCount > 0) {
+      const total = session.rounds * session.teamCount
+      for (let overall = nextPick; overall <= total; overall += 1) {
+        const owner = draftPickOwner({ overall, teamCount: session.teamCount, draftType: session.draftType,
+          thirdRoundReversal: session.thirdRoundReversal, slotOrder: order, tradedPicks: session.tradedPicks })
+        if (!owner) break
+        if (String(owner.rosterId ?? '') === String(externalId)) {
+          const round = Math.ceil(overall / session.teamCount)
+          yourNextPick = { overall, round, inRound: overall - (round - 1) * session.teamCount, away: overall - nextPick }
+          break
+        }
+      }
+    }
+
     return {
       leagueId: session.leagueId,
       leagueName: meta?.name?.trim() || 'League',
@@ -270,6 +312,8 @@ export async function getDraftHqAll(
       queuedCount: queuedBySession.get(session.id) ?? 0,
       modeLabel: session.draftModeLabel?.trim() || null,
       startedAt: session.startedAt ? session.startedAt.toISOString() : null,
+      yourNextPick,
+      draftAt: draftAtByLeague.get(session.leagueId) ?? null,
     }
   })
 

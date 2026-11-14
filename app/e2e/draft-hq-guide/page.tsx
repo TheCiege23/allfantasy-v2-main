@@ -42,11 +42,21 @@ function rows(scenario: string): DraftHqAllRow[] {
   const running = row({ leagueId: 'L-run', leagueName: 'Sample Dynasty Club', phase: 'live', yourSlot: null, rounds: 11, currentRound: 4, nextOverallPick: 44, picksMade: 43, onClockName: 'Sample Rival' })
   const paused = row({ leagueId: 'L-pause', leagueName: 'Sample Hoops Redraft', phase: 'live', platform: 'allfantasy', rawStatus: 'paused', teamCount: 16, yourSlot: 1, rounds: 9, currentRound: 1, nextOverallPick: 4, picksMade: 3 })
   const upcoming = [
-    row({ leagueId: 'L-up1', leagueName: 'Sample Office League', phase: 'upcoming', platform: 'allfantasy', yourSlot: 1 }),
+    row({ leagueId: 'L-up1', leagueName: 'Sample Office League', phase: 'upcoming', platform: 'allfantasy', yourSlot: 1, draftAt: '2026-11-16T01:00:00.000Z' }),
+    row({ leagueId: 'L-up0', leagueName: 'Sample Zombie League', phase: 'upcoming', platform: 'allfantasy', yourSlot: 1 }),
     row({ leagueId: 'L-up2', leagueName: 'Sample Best Ball 12', phase: 'upcoming', yourSlot: null, rounds: 18 }),
     row({ leagueId: 'L-up3', leagueName: 'Sample Keeper League', phase: 'upcoming', yourSlot: 9, rounds: 13, queuedCount: 4 }),
   ]
   const done = [row({ leagueId: 'L-done', leagueName: 'Sample Summer Mock', phase: 'done', yourSlot: 7 })]
+  /*
+   * 'account' (2026-11-13 follow-up): the owner's page — a Sleeper draft running where your slot IS known
+   * (so the card shows your next pick), and a paused draft waiting on you.
+   */
+  if (scenario === 'account') {
+    const known = row({ ...running, yourSlot: 9, onClockName: null, yourNextPick: { overall: 57, round: 4, inRound: 9, away: 6 } })
+    const pausedYours = row({ ...paused, yoursOnClock: true })
+    return [known, pausedYours, ...upcoming, ...done]
+  }
   if (scenario === 'upcoming') return [...upcoming, ...done]
   if (scenario === 'running') return [running, paused, ...upcoming, ...done]
   return [yours, running, paused, ...upcoming, ...done]

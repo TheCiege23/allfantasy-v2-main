@@ -8,7 +8,8 @@
  */
 import type { DraftHqAllRow } from '@/lib/core-app/draftHqAll'
 
-type Row = Pick<DraftHqAllRow, 'leagueName' | 'phase' | 'rawStatus' | 'yoursOnClock'>
+type Row = Pick<DraftHqAllRow, 'leagueName' | 'phase' | 'rawStatus' | 'yoursOnClock'> &
+  Partial<Pick<DraftHqAllRow, 'yourSlot' | 'draftAt'>>
 
 const isPaused = (r: Pick<DraftHqAllRow, 'rawStatus'>) => r.rawStatus === 'paused'
 
@@ -34,8 +35,11 @@ export type DraftHqHeadline =
   /** No draft on any of your leagues. */
   | { kind: 'none' }
   | { kind: 'yourPick'; league: string; n: number }
-  /** Running drafts, none of them on you. */
-  | { kind: 'running'; league: string; n: number }
+  /**
+   * Running drafts, none of them on you. `known` is false when your slot in one of them cannot be read —
+   * then the headline does not claim "not your pick". `pausedYours` names a paused draft where you pick next.
+   */
+  | { kind: 'running'; league: string; n: number; known: boolean; pausedYours: string | null }
   /** Nothing running, but a draft is paused. `yours` when the paused pick is yours. */
   | { kind: 'paused'; league: string; n: number; yours: boolean }
   /** Nothing running or paused; drafts that have not started. */
@@ -49,8 +53,20 @@ export function draftHqHeadline(rows: ReadonlyArray<Row>): DraftHqHeadline {
   const yours = rows.filter(isYourPickNow).sort(byName)
   if (yours.length > 0) return { kind: 'yourPick', league: yours[0]!.leagueName, n: yours.length }
   const running = rows.filter((r) => r.phase === 'live' && !isPaused(r)).sort(byName)
-  if (running.length > 0) return { kind: 'running', league: running[0]!.leagueName, n: running.length }
   const paused = rows.filter((r) => r.phase === 'live' && isPaused(r)).sort((a, b) => Number(b.yoursOnClock) - Number(a.yoursOnClock) || byName(a, b))
+  /*
+   * ⚠ A PAUSED DRAFT WHERE YOU PICK NEXT IS SAID EVEN WHEN ANOTHER DRAFT IS RUNNING (2026-11-13). The
+   * live page read "KBI North Black is drafting — it's not your pick yet" over a paused draft whose card
+   * said "On the clock: You": the running draft won the headline and the one waiting on you vanished.
+   *
+   * ⚠ AND "NOT YOUR PICK" IS ONLY SAID WHEN YOUR SLOT IS KNOWN. With your team missing from the order,
+   * `yoursOnClock` is false by construction, not by measurement.
+   */
+  if (running.length > 0) {
+    const pausedYours = paused.find((r) => r.yoursOnClock)?.leagueName ?? null
+    const known = running.every((r) => r.yourSlot != null)
+    return { kind: 'running', league: running[0]!.leagueName, n: running.length, known, pausedYours }
+  }
   if (paused.length > 0) return { kind: 'paused', league: paused[0]!.leagueName, n: paused.length, yours: paused[0]!.yoursOnClock }
   const upcoming = rows.filter((r) => r.phase === 'upcoming').length
   if (upcoming > 0) return { kind: 'upcoming', n: upcoming }
@@ -65,8 +81,21 @@ export type DraftGroups<R> = { yourPick: R[]; drafting: R[]; comingUp: R[]; fini
  * Full cards are for drafts with a clock (your pick, drafting now); a draft that has not started or has
  * finished has nothing ticking, so it gets a one-line row — six stat boxes of "—" said nothing.
  */
+/**
+ * Within not-started drafts: the soonest dated draft first, then the undated (2026-11-13). Only an
+ * AllFantasy league stores a draft date (`DraftHqAllRow.draftAt`); before this, eight undated rows in
+ * alphabetical order could not say which draft came next.
+ */
+function byDate(a: Row, b: Row): number {
+  const ta = a.draftAt ? Date.parse(a.draftAt) : Number.POSITIVE_INFINITY
+  const tb = b.draftAt ? Date.parse(b.draftAt) : Number.POSITIVE_INFINITY
+  return ta === tb ? 0 : ta < tb ? -1 : 1
+}
+
 export function groupDrafts<R extends Row>(rows: ReadonlyArray<R>, limit = 10): { groups: DraftGroups<R>; shown: number } {
-  const ranked = [...rows].sort((a, b) => draftUrgency(a) - draftUrgency(b) || a.leagueName.localeCompare(b.leagueName)).slice(0, limit)
+  const ranked = [...rows]
+    .sort((a, b) => draftUrgency(a) - draftUrgency(b) || (a.phase === 'upcoming' ? byDate(a, b) : 0) || a.leagueName.localeCompare(b.leagueName))
+    .slice(0, limit)
   const groups: DraftGroups<R> = { yourPick: [], drafting: [], comingUp: [], finished: [] }
   for (const r of ranked) {
     if (isYourPickNow(r)) groups.yourPick.push(r)

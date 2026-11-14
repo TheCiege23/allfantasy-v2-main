@@ -74,7 +74,7 @@ function headlineText(h: DraftHqHeadline, m: Copy): string {
     case 'yourPick':
       return m.headYourPick(h.league, h.n)
     case 'running':
-      return m.headRunning(h.league, h.n)
+      return `${h.known ? m.headRunning(h.league, h.n) : m.headRunningUnknown(h.league, h.n)}${h.pausedYours ? m.headPausedYours(h.pausedYours) : ''}`
     case 'paused':
       return m.headPaused(h.league, h.n, h.yours)
     case 'upcoming':
@@ -104,8 +104,32 @@ function statusOf(r: DraftHqAllRow, m: Copy): { label: string; sev: 'bad' | 'war
 function lineOf(r: DraftHqAllRow, m: Copy): string | null {
   if (r.rawStatus === 'paused') return m.linePaused
   if (r.yoursOnClock) return m.lineYourPick
+  if (r.phase === 'live' && r.yourSlot == null) return m.lineSlotUnknown
   if (r.phase === 'live') return r.onClockName ? m.lineOnClock(r.onClockName) : m.lineRunning
   return null
+}
+
+/** Native leagues store a draft date; an imported draft's date lives on its platform (DraftHqAllRow.draftAt). */
+function isNative(platform: string | null): boolean {
+  const k = String(platform ?? '').trim().toLowerCase()
+  return k === '' || k === 'native' || k === 'allfantasy' || k === 'af'
+}
+
+/** When a not-started draft happens, in ET like the rest of /core — or where its date lives. */
+function dateOf(r: DraftHqAllRow, m: Copy, language: string | null): string | null {
+  if (r.phase !== 'upcoming') return null
+  if (r.draftAt) {
+    const when = new Date(r.draftAt).toLocaleString(language === 'es' ? 'es-US' : 'en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: 'America/New_York',
+    })
+    return m.draftsOn(when)
+  }
+  return isNative(r.platform) ? m.noDateSet : m.dateOnPlatform(platformLabel(r.platform))
 }
 
 function boardHref(r: DraftHqAllRow): string {
@@ -253,6 +277,10 @@ function Card({ row, picks, m }: { row: DraftHqAllRow; picks?: LiveDraftPicks; m
           {slot ? <StatPair k={m.statSlot} v={slot} /> : null}
           {round ? <StatPair k={m.statRound} v={round} /> : null}
           {onClock ? <StatPair k={m.statOnClock} v={onClock} sev={yourPick ? 'bad' : undefined} /> : null}
+          {/* The number you wait for while someone else picks (2026-11-13). */}
+          {row.yourNextPick && !row.yoursOnClock ? (
+            <StatPair k={m.statNextPick} v={m.nextPick(row.yourNextPick.round, row.yourNextPick.inRound, row.yourNextPick.away)} sev="accent" />
+          ) : null}
           {row.queuedCount > 0 ? <StatPair k={m.statQueued} v={String(row.queuedCount)} sev="accent" /> : null}
         </div>
 
@@ -265,9 +293,10 @@ function Card({ row, picks, m }: { row: DraftHqAllRow; picks?: LiveDraftPicks; m
 }
 
 /** A draft with nothing ticking — not started, finished, or an unreadable status: one line. */
-function Row({ row, m }: { row: DraftHqAllRow; m: Copy }) {
+function Row({ row, m, language }: { row: DraftHqAllRow; m: Copy; language: string | null }) {
   const status = statusOf(row, m)
   const facts = m.rowFacts(slotOf(row, m), row.rounds)
+  const date = dateOf(row, m, language)
   return (
     <li className="af-dh-row" data-phase={row.phase}>
       <LeagueCrest imageUrl={row.imageUrl} name={row.leagueName} platform={row.platform} size="sm" />
@@ -280,6 +309,11 @@ function Row({ row, m }: { row: DraftHqAllRow; m: Copy }) {
           {facts ? ` · ${facts}` : null}
           {row.queuedCount > 0 ? ` · ${m.statQueued} ${row.queuedCount}` : null}
         </span>
+        {date ? (
+          <span className="af-dh-row-date" data-dated={row.draftAt ? 'true' : undefined}>
+            {date}
+          </span>
+        ) : null}
       </span>
       <span className="af-bd-tag" data-sev={status.sev}>
         {status.label}
@@ -353,7 +387,7 @@ function DraftHqBoard({ data, allHref, totalLeagues, picks, language = null }: D
           <SectionHead id="af-dh-coming" label={m.secComingUp} count={String(groups.comingUp.length)} />
           <ul className="af-dh-rows">
             {groups.comingUp.map((r) => (
-              <Row key={r.leagueId} row={r} m={m} />
+              <Row key={r.leagueId} row={r} m={m} language={language} />
             ))}
           </ul>
         </section>
@@ -364,13 +398,11 @@ function DraftHqBoard({ data, allHref, totalLeagues, picks, language = null }: D
           <SectionHead id="af-dh-finished" label={m.secFinished} tone="good" count={String(groups.finished.length)} />
           <ul className="af-dh-rows">
             {groups.finished.map((r) => (
-              <Row key={r.leagueId} row={r} m={m} />
+              <Row key={r.leagueId} row={r} m={m} language={language} />
             ))}
           </ul>
         </section>
       ) : null}
-
-      {anyEmptyQueue ? <p className="af-bd-note af-dh-queue-note">{m.queueNote}</p> : null}
 
       {/*
         ⚠ ONE FOOTER LINE, AND ITS LINK IS THE ONLY ROUTE TO THE FULL PICKER (BoardKit FooterSummary's
@@ -378,9 +410,27 @@ function DraftHqBoard({ data, allHref, totalLeagues, picks, language = null }: D
         here in one clause rather than filling the board.
       */}
       <div className="af-bd-foot">
-        <p className="af-bd-foot-text">
-          {m.foot(shown, withDraft, data.withoutDraft)} <TopicTip topic="draftHqScope" />
-        </p>
+        {/* A div, not a <p>: a <details> inside a <p> is invalid HTML — the parser closes the <p> early and hydration fails. */}
+        <div className="af-bd-foot-text">
+          {m.foot(shown, withDraft)}{' '}
+          {/*
+            One count on the line (2026-11-13). Leagues with no readable draft, and why a queue can read
+            empty, sit behind this "?" — they were a second and third number in the same sentence.
+          */}
+          {data.withoutDraft > 0 || anyEmptyQueue ? (
+            <details className="af-dh-why">
+              <summary aria-label={m.footWhy} title={m.footWhy}>
+                ?
+              </summary>
+              <span className="af-dh-why-body">
+                {data.withoutDraft > 0 ? <span className="af-dh-why-line">{m.footWithout(data.withoutDraft)}</span> : null}
+                {anyEmptyQueue ? <span className="af-dh-why-line af-dh-queue-note">{m.queueNote}</span> : null}
+              </span>
+            </details>
+          ) : (
+            <TopicTip topic="draftHqScope" />
+          )}
+        </div>
         <Link className="af-bd-foot-cta" href={allHref}>
           {m.footAll(totalLeagues)} &rarr;
         </Link>
