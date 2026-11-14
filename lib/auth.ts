@@ -16,7 +16,7 @@ import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
-import { clearSharedRateLimit, consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
+import { clearPasswordGuesses, spendPasswordGuess } from "@/lib/auth/passwordGuessBudget";
 import { prisma } from "@/lib/prisma";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import {
@@ -300,9 +300,9 @@ const providers: NextAuthOptions["providers"] = [
         // phone spellings of one account share it; spent BEFORE the compare so a
         // parallel burst cannot all get a guess in. Answers exactly like a wrong
         // password — it must not confirm the account exists.
-        const budgetKey = `signin-account:${user.id}`;
-        const budget = await consumeSharedRateLimit(budgetKey, 10, 15 * 60);
-        if (!budget.success) {
+        // Shared with the current-password checks on the settings routes
+        // (lib/auth/passwordGuessBudget), so a guess costs the same anywhere.
+        if (!(await spendPasswordGuess(user.id))) {
           return null;
         }
 
@@ -311,7 +311,7 @@ const providers: NextAuthOptions["providers"] = [
         if (!isValidPassword) {
           return null;
         }
-        await clearSharedRateLimit(budgetKey).catch(() => undefined);
+        await clearPasswordGuesses(user.id);
 
         // A suspended or banned account (lib/moderation/accountSuspension). Checked only after
         // the password matched, so it tells nothing to someone who does not have it.

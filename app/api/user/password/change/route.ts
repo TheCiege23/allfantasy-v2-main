@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { isStrongPassword } from "@/lib/tokens"
+import { clearPasswordGuesses, spendPasswordGuess } from "@/lib/auth/passwordGuessBudget"
 
 export const dynamic = "force-dynamic"
 
@@ -59,6 +60,15 @@ export async function POST(req: Request) {
     )
   }
 
+  // Spent BEFORE the compare, from the same per-account budget as sign-in, so a stolen session
+  // cannot grind the current password here without limit (lib/auth/passwordGuessBudget).
+  if (!(await spendPasswordGuess(session.user.id))) {
+    return NextResponse.json(
+      { error: "TOO_MANY_ATTEMPTS", message: "Too many incorrect passwords. Try again in 15 minutes." },
+      { status: 429 }
+    )
+  }
+
   const valid = await bcrypt.compare(currentPassword, user.passwordHash)
   if (!valid) {
     return NextResponse.json(
@@ -66,6 +76,8 @@ export async function POST(req: Request) {
       { status: 400 }
     )
   }
+
+  await clearPasswordGuesses(session.user.id)
 
   const passwordHash = await bcrypt.hash(newPassword, 12)
   await (prisma as any).appUser.update({
