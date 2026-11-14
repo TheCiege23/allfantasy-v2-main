@@ -222,6 +222,8 @@ The installer is idempotent: running it twice does not create a second trigger.
 | HTTP 503 | LS_INBOUND_SECRET is too short/unset or LS_SENDER_DOMAINS is empty/invalid; redeploy |
 | Stored rejected | Inspect original Authentication-Results and rejection reason; verify exact From/DKIM domains |
 | Label visible but new email missing | Do not add thread-wide Gmail filters that apply af-processed automatically |
+| Failed at raw_decode | Replace Code.gs with the current version; the Advanced Gmail service can return already-decoded bytes |
+| Failed at gmail_read / http_send / receipt_decode / gmail_label | The stage identifies the failed step; share only the sanitized stage/error, never email source or secrets |
 | Repeated failures fill the batch | Inspect the unprocessed messages/Executions, fix the cause, then run again |
 
 If you revise the verified sender domain configuration, previously stored rejected rows remain

@@ -9,7 +9,7 @@ const script = readFileSync("scripts/leaguesafe/Code.gs", "utf8")
 const raw = "From: sender@notices.example\r\nSubject: Synthetic 🧪\r\n\r\nUninterpreted MIME body."
 const secret = "synthetic-apps-script-secret-with-32-plus-bytes"
 
-function runtime() {
+function runtime(rawFormat: "bytes" | "base64url" = "bytes") {
   const processed = new Set<string>()
   const ids = ["19abc"]
   const triggers: { getHandlerFunction: () => string }[] = []
@@ -26,7 +26,10 @@ function runtime() {
   const modify = vi.fn((_: unknown, __: string, id: string) => { processed.add(id) })
   const releaseLock = vi.fn()
   const get = vi.fn(() => ({
-    raw: Buffer.from(raw).toString("base64url"), internalDate: "1794650400000",
+    raw: rawFormat === "bytes"
+      ? [...Buffer.from(raw)].map((byte) => byte > 127 ? byte - 256 : byte)
+      : Buffer.from(raw).toString("base64url"),
+    internalDate: "1794650400000",
   }))
   const profile = vi.fn(() => ({ emailAddress: "allfantasysportsapp@gmail.com" }))
   const context = {
@@ -46,7 +49,10 @@ function runtime() {
         const buffer = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value)
         return { getBytes: () => [...buffer], getDataAsString: () => buffer.toString("utf8") }
       },
-      base64DecodeWebSafe: (value: string) => [...Buffer.from(value, "base64url")],
+      base64DecodeWebSafe: vi.fn((value: unknown) => {
+        if (typeof value !== "string") throw new TypeError("Expected encoded string");
+        return [...Buffer.from(value, "base64url")];
+      }),
       computeHmacSha256Signature: (value: string, key: string) =>
         [...createHmac("sha256", key).update(value).digest()].map((byte) => byte > 127 ? byte - 256 : byte),
     },
@@ -68,8 +74,8 @@ function runtime() {
 }
 
 describe("actual Apps Script transport executed with mocked Google services", () => {
-  it("sends the raw MIME and Gmail internalDate with an HMAC the server verifies", () => {
-    const run = runtime()
+  it.each(["bytes", "base64url"] as const)("sends the raw MIME and Gmail internalDate with an HMAC the server verifies for %s", (rawFormat) => {
+    const run = runtime(rawFormat)
     run.context.captureLeagueSafeEmails()
     expect(run.fetch).toHaveBeenCalledOnce()
     const [url, options] = run.fetch.mock.calls[0] as unknown as [string, {
@@ -77,6 +83,7 @@ describe("actual Apps Script transport executed with mocked Google services", ()
     }]
     expect(url).toBe(run.properties.LS_INBOUND_URL)
     expect(options.followRedirects).toBe(false)
+    expect(run.context.Utilities.base64DecodeWebSafe).toHaveBeenCalledTimes(rawFormat === "bytes" ? 0 : 1)
     expect(JSON.parse(options.payload)).toEqual({
       messageId: "19abc", receivedAt: new Date(1794650400000).toISOString(), rawBody: raw,
     })
@@ -138,5 +145,44 @@ describe("actual Apps Script transport executed with mocked Google services", ()
     run.context.installLeagueSafeTrigger()
     run.context.installLeagueSafeTrigger()
     expect(run.triggers).toHaveLength(1)
+  })
+  it("reports a raw decode failure without logging message content or the secret", () => {
+    const run = runtime("base64url")
+    run.context.Utilities.base64DecodeWebSafe.mockImplementationOnce(() => {
+      throw new Error("Sensitive decoder input: " + raw + secret)
+    })
+    expect(() => run.context.captureLeagueSafeEmails()).toThrow()
+    expect(run.fetch).not.toHaveBeenCalled()
+    expect(run.modify).not.toHaveBeenCalled()
+    const logs = JSON.stringify(run.context.console.error.mock.calls)
+    expect(logs).toContain("failed at raw_decode")
+    expect(logs).not.toContain(raw)
+    expect(logs).not.toContain(secret)
+  })
+  it("identifies Gmail read failures without logging the underlying exception", () => {
+    const run = runtime()
+    run.get.mockImplementationOnce(() => { throw new Error(raw + secret) })
+    expect(() => run.context.captureLeagueSafeEmails()).toThrow()
+    expect(JSON.stringify(run.context.console.error.mock.calls)).toContain("failed at gmail_read")
+    expect(JSON.stringify(run.context.console.error.mock.calls)).not.toContain(secret)
+    expect(run.fetch).not.toHaveBeenCalled()
+  })
+  it("identifies acknowledgement decoding failures without printing response bodies", () => {
+    const run = runtime()
+    run.response.getContentText.mockReturnValue("not JSON: " + raw + secret)
+    expect(() => run.context.captureLeagueSafeEmails()).toThrow()
+    const logs = JSON.stringify(run.context.console.error.mock.calls)
+    expect(logs).toContain("failed at receipt_decode")
+    expect(logs).not.toContain(secret)
+    expect(run.modify).not.toHaveBeenCalled()
+  })
+  it("distinguishes a Gmail labeling failure after acknowledged storage", () => {
+    const run = runtime()
+    run.modify.mockImplementationOnce(() => { throw new Error(raw + secret) })
+    expect(() => run.context.captureLeagueSafeEmails()).toThrow()
+    expect(run.fetch).toHaveBeenCalledOnce()
+    const logs = JSON.stringify(run.context.console.error.mock.calls)
+    expect(logs).toContain("failed at gmail_label")
+    expect(logs).not.toContain(secret)
   })
 })

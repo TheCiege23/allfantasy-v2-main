@@ -54,10 +54,18 @@ function captureLeagueSafeEmails() {
     for (var index = 0; index < pending.length; index++) {
       if (Date.now() - started > 240000) break;
       var id = pending[index].id;
+      var stage = "gmail_read";
       try {
         var email = Gmail.Users.Messages.get("me", id, { format: "raw" });
         if (!email.raw || !email.internalDate) throw new Error("Missing raw message metadata.");
-        var raw = Utilities.newBlob(Utilities.base64DecodeWebSafe(email.raw)).getDataAsString("UTF-8");
+        stage = "raw_decode";
+        // Advanced Gmail may already decode the REST bytes field into Byte[].
+        // Decode only an encoded string; preserve signed bytes returned by Apps Script.
+        var rawBytes = typeof email.raw === "string"
+          ? Utilities.base64DecodeWebSafe(email.raw)
+          : email.raw;
+        var raw = Utilities.newBlob(rawBytes).getDataAsString("UTF-8");
+        stage = "build_payload";
         var payload = JSON.stringify({
           messageId: id,
           receivedAt: new Date(Number(email.internalDate)).toISOString(),
@@ -68,6 +76,7 @@ function captureLeagueSafeEmails() {
           failures++;
           continue;
         }
+        stage = "sign_request";
         var timestamp = String(Math.floor(Date.now() / 1000));
         var bytes = Utilities.computeHmacSha256Signature(
           timestamp + "." + payload, config.secret, Utilities.Charset.UTF_8
@@ -75,6 +84,7 @@ function captureLeagueSafeEmails() {
         var hex = bytes.map(function (value) {
           return ("0" + ((value + 256) % 256).toString(16)).slice(-2);
         }).join("");
+        stage = "http_send";
         var response = UrlFetchApp.fetch(config.url, {
           method: "post", contentType: "application/json; charset=utf-8", payload: payload,
           headers: { "X-LS-Timestamp": timestamp, "X-LS-Signature": "v1=" + hex },
@@ -86,6 +96,7 @@ function captureLeagueSafeEmails() {
           failures++;
           continue;
         }
+        stage = "receipt_decode";
         var receipt = JSON.parse(response.getContentText());
         if (receipt.ok !== true || receipt.stored !== true || typeof receipt.id !== "string" ||
             ["captured", "rejected", "parsed", "unparseable"].indexOf(receipt.processingStatus) === -1) {
@@ -93,10 +104,11 @@ function captureLeagueSafeEmails() {
         }
         // The Gmail conversation displays this label. Never label a whole thread:
         // doing so could mark an uncaptured message that arrived during this run.
+        stage = "gmail_label";
         Gmail.Users.Messages.modify({ addLabelIds: [label.id] }, "me", id);
       } catch (_) {
         // Never log the exception/response/payload: they can contain email text.
-        console.error("LeagueSafe: capture or labeling failed for Gmail message " + id + "; retry on next run.");
+        console.error("LeagueSafe: Gmail message " + id + " failed at " + stage + "; retry on next run.");
         failures++;
       }
     }
