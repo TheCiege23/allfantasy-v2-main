@@ -216,6 +216,7 @@ The installer is idempotent: running it twice does not create a second trigger.
 | Gmail is not defined / access denied | Add Advanced Gmail service, manifest scopes, and authorize again |
 | HTTP 301/302/307/308 | Use the canonical HTTPS hostname; do not enable redirect following |
 | HTTP 401 | Same exact secret on both sides; deployed environment; valid timestamp |
+| HTTP 403 | Check the app middleware/server policy before rotating secrets; the exact inbound POST must reach its HMAC handler from Google data centers |
 | HTTP 400/415 | Use the provided complete script/envelope without modifying encoding |
 | HTTP 413 / size error | Original message exceeds the 2 MiB encoded request limit; inspect manually |
 | HTTP 500 / viewer unavailable | Database connectivity, generated Prisma client, migration installation |

@@ -714,6 +714,10 @@ async function refusalAsPageIfNavigation(request: NextRequest, refusal: NextResp
 }
 
 async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  // The Gmail capture bridge runs on Google's servers, not a visitor's connection.
+  // This exact POST is machine ingestion: the handler verifies timestamped HMAC
+  // before any storage. Keep the origin lock and every other path/method gated.
+  if (request.method === "POST" && pathname === "/api/integrations/leaguesafe/inbound") return null
   if (hasMachineCredential(request.headers)) return null
   // Before the geo exemptions and the `country !== "US"` early return below: a
   // VPN is refused wherever its exit is, and /api/auth sign-in is refused too.
