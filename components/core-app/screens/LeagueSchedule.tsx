@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import { useMessages } from '@/components/i18n/useMessages'
 import { scheduleGuideMessages } from '@/lib/core-app/messages/scheduleGuide'
 import { scheduleHeadline, whatsNext, type NextItem, type ScheduleHeadline } from '@/lib/core-app/scheduleGuide'
+import type { GameLeft } from '@/lib/core-app/remainingSchedule'
 import '@/components/core-app/af-team-workspace.css'
 import '@/components/core-app/af-league-home.css'
 import '@/components/core-app/af-schedule-guide.css'
@@ -45,7 +46,14 @@ function headlineText(h: ScheduleHeadline, m: Copy): string {
   return m.headNone
 }
 
-export default function LeagueSchedule({ data }: { data: LeagueHomeData }) {
+export default function LeagueSchedule({
+  data,
+  gamesLeft = null,
+}: {
+  data: LeagueHomeData
+  /** Your unplayed games after this week (lib/core-app/remainingSchedule.ts); null when it could not be read. */
+  gamesLeft?: GameLeft[] | null
+}) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -65,6 +73,17 @@ export default function LeagueSchedule({ data }: { data: LeagueHomeData }) {
   })
   const matchup = data.matchup?.available ? data.matchup.data : null
   const headline = scheduleHeadline({ matchup, currentWeek, items })
+  /*
+   * 2026-11-13 follow-up: a schedule answers "who do I play the rest of the way?". The games left are the
+   * regular season's — they stop where the playoffs start, when the timeline says where that is — and the
+   * headline says how many and the next one. This week's score moves to one line under it.
+   */
+  const playoffStart = items.find((i) => i.label === 'Playoffs')?.span?.start ?? null
+  const left = (gamesLeft ?? []).filter((g) => playoffStart == null || g.week < playoffStart)
+  const nextGame = left[0] ?? null
+  const title = nextGame
+    ? m.headAhead(left.length, playoffStart != null, nextGame.week, nextGame.opponentName, nextGame.record)
+    : headlineText(headline, m)
 
   const picker = data.weekPicker ?? null
   const weeks = picker?.weeks ?? []
@@ -77,11 +96,39 @@ export default function LeagueSchedule({ data }: { data: LeagueHomeData }) {
       <PageHeader
         className="af-tw-heading"
         eyebrow={m.eyebrow(data.league.name)}
-        title={headlineText(headline, m)}
+        title={title}
         sub={m.intro}
         actions={<Link href={`/core/my-team?league=${leagueId}`}>Plan your roster</Link>}
       />
       <TeamDeadlineAlertTarget leagueId={data.league.id} events={data.calendar ?? []} query={params?.toString() ?? ''} />
+      {nextGame && headline.kind === 'game' ? (
+        <p className="af-sg-thisweek">{m.thisWeekScore(headline.week, headline.opponent, headline.you, headline.them, headline.started)}</p>
+      ) : null}
+
+      {/* ── Your games left: every regular-season opponent after this week, the tough ones marked ──── */}
+      {left.length > 0 ? (
+        <section className="af-tw-panel af-sg-left" aria-labelledby="af-sg-left-title" data-testid="schedule-games-left">
+          <h2 id="af-sg-left-title">{m.gamesLeftTitle}</h2>
+          <p className="af-sg-note">{m.gamesLeftSub(playoffStart != null)}</p>
+          <ol className="af-sg-left-list">
+            {left.map((g) => (
+              <li key={`${g.week}-${g.opponentId}`} className="af-sg-left-row" data-tough={g.tough || undefined}>
+                <span className="af-sg-left-week af-num">{m.gameLeftWeek(g.week)}</span>
+                <span className="af-sg-left-opp">{g.opponentName}</span>
+                <span className="af-sg-left-rec af-num">{m.gameLeftRecord(g.record)}</span>
+                {g.tough ? (
+                  <span className="af-sg-badge" data-tone="tough" title={m.toughTitle}>
+                    {m.tough}
+                  </span>
+                ) : (
+                  <span aria-hidden />
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
 
       {/* ── What's next: the phase you are in, the ones to come, and any dated deadline ─────────── */}
       {items.length > 0 ? (

@@ -77,6 +77,7 @@ import {
 } from '@/lib/core-app/homePortfolioSummary'
 import { getChatBadge } from '@/lib/chat-core/chatBadge'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import { loadYourGamesLeft } from '@/lib/core-app/remainingScheduleLoader'
 import {
   LeagueDataCoverage,
   LeagueDataCoverageSkeleton,
@@ -2242,6 +2243,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           userId,
           Number.isFinite(requestedWeek) ? requestedWeek : null,
           leagueCtx,
+        ).catch(() => null)
+      : null
+
+  /*
+   * The Schedule tab's "Your games left" (2026-11-13): this season's pairings after the current week. A failed
+   * read leaves the section out and nothing else.
+   */
+  const scheduleGamesLeft =
+    segment === 'schedule' && leagueHome
+      ? await loadYourGamesLeft(
+          leagueHome.league.id,
+          userId,
+          leagueCtx,
+          leagueHome.weekPicker?.current ?? leagueHome.league.currentWeek ?? null,
         ).catch(() => null)
       : null
 
@@ -4802,7 +4817,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         <>
         {segment === 'schedule' || segment === 'moves' ? null : survivorBanner('full')}
         {chimmyMovesCard}
-        {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
+        {segment === 'schedule' ? <LeagueSchedule data={leagueHome} gamesLeft={scheduleGamesLeft} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
           hiddenSections={hiddenLeagueSections}
           data={leagueHome}
           identityInShell={leagueHeaderShown}

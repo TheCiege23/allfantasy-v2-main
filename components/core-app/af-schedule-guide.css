@@ -125,3 +125,48 @@
   font: 400 12px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
 }
+
+/* ── Your games left (2026-11-13 follow-up) ─────────────────────────────────────────────────────── */
+.af-core .af-sg-thisweek {
+  margin: -4px 0 12px;
+  font: 600 13px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2, var(--text));
+}
+.af-core .af-sg-left-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-sg-left-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-sg-left-row:first-child {
+  border-top: 0;
+}
+.af-core .af-sg-left-week {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-sg-left-opp {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core .af-sg-left-rec {
+  color: var(--text2, var(--muted));
+  font-size: 13px;
+}
+.af-core .af-sg-badge[data-tone='tough'] {
+  border-color: var(--warn, #f5c451);
+  color: var(--warn, #f5c451);
+}

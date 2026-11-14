@@ -65,6 +65,14 @@ const PRESEASON: TimelinePhase[] = [
   { key: 'playoffs', label: 'Playoffs', when: 'WK 15-17', state: 'future', detail: '6 teams' },
 ]
 
+/* SAMPLE: your games after week 10, as lib/core-app/remainingSchedule.ts builds them (2026-11-13 follow-up). */
+const GAMES_LEFT = [
+  { week: 11, opponentId: 's3', opponentName: 'Sample Leaders', record: { wins: 8, losses: 1, ties: 0 }, tough: true },
+  { week: 12, opponentId: 's4', opponentName: 'Sample Longshots', record: { wins: 2, losses: 7, ties: 0 }, tough: false },
+  { week: 13, opponentId: 's5', opponentName: 'Sample Chasers', record: { wins: 7, losses: 2, ties: 0 }, tough: true },
+  { week: 14, opponentId: 's6', opponentName: 'Sample Bubble', record: { wins: 5, losses: 4, ties: 0 }, tough: false },
+]
+
 function data(kind: string, week: number): LeagueHomeData {
   const current = kind === 'preseason' ? null : 10
   const selected = kind === 'preseason' ? 1 : week
@@ -96,7 +104,7 @@ export default async function ScheduleGuideHarnessPage({ searchParams }: { searc
       comms={{ leagues: [], chimmyTokenCost: null, dockable: false, supportEmail: null }}
     >
       <div data-testid="schedule-guide-harness">
-        <LeagueSchedule data={data(kind, week)} />
+        <LeagueSchedule data={data(kind, week)} gamesLeft={kind === 'h2h' ? GAMES_LEFT : null} />
       </div>
     </AfCoreShell>
   )

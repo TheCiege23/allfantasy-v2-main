@@ -47,9 +47,8 @@ function Side({
         a fixed anchor per row — the same team is always on the same line —
         which is most of what makes a scoreboard scannable.
       */}
-      <span className="af-sb-ha" aria-hidden>
-        {side === 'home' ? 'H' : 'A'}
-      </span>
+      {/* 2026-11-13: the H / A letters read as a code to decode; the column keeps its slot so rows still line up. */}
+      <span className="af-sb-ha" aria-hidden />
       {team.avatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="af-sb-av" src={team.avatarUrl} alt="" width={24} height={24} />
@@ -145,10 +144,11 @@ export function LeagueScoreboardPanel({
       <div className="af-sb-cols" aria-hidden>
         <span />
         <span />
-        <span className="af-label">{copy(board.allUnplayed ? 'PROJ' : 'PTS')}</span>
-        <span className="af-label">{copy('FROM')}</span>
+        {/* Plain words (2026-11-13): PROJ / FROM / MARGIN were codes. The coverage column explains itself on hover. */}
+        <span className="af-label">{copy(board.allUnplayed ? 'Projected' : 'Points')}</span>
+        <span className="af-label" />
         <span className="af-label">{copy('WIN')}</span>
-        <span className="af-label">{copy('MARGIN')}</span>
+        <span className="af-label">{copy('Lead')}</span>
       </div>
 
       <ul className="af-sb-list">
@@ -180,7 +180,10 @@ export function LeagueScoreboardPanel({
               </span>
             ) : g.margin != null ? (
               <span className="af-sb-margin af-num">
-                {g.margin === 0 ? copy('level') : `${copy('by')} ${g.margin.toFixed(1)}`}
+                {/* A 0–0 game has not started; "level" read as a result. A real tie says so. */}
+                {g.margin === 0
+                  ? copy(g.teams.every((t) => (t.points ?? 0) === 0) ? 'Not started' : 'Tied')
+                  : g.margin.toFixed(1)}
               </span>
             ) : null}
           </li>

@@ -129,12 +129,12 @@ export const RANKINGS_TOPICS = {
   },
   scoreboardWinChance: {
     en: {
-      title: 'WIN and MARGIN',
-      body: 'WIN is a pre-game chance from the two projected totals, assuming each lineup’s score varies by about 26 points, capped between 3% and 97%. It shows only before anything is scored, and only when both lineups are fully projected. MARGIN is the points gap. On your own game the percentage is the Matchup screen’s forecast instead.',
+      title: 'WIN and Lead',
+      body: 'WIN is a pre-game chance from the two projected totals, assuming each lineup’s score varies by about 26 points, capped between 3% and 97%. It shows only before anything is scored, and only when both lineups are fully projected. Lead is the points gap; a 0–0 game says Not started. On your own game the percentage is the Matchup screen’s forecast instead.',
     },
     es: {
-      title: 'WIN y MARGIN',
-      body: 'WIN es una probabilidad previa al partido a partir de los dos totales proyectados, suponiendo que el puntaje de cada alineación varía unos 26 puntos, limitada entre 3% y 97%. Solo aparece antes de que se anote nada y cuando ambas alineaciones están proyectadas por completo. MARGIN es la diferencia de puntos. En tu propio partido, el porcentaje es el pronóstico de la pantalla de Matchup.',
+      title: 'WIN y Ventaja',
+      body: 'WIN es una probabilidad previa al partido a partir de los dos totales proyectados, suponiendo que el puntaje de cada alineación varía unos 26 puntos, limitada entre 3% y 97%. Solo aparece antes de que se anote nada y cuando ambas alineaciones están proyectadas por completo. Ventaja es la diferencia de puntos; un partido 0–0 dice Sin empezar. En tu propio partido, el porcentaje es el pronóstico de la pantalla de Matchup.',
     },
   },
   liveImpactTotal: {
