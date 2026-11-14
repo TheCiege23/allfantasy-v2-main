@@ -23,7 +23,8 @@ describe('/commissioners', () => {
     const doc = await renderCommissioners()
     const h1s = doc.querySelectorAll('h1')
     expect(h1s).toHaveLength(1)
-    expect(h1s[0].textContent).toBe('Built by a commissioner,for commissioners.')
+    // "long-time", matching the landing page's commissioner band (owner's wording, 2026-11-13).
+    expect(h1s[0].textContent).toBe('Built by a long-time commissioner,for commissioners.')
     // No heading level is skipped: every h3 sits after some h2.
     const levels = [...doc.querySelectorAll('h1, h2, h3, h4')].map((h) => Number(h.tagName[1]))
     levels.forEach((lvl, i) => {

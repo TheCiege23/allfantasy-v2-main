@@ -156,6 +156,28 @@ export function Shield() {
   )
 }
 
+/**
+ * Renders text with every hyphenated word kept on one line. "long-time" in a 34–68px headline
+ * broke as "long-" / "time" on a 390px phone (measured on /commissioners, 2026-11-13). The text
+ * itself is unchanged — only the wrap — so textContent, tests and crawlers see the same string.
+ */
+export function NoBreakHyphens({ text }: { text: string }) {
+  const parts = text.split(/(\S+-\S+)/)
+  return (
+    <>
+      {parts.map((p, i) =>
+        i % 2 ? (
+          <span key={i} className="af-lp-nowrap">
+            {p}
+          </span>
+        ) : (
+          p
+        ),
+      )}
+    </>
+  )
+}
+
 /* Stroke icons for the commissioner band — decorative, the card title carries the meaning. */
 const COMMISH_ICONS = [
   <svg key="dues" width="26" height="26" viewBox="0 0 26 26" aria-hidden focusable="false">
@@ -437,7 +459,7 @@ export function LandingV4({
       <section className="af-lp-commish" id="commissioners" data-testid="landing-commish-line" aria-labelledby="af-lp-commish-h2">
         <span className="af-lp-commish-label af-num">{c.commish.label}</span>
         <h2 className="af-lp-commish-h2" id="af-lp-commish-h2">
-          {c.commish.h2}
+          <NoBreakHyphens text={c.commish.h2} />
         </h2>
         <p className="af-lp-commish-body">{c.commish.body}</p>
         <ul className="af-lp-commish-grid">

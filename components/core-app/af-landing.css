@@ -2020,3 +2020,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Keeps a hyphenated word ("long-time") on one line in big headlines; see NoBreakHyphens. */
+.af-lp-nowrap {
+  white-space: nowrap;
+}

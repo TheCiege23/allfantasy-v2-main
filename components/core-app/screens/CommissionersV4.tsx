@@ -5,7 +5,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-landing.css'
 import '@/components/core-app/af-commissioners.css'
-import { Shield } from '@/components/core-app/screens/LandingV4'
+import { NoBreakHyphens, Shield } from '@/components/core-app/screens/LandingV4'
 import { CommissionersCtaLink } from '@/components/core-app/screens/CommissionersCtaLink'
 import { CommissionerScreenshot } from '@/components/core-app/screens/CommissionerScreenshot'
 import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
@@ -119,7 +119,7 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
           <div className="af-lp-hero-text">
             <span className="af-lp-eyebrow af-lp-eyebrow--accent af-num">{h.eyebrow}</span>
             <h1 className="af-lp-h1" data-testid="commissioners-hero-headline">
-              {h.h1a}
+              <NoBreakHyphens text={h.h1a} />
               <br />
               <span className="af-lp-h1-accent">{h.h1b}</span>
             </h1>
