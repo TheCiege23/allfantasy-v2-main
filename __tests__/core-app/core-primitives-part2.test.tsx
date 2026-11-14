@@ -284,10 +284,11 @@ describe('Matchup: the shared page header, the week as its eyebrow', () => {
     const head = h1s[0].closest('header.af-pg-head')!
     expect(head.classList.contains('af-mu-head')).toBe(true)
     expect(screen.getByTestId('matchup-week-eyebrow').textContent).toBe('Matchup · Week 9')
-    // The banner follows the guide block directly, still naming the league (as text) and the week.
+    // The banner follows the guide block directly. It is the week now: the league bar above every
+    // league tab names the league (2026-11-14).
     const banner = head.closest('section.af-mug-head')!.nextElementSibling as HTMLElement
     expect(banner.className).toBe('af-mu-week')
-    expect(banner.querySelector('p.af-mu-league-name')?.textContent).toBe('Kings of Buffalo')
+    expect(banner.querySelector('.af-mu-league-name')).toBeNull()
     expect(banner.querySelector('.af-mu-week-label')?.textContent).toBe('Week 9 · 2026')
     expect(banner.querySelector('.af-mu-week-state')?.textContent).toBe('Final')
   })
