@@ -4967,6 +4967,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   ? `Deadline · week ${trades.deadline.data.week}`
                   : null
               }
+              deadlineWeek={
+                trades.deadline.available && !trades.deadline.data.none ? trades.deadline.data.week ?? null : null
+              }
               deadlineCountdown={trades.deadlineCountdown ?? null}
               pickTradeDeadline={trades.pickTradeDeadline ?? null}
               platform={trades.league.platform}
