@@ -97,3 +97,38 @@
     font-size: 13px;
   }
 }
+
+/* ── 2026-11-14: one line for this week, the standings link, the commissioner basis, one column ── */
+.af-core .af-lho-week {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 999px;
+  background: var(--surface2, transparent);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.af-core .af-lho-week:hover { border-color: var(--accent); }
+.af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 800px) {
+  .af-core .af-lh-week-summary-grid[data-cells='2'] { grid-template-columns: minmax(0, 1fr); }
+}
+.af-core .af-lh-grid:not(:has(> .af-lh-side)) { grid-template-columns: minmax(0, 1fr); }
+.af-core .af-lh-standings-all {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-ch-basis { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }

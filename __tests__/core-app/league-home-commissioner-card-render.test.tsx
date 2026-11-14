@@ -71,7 +71,7 @@ function card(commissioner: unknown): HTMLElement {
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(/\s+/g, ' ')
 
 describe('Overview commissioner card', () => {
-  it('shows an imported league’s card without an at-risk tile, and says how it judged', () => {
+  it('says an imported league’s inactive managers in one sentence, without at-risk, and how it judged', () => {
     const el = card({
       available: true,
       data: {
@@ -84,17 +84,19 @@ describe('Overview commissioner card', () => {
       },
     })
     expect(text(el)).not.toContain('At risk')
-    expect(text(el)).toContain('Inactive: Ada, Bea, Cy, Di and 1 more')
+    expect(text(el)).toContain('5 of 12 managers are inactive: Ada, Bea, Cy, Di and 1 more.')
+    // The counts are in the sentence; the two count tiles that repeated them are gone.
+    expect(el.querySelector('.af-ch-tiles')).toBeNull()
     expect(text(el)).toContain('Judged by trades, waiver claims and roster moves in the last 14 days.')
     expect(el.querySelector(`a[href="${HREF}"]`)).not.toBeNull()
   })
 
-  it('keeps the at-risk tile where it is measured', () => {
+  it('says how many are at risk where it is measured', () => {
     const el = card({
       available: true,
       data: { inactiveCount: 0, atRiskCount: 2, totalManagers: 10, inactiveNames: [], basis: 'the last lineup or roster change', href: HREF },
     })
-    expect(text(el)).toContain('At risk')
+    expect(text(el)).toContain('2 are at risk of going quiet.')
     expect(text(el)).toContain('Nobody is inactive.')
   })
 
@@ -104,7 +106,7 @@ describe('Overview commissioner card', () => {
       data: { inactiveCount: 3, atRiskCount: null, totalManagers: 3, inactiveNames: ['A', 'B', 'C'], basis: 'moves', href: HREF },
     })
     expect(text(el)).toContain('a quiet stretch')
-    expect(text(el)).not.toContain('Inactive: A')
+    expect(text(el)).not.toContain('inactive: A')
   })
 
   it('gives a commissioner the reason and the way into the hub when activity can’t be judged', () => {
