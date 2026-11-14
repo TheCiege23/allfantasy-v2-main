@@ -9,6 +9,8 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { waiverFactText } from '@/lib/core-app/playerCardCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { waiverEdgeMessages } from '@/lib/core-app/messages/waiverEdge'
+import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
+import { rivalPieces, type RivalPiece } from '@/lib/core-app/waiversGuide'
 import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import type { WaiverEdge } from '@/lib/competitive-edge/waiverEdge'
 
@@ -55,7 +57,19 @@ export function WaiverCompetitiveEdge({
 }) {
   const { language } = useOptionalLanguage()
   const m = useMessages(waiverEdgeMessages)
+  const g = useMessages(waiversGuideMessages)
   const [showAllRivals, setShowAllRivals] = useState(false)
+  const money = (n: number) => `$${n.toLocaleString('en-US')}`
+  const pieceText = (p: RivalPiece) =>
+    p.kind === 'left'
+      ? g.rivalLeft(money(p.amount))
+      : p.kind === 'noClaims'
+        ? g.rivalNoClaims
+        : p.kind === 'claims'
+          ? g.rivalClaims(p.claims, p.zero, p.spent != null ? money(p.spent) : null)
+          : p.kind === 'biggest'
+            ? g.rivalBiggest(money(p.bid), p.position)
+            : g.rivalPosition(p.count, p.position)
   if (access && !access.unlocked) {
     return <CoreDepthLock access={access} what={lockSubjectText('Competitive Edge', language)} lang={language} />
   }
@@ -95,11 +109,19 @@ export function WaiverCompetitiveEdge({
         {(showAllRivals ? rivals : rivals.slice(0, RIVALS_PREVIEW)).map((r) => (
           <li key={r.manager.teamExternalId} className="af-wv-edge-rival" data-testid={`waiver-edge-rival-${r.manager.teamExternalId}`}>
             <div className="af-wv-edge-name">{r.manager.name}</div>
-            <ul className="af-wv-edge-facts">
-              {r.facts.map((f) => (
-                <li key={f.key}>{waiverFactText(f, language)}</li>
-              ))}
-            </ul>
+            {/*
+              One line per manager (2026-11-14), not four sentences that each began with his name and
+              ended "more than your $449" — the league line above says the comparison once.
+            */}
+            {rivalPieces(r.facts).length > 0 ? (
+              <p className="af-wv-edge-line" data-testid="waiver-edge-rival-line">{rivalPieces(r.facts).map(pieceText).join(' · ')}</p>
+            ) : (
+              <ul className="af-wv-edge-facts">
+                {r.facts.map((f) => (
+                  <li key={f.key}>{waiverFactText(f, language)}</li>
+                ))}
+              </ul>
+            )}
           </li>
         ))}
       </ul>

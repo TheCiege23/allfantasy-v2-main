@@ -356,11 +356,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
           </p>
         ))}
       </div>
-      {board.state === 'ok' ? (
-        <p className="af-wvg-teach">
-          <b>{guide.why}</b> {guide.boardTeach}
-        </p>
-      ) : null}
+      {/* No "Why it matters" (2026-11-14): the list's GAIN column already says it is ranked by what each player adds. */}
     </section>
   )
 }
