@@ -98,6 +98,27 @@ export function resolveAuctionContext(
   }
 }
 
+/**
+ * The league's draft roster shape — starting slots plus superflex/2QB — from the SAME rules
+ * `buildDraftDecisionContext` uses (`resolveLeagueScoringFlags`, `isIdpLeague`, `getRosterTemplate`).
+ * For callers that need the engine's need model without the whole decision context, e.g. the queue
+ * reorder. Fails closed to the sport defaults (empty slots, no flags) rather than throwing.
+ */
+export async function resolveDraftRosterShape(
+  leagueId: string,
+  league: { sport: string; settings: unknown; starters: unknown },
+): Promise<{ rosterSlots: string[]; isSF: boolean; is2QB: boolean }> {
+  try {
+    const { isSF, is2QB } = resolveLeagueScoringFlags(league.settings, league.starters)
+    const rosterFormatType = (await isIdpLeague(leagueId)) ? 'IDP' : 'standard'
+    const template = await getRosterTemplate(league.sport as LeagueSport, rosterFormatType, leagueId)
+    const rosterSlots = template.slots.flatMap((slot) => Array(Math.max(0, slot.starterCount)).fill(slot.slotName))
+    return { rosterSlots, isSF, is2QB }
+  } catch {
+    return { rosterSlots: [], isSF: false, is2QB: false }
+  }
+}
+
 export interface BuildDraftDecisionContextInput {
   leagueId: string
   rosterId: string
