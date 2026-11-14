@@ -15,7 +15,6 @@ export function portfolioRequest(question: string, previous?: PortfolioState | n
   const q = question.toLowerCase().replace(/[’]/g, "'")
   const across = /\b(?:across|all|every|my|of my)\s+(?:of\s+)?(?:my\s+)?(?:leagues|teams|rosters)\b|\bwhich\s+(?:of\s+my\s+)?(?:leagues?|teams?|rosters?)\b|\bhow\s+many\s+(?:of\s+my\s+)?(?:teams|leagues)\b|\bmy\s+(?:strongest|weakest|best|most complete)\s+(?:team|roster)\b/.test(q)
   const comparison = /\b(?:compare|rank|complete|completeness|balanced|balance|strongest|weakest|best|better|depth|rate|review)\b/.test(q)
-  const roster = /\b(?:teams?|rosters?|leagues?)\b/.test(q)
   const reference = /\b(?:second|2nd)\b/.test(q) ? 1 : /\b(?:third|3rd)\b/.test(q) ? 2 :
     /\b(?:last|worst|weakest)\s+(?:one|team|roster)\b/.test(q) ? 'last' :
     /\b(?:first|1st|best|strongest)\s+(?:one|team|roster)\b/.test(q) ? 0 :

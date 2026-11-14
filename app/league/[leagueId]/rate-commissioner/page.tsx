@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { Star, Send, CheckCircle, Trophy, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { CommishReputationPanel, type ReputationView } from '@/components/commish-reputation/CommishReputationPanel'
@@ -93,7 +93,6 @@ const CARD_GRADIENTS = [
 
 export default function RateCommissionerPage() {
   const params = useParams()
-  const router = useRouter()
   const leagueId = params?.leagueId as string
 
   const [loading, setLoading] = useState(true)

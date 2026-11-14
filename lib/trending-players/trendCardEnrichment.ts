@@ -218,7 +218,6 @@ export async function attachTrendCardProjectionAndLeagueContext(args: {
   const profiles = merged?.players ?? []
 
   const enrichOne = (card: TrendPlayerCard, direction: 'up' | 'down'): TrendPlayerCard => {
-    const sp = normalizeToSupportedSport(String(card.sport ?? 'NFL'))
     const prof = profileByName(profiles, card.name)
     const proj = prof ? effectiveFantasyPoints(prof) : null
     const idAnn = annotatePlayerIdentityFromProfile(prof)

@@ -16,11 +16,6 @@ export async function shouldJoinJury(leagueId: string, week: number): Promise<bo
   const mergeWeek = config.mergeWeek ?? 0
   if (week < mergeWeek) return false
 
-  const councilsAfterMerge = await prisma.survivorTribalCouncil.findMany({
-    where: { leagueId, phase: 'merge', week: { gte: mergeWeek } },
-    orderBy: { week: 'asc' },
-    select: { id: true },
-  })
   const juryCount = await prisma.survivorJuryMember.count({
     where: { leagueId },
   })

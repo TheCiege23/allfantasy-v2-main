@@ -92,7 +92,7 @@ function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, 
 // ---------------------------------------------------------------------------
 
 function selectPosture(input: NegotiationInput): NegotiationPosture {
-  const { negotiationStage, riskTolerance, fairnessScore, acceptanceOdds, previousOfferRejected, targetManagerArchetype, relationshipContext } = input
+  const { negotiationStage, riskTolerance, previousOfferRejected, targetManagerArchetype, relationshipContext } = input
 
   if (negotiationStage === 'rejected' && previousOfferRejected) {
     if (riskTolerance === 'aggressive') return 'firm_offer'

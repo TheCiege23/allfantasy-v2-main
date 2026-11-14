@@ -205,7 +205,7 @@ export default function ChimmyChatShell({
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [showHistorySidebar, setShowHistorySidebar] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
-  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
+  const [, setIsLoadingConversation] = useState(false)
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, 'helpful' | 'unhelpful'>>({})
   const [assistantMode, setAssistantMode] = useState<ChimmyAssistantMode>(() =>
     normalizeChimmyAssistantMode(strategyMode ?? DEFAULT_CHIMMY_ASSISTANT_MODE)

@@ -118,7 +118,7 @@ export function RenewLeagueModal({ leagueId, isOpen, onClose, onRenewed }: Props
   const [duesAmount, setDuesAmount] = useState<number | null>(null)
   const [renewalCompleted, setRenewalCompleted] = useState(false)
   const [listInFinder, setListInFinder] = useState(false)
-  const [isListedInFinder, setIsListedInFinder] = useState(false)
+  const [, setIsListedInFinder] = useState(false)
   const [dispersalDraftEligible, setDispersalDraftEligible] = useState(false)
   const [step, setStep] = useState(1)
   const [zombieHubPath, setZombieHubPath] = useState<string | null>(null)

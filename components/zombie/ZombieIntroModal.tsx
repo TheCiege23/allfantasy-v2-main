@@ -28,7 +28,7 @@ export function ZombieIntroModal({
   forceReplay = false,
 }: ZombieIntroModalProps) {
   const [visible, setVisible] = useState(false)
-  const [videoKey, setVideoKey] = useState(0)
+  const [videoKey] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
 
   const storageKey = `${STORAGE_PREFIX}${leagueId}_${userId}`

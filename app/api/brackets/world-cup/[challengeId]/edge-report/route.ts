@@ -198,10 +198,6 @@ async function paidToolPost(request: Request, props: { params: Promise<unknown> 
       },
     })
   } catch (err) {
-    // Token spend failed after successful LLM — clean 402, no AI message saved
-    const isSpendFailure =
-      err instanceof Error &&
-      (err.message.includes("Insufficient") || err.message.includes("token"))
     return NextResponse.json(
       {
         error: "Token spend failed. Your coaching was generated but the token could not be deducted. Check your balance and try again.",

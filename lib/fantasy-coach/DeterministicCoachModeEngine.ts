@@ -305,7 +305,6 @@ function buildCoachSummary(snapshot: CoachEngineSnapshot): string {
 
 function buildRosterStrengths(snapshot: CoachEngineSnapshot): string[] {
   const strongestRef = getReferenceSlot(snapshot.peerSummary, snapshot.strongestSlot.slotId);
-  const swingRef = getReferenceSlot(snapshot.peerSummary, snapshot.swingSlot.slotId);
   const floorRatio =
     snapshot.bestFloorSlot.floor / Math.max(1, snapshot.bestFloorSlot.adjustedProjection);
 
@@ -320,7 +319,6 @@ function buildRosterStrengths(snapshot: CoachEngineSnapshot): string[] {
 
 function buildRosterWeaknesses(snapshot: CoachEngineSnapshot): string[] {
   const weakestRef = getReferenceSlot(snapshot.peerSummary, snapshot.weakestSlot.slotId);
-  const secondRef = getReferenceSlot(snapshot.peerSummary, snapshot.secondaryWeakestSlot.slotId);
 
   return [
     `${snapshot.weakestSlot.slotLabel} is the thinnest starter spot right now at ${snapshot.weakestSlot.adjustedProjection.toFixed(1)} adjusted points, trailing baseline by ${Math.abs(

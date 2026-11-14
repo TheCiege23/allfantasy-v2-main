@@ -137,7 +137,6 @@ export function XpProgressPremium({
 }) {
   const pct = Math.min(100, Math.max(0, progressPct))
   const segments = 7
-  const filledSeg = Math.round((pct / 100) * segments)
 
   return (
     <div className="space-y-2">

@@ -72,7 +72,7 @@ export function planBetaItemSettlement(input: {
   openingByRoster: Record<string, number>; bashingThreshold: number; maulingThreshold: number
   weaponsEnabled: boolean; highScoreEnabled: boolean; combatSerumsEnabled: boolean
 }): ItemPlan {
-  const { week, matchups, teams, items } = input
+  const { matchups, teams, items } = input
   const plan: ItemPlan = { transfers: [], awards: [] }
   const teamByRoster = new Map(teams.map(t => [t.rosterId, t]))
   const usedRosters = new Set<string>()

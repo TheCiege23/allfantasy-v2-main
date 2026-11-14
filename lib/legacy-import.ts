@@ -82,9 +82,6 @@ function detectLeagueFormats(league: SleeperLeague): { isSF: boolean; isTEP: boo
     pos === 'SUPER_FLEX' || pos === 'SF' || pos === 'OP'
   );
   
-  // Detect TEP: Check if TE has bonus reception points
-  // TEP means TE receptions are worth more than WR/RB receptions
-  const recValue = scoringSettings.rec ?? 0;
   const tePremValue = scoringSettings.bonus_rec_te ?? scoringSettings.rec_te ?? 0;
   
   const isTEP = tePremValue > 0;

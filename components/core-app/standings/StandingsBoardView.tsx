@@ -1661,7 +1661,6 @@ export function StandingsBoardView({
     division !== 'all' && division !== 'group' ? new Set(board.teams.filter((t) => t.division?.key === division).map((t) => t.rosterId)) : null
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
-  const withheld = board.projectionWithheld
   const you = board.teams.find((t) => t.isYou) ?? null
   /*
    * The playoff picture needs a playoff line to draw: head-to-head results, no elimination format, and

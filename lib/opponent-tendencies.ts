@@ -94,7 +94,6 @@ function computeTendencies(
   let picksAcquired = 0;
   let picksGiven = 0;
   let highValueAcquired = 0;
-  let lowValueAcquired = 0;
   let totalAcquired = 0;
   let consolidationCount = 0;
   const posAcquired: Record<string, number> = {};

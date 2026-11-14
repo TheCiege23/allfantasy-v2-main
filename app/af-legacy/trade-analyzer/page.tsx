@@ -337,13 +337,6 @@ function formatAsset(a: TradeAsset) {
   return `FAAB $${a.faab.amount}`
 }
 
-function normalizeName(s?: string) {
-  return String(s || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '')
-}
-
 function extractPlayerNamesFromAssets(assetsA: TradeAsset[], assetsB: TradeAsset[]) {
   const names = [...assetsA, ...assetsB]
     .filter((a): a is { type: 'player'; player: RosteredPlayer } => a?.type === 'player' && !!(a as any).player)
@@ -543,9 +536,9 @@ export default function LegacyTradeAnalyzerPage() {
   const [userLeagues, setUserLeagues] = useState<LeagueOption[]>([])
   const [selectedLeagueId, setSelectedLeagueId] = useState('')
   const [leagueManagers, setLeagueManagers] = useState<ManagerOption[]>([])
-  const [managerByRosterId, setManagerByRosterId] = useState<Record<number, ManagerOption>>({})
+  const [, setManagerByRosterId] = useState<Record<number, ManagerOption>>({})
   const [loadingLeagues, setLoadingLeagues] = useState(false)
-  const [loadingManagers, setLoadingManagers] = useState(false)
+  const [, setLoadingManagers] = useState(false)
 
   const [sleeperA, setSleeperA] = useState('')
   const [sleeperB, setSleeperB] = useState('')
@@ -587,17 +580,8 @@ export default function LegacyTradeAnalyzerPage() {
   const [pickSelectA, setPickSelectA] = useState('')
   const [pickSelectB, setPickSelectB] = useState('')
 
-  const [playerQueryA, setPlayerQueryA] = useState('')
-  const [playerQueryB, setPlayerQueryB] = useState('')
-
-  const [pickYearA, setPickYearA] = useState(String(currentYear()))
-  const [pickRoundA, setPickRoundA] = useState('1')
-  const [pickNumberA, setPickNumberA] = useState('')
   const [faabA, setFaabA] = useState('')
 
-  const [pickYearB, setPickYearB] = useState(String(currentYear()))
-  const [pickRoundB, setPickRoundB] = useState('1')
-  const [pickNumberB, setPickNumberB] = useState('')
   const [faabB, setFaabB] = useState('')
 
   const [analyzing, setAnalyzing] = useState(false)
@@ -998,27 +982,6 @@ export default function LegacyTradeAnalyzerPage() {
     }
   }, [canRunSocialPulse, includeSocialPulse])
 
-  // Side A picks from rosterB (what A receives FROM B)
-  const suggestionsA = useMemo(() => {
-    const q = normalizeName(playerQueryA)
-    if (!leagueMode || !q) return []
-    const source = showIdp ? (idpEnabled ? rosterB : rosterB.filter((p) => !p.isIdp)) : rosterB
-    return source.filter((p) => normalizeName(p.name).includes(q)).slice(0, 10)
-  }, [leagueMode, rosterB, playerQueryA, idpEnabled, showIdp])
-
-  // Side B picks from rosterA (what B receives FROM A)
-  const suggestionsB = useMemo(() => {
-    const q = normalizeName(playerQueryB)
-    if (!leagueMode || !q) return []
-    const source = showIdp ? (idpEnabled ? rosterA : rosterA.filter((p) => !p.isIdp)) : rosterA
-    return source.filter((p) => normalizeName(p.name).includes(q)).slice(0, 10)
-  }, [leagueMode, rosterA, playerQueryB, idpEnabled, showIdp])
-
-  const canAddPick = (year: number) => {
-    const y0 = currentYear()
-    return year >= y0 && year <= y0 + 3
-  }
-
   const addPlayerFromRoster = (side: Side, p: RosteredPlayer) => {
     const normalized = normalizePlayer(
       { id: p.id, name: p.name, position: p.pos, team: p.team },
@@ -1033,93 +996,6 @@ export default function LegacyTradeAnalyzerPage() {
     else setAssetsB((prev) => [...prev, asset])
   }
 
-  const addManualPlayer = (side: Side, name: string) => {
-    const sportKey = sport === 'NFL' ? 'nfl' : 'nba'
-    const normalized = normalizePlayer(
-      { name, position: sport === 'NFL' ? 'WR' : 'SG' },
-      sportKey
-    )
-    const mock: RosteredPlayer = {
-      id: normalized.id,
-      name,
-      pos: sport === 'NFL' ? 'WR' : 'SG',
-      slot: 'Bench',
-      team: '',
-      isIdp: false,
-      media: normalized.media,
-    }
-    addPlayerFromRoster(side, mock)
-  }
-
-  const addPlayerByQuery = (side: Side) => {
-    const q = (side === 'A' ? playerQueryA : playerQueryB).trim()
-    if (!q) return
-
-    if (leagueMode) {
-      // Side A receives from rosterB, Side B receives from rosterA
-      const roster = side === 'A' ? rosterB : rosterA
-      const source = showIdp ? (idpEnabled ? roster : roster.filter((p) => !p.isIdp)) : roster
-      const normalizedQ = normalizeName(q)
-      
-      // Try exact match first, then partial match
-      let match = source.find((p) => normalizeName(p.name) === normalizedQ)
-      if (!match) {
-        // Partial match - find the first player whose name contains the query
-        const matches = source.filter((p) => normalizeName(p.name).includes(normalizedQ))
-        if (matches.length === 1) {
-          match = matches[0]
-        } else if (matches.length > 1) {
-          setError('Multiple players match. Please select from the dropdown.')
-          return
-        }
-      }
-
-      if (!match) {
-        setError(`Player not found on ${side === 'A' ? sleeperB : sleeperA}'s roster. Select from the dropdown.`)
-        return
-      }
-      if (showIdp && !idpEnabled && match.isIdp) {
-        setError('IDP is currently turned OFF. Turn it ON to add defensive players.')
-        return
-      }
-      addPlayerFromRoster(side, match)
-    } else {
-      addManualPlayer(side, q)
-    }
-
-    if (side === 'A') setPlayerQueryA('')
-    else setPlayerQueryB('')
-  }
-
-  const maxRounds = sport === 'NFL' ? 4 : 2
-  const maxPickNumber = sport === 'NFL' ? 32 : 30
-
-  const addPick = (side: Side) => {
-    const year = Number(side === 'A' ? pickYearA : pickYearB)
-    const round = Number(side === 'A' ? pickRoundA : pickRoundB) as 1 | 2 | 3 | 4
-    const pickNumStr = side === 'A' ? pickNumberA : pickNumberB
-    const pickNumber = pickNumStr.trim() ? Number(pickNumStr) : undefined
-    
-    if (!Number.isFinite(year) || !canAddPick(year)) {
-      setError(`Pick year must be between ${currentYear()} and ${currentYear() + 3}.`)
-      return
-    }
-    if (round < 1 || round > maxRounds) {
-      setError(`Pick round must be 1–${maxRounds}.`)
-      return
-    }
-    if (pickNumber !== undefined && (!Number.isFinite(pickNumber) || pickNumber < 1 || pickNumber > maxPickNumber)) {
-      setError(`Pick number must be between 1 and ${maxPickNumber}.`)
-      return
-    }
-    
-    const asset: TradeAsset = { type: 'pick', pick: { year, round, pickNumber } }
-    if (side === 'A') setAssetsA((p) => [...p, asset])
-    else setAssetsB((p) => [...p, asset])
-    
-    if (side === 'A') setPickNumberA('')
-    else setPickNumberB('')
-  }
 
   const addFaab = (side: Side) => {
     const raw = side === 'A' ? faabA : faabB

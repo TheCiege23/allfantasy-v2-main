@@ -703,8 +703,6 @@ function computeFairnessScore(
   const receiveVorp = sumField(receive, 'vorpValue')
   const hasVorpData = giveVorp > 0 || receiveVorp > 0
 
-  const giveMarket = sumField(give, 'marketValue') * consolPenalty
-  const receiveMarket = sumField(receive, 'marketValue')
   const giveMarketRaw = sumField(give, 'marketValue')
   const receiveMarketRaw = sumField(receive, 'marketValue')
   const marketDeltaPct = giveMarketRaw > 0

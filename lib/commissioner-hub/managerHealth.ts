@@ -158,7 +158,6 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
   if (rosters.length === 0) return empty
 
   const rosterIds = rosters.map((r) => r.id)
-  const platformUserIds = rosters.map((r) => r.platformUserId).filter(Boolean)
 
   /*
    * Identity comes from LeagueTeam, joined on platformUserId — the same join the

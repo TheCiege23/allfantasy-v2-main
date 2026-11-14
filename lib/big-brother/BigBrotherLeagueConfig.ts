@@ -210,7 +210,6 @@ export async function upsertBigBrotherConfig(
     select: { id: true, sport: true },
   })
   if (!league) throw new Error('League not found')
-  const sport = normalizeToSupportedSport(league.sport) as LeagueSport
 
   const data: Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['create'] & Partial<Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['update']> = {
     leagueId,

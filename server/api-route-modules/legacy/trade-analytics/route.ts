@@ -315,7 +315,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
 
       const shapeCounts: Record<string, number> = {}
       for (const s of ps.tradeShapes) shapeCounts[s] = (shapeCounts[s] || 0) + 1
-      const topShapes = Object.entries(shapeCounts).sort(([,a],[,b]) => b - a)
 
       const suggestedDeals: string[] = []
       if (consolidationPct >= 0.5) {
@@ -391,7 +390,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
     const traderLabel = getTraderLabel(overallGrade)
 
     const managerTradeCount: Record<string, number> = {}
-    const managerWaiverCount: Record<string, number> = {}
     const pairTradeCount: Record<string, { team1: string; team2: string; count: number }> = {}
     
     trades.forEach(trade => {
@@ -663,7 +661,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool
         const hindsight = t._analytics?.withHindsight
         const marketShift = (hindsight?.deltaValue ?? 0) - (atTime?.deltaValue ?? 0)
         const atTimeAbs = Math.abs(atTime?.deltaValue ?? t.value)
-        const hindsightAbs = Math.abs(hindsight?.deltaValue ?? t.value)
         const controversyScore = Math.abs(marketShift) > 200
           ? Math.round(Math.abs(marketShift) * (Math.abs(atTime?.percentDiff ?? 0) < 15 ? 1.3 : 1))
           : Math.round(Math.abs(atTime?.percentDiff ?? 0) < 10 ? atTimeAbs * 0.8 : 0)

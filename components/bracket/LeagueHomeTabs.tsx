@@ -89,12 +89,6 @@ export function LeagueHomeTabs(props: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(true)
 
-  const isCommissioner = useMemo(() => {
-    if (props.isOwner) return true
-    const member = props.members.find(m => m.userId === props.currentUserId)
-    return member?.role === "CO_COMMISSIONER"
-  }, [props.isOwner, props.members, props.currentUserId])
-
   const { data: live } = useBracketLive({
     tournamentId: props.tournamentId,
     leagueId: props.leagueId,

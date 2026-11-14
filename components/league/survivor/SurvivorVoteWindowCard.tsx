@@ -28,8 +28,6 @@ export function SurvivorVoteWindowCard({
               : status === 'cancelled'
                 ? 'Cancelled'
                 : 'Not started'
-  const tone =
-    status === 'voting_open' ? 'bg-emerald-500/15 text-emerald-200' : isRevealed ? 'bg-orange-500/15 text-orange-200' : 'bg-neutral-800 text-neutral-300'
   const deadline = votingDeadline ? new Date(votingDeadline) : null
 
   return (

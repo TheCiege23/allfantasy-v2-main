@@ -17,7 +17,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/cfb-players", tool: "Le
   const query = searchParams?.get('q') || searchParams?.get('query')
   const team = searchParams?.get('team')
   const username = searchParams?.get('username')
-  const year = searchParams?.get('year') ? parseInt(searchParams?.get('year')!) : undefined
 
   try {
     // Action: search - Search for CFB players by name

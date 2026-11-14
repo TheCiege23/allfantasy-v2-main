@@ -93,7 +93,7 @@ async function getReturnNudges(userId: string): Promise<RetentionNudge[]> {
  * Unfinished action reminders: e.g. incomplete profile, no league joined.
  */
 async function getUnfinishedReminders(userId: string): Promise<RetentionNudge[]> {
-  const [profile, leagueCount, funnelComplete] = await Promise.all([
+  const [, leagueCount, funnelComplete] = await Promise.all([
     getSettingsProfile(userId),
     (prisma as any).league.count({ where: { userId } }).catch(() => 0),
     prisma.userProfile.findUnique({

@@ -159,7 +159,6 @@ export async function runForecastSweep(deps: ForecastSweepDeps): Promise<Forecas
   if (!forecastSweepEnabled()) return counts
 
   const prisma = deps.prisma ?? defaultPrisma
-  const now = deps.now ?? (() => Date.now())
   const leagueCap = Math.max(1, deps.leagueCap ?? DEFAULT_LEAGUE_CAP)
 
   /*

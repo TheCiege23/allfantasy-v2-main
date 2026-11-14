@@ -50,7 +50,7 @@ export default function AIGMStatusIndicator({
   compact = false 
 }: AIGMStatusIndicatorProps) {
   const [status, setStatus] = useState<PreAnalysisStatus | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [, setIsLoading] = useState(true)
   const [progress, setProgress] = useState(0)
 
   const checkStatus = useCallback(async () => {

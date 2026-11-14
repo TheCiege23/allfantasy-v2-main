@@ -852,7 +852,7 @@ function analyzePlayoffBracket(
     }
   }
 
-  for (const [rid, info] of result) {
+  for (const [, info] of result) {
     if (info.isChampion) info.bestFinish = 1
     else if (info.madePlayoffs && info.bestFinish === 999) {
       info.bestFinish = rosterIds.length

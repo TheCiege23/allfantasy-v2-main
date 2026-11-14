@@ -94,8 +94,6 @@ export async function computeTournamentChaos(tournamentId: string): Promise<Chao
   const correct = decidedPicks.filter((p) => p.isCorrect === true).length
   const avgBracketAccuracy = totalDecided > 0 ? correct / totalDecided : 0.5
 
-  // Chaos score components
-  const maxGames = nodes.length || 1
   const upsetFreq = finalGames > 0 ? upsetCount / finalGames : 0
   const gapFactor = Math.min(1, avgSeedGapUpsets / 8) // big seed gaps increase chaos
   const topSeedFactor = Math.min(1, topSeedElims / 8)

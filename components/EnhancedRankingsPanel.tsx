@@ -427,8 +427,6 @@ export default function EnhancedRankingsPanel({ username, leagueId, leagueName }
     return sorted
   }, [players, posFilter, sortField, rosterOnly])
 
-  const userRosterPlayers = useMemo(() => players.filter(p => p.isOnUserRoster), [players])
-
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-1">

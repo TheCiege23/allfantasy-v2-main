@@ -409,10 +409,6 @@ function buildBestPath(
   const totalPendingPoints = pendingWithPoints.reduce((s, x) => s + x.pts, 0)
   const optimisticScore = userEntry.totalScore + totalPendingPoints
 
-  // How many rivals could the user overtake if they hit all remaining picks?
-  const rivalsBeaten = leaderboard.filter(
-    (r) => r.userId !== userId && r.rank < (userEntry.rank ?? Infinity) && r.totalScore < optimisticScore
-  ).length
   // Rivals currently ahead who user can reach
   const rivarAbove = leaderboard.filter(
     (r) => r.userId !== userId && (r.rank ?? 0) < (userEntry.rank ?? Infinity)

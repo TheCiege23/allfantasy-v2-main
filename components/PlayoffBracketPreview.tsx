@@ -202,10 +202,7 @@ function Bracket4({ team, leagueName, season, generateScore, pickWinner }: Brack
   const semi2Winner = w2 === 'a' ? 2 : 3
   const semi2Loser = w2 === 'a' ? 3 : 2
   const champW = pickWinner(semi1Winner, semi2Winner, 2)
-  const champion = champW === 'a' ? semi1Winner : semi2Winner
-  const runnerUp = champW === 'a' ? semi2Winner : semi1Winner
   const thirdW = pickWinner(semi1Loser, semi2Loser, 2)
-  const thirdPlace = thirdW === 'a' ? semi1Loser : semi2Loser
 
   return (
     <BracketShell leagueName={leagueName} season={season} playoffTeamCount={4}>

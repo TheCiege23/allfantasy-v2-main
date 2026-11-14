@@ -776,7 +776,6 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     round,
     pick,
     totalTeams,
-    sport,
     isDynasty = false,
     isSF = false,
     is2QB = false,

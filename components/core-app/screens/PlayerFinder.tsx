@@ -91,7 +91,6 @@ import { FollowingBoard } from '@/components/core-app/player-finder/FollowingBoa
 import { HomeSportTabs } from '@/components/core-app/player-finder/HomeSportTabs'
 import type { HomeSport } from '@/lib/core-app/finderHomeSports'
 import { PushAsk } from '@/components/core-app/player-finder/PushAsk'
-import { followCopy } from '@/lib/core-app/finderFollowCopy'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
 import { FreeAgentBids } from '@/components/core-app/player-finder/FreeAgentBids'
 import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
@@ -534,7 +533,6 @@ export function PlayerFinder({
   const leagueMode = Boolean(signedIn && selectedLeagueId)
   // The signed-in home with no player open: "My players" (2026-10-08).
   const myPlayersHome = Boolean(signedIn && !detail && !compareRequested)
-  const fc = followCopy(language)
   const inScope = (leagueId: string) => !leagueMode || leagueId === selectedLeagueId
   // The table's "someone else has him" rows fold once there are more than OTHERS_FOLD_AFTER of them.
   const [showOtherRows, setShowOtherRows] = useState(false)

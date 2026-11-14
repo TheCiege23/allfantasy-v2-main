@@ -67,14 +67,12 @@ async function batchResolveDraftGradeManagers(
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>()
   if (keys.length === 0) return result
-  const keySet = new Map(keys.map((k) => [`${k.leagueId}:${k.rosterId}`, k]))
   const leagueIds = [...new Set(keys.map((k) => k.leagueId))]
 
   const leagues = await prisma.league.findMany({
     where: { id: { in: leagueIds } },
     select: { id: true, legacyLeagueId: true },
   })
-  const leagueMap = new Map(leagues.map((l) => [l.id, l]))
   const appLeagueIds = new Set(leagues.map((l) => l.id))
 
   const rosterPairs = keys.filter((k) => appLeagueIds.has(k.leagueId)).map((k) => ({ leagueId: k.leagueId, id: k.rosterId }))

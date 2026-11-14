@@ -45,7 +45,6 @@ export async function summarizeHeadlines(
 
   const batch = items.slice(0, MAX_BATCH);
   const titles = batch.map((i) => i.title);
-  const byId = new Map(batch.map((i) => [i.id, i.title]));
 
   for (const item of items) {
     result[item.id] = item.title;

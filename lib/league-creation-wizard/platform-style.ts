@@ -13,7 +13,6 @@ export function resolveVariantForPlatformStyle(
   const first = variants[0]!.value
   if (style === 'af') return first
 
-  const values = variants.map((x) => x.value)
   const labels = variants.map((x) => `${x.label ?? ''} ${x.value}`)
   const combined = variants.map((x, i) => ({ value: x.value, text: labels[i] ?? x.value }))
 

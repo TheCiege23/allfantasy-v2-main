@@ -477,7 +477,6 @@ export function Standings({
   const { league, season, week, seasonComplete, trend, recent, projection, history, board } = data
   const me = board.teams.find((t) => t.isYou) ?? null
   const n = board.teams.length
-  const P = board.rules.platformLabel
   /*
    * 2026-11-13 guide: the title said only "Standings". It now says where you stand and whether you are
    * in a playoff spot, with Season Outlook's odds — the answer people open the page for.

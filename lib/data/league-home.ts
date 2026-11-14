@@ -1134,7 +1134,6 @@ function buildLeagueTeamRows(
 
 async function buildRosterCard(context: LeagueContext): Promise<LeagueRosterCard> {
   const sport = context.league.sport
-  const settings = toJsonRecord(context.league.settings)
   const currentRoster = context.currentRoster
   const playerData = currentRoster?.playerData ?? {}
   const playerDataRecord = toJsonRecord(playerData)
@@ -1534,12 +1533,6 @@ async function buildTradesData(context: LeagueContext): Promise<LeagueTradesData
   }).catch(() => [])
 
   const blockPlayerIds = tradeBlockRows.map((row) => row.playerId)
-  const tradePlayerIds = histories.flatMap((history) =>
-    history.trades.flatMap((trade) => [
-      ...jsonAssetLabels(trade.playersGiven as Prisma.JsonValue),
-      ...jsonAssetLabels(trade.playersReceived as Prisma.JsonValue),
-    ])
-  )
   // `currentListings` yields Sleeper ids whatever the league's platform — say so, or a Sleeper NBA
   // league's ids would be read by the native rule as Rolling Insights numbers.
   const mediaIndex = await resolvePlayerIndex(String(context.league.sport), blockPlayerIds, 'sleeper')

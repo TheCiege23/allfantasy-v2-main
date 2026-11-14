@@ -226,8 +226,6 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
     info: { icon: <Info className="w-4 h-4 text-blue-400" />, color: 'border-blue-500/30 bg-blue-500/10' },
   };
 
-  const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId);
-
   if (!strategy && !loading) {
     return (
       <div className="space-y-6">

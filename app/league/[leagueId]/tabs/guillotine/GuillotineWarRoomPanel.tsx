@@ -165,7 +165,6 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
   }
 
   const tradesEnabled = context.guillotine.tradesEnabled
-  const me = context.standings.find((s) => s.isUserTeam)
 
   return (
     <section className="space-y-3 rounded-xl border border-violet-400/20 bg-[#0a0820] p-4" data-testid="guillotine-war-room-panel">

@@ -160,7 +160,6 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
     sportsFeed = null,
     aiFeatureStatus = null,
     warRoom = null,
-    presentationVariant = 'default',
     picksUntilUser = null,
     userOnTheClock = false,
     resolvedRecommendedPlayer = null,

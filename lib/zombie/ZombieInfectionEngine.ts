@@ -182,7 +182,7 @@ export async function computeInfections(input: InfectionInput): Promise<ZombieIn
   const config = await getZombieLeagueConfig(input.leagueId)
   if (!config) return { leagueId: input.leagueId, week: input.week, infected: [] }
 
-  const { leagueId, week, season = null, zombieLeagueId } = input
+  const { leagueId, week, season = null } = input
   const statuses = await getAllStatuses(leagueId)
   const statusByRoster = new Map(statuses.map((s) => [s.rosterId, s.status]))
   const seasonYear = season ?? new Date().getFullYear()

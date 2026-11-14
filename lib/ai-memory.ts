@@ -437,7 +437,6 @@ export function buildMemoryPromptSection(context: AIMemoryContext): string {
   if (context.userProfile) {
     const profile = context.userProfile
     const strategyBias = profile.strategyBias as any
-    const behaviorMetrics = profile.behaviorMetrics as any
 
     sections.push(`
 ## USER PROFILE (from memory)

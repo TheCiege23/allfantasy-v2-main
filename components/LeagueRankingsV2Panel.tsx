@@ -525,7 +525,6 @@ function RankHistoryChart({ teams, weeklyPtsMap, selectedTeam, onSelectTeam }: {
   }
 
   const maxPts = Math.max(...teamPts, 1)
-  const barWidth = Math.max(8, Math.min(24, Math.floor(280 / teamPts.length) - 2))
 
   return (
     <div>
@@ -657,7 +656,6 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
 
       const portfolio = team.portfolioProjection || { year1: 50, year3: 45, year5: 40 }
       const avgAge = portfolio.year5 >= portfolio.year1 ? 23 : portfolio.year5 < 30 ? 28 : 30
-      const phase = team.phase || data?.phase || 'in_season'
       const isContending = team.composite >= 60
 
       const res = await fetch('/api/rankings/dynasty-roadmap', {
@@ -1035,8 +1033,6 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             const weeklyPts = weeklyPtsMap.get(team.rosterId) || []
             const recentPts = weeklyPts.slice(-6)
             const explanation = team.explanation
-            const upDrivers = explanation?.drivers?.filter(d => d.polarity === 'UP').slice(0, 2) ?? []
-            const downDrivers = explanation?.drivers?.filter(d => d.polarity === 'DOWN').slice(0, 1) ?? []
 
             return (
               <div key={team.rosterId} className={cx(

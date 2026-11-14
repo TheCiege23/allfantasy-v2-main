@@ -104,7 +104,7 @@ export async function getDevyTeamOutlook(args: {
   const config = await getDevyConfig(args.leagueId)
   if (!config) return null
 
-  const [rights, roster, league] = await Promise.all([
+  const [rights, roster] = await Promise.all([
     prisma.devyRights.findMany({
       where: { leagueId: args.leagueId, rosterId: args.rosterId },
       select: { id: true, state: true, devyPlayerId: true },

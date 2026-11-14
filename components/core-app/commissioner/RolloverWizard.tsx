@@ -83,7 +83,6 @@ export function RolloverWizard({ leagueId }: { leagueId: string }) {
   if (dynasty) return dynasty.show ? <DynastyRolloverWizard leagueId={leagueId} view={dynasty} reload={load} /> : null
   if (!view || !view.show) return null
   const { input, plan } = view
-  const stateOf = (key: RolloverStepKey) => plan.steps.find((s) => s.key === key)!.state
 
   const renew = async () => {
     setBusy(true)

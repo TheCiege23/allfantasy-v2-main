@@ -37,7 +37,6 @@ export function computeInductionScore(
   const dynasty = dynastyLength(metrics)
   const comeback = comebackMagnitude(metrics)
   const rivalry = rivalryIntensity(metrics)
-  const record = recordValue(metrics)
 
   switch (category) {
     case 'all_time_great_managers':
@@ -104,9 +103,4 @@ function comebackMagnitude(m: InductionMetrics): number {
 function rivalryIntensity(m: InductionMetrics): number {
   if (m.rivalryIntensity == null) return 0
   return clamp01(m.rivalryIntensity)
-}
-
-function recordValue(m: InductionMetrics): number {
-  if (m.recordValue == null) return 0
-  return clamp01(m.recordValue)
 }

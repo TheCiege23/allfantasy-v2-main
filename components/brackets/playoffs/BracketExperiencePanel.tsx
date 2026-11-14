@@ -31,7 +31,6 @@ export default function BracketExperiencePanel({ experience: data, challengeId, 
   const pending = useRef(false)
   const editing = useRef(false)
   useEffect(() => { if (!editing.current) setPrefs(data.alerts) }, [data.alerts])
-  const href = entryId ? `/brackets/leagues/${challengeId}/entries/${entryId}` : `/brackets/leagues/${challengeId}`
   const fmt = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(locale) : c.unavailable
   const rows = data.ledger.filter(row => filter !== "points" || row.points > 0)
   function edit<K extends keyof BracketAlertPreferences>(key: K, value: BracketAlertPreferences[K]) { editing.current = true; setDirty(true); setPrefs(p => ({ ...p,[key]:value })); setStatus("") }

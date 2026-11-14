@@ -386,7 +386,6 @@ export async function POST(req: NextRequest) {
         }).sort((a, b) => a.adp - b.adp)
       : pool
 
-    const pickCount = rounds * teamCount
     const pickOutcomes: Map<number, Map<string, number>> = new Map()
     const pickBreakdowns: Map<number, Map<string, { sum: ScoreBreakdown; count: number }>> = new Map()
 
@@ -557,7 +556,6 @@ export async function POST(req: NextRequest) {
 
       if (top3[0] && futurePick) {
         const topPlayer = top3[0].player
-        const futureTargets = futurePick.topTargets || []
         let snipeCount = 0
         for (let offset = 1; offset <= 3; offset++) {
           const interveningMap = pickOutcomes.get(focusPickOverall + offset)

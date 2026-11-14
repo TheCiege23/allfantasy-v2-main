@@ -701,7 +701,7 @@ function generateFallbackOpportunities(
 
   // 2. CONSOLIDATION OFFERS — find elite players user could consolidate toward
   const eliteTargets: TradeOpportunity['relevantPlayers'] = []
-  for (const [partnerId, partner] of allPartners) {
+  for (const [partnerId] of allPartners) {
     const partnerAssets = pricedAssets[partnerId] || []
     const elites = partnerAssets
       .filter(a => !a.isPick && tierValue(a.tier) >= 4 && a.value >= 5000)
