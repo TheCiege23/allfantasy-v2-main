@@ -85,9 +85,17 @@ The engine now scores what separates one draft from another, not only value and 
 of other managers were retired for privacy. In-draft roster facts are allowed; labels and
 predictions about a person are not. Revisiting that is an owner decision, not a code change.
 
-Still open: replacement-value scoring (`DRAFT_VORP_MODE`, computed but in `observe`); a
-non-tournament league drafted mid-season has no stored scoring start week (Sleeper's
-`start_week` is not imported); and Sleeper does not share auction bid amounts.
+**Replacement value is on (2026-11-14), the projection half only.** `DRAFT_VORP_MODE` now
+defaults to `active`. It was checked with `scripts/simulate-draft-vorp-modes.ts`: full snake
+drafts on real ADP with every team using the engine. With projections, reaches of more than two
+rounds went 8 → 7 (12 teams) and 8 → 6 (16 teams), starter quality was unchanged, and every
+lineup was complete. The ADP "tier cliff" made drafts worse in every form tried (as high as
+8 → 17 reaches, and second kickers), so it is now evidence text only. Both signals count only at
+a position still needed. This is a sanity check, not proof of better picks: the real-outcome
+backtest needs production data. Roll back with `DRAFT_VORP_MODE=observe`.
+
+Sleeper's `start_week` is imported since 2026-11-14 (GAPS S-11). Still open: Sleeper does not
+share auction bid amounts.
 
 ## 3. The rules
 
@@ -172,9 +180,10 @@ portal, with:
    they should be summary-cached, and they depend on an event store that is still thin in
    production. Signal text is English-only today, as it is on `/manager-hub`; localize it at the
    signal source rather than in the page.
-2. **Finish the draft engine (§2.1–2.2).** Measure `DRAFT_VORP_MODE=active` against observe before
-   switching it on. Import Sleeper's `start_week` so mid-season leagues get a scoring window.
-   Auctions and the LLM tips were done on 2026-11-14.
+2. **Prove the draft engine on real outcomes (§2.2).** Run the draft backtest
+   (`lib/shared-services/draft/backtest/`) against completed drafts to confirm replacement value
+   improves picks, not just keeps them sane. Feed projections to the decision card and Chimmy
+   (today only the draft room passes them), so replacement value reaches those surfaces too.
    Draft season is when most new users arrive.
 3. **A "what changed since you looked" feed** driven by the sports-os reaction events. Injuries,
    trades and waiver results get pushed instead of polled, using the notification outbox and the

@@ -104,11 +104,12 @@ export interface RecommendationInput {
    * Draft VORP slice).
    *   'off'     — VORP fields are null/zero; identical to the pre-VORP engine.
    *   'observe' — VORP fields are computed and exposed on every ranking row but
-   *               NEVER included in totalScore (shadow-style observability; the
-   *               default, so every existing consumer's scoring is unchanged).
-   *   'active'  — vorpScore/tierDropoffScore join totalScore.
+   *               NEVER included in totalScore (shadow-style observability).
+   *   'active'  — vorpScore joins totalScore at positions still needed (the default
+   *               since 2026-11-14). tierDropoffScore is always 0: the tier cliff is
+   *               evidence text only, after it failed the simulation check.
    * When omitted, resolved from env DRAFT_VORP_MODE ('off'|'observe'|'active'),
-   * defaulting to 'observe'.
+   * defaulting to 'active'.
    */
   vorpMode?: 'off' | 'observe' | 'active'
   /** When set, need weights ignore positions outside this starter-eligible set (same as draft pool). */
@@ -610,7 +611,15 @@ function resolveVorpMode(explicit: VorpMode | undefined, env: NodeJS.ProcessEnv 
   if (explicit === 'off' || explicit === 'observe' || explicit === 'active') return explicit
   const raw = String(env['DRAFT_VORP_MODE'] ?? '').trim().toLowerCase()
   if (raw === 'off' || raw === 'observe' || raw === 'active') return raw
-  return 'observe'
+  /*
+   * DEFAULT 'active' since 2026-11-14 (was 'observe'). Only the PROJECTION half scores — the tier
+   * cliff is evidence text (see the note in the ranking loop) — and only at positions still needed.
+   * Measured with scripts/simulate-draft-vorp-modes.ts --synthetic-projections: reaches of more than
+   * two rounds 8 → 7 (12 teams) and 8 → 6 (16 teams), starter quality unchanged, every lineup complete.
+   * A sanity check, not proof of better picks — real outcomes need the backtest. Roll back with
+   * DRAFT_VORP_MODE=observe.
+   */
+  return 'active'
 }
 
 /**
@@ -634,6 +643,7 @@ function buildVorpContext(
 ): {
   replacementByPos: Record<string, number | null>
   nextAdpGapFor: (pos: string, adp: number) => number | null
+  typicalAdpGapFor: (pos: string) => number | null
 } {
   const byPos: Record<string, RecommendationPlayer[]> = {}
   for (const p of available) {
@@ -677,7 +687,23 @@ function buildVorpContext(
     return null
   }
 
-  return { replacementByPos, nextAdpGapFor }
+  /*
+   * The position's ordinary spacing between consecutive ADPs near the top of what is left (median of
+   * up to 12 gaps). A "cliff" means a gap unusual FOR THAT POSITION: kickers and tight ends are always
+   * spread out, so a raw gap rewarded them constantly — measured 2026-11-14 in
+   * scripts/simulate-draft-vorp-modes.ts, where it took reaches from 8 to 12 and gave teams second kickers.
+   */
+  const typicalAdpGapFor = (pos: string): number | null => {
+    const list = adpSortedByPos[pos]
+    if (!list || list.length < 3) return null
+    const gaps: number[] = []
+    for (let i = 1; i < list.length && gaps.length < 12; i++) gaps.push(list[i]! - list[i - 1]!)
+    gaps.sort((a, b) => a - b)
+    const mid = Math.floor(gaps.length / 2)
+    return gaps.length % 2 ? gaps[mid]! : (gaps[mid - 1]! + gaps[mid]!) / 2
+  }
+
+  return { replacementByPos, nextAdpGapFor, typicalAdpGapFor }
 }
 
 /**
@@ -771,9 +797,8 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
     const modeAdjustment = mode === 'bpa' ? 0 : needScore * 0.55
 
     // Draft VORP slice: replacement value + tier cliff. Computed whenever
-    // vorpMode !== 'off' (observability), but joins totalScore ONLY in
-    // 'active' mode — 'observe' (the default) leaves every existing
-    // consumer's scoring bit-identical to the pre-VORP engine.
+    // vorpMode !== 'off' (observability); only the projection VORP joins totalScore,
+    // and only in 'active' mode (the default since 2026-11-14).
     const projectedPoints =
       typeof p.projectedPoints === 'number' && Number.isFinite(p.projectedPoints) ? p.projectedPoints : null
     let replacementProjection: number | null = null
@@ -784,16 +809,27 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
     let valueSignal: DraftPlayerRankingRow['valueSignal'] = 'none'
     if (vorpContext) {
       replacementProjection = vorpContext.replacementByPos[pos] ?? null
+      // Replacement value only counts where a starter is still needed (need >= 40): an edge at a
+      // position already filled is bench value, not a reason to reach (2026-11-14).
+      const neededHere = needScore >= 40
       if (projectedPoints != null && replacementProjection != null) {
         vorp = projectedPoints - replacementProjection
         valueSignal = 'projection'
-        if (vorpMode === 'active') vorpScore = clamp(vorp * 0.3, -8, 30)
+        if (vorpMode === 'active') vorpScore = neededHere ? clamp(vorp * 0.3, -8, 30) : clamp(vorp * 0.3, -8, 0)
       } else {
         tierDropoff = vorpContext.nextAdpGapFor(pos, adp)
         if (tierDropoff != null) {
           valueSignal = 'adp_gap'
-          // Only reward standing at a real cliff (gap beyond normal spacing).
-          if (vorpMode === 'active') tierDropoffScore = clamp((tierDropoff - 4) * 0.6, 0, 12)
+          /*
+           * 🛑 THE TIER CLIFF NO LONGER SCORES — IT IS EVIDENCE TEXT ONLY (2026-11-14, measured).
+           * scripts/simulate-draft-vorp-modes.ts, real ADP, every team on the engine:
+           *   raw gap (the original)         reaches >2 rounds 8 → 12 (12 tm), 8 → 17 (16 tm); 2nd kickers
+           *   gap ÷ position spacing, need   8 → 14, and one 16-team roster left incomplete
+           *   stricter (ratio−3)×2, cap 5    reaches 8 → 7, but starters worse (459.7 → 466.7)
+           * No version beat leaving it out, so it stays out. `tierDropoff` is still computed and the
+           * "Tier cliff" evidence line still prints; `tierDropoffScore` is always 0.
+           */
+          void neededHere
         }
       }
     }
