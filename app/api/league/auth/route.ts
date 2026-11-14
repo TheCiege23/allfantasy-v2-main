@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { encrypt, decrypt } from '@/lib/league-auth-crypto';
+import { encrypt } from '@/lib/league-auth-crypto';
 import { isAllowedLeagueAuthRequestOrigin } from '@/lib/extension/allowedRequestOrigin';
 import { getPublicSiteOrigin } from '@/lib/site-public-origin';
 import { validateEspnCookieInput } from '@/lib/league-import/espn/espnFantasyClient';

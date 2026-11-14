@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { findPlayerByName } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,

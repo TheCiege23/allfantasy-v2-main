@@ -33,8 +33,8 @@ import { gradeLegacyCounters } from '@/lib/legacy/legacyPackageGrade'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
-import { buildRuntimeConstraints, formatConstraintsForPrompt, DEFAULT_TRADE_CONSTRAINTS, getPickValueWithRange, getPickRange } from '@/lib/trade-constraints'
-import { buildHistoricalTradeContext, getDataInfo } from '@/lib/historical-values'
+import { buildRuntimeConstraints, formatConstraintsForPrompt } from '@/lib/trade-constraints'
+import { buildHistoricalTradeContext } from '@/lib/historical-values'
 import { autoLogDecision } from '@/lib/decision-log'
 import { computeNewsValueAdjustments, applyNewsAdjustmentsToValueMap, formatNewsAdjustmentsForPrompt, type PlayerNewsData, type NewsValueAdjustment } from '@/lib/news-value-adjustment'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
@@ -48,7 +48,7 @@ import type { Asset } from '@/lib/trade-engine/types'
 import { computeDraftProjectionScore, devyAcceptanceAdjustment, applyTeamDirectionAdjustment } from '@/lib/devy-model'
 import { extractAcceptanceFeatures, acceptanceProbabilityWithLiquidity } from '@/lib/acceptance-model'
 import { computeLiquidity, liquidityTier, type LiquidityMetrics } from '@/lib/liquidity-model'
-import { simulateMatchup, computeChampionshipDelta, type TeamProjection } from '@/lib/monte-carlo'
+import { computeChampionshipDelta, type TeamProjection } from '@/lib/monte-carlo'
 import { simulatePortfolio, type PortfolioAsset } from '@/lib/portfolio-simulator'
 import { generateOptimalCounters, buildAvailableSweeteners, type TradeShape } from '@/lib/counter-builder'
 import { prisma } from '@/lib/prisma'
@@ -947,7 +947,6 @@ function getScarcityMultiplier(numTeams: number): number {
   return 1.0
 }
 
-
 function buildPickContext(assets: TradeAsset[], numTeams: number) {
   return assets
     .filter(a => a.type === 'pick')
@@ -1227,7 +1226,6 @@ The grade and verdict are FIXED by the engine (see TRADE GRADE). Explain them; d
     2
   )
 }
-
 
 type TradeProviderAudit = {
   providers: {
@@ -2919,5 +2917,4 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     )
   }
 })
-
 

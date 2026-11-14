@@ -1,6 +1,6 @@
 'use client'
 
-import { BookmarkCheck, CheckCircle2, ArchiveX, ChevronRight, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, ArchiveX, ChevronRight, AlertTriangle } from 'lucide-react'
 import type { UnifiedSavedRecommendation } from '@/lib/chimmy-actions/AIActionModel'
 
 const TYPE_COLORS: Record<string, string> = {

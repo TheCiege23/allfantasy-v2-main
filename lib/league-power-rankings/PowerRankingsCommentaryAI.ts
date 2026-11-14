@@ -9,7 +9,7 @@ import { deepseekChat } from '@/lib/deepseek-client';
 import { xaiChatJson, parseTextFromXaiChatCompletion } from '@/lib/xai-client';
 import { openaiChatText } from '@/lib/openai-client';
 import { isDeepSeekAvailable, isOpenAIAvailable, isXaiAvailable } from '@/lib/provider-config';
-import type { PowerRankingsOutput, PowerRankingTeam } from './types';
+import type { PowerRankingsOutput } from './types';
 
 interface PowerRankingsCommentary {
   formulaExplanation: string | null;

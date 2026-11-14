@@ -4,7 +4,7 @@
 
 import { getPlayerMetaTrendsForMeta, getPositionMetaTrends } from '@/lib/global-meta-engine/MetaQueryService'
 import { normalizeSportForMeta } from '@/lib/global-meta-engine/SportMetaResolver'
-import type { DraftPlayer, MetaDraftInput, MetaDraftOutput } from './types'
+import type { MetaDraftInput, MetaDraftOutput } from './types'
 
 function normalizeName(name: string): string {
   return String(name ?? '')

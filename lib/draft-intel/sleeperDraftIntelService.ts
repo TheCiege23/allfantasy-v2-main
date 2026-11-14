@@ -17,10 +17,7 @@ import 'server-only'
  *    the LeagueContext envelope (slice 5) and the payload says so.
  */
 
-import {
-  getLeagueContext,
-  type LeagueContextEnvelope,
-} from '@/lib/league-context/leagueContextService'
+import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import {
   adpFor,
   getSeasonBoard,

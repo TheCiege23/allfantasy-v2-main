@@ -2,7 +2,7 @@
  * AwardScoreCalculator — compute winner and score for each award type from season performance.
  */
 
-import type { SeasonPerformanceInput, AwardCandidate, AwardType } from './types'
+import type { SeasonPerformanceInput, AwardType } from './types'
 
 /**
  * For each award type, return the winning candidate (managerId + score). One winner per type.

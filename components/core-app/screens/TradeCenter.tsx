@@ -27,11 +27,7 @@ import {
 } from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { readPickPreviewValue } from '@/lib/trade-value-console/pickPreview'
-import {
-  analysisUnpricedReason,
-  pickUnpricedReason,
-  pricedOnAnalysisReason,
-} from '@/lib/trade-value/unpricedReason'
+import { analysisUnpricedReason, pricedOnAnalysisReason } from '@/lib/trade-value/unpricedReason'
 /*
  * ⚠ THE SAME RESOLVER THE PICKER USES, DELIBERATELY. This repo already carries FIVE
  * team-logo functions (`getTeamLogo`, three separate `getTeamLogoUrl`s, and
@@ -166,7 +162,6 @@ const PLATFORM_MARK: Record<string, string> = {
 function platformMark(platform: string): string {
   return PLATFORM_MARK[platform.toLowerCase()] ?? platform.charAt(0).toUpperCase()
 }
-
 
 type Line = {
   name: string

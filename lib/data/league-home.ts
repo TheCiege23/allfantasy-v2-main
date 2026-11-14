@@ -174,11 +174,6 @@ function toStringArray(value: unknown): string[] {
     .filter((entry): entry is string => Boolean(entry))
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
-}
-
 function titleCase(value: string): string {
   return value
     .replace(/[_-]+/g, ' ')
@@ -201,14 +196,6 @@ function formatDateTime(date: Date | string | null | undefined): string {
     hour: 'numeric',
     minute: '2-digit',
   })
-}
-
-function formatCompactNumber(value: number | null | undefined): string {
-  if (value == null) return '-'
-  if (Math.abs(value) >= 1000) {
-    return `${value > 0 ? '+' : ''}${(value / 1000).toFixed(1)}K`
-  }
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}`
 }
 
 function logOptionalLeagueDataWarning(scope: string, error: unknown): void {
@@ -621,14 +608,6 @@ function toResolvedLeaguePlayer(
     ownerLabel: extras?.ownerLabel,
     stats: extras?.stats ?? extractNumericStats(entry?.stats ?? {}, entry?.position || 'FLEX'),
   }
-}
-
-function sumLineupSlots(lineup: unknown): number {
-  if (!lineup || typeof lineup !== 'object' || Array.isArray(lineup)) return 0
-  return Object.values(lineup as Record<string, unknown>).reduce<number>((sum, value) => {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? sum + parsed : sum
-  }, 0)
 }
 
 async function buildVariantSummary(context: LeagueContext): Promise<LeagueVariantSummary> {

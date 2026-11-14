@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { ReputationRuntimeConfig, ReputationScoreWeights, ReputationSport, ReputationTier } from './types'
+import type { ReputationRuntimeConfig, ReputationScoreWeights, ReputationSport } from './types'
 import { normalizeSportForReputation } from './SportReputationResolver'
 import { REPUTATION_TIERS } from './types'
 import { DEFAULT_REPUTATION_SCORE_WEIGHTS, normalizeScoreWeights } from './ReputationScoreCalculator'

@@ -1,12 +1,5 @@
 import { prisma } from "@/lib/prisma"
 
-type FeedEventType =
-  | "UPSET_BUSTED"
-  | "CHAMP_ELIMINATED"
-  | "PERFECT_TRACKER"
-  | "LEAD_CHANGE"
-  | "BIG_UPSET"
-
 const COOLDOWN_MS = 5 * 60 * 1000
 
 async function hasCooldown(

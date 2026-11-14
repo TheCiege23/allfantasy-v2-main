@@ -3,7 +3,7 @@
  * Extracts intent and parameters; does not validate eligibility (validation in respective engines).
  */
 
-import type { SurvivorParsedCommand, SurvivorCommandIntent } from './types'
+import type { SurvivorParsedCommand } from './types'
 
 const CHIMMY_PREFIX = '@chimmy'
 const VOTE_PATTERNS = [

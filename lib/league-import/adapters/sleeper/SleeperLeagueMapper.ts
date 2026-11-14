@@ -1,5 +1,4 @@
 import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
-import type { NormalizedLeagueSettings } from '../../types'
 import type { SleeperImportPayload } from './types'
 import { readSleeperDivisions, STANDINGS_DIVISIONS_KEY } from '../../standingsDivisions'
 import { receptionScoringLabel } from '../../receptionScoringLabel'

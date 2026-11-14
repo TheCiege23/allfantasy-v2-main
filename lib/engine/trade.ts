@@ -24,7 +24,7 @@ import {
   computeAthleticGrade,
   computeCollegeProductionGrade,
 } from "@/lib/player-analytics";
-import { runEnhancedPipeline, type EnhancedTradeAnalysis } from "./enhanced-trade-pipeline";
+import { runEnhancedPipeline } from "./enhanced-trade-pipeline";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));

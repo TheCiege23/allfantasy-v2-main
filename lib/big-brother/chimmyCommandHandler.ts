@@ -4,7 +4,6 @@
 
 import { prisma } from '@/lib/prisma'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
-import { isBigBrotherLeague } from './BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague, transitionPhase } from './BigBrotherPhaseStateMachine'
 import { getEligibility, isJuryRoster } from './BigBrotherEligibilityEngine'
 import { setNominations, setReplacementNominee } from './BigBrotherNominationEngine'

@@ -16,21 +16,12 @@ import { updateSessionWithArchive, recordArchiveEvent } from '@/lib/draft-archiv
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { logAction } from '@/server/services/auditService'
-import {
-  type ApplyPostDraftLifecycleResult,
-  applyDraftingLifecycleOnDraftResetInTransaction,
-  applyPostDraftLifecycleInTransaction,
-  ensureDraftingLifecycleForActiveSession,
-} from '@/server/services/leagueLifecycleService'
+import { applyDraftingLifecycleOnDraftResetInTransaction, applyPostDraftLifecycleInTransaction, ensureDraftingLifecycleForActiveSession } from '@/server/services/leagueLifecycleService'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
 import { applyTradedOwnerToCurrentPick } from './PickOwnershipResolver'
-import {
-  computeTimerState,
-  computeTimerStateWithPauseWindow,
-  isInsidePauseWindow,
-} from './DraftTimerService'
+import { computeTimerStateWithPauseWindow, isInsidePauseWindow } from './DraftTimerService'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getViewerAutopickPreference } from './LiveDraftAutopickPreferenceService'
 import { getCurrentUserRosterIdForLeague } from './auth'

@@ -5,7 +5,7 @@
  * Deterministic: no AI involvement.
  */
 
-import { isPositionEligibleForIdpSlot, getAllowedPositionsForIdpSlot } from './IDPEligibility'
+import { isPositionEligibleForIdpSlot } from './IDPEligibility'
 import { getIdpLeagueConfig, getRosterDefaultsForIdpLeague } from './IDPLeagueConfig'
 import type { IdpPositionMode } from './types'
 
@@ -21,8 +21,6 @@ export interface OptimalLineup {
   totalPoints: number
 }
 
-/** Standard NFL offensive slot names. */
-const OFFENSIVE_SLOTS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF'] as const
 const OFFENSIVE_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF'])
 const IDP_POSITION_SET = new Set(['DE', 'DT', 'DL', 'LB', 'CB', 'S', 'DB', 'ILB', 'OLB', 'SS', 'FS'])
 

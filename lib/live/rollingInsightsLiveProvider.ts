@@ -28,7 +28,7 @@ import type {
 } from '@/lib/live-scoring/provider'
 import type { LiveGameStatus } from '@/lib/live-scoring/types'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
-import { liveUrl, parseLivePayload, interpretPollResponse } from './rollingInsightsAdapter'
+import { liveUrl, interpretPollResponse } from './rollingInsightsAdapter'
 import type { GameSnapshot } from './eventDetector'
 import { prisma } from '@/lib/prisma'
 

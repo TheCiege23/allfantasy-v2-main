@@ -5,17 +5,8 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { 
   findPlayerTier
 } from './dynasty-tiers';
-import { getComprehensiveLearningContext } from './comprehensive-trade-learning';
-import { fetchPlayerNewsFromGrok } from './ai-gm-intelligence';
 import { resolveNflAges, ageOf } from './player-age';
-import {
-  getLeagueInfo,
-  getLeagueRosters,
-  getLeagueTransactions,
-  getLeagueUsers,
-  getTradedDraftPicks,
-  SleeperDraftPick,
-} from './sleeper-client';
+import { getLeagueInfo, getLeagueRosters, getLeagueTransactions, getLeagueUsers, getTradedDraftPicks } from './sleeper-client';
 import {
   getCanonicalPlayerMapForSport,
   DECISION_FRESHNESS_MS,

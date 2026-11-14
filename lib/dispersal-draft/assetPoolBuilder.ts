@@ -71,8 +71,6 @@ function extractPlayersFromPlayerData(playerData: unknown, sourceRosterId: strin
   return []
 }
 
-type RawDraftPick = Record<string, unknown>
-
 function rawToDraftPickAsset(sourceRosterId: string, raw: unknown): DispersalAsset | null {
   const o = asRecord(raw)
   if (!o) return null

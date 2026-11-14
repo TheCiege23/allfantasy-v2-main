@@ -7,7 +7,7 @@
 
 import { isIdpPosition as isIdpPositionFromMap, normalizeIdpPosition } from '@/lib/idp-kicker-values'
 import type { IdpPositionMode } from './types'
-import { IDP_GROUP_TO_SPLIT, IDP_SPLIT_TO_GROUP } from './types'
+import { IDP_GROUP_TO_SPLIT } from './types'
 
 export { isIdpPositionFromMap as isIdpPosition }
 

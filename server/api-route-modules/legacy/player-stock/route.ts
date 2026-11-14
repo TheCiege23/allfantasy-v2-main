@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { isEvidencedPrice, pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
-import { findPlayerInCSV, getPlayerValue as getCSVPlayerValue, getPlayerECR, CSVPlayerValue } from '@/lib/player-values-csv'
+import { findPlayerInCSV, getPlayerValue as getCSVPlayerValue, getPlayerECR } from '@/lib/player-values-csv'
 import { getConsensusADP } from '@/lib/multi-platform-adp'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/player-stock", tool: "LegacyPlayerStock" })(async (request: Request) => {

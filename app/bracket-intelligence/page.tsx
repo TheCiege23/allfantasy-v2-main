@@ -59,13 +59,6 @@ type AiReview = {
   summary: string
 } | null
 
-type StoryResponse = {
-  ok: boolean
-  story?: {
-    narrative: string
-  }
-}
-
 function BracketIntelligenceInner() {
   const searchParams = useSearchParams()
   const router = useRouter()

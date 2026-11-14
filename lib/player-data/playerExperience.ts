@@ -11,7 +11,7 @@ import {
   getExperienceSignalsFromSportsPlayer,
   type ProviderExperienceSignal,
 } from '@/lib/player-data/providerExperienceFields'
-import { getCollegeClassBucket, normalizeCollegeClass } from '@/lib/draft-room/collegeClass'
+import { getCollegeClassBucket } from '@/lib/draft-room/collegeClass'
 import { resolveNflRookieSource } from '@/lib/providers/nflRookieSourcePolicy'
 
 type PlayerExperienceStatus = 'rookie' | 'veteran' | 'college' | 'devy' | 'unknown'

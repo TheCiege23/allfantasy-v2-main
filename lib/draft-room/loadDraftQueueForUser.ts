@@ -4,12 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
-import {
-  dedupeQueueEntries,
-  normalizeDraftedNameSet,
-  normalizeQueueEntries,
-  removeDraftedPlayersFromQueue,
-} from '@/lib/draft-queue-engine'
+import { dedupeQueueEntries, normalizeDraftedNameSet, removeDraftedPlayersFromQueue } from '@/lib/draft-queue-engine'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export async function loadDraftQueueForUser(leagueId: string, userId: string): Promise<{

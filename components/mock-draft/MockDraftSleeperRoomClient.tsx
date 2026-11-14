@@ -535,15 +535,6 @@ function buildDefaultSettings(): DraftSettings {
   }
 }
 
-function scoringLabelFromLeague(value: string): DraftScoring {
-  const normalized = value.trim().toLowerCase()
-  if (normalized.includes('half')) return 'Half PPR'
-  if (normalized.includes('ppr')) return 'PPR'
-  if (normalized.includes('categorie')) return 'Categories'
-  if (normalized.includes('point')) return 'Points'
-  return 'Standard'
-}
-
 function buildPlayerContextMessage(state: DraftState, queue: string[]): string {
   const currentTeam = state.teams.find((team) => team.slot === state.onTheClock)
   const queuedPlayers = queue

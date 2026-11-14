@@ -28,48 +28,6 @@ interface TradeAnalyticsRequest {
   league?: { qb_format?: string }
 }
 
-function adaptTradeForDualMode(
-  trade: TradeAnalyticsRequest['trades'][0],
-  sleeperUsername: string,
-  sleeperUserId?: string
-): {
-  date: string;
-  sideAPlayers: string[];
-  sideBPlayers: string[];
-  sideAPicks: { year: number; round: number; tier?: 'early' | 'mid' | 'late' }[];
-  sideBPicks: { year: number; round: number; tier?: 'early' | 'mid' | 'late' }[];
-} | null {
-  const userParty = trade.parties?.find(p => isUserParty(p, sleeperUsername, sleeperUserId))
-  const otherParty = trade.parties?.find(p => !isUserParty(p, sleeperUsername, sleeperUserId))
-  
-  if (!userParty || !otherParty) return null
-  
-  const tradeDate = trade.timestamp
-    ? new Date(trade.timestamp).toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10)
-  
-  const parsePick = (pick: { round: number; season: string; slot?: string }) => {
-    const year = parseInt(pick.season) || new Date().getFullYear()
-    const tier = pick.slot === 'early' || pick.slot === 'mid' || pick.slot === 'late' 
-      ? pick.slot as 'early' | 'mid' | 'late' 
-      : undefined
-    return { year, round: pick.round, tier }
-  }
-  
-  const userReceived = userParty.playersReceived?.map(p => p.name) || []
-  const userReceivedPicks = userParty.picksReceived?.map(parsePick) || []
-  const otherReceived = otherParty.playersReceived?.map(p => p.name) || []
-  const otherReceivedPicks = otherParty.picksReceived?.map(parsePick) || []
-  
-  return {
-    date: tradeDate,
-    sideAPlayers: userReceived,
-    sideBPlayers: otherReceived,
-    sideAPicks: userReceivedPicks,
-    sideBPicks: otherReceivedPicks,
-  }
-}
-
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool: "LegacyTradeAnalytics" })(async (req: NextRequest) => {
   try {
     const body: TradeAnalyticsRequest = await req.json()

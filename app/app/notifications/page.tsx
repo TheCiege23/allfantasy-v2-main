@@ -16,7 +16,6 @@ import {
 import { EmptyStateRenderer, ErrorStateRenderer, LoadingStateRenderer } from "@/components/ui-states"
 import { resolveNoResultsState, resolveRecoveryActions } from "@/lib/ui-state"
 import { useNotifications } from "@/hooks/useNotifications"
-import type { PlatformNotification } from "@/types/platform-shared"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import {
   getNotificationDestination,

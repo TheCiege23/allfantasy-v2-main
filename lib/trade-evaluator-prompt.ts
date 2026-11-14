@@ -1,6 +1,3 @@
-import { AI_CORE_PERSONALITY, getModeInstructions, SIGNATURE_PHRASES, MEMORY_AWARENESS, WHEN_TO_SPEAK_RULES, ESCALATION_SYSTEM } from '@/lib/ai-personality';
-import { getUniversalAIContext } from '@/lib/ai-player-context';
-
 export const NEGOTIATION_RULES = `
 NEGOTIATION ASSISTANT RULES (CRITICAL):
 - You are generating negotiation UX content ONLY (messages, counters, sweeteners, red lines).

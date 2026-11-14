@@ -3,7 +3,6 @@
  * Uses snake/3RR from DraftOrderService.
  */
 
-import { getSlotInRoundForOverall } from '../DraftOrderService'
 import type { DraftType } from '../types'
 import type { SlotOrderEntry } from '../types'
 import type { KeeperLock, KeeperSelection } from './types'

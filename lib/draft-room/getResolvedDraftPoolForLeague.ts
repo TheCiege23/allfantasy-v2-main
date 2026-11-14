@@ -397,10 +397,6 @@ function normalizeLooseName(name: string | null | undefined): string {
   return canonicalName(name)
 }
 
-function loosePlayerKey(name: string, position: string): string {
-  return `${normalizeLooseName(name)}|${normalizeKeyPart(position)}`
-}
-
 function loosePlayerTeamKey(name: string, position: string, team?: string | null): string {
   return `${normalizeLooseName(name)}|${normalizeKeyPart(position)}|${normalizeKeyPart(team)}`
 }
@@ -806,7 +802,6 @@ function poolRowSleeperId(row: SportPoolRow): string | null {
   const raw = String(row.sleeper_id ?? '').trim()
   return raw === '' ? null : raw
 }
-
 
 function jrAliasBaseKey(name: string, position: string, team: string | null | undefined): string {
   const n = canonicalName(name).replace(/(^|\s)jr$/, '').trim()

@@ -102,19 +102,6 @@ function computeRiskBand(player: any): 'LOW' | 'MEDIUM' | 'HIGH' {
 }
 
 /**
- * @deprecated Tiers on `devyValue`, which is a position-and-class-year lookup
- * with no player-specific input and is 0 for most of the pool — so it tiered
- * 1,455 players we know nothing about as "Sleeper" and put a freshman QB above
- * Jeremiah Smith. Use `honestTier`. Kept only for the hardcoded fallback board
- * below, whose entries carry hand-written values rather than DB rows.
- */
-function assignTier(devyValue: number): 'Tier 1' | 'Tier 2' | 'Sleeper' {
-  if (devyValue >= 7000) return 'Tier 1'
-  if (devyValue >= 4000) return 'Tier 2'
-  return 'Sleeper'
-}
-
-/**
  * Tier from position on the evidenced board.
  *
  * ⚠ BANDS ARE PRESENTATION. Nothing multiplies by them; they only choose the
@@ -226,7 +213,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
       )]
 
       const safeCandidates = allCandidates.filter(p => p.graduatedToNFL !== true && p.devyEligible !== false)
-
 
       const finalScoreOpts = { biggestNeed, secondaryNeed, isSF, isTEP, totalTeams, pickNumber }
 

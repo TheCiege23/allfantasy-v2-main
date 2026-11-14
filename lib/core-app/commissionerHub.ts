@@ -382,23 +382,6 @@ export type CommissionerHubDynasty = {
   } | null
 }
 
-/**
- * ⚠ COLLUSION AND TANKING DO NOT RUN ON IMPORTED LEAGUES, SO THE DESIGN'S
- * "OPEN DISPUTES" TILE HAS NOTHING BEHIND IT. `CollusionDetectionEngine` scans
- * settled `AfLeagueTrade` / `RedraftTradeProposal` trades and
- * `TankingDetectionEngine` reads `RedraftMatchup` — all AF-native-only tables —
- * so an imported Sleeper league is never scanned.
- *
- * A tile reading "0 open disputes" off a scan that structurally cannot find one
- * is the most confident wrong number this screen could show a commissioner, so
- * the tile states the gap instead. The "Resolve a dispute" guide is the
- * replacement: it works the same way whether or not a scan exists.
- */
-const ROLE_LABEL: Record<'commissioner' | 'co_commissioner', string> = {
-  commissioner: 'Commissioner',
-  co_commissioner: 'Co-commissioner',
-}
-
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return '?'

@@ -5,7 +5,7 @@
 
 import { getUnifiedCareerProfile } from './UnifiedCareerQueryService'
 import { getLeaguePrestigeSummary } from './UnifiedCareerQueryService'
-import type { UnifiedCareerProfile, LeaguePrestigeSummary, AICareerContextPayload } from './types'
+import type { LeaguePrestigeSummary, AICareerContextPayload } from './types'
 import { resolveSportForCareer } from './SportPrestigeResolver'
 import { DEFAULT_SPORT } from '@/lib/sport-scope'
 

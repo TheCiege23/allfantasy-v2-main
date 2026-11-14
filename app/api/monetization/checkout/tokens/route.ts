@@ -15,13 +15,7 @@ import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheck
 import { findStripeCustomerIdForUser } from "@/lib/monetization/stripeCustomerForUser"
 import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo"
 import { enforcePaidAccountLock } from "@/lib/geo/enforcePaidAccountLock"
-import {
-  normalizeCouponCode,
-  validateCouponForUser,
-  createPendingRedemption,
-  calculateDiscountedAmounts,
-  findSponsorCoupon,
-} from "@/lib/promotions/sponsorCoupon"
+import { validateCouponForUser, createPendingRedemption, calculateDiscountedAmounts, findSponsorCoupon } from "@/lib/promotions/sponsorCoupon"
 
 type CheckoutTokensBody = {
   sku?: string

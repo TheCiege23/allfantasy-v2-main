@@ -128,7 +128,6 @@ import WorldCupGroupStagePicks from "./WorldCupGroupStagePicks"
 import WorldCupReadinessPanel from "./WorldCupReadinessPanel"
 import WorldCupPoolCountdownBanner from "./WorldCupPoolCountdownBanner"
 import type { WorldCupCountdownFirstMatch } from "./WorldCupPoolCountdownBanner"
-import { ChimmyFreshnessChip } from "./ChimmyFreshnessChip"
 import WorldCupAiInsightsCTA from "./WorldCupAiInsightsCTA"
 import WorldCupDailyEdgeReportCard from "./WorldCupDailyEdgeReportCard"
 import WorldCupMatchImpactCenter from "./WorldCupMatchImpactCenter"
@@ -138,21 +137,7 @@ import {
   WorldCupChatEmptyState,
   WorldCupAiPromptChips,
 } from "./chat"
-import type {
-  WorldCupChatMode as WcChatMode,
-  WorldCupPoolChatMessage as WcPoolChatMsg,
-  WorldCupChatGifAttachment as WcGifAttachment,
-  WorldCupChatImageAttachment as WcImageAttachment,
-  WorldCupChatPollAttachment as WcPollAttachment,
-  WorldCupChatPollOption as WcPollOption,
-  WorldCupDmMember as WcDmMember,
-  WorldCupMentionSuggestion as WcMentionSuggestion,
-  WorldCupDmThread as WcDmThread,
-  WorldCupDmMessage as WcDmMsg,
-  WorldCupAiPromptAction as WcAiPromptAction,
-  WorldCupChatAiGate as WcChatAiGate,
-  WorldCupComposerPanel as WcComposerPanel,
-} from "./chat"
+import type { WorldCupChatMode as WcChatMode, WorldCupPoolChatMessage as WcPoolChatMsg, WorldCupChatGifAttachment as WcGifAttachment, WorldCupChatImageAttachment as WcImageAttachment, WorldCupChatPollOption as WcPollOption, WorldCupDmMember as WcDmMember, WorldCupMentionSuggestion as WcMentionSuggestion, WorldCupDmThread as WcDmThread, WorldCupDmMessage as WcDmMsg, WorldCupComposerPanel as WcComposerPanel } from "./chat"
 type Tab = WorldCupBracketTab
 // Chat types are now imported from ./chat — local aliases kept for zero-diff usages below
 type WorldCupPoolChatMessage = WcPoolChatMsg
@@ -163,7 +148,6 @@ type WorldCupDmMessage = WcDmMsg
 type WorldCupChatGifAttachment = WcGifAttachment
 type WorldCupChatImageAttachment = WcImageAttachment
 type WorldCupChatPollOption = WcPollOption
-type WorldCupChatPollAttachment = WcPollAttachment
 type WorldCupComposerPanel = WcComposerPanel
 type WorldCupChatMode = WcChatMode
 type WorldCupAdminSimulationRound =
@@ -6837,60 +6821,6 @@ function WorldCupImageUploadPanel({
           {error}
         </p>
       ) : null}
-    </div>
-  )
-}
-
-function WorldCupPollMessage({
-  poll,
-  messageId,
-  isVoting,
-  onVote,
-}: {
-  poll: WorldCupChatPollAttachment
-  messageId: string
-  isVoting: boolean
-  onVote: (optionId: string) => void
-}) {
-  return (
-    <div className="mt-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3">
-      <p className="text-xs font-black text-white">{poll.question}</p>
-      <div className="mt-3 space-y-2">
-        {poll.options.map((option) => {
-          const selected = poll.currentUserVote === option.id
-          return (
-            <button
-              key={`${messageId}-${option.id}`}
-              type="button"
-              onClick={() => onVote(option.id)}
-              disabled={isVoting || poll.closed}
-              className={[
-                "w-full overflow-hidden rounded-lg border bg-black/25 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-65",
-                selected ? "border-cyan-300/70" : "border-white/10 hover:border-cyan-300/35",
-              ].join(" ")}
-            >
-              <span className="relative block">
-                <span
-                  className="absolute inset-y-0 left-0 bg-cyan-300/15"
-                  style={{ width: `${option.percentage}%` }}
-                  aria-hidden
-                />
-                <span className="relative flex items-center justify-between gap-2 px-3 py-2">
-                  <span className="font-bold text-white/75">{option.label}</span>
-                  <span className="text-[11px] font-black text-white/65">
-                    {option.votes} vote{option.votes === 1 ? "" : "s"} · {option.percentage}%
-                  </span>
-                </span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-      <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-white/35">
-        {poll.totalVotes} total vote{poll.totalVotes === 1 ? "" : "s"}
-        {poll.currentUserVote ? " · Your vote is counted" : ""}
-        {poll.closed ? " · Closed" : ""}
-      </p>
     </div>
   )
 }

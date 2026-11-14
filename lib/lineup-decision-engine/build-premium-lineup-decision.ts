@@ -3,13 +3,7 @@ import type { LineupOptimizerResult, OptimizerPlayerInput } from '@/lib/lineup-o
 import { findBestInjuryReplacement, isZeroParticipationWithSignals } from './auto-sub-engine'
 import { displaySportLabel, resolveExtendedLineupSport, type ExtendedLineupSport } from './lineup-sport'
 import { getSportSignalHints } from './sport-adapters'
-import type {
-  EnrichedPlayer,
-  LineupDecisionMode,
-  PremiumLineupDecisionInput,
-  PremiumPlayerInput,
-  TeamContextInput,
-} from './types'
+import type { EnrichedPlayer, LineupDecisionMode, PremiumLineupDecisionInput, TeamContextInput } from './types'
 import { enrichPremiumPlayer } from './enrich-player'
 import { normalizePreferenceProfile } from './preference-learning'
 import { PremiumLineupDecisionJsonSchema } from './schema'

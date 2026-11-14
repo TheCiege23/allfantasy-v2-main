@@ -1,6 +1,5 @@
 'use client'
 
-import { Sparkles } from 'lucide-react'
 import type { DraftRecommendation } from '@/components/app/draft-room/DraftHelperPanel'
 
 interface DraftHelperCopilotProps {

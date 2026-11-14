@@ -1,5 +1,4 @@
 import type { IExternalScheduleMapper } from '../../mappers/ExternalScheduleMapper'
-import type { NormalizedMatchup } from '../../types'
 import type { SleeperImportPayload } from './types'
 
 /** Group Sleeper matchups by matchup_id so we have roster_id_1 vs roster_id_2. */

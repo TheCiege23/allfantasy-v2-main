@@ -6,8 +6,6 @@
 
 import { prisma } from '@/lib/prisma'
 import { getDevyConfig } from '../DevyLeagueConfig'
-import type { DevyLeagueConfigShape } from '../types'
-import { getDevyAdapterForSport } from '../types'
 
 export interface PromotionCheckResult {
   canPromote: boolean

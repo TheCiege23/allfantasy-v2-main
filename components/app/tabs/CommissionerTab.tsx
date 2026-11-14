@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Shield, Users, FileEdit, Clock, ListChecks, MessageSquare, Settings2, Link2, Loader2, Award, TrendingUp, Heart, Pause, Play, RotateCcw, Undo2, Bot, Megaphone, Crown } from 'lucide-react'
+import { Shield, Users, FileEdit, Clock, ListChecks, Settings2, Loader2, Award, TrendingUp, Heart, Pause, Play, RotateCcw, Undo2, Bot, Megaphone, Crown } from 'lucide-react'
 import type { LeagueTabProps } from '@/components/app/tabs/types'
 import TabDataState from '@/components/app/tabs/TabDataState'
 import { Button } from '@/components/ui/button'

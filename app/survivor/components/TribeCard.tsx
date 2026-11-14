@@ -1,4 +1,3 @@
-import clsx from 'clsx'
 import type { SurvivorSeasonTribe } from '@/lib/survivor/survivorUiTypes'
 import { extractLeadingTribeIcon, stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'

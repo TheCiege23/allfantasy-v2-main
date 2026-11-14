@@ -4,7 +4,7 @@
  */
 
 import type { LeagueSport } from '@prisma/client'
-import { getC2CAdapterForSport, type C2CEligibilityResult, type C2CSportAdapterId } from '../types'
+import { getC2CAdapterForSport, type C2CEligibilityResult } from '../types'
 import { NFL_C2C_COLLEGE_POSITIONS, NBA_C2C_COLLEGE_POSITIONS, NBA_POSITION_TO_C2C } from '../constants'
 
 const NFL_COLLEGE_SET = new Set(NFL_C2C_COLLEGE_POSITIONS.map((p) => p.toUpperCase()))

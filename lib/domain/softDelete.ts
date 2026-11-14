@@ -37,7 +37,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { ActorContext } from './actorContext'
 import type { DomainError } from './errors'
-import { forbidden } from './errors'
 import { type Result, err, ok } from './result'
 import { validateReason } from './reason'
 import { type Authorize, denyAll } from './ports'

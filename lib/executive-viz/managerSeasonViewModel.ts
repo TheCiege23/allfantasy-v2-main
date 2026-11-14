@@ -15,14 +15,9 @@
  * invented (documented in EXECUTIVE_VISUALIZATION_ENGINE.md §Phase V2.2).
  */
 import type { ManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
-import type { AttentionSignalSeverity } from '@/lib/decision-os/attentionSignals'
-import type { RecommendationPriority, RecommendationCategory } from '@/lib/decision-os/phase6/recommendations/types'
+import type { RecommendationCategory } from '@/lib/decision-os/phase6/recommendations/types'
 import type { ExecutiveHealthStatus, ExecutiveBarDatum, ExecutiveSupportingChart } from './commissionerLeagueHealthViewModel'
-import { PRIORITY_RANK, statusFromPriority, statusFromSeverity, titleCase } from './recommendationPresentation'
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
+import { PRIORITY_RANK, statusFromPriority, titleCase } from './recommendationPresentation'
 
 // ─── Flagship: Championship Trajectory ─────────────────────────────────────────
 

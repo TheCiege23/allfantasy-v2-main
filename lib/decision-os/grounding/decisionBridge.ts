@@ -17,7 +17,7 @@ import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
-import type { GroundedSlice, GroundingGap } from './packet'
+import type { GroundedSlice } from './packet'
 
 /**
  * R2.3–R2.5 — producers that RUN a live engine and hand the packet its decision.

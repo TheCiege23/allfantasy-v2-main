@@ -4,25 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  ArrowLeft,
-  ArrowLeftRight,
-  Clock,
-  Copy,
-  Grid2x2,
-  Hash,
-  LayoutGrid,
-  Menu,
-  Pause,
-  RefreshCw,
-  Settings2,
-  Shield,
-  Sparkles,
-  Tv,
-  User,
-  Volume2,
-  VolumeX,
-} from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, Menu, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
@@ -137,13 +119,6 @@ type DraftTopBarProps = {
   dynastyDraftKindLabel?: string | null
   /** One line on how a rookie auction converted traded rookie picks; null hides it. */
   rookieAuctionNote?: string | null
-}
-
-const TIMER_COLORS = {
-  running: 'text-emerald-300 border-emerald-400/25 bg-emerald-500/10',
-  paused: 'text-amber-200 border-amber-400/25 bg-amber-500/10',
-  expired: 'text-red-200 border-red-400/25 bg-red-500/10',
-  none: 'text-white/70 border-white/12 bg-white/5',
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {

@@ -11,7 +11,6 @@ import { AICardRenderer, AI_INSIGHT_CARD_ID } from '@/components/ai-insight-card
 import { DraftShareCard, DRAFT_SHARE_CARD_ID } from '@/components/draft-sharing'
 import { SocialPostCard, SOCIAL_POST_CARD_ID } from './SocialPostCard'
 import { CommunitySharePanel } from '@/components/community-integration'
-import { REQUIRED_HASHTAGS } from '@/lib/social-content-generator/constants'
 import type { SocialContentType } from '@/lib/social-content-generator/types'
 
 const CONTENT_TYPES: { id: SocialContentType; label: string }[] = [

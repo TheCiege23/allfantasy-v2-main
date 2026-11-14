@@ -14,7 +14,7 @@ import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
 import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
-import { useCommissionerActions, type CommissionerControlApiResult } from '@/hooks/useCommissionerActions'
+import { useCommissionerActions } from '@/hooks/useCommissionerActions'
 import { DraftRoomSettingsModal } from '@/components/app/draft-room/DraftRoomSettingsModal'
 import { DraftBoard } from '@/components/app/draft-room/DraftBoard'
 import { DraftTeamStrip, type DraftTeamStripTeamMeta } from '@/components/app/draft-room/DraftTeamStrip'
@@ -25,15 +25,13 @@ import { SportAwareDraftRoom } from '@/components/app/draft-room/SportAwareDraft
 import { parseRookieFilterState, type RookieFilterState } from '@/lib/draft-room/rookieFilterState'
 import { QueuePanel } from '@/components/app/draft-room/QueuePanel'
 import { DraftIntelQueuePanel } from '@/components/app/draft-room/DraftIntelQueuePanel'
-import { DraftChatPanel, type DraftChatMessage, type DraftChatSendPayload } from '@/components/app/draft-room/DraftChatPanel'
+import { type DraftChatMessage, type DraftChatSendPayload } from '@/components/app/draft-room/DraftChatPanel'
 import { DraftChatDock } from '@/components/app/draft-room/DraftChatDock'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
 import { currentChimmySurface } from '@/lib/draft-room/chimmySurface'
 import { DraftDecisionOsCard } from '@/components/app/draft-room/DraftDecisionOsCard'
 import { DraftHelperFloatingBubble } from '@/components/app/draft-room/DraftHelperFloatingBubble'
 import { DraftHelperFloatingWindow } from '@/components/app/draft-room/DraftHelperFloatingWindow'
-import { DraftHelperCopilot } from '@/components/app/draft-room/DraftHelperCopilot'
-import { DraftHelperIntelligence } from '@/components/app/draft-room/DraftHelperIntelligence'
 import { calculateDraftHelperBadgeCount, hasDraftHelperContent } from '@/lib/draft-helper/calculateBadgeCount'
 import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState'
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
@@ -56,7 +54,6 @@ import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePick
 import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
-import { LiveDraftStatusColumn } from '@/components/draft/live/LiveDraftStatusColumn'
 import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
@@ -131,10 +128,7 @@ import {
   buildAssistantFeedByPlayerName,
   getAssistantFeedForPlayer,
 } from '@/lib/draft-room/assistantFeedLookup'
-import {
-  buildDraftChatPlayerContextFromDisplay,
-  type DraftChatPlayerContext,
-} from '@/lib/draft-room/draft-chat-player-context'
+import { buildDraftChatPlayerContextFromDisplay } from '@/lib/draft-room/draft-chat-player-context'
 import type { DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 
 type DraftRoomPageClientProps = {
@@ -248,17 +242,6 @@ function normalizePoolReadiness(
   }
 }
 
-const POLL_MS = 8000
-const POLL_MS_BACKGROUND = 30000
-/** Require several consecutive lightweight poll failures before treating the room as degraded (avoids top-bar flicker). */
-const SESSION_POLL_FAILS_FOR_DEGRADED = 5
-/** Brief delay before showing the badge so transient blips do not flash "Sync issue". */
-const CONNECTION_DEGRADED_SHOW_DELAY_MS = 1600
-const AI_ADP_POLL_SKIP_MS = 30 * 60 * 1000
-const QUEUE_POLL_EVERY_N_TICKS = 2
-const SETTINGS_POLL_EVERY_N_TICKS = 3
-const CHAT_POLL_EVERY_N_TICKS = 2
-const POOL_POLL_EVERY_N_TICKS = 3
 const DRAFT_ROOM_LOCAL_PREFS_KEY_PREFIX = 'af:draft-room-prefs:'
 
 function mergeDraftChatWire(

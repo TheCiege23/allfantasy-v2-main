@@ -11,7 +11,6 @@ import {
   TAXI_DEFAULT_DEVY,
   TAXI_DEFAULT_C2C_PRO,
 } from './constants'
-import type { LeagueSport } from '@prisma/client'
 
 export interface EffectiveTaxiSettings {
   taxiSlotCount: number

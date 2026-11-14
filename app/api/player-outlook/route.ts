@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import {
-  getPlayerOutlook,
-  getPlayerOutlookBatch,
-  PlayerOutlookRequestSchema,
-  PlayerOutlookBatchRequestSchema,
-} from '@/lib/player-outlook'
+import { getPlayerOutlook, getPlayerOutlookBatch, PlayerOutlookBatchRequestSchema } from '@/lib/player-outlook'
 
 /**
  * GET /api/player-outlook?playerName=X&sport=NFL&narrative=true

@@ -8,8 +8,6 @@ import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPr
 import { renderBlogBodyHtml } from "@/lib/automated-blog/renderBlogBody"
 import { isBlogAdmin } from "@/lib/automated-blog/blogAdminGate"
 
-const BASE = "https://allfantasy.ai"
-
 type Props = { params: Promise<{ slug: string }>; searchParams?: Promise<{ preview?: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

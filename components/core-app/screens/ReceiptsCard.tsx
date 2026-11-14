@@ -2,15 +2,7 @@
 
 import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
-import type {
-  ChimmyAddReceipt,
-  ChimmyReceipt,
-  DecisionReceiptsData,
-  LineupReceipt,
-  StartCallReceipt,
-  TradeReceipt,
-  WaiverReceipt,
-} from '@/lib/core-app/decisionReceipts'
+import type { ChimmyAddReceipt, ChimmyReceipt, DecisionReceiptsData, LineupReceipt, StartCallReceipt, WaiverReceipt } from '@/lib/core-app/decisionReceipts'
 import { describeTrackRecord, readTrackRecordLine } from '@/lib/chimmy-outcomes/trackRecord'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'

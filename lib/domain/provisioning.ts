@@ -16,7 +16,6 @@
  * the bug is.
  */
 
-import type { ActorContext } from './actorContext'
 import type { Tx } from './db'
 import { type DomainError, invariant, notEntitled } from './errors'
 import { type Result, err, ok } from './result'

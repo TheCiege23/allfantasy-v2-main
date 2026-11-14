@@ -8,7 +8,6 @@
  * Pure deterministic. <50ms.
  */
 
-import { getAgeCurve } from '@/lib/trade-engine/sport-tuning-registry'
 import { z } from 'zod'
 
 // ---------------------------------------------------------------------------

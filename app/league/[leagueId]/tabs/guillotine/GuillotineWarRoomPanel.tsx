@@ -9,7 +9,7 @@
  * the league enables them. No dead buttons.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Loader2, ShieldQuestion, Skull, Sparkles } from 'lucide-react'
+import { AlertTriangle, Loader2, ShieldQuestion, Skull } from 'lucide-react'
 import {
   analyzeGuillotineWarRoomTrade,
   askGuillotineWarRoom,

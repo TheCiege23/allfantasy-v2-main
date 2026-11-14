@@ -3,12 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { analyzeLeagueGovernance } from './LeagueGovernanceAnalyzer'
-import {
-  appendAICommissionerActionLog,
-  ensureAICommissionerConfig,
-  runAICommissionerCycle,
-  toConfigView,
-} from './AICommissionerService'
+import { appendAICommissionerActionLog, ensureAICommissionerConfig, runAICommissionerCycle } from './AICommissionerService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommissionerAccount'

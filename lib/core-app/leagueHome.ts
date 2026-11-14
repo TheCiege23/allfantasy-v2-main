@@ -388,18 +388,6 @@ function recordOf(t: { wins: number; losses: number; ties: number }): string {
   return t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`
 }
 
-/** Reads an integer out of the settings blob, tolerating string values. */
-function settingWeek(settings: unknown, ...keys: string[]): number | null {
-  if (!settings || typeof settings !== 'object') return null
-  const bag = settings as Record<string, unknown>
-  for (const key of keys) {
-    const raw = bag[key]
-    const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
-    if (Number.isFinite(n) && n > 0 && n < 30) return Math.floor(n)
-  }
-  return null
-}
-
 /*
  * ⚠ `buildTimeline` LIVED HERE AND HAS BEEN DELETED, not merely bypassed.
  *
@@ -754,7 +742,6 @@ export async function getLeagueHomeData(
    * told "no draft has been set up".
    */
   const draftedAlready = rosteredPlayerCount > 0
-
 
   // A league whose teams all sit at 0-0 has been imported but never had results
   // read. Showing that as a standings table would present "everyone is 0-0" as a

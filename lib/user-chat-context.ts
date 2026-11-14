@@ -2,7 +2,7 @@ import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
 import { DEFAULT_SPORT } from '@/lib/sport-scope';
 import { getAllPlayers, SleeperPlayer } from './sleeper-client';
-import { FantasyCalcPlayer, findPlayerByName } from './fantasycalc';
+import { FantasyCalcPlayer } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 
 export interface PlatformLeagueInfo {
@@ -120,8 +120,6 @@ export interface UserChatContext {
   multiPlatform?: MultiPlatformContext;
   fantasyCalcTopPlayers?: { name: string; value: number; position: string; trend: number }[];
 }
-
-const IDP_POSITIONS = ['LB', 'DL', 'DB', 'DE', 'DT', 'CB', 'S', 'IDP_FLEX', 'LB/DL', 'DB/DL'];
 
 export async function buildUserChatContext(
   sleeperUsername: string

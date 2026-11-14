@@ -18,14 +18,7 @@ import {
   getPinnedDisplayBody,
   getReferencedMessageIdFromPin,
 } from "./PinnedMessageService"
-import {
-  isPollMessage,
-  parsePollBody,
-  getVoteUrl,
-  getVotePayload,
-  getClosePollUrl,
-  type PollPayload,
-} from "./PollService"
+import { parsePollBody, getVoteUrl, getVotePayload, getClosePollUrl, type PollPayload } from "./PollService"
 import { getMentionRanges } from "./MentionResolver"
 import { RichMessageRenderer } from "@/lib/rich-message"
 

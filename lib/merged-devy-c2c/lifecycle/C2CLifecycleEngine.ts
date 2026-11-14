@@ -4,12 +4,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getC2CConfig } from '../C2CLeagueConfig'
 import { appendC2CLifecycleEvent } from './C2CAuditLog'
-import {
-  C2C_LIFECYCLE_STATE,
-  type C2CLifecycleState,
-} from '../types'
+import { C2C_LIFECYCLE_STATE } from '../types'
 import { DEVY_LIFECYCLE_STATE } from '@/lib/devy/types'
 
 /** States that are treated as "college active" for C2C (can score in college contests until promotion deadline). */

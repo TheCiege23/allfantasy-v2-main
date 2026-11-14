@@ -236,30 +236,6 @@ type ConversationTurn = {
   content: string
 }
 
-type ChimmyPECRExecutionOutput = {
-  responseContract: AIToolResponseContract
-  modelOutputs?: Array<{
-    model?: string
-    modelName?: string
-    skipped?: boolean
-    /** What the model returned — read by `judgeChimmyDelivery` to decide whether the charge stands. */
-    raw?: string
-    error?: string
-    tokensPrompt?: number
-    tokensCompletion?: number
-  }>
-  sanitizedAiExplanation: string
-  sanitizedActionPlan: string
-  sanitizedUncertainty: string
-  providerStatus: Record<string, string>
-  quantData?: Record<string, unknown>
-  trendData?: Record<string, unknown>
-  recommendedTool: string
-  toolLinks: string[]
-  responseStructure: ReturnType<typeof buildResponseStructure>
-  processingMs: number
-}
-
 type ChimmyPECRPlanContext = {
   legacyEnrichmentContext: string
   enrichmentLoaded: boolean
@@ -449,7 +425,6 @@ const ChimmyFormSchema = z.object({
 
 /** A question about the trade block itself, whatever its intent classifies as. */
 const TRADE_BLOCK_WORDS = /\b(?:trade|trading)\s+block\b|\bon\s+the\s+block\b|\btrade\s+bait\b/i
-
 
 const SPORTS_KEYWORDS = [
   'trade', 'waiver', 'draft', 'player', 'pick', 'roster', 'lineup',
@@ -822,38 +797,6 @@ function buildResponseStructure(
     recommendedAction: actionPlan ?? undefined,
     caveats: uncertainty ? [uncertainty] : undefined,
   }
-}
-
-function resolveUsageLogModel(args: {
-  providerUsed?: string | null
-  modelOutputs?: Array<{
-    model?: string
-    modelName?: string
-    skipped?: boolean
-  }>
-}): string {
-  const outputs = Array.isArray(args.modelOutputs) ? args.modelOutputs : []
-  const selectedOutput =
-    (args.providerUsed
-      ? outputs.find((output) => output.model === args.providerUsed && output.skipped !== true)
-      : undefined) ??
-    outputs.find((output) => output.skipped !== true) ??
-    outputs[0]
-
-  return selectedOutput?.modelName || selectedOutput?.model || args.providerUsed || 'unknown'
-}
-
-function resolveUsageLogTokensUsed(modelOutputs?: Array<{
-  tokensPrompt?: number
-  tokensCompletion?: number
-}>): number {
-  if (!Array.isArray(modelOutputs) || modelOutputs.length === 0) {
-    return 0
-  }
-
-  return modelOutputs.reduce((sum, output) => {
-    return sum + Math.max(0, output.tokensPrompt ?? 0) + Math.max(0, output.tokensCompletion ?? 0)
-  }, 0)
 }
 
 function buildUserMessage(input: {

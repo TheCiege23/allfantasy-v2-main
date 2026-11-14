@@ -182,10 +182,6 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
 
-function compact<T>(values: Array<T | null | undefined>): T[] {
-  return values.filter((value): value is T => value != null)
-}
-
 function uniq(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean))]
 }

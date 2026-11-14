@@ -1,6 +1,6 @@
 'use client'
 
-import type { TeamScore, Driver } from '@/lib/rankings-engine/league-rankings-v2'
+import type { TeamScore } from '@/lib/rankings-engine/league-rankings-v2'
 
 const DRIVER_LABELS: Record<string, string> = {
   record_surge: 'Win Streak',

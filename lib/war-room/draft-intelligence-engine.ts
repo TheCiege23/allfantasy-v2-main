@@ -53,10 +53,6 @@ export type WarRoomIntelligenceResult = {
   envelope: LiveDraftBrainEnvelope
 }
 
-function playerKey(p: { name: string; position: string; team?: string | null }): string {
-  return `${p.name}|${p.position}|${(p.team ?? '').toLowerCase()}`
-}
-
 function scoreToConfidencePct(pickScore: number): number {
   const scaled = 50 + Math.min(45, Math.max(-45, pickScore / 3))
   return Math.round(Math.min(99, Math.max(48, scaled)))

@@ -16,7 +16,7 @@ import type {
   AIActionType,
   BindingInput,
 } from './AIActionModel'
-import { AI_ACTION_REGISTRY, getActionMeta } from './AIActionRegistry'
+import { getActionMeta } from './AIActionRegistry'
 import { applyAvailabilityToAction } from './AIActionPermissionGuard'
 import { isActionValidForSport, getSportSpecificPayload } from './AIActionSportAdapter'
 import { buildPrefillData, buildWorkflowPrefill, getPrefillTarget } from './AIActionWorkflowPrefiller'

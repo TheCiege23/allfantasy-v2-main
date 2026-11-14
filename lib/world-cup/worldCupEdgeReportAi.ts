@@ -15,7 +15,7 @@ import "server-only"
 import { routeTextCall, type RouterMessage } from "@/lib/ai/providerRouter"
 import { logAiInteraction } from "@/lib/ai/auditLogger"
 import { getCachedAiResult, saveAiResult } from "@/lib/ai/ai-result-cache"
-import type { EdgeReportGrounding, WorldCupEdgeReport } from "./worldCupEdgeReport"
+import type { WorldCupEdgeReport } from "./worldCupEdgeReport"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

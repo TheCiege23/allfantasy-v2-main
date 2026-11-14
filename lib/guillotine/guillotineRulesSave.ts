@@ -9,15 +9,7 @@ import { resolveGuillotineEndgame } from './endgameRules'
 import { calendarFitMessage, guillotineCalendarFit } from './calendarFit'
 import { readGuillotineAdvanced } from './guillotineAdvancedSettings'
 import { hasFirstChopHappened } from './guillotineFirstChopWeek'
-import {
-  normalizeGuillotineRulesPatch,
-  paidFieldsChanged,
-  RULE_DEFAULTS,
-  AI_RECAP_AUTO_KEY,
-  type GuillotineRuleField,
-  type GuillotineRules,
-  type RulesPatchError,
-} from './guillotineRules'
+import { normalizeGuillotineRulesPatch, paidFieldsChanged, RULE_DEFAULTS, AI_RECAP_AUTO_KEY, type GuillotineRuleField, type GuillotineRules } from './guillotineRules'
 import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
 import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'

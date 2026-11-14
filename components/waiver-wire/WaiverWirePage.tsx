@@ -12,15 +12,7 @@ import { toast } from "sonner"
 import WaiverFilters from "@/components/waiver-wire/WaiverFilters"
 import WaiverPlayerRow from "@/components/waiver-wire/WaiverPlayerRow"
 import WaiverClaimDrawer from "@/components/waiver-wire/WaiverClaimDrawer"
-import {
-  getTabLabel,
-  getWaiverRuleSummary,
-  getWaiverTypeLabel,
-  WAIVER_EMPTY_PLAYERS_TITLE,
-  WAIVER_EMPTY_PLAYERS_HINT,
-  WAIVER_EMPTY_PENDING_TITLE,
-  WAIVER_EMPTY_HISTORY_TITLE,
-} from "@/lib/waiver-wire/WaiverWireViewService"
+import { getTabLabel, getWaiverRuleSummary, getWaiverTypeLabel, WAIVER_EMPTY_PLAYERS_TITLE, WAIVER_EMPTY_PLAYERS_HINT, WAIVER_EMPTY_HISTORY_TITLE } from "@/lib/waiver-wire/WaiverWireViewService"
 import { getWaiverAIChatUrl, buildWaiverSummaryForAI } from "@/lib/waiver-wire/WaiverToAIContextBridge"
 import type { WriteAuthorityEnvelope } from "@/lib/league/write-authority"
 import { waiverPositionMatches } from "@/lib/waiver-wire/SportWaiverResolver"

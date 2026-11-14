@@ -1,26 +1,4 @@
-import type {
-  CompanyIntelligenceInput,
-  CompanyIntelligenceResult,
-  RetentionDriverInsight,
-  ChurnRiskFactor,
-  FeatureAdoptionOpportunity,
-  CommissionerBehaviorInsight,
-  LeagueFormatEffectiveness,
-  EngagementHealthSummary,
-  CohortRecommendation,
-  MonetizationSignal,
-  DataQualityReport,
-  DriverStrength,
-  ChurnRiskLevel,
-  AdoptionGap,
-  CommissionerPrevalence,
-  EngagementSignal,
-  RetentionSignal,
-  HealthTier,
-  MonetizationPotential,
-  LeagueSignalAggregateSlice,
-  ArchetypeDistributionSlice,
-} from './types'
+import type { CompanyIntelligenceInput, CompanyIntelligenceResult, RetentionDriverInsight, ChurnRiskFactor, FeatureAdoptionOpportunity, CommissionerBehaviorInsight, LeagueFormatEffectiveness, EngagementHealthSummary, CohortRecommendation, MonetizationSignal, DataQualityReport, DriverStrength, ChurnRiskLevel, AdoptionGap, CommissionerPrevalence, EngagementSignal, RetentionSignal, HealthTier, MonetizationPotential } from './types'
 
 export const COMPANY_INTELLIGENCE_VERSION = '6.6.0'
 

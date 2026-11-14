@@ -1,6 +1,4 @@
 import { prisma } from '../prisma'
-import { Prisma } from '@prisma/client'
-import { FantasyCalcPlayer } from '../fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { resolveCurrentTradeLearningSeason } from './season-resolver'
 

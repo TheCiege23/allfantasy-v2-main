@@ -59,11 +59,6 @@ export function validateC2CRosterSlots(args: {
   }
 }
 
-function totalProStarters(config: C2CLeagueConfigShape): number {
-  const slots = config.proLineupSlots ?? {}
-  return Object.values(slots).reduce((s, n) => s + (typeof n === 'number' ? n : 0), 0)
-}
-
 export function getCollegeRosterSize(config: C2CLeagueConfigShape): number {
   return config.collegeRosterSize
 }

@@ -4,7 +4,7 @@
  * PROMPT 5/6.
  */
 
-import { getRosterDefaultsForIdpLeague, getIdpLeagueConfig } from '@/lib/idp/IDPLeagueConfig'
+import { getIdpLeagueConfig } from '@/lib/idp/IDPLeagueConfig'
 import { buildIdpStarterSlots } from '@/lib/idp/IDPRosterPresets'
 import { IDP_STAT_KEYS } from '@/lib/idp/IDPScoringPresets'
 import type { IdpLeagueConfigLoaded, IdpPositionMode, IdpRosterPreset, IdpSlotOverrides, IdpScoringOverrides } from './types'

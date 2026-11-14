@@ -1,6 +1,6 @@
 import type { UserLineupPreferenceProfileInput } from '@/lib/lineup-decision-engine/types'
 import { LINEUP_PREFERENCE_DECAY_RULES, LINEUP_PREFERENCE_TIEBREAKER_RULES } from './rules'
-import { AUX_LINEUP_TRAIT_IDS, LINEUP_PREFERENCE_TRAIT_IDS, type LineupPreferenceTraitId } from './trait-ids'
+import { LINEUP_PREFERENCE_TRAIT_IDS, type LineupPreferenceTraitId } from './trait-ids'
 import type {
   LineupPreferenceEventKind,
   LineupPreferenceExample,

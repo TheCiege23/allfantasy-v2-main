@@ -473,13 +473,6 @@ function RankMovement({ delta }: { delta: number | null }) {
   return <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-0.5"><span className="text-[11px]">&#x25B2;</span>{Math.abs(delta)}</span>
 }
 
-function PhaseLabel({ phase, week }: { phase: string; week: number }) {
-  if (phase === 'offseason') return <>Offseason</>
-  if (phase === 'post_draft') return <>Post-Draft</>
-  if (phase === 'post_season') return <>Postseason</>
-  return <>Week {week}</>
-}
-
 function HeroCard({ title, subtitle, detail, accent, icon, cta, onCta }: {
   title: string
   subtitle: string

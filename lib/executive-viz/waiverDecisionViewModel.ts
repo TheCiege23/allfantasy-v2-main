@@ -26,7 +26,7 @@
  * time-series "timeline". Recommendation ordering is never labeled as historical movement.
  */
 import type { ManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
-import type { Recommendation, RecommendationPriority, RecommendationConfidence, RecommendationCategory } from '@/lib/decision-os/phase6/recommendations/types'
+import type { Recommendation, RecommendationPriority, RecommendationCategory } from '@/lib/decision-os/phase6/recommendations/types'
 import type { ExecutiveHealthStatus, ExecutiveBarDatum, ExecutiveSupportingChart } from './commissionerLeagueHealthViewModel'
 import { PRIORITY_RANK, statusFromPriority, titleCase } from './recommendationPresentation'
 

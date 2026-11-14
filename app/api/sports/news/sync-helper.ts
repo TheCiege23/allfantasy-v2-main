@@ -127,11 +127,6 @@ function extractAllTeamsFromText(text: string): string[] {
   return Array.from(found);
 }
 
-function extractTeamFromText(text: string): string | null {
-  const teams = extractAllTeamsFromText(text);
-  return teams.length > 0 ? teams[0] : null;
-}
-
 let _cachedPlayerNames: { names: Map<string, string>; fetchedAt: number } | null = null;
 const PLAYER_CACHE_TTL = 10 * 60 * 1000;
 

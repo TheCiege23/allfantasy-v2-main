@@ -6,11 +6,7 @@ import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { AutomationCatalogCard } from './AutomationCatalogCard'
 import { StackedBarChart, DistributionBarChart, InfoCard } from '@/components/commissioner-os/cards'
-import {
-  automationRunOutcomes,
-  automationStaleness,
-  AUTOMATION_OUTCOME_SERIES,
-} from '@/lib/commissioner-ui/charts/deriveChartSeries'
+import { automationRunOutcomes, automationStaleness } from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { AutomationHistoryDialog } from './AutomationHistoryDialog'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { AutomationCatalogEntry, AutomationExecutionEntry } from '@/lib/commissioner-ui/automations/decision-os-client'

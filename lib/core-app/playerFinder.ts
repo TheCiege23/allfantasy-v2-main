@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
-import type { SectionState, UnavailableSection } from './leagueHome'
+import type { SectionState } from './leagueHome'
 import { isBestBallLeagueRow } from './leagueBestBall'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
@@ -1080,7 +1080,6 @@ export async function getPlayerDetail(
                 : 'no unrostered player we can price would fill his slot in the leagues we checked',
         }
 
-
   /*
    * His game this week, for the lineup lock, from the week's rows (cached per
    * sport for a minute); the club is matched in memory, because SportsGame holds
@@ -1538,7 +1537,6 @@ async function loadPlayerFacts(
         available: false,
         reason: 'a rank needs this player to appear in the projection set, and he does not',
       }
-
 
   /*
    * AllFantasy's own engine, same week and same Sleeper-id key as the provider row above. Read once

@@ -4,8 +4,7 @@
  * Identifies college-only, pro-only, and overlap windows.
  */
 
-import type { LeagueScheduleAdapter, FantasyWeekPlan, WeekVolumeProfile, NbaScheduleConfig, FantasyDayEvent, DayVolume } from '../types'
-import { classifyDay } from '../NbaGameVolumeService'
+import type { LeagueScheduleAdapter, FantasyWeekPlan, WeekVolumeProfile, NbaScheduleConfig, FantasyDayEvent } from '../types'
 
 export class C2CScheduleAdapter implements LeagueScheduleAdapter {
   resolveFantasyWeek(

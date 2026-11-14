@@ -1,7 +1,7 @@
 import { prisma } from '../prisma'
 import { Prisma } from '@prisma/client'
 import { invalidateCalibrationCache } from './accept-calibration'
-import { computeAndStoreIsotonicMap, type IsotonicMap } from './isotonic-calibrator'
+import { computeAndStoreIsotonicMap } from './isotonic-calibrator'
 import { resolveCurrentTradeLearningSeason } from './season-resolver'
 import { TRADE_MODEL_VERSION } from '@/lib/replay-framework/versioning'
 

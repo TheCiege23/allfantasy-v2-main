@@ -17,7 +17,7 @@ import {
 import type { AIChatContext } from '@/lib/chimmy-chat'
 import { loadChimmyConversation } from '@/lib/chimmy-conversation-service'
 import { useAnalysisUnlock } from './useAnalysisUnlock'
-import ChimmyMessageBubble, { type ChimmyMessageMeta } from './ChimmyMessageBubble'
+import { type ChimmyMessageMeta } from './ChimmyMessageBubble'
 import { readBracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import ChimmyConversationThread from './ChimmyConversationThread'
 import ChimmyIntentChips from './ChimmyIntentChips'

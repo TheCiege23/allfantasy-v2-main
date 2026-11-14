@@ -19,7 +19,6 @@ import { StorylineOverlay } from '@/components/broadcast/StorylineOverlay'
 import { RivalriesPanel } from '@/components/broadcast/RivalriesPanel'
 
 const VIEWS = ['matchups', 'standings', 'storylines', 'rivalries'] as const
-type ViewKey = (typeof VIEWS)[number]
 
 export default function LeagueBroadcastPage() {
   const params = useParams<{ leagueId: string }>() ?? ({} as { leagueId: string })

@@ -15,7 +15,6 @@ import { survivorIdolPlayCutoffText, survivorIdolPlayDeadline } from './survivor
 import { normalizeSurvivorFoundationSettings } from './survivorSettings'
 import { getCouncil } from './SurvivorTribalCouncilService'
 import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
-import type { IdolPowerType } from './types'
 
 /** Seeded RNG for deterministic assignment. */
 function seededRandom(seed: number): () => number {

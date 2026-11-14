@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { XP_PER_LEVEL, TIERS } from "@/lib/ranking/config"
 import FeedbackModal from "@/app/components/FeedbackModal"
 import LegacyTutorial from "@/app/components/LegacyTutorial"
-import AIGMStatusIndicator from "@/app/components/AIGMStatusIndicator"
 import HeroMetricAI from "@/app/components/HeroMetricAI"
 // Deferred: only rendered once reportCardLeague + username are both set, pulls in recharts.
 const PortfolioChart = dynamic(() => import("@/components/PortfolioChart"), { ssr: false })
@@ -82,37 +81,11 @@ import BottomTabBar from "@/components/mobile/BottomTabBar"
 import type { MainTab } from "@/components/mobile/BottomTabBar"
 import SubTabNav from "@/components/mobile/SubTabNav"
 import MobileSectionHeader from "@/components/mobile/MobileSectionHeader"
-import { ConfidenceBadge, TrustExplanationSheet, TrustTimeline } from "@/components/ai-confidence"
+import { ConfidenceBadge, TrustExplanationSheet } from "@/components/ai-confidence"
 import { RiskFlags as AIRiskFlags } from "@/components/ai"
 import { convertConfidenceRiskToTrustData, buildDataSources } from "@/lib/analytics/confidence-types"
-import type { TrustData, TrustTimelinePoint } from "@/lib/analytics/confidence-types"
-import { 
-  MessageSquareText, 
-  HelpCircle, 
-  BarChart3, 
-  ArrowLeftRight, 
-  Target, 
-  Search, 
-  TrendingUp, 
-  Trophy, 
-  Radio, 
-  Swords, 
-  MessageCircle, 
-  Share2, 
-  PackageOpen,
-  ShoppingBag,
-  Sparkles,
-  Shield,
-  AlertTriangle,
-  CheckCircle2,
-  Info,
-  ChevronRight,
-  ChevronDown,
-  History,
-  X,
-  LayoutGrid,
-  Lightbulb
-} from "lucide-react"
+import type { TrustData } from "@/lib/analytics/confidence-types"
+import { MessageSquareText, HelpCircle, BarChart3, ArrowLeftRight, Target, Search, TrendingUp, Trophy, Radio, Swords, MessageCircle, Share2, PackageOpen, ShoppingBag, Sparkles, Shield, CheckCircle2, Info, ChevronRight, X, LayoutGrid, Lightbulb } from "lucide-react"
 import { useAnalytics } from "@/app/hooks/useAnalytics"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 
@@ -774,29 +747,6 @@ function LeagueHistoryAccordion({
   )
 }
 
-function CooldownPill(props: { label?: string; ms: number; tone?: 'cyan' | 'purple' | 'slate' }) {
-  const { label = 'Cooldown', ms, tone = 'slate' } = props
-  if (!ms || ms <= 0) return null
-
-  const toneClass =
-    tone === 'cyan'
-      ? 'bg-cyan-500/10 border-cyan-400/25 text-cyan-200'
-      : tone === 'purple'
-      ? 'bg-purple-500/10 border-purple-400/25 text-purple-200'
-      : 'bg-white/5 border-white/10 text-white/60'
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] leading-none ${toneClass}`}
-      title={`${label}: ${formatCooldown(ms)}`}
-    >
-      <span className="opacity-70">⏳</span>
-      <span className="opacity-80">{label}</span>
-      <span className="font-semibold">{formatCooldown(ms)}</span>
-    </span>
-  )
-}
-
 function ToolStatCard({ label, value, icon, accent, subValue }: { label: string; value: string; icon?: string; accent?: 'cyan' | 'purple' | 'emerald' | 'amber' | 'rose'; subValue?: string }) {
   const accentClasses = {
     cyan: 'from-cyan-500/20 to-cyan-500/5 border-cyan-400/25 hover:border-cyan-400/40',
@@ -891,7 +841,6 @@ function AFLegacyContent() {
   const [newPlatformName, setNewPlatformName] = useState('')
   const [newPlatformLeagueCount, setNewPlatformLeagueCount] = useState('')
   const [newPlatformNotes, setNewPlatformNotes] = useState('')
-
 
   const [error, setError] = useState('')
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'complete'>('idle')
@@ -6156,7 +6105,6 @@ function AFLegacyContent() {
                   </div>
                 </div>
 
-
                 {/* Connected Platforms - Compact Chips */}
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   {/* Sleeper Chip */}
@@ -7364,7 +7312,6 @@ function AFLegacyContent() {
                       username={username}
                       leagueId={tradeSelectedLeague || leagues[0]?.league_id || ""}
                     />
-
 
                     {/* ═══════════════════════════════════════════════════════════════════════════════
                         TRADE REPORT CARD - Premium Header (Dynasty Dealmaker Style)
@@ -14728,7 +14675,6 @@ function AFLegacyContent() {
                       </div>
                     )}
 
-
                     <div className="mb-4 p-4 rounded-xl bg-black/25 border border-cyan-500/20">
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                         <p className="text-xs text-gray-300 font-semibold">How Chimmy prepares your social post</p>
@@ -16131,7 +16077,6 @@ function AFLegacyContent() {
                         </div>
                       </div>
                     )}
-
 
                     {/* Playoff Bracket Preview */}
                     <h4 className="text-base sm:text-lg font-bold text-white mt-8 mb-3 sm:mb-4 flex items-center gap-2">

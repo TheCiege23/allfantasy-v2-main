@@ -2,8 +2,6 @@
  * Zombie collusion flag service: deterministic event flags (PROMPT 353). AI summary is optional/hybrid.
  */
 
-import { prisma } from '@/lib/prisma'
-
 interface CollusionFlag {
   leagueId: string
   rosterIdA: string

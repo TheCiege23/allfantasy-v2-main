@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import type { ConfidenceRiskOutput, RiskTag } from '@/lib/analytics/confidence-risk-engine'
 
 type GuardianActionType = 'trade' | 'player_drop' | 'faab_bid'

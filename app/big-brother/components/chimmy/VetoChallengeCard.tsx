@@ -3,11 +3,6 @@
 import { useState } from 'react'
 import type { BigBrotherSummary } from '@/components/big-brother/types'
 
-interface VetoThemeState {
-  themeHints?: string[]
-  challengeMode?: string
-}
-
 export function VetoChallengeCard({
   leagueId,
   summary,

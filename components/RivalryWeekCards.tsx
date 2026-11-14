@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import type { RivalryWeekData, RivalryPair, RivalryEvidence } from '@/lib/rivalry-engine'
 
 function cx(...classes: (string | false | null | undefined)[]) {

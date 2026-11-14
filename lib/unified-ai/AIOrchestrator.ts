@@ -5,7 +5,7 @@
  */
 
 import type { AIContextEnvelope, ModelOutput, OrchestrationResult, OrchestrationMode } from "./types"
-import { resolveOrchestrationMode, resolveSingleModel, resolveSpecialistPair, resolveModelsForConsensus } from "./ModelRoutingResolver"
+import { resolveOrchestrationMode, resolveSingleModel, resolveSpecialistPair } from "./ModelRoutingResolver"
 import { evaluateConsensus } from "./ConsensusEvaluator"
 import { composeUnifiedBrain } from "./UnifiedBrainComposer"
 import { resolveConfidence } from "./AIConfidenceResolver"

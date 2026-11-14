@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { Trophy, LogIn, UserPlus, Sparkles, Goal, Dribbble, IceCream2, Flag } from 'lucide-react'
+import { Trophy, LogIn, UserPlus, Sparkles, Goal } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 

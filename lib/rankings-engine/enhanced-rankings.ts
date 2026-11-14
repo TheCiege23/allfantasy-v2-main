@@ -46,12 +46,6 @@ interface EnhancedRankingsOutput {
   adaptiveWeightsUsed?: ComponentWeights | null
 }
 
-const VIEW_BASE_MAP: Record<EnhancedView, string> = {
-  this_year: 'win_now',
-  dynasty_horizon: 'rebuild',
-  overall: 'league',
-}
-
 export function computeEnhancedRankings(
   adaptiveOutput: AdaptiveRankingsOutput,
   goal: 'win-now' | 'balanced' | 'rebuild',

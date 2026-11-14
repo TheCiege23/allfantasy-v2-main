@@ -33,9 +33,7 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
  * survives a monochrome render.
  */
 
-
 const label = (p: ScenarioPlayer) => (p.position ? `${p.name} (${p.position})` : p.name)
-const names = (ps: ScenarioPlayer[]) => ps.map(label).join(', ')
 
 function fmt(n: number | null | undefined, digits: number): string {
   return n == null ? '—' : n.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })

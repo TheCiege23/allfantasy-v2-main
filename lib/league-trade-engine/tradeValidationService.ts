@@ -6,11 +6,7 @@ import type { League, Roster } from '@prisma/client'
 import { extractDraftPicksFromPlayerData } from '@/lib/dispersal-draft/assetPoolBuilder'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { countTowardRosterLimit, leagueRosterLimit, uncountedPlayerIds } from '@/lib/league/rosterLimit'
-import {
-  isPastTradeDeadline,
-  resolveLeagueTradeSettings,
-  type ResolvedLeagueTradeSettings,
-} from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { isPastTradeDeadline, type ResolvedLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { TRADE_ITEM_TYPES, type TradeItemType } from '@/lib/league-trade-engine/types'
 import {

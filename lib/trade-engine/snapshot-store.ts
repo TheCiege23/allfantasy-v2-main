@@ -1,6 +1,5 @@
 // lib/trade-engine/snapshot-store.ts
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client'
 
 export type SnapshotType = 'league_analyze' | 'rankings_analyze' | 'otb_packages'
 const LEGACY_SNAPSHOT_TYPES: SnapshotType[] = ['league_analyze', 'rankings_analyze', 'otb_packages']

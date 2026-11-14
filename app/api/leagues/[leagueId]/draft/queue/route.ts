@@ -8,7 +8,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import type { QueueEntry } from '@/lib/live-draft-engine/types'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
 import { normalizeDraftQueueSizeLimit } from '@/lib/draft-defaults/DraftQueueLimitResolver'
 import {
