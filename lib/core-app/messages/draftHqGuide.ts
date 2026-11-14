@@ -57,6 +57,8 @@ export const draftHqGuideMessages = defineMessages({
     rowFacts: (slot: string | null, rounds: number | null) =>
       [slot ? `Slot ${slot}` : null, rounds != null ? `${rounds} rounds` : null].filter(Boolean).join(' · '),
     /** A not-started draft's date (ET, as the rest of /core) — or where its date lives (2026-11-13). */
+    /** The locale a draft date is written in — in the catalog, not an inline language ternary. */
+    dateLocale: 'en-US',
     draftsOn: (when: string) => `Drafts ${when} ET`,
     noDateSet: 'No draft date set',
     dateOnPlatform: (platform: string) => `Draft date is on ${platform}`,
@@ -120,6 +122,7 @@ export const draftHqGuideMessages = defineMessages({
     lineSlotUnknown: 'No vemos cuál es tu equipo en este draft, así que no podemos decir cuándo eliges: abre el tablero.',
     rowFacts: (slot, rounds) =>
       [slot ? `Turno ${slot}` : null, rounds != null ? `${rounds} rondas` : null].filter(Boolean).join(' · '),
+    dateLocale: 'es-US',
     draftsOn: (when) => `Draft el ${when} ET`,
     noDateSet: 'Sin fecha de draft',
     dateOnPlatform: (platform) => `La fecha del draft está en ${platform}`,
