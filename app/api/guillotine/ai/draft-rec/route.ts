@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getGuillotineDraftRecommendation } from '@/lib/guillotine/ai/draftAssistant'
+import { getGuillotineDraftRecommendation, type DraftPlayer, type DraftedPlayer } from '@/lib/guillotine/ai/draftAssistant'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
 
 export const dynamic = 'force-dynamic'
@@ -10,8 +10,9 @@ export async function POST(req: NextRequest) {
   if (gate instanceof Response) return gate
 
   let body: {
-    currentRoster: { playerId: string; name: string; pos: string }[]
-    availablePlayers: { playerId: string; name: string; pos: string }[]
+    currentRoster: DraftedPlayer[]
+    /** Optional adp/team/byeWeek/projectedPoints per player sharpen the engine's ranking. */
+    availablePlayers: DraftPlayer[]
     sport?: string
     draftSlot?: number
     pickNumber?: number

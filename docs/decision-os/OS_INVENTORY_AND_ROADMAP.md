@@ -347,7 +347,7 @@ class of truth, a **Decision domain** owns a class of question, and a hub, page 
 | Identity OS | **Fact OS** | `decision-os/import/assertions` (R4) |
 | Manager Psychology OS | **Fact OS** — now inside the hub | `decision-os/psychology-os` (R4b) |
 | Lineup · Waiver · Trade · Commissioner | **Decision domains** — all four have engines | `decision-os/{lineup,waiver,trade,commissioner-health}` |
-| Draft | **Decision domain with NO engine** | feed only; D5 unresolved |
+| Draft | **Decision domain — engine exists** (2026-11-14 correction): `decision-os/draft/decision.ts` wraps `draft-helper/RecommendationEngine.ts`; duplicate rankers converging, see `docs/os/OS_BACKBONE_PRINCIPLES.md` §2 | `decision-os/draft` |
 | Decision OS | **the hub** — the only thing that assembles, grades and answers | `decision-os/grounding` |
 | Chimmy | **the interface** | `/api/chat/chimmy` |
 | Platform OS · Manager OS | ❌ **nav labels, not systems** — seven names routing to two pages | `FantasyOsGateway` |

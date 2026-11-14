@@ -66,15 +66,22 @@ export function planDraftQueueAiReorder(input: {
   queue: QueueEntry[]
   rosterPositions: string[]
   sport: string
+  /** The league's starting slots and superflex/2QB flags, so need matches the draft engine's. */
+  rosterSlots?: string[]
+  isSF?: boolean
+  is2QB?: boolean
   hasProDraftAiAccess: boolean
   aiManageDraftQueueEnabled: boolean
 }): DraftQueueAiReorderPlan {
-  const { queue, rosterPositions, sport, hasProDraftAiAccess, aiManageDraftQueueEnabled } = input
+  const { queue, rosterPositions, sport, rosterSlots, isSF, is2QB, hasProDraftAiAccess, aiManageDraftQueueEnabled } = input
 
   const result = reorderQueueByNeedRespectingLocks({
     queue,
     rosterPositions,
     sport,
+    rosterSlots,
+    isSF,
+    is2QB,
   })
 
   if (!hasProDraftAiAccess) {

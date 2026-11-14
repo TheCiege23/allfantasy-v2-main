@@ -26,7 +26,7 @@ There are two products, and they need opposite rules:
 ```
   FACTS                         DECISIONS                         SURFACES (what users see)
   ─────                         ─────────                         ─────────────────────────
-  Import OS (league sync)  ─┐   draft engine      (missing) ───▶  Draft HQ, mock drafts
+  Import OS (league sync)  ─┐   draft engine      ✅      ───▶  Draft room, Draft HQ, queue
   Sports data (players,     │   waiver engine     ✅      ───▶  Waivers, waiver-wire
    injuries, schedule)      ├─▶ trade engine      ✅      ───▶  Trades, War Room, Trade Evaluator
   Market values             │   lineup engine     ✅      ───▶  My Team, Matchup
@@ -47,9 +47,28 @@ and a decision engine never renders anything.
 | Lineup | `lib/decision-os/lineup/` | `/core/my-team` | ✅ wired |
 | Commissioner | `commissioner-health/` plus the behavioural API | `/core/commissioner`, `/commissioner-os` | ✅ in-process since 2026-11-14 |
 | Cross-league "what needs me" | `managerCommandCenter.ts`, `attentionQueue.ts` | **Your week** (`/core/week`) | ✅ Survivor signals fold into the week guide since 2026-11-14; `/manager-hub` kept for white-label tenants |
-| Draft | **none** — feed only (`draft-os/`) | Draft HQ | ❌ the biggest gap |
+| Draft | `lib/decision-os/draft/` wrapping `lib/draft-helper/RecommendationEngine.ts` | draft room, Draft HQ, queue reorder, Guillotine advice | ✅ engine exists; converging duplicates (§2.1) |
 | Chat | `grounding/` packet | Chimmy | ✅ on in production per 2026-09-12 note |
 | Speed | `lib/sports-os/` summaries | every `/core` screen | ✅ 100% since 2026-11-14 |
+
+### 2.1 Draft: one engine, and where the others stand (2026-11-14)
+
+This file first said draft had no engine. That was wrong. `lib/decision-os/draft/decision.ts`
+(`manager.draft.pick`) wraps the shared ranker `lib/draft-helper/RecommendationEngine.ts`, which
+the draft room, Draft HQ, Chimmy, the live draft brain, the War Room panel and autopick all call.
+The real gap was **other rankers answering the same question their own way**. Where they stand:
+
+| Ranker | Status |
+|---|---|
+| `draft-intelligence/draft-decision-engine.ts` + `draft-war-room` | **Retired.** Its only caller, `/api/draft-war-room`, had no caller in the app and now answers 410 |
+| `guillotine/ai/draftAssistant.ts` | **On the engine.** It used to return the first three players sent |
+| `draft-queue-engine/reorder-by-need.ts` | **On the engine's need model** (`computeNeeds`), with the league's real slots and superflex/2QB |
+| `bestball/ai/draftAssistant.ts` | **Kept, on purpose.** Best ball has no lineup to set; its depth targets and stack rules are a different question |
+| `ai/opponents/draft`, `mock-draft-simulator/DraftAIManager`, `mock-draft/ai-pick` (`pick`), `predict-board`, `sleeperDraftBoard` | **Kept, on purpose.** They simulate *other drafters* (bots, personalities, ADP-order CPUs). Advice to you and a prediction of them are different jobs |
+| `app/api/draft/ai/*`, `ai/draft-help` | LLM text only. Grounding them in the engine's output is the next step |
+
+Still open: auctions (the decision refuses them) and replacement-value scoring
+(`DRAFT_VORP_MODE`, computed but in `observe`).
 
 ## 3. The rules
 
@@ -134,9 +153,9 @@ portal, with:
    they should be summary-cached, and they depend on an event store that is still thin in
    production. Signal text is English-only today, as it is on `/manager-hub`; localize it at the
    signal source rather than in the page.
-2. **A draft engine.** It is the only domain with no engine, and draft season is when most new
-   users arrive. Start with pick recommendations from the existing value plus roster-need
-   primitives (`value-v2` marginal roster value, `lineup` optimal matching).
+2. **Finish the draft engine (§2.1).** Ground the LLM draft routes in the engine's output, add
+   auction bid advice, and measure `DRAFT_VORP_MODE=active` against observe before switching it on.
+   Draft season is when most new users arrive.
 3. **A "what changed since you looked" feed** driven by the sports-os reaction events. Injuries,
    trades and waiver results get pushed instead of polled, using the notification outbox and the
    fatigue budget (R7) that already exist.

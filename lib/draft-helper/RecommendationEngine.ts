@@ -235,6 +235,11 @@ function defaultTargetsForSport(sport: string): Record<string, { starter: number
   }
 }
 
+/** Exported so a caller keying on the engine's `computeNeeds` output uses the same position names. */
+export function normalizeDraftSlot(slot: string, sport: string): string {
+  return normalizeSlot(slot, sport)
+}
+
 function normalizeSlot(slot: string, sport: string): string {
   const normalized = String(slot || '').toUpperCase().trim()
   const normalizedSport = normalizeToSupportedSport(sport)
