@@ -96,7 +96,7 @@ test('delete confirmation contains focus and restores the page when cancelled', 
 
 test('sign-in account switch has a full touch target', async ({ page }) => {
   await page.goto('/login')
-  const link = page.locator('.af-au-switch a')
+  const link = page.locator('a.af-au-switch')
   await expect(link).toBeVisible()
   expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44)
 })
