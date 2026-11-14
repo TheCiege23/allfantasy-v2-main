@@ -126,6 +126,56 @@ try {
   console.log(`   seasons considered (summed over runs) ${considered}; weeks finalized ${finalized}; finalize threw ${finalizeFailed}`)
   console.log(`   refusals (summed over runs): ${Object.keys(refusals).length ? JSON.stringify(refusals) : '(none)'}`)
   console.log(`   last run that finalized any week (45d): ${iso(lastFinalize[0]?.at)}`)
+
+  // 5. Why the stat rows are missing (added after the first production run, 2026-11-14).
+  //   An NFL offensive player's weekly row comes only from Sleeper's week-wide stats call
+  //   (lib/live-scoring/nflLiveStatsProvider.ts), which returns an EMPTY map — silently — when the
+  //   call is refused, fails, or the roster ids are not Sleeper ids. Team defenses are derived from
+  //   SportsGame instead, which is why a week can hold ~8 rows and nothing else.
+  const calls = await prisma.$queryRaw`
+    SELECT DATE(called_at) AS day, COUNT(*)::int AS calls,
+           COUNT(*) FILTER (WHERE status = 1)::int AS ok, COUNT(*) FILTER (WHERE status <> 1)::int AS failed
+    FROM api_call_log
+    WHERE provider = 'sleeper' AND endpoint = 'stats/nfl/week' AND called_at > NOW() - INTERVAL '50 days'
+    GROUP BY 1 ORDER BY 1`
+  console.log('\n5a. Sleeper week-stats calls per day (status 1 = HTTP ok, 0 = not ok), last 50 days:')
+  if (!calls.length) console.log('   (no calls logged)')
+  for (const r of calls) console.log(`   ${String(r.day instanceof Date ? r.day.toISOString().slice(0, 10) : r.day)}: ${r.calls} calls, ${r.ok} ok, ${r.failed} failed`)
+
+  const audits = await prisma.$queryRaw`
+    SELECT a."createdAt" AS at,
+           a.details->>'week' AS week,
+           a.details->>'scoresUpserted' AS upserted,
+           a.details->>'weekStatsFromProvider' AS from_provider,
+           jsonb_array_length(COALESCE(a.details->'missingCachePlayerIds', '[]'::jsonb)) AS missing_cache,
+           jsonb_array_length(COALESCE(a.details->'missingWeekPlayerIds', '[]'::jsonb)) AS missing_week,
+           jsonb_array_length(COALESCE(a.details->'missingStatPlayerIds', '[]'::jsonb)) AS missing_stat
+    FROM admin_audit_log a JOIN redraft_seasons s ON s.id = a."targetId"
+    WHERE a.action = 'redraft_score_sync' AND s.sport = ANY(${sports}) AND s.season = ${season}
+    ORDER BY a."createdAt" DESC LIMIT 8`
+  console.log('\n5b. Latest weekly stat syncs for those seasons (from admin_audit_log):')
+  if (!audits.length) console.log('   (none logged)')
+  for (const r of audits) {
+    console.log(`   ${iso(r.at)} week ${r.week ?? '?'}: upserted ${r.upserted ?? '?'}, from Sleeper ${r.from_provider ?? '?'}, missing cache ${r.missing_cache} / week ${r.missing_week} / stat ${r.missing_stat}`)
+  }
+
+  const ids = await prisma.$queryRaw`
+    SELECT CASE WHEN rp."playerId" ~ '^[0-9]+$' THEN 'numeric (Sleeper-style)'
+                WHEN rp."playerId" ILIKE 'nfl:def:%' THEN 'team defense (nfl:def:XX)'
+                WHEN rp."playerId" ~ '^[A-Z]{2,3}$' THEN 'team code (DEF)'
+                ELSE 'other format' END AS shape,
+           COUNT(*)::int AS players,
+           COUNT(*) FILTER (WHERE rp."addedAt" >= DATE '2026-10-01')::int AS added_since_oct
+    FROM redraft_roster_players rp
+    JOIN redraft_rosters r ON r.id = rp."rosterId"
+    JOIN redraft_seasons s ON s.id = r."seasonId"
+    WHERE s.sport = ANY(${sports}) AND s.season = ${season} AND rp."droppedAt" IS NULL
+      AND EXISTS (SELECT 1 FROM redraft_matchups m WHERE m."seasonId" = s.id)
+    GROUP BY 1 ORDER BY 2 DESC`
+  console.log('\n5c. Rostered player-id formats in seasons that have matchups (Sleeper stats are keyed by numeric id):')
+  if (!ids.length) console.log('   (none)')
+  for (const r of ids) console.log(`   ${r.shape}: ${r.players} (added since Oct 1: ${r.added_since_oct})`)
+
   console.log('\nPaste everything above back. It contains counts only.')
 } catch (err) {
   console.error('diagnose-week-finalization failed:', err instanceof Error ? err.message.split('\n').slice(-1)[0] : err)
