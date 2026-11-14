@@ -36,14 +36,24 @@ const you = {
   xp: 2340, progressPct: 78, xpToNext: 660, nextLevelName: 'All-Pro I',
 }
 
-function hero(showLevel: boolean, community: { rank: number; of: number } | null = { rank: 6, of: 214 }) {
-  return render(<RankingsHero computedLine="Calculated" actions={<a href="/x">Compare</a>} you={you} community={community} showLevel={showLevel} />)
+function hero(showLevel: boolean, ranked = true) {
+  return render(
+    <RankingsHero
+      computedLine="Calculated"
+      actions={<a href="/x">Compare</a>}
+      you={you}
+      headline={ranked ? { kind: 'board', rank: 6, of: 214, board: null, next: { handle: 'alpha', gap: 4.4 } } : { kind: 'notRanked', min: 3 }}
+      scope="global"
+      showLevel={showLevel}
+    />,
+  )
 }
 
 describe('RankingsHero', () => {
-  it('shows where you stand on Community and your level, then the dark level card', () => {
+  it('says where you stand as the headline (2026-11-14), then the dark level card — no pills', () => {
     hero(true)
-    expect(screen.getByTestId('rk-pills').textContent).toBe('#6of 214 · Community15Level · Pro Bowler III')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('You’re #6 of 214 — 4.4 behind @alpha')
+    expect(screen.queryByTestId('rk-pills')).toBeNull()
     const card = screen.getByTestId('rk-levelcard')
     expect(card.textContent).toContain('2,340 XP')
     expect(card.textContent).toContain('660 XP to All-Pro I')
@@ -61,28 +71,27 @@ describe('RankingsHero', () => {
     ])
   })
 
-  it('leaves the level card to My portfolio’s own body there, and drops the Community pill when you are not ranked', () => {
-    hero(false, null)
+  it('leaves the level card to My portfolio’s own body there, and says when you are not ranked', () => {
+    hero(false, false)
     expect(screen.queryByTestId('rk-levelcard')).toBeNull()
-    expect(screen.getByTestId('rk-pills').textContent).toBe('15Level · Pro Bowler III')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('You’re not on this board yet — it needs 3+ league-seasons with results')
   })
 
   it('reads in Spanish', () => {
     lang.language = 'es'
     hero(true)
-    expect(screen.getByTestId('rk-pills').textContent).toContain('de 214 · Comunidad')
+    // The number is formatted in the app's number locale, which this test does not switch.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/^Eres #6 de 214: a 4[.,]4 de @alpha$/)
     expect(screen.getByTestId('rk-levelcard').textContent).toContain('Niv. 15 de 25')
   })
 })
 
 describe('RankingsBoardHead', () => {
-  it('states the population and, on Overall only, the score equation with its weights', () => {
-    const { rerender } = render(<RankingsBoardHead shown={10} population={214} you={{ rank: 6, of: 214 }} overall />)
-    expect(screen.getByTestId('rk-boardhead').textContent).toContain('10 of 214 managers ranked')
-    const weights = [...screen.getByRole('list', { name: 'Score components and their weights' }).querySelectorAll('li')].map((li) => li.textContent)
-    expect(weights).toEqual(['Win rate 30%', 'Scoring 20%', 'Titles 25%', 'Playoffs 25%'])
-    rerender(<RankingsBoardHead shown={10} population={214} you={null} overall={false} />)
-    expect(screen.queryByRole('list', { name: 'Score components and their weights' })).toBeNull()
+  it('says what the board is, and nothing the headline or the line under the board already says', () => {
+    render(<RankingsBoardHead />)
+    const head = screen.getByTestId('rk-boardhead').textContent ?? ''
+    expect(head).toContain('Community leaderboard')
+    expect(head).not.toMatch(/managers ranked|You #|30%/)
   })
 })
 

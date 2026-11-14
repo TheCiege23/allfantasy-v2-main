@@ -67,6 +67,7 @@ describe('MoreToolsLinks', () => {
     render(<MoreToolsLinks screen="rankings" language="es" />)
     const section = screen.getByTestId('more-tools-rankings')
     expect(within(section).getByRole('heading').textContent).toBe('Más herramientas')
-    expect(within(section).getByRole('link').textContent).toContain('Comparar mánagers')
+    // Rankings carries four links since 2026-11-14 (Compare, Your career and Find a league moved here from its header).
+    expect(within(section).getAllByRole('link').map((a) => a.textContent).join(' ')).toContain('Comparar mánagers')
   })
 })
