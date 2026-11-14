@@ -41,7 +41,10 @@
 .af-lh-dy-pennant[data-mine=true]{color:var(--dyn-ink,#0B0F17);background:linear-gradient(180deg,#F3D79F,var(--dyn-gold,#D4A24C))}
 .af-lh-dy-pennant[data-open=true]{color:#cfc6b2;background:rgba(7,9,16,.55);box-shadow:inset 0 0 0 1px rgba(243,215,159,.5)}
 .af-lh-dy-pennant-year{font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:112%;font-weight:800;font-size:15px;line-height:1}
-.af-lh-dy-pennant-name{max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.15;font-weight:600}
+/* Two lines, clamped: one nowrap line read "Gridiro…" and "Bench …" at every size, and the pennants cannot widen
+ * (five already fill the phone row). Two lines still end above the V-notch at both sizes (8px clear on a phone).
+ * __tests__/dynasty/dynastyRaftersNames.test.ts */
+.af-lh-dy-pennant-name{max-width:50px;overflow:hidden;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;hyphens:auto;overflow-wrap:break-word;font-size:11px;line-height:1.15;font-weight:600}
 .af-lh-dy-titles{display:inline-flex;align-items:center;gap:6px;color:#d9d1bf;font-size:13px;font-weight:600}
 .af-lh-dy-titles[data-mine=true]{color:var(--dyn-gold-soft,#F3D79F)}
 .af-lh-dy-titles svg{color:var(--dyn-gold,#D4A24C)}
