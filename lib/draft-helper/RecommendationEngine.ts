@@ -6,6 +6,17 @@
 import { draftPoolRowMatchesEligiblePositions } from '@/lib/draft-room/draft-pool-eligible-positions'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getAuctionMaxBid } from '@/lib/mock-draft/draft-engine'
+import {
+  byeWindowVerdict,
+  describeOpenSlotsAhead,
+  describeRuns,
+  describeWindow,
+  detectPositionRuns,
+  openStarterSlotsAhead,
+  runUrgency,
+  type ByeStatus,
+  type ScoringWindow,
+} from './draftContextSignals'
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
@@ -106,6 +117,19 @@ export interface RecommendationInput {
   aiAdpByKey?: Record<string, number>
   /** Optional bye weeks by player key (NFL) */
   byeByKey?: Record<string, number>
+  /**
+   * The NFL weeks this draft's rosters score (2026-11-14). An in-season or tournament-stage draft
+   * scores only part of the season, so a bye inside the window costs real points and one already
+   * played costs none. Omitted = a full-season draft: byes are not scored.
+   */
+  scoringWindow?: ScoringWindow | null
+  /** Positions of this draft's most recent picks, oldest first — feeds position-run detection. */
+  recentPickPositions?: string[]
+  /**
+   * Each team picking before the target's next turn, as the positions it has drafted so far in
+   * THIS draft. Used only as a count of open starting slots ahead — never to label a manager.
+   */
+  teamsAheadPositions?: string[][]
 }
 
 export interface RecommendationResult {
@@ -134,6 +158,12 @@ export interface RecommendationResult {
   correlationInsight: string | null
   formatInsight: string | null
   byeNote: string | null
+  /** The scoring window and how the top choice's bye sits in it; null for a full-season draft. */
+  scoringWindowInsight?: string | null
+  /** A position run in the most recent picks, when one is on. */
+  runInsight?: string | null
+  /** Open starting slots among the teams picking before your next turn. */
+  teamsAheadInsight?: string | null
   explanation: string
   evidence: string[]
   caveats: string[]
@@ -566,6 +596,12 @@ export type DraftPlayerRankingRow = {
   tierDropoffScore: number
   /** Which value signal produced vorp/tier fields for this row. */
   valueSignal: 'projection' | 'adp_gap' | 'none'
+  /** The player's bye week, when known. */
+  byeWeek: number | null
+  /** Where the bye sits against the scoring window ('unknown' with no window or no bye). */
+  byeStatus: ByeStatus
+  /** Score added for the window (negative inside it), the run and the teams ahead. */
+  contextScore: number
 }
 
 export type VorpMode = 'off' | 'observe' | 'active'
@@ -656,6 +692,9 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
   caveats: string[]
   playerKey: (p: RecommendationPlayer) => string
   withAdpCount: number
+  runs: ReturnType<typeof detectPositionRuns>
+  openAhead: ReturnType<typeof openStarterSlotsAhead>
+  teamsAheadCount: number
 } | null {
   const {
     available,
@@ -706,6 +745,12 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
   const pool = available.slice(0, 80)
   const vorpContext = vorpMode === 'off' ? null : buildVorpContext(pool, normalizedSport, overall, totalTeams)
 
+  // Draft-context signals (2026-11-14) — see draftContextSignals.ts.
+  const scoringWindow = input.scoringWindow ?? null
+  const runs = detectPositionRuns(input.recentPickPositions ?? [], totalTeams)
+  const openAhead = openStarterSlotsAhead({ teamsAhead: input.teamsAheadPositions ?? [], rosterSlots })
+  const teamsAheadCount = (input.teamsAheadPositions ?? []).length
+
   const scored: DraftPlayerRankingRow[] = pool.map((p) => {
     const pos = normalizeSlot(p.position, normalizedSport)
     let needScore = needs[pos] ?? 20
@@ -753,8 +798,18 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
       }
     }
 
+    const rawBye = p.byeWeek ?? input.byeByKey?.[key] ?? null
+    const byeWeek = rawBye != null && Number.isFinite(Number(rawBye)) ? Number(rawBye) : null
+    const bye = byeWindowVerdict(byeWeek, scoringWindow)
+    const run = mode === 'bpa' ? 0 : runUrgency(pos, runs, needScore)
+    // When most of the teams picking before you still need this position too, it will not wait.
+    const ahead = openAhead.find((f) => f.position === pos)
+    const aheadScore =
+      mode !== 'bpa' && ahead && teamsAheadCount > 0 && needScore >= 40 && ahead.teams / teamsAheadCount >= 0.5 ? 4 : 0
+    const contextScore = bye.score + run + aheadScore
+
     const totalScore =
-      modeAdjustment + adpEdge * 0.9 + formatBoost + dynastyBoost + auctionAdjustment + vorpScore + tierDropoffScore
+      modeAdjustment + adpEdge * 0.9 + formatBoost + dynastyBoost + auctionAdjustment + vorpScore + tierDropoffScore + contextScore
     const confidence = clamp(Math.round(55 + totalScore * 0.6), 40, 92)
     return {
       player: p,
@@ -771,10 +826,18 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
       tierDropoff,
       tierDropoffScore,
       valueSignal,
+      byeWeek,
+      byeStatus: bye.status,
+      contextScore,
     }
   })
 
   scored.sort((a, b) => b.totalScore - a.totalScore)
+
+  if (scoringWindow) {
+    const unknownByes = scored.slice(0, 30).filter((r) => r.byeStatus === 'unknown').length
+    if (unknownByes > 0) caveats.push(`Bye week unknown for ${unknownByes} of the top 30 players; they are not penalised for the scoring window.`)
+  }
 
   return {
     normalizedSport,
@@ -784,6 +847,9 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
     caveats,
     playerKey,
     withAdpCount,
+    runs,
+    openAhead,
+    teamsAheadCount,
   }
 }
 
@@ -813,6 +879,9 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
       correlationInsight: null,
       formatInsight: null,
       byeNote: null,
+      scoringWindowInsight: null,
+      runInsight: null,
+      teamsAheadInsight: null,
       explanation: 'No available players in pool.',
       evidence: [],
       caveats: ['No players available.'],
@@ -832,6 +901,9 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
       correlationInsight: null,
       formatInsight: null,
       byeNote: null,
+      scoringWindowInsight: null,
+      runInsight: null,
+      teamsAheadInsight: null,
       explanation: 'No available players in pool.',
       evidence: [],
       caveats: ['No players available.'],
@@ -839,7 +911,7 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     }
   }
 
-  const { normalizedSport, overall, needs, scored, caveats: rankingCaveats, playerKey, withAdpCount } = rankings
+  const { normalizedSport, overall, needs, scored, caveats: rankingCaveats, playerKey, withAdpCount, runs, openAhead, teamsAheadCount } = rankings
   for (const c of rankingCaveats) {
     if (!caveats.includes(c)) caveats.push(c)
   }
@@ -856,6 +928,9 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
       correlationInsight: null,
       formatInsight: null,
       byeNote: null,
+      scoringWindowInsight: null,
+      runInsight: null,
+      teamsAheadInsight: null,
       explanation: 'Could not rank available players.',
       evidence: [],
       caveats,
@@ -906,12 +981,39 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     }
   }
 
+  // Draft-context insights (2026-11-14): said once, about THIS draft, from facts the caller supplied.
+  const scoringWindow = input.scoringWindow ?? null
+  let scoringWindowInsight: string | null = null
+  if (scoringWindow) {
+    const skipped = scored.slice(0, 30).filter((r) => r.byeStatus === 'in_window')
+    const topBye =
+      best.byeStatus === 'played'
+        ? `${best.player.name}'s bye (week ${best.byeWeek}) is already played`
+        : best.byeStatus === 'after_window'
+          ? `${best.player.name}'s bye (week ${best.byeWeek}) falls after the window`
+          : best.byeStatus === 'in_window'
+            ? `${best.player.name}'s bye (week ${best.byeWeek}) is INSIDE the window — every alternative was worse even after that cost`
+            : `${best.player.name}'s bye week is unknown`
+    const moved = skipped.length
+      ? ` ${skipped.length} of the top 30 have a bye inside the window and were moved down (${skipped
+          .slice(0, 3)
+          .map((r) => `${r.player.name}, wk ${r.byeWeek}`)
+          .join('; ')}${skipped.length > 3 ? '; …' : ''}).`
+      : ''
+    scoringWindowInsight = `Scoring window: ${describeWindow(scoringWindow)}. ${topBye}.${moved}`
+  }
+  const runInsight = describeRuns(runs)
+  const teamsAheadInsight = describeOpenSlotsAhead(openAhead, teamsAheadCount)
+
   const reasonParts: string[] = []
   if ((needs[pos] ?? 0) >= 70) reasonParts.push(`fills critical ${pos} need`)
   else if ((needs[pos] ?? 0) >= 40) reasonParts.push(`improves ${pos} depth`)
   if (best.adpEdge > 5 && best.adpIsReal) reasonParts.push('good value vs ADP')
   if ((normalizedSport === 'NFL' || normalizedSport === 'NCAAF') && isSF && pos === 'QB') reasonParts.push('Superflex QB premium')
   if ((normalizedSport === 'NFL' || normalizedSport === 'NCAAF') && is2QB && pos === 'QB') reasonParts.push('2QB format premium')
+  if (scoringWindow && best.byeStatus === 'played') reasonParts.push('bye already played')
+  if (scoringWindow && best.byeStatus === 'after_window') reasonParts.push('no bye during the scoring window')
+  if (runs.some((r) => r.position === pos) && (needs[pos] ?? 0) >= 40) reasonParts.push(`${pos} run in progress`)
   const reason = reasonParts.length ? reasonParts.join('; ') : 'Best fit for roster and draft position'
 
   const alternatives = scored.slice(1, 4).map((item, idx) => ({
@@ -951,6 +1053,9 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
       `Tier cliff: next available ${pos} goes ~${Math.round(best.tierDropoff)} picks later by ADP.`,
     )
   }
+  if (scoringWindowInsight) evidence.push(scoringWindowInsight)
+  if (runInsight) evidence.push(runInsight)
+  if (teamsAheadInsight) evidence.push(teamsAheadInsight)
   if (stackInsight) evidence.push(`Stack signal: ${stackInsight}`)
   if (formatInsight) evidence.push(`Format signal: ${formatInsight}`)
   const uncertainty =
@@ -977,6 +1082,9 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     correlationInsight,
     formatInsight,
     byeNote,
+    scoringWindowInsight,
+    runInsight,
+    teamsAheadInsight,
     explanation,
     evidence,
     caveats,

@@ -34,6 +34,7 @@ function makeContext(overrides: Partial<DraftDecisionContext> = {}): DraftDecisi
     // Pick within the round; the overall pick is carried separately (fixed 2026-11-14).
     pick: 6,
     overallPick: 30,
+    scoringWindow: null,
     totalTeams: 12,
     status: 'in_progress',
     draftType: 'snake',
