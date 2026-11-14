@@ -74,7 +74,7 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
 
         <div className="af-lp-nav-right">
           {signedIn ? null : (
-            <Link href="/login" className="af-lp-signin">
+            <Link href="/login" className="af-btn af-btn--ghost af-lp-signin" data-testid="commissioners-nav-sign-in">
               Sign in
             </Link>
           )}
@@ -83,7 +83,17 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
           </CommissionersCtaLink>
         </div>
 
+        {/* Same pair as the landing page's phone header: a returning commissioner needs a way in. */}
         <div className="af-lp-mobile-actions">
+          {signedIn ? null : (
+            <Link
+              href="/login"
+              className="af-btn af-btn--ghost af-lp-mobile-signin"
+              data-testid="commissioners-mobile-sign-in"
+            >
+              Sign in
+            </Link>
+          )}
           <CommissionersCtaLink
             href={importHref}
             cta="import"
