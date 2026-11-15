@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { SurvivorTribeBadge, SurvivorTribeMark } from '@/components/league/survivor/SurvivorTribeBadge'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel, Lock } from 'lucide-react'
 import { DraftBoardCell, type DraftBoardCellPick, type PickHighlightTone } from './DraftBoardCell'
 import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import type { KeeperSessionSnapshot } from '@/lib/live-draft-engine/types'
@@ -256,6 +256,12 @@ function DraftBoardInner({
     return map
   }, [keeperLocks])
 
+  const keeperCountByRoster = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const lock of keeperLocks) counts.set(lock.rosterId, (counts.get(lock.rosterId) ?? 0) + 1)
+    return counts
+  }, [keeperLocks])
+
   /** Per-round map of draft slot (column) → cell data. Columns match `orderedSlots` (slot 1…N left to right). */
   const boardRowsByRoundAndSlot = useMemo(() => {
     const totalPicks = rounds * teamCount
@@ -317,7 +323,9 @@ function DraftBoardInner({
         tradedPickMeta: resolvedTradedMeta,
         managerTintColor: ownerColor.tintHex,
         amount: existing?.amount ?? null,
-        isKeeper: useLock ?? undefined,
+        isKeeper: useLock ? true : undefined,
+        isViewerKeeper:
+          useLock && currentUserRosterId && lock?.rosterId === currentUserRosterId ? true : undefined,
         isDevyPick: isDevyPick || undefined,
         isCollegePick: isCollegePick || undefined,
         isProPick: isProPick || undefined,
@@ -347,6 +355,7 @@ function DraftBoardInner({
     thirdRoundReversal,
     pickByKey,
     keeperByKey,
+    currentUserRosterId,
     slotOrder,
     tradedPicks,
     slotOrderBySlot,
@@ -748,6 +757,16 @@ function DraftBoardInner({
                   </span>
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
+                  ) : null}
+                  {keeperCountByRoster.get(entry.rosterId) ? (
+                    <span
+                      className="absolute right-0.5 top-0 inline-flex items-center gap-0.5 rounded-full bg-amber-400/15 px-1 text-[10px] font-bold leading-[14px] text-amber-300"
+                      title={`${keeperCountByRoster.get(entry.rosterId)} kept`}
+                      data-testid={`draft-board-team-header-keepers-${entry.slot}`}
+                    >
+                      <Lock className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+                      {keeperCountByRoster.get(entry.rosterId)}
+                    </span>
                   ) : null}
                 </div>
                 )
