@@ -157,6 +157,16 @@ export const RANKINGS_TOPICS = {
       body: 'La jugada destacada más reciente de uno de tus titulares en un partido que se juega ahora, con cuánto hace que ocurrió. Es el momento más nuevo, no una clasificación de quién anotó más.',
     },
   },
+  livePage: {
+    en: {
+      title: 'Live scores',
+      body: 'Open this while games are on: see who’s scoring for you and which matchups could still flip. It only reads your leagues — it never changes them.',
+    },
+    es: {
+      title: 'Marcadores en vivo',
+      body: 'Ábrelo mientras hay partidos: mira quién suma para ti y qué enfrentamientos aún pueden cambiar. Solo lee tus ligas; nunca las modifica.',
+    },
+  },
   liveGameWinEstimate: {
     en: {
       title: 'Win prob · est',

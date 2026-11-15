@@ -7,6 +7,8 @@ import LiveGuideHarnessClient from './LiveGuideHarnessClient'
  *
  *   /e2e/live-guide             between games: one final, the next kickoff on Sunday
  *   /e2e/live-guide?mode=live   games on: starters playing now, a live game card
+ *   /e2e/live-guide?league=1    inside one league (2026-11-15): the score headline, the one-line
+ *                               matchup, Around the league folded, a box score folded, a pregame card
  */
 export default async function LiveGuideHarnessPage({
   searchParams,
@@ -14,5 +16,5 @@ export default async function LiveGuideHarnessPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  return <LiveGuideHarnessClient mode={sp.mode === 'live' ? 'live' : 'between'} />
+  return <LiveGuideHarnessClient mode={sp.mode === 'live' ? 'live' : 'between'} league={sp.league === '1'} />
 }

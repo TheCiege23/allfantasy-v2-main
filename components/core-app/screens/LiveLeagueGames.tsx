@@ -29,6 +29,9 @@ function shown(team: ScoreboardTeam): { value: number | null; projected: boolean
 /**
  * The rest of the held league's games, under your own matchup card on Live scores. Compact rows:
  * both teams, the live score (or projection, marked), and a LIVE / FINAL / UPCOMING chip.
+ *
+ * ⚠ FOLDED TO ONE LINE (2026-11-15): "Around the league · Week 10 · 6 games live". The page is about
+ * your games; the rest of the league is one tap away rather than a grid between your matchup and them.
  */
 export function LiveLeagueGames({
   leagueId,
@@ -39,14 +42,18 @@ export function LiveLeagueGames({
 }) {
   const m = useMessages(liveLeagueGamesMessages)
   if (data.games.length === 0) return null
+  const liveCount = data.games.filter((game) => liveGameState(game, data.weekFinal) === 'live').length
   return (
-    <section className="af-llg" aria-label={m.aria} data-testid="live-league-games">
-      <header className="af-llg-head">
-        <h2 className="af-label af-llg-title">{m.title(data.week)}</h2>
-        <Link className="af-llg-more" href={`/core?league=${encodeURIComponent(leagueId)}`} prefetch={false}>
-          {m.openMatchups} →
-        </Link>
-      </header>
+    <details className="af-llg" aria-label={m.aria} data-testid="live-league-games">
+      <summary className="af-llg-head">
+        <h2 className="af-label af-llg-title">
+          {m.title(data.week)} · <span data-testid="live-league-games-summary">{m.summary(liveCount, data.games.length)}</span>
+        </h2>
+        <span className="af-live-mine-chev" aria-hidden />
+      </summary>
+      <Link className="af-llg-more" href={`/core?league=${encodeURIComponent(leagueId)}`} prefetch={false}>
+        {m.openMatchups} →
+      </Link>
       {data.allUnplayed ? <p className="af-llg-note">{m.allProjected}</p> : null}
       <ul className="af-llg-list">
         {data.games.map((game, i) => {
@@ -78,6 +85,6 @@ export function LiveLeagueGames({
           )
         })}
       </ul>
-    </section>
+    </details>
   )
 }

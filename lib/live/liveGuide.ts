@@ -73,18 +73,20 @@ export type LiveChip =
  * The fourth chip is the next kickoff between games and "done today" during them.
  */
 export function liveChips(moment: LiveMoment, glance: Pick<LeaguesAtAGlance, 'counts'> | null): LiveChip[] {
+  /*
+   * ⚠ NO "PLAYING NOW" CHIP (2026-11-15). The headline is that number ("3 of your starters are playing
+   * right now", or the score line with "· 3 starters playing now"), so a tile repeating it said it twice.
+   * The chip kind stays in the type for the renderer; nothing emits it.
+   */
   const chips: LiveChip[] = []
-  if (moment.kind === 'live' || moment.kind === 'between') {
-    const playing = moment.kind === 'live' ? moment.playing : 0
-    chips.push({ key: 'playing', value: playing, href: '#af-live-slate', tone: playing > 0 ? 'live' : 'plain' })
-  }
   if (glance) {
     const { behind, close } = glance.counts
     chips.push({ key: 'behind', value: behind, href: behind > 0 ? '#af-live-glance' : null, tone: behind > 0 ? 'bad' : 'plain' })
     chips.push({ key: 'close', value: close, href: close > 0 ? '#af-live-glance' : null, tone: close > 0 ? 'warn' : 'plain' })
   }
   if (moment.kind === 'between' && moment.nextAt) chips.push({ key: 'next', at: moment.nextAt, href: '#af-live-next' })
-  else if (moment.kind === 'live' || moment.kind === 'between') chips.push({ key: 'done', value: moment.done, href: '#af-live-slate' })
+  // "0 Done today" says nothing; the chip appears once a starter of yours has finished.
+  else if ((moment.kind === 'live' || moment.kind === 'between') && moment.done > 0) chips.push({ key: 'done', value: moment.done, href: '#af-live-slate' })
   return chips.slice(0, 4)
 }
 

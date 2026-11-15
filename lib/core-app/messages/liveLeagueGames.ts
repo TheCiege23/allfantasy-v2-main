@@ -11,6 +11,9 @@ export const liveLeagueGamesMessages = defineMessages({
     upcoming: 'Upcoming',
     proj: 'proj',
     openMatchups: 'Full league scoreboard',
+    /** The closed line: how many of the other games are being played now. */
+    summary: (live: number, total: number) =>
+      live > 0 ? `${live} ${live === 1 ? 'game' : 'games'} live` : `${total} ${total === 1 ? 'game' : 'games'}`,
   },
   es: {
     title: (week: number) => `En la liga · Semana ${week}`,
@@ -21,5 +24,7 @@ export const liveLeagueGamesMessages = defineMessages({
     upcoming: 'Próximo',
     proj: 'proy',
     openMatchups: 'Marcador completo de la liga',
+    summary: (live: number, total: number) =>
+      live > 0 ? `${live} ${live === 1 ? 'partido' : 'partidos'} en vivo` : `${total} ${total === 1 ? 'partido' : 'partidos'}`,
   },
 })
