@@ -8,6 +8,9 @@ import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPr
 import { renderBlogBodyHtml } from "@/lib/automated-blog/renderBlogBody"
 import { isBlogAdmin } from "@/lib/automated-blog/blogAdminGate"
 import { isArticleLive } from "@/lib/automated-blog/liveArticles"
+import { buildBlogPostingJsonLd } from "@/lib/automated-blog/blogPostingSchema"
+import { serializeJsonLd } from "@/lib/seo/StructuredDataResolver"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 type Props = { params: Promise<{ slug: string }>; searchParams?: Promise<{ preview?: string }> }
 
@@ -59,12 +62,38 @@ export default async function BlogArticlePage({ params, searchParams }: Props) {
   if (!article) notFound()
   // `?preview=1` shows an unpublished article, so it is an admin view — for
   // anyone else a draft does not exist.
-  if (!isArticleLive(article) && !(isPreview && (await isBlogAdmin()))) notFound()
+  const live = isArticleLive(article)
+  if (!live && !(isPreview && (await isBlogAdmin()))) notFound()
 
   const bodyHtml = renderBlogBodyHtml(article.body)
+  // An admin's preview of a draft is not a page anyone should index, so it gets no article data.
+  const jsonLd = live
+    ? buildBlogPostingJsonLd({
+        origin: getPublicSiteOrigin(),
+        slug: article.slug,
+        title: article.title,
+        description: buildBlogSEO({
+          title: article.title,
+          excerpt: article.excerpt,
+          body: article.body,
+          sport: article.sport,
+          category: article.category,
+          slug: article.slug,
+          seoTitle: article.seoTitle,
+          seoDescription: article.seoDescription,
+        }).description,
+        category: article.category,
+        tags: article.tags,
+        publishedAt: article.publishedAt,
+        updatedAt: article.updatedAt,
+      })
+    : []
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
+      {jsonLd.map((item, i) => (
+        <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(item) }} />
+      ))}
       <article className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-12">
         <Link href="/blog" className="text-sm text-gray-400 hover:text-white" data-testid="blog-article-back-button">
           ← Back to Blog

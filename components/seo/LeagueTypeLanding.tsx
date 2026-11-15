@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { ArrowRight, Check, ChevronDown, Eye } from 'lucide-react'
 import HomeTopNav from '@/components/navigation/HomeTopNav'
 import SeoLandingFooter from '@/components/landing/SeoLandingFooter'
+import BlogGuideLinks from '@/components/seo/BlogGuideLinks'
+import { LEAGUE_TYPE_GUIDES } from '@/lib/seo-landing/blog-guides'
 import {
   SPORT_DISPLAY,
   getLeagueTypeDemoMeta,
@@ -134,6 +136,8 @@ export default function LeagueTypeLanding({ page }: { page: LeagueTypePage }) {
               </ul>
             </section>
           ) : null}
+
+          <BlogGuideLinks guides={LEAGUE_TYPE_GUIDES[page.slug]} testIdPrefix={`league-type-${page.slug}`} />
 
           <section className="mt-10" aria-labelledby="faq">
             <h2 id="faq" className="text-lg font-semibold">

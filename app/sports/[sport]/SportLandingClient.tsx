@@ -8,6 +8,8 @@ import type { SportConfig } from '@/lib/seo-landing/config'
 import { getSportCanonical } from '@/lib/seo-landing/config'
 import { ArrowRight, Trophy } from 'lucide-react'
 import { ShareButtons } from '@/components/seo/ShareButtons'
+import BlogGuideLinks from '@/components/seo/BlogGuideLinks'
+import { SPORT_GUIDES } from '@/lib/seo-landing/blog-guides'
 
 export type SportLeagueTypeLink = { slug: string; name: string; subtitle: string | null }
 
@@ -109,6 +111,8 @@ export default function SportLandingClient({
               </ul>
             </section>
           ) : null}
+
+          <BlogGuideLinks guides={SPORT_GUIDES[config.slug]} testIdPrefix={`sport-landing-${config.slug}`} />
 
           <section className="mt-10" aria-labelledby="tools">
             <h2 id="tools" className="text-lg font-semibold">

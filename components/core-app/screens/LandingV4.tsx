@@ -722,6 +722,7 @@ export function LandingV4({
           <nav className="af-lp-footer-links" aria-label="Footer">
             <Link href="/commissioners">{c.nav.forCommissioners}</Link>
             <Link href="/core/players">{c.footer.playerFinder}</Link>
+            <Link href="/blog">{c.footer.blog}</Link>
             <Link href="/core">{c.footer.dashboard}</Link>
             <Link href="/core/partners">{c.nav.partners}</Link>
             <Link href="/privacy">{c.footer.privacy}</Link>
