@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, Gavel, History, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, Gavel, History, Lock, Pencil } from 'lucide-react'
 import { withAlpha } from '@/lib/draft-room'
 import { PlayerAvatar } from './PlayerAvatar'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -28,7 +28,10 @@ export type DraftBoardCellPick = {
   byeWeek: number | null
   displayName: string | null
   amount?: number | null
+  /** A kept player pre-assigned to this slot before the draft — not a pick anyone made. */
   isKeeper?: boolean
+  /** The kept player belongs to the viewer's roster. */
+  isViewerKeeper?: boolean
   isDevyPick?: boolean
   isCollegePick?: boolean
   isProPick?: boolean
@@ -202,13 +205,29 @@ function DraftBoardCellInner({
   const tradeHex = tradedPickColorMode ? pick.tradedPickMeta?.tintColor ?? null : null
   const positionHex = !isEmpty ? positionTintHex(pick.position) : null
   const fillHex = !isEmpty ? positionHex : tradeHex
-  const tileStyle: React.CSSProperties | undefined = fillHex
-    ? isEmpty
-      ? { backgroundColor: withAlpha(fillHex, 0.22), boxShadow: `inset 0 0 0 1px ${withAlpha(fillHex, 0.55)}` }
-      : { backgroundColor: fillHex }
-    : undefined
-  // Filled tiles carry dark text on the bright position colour, as Sleeper does.
-  const onFill = !isEmpty && Boolean(positionHex)
+  /**
+   * A kept player was assigned before the draft — nobody picked them. A solid position tile made
+   * them indistinguishable from a real pick (the old cue was an 11px "K"), so a keeper is drawn
+   * LOCKED instead: dark striped tile, position-coloured edge, light text. The viewer's own keeper
+   * adds the accent ring the board already uses for "yours".
+   */
+  const isKept = Boolean(pick.isKeeper) && !isEmpty
+  const keptHex = positionHex ?? '#8b949e'
+  const tileStyle: React.CSSProperties | undefined = isKept
+    ? {
+        backgroundColor: '#101a2e',
+        backgroundImage: `repeating-linear-gradient(135deg, ${withAlpha(keptHex, 0.24)} 0 7px, transparent 7px 14px)`,
+        boxShadow: pick.isViewerKeeper
+          ? `inset 0 0 0 2px ${keptHex}, 0 0 0 2px #22d3ee`
+          : `inset 0 0 0 2px ${keptHex}`,
+      }
+    : fillHex
+      ? isEmpty
+        ? { backgroundColor: withAlpha(fillHex, 0.22), boxShadow: `inset 0 0 0 1px ${withAlpha(fillHex, 0.55)}` }
+        : { backgroundColor: fillHex }
+      : undefined
+  // Filled tiles carry dark text on the bright position colour, as Sleeper does. Kept tiles are dark.
+  const onFill = !isEmpty && Boolean(positionHex) && !isKept
 
   const ownerLabel = pick.tradedPickMeta?.newOwnerName ?? pick.displayName ?? null
   const showTradeChip = Boolean(isEmpty && ownerLabel && pick.tradedPickMeta?.newOwnerName)
@@ -222,7 +241,9 @@ function DraftBoardCellInner({
 
   const ariaLabel = isEmpty
     ? `Draft pick ${compactLabel}, empty slot`
-    : `${pick.playerName ?? 'Player'}, ${pick.position ?? ''}, ${pick.team ?? ''}, pick ${compactLabel}`
+    : isKept
+      ? `${pick.isViewerKeeper ? 'Your kept player' : 'Kept player'} ${pick.playerName ?? ''}, ${pick.position ?? ''}, ${pick.team ?? ''}, uses pick ${compactLabel}`
+      : `${pick.playerName ?? 'Player'}, ${pick.position ?? ''}, ${pick.team ?? ''}, pick ${compactLabel}`
 
   const hasRealHeadshot = Boolean(headshotSrc && classifyAvatarSource(headshotSrc) === 'headshot')
   const hasStatusBadges = Boolean(
@@ -318,7 +339,16 @@ function DraftBoardCellInner({
 
       {hasStatusBadges ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden pr-8">
-          {pick.isKeeper ? <StatusBadge label="K" className="bg-emerald-500/30 text-emerald-100" /> : null}
+          {isKept ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px font-mono text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#14172a]"
+              style={{ backgroundColor: keptHex }}
+              data-testid={`draft-board-cell-keeper-${pick.overall}`}
+            >
+              <Lock className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+              {pick.isViewerKeeper ? 'Yours' : 'Kept'}
+            </span>
+          ) : null}
           {pick.isDevyPick ? <StatusBadge label="D" className="bg-violet-500/30 text-violet-100" /> : null}
           {pick.isCollegePick ? <StatusBadge label="C" className="bg-violet-500/30 text-violet-100" /> : null}
           {pick.isProPick ? <StatusBadge label="P" className="bg-cyan-500/30 text-cyan-100" /> : null}
@@ -419,6 +449,15 @@ function DraftBoardCellInner({
                 </span>
               ) : null}
             </span>
+            {isKept ? (
+              <span
+                className="mt-0.5 block truncate text-[10px] font-bold leading-[12px]"
+                style={{ color: keptHex }}
+                data-testid={`draft-board-cell-keeper-cost-${pick.overall}`}
+              >
+                {pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
+              </span>
+            ) : null}
           </div>
           {/* Only a real photo: with none, an initials circle read as a dark blob over the name. */}
           {hasRealHeadshot ? (
