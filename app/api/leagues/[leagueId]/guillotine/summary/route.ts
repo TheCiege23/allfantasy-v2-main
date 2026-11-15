@@ -10,6 +10,9 @@
  *
  * POST: a chopped manager's "Who's next?" pick (`{ action: 'next_chop_pick', week, rosterId }`,
  * lib/guillotine/nextChopPick.ts). Any member; the store refuses a manager who is still alive.
+ *
+ * Commissioner decides (lib/guillotine/commissionerTiebreak.ts): `GET ?view=tiebreak` lists chop ties left to the
+ * commissioner, and `POST { action: 'commissioner_tiebreak', key, rosterIds }` picks who goes. Commissioner only.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -30,6 +33,7 @@ import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRu
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
 import { loadNextChopPickState, saveNextChopPick } from '@/lib/guillotine/nextChopPickStore'
+import { decideCommissionerTiebreak, loadCommissionerTiebreaks } from '@/lib/guillotine/commissionerTiebreakLoad'
 import { guillotineAdvancedSnapshot, guillotineRulesSnapshot } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
@@ -76,6 +80,15 @@ export async function GET(
     }
     const view = await readGuillotineRules(leagueId, userId)
     return view ? NextResponse.json(view) : NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
+  }
+
+  // `?view=tiebreak`: chop ties left to the commissioner (lib/guillotine/commissionerTiebreak.ts). Free — the step
+  // is in every league's default tiebreak order.
+  if (req.nextUrl.searchParams?.get('view') === 'tiebreak') {
+    if (!(await isCommissioner(leagueId, userId))) {
+      return NextResponse.json({ error: 'Only the commissioner can decide a chop tie.' }, { status: 403 })
+    }
+    return NextResponse.json({ ties: await loadCommissionerTiebreaks(leagueId) })
   }
 
   // `?view=preview`: the commissioner's chop-week preview (lib/guillotine/chopPreview.ts). AF Commissioner,
@@ -174,7 +187,16 @@ export async function POST(
   if (!(await canAccessLeagueDraft(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!(await isGuillotineLeague(leagueId))) return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
 
-  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown; key?: unknown; rosterIds?: unknown } | null
+  // The commissioner picks who goes in a tied chop (`{ action: 'commissioner_tiebreak', key, rosterIds }`).
+  if (body?.action === 'commissioner_tiebreak') {
+    if (!(await isCommissioner(leagueId, userId))) {
+      return NextResponse.json({ error: 'Only the commissioner can decide a chop tie.' }, { status: 403 })
+    }
+    const decided = await decideCommissionerTiebreak({ leagueId, userId, key: body.key, rosterIds: body.rosterIds })
+    if (!decided.ok) return NextResponse.json({ error: decided.error }, { status: decided.status })
+    return NextResponse.json({ ok: true, ties: await loadCommissionerTiebreaks(leagueId) })
+  }
   if (body?.action !== 'next_chop_pick' || typeof body.rosterId !== 'string' || !body.rosterId || !Number.isInteger(body.week)) {
     return NextResponse.json({ error: 'Send { action: "next_chop_pick", week, rosterId }.' }, { status: 400 })
   }

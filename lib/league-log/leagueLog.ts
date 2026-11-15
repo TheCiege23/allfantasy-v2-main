@@ -330,6 +330,25 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: () => ({ en: 'Recalculated the standings', es: 'Recalculó la clasificación' }),
   },
+  // Written when a commissioner picks who goes in a tied Guilly chop (lib/guillotine/commissionerTiebreakStore.ts).
+  // The chop itself follows on the next score sync; this records that the commissioner, not a rule, decided it.
+  guillotine_tiebreak_decided: {
+    category: 'rulings',
+    members: true,
+    line: (ctx) => {
+      const a = obj(ctx.row.afterState)
+      const week = str(obj(ctx.row.metadata).key)?.split(':')[1]
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const tied = Array.isArray(a.tiedRosterIds) ? a.tiedRosterIds.length : 0
+      const wk = { en: week ? ` in week ${week}` : '', es: week ? ` en la semana ${week}` : '' }
+      return {
+        en: `Broke the chop tie${wk.en}: ${names(a.choppedRosterIds, 'en') || 'a team'} goes`,
+        es: `Desempató la eliminación${wk.es}: cae ${names(a.choppedRosterIds, 'es') || 'un equipo'}`,
+        detailEn: tied ? `${tied} teams were tied, and the league's tiebreak order left it to the commissioner.` : null,
+        detailEs: tied ? `${tied} equipos estaban empatados y el orden de desempate de la liga lo dejó al comisionado.` : null,
+      }
+    },
+  },
   dispute_ruled: {
     category: 'rulings',
     members: true,
@@ -559,6 +578,12 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)
+    }
+    if (row.actionType === 'guillotine_tiebreak_decided') {
+      const a = obj(row.afterState)
+      for (const id of [a.choppedRosterIds, a.tiedRosterIds].flatMap((v) => (Array.isArray(v) ? v : []))) {
+        if (str(id)) ids.add(str(id)!)
+      }
     }
     if (row.actionType === 'guillotine_stat_correction') {
       const a = obj(row.afterState)

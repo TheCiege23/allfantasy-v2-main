@@ -84,7 +84,7 @@ const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: string }> = 
   { value: 'season_points', label: 'Fewer season points is chopped' },
   { value: 'previous_period', label: 'Lower score last week is chopped' },
   { value: 'draft_slot', label: 'Later draft slot is chopped (week 1 only)' },
-  { value: 'commissioner', label: 'Commissioner decides' },
+  { value: 'commissioner', label: 'Commissioner decides (12 hours to pick, then the next rule)' },
   { value: 'random', label: 'Random' },
 ]
 
