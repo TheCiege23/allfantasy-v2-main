@@ -207,7 +207,7 @@ export async function evaluateAiCostGate(
         ok: false,
         reason: 'plan',
         response: NextResponse.json(
-          { error: 'Premium feature', code: 'feature_not_entitled', message: `${cfg.label} is part of a paid plan.`, upgradePath: '/pricing' },
+          { error: 'Premium feature', code: 'feature_not_entitled', message: `${cfg.label} is part of a paid plan.`, upgradePath: '/pricing?from=ai_not_entitled' },
           { status: 403 },
         ),
       }
@@ -232,7 +232,7 @@ export async function evaluateAiCostGate(
           message: `You've reached today's limit for ${cfg.label}. It resets at midnight UTC.${upgrade}`,
           limit: dailyLimit,
           retryAfterSec: daily.retryAfterSec,
-          upgradePath: !hasPlan && cfg.featureId ? '/pricing' : null,
+          upgradePath: !hasPlan && cfg.featureId ? '/pricing?from=ai_daily_cap' : null,
           useDeterministicFallback: true,
         }
         return {

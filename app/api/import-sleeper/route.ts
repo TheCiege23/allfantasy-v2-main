@@ -5,7 +5,7 @@ import { z } from "zod";
 import { LeagueSport, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { requireVerifiedUser } from "@/lib/auth-guard";
+import { requireAgeConfirmedUser } from "@/lib/auth-guard";
 import {
   upsertPlatformIdentity,
   isPlatformRankLocked,
@@ -98,7 +98,7 @@ type SleeperLeagueImportOutcome =
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireVerifiedUser();
+    const auth = await requireAgeConfirmedUser();
     if (!auth.ok) {
       return auth.response;
     }

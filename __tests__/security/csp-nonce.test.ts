@@ -57,6 +57,9 @@ describe('the nonce policy', () => {
     // present; they are kept only as the documented pre-CSP3 fallback.
     expect(s.indexOf("'unsafe-inline'")).toBeGreaterThan(s.indexOf("'strict-dynamic'"))
     expect(s).toContain("'report-sample'")
+    // No eval: under a nonce 'unsafe-inline' is ignored, so eval would be the one way left for
+    // an injected string to run. CSP_ALLOW_EVAL=1 is the rollback (csp-enforced.test.ts).
+    expect(s).not.toContain("'unsafe-eval'")
   })
 
   it('keeps every other enforced protection', () => {
