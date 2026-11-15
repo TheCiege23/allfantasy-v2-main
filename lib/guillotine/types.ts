@@ -129,3 +129,5 @@ export type GuillotineEventType =
    * metadata says whether the corrected scores would have chopped someone else.
    */
   | 'stat_correction'
+  /** The commissioner undid a chop (./chopUndo.ts): the team is back, its players restored. */
+  | 'chop_undone'

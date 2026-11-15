@@ -509,6 +509,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
           choppedRosterIds,
           pool: split.pool,
           shares: Object.fromEntries(split.shares),
+          taken: Object.fromEntries(split.taken),
         })
         if (!input.skipChat && input.systemUserId) {
           const whose = choppedRosterIds.length === 1 ? "The chopped team's" : "The chopped teams'"
