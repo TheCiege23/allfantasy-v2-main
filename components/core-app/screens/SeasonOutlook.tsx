@@ -149,7 +149,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                         <Link className="af-olk-driver-l" href={`/core/season-outlook?league=${encodeURIComponent(s.leagueId)}`}>
                           {s.leagueName} · {copy('week')} {s.week}
                         </Link>
-                        <span className="af-olk-driver-v af-num">±{(s.swing / 2).toFixed(0)} pts</span>
+                        <span className="af-olk-driver-v af-num">±{(s.swing / 2).toFixed(0)}%</span>
                       </div>
                       <span className="af-olk-diverge" aria-hidden>
                         <span className="af-olk-diverge-mid" />
