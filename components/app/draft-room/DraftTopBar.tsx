@@ -11,6 +11,9 @@ import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
 import type { TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import './af-draft-room.css'
 import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
+import { effectiveDueAt, formatClockTime, isLongPickClock, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
+import { useMessages } from '@/components/i18n/useMessages'
+import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlanner'
 
 type DraftTopBarProps = {
   leagueName: string
@@ -81,6 +84,8 @@ type DraftTopBarProps = {
   timerPauseReason?: 'commissioner' | 'overnight_window' | null
   /** ISO UTC when overnight quiet window ends (session.timer.overnightResumeAt). */
   overnightResumeAtIso?: string | null
+  /** Commissioner quiet hours; moves the shown due time past them, since the clock freezes then. */
+  quietWindow?: QuietWindow | null
   /** Number of browsers currently viewing the draft room (from the live-draft presence channel). */
   onlineCount?: number
   /** `redraft_snake` — show format chips and slightly stronger header chrome (snake redraft live URL). */
@@ -250,6 +255,7 @@ export function DraftTopBar({
   onToggleAutoPick,
   timerPauseReason = null,
   overnightResumeAtIso = null,
+  quietWindow = null,
   thirdRoundReversal = false,
   bigScreenHref = null,
   aiRecommendationOverlay = null,
@@ -260,7 +266,8 @@ export function DraftTopBar({
   dynastyDraftKindLabel = null,
   rookieAuctionNote = null,
 }: DraftTopBarProps) {
-  const { t, tInterpolate } = useLanguage()
+  const { t, tInterpolate, language } = useLanguage()
+  const pickClockCopy = useMessages(pickClockPlannerMessages)
   const liveRemaining = useDraftCountdownSeconds(
     timerStatus,
     timerEndAtIso ?? undefined,
@@ -379,6 +386,17 @@ export function DraftTopBar({
           ? formatTimerRemaining(0)
           : formatTimerRemaining(effectiveRemaining ?? 0)
 
+  // On a long pick clock (10+ minutes) a countdown alone is hard to plan around — "3h 11m" means
+  // working out the time. Show the wall-clock deadline beside it. Not a mode: any draft type.
+  // Quiet hours freeze the clock server-side, so the deadline is the effective one, not timerEndAt.
+  const dueLabel = useMemo(() => {
+    if (timerStatus !== 'running' || !isLongPickClock(timerSeconds) || !timerEndAtIso) return null
+    const endMs = Date.parse(timerEndAtIso)
+    if (!Number.isFinite(endMs)) return null
+    const due = effectiveDueAt(Date.now(), endMs, quietWindow ?? null)
+    return pickClockCopy.dueAt(formatClockTime(due, language === 'es' ? 'es-US' : 'en-US'))
+  }, [timerStatus, timerSeconds, timerEndAtIso, quietWindow, pickClockCopy, language])
+
   const timerSummary = useMemo(() => formatTimerSummary(timerSeconds, t), [timerSeconds, t])
   const clockProgress = timerStatus === 'running' ? clockProgressPercent(effectiveRemaining, timerSeconds) : null
   const urgentLowTimer =
@@ -467,6 +485,11 @@ export function DraftTopBar({
           ) : null}
           <Clock className="h-5 w-5 shrink-0 opacity-90" />
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
+          {dueLabel ? (
+            <span className="whitespace-nowrap text-[11px] font-semibold text-cyan-100/80 max-sm:hidden" data-testid="draft-topbar-timer-due">
+              {dueLabel}
+            </span>
+          ) : null}
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
           {isPausedCommissioner ? (
             <span className="hidden sm:inline rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
