@@ -35,6 +35,7 @@ import { YahooSnapshotImport } from '@/components/core-app/import/YahooSnapshotI
 import { openYahooCopyPaste, useYahooCopyPasteEnabled } from '@/components/core-app/import/yahooCopyPaste'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-app/import/EspnLeagueCheck'
+import { EspnTeamCodeVerify } from '@/components/core-app/import/EspnTeamCodeVerify'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
 import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
@@ -3485,11 +3486,23 @@ export function ImportV4({
             </p>
           ) : null}
           {previewImportState(provider, phase).espnAsk && phase.espnRunBy === 'me' ? (
-            <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
-              Connect ESPN above so we can confirm you run this league &mdash; it takes about two
-              minutes on a computer. Then press Import: you&rsquo;ll get invites, team assignments and
-              the commissioner tools.
-            </p>
+            <>
+              <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
+                Connect ESPN above so we can confirm you run this league &mdash; it takes about two
+                minutes on a computer. Then press Import: you&rsquo;ll get invites, team assignments and
+                the commissioner tools.
+              </p>
+              {/*
+                The phone path (2026-11-15). A commissioner on Android sat on the cookie step polling
+                for a connection a phone can never make, and left. A code on their ESPN team proves
+                the same thing the cookie does — control of that team — and the gate finds it on the
+                next preview by itself (`lib/league-import/espn/espnTeamCode.ts`).
+              */}
+              <EspnTeamCodeVerify
+                leagueInput={phase.sourceId}
+                onVerified={() => void runPreview(phase.sourceId, phase.attested)}
+              />
+            </>
           ) : null}
           {/*
             ── Are you the commissioner? ───────────────────────────────────────────
