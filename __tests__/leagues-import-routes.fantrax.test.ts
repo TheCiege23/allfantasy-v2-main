@@ -9,7 +9,7 @@ const persistImportWithCanonicalAuditMock = vi.fn()
 class ImportedLeagueConflictErrorMock extends Error {}
 
 vi.mock('@/lib/auth-guard', () => ({
-  requireVerifiedUser: requireVerifiedUserMock,
+  requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock,
 }))
 
 /*

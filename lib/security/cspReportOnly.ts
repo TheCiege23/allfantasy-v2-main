@@ -52,7 +52,7 @@ const META = ['https://connect.facebook.net', 'https://www.facebook.com']
  * Listing them turns those reports off so the remaining ones are signal.
  *
  * ⚠ DELIBERATELY STILL MISSING, so they keep reporting until someone decides:
- *   - `eval` (script-src) — a GTM custom template; allowing it is 'unsafe-eval'.
+ *   - `eval` (script-src) — refused in every mode since 2026-11-14 (see `evalRollback`).
  *   - `mpc-pilot-*.a.run.app` / `mpc2-prod-*.a.run.app` — an unidentified fetch that
  *     fires right after the Meta SDK (see the runbook). Its hostname rotates, so a
  *     single entry would not hold, and an unknown third party should not be waved
@@ -141,9 +141,8 @@ export const CSP_REPORT_ONLY_POLICY = serializeCsp(CSP_REPORT_ONLY_DIRECTIVES)
 // below is measured, and each one would otherwise have broken a live tag on the
 // first enforced page view:
 //
-//  - `'unsafe-eval'` (script-src): 98 reports, inline (document-sourced) — a GTM
-//    custom template. Given `'unsafe-inline'` is already required, refusing eval
-//    stops no XSS that inline script cannot already do; it would only break the tag.
+//  - `'unsafe-eval'` was added here for 98 `eval` reports first read as a GTM custom
+//    template, and REMOVED 2026-11-14 — see `evalRollback` below for what they really were.
 //  - The apex `allfantasy.ai` (script-src): `'self'` names only the host serving the
 //    page, and assets were requested from the apex while the page was on www.
 //  - `connect-src` is `https:` rather than a host list. Google Ads remarketing beacons
@@ -166,9 +165,33 @@ export const CSP_REPORT_ONLY_POLICY = serializeCsp(CSP_REPORT_ONLY_DIRECTIVES)
 
 const APEX_AND_WWW = ['https://allfantasy.ai', 'https://www.allfantasy.ai']
 
+/*
+ * 🛑 NO 'unsafe-eval' BY DEFAULT, IN ANY MODE. `CSP_ALLOW_EVAL=1` on the service is the
+ * rollback (a variable write redeploys it); any other value, or none, refuses eval.
+ *
+ * It was allowed on the reading that GTM custom templates eval. The reports said otherwise:
+ * the `blocked: eval` reports from 2026-11-01 on name our OWN origin as their source (a few
+ * name none — typical of extensions) and NONE names googletagmanager.com. The caller was `initSentryClient` in
+ * lib/error-tracking/sentry.ts, which built `Function("specifier","return import(specifier)")`
+ * on every page — and could never load anything, because a browser cannot resolve a bare
+ * `@sentry/nextjs` specifier. That path is deleted; sentry.client.config.ts is the client init.
+ *
+ * A scan of all 127 live chunks (2026-11-14) found three other `Function(...)` sites, none of
+ * which needs eval: globalThis fallbacks that run only where `globalThis` does not exist, and
+ * zod's `allowsEval` probe, which catches the refusal and validates without codegen. That
+ * probe files one `eval` report per page load — expected, not a breakage.
+ *
+ * Why it matters under the nonce policy: there `'unsafe-inline'` is ignored, so eval is no
+ * longer "nothing inline script could not already do" — it is the one remaining way an
+ * injected STRING becomes running code (`eval`, `new Function`, `setTimeout("…")`).
+ */
+export function evalRollback(raw: string | undefined = process.env.CSP_ALLOW_EVAL): string[] {
+  return raw?.trim() === '1' ? ["'unsafe-eval'"] : []
+}
+
 export const CSP_ENFORCED_DIRECTIVES: Record<string, string[]> = {
   ...CSP_REPORT_ONLY_DIRECTIVES,
-  'script-src': [...CSP_REPORT_ONLY_DIRECTIVES['script-src'], "'unsafe-eval'", ...APEX_AND_WWW],
+  'script-src': [...CSP_REPORT_ONLY_DIRECTIVES['script-src'], ...evalRollback(), ...APEX_AND_WWW],
   'connect-src': ["'self'", 'https:', 'wss:'],
   'frame-src': [...CSP_REPORT_ONLY_DIRECTIVES['frame-src'], 'https://hooks.stripe.com'],
   'form-action': ["'self'", 'https://www.facebook.com'],
@@ -191,8 +214,7 @@ export const CSP_ENFORCED_POLICY = serializeCsp(CSP_ENFORCED_DIRECTIVES)
 // browsers that predate CSP3: any browser that understands 'strict-dynamic' or a
 // nonce ignores both (CSP3 §8.2), so they open nothing in a modern browser. Host
 // allowlists are ignored under 'strict-dynamic' for the same reason, which is why
-// none is repeated here. `'unsafe-eval'` stays: GTM custom templates eval (98 inline
-// reports in the week this policy was measured from).
+// none is repeated here. Eval is refused unless the rollback is set — see `evalRollback`.
 //
 // `'report-sample'` asks the browser to include the first 40 characters of a blocked
 // inline script in its report — the only way to tell WHICH GTM Custom HTML tag would
@@ -216,7 +238,7 @@ export function buildNonceDirectives(nonce: string): Record<string, string[]> {
     'script-src': [
       `'nonce-${nonce}'`,
       "'strict-dynamic'",
-      "'unsafe-eval'",
+      ...evalRollback(),
       "'report-sample'",
       'https:', // pre-CSP3 fallback only
       "'unsafe-inline'", // pre-CSP3 fallback only; ignored when a nonce is present

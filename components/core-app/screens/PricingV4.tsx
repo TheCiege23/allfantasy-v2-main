@@ -38,6 +38,7 @@ import { pricingCardStatus, type PricingAccount } from '@/lib/core-app/pricingAc
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import type { ComparisonCell, ComparisonGroup, ComparisonTier, PlanExample } from '@/lib/monetization/planComparison'
 import { pricingGuideMessages } from '@/lib/core-app/messages/pricingGuide'
+import { trialAppliesTo, useTrialOffer } from '@/lib/monetization/useTrialOffer'
 import {
   pricingHeadline,
   splitComingSoon,
@@ -396,6 +397,8 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
   const pm = useMessages(plansScreenMessages)
   const g = useMessages(pricingGuideMessages)
   const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
+  // The AF Pro free trial — web only: a store build never asks, and never shows it (App Store 3.1.1 / 3.1.3).
+  const trialOffer = useTrialOffer(!nativeApp && !playApp)
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -736,15 +739,29 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
                   {g.inYourPlan}
                 </p>
               ) : (
-                <button
-                  type="button"
-                  className="af-pr-cta"
-                  data-testid={sku ? `pricing-subscription-cta-${sku}` : undefined}
-                  disabled={!sku || blocked || pendingSku === sku || (nativeApp && !nativePrices[sku])}
-                  onClick={() => sku && startCheckout(sku, 'subscription')}
-                >
-                  {pendingSku === sku ? 'Opening checkout…' : `Choose ${plan.name}`}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="af-pr-cta"
+                    data-testid={sku ? `pricing-subscription-cta-${sku}` : undefined}
+                    disabled={!sku || blocked || pendingSku === sku || (nativeApp && !nativePrices[sku])}
+                    onClick={() => sku && startCheckout(sku, 'subscription')}
+                  >
+                    {pendingSku === sku
+                      ? 'Opening checkout…'
+                      : !nativeApp && trialOffer.eligible === true && trialAppliesTo(trialOffer, sku)
+                        ? g.trialCta(trialOffer.days)
+                        : `Choose ${plan.name}`}
+                  </button>
+                  {/* The trial's terms, said before the click. Web only; marked for the iOS hide rule too. */}
+                  {!nativeApp && price != null && trialAppliesTo(trialOffer, sku) ? (
+                    <p className="af-pr-trial" data-testid={`pricing-trial-${sku}`} data-ios-purchase>
+                      {trialOffer.eligible === true
+                        ? g.trialTerms(trialOffer.days, money(price), g.trialPer(interval))
+                        : g.trialNewMembers(trialOffer.days)}
+                    </p>
+                  ) : null}
+                </>
               )}
 
               <hr className="af-pr-rule" />

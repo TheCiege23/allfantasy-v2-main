@@ -209,7 +209,7 @@ describe('Player Finder — core view', () => {
     expect(within(region).getByLabelText('added in 66 leagues')).toHaveTextContent('+66')
     // English is pinned byte for byte; Spanish is core-finder-page-spanish's job.
     expect(within(region).getByRole('heading').textContent).toBe('Most added this week')
-    expect(region.querySelector('.af-pf-trend-sub')?.textContent).toBe('of 189 leagues adding · through Sep 28')
+    expect(region.querySelector('.af-pf-trend-sub')?.textContent).toBe('Added most in 189 leagues · through Sep 28')
   })
 
   it('no trending list, no empty card', () => {
@@ -1028,7 +1028,7 @@ describe('Player Finder — player depth paywall', () => {
     renderCore({ detail: WITHHELD, depthAccess: LOCKED })
     expect(screen.queryByRole('region', { name: 'Recommended moves' })).toBeNull()
     const moves = screen.getByRole('region', { name: 'Recommended moves — AF Pro' })
-    expect(within(moves).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro')
+    expect(within(moves).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&from=lock_player_depth')
 
     const side = screen.getByRole('complementary', { name: 'What to do' })
     expect(within(side).queryByRole('region', { name: 'Chimmy verdict' })).toBeNull()

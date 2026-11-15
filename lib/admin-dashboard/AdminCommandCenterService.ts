@@ -36,6 +36,8 @@ import {
 } from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getPlayInstallStats, type PlayInstallStatsResult } from "@/lib/google-play/playInstallStats"
+import { describeMrrEstimate, estimateMrr, formatUsdCents } from "@/lib/monetization/mrrEstimate"
+import { describeProWeekStats, loadProWeekStats, type ProWeekStats } from "@/lib/referral/proWeekStats"
 
 type MetricValue = number | string
 
@@ -626,6 +628,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   // Start independent reports before the main query batch. A cold external API
   // must never add its full timeout to the database work on the critical path.
   const waitlistPromise = loadWaitlist()
+  // "Give a week, get a week" (lib/referral/proWeek.ts). A failed read reports "not tracked", never a 0.
+  const proWeekPromise: Promise<ProWeekStats | null> = loadProWeekStats(prisma as never).catch(() => null)
   const leaguesByPlatformPromise = loadLeaguesByPlatform()
   const aiProvidersPromise = Promise.race([
     probeAiProviders().catch(() => null),
@@ -731,6 +735,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       select: {
         status: true,
         sku: true,
+        // The MRR estimate counts only store-billed rows (lib/monetization/mrrEstimate.ts).
+        source: true,
         plan: { select: { code: true } },
       },
     }),
@@ -916,7 +922,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   ])
 
   // Keep these outside the positional query array, but await them together.
-  const [waitlist, leaguesByPlatform] = await Promise.all([waitlistPromise, leaguesByPlatformPromise])
+  const [waitlist, leaguesByPlatform, proWeek] = await Promise.all([waitlistPromise, leaguesByPlatformPromise, proWeekPromise])
 
   // Login counts are only meaningful once IdentitySignal has captured at least one
   // login. Before that, a "0" would be indistinguishable from the old silent-zero
@@ -935,6 +941,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     },
     { annual: 0, monthly: 0, unknown: 0 }
   )
+  const mrr = estimateMrr(subscriptions.map((sub) => ({ status: sub.status, source: sub.source, sku: sub.sku, planCode: sub.plan.code })))
   const activeSubscriptionUserCount = activeSubscriptionUsers
   const completedRevenueCents = bracketPaymentRevenue._sum.amountCents ?? null
   const inviteAccepts = worldCupInviteUseSummary._sum.useCount ?? 0
@@ -1028,7 +1035,15 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments only"),
       metric("Token sales revenue", `$${(tokenSalesRevenueCents / 100).toFixed(2)}`, `${tokenSalesPayments} completed token payment rows`),
       metric("Coupon redemptions", couponRedemptions, `${couponRedemptionsRedeemed} redeemed`),
-      notTracked("MRR estimate", "Subscription prices are not reliably stored on subscription rows"),
+      /*
+       * MRR (2026-11-15): the price is still not stored on the row, but the SKU is, and the catalog
+       * prices every SKU — the same prices Stripe is checked against. GROSS LIST PRICE, before coupons
+       * and store fees, so it can over-state and never under-state; the note says so.
+       */
+      metric("MRR estimate", formatUsdCents(mrr.mrrCents), describeMrrEstimate(mrr)),
+      proWeek
+        ? metric("Referral Pro weeks (30 days)", proWeek.granted30d, describeProWeekStats(proWeek))
+        : notTracked("Referral Pro weeks (30 days)", "Could not read referral weeks"),
     ],
     tokens: [
       metric("Token balances total", tokenBalanceSummary._sum.balance ?? 0),

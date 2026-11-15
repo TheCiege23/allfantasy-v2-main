@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { readableApiError } from '@/lib/http/readableApiError'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { isInIosAppClient } from '@/lib/platform/iosApp'
+import { useProWeekOffer } from '@/lib/referral/useProWeekOffer'
 // af-core.css carries the .af-core token layer (--surface, --surface2, --line2,
 // --accent …) for all three modes. AfCoreShell imports it for screens inside the
 // shell; these pages render standalone at /login and /signup, so without it every
@@ -572,8 +574,30 @@ function DevBypassSignIn({ callbackUrl }: { callbackUrl: string }) {
   )
 }
 
+/** `?ref=CODE` on the sign-up page itself — a short token, or nothing. */
+function referralFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const ref = new URLSearchParams(window.location.search).get('ref')?.trim() ?? ''
+  return /^[A-Za-z0-9]{4,16}$/.test(ref) ? ref : null
+}
+
+/**
+ * A visitor who arrived on a friend's referral link (`/signup?ref=`) is told what bringing a league earns
+ * them both (lib/referral/proWeek.ts). Read after mount — the URL is not known on the server — and never
+ * inside the iOS app, which does not advertise the offer (App Store 3.1.1 / 3.1.3).
+ */
+function useReferralProWeekLine(): number {
+  const [referred, setReferred] = useState(false)
+  useEffect(() => {
+    setReferred(Boolean(referralFromUrl()) && !isInIosAppClient())
+  }, [])
+  const offer = useProWeekOffer(referred)
+  return referred ? offer.days : 0
+}
+
 function SignUp({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
+  const proWeekDays = useReferralProWeekLine()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -688,6 +712,12 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             ? { phone: codeSentTo ?? phone.trim(), phoneVerificationCode: code.replace(/\s/g, '') }
             : {}),
           ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
+          /*
+           * A friend's code in this page's own URL (`/signup?ref=CODE`, 2026-11-15). The auth pages do not
+           * mount ReferralTracker, so the `af_ref` cookie is only there when the visitor came through the
+           * landing; the register route prefers this and falls back to the cookie.
+           */
+          ...(referralFromUrl() ? { referralCode: referralFromUrl() } : {}),
         }),
       })
 
@@ -754,8 +784,13 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           <p className="af-au-sub">
             {method === 'phone'
               ? 'Free to create or connect leagues. We’ll text you a code to confirm your number.'
-              : 'Free to create or connect leagues. Next: verify your email, then choose how to start.'}
+              : 'Free to create or connect leagues. Next: bring in your league. We’ll email you a link to confirm your address.'}
           </p>
+          {proWeekDays > 0 ? (
+            <p className="af-au-sub" data-testid="signup-pro-week-offer">
+              <strong>You were invited.</strong> Import a league and you and your friend both get {proWeekDays} days of AF Pro, free.
+            </p>
+          ) : null}
         </div>
       </header>
 
@@ -828,7 +863,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           <span className="af-au-hint">
             {method === 'phone'
               ? 'Link it now and your Sleeper leagues import in one click.'
-              : 'Link it now and, once your email is verified, your Sleeper leagues import in one click.'}
+              : 'Link it now and your Sleeper leagues import in one click, right after you sign up.'}
           </span>
         </label>
 

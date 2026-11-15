@@ -77,6 +77,10 @@ import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import { usePlayerCard } from '../player-card/PlayerCardProvider'
 import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
+import { matchMultiTeamOffer, offerTeamCount, type MultiOfferRefusal } from '@/lib/trade-screenshot/matchMultiOffer'
+import { MultiTeamTradeBuilder } from '@/components/core-app/screens/MultiTeamTradeBuilder'
+import { multiTeamTradeMessages } from '@/lib/core-app/messages/multiTeamTrade'
+import type { MultiAsset } from '@/lib/trade-intel/multiTeamGrade'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
 import { managerNameBesideLabel } from '@/lib/trade-screenshot/managerHandles'
 import { tradeExplainPrompt } from '@/lib/core-app/tradeExplainPrompt'
@@ -1218,6 +1222,14 @@ export function TradeCenter(props: {
    */
   /* `done` says what loaded, beside the button that did it — the builder may be off screen. */
   const [screenshotRead, setScreenshotRead] = useState<{ busy: boolean; error: string | null; done?: string | null }>({ busy: false, error: null })
+  /*
+   * 2 teams (the full analyzer) or 3–4 teams (MultiTeamTradeBuilder, graded on league value only),
+   * 2026-11-14. A 3–4 team screenshot switches to the second and loads into it; `key` remounts it so it
+   * starts from what was read.
+   */
+  const [tradeMode, setTradeMode] = useState<'two' | 'multi'>('two')
+  const [multiLoad, setMultiLoad] = useState<{ key: number; initial: { teamIds: string[]; assets: MultiAsset[] } | null }>({ key: 0, initial: null })
+  const mt = useMessages(multiTeamTradeMessages)
   const readOfferScreenshot = useCallback(
     async (file: File) => {
       const leagueId = props.league?.id
@@ -1234,6 +1246,35 @@ export function TradeCenter(props: {
         const j = (await r.json().catch(() => null)) as { read?: OfferRead; error?: string } | null
         if (!r.ok || !j?.read) {
           setScreenshotRead({ busy: false, error: j?.error ?? 'We could not read that screenshot. Enter the offer by hand.' })
+          return
+        }
+        /* 3 or 4 teams: the multi-team matcher and builder. Two teams: unchanged, below. */
+        if (offerTeamCount(j.read) >= 3) {
+          const mm = matchMultiTeamOffer({ read: j.read, rosters: rosterData.rosters, viewerRosterId: rosterData.viewerTeamRosterId })
+          if (!mm.ok) {
+            const r: MultiOfferRefusal = mm.reason
+            setScreenshotRead({
+              busy: false,
+              error:
+                r.code === 'team_count'
+                  ? mt.refusedTeamCount(r.count)
+                  : r.code === 'unplaced'
+                    ? mt.refusedUnplaced
+                    : r.code === 'duplicate'
+                      ? mt.refusedDuplicate
+                      : mt.refusedUnreadable,
+            })
+            return
+          }
+          setMultiLoad((prev) => ({ key: prev.key + 1, initial: { teamIds: mm.teamIds, assets: mm.assets } }))
+          setTradeMode('multi')
+          const notes = [
+            mt.loaded(mm.teamIds.length, mm.assets.length),
+            mm.unmatched.length > 0 ? mt.notPlaced(mm.unmatched.join(', ')) : null,
+            mm.faabLeftOut.length > 0 ? mt.faabLeftOut(mm.faabLeftOut.map((n) => `$${n}`).join(', ')) : null,
+          ]
+          setScreenshotRead({ busy: false, error: null, done: notes.filter(Boolean).join(' ') })
+          revealBuilder()
           return
         }
         const m = matchOfferToRosters({ read: j.read, rosters: rosterData.rosters, viewerRosterId: rosterData.viewerTeamRosterId })
@@ -1257,7 +1298,7 @@ export function TradeCenter(props: {
         setScreenshotRead({ busy: false, error: 'The screenshot did not upload. Check your connection and try again.' })
       }
     },
-    [props.league?.id, rosterData, revealBuilder],
+    [props.league?.id, rosterData, revealBuilder, mt],
   )
 
   /**
@@ -1969,6 +2010,7 @@ export function TradeCenter(props: {
         Both totals, a meter of where the deal leans, and the one button that finishes the job.
         Hidden above 720px by the stylesheet; the desktop page has its own balance and actions.
       */}
+      {tradeMode === 'two' ? (
       <div className="af-tc-stepbar">
         <div className="af-tc-stepbar-row">
           {/*
@@ -2007,6 +2049,7 @@ export function TradeCenter(props: {
           </div>
         ) : null}
       </div>
+      ) : null}
 
       {/*
         Naming the other side is not decoration. It is what turns on the whole
@@ -2050,8 +2093,31 @@ export function TradeCenter(props: {
           ) : (
             <p className="af-tc-create-note">{lg.uploadHint}</p>
           )}
+          {(rosterData?.rosters.length ?? 0) >= 3 ? (
+            <div className="af-tc-seg af-tc-create-mode" role="radiogroup" aria-label={mt.modeLabel} data-testid="trade-create-mode">
+              <button type="button" role="radio" aria-checked={tradeMode === 'two'} onClick={() => setTradeMode('two')}>
+                {mt.modeTwo}
+              </button>
+              <button type="button" role="radio" aria-checked={tradeMode === 'multi'} onClick={() => setTradeMode('multi')}>
+                {mt.modeMulti}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
+      {tradeMode === 'multi' && rosterData && !props.embedded ? (
+        <div className="af-tc-mstep-wrap">
+          <MultiTeamTradeBuilder
+            key={multiLoad.key}
+            rosters={rosterData.rosters}
+            viewerRosterId={rosterData.viewerTeamRosterId}
+            sendHref={props.sourceLink?.href ?? null}
+            platformLabel={props.sourceLink?.providerLabel ?? null}
+            initial={multiLoad.initial}
+          />
+        </div>
+      ) : (
+      <>
       {otherRosters.length > 0 && !props.embedded ? (
         <div className="af-tc-partner">
           <span className="af-label">{copy('Trading with')}</span>
@@ -2964,6 +3030,9 @@ export function TradeCenter(props: {
           />
         </div>
       ) : null}
+
+      </>
+      )}
 
       {/*
         The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a

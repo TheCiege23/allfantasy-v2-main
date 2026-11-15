@@ -26,7 +26,9 @@ export default function Preview() {
     <div className="af-core p-4">
       <button className="af-btn" onClick={() => setSupportOpen(true)}>Preview core support</button>
       <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} defaultEmail="preview@example.com" />
-      <LeagueTabs leagueId="mobile-preview" leagueName={league.name} activeKey="trades" compact platform="sleeper" />
+      {/* Trades, not Moves (2026-11-14): Moves folded into Trades and left the tab row, so "moves" selected nothing.
+          Trades takes the same last slot in the phone strip, and shows only where the league can trade. */}
+      <LeagueTabs leagueId="mobile-preview" leagueName={league.name} activeKey="trades" tradeSupported compact platform="sleeper" />
       <ImportedLeagueQuickActions leagueId="mobile-preview" leagueName={league.name} platform="Sleeper" canRemove />
       <div style={{ height: 1800 }}>This week</div>
     </div>

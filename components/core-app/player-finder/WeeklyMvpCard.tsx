@@ -1,5 +1,7 @@
 'use client'
 
+import { useMyReferralLink } from '@/lib/referral/myReferralLink'
+import { withShareLink } from '@/lib/referral/referralShareLink'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -23,6 +25,7 @@ function headshot(m: WeeklyMvp): string | null {
 export function WeeklyMvpCard({ mvp }: { mvp: WeeklyMvp | null }) {
   const { language } = useOptionalLanguage()
   const [shared, setShared] = useState<'shared' | 'copied' | null>(null)
+  const referralLink = useMyReferralLink(Boolean(mvp))
   if (!mvp) return null
   const t = playerFunCopy(language)
   const pts = mvp.points.toFixed(1)
@@ -32,14 +35,17 @@ export function WeeklyMvpCard({ mvp }: { mvp: WeeklyMvp | null }) {
 
   const share = async () => {
     const nav = typeof navigator !== 'undefined' ? navigator : null
+    // The sharer's referral link on its own line (lib/referral/referralShareLink.ts); none when signed out.
+    // Fetched at render, not on the tap: awaiting a request before share() can cost the tap's activation.
+    const shareText = withShareLink(text, referralLink)
     try {
       if (nav && typeof nav.share === 'function') {
-        await nav.share({ text })
+        await nav.share({ text: shareText })
         setShared('shared')
         return
       }
       if (nav?.clipboard) {
-        await nav.clipboard.writeText(text)
+        await nav.clipboard.writeText(shareText)
         setShared('copied')
       }
     } catch {

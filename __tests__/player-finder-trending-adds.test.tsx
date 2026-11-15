@@ -109,7 +109,7 @@ describe('TrendingAdds card', () => {
     sharing.push({ externalId: 'E2306', sleeperId: '9999' })
     render(<TrendingAdds data={await loadTrendingAdds(NOW)} leagueParam="&league=L1" />)
     expect(screen.getByRole('heading', { name: 'Most added this week' })).toBeTruthy()
-    expect(screen.getByText(/of 189 leagues adding · through Sep 28/)).toBeTruthy()
+    expect(screen.getByText(/^Added most in 189 leagues · through Sep 28$/)).toBeTruthy()
     expect(screen.getByRole('link', { name: /Zach Ertz/ }).getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL~rolling_insights%3AE1339&league=L1')
     expect(screen.getByLabelText('added in 66 leagues').textContent).toBe('+66')
     // A player whose ref is not round-trip safe is listed but not linked.

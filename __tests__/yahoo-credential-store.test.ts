@@ -26,7 +26,7 @@ const requireVerifiedUserMock = vi.hoisted(() => vi.fn())
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock }))
 /*
  * These cases test the credential-store wiring of the LIVE Yahoo path. Yahoo is coming soon in
  * provider-ui-config, so the route refuses before reaching the store; pin it live here. The
