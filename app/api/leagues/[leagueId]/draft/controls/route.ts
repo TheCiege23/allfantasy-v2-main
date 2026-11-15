@@ -61,6 +61,7 @@ import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAu
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isLoggedCommissionerDraftAction, recordCommissionerDraftAction, refuseIfSleeperMirrored } from '@/lib/draft-room/commissionerDraftActions'
 import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
 import { CUSTOM_TIMER_MAX_SECONDS, CUSTOM_TIMER_MIN_SECONDS, decideCommissionerTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 
@@ -157,7 +158,32 @@ async function loadFallbackCandidates(leagueId: string, sport: string): Promise<
   }))
 }
 
+/**
+ * Every commissioner control that succeeds is written to the league log with who did it
+ * (lib/draft-room/commissionerDraftActions.ts). Timer ticks are automation and are not.
+ */
 export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ leagueId: string }> }
+) {
+  const peek = (await req.clone().json().catch(() => ({}))) as Record<string, unknown> | null
+  const res = await handleDraftControl(req, ctx)
+  const action = String(peek?.action ?? '').toLowerCase()
+  if (res.status < 300 && isLoggedCommissionerDraftAction(action)) {
+    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+    const { leagueId } = await ctx.params
+    const seconds = action === 'set_timer_seconds' ? Number(peek?.seconds ?? peek?.timerSeconds) : NaN
+    if (session?.user?.id && leagueId) {
+      await recordCommissionerDraftAction(leagueId, session.user.id, action, {
+        ...(Number.isFinite(seconds) ? { seconds } : {}),
+        source: 'draft/controls',
+      })
+    }
+  }
+  return res
+}
+
+async function handleDraftControl(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -186,6 +212,12 @@ export async function POST(
       { error: `Invalid action. Use one of: ${ALLOWED_ACTIONS.join(', ')}` },
       { status: 400 }
     )
+  }
+  // Sleeper rewrites a mirrored draft on every sync, so a change made here would be silently undone.
+  // Next season's draft is a new AF draft, and the timer ticks are no-ops there, so those stay open.
+  if (action !== 'create_next_draft' && isLoggedCommissionerDraftAction(action)) {
+    const mirrored = await refuseIfSleeperMirrored(leagueId)
+    if (mirrored) return NextResponse.json(mirrored.body, { status: mirrored.status })
   }
   const tournamentLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   if (seasonSetupBlocked(tournamentLeague?.settings)) {

@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, canSubmitPickForRoster, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
+import { recordCommissionerDraftAction, refuseIfSleeperMirrored } from '@/lib/draft-room/commissionerDraftActions'
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import {
   DRAFT_PICK_NOT_ON_CLOCK,
@@ -115,12 +116,23 @@ export const POST = withTimedRoute('draft_pick', async (
       : 'user'
 
   // Determine the effective roster ID
-  let effectiveRosterId = rosterId ?? expectedRosterId
+  /*
+   * 🛑 A COMMISSIONER'S OFFLINE PICK LANDED ON THEIR OWN TEAM (2026-11-15). In an offline draft the commissioner enters
+   * every team's pick; the draft room sent the commissioner's OWN roster id with each one, and the commissioner
+   * override skips the on-the-clock check — so a commissioner who also owns a team drafted every player onto it.
+   * A commissioner-entered pick is made for the team on the clock, always.
+   */
+  let effectiveRosterId = source === 'commissioner' ? expectedRosterId : (rosterId ?? expectedRosterId)
 
   // Check if user is commissioner - if so, allow drafting for any roster
   const isComm = await isCommissioner(leagueId, userId)
   if (source === 'commissioner' && !isComm) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (source === 'commissioner') {
+    // Sleeper rewrites a mirrored draft on every sync; a pick made for a team here would be undone.
+    const mirrored = await refuseIfSleeperMirrored(leagueId)
+    if (mirrored) return NextResponse.json(mirrored.body, { status: mirrored.status })
   }
   if (!isComm && effectiveRosterId !== expectedRosterId) {
     // Commit M — surface a structured code so the client can show an
@@ -273,6 +285,14 @@ export const POST = withTimedRoute('draft_pick', async (
     )
     .catch(() => {})
 
+  if (source === 'commissioner') {
+    const made = result.snapshot as { overall?: number } | null | undefined
+    await recordCommissionerDraftAction(leagueId, userId, 'commissioner_pick', {
+      overall: typeof made?.overall === 'number' ? made.overall : null,
+      rosterId: effectiveRosterId,
+      source: 'draft/pick',
+    })
+  }
   await notifyOnTheClockAfterPick(leagueId)
   void notifyDraftIntelPickConfirmation(leagueId, effectiveRosterId, String(playerName).trim()).catch(() => {})
 

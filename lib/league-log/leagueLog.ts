@@ -486,6 +486,48 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: () => ({ en: 'Undid the last draft pick', es: 'Deshizo la última elección del draft' }),
   },
+  // lib/draft-room/commissionerDraftActions.ts — one row per commissioner action in the draft room. The line reads
+  // only `action`, `overall`, `rosterId` and `seconds`; an action this map does not name still shows, generically.
+  draft_commissioner_action: {
+    category: 'draft',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const action = str(m.action) ?? ''
+      const overall = num(m.overall)
+      const seconds = num(m.seconds)
+      const at = overall != null ? ` #${overall}` : ''
+      const t = team(ctx, m.rosterId)
+      switch (action) {
+        case 'start': return { en: 'Started the draft', es: 'Inició el draft' }
+        case 'pause': return { en: 'Paused the draft', es: 'Pausó el draft' }
+        case 'resume': return { en: 'Resumed the draft', es: 'Reanudó el draft' }
+        case 'reset_timer': return { en: 'Restarted the pick clock', es: 'Reinició el reloj de la elección' }
+        case 'set_timer_seconds':
+          return seconds != null
+            ? { en: `Set the pick clock to ${seconds} seconds`, es: `Puso el reloj de elección en ${seconds} segundos` }
+            : { en: 'Changed the pick clock', es: 'Cambió el reloj de elección' }
+        case 'force_autopick': return { en: 'Made an automatic pick for the team on the clock', es: 'Hizo una elección automática para el equipo en turno' }
+        case 'skip_pick': return { en: `Skipped the pick on the clock`, es: 'Saltó la elección en turno' }
+        case 'undo_pick': return { en: 'Undid the last draft pick', es: 'Deshizo la última elección del draft' }
+        case 'complete': return { en: 'Ended the draft', es: 'Terminó el draft' }
+        case 'resolve_auction': return { en: 'Closed the current auction', es: 'Cerró la subasta en curso' }
+        case 'reset_draft': return { en: 'Reset the draft', es: 'Reinició el draft' }
+        case 'swap_manager': return { en: 'Swapped two teams’ draft slots', es: 'Intercambió los turnos de dos equipos' }
+        case 'create_next_draft': return { en: 'Set up next season’s draft', es: 'Preparó el draft de la próxima temporada' }
+        case 'pick_edit': return { en: `Changed pick${at}`, es: `Cambió la elección${at}` }
+        case 'commissioner_pick': return { en: `Made pick${at} for ${t.en}`, es: `Hizo la elección${at} por ${t.es}` }
+        case 'order': return { en: 'Changed the draft order', es: 'Cambió el orden del draft' }
+        case 'randomize_order': return { en: 'Randomized the draft order', es: 'Sorteó el orden del draft' }
+        default: return { en: 'Made a change in the draft room', es: 'Hizo un cambio en la sala del draft' }
+      }
+    },
+  },
+  draft_reset: {
+    category: 'draft',
+    members: true,
+    line: () => ({ en: 'Reset the draft', es: 'Reinició el draft' }),
+  },
   league_lock_toggle: {
     category: 'league',
     members: true,
@@ -585,7 +627,7 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
   const ids = new Set<string>()
   for (const row of rows) {
     const m = obj(row.metadata)
-    if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo' || row.actionType === 'draft_commissioner_action') && str(m.rosterId)) ids.add(str(m.rosterId)!)
     if (
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||

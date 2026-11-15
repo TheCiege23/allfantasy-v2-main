@@ -140,6 +140,8 @@ type AuditLogRow = {
 const ACTION_WORDING: Record<string, string> = {
   settings_patch: 'Changed league settings',
   commissioner_undo_draft_pick: 'Undid a draft pick',
+  draft_commissioner_action: 'Made a change in the draft room',
+  draft_reset: 'Reset the draft',
   commissioner_run_waivers: 'Ran waivers by hand',
   commissioner_automation_run: 'Ran a league automation',
   commissioner_edit_standings: 'Edited the standings',
