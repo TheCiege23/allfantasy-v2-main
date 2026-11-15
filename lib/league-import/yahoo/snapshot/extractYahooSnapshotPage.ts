@@ -12,11 +12,19 @@
  *
  * Screenshots go through `readImageWithVision`, the one shared vision call (Claude first, then
  * OpenAI), so they inherit its spend switch and provider order.
+ *
+ * 🛑 AND IF THAT FAILS, EVERY OTHER CONFIGURED PROVIDER. Measured in production 2026-11-15: the first
+ * real page sent was refused with Anthropic 401 `invalid x-api-key` — the same key that had been
+ * failing Chimmy since 2026-10-27 — so the whole import depended on one provider being healthy. Text
+ * and screenshots now fall back through `routeTextCall` (AI_PROVIDER_ORDER: OpenAI, Anthropic, xAI,
+ * DeepSeek), with a longer per-provider timeout than chat uses, because transcribing a whole draft
+ * page is not a chat reply. Same prompt, same JSON contract, same schema check on whatever answers.
  */
 import Anthropic from '@anthropic-ai/sdk'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { resolveChimmyClaudeModel } from '@/lib/ai/chimmyClaudeConfig'
 import { readImageWithVision } from '@/lib/chimmy/screenshotVision'
+import { routeTextCall, type RouterImage } from '@/lib/ai/providerRouter'
 import { yahooSnapshotExtractionSchema, type YahooSnapshotExtraction } from './yahooSnapshotTypes'
 
 export const YAHOO_SNAPSHOT_MAX_TEXT_CHARS = 200_000
@@ -79,8 +87,43 @@ export function parseYahooSnapshotReply(reply: string): YahooSnapshotExtractResu
   return { status: 'ok', page: parsed.data }
 }
 
+function userMessage(text: string): string {
+  return `<yahoo_page>\n${text}\n</yahoo_page>\nTranscribe this page as instructed.`
+}
+
+/** Per provider. Settings or a roster reads in seconds; a full draft-results page can take ~30 s. */
+const FALLBACK_TIMEOUT_MS = 60_000
+
+/**
+ * The fallback: the same instructions through the shared router, which tries each configured provider
+ * in turn and moves on after an auth, billing, rate-limit or timeout failure. Null when none answers.
+ * A truncated answer cannot slip through as a short table: it is not valid JSON, so the schema check
+ * rejects it.
+ */
+async function readWithRouter(args: { text?: string; image?: RouterImage }): Promise<string | null> {
+  const result = await routeTextCall({
+    messages: [
+      { role: 'system', content: YAHOO_SNAPSHOT_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: args.text != null ? userMessage(args.text) : 'Transcribe this screenshot of a Yahoo league page as instructed.',
+      },
+    ],
+    image: args.image ?? null,
+    maxTokens: 16_000,
+    temperature: 0,
+    skipCache: true,
+    timeoutMs: FALLBACK_TIMEOUT_MS,
+    feature: 'yahoo_snapshot_import',
+  })
+  if (!result.ok || !result.text.trim()) return null
+  console.info('[YahooSnapshot] read by fallback provider=%s', result.provider)
+  return result.text
+}
+
 async function readTextWithClaude(text: string): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  // Trimmed like every other Claude caller in the app: a stray newline in the env value is a 401.
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
   if (!apiKey) return null
   try {
     const client = new Anthropic({ apiKey, maxRetries: 1, timeout: 90_000 })
@@ -93,7 +136,7 @@ async function readTextWithClaude(text: string): Promise<string | null> {
       messages: [
         {
           role: 'user',
-          content: `<yahoo_page>\n${text}\n</yahoo_page>\nTranscribe this page as instructed.`,
+          content: userMessage(text),
         },
       ],
     })
@@ -111,13 +154,21 @@ async function readTextWithClaude(text: string): Promise<string | null> {
   }
 }
 
+async function toRouterImage(file: File): Promise<RouterImage> {
+  return {
+    data: Buffer.from(await file.arrayBuffer()).toString('base64'),
+    mediaType: file.type as RouterImage['mediaType'],
+  }
+}
+
 export async function extractYahooSnapshotPage(
   input: { text: string } | { image: File },
 ): Promise<YahooSnapshotExtractResult> {
   if (!isAiSpendEnabled()) return { status: 'disabled' }
 
   if ('text' in input) {
-    const reply = await readTextWithClaude(input.text.slice(0, YAHOO_SNAPSHOT_MAX_TEXT_CHARS))
+    const text = input.text.slice(0, YAHOO_SNAPSHOT_MAX_TEXT_CHARS)
+    const reply = (await readTextWithClaude(text)) ?? (await readWithRouter({ text }))
     return reply ? parseYahooSnapshotReply(reply) : { status: 'unavailable' }
   }
 
@@ -127,6 +178,9 @@ export async function extractYahooSnapshotPage(
     question: 'Transcribe this screenshot of a Yahoo league page as instructed.',
     maxTokens: 8_000,
   })
-  if (read.status !== 'ok') return { status: read.status }
-  return parseYahooSnapshotReply(read.text)
+  if (read.status === 'ok') return parseYahooSnapshotReply(read.text)
+  if (read.status === 'disabled') return { status: 'disabled' }
+  // Both vision providers failed: try the rest of the chain with the image attached.
+  const reply = await readWithRouter({ image: await toRouterImage(input.image) })
+  return reply ? parseYahooSnapshotReply(reply) : { status: 'unavailable' }
 }
