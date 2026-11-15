@@ -30,6 +30,9 @@ vi.mock('next/link', () => ({
 let pathname = '/demo/formats'
 vi.mock('next/navigation', () => ({
   usePathname: () => pathname,
+  // The demo frame and the app's own League Home (rendered on every format page) read these.
+  useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {}, back: () => {}, refresh: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND')
   },

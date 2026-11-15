@@ -115,6 +115,19 @@ export function DemoOverview({ view, sample = false, createHref = '/create-leagu
           </section>
           )}
 
+          <DemoHealthCard view={view} />
+          <DemoAlertsCard view={view} />
+        </div>
+      </div>
+
+      <DemoRecentTrades view={view} sample={sample} />
+      <DemoCreateCta createHref={createHref} testLeagueHref={testLeagueHref} />
+    </div>
+  )
+}
+
+function DemoHealthCard({ view }: { view: DemoLeagueView }) {
+  return (
           <section className="af-card p-4" aria-labelledby="demo-health">
             <h2 id="demo-health" className="text-lg font-black">League Health</h2>
             {view.health ? (
@@ -130,7 +143,11 @@ export function DemoOverview({ view, sample = false, createHref = '/create-leagu
               <p className="mt-2 text-sm af-muted">Not enough data yet.</p>
             )}
           </section>
+  )
+}
 
+function DemoAlertsCard({ view }: { view: DemoLeagueView }) {
+  return (
           <section className="af-card p-4" aria-labelledby="demo-alerts">
             <h2 id="demo-alerts" className="text-lg font-black">Alerts</h2>
             <p className="text-xs af-tertiary">Shown here only — the demo never sends emails or push notifications.</p>
@@ -140,9 +157,43 @@ export function DemoOverview({ view, sample = false, createHref = '/create-leagu
               <ul className="mt-2 space-y-1 text-sm">{view.alerts.map((a, i) => <li key={i}>• {a.text}</li>)}</ul>
             )}
           </section>
-        </div>
-      </div>
+  )
+}
 
+/**
+ * What the demo shows BELOW the app's own League Home (DemoCoreShell + LeagueHome): the parts the
+ * old demo overview had that the real Home has no panel for — every team (with its page, on the live
+ * demo), League Health, alerts, recent trades — and the way to start a league.
+ */
+export function DemoLeagueExtras({ view, sample = false, createHref = '/create-league', testLeagueHref = '/create-league?from=demo' }: { view: DemoLeagueView; sample?: boolean; createHref?: string; testLeagueHref?: string }) {
+  return (
+    <div className="mt-5 space-y-5" data-testid="demo-league-extras">
+      {sample ? null : (
+        <section className="af-card p-4" aria-labelledby="demo-teams">
+          <h2 id="demo-teams" className="text-lg font-black">Teams</h2>
+          <p className="text-xs af-tertiary">Open any team to see its roster.</p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {view.teams.map((t) => (
+              <li key={t.slot} className="af-card-soft p-2"><TeamBadge team={t} size={28} /></li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <div className="grid gap-5 md:grid-cols-2">
+        <DemoHealthCard view={view} />
+        <DemoAlertsCard view={view} />
+      </div>
+      <DemoRecentTrades view={view} sample={sample} />
+      <DemoCreateCta createHref={createHref} testLeagueHref={testLeagueHref} />
+    </div>
+  )
+}
+
+function DemoRecentTrades({ view, sample }: { view: DemoLeagueView; sample: boolean }) {
+  const team = (slot: number) => view.teams.find((t) => t.slot === slot)
+  const TeamBadgeX = (props: Parameters<typeof TeamBadge>[0]) => <TeamBadge {...props} link={!sample && props.link !== false} />
+  return (
+    <>
       {sample && view.trades.length === 0 ? null : (
       <section className="af-card p-4" aria-labelledby="demo-recent-trades">
         <div className="flex items-center justify-between">
@@ -168,7 +219,12 @@ export function DemoOverview({ view, sample = false, createHref = '/create-leagu
         )}
       </section>
       )}
+    </>
+  )
+}
 
+function DemoCreateCta({ createHref, testLeagueHref }: { createHref: string; testLeagueHref: string }) {
+  return (
       <section className="af-card flex flex-col items-start justify-between gap-3 p-5 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-lg font-black">Run your own league like this</h2>
@@ -179,7 +235,6 @@ export function DemoOverview({ view, sample = false, createHref = '/create-leagu
           <Link href={testLeagueHref} className="af-button-secondary inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold" data-testid="demo-create-test-league">Create a test league</Link>
         </div>
       </section>
-    </div>
   )
 }
 

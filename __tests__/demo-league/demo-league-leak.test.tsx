@@ -192,6 +192,9 @@ vi.mock('next/link', () => ({
 }))
 vi.mock('next/navigation', () => ({
   usePathname: () => '/demo',
+  // The demo frame and the app's own League Home (rendered on /demo) read these.
+  useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {}, back: () => {}, refresh: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND')
   },
