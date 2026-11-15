@@ -3476,7 +3476,8 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
   min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  /* 8px, like the builder's selects: a 9-24px radius is a panel radius, which must be a token. */
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
