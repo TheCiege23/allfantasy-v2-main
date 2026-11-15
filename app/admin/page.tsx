@@ -1885,6 +1885,9 @@ export default async function AdminPage(
             <div className="af-cc-admin-chip">Admin</div>
             <DeploymentMarker />
             <div className="af-cc-spacer" />
+            <a className="af-cc-tab" href="/admin/growth" data-testid="admin-growth-tab">
+              Growth &amp; revenue
+            </a>
             <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
               Social newsroom
             </a>
