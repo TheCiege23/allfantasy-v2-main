@@ -8,6 +8,7 @@ import { cookies } from 'next/headers'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import { TradesLeagueActivityView } from '@/components/core-app/screens/TradesLeagueActivityView'
 import type { ActivityRow } from '@/lib/core-app/tradesActivity'
+import { SampleRosters } from './SampleRosters'
 
 /**
  * DB-free render of ONE league's Trades tab (2026-11-13) inside the real AfCoreShell: the deadline
@@ -135,11 +136,13 @@ export default async function TradesLeagueGuideHarnessPage({
       comms={{ leagues: [], chimmyTokenCost: null, dockable: false, supportEmail: null }}
     >
       <div data-testid="trades-league-guide-harness">
+        {/* SAMPLE rosters for Create a trade (SampleRosters.tsx): 4 teams, so the 3–4 team builder can be shown. */}
+        <SampleRosters />
         <TradeCenter
           viewerId={null}
           league={{ id: 'l0', name: 'Sample Guillotine League', format: 'guillotine', teamCount: 18 }}
           platform="sleeper"
-          sourceLink={{ href: '#', label: 'Open in Sleeper', platformLabel: 'Sleeper', screen: 'trade', external: true, candidate: null } as never}
+          sourceLink={{ href: '#', label: 'Open in Sleeper', platformLabel: 'Sleeper', providerLabel: 'Sleeper', screen: 'trade', external: true, candidate: null } as never}
           deadlineWeek={11}
           deadlineCountdown={COUNTDOWN[state]}
           leagues={LEAGUES}

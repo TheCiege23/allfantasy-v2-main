@@ -3294,3 +3294,248 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
 .af-tc-activity-what b {
   color: var(--text);
 }
+
+/* 2 teams or 3–4 teams (2026-11-14). */
+.af-tc-create-mode {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.af-tc-create-mode button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-tc-create-mode button[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--bg, #0b0f17);
+}
+
+/* The 3–4 team builder (MultiTeamTradeBuilder.tsx). */
+.af-mt {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-mt-teams {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: var(--surface);
+}
+.af-mt-teams legend {
+  padding: 0 4px;
+}
+.af-mt-hint,
+.af-mt-empty {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-mt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.af-mt-chip {
+  min-height: 44px;
+}
+.af-mt-chip[data-on='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.af-mt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.af-mt-team {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: var(--surface);
+}
+.af-mt-team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.af-mt-team-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-mt-letter {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-weight: 800;
+  background: var(--line);
+  color: var(--text);
+}
+.af-mt-letter[data-letter='A'],
+.af-mt-letter[data-letter='B'] {
+  background: color-mix(in srgb, var(--good, #2bd47e) 22%, transparent);
+  color: var(--good, #2bd47e);
+}
+.af-mt-letter[data-letter='D'],
+.af-mt-letter[data-letter='F'] {
+  background: color-mix(in srgb, var(--bad, #ff5d6c) 22%, transparent);
+  color: var(--bad, #ff5d6c);
+}
+.af-mt-assets,
+.af-mt-options,
+.af-mt-grade-rows {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.af-mt-asset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name value' 'to remove';
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.af-mt-asset:first-child {
+  border-top: 0;
+}
+.af-mt-asset-name {
+  grid-area: name;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-mt-asset-pos {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-mt-asset-value {
+  grid-area: value;
+  color: var(--text2);
+}
+.af-mt-asset-to {
+  grid-area: to;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.af-mt-asset-to select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.af-mt-remove {
+  grid-area: remove;
+  justify-self: end;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+.af-mt-search {
+  margin-top: 8px;
+}
+.af-mt-search input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.af-mt-options button {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.af-mt-grade {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: var(--surface);
+}
+.af-mt-grade-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-mt-grade-sub {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.af-mt-verdict {
+  margin: 6px 0 0;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-mt-grade-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  color: var(--text2);
+  font-size: 13.5px;
+}
+.af-mt-basis {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-mt-send {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 10px;
+}
