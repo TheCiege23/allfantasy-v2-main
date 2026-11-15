@@ -4,8 +4,10 @@
  */
 
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
-const BASE = 'https://allfantasy.ai'
+// www via the shared helper: the apex 301s to www, so an apex canonical names a redirect.
+const BASE = getPublicSiteOrigin()
 
 export type SportSlug =
   | 'fantasy-football'

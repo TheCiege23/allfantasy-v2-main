@@ -3,6 +3,8 @@
  * Routes: /trade-analyzer, /waiver-wire, /draft-helper, /player-comparison, /matchup-simulator, /fantasy-coach
  */
 
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+
 export interface AIToolSeoConfig {
   title: string
   description: string
@@ -247,7 +249,8 @@ export const AI_TOOL_PAGES = {
 
 type AIToolPageSlug = keyof typeof AI_TOOL_PAGES
 
-const BASE = 'https://allfantasy.ai'
+// www via the shared helper: the apex 301s to www, so an apex canonical names a redirect.
+const BASE = getPublicSiteOrigin()
 
 export function getAIToolPageCanonical(slug: AIToolPageSlug): string {
   return `${BASE}/${slug}`

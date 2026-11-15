@@ -22,13 +22,15 @@ const FOOTER_SECTIONS = [
   {
     heading: 'Sports',
     links: [
-      { href: '/fantasy-football', label: 'Fantasy Football' },
+      // /sports/* is the one sport lander; the bare /fantasy-* paths 308 to it
+      // (next.config.js), so linking there would make every footer link a redirect.
+      { href: '/sports/fantasy-football', label: 'Fantasy Football' },
       // /fantasy-football/dynasty was never a route — this 404'd on five
       // indexable landers. The live dynasty lander is the legacy-dynasty tool.
       { href: '/tools/legacy-dynasty', label: 'Dynasty Football' },
-      { href: '/fantasy-basketball', label: 'Fantasy Basketball' },
-      { href: '/fantasy-baseball', label: 'Fantasy Baseball' },
-      { href: '/fantasy-hockey', label: 'Fantasy Hockey' },
+      { href: '/sports/fantasy-basketball', label: 'Fantasy Basketball' },
+      { href: '/sports/fantasy-baseball', label: 'Fantasy Baseball' },
+      { href: '/sports/fantasy-hockey', label: 'Fantasy Hockey' },
       { href: '/brackets', label: 'World Cup Pools' },
     ],
   },

@@ -43,12 +43,20 @@ export async function GET() {
   const staticPages = [
     { path: 'blog', priority: '0.8', changefreq: 'weekly' },
     { path: '', priority: '1.0', changefreq: 'weekly' },
-    { path: 'app', priority: '0.9', changefreq: 'weekly' },
-    { path: 'bracket', priority: '0.9', changefreq: 'weekly' },
-    { path: 'brackets', priority: '0.8', changefreq: 'weekly' },
+    /*
+     * ⚠ ONLY PAGES A LOGGED-OUT CRAWLER CAN READ. Removed 2026-11-14, each measured
+     * on production as Googlebot:
+     *   app         the signed-in shell ("Your leagues"), not a landing page
+     *   bracket     a 307 to /brackets — a sitemap entry that redirects is a wasted crawl
+     *   mock-draft  serves the sign-in page with a canonical of /login; the public
+     *               mock draft lander is /tools/mock-draft-simulator, listed below
+     */
+    { path: 'brackets', priority: '0.9', changefreq: 'weekly' },
+    { path: 'world-cup', priority: '0.8', changefreq: 'weekly' },
+    { path: 'discover/leagues', priority: '0.8', changefreq: 'daily' },
+    { path: 'players', priority: '0.7', changefreq: 'daily' },
     { path: 'af-legacy', priority: '0.8', changefreq: 'weekly' },
     { path: 'trade-analyzer', priority: '0.8', changefreq: 'weekly' },
-    { path: 'mock-draft', priority: '0.7', changefreq: 'weekly' },
     { path: 'waiver-ai', priority: '0.7', changefreq: 'weekly' },
     { path: 'tools-hub', priority: '0.85', changefreq: 'weekly' },
     { path: 'chimmy', priority: '0.8', changefreq: 'weekly' },
