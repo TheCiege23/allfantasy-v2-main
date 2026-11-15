@@ -41,14 +41,27 @@ describe('EspnTeamCodeVerify', () => {
     expect(screen.getByText(/Confirmed: Tribal Beef/)).toBeTruthy()
   })
 
-  it('says a private league cannot use a code, rather than "not there yet"', async () => {
+  it('a private league gets "make it public, keep it public" steps, and can check again', async () => {
     fetchMock
       .mockResolvedValueOnce(reply({ ok: true, code: 'K9X2' }))
-      .mockResolvedValueOnce(reply({ ok: true, code: 'K9X2', found: false, reason: 'private', message: 'This league is private.' }))
-    render(<EspnTeamCodeVerify leagueInput="123456" onVerified={vi.fn()} />)
+      .mockResolvedValueOnce(reply({ ok: true, code: 'K9X2', found: false, reason: 'private', message: 'server copy' }))
+      .mockResolvedValueOnce(reply({ ok: true, code: 'K9X2', found: true, teamName: 'Tribal Beef' }))
+    const onVerified = vi.fn()
+    render(<EspnTeamCodeVerify leagueInput="123456" onVerified={onVerified} />)
     await screen.findByText('K9X2')
     fireEvent.click(screen.getByTestId('espn-team-code-check'))
-    expect(await screen.findByText('This league is private.')).toBeTruthy()
+
+    const block = await screen.findByTestId('espn-team-code-private')
+    expect(block.textContent).toMatch(/Make League Viewable to Public/)
+    expect(block.textContent).toMatch(/Keep it public/)
+    // Not the generic "we don't see your code" copy.
+    expect(screen.queryByText(/don't see K9X2/)).toBeNull()
+    expect(onVerified).not.toHaveBeenCalled()
+
+    // After they flip it public, the same button checks again and hands back.
+    fireEvent.click(screen.getByTestId('espn-team-code-check'))
+    await waitFor(() => expect(onVerified).toHaveBeenCalledTimes(1))
+    expect(screen.queryByTestId('espn-team-code-private')).toBeNull()
   })
 
   it('renders nothing when codes are unavailable, so the cookie path stands alone', async () => {
