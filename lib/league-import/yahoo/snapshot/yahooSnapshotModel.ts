@@ -309,7 +309,8 @@ export function buildYahooSnapshotPayload(snapshot: YahooLeagueSnapshot, now: Da
       if (!teamKey) continue
       draftPicks.push({
         round: pick.round,
-        pickNumber: pick.pick ?? (pick.round - 1) * numTeams + inRound,
+        // Overall pick from Yahoo's in-round number (or page order when it is missing).
+        pickNumber: (pick.round - 1) * numTeams + (pick.pick ?? inRound),
         teamKey,
         playerId: snapshotPlayerId(pick.playerName, pick.position, pick.nflTeam),
         playerName: pick.playerName,
