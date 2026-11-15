@@ -1,6 +1,20 @@
 'use client'
 
+import Link from 'next/link'
 import { useRef, useState } from 'react'
+
+import { CHIMMY_PLAN_DAILY_INCLUDED } from '@/lib/chimmy/planAllowanceView'
+import { withEntrySource } from '@/lib/monetization/upgradeEntrySource'
+
+/*
+ * Chimmy is included in AF Pro (and AF Supreme, which bundles it) — NOT in AF Commissioner alone,
+ * which keeps paying tokens (lib/chimmy/planAllowance.ts). So this page only ever offers AF Pro.
+ */
+const PRO_HREF = withEntrySource('/upgrade?plan=pro', 'demo-chimmy')
+
+/** The server's `code` on a 429: the demo's own limits, which become a sign-up card, not an error. */
+type LimitCode = 'demo_limit' | 'daily_cap'
+const isLimitCode = (c: unknown): c is LimitCode => c === 'demo_limit' || c === 'daily_cap'
 
 const SUGGESTIONS = [
   'Who is the best team right now and why?',
@@ -21,11 +35,13 @@ type Turn = {
   truncated?: boolean
   /** A continue or retry request for this turn is in flight. */
   working?: boolean
+  /** The demo's limit was reached: show the sign-up / AF Pro card instead of a retry. */
+  limit?: LimitCode
 }
 
 type ChimmyReply =
   | { ok: true; answer: string; truncated: boolean }
-  | { ok: false; status: number; error: string; retryable: boolean }
+  | { ok: false; status: number; error: string; retryable: boolean; limit?: LimitCode }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -44,11 +60,17 @@ async function askChimmy(body: { message: string; history: Array<{ q: string; a:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const json = (await res.json().catch(() => ({}))) as { answer?: string; truncated?: boolean; error?: string; retryable?: boolean }
+      const json = (await res.json().catch(() => ({}))) as { answer?: string; truncated?: boolean; error?: string; retryable?: boolean; code?: string }
       if (res.ok && typeof json.answer === 'string' && json.answer.trim()) {
         return { ok: true, answer: json.answer, truncated: json.truncated === true }
       }
-      last = { ok: false, status: res.status, error: json.error || FALLBACK_ERROR, retryable: res.status >= 500 && json.retryable !== false }
+      last = {
+        ok: false,
+        status: res.status,
+        error: json.error || FALLBACK_ERROR,
+        retryable: res.status >= 500 && json.retryable !== false,
+        ...(res.status === 429 && isLimitCode(json.code) ? { limit: json.code } : {}),
+      }
       if (!last.retryable) return last
     } catch {
       last = { ok: false, status: 0, error: NETWORK_ERROR, retryable: true }
@@ -81,11 +103,11 @@ export function DemoChimmy() {
     const turn = turnsRef.current[index]
     if (!turn) return
     setBusy(true)
-    patch(index, { a: null, error: undefined, truncated: false, working: true })
+    patch(index, { a: null, error: undefined, limit: undefined, truncated: false, working: true })
     const reply = await askChimmy({ message: turn.q, history: historyBefore(index) })
     patch(index, reply.ok
       ? { a: reply.answer, truncated: reply.truncated, working: false }
-      : { error: reply.error, working: false })
+      : { error: reply.error, limit: reply.limit, working: false })
     setBusy(false)
   }
 
@@ -128,7 +150,23 @@ export function DemoChimmy() {
           <li key={i} className="space-y-2">
             <p className="af-card-soft ml-auto w-fit max-w-[85%] p-3 text-sm">{t.q}</p>
             <div className="af-card w-fit max-w-[90%] whitespace-pre-wrap p-3 text-sm" data-testid="demo-chimmy-answer">
-              {t.error ? (
+              {t.error && t.limit ? (
+                <div className="space-y-2" role="status" data-testid="demo-chimmy-limit">
+                  <p className="font-semibold">{t.error}</p>
+                  <p>
+                    {t.limit === 'demo_limit' ? 'It opens up again in a few minutes. ' : 'It resets tomorrow. '}
+                    Sign up free to ask Chimmy about your own league — AF Pro includes {CHIMMY_PLAN_DAILY_INCLUDED} Chimmy answers a day.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href="/signup" className="af-button-primary inline-flex min-h-9 items-center rounded-full px-4 text-xs font-semibold">
+                      Sign up free
+                    </Link>
+                    <Link href={PRO_HREF} className="af-button-secondary inline-flex min-h-9 items-center rounded-full px-4 text-xs font-semibold">
+                      See AF Pro
+                    </Link>
+                  </div>
+                </div>
+              ) : t.error ? (
                 <div className="space-y-2" role="alert">
                   <p>{t.error}</p>
                   <button
@@ -183,6 +221,13 @@ export function DemoChimmy() {
           Ask
         </button>
       </form>
+      {/* After a real answer, and not beside a limit card that already says it. */}
+      {turns.some((t) => t.a && !t.error) && !turns.some((t) => t.limit) && (
+        <p className="af-muted text-xs" data-testid="demo-chimmy-pro-note">
+          Want deeper answers about your own league?{' '}
+          <Link href={PRO_HREF} className="font-semibold underline">AF Pro</Link> includes {CHIMMY_PLAN_DAILY_INCLUDED} Chimmy answers a day.
+        </p>
+      )}
     </div>
   )
 }
