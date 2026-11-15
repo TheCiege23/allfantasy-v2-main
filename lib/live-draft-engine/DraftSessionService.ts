@@ -996,6 +996,17 @@ export async function setTimerSeconds(
  * `DraftPickAuditLog`. The reason is commissioner-visible only (read endpoint hides it for non-commissioners).
  * Optional args keep the function backward-compatible for legacy callers; routes always pass them.
  */
+/**
+ * An auction budget map with `amount` given back to `rosterId` — the inverse of the winner's deduction in
+ * auction/AuctionEngine.ts. A missing or unreadable map is left alone rather than invented (null).
+ */
+export function refundAuctionBudget(budgets: unknown, rosterId: string, amount: number): Record<string, number> | null {
+  if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) return null
+  const current = (budgets as Record<string, unknown>)[rosterId]
+  if (typeof current !== 'number' || !Number.isFinite(current)) return null
+  return { ...(budgets as Record<string, number>), [rosterId]: current + amount }
+}
+
 export async function undoLastPick(
   leagueId: string,
   options?: { reason?: string; actorUserId?: string | null },
@@ -1022,6 +1033,16 @@ export async function undoLastPick(
       : null
 
   await prisma.$transaction(async (tx) => {
+    /*
+     * 🛑 UNDO LEFT TWO THINGS BEHIND (2026-11-15). An NBA devy / C2C college pick creates a draft right; undo deleted
+     * the pick and kept the right, so the player stayed owned and could not be drafted again. An auction pick spent
+     * the winner's budget; undo deleted the pick and kept the money spent. Both are reversed with the pick — the
+     * pick editor and draft reset already did the first.
+     */
+    const { removeDraftCollegeRight } = await import('@/lib/devy/nbaDraftRights')
+    await removeDraftCollegeRight(tx, leagueId, last)
+    const refund = session.draftType === 'auction' && last.rosterId && typeof last.amount === 'number' && last.amount > 0 ? last.amount : 0
+    const refundedBudgets = refund ? refundAuctionBudget(session.auctionBudgets, last.rosterId!, refund) : null
     await tx.draftPick.delete({ where: { id: last.id } })
     let updatedSession: Parameters<typeof recordArchiveEvent>[1] = session
     if (freshTimerEndAt !== null) {
@@ -1033,12 +1054,13 @@ export async function undoLastPick(
           timerEndAt: freshTimerEndAt,
           pausedRemainingSeconds: null,
           overnightFrozenPickSeconds: null,
+          ...(refundedBudgets ? { auctionBudgets: refundedBudgets } : {}),
         },
       })
     } else {
       updatedSession = await tx.draftSession.update({
         where: { id: session.id },
-        data: { version: { increment: 1 }, updatedAt: new Date() },
+        data: { version: { increment: 1 }, updatedAt: new Date(), ...(refundedBudgets ? { auctionBudgets: refundedBudgets } : {}) },
       })
     }
     await recordArchiveEvent(tx, updatedSession, 'reset_timer', { actorUserId, correction: 'undo_pick' })
@@ -1060,6 +1082,7 @@ export async function undoLastPick(
             position: last.position,
             team: last.team,
             source: last.source,
+            ...(refund ? { refundedAuctionAmount: refund } : {}),
           },
         },
       })

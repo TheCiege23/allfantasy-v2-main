@@ -16,6 +16,13 @@ const hm = vi.hoisted(() => ({
   logAction: vi.fn(),
   publishDraftIntelForUpcomingManagers: vi.fn(),
   sendDraftIntelDm: vi.fn(),
+  refuseIfSleeperMirrored: vi.fn(),
+  recordCommissionerDraftAction: vi.fn(),
+}))
+
+vi.mock('@/lib/draft-room/commissionerDraftActions', () => ({
+  refuseIfSleeperMirrored: hm.refuseIfSleeperMirrored,
+  recordCommissionerDraftAction: hm.recordCommissionerDraftAction,
 }))
 
 vi.mock('next-auth', () => ({
@@ -164,11 +171,33 @@ describe('POST /api/leagues/[leagueId]/draft/pick commissioner ordering', () => 
       }),
     )
 
+    // 🛑 A commissioner-entered pick is made for the team ON THE CLOCK (roster-1), whatever roster the request names
+    // (2026-11-15). The draft room sent the commissioner's own roster, so an offline commissioner who owned a team
+    // drafted every player onto it.
     expect(hm.submitPick).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'commissioner',
-        rosterId: 'roster-9',
+        rosterId: 'roster-1',
       }),
     )
+    // …and the league log records who made it, for which team.
+    expect(hm.recordCommissionerDraftAction).toHaveBeenCalledWith('league-1', 'user-1', 'commissioner_pick', expect.objectContaining({ rosterId: 'roster-1' }))
+  })
+
+  // 🛑 Sleeper rewrites a mirrored draft on every sync, so a pick entered here would be silently undone (2026-11-15).
+  it('refuses a commissioner pick on a draft mirrored from Sleeper', async () => {
+    hm.isCommissioner.mockResolvedValue(true)
+    hm.refuseIfSleeperMirrored.mockResolvedValueOnce({ body: { error: 'This draft runs on Sleeper.', code: 'SLEEPER_MIRRORED_DRAFT' }, status: 409 })
+
+    const { POST } = await import('@/app/api/leagues/[leagueId]/draft/pick/route')
+    const req = createMockNextRequest('http://localhost/api/leagues/league-1/draft/pick', {
+      method: 'POST',
+      body: { playerName: 'Player One', position: 'RB', source: 'commissioner' },
+    })
+    const res = await POST(req as any, { params: Promise.resolve({ leagueId: 'league-1' }) })
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('SLEEPER_MIRRORED_DRAFT')
+    expect(hm.submitPick).not.toHaveBeenCalled()
+    expect(hm.recordCommissionerDraftAction).not.toHaveBeenCalled()
   })
 })

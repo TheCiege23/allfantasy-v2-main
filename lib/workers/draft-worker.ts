@@ -11,7 +11,10 @@ import {
   resetTimer,
   resumeDraftSession,
   startDraftSession,
+  undoLastPick,
 } from '@/lib/live-draft-engine/DraftSessionService'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { logAction } from '@/server/services/auditService'
 import { submitPick, type SubmitPickInput } from '@/lib/live-draft-engine/PickSubmissionService'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
@@ -576,6 +579,12 @@ export class DraftWorker {
       throw new Error('Commissioner access required')
     }
 
+    /*
+     * 🛑 THIS DELETED EVERY PICK FROM `pickId` ONWARD, IN WHATEVER SESSION THAT PICK BELONGED TO (2026-11-15). Nothing
+     * checked the pick was in this draft, a completed draft was reopened, nothing was recorded, and an auction bid or
+     * an NBA college right stayed spent. It now undoes this draft's LAST pick only, through `undoLastPick`, which
+     * refuses a completed draft, reverses the pick's effects and records the commissioner.
+     */
     const target = await prisma.draftPick.findUnique({
       where: { id: pickId },
       select: { id: true, sessionId: true, overall: true },
@@ -583,25 +592,33 @@ export class DraftWorker {
     if (!target?.id) {
       throw new Error('Pick not found')
     }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.draftPick.deleteMany({
-        where: {
-          sessionId: target.sessionId,
-          overall: { gte: target.overall },
-        },
-      })
-      await tx.draftSession.update({
-        where: { id: target.sessionId },
-        data: {
-          status: 'in_progress',
-          version: { increment: 1 },
-          updatedAt: new Date(),
-        },
-      })
+    const current = await prisma.draftSession.findFirst({
+      where: { leagueId: context.leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { id: true, picks: { orderBy: { overall: 'desc' }, take: 1, select: { id: true } } },
     })
+    if (!current || current.id !== target.sessionId) {
+      throw new Error('Pick not found')
+    }
+    if (current.picks[0]?.id !== target.id) {
+      throw new Error('Only the most recent pick can be undone')
+    }
+    const undone = await undoLastPick(context.leagueId, { actorUserId: commishId })
+    if (!undone) {
+      throw new Error('This pick cannot be undone')
+    }
+    await logAction({
+      leagueId: context.leagueId,
+      userId: commishId,
+      actionType: 'commissioner_undo_draft_pick',
+      entityType: 'draft',
+      entityId: current.id,
+      beforeState: { overall: target.overall },
+      afterState: { undone: true },
+      metadata: { source: 'draft-worker.undoPick' },
+    }).catch(() => {})
 
-    await resetTimer(context.leagueId)
+    // undoLastPick already restarts the clock for the restored pick (and leaves a paused clock paused).
     await this.broadcastDraftState(draftId)
   }
 

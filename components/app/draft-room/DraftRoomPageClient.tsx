@@ -2578,7 +2578,9 @@ export function DraftRoomPageClient({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            rosterId: currentUserRosterId ?? undefined,
+            // A commissioner entering an offline pick is picking for the team on the clock, not their own
+            // (the server enforces it too — draft/pick/route.ts).
+            rosterId: draftUISettings?.executionMode === 'offline' && isCommissioner ? undefined : (currentUserRosterId ?? undefined),
             playerName: player.name,
             position: player.position,
             team: player.team ?? null,
@@ -4283,6 +4285,8 @@ export function DraftRoomPageClient({
   const boardHasOpenPicks = (session.picks?.length ?? 0) < totalBoardPicksPlanned
   /** Sleeper owns this draft — we only mirror picks. The mirror never writes timerEndAt, so a blank clock is correct, not broken. */
   const isMirroredFromSleeper = Boolean((session as DraftSessionSnapshot).sleeperDraftId)
+  /** Sleeper's sync rewrites the board, so a commissioner edit here would be undone — and the server refuses it. */
+  const commissionerCanEditBoard = isCommissioner && !isMirroredFromSleeper
   /** DB row occasionally missing timerEndAt — TopBar shows "—"; nudge user to resync rather than implying a dead room. */
   const showPickClockAnchorWarning =
     !isMirroredFromSleeper &&
@@ -4977,6 +4981,7 @@ export function DraftRoomPageClient({
                           })
                         }}
                       />
+                      {commissionerCanEditBoard ? (
                       <CommissionerPickEditorPanel
                         leagueId={leagueId}
                         session={session}
@@ -4988,6 +4993,11 @@ export function DraftRoomPageClient({
                           setGovernanceBanner({ variant: 'success', message: 'Pick updated. Draft remains paused.' })
                         }}
                       />
+                      ) : (
+                        <p data-testid="draft-sleeper-mirror-commish-note" className="rounded-lg border border-cyan-400/25 bg-cyan-950/25 px-3 py-2 text-xs text-cyan-50/90">
+                          This draft runs on Sleeper. Edit picks, the order and the clock there — they sync here.
+                        </p>
+                      )}
                       <CommissionerAuditLogList
                         leagueId={leagueId}
                         slotOrder={session?.slotOrder}
@@ -5321,9 +5331,9 @@ export function DraftRoomPageClient({
                     setTradeHistoryOpen(true)
                   }}
                   canCommissionerEditPicks={
-                    isCommissioner && session?.status === 'paused' && session?.draftType !== 'auction'
+                    commissionerCanEditBoard && session?.status === 'paused' && session?.draftType !== 'auction'
                   }
-                  onCommissionerEditPick={isCommissioner ? openCommissionerPickEditor : undefined}
+                  onCommissionerEditPick={commissionerCanEditBoard ? openCommissionerPickEditor : undefined}
                   adpDeltaByOverall={boardAdpDeltaByOverall}
                   teamMetaByRoster={teamMetaByRoster}
                 />
@@ -5402,7 +5412,7 @@ export function DraftRoomPageClient({
         void fetchDraftSettings()
       }}
     />
-    {commissionerEditModalOpen && isCommissioner && (
+    {commissionerEditModalOpen && commissionerCanEditBoard && (
       <div
         className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/60 p-4 sm:items-center"
         role="dialog"

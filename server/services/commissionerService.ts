@@ -83,7 +83,7 @@ export async function reverseLastDraftPick(leagueId: string, userId: string) {
     select: { id: true, status: true, nextOverallPick: true, currentRoundNum: true },
   })
 
-  const ok = await undoLastPick(leagueId)
+  const ok = await undoLastPick(leagueId, { actorUserId: userId })
   await logAction({
     leagueId,
     userId,
