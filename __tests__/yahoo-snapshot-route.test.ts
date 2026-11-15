@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/telemetry/usage', () => ({ withApiUsage: () => <T>(handler: T) => handler }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser, requireAgeConfirmedUser: h.requireVerifiedUser }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsDataCache: {

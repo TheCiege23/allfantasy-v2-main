@@ -14,7 +14,8 @@ import {
   applyImportReviewOverrides,
   parseImportReviewOverrides,
 } from '@/lib/league-import/review/importReviewOverrides'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
+import { recordImportCompleted } from '@/lib/analytics/importFunnel'
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import {
@@ -115,6 +116,7 @@ async function commitPublicEspnLeagueAsMember(args: {
     if (!outcome.ok) {
       return NextResponse.json({ error: outcome.error, code: outcome.code }, { status: outcome.status })
     }
+    await recordImportCompleted(args.userId, 'espn', { existed: outcome.existed === true, joinedExisting: outcome.joinedExisting === true })
     return NextResponse.json({
       leagueId: outcome.league.id,
       name: outcome.league.name,
@@ -154,7 +156,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleImportCommit(req: NextRequest): Promise<Response> {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) {
     return auth.response
   }
@@ -375,6 +377,7 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
      * The 409/"Already imported" path is unreachable for anything imported once
      * before, which is precisely the case a re-run hits.
      */
+    await recordImportCompleted(auth.userId, provider, { existed: persisted.existed === true, joinedExisting: persisted.joinedExisting === true })
     return NextResponse.json({
       leagueId: persisted.league.id,
       name: persisted.league.name,

@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from 'next/server'
-import {requireVerifiedUser} from '@/lib/auth-guard'
+import {requireAgeConfirmedUser} from '@/lib/auth-guard'
 import {getServedOrigin} from '@/lib/http/served-origin'
 import {fantraxBrowserContext} from '@/lib/import-os/collector/fantraxBrowserContext'
 import {importFantraxBrowserActuals} from '@/lib/import-os/collector/fantraxBrowserActuals'
@@ -7,13 +7,13 @@ export const dynamic='force-dynamic'
 export const maxDuration=120
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 export async function GET(req:NextRequest){
- const auth=await requireVerifiedUser();if(!auth.ok)return auth.response
+ const auth=await requireAgeConfirmedUser();if(!auth.ok)return auth.response
  const leagueId=req.nextUrl.searchParams.get('leagueId')??''
  if(!uuid.test(leagueId))return NextResponse.json({error:'Valid league ID required'},{status:400})
  try{return NextResponse.json(await fantraxBrowserContext(auth.userId,leagueId),{headers:{'Cache-Control':'no-store'}})}catch{return NextResponse.json({error:'Owned Fantrax college league or verified download contract unavailable'},{status:400})}
 }
 export async function POST(req:NextRequest){
- const auth=await requireVerifiedUser();if(!auth.ok)return auth.response
+ const auth=await requireAgeConfirmedUser();if(!auth.ok)return auth.response
  // Railway's nextUrl origin can be the bind address; trust configured deployment origin.
  if(req.headers.get('origin')!==getServedOrigin(req))return NextResponse.json({error:'Same-origin request required'},{status:403})
  try{

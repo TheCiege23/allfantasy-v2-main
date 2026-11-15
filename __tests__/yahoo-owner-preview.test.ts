@@ -19,7 +19,7 @@ const requireVerifiedUserMock = vi.hoisted(() => vi.fn())
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock }))
 vi.mock('@/lib/telemetry/usage', () => ({
   withApiUsage:
     () =>

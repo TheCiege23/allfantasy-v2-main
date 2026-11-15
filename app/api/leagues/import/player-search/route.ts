@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { normalizePlayerNameForResolution } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 
@@ -23,7 +23,7 @@ const querySchema = z.object({
 })
 
 export async function GET(req: Request) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) return auth.response
 
   const rl = consumeRateLimit({

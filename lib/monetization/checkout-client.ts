@@ -2,6 +2,7 @@ import type { MetaEventPayload } from "@/lib/meta-events"
 import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
 import { purchaseWithGooglePlay } from "@/lib/monetization/google-play-client"
 import { isAppleApp, purchaseWithApple } from "@/lib/monetization/apple-iap-client"
+import { entrySourceFromSearch, normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
 
 export type MonetizationCheckoutProductType = "subscription" | "token_pack"
 
@@ -13,6 +14,11 @@ export type MonetizationCheckoutRequest = {
   returnPath: string
   /** Optional sponsor/promo code to pre-apply at checkout (e.g. "WassupFred"). Server validates — client cannot spoof discounts. */
   couponCode?: string | null
+  /**
+   * Which surface sent the buyer here (`lock_player_depth`, …). Defaults to the page's own `?from=`,
+   * so every purchase surface reports it without being changed (lib/monetization/upgradeEntrySource.ts).
+   */
+  entrySource?: string | null
 }
 
 export type MonetizationCheckoutResult =
@@ -68,6 +74,9 @@ export async function resolveCheckoutUrl(
     returnPath: normalizeReturnPath(request.returnPath),
     couponCode: normalizedCoupon,
   }
+  const entrySource =
+    normalizeEntrySource(request.entrySource) ??
+    (typeof window === "undefined" ? null : entrySourceFromSearch(window.location?.search))
   const endpoint = resolveCheckoutEndpoint(request.productType)
   const requestKey = `${normalizedRequest.productType}:${normalizedRequest.sku}:${normalizedRequest.returnPath}:${normalizedCoupon ?? ""}`
   const existing = inFlightCheckoutRequests.get(requestKey)
@@ -84,6 +93,7 @@ export async function resolveCheckoutUrl(
           sku: normalizedRequest.sku,
           returnPath: normalizedRequest.returnPath,
           ...(normalizedRequest.couponCode ? { couponCode: normalizedRequest.couponCode } : {}),
+          ...(entrySource ? { entrySource } : {}),
         }),
         signal: controller.signal,
       })

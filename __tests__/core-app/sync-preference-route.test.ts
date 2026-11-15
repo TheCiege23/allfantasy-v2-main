@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 const h = vi.hoisted(() => ({ auth: vi.fn(), access: vi.fn(), league: vi.fn(), save: vi.fn() }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.auth }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.auth, requireAgeConfirmedUser: h.auth }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueAccess: h.access }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league } } }))
 vi.mock('@/lib/core-app/syncPreferences', () => ({ setSyncPaused: h.save }))

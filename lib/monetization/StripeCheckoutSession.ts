@@ -1,5 +1,6 @@
 import "server-only"
 import type Stripe from "stripe"
+import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
 import { getStripeClient } from "@/lib/stripe-client"
 import { getBaseUrl } from "@/lib/get-base-url"
 import {
@@ -69,6 +70,8 @@ export async function buildStripeCheckoutSessionForSku(input: {
    * decides eligibility; this builder decides whether the coupon may ride THIS session.
    */
   foundingMember?: boolean | null
+  /** Which surface sent the buyer (upgradeEntrySource.ts) — rides the session's metadata to the webhook. */
+  entrySource?: string | null
   env?: NodeJS.ProcessEnv
 }): Promise<StripeCheckoutSessionResult | null> {
   const env = input.env ?? process.env
@@ -104,6 +107,8 @@ export async function buildStripeCheckoutSessionForSku(input: {
   }
   const couponCode = input.couponCode?.trim()
   if (couponCode) metadata.couponCode = couponCode
+  const entrySource = normalizeEntrySource(input.entrySource)
+  if (entrySource) metadata.entrySource = entrySource
 
   const params: Stripe.Checkout.SessionCreateParams = {
     mode,
