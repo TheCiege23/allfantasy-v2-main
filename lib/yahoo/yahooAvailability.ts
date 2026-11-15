@@ -75,6 +75,20 @@ export function isYahooOpenForUser(userId: string | null | undefined): boolean {
 }
 
 /**
+ * Pasted-league (snapshot) import — `lib/league-import/yahoo/snapshot/`. Needs no Yahoo API access at
+ * all, so it is NOT tied to Yahoo's approval: preview users get it first, and
+ * `YAHOO_SNAPSHOT_IMPORT_OPEN=1` opens it to every signed-in user without touching the API's
+ * coming-soon state. Owner decision 2026-11-14: allowlist first, then open.
+ */
+export const YAHOO_SNAPSHOT_IMPORT_OPEN_ENV = 'YAHOO_SNAPSHOT_IMPORT_OPEN'
+
+export function isYahooSnapshotImportOpenFor(userId: string | null | undefined): boolean {
+  if (!userId) return false
+  if (process.env[YAHOO_SNAPSHOT_IMPORT_OPEN_ENV]?.trim() === '1') return true
+  return isYahooOpenForUser(userId)
+}
+
+/**
  * The JSON answer for a Yahoo data route while Yahoo is coming soon.
  *
  * 409, not 5xx: nothing is broken, and a 5xx would page someone and count against the error rate.

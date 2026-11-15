@@ -4,6 +4,7 @@
 
 import { importComingSoonMessage, isImportProviderAvailable } from './provider-ui-config';
 import { parseFantraxLeagueId } from './fantrax/fantraxApi';
+import { isYahooSnapshotSourceId } from './yahoo/snapshot/yahooSnapshotModel';
 import type { ImportProvider } from './types';
 import type { ImportReviewOverrides } from './review/types';
 
@@ -246,7 +247,8 @@ export async function fetchImportPreview(
    */
   options?: { allowPreviewOnly?: boolean }
 ): Promise<FetchPreviewResult> {
-  if (!isImportProviderAvailable(provider)) {
+  // A pasted Yahoo league (yahoo-snapshot:<id>) is allowed through; the server decides who may use it.
+  if (!isImportProviderAvailable(provider) && !(provider === 'yahoo' && isYahooSnapshotSourceId(sourceInput))) {
     return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
@@ -318,7 +320,8 @@ export async function submitImportCreation(
     reviewOverrides?: ImportReviewOverrides | null
   }
 ): Promise<SubmitImportResult> {
-  if (!isImportProviderAvailable(provider)) {
+  // A pasted Yahoo league (yahoo-snapshot:<id>) is allowed through; the server decides who may use it.
+  if (!isImportProviderAvailable(provider) && !(provider === 'yahoo' && isYahooSnapshotSourceId(sourceInput))) {
     return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
