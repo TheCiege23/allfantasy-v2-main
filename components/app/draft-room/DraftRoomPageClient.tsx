@@ -55,6 +55,7 @@ import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnou
 import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
+import { KeeperRollCall } from '@/components/app/draft-room/KeeperRollCall'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 
@@ -5334,6 +5335,18 @@ export function DraftRoomPageClient({
       }
       modeBanner={
         draftRoomMode ? <DraftModeBanner mode={draftRoomMode} isCommissioner={isCommissioner} /> : null
+      }
+      keeperStrip={
+        !isDraftCompleted && (session as DraftSessionSnapshot).keeper?.locks?.length ? (
+          <KeeperRollCall
+            locks={(session as DraftSessionSnapshot).keeper!.locks}
+            teamCount={safeBoardTeamCount}
+            currentUserRosterId={currentUserRosterId ?? null}
+            teamNameByRosterId={Object.fromEntries(
+              Object.entries(teamMetaByRoster).map(([rosterId, meta]) => [rosterId, meta.teamName ?? meta.ownerName ?? null]),
+            )}
+          />
+        ) : null
       }
       auctionStrip={
         draftRoomState.isAuction && auctionSnapshot ? (

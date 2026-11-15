@@ -47,6 +47,8 @@ type DraftRoomShellProps = {
    * visible area on desktop (measured 2026-11-15: top at -28px with scrollTop 146).
    */
   modeBanner?: ReactNode
+  /** Keeper roll call. Same placement and reason as `modeBanner`: outside the board's scroll zone. */
+  keeperStrip?: ReactNode
   draftBoard: ReactNode
   playerPanel: ReactNode
   queuePanel: ReactNode
@@ -113,6 +115,7 @@ export function DraftRoomShell({
   mobileDockAccessory,
   auctionStrip,
   modeBanner,
+  keeperStrip,
   mobileTab,
   onMobileTabChange,
   layout = 'classic',
@@ -299,6 +302,9 @@ export function DraftRoomShell({
           </div>
           {modeBanner ? (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
+          ) : null}
+          {keeperStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-keeper-strip-slot">{keeperStrip}</div>
           ) : null}
           {/* D.6.2 — board zone grows when the bottom dock is collapsed.
               Expanded:  ~52vh cap so dock has ~48vh; matches Sleeper proportions.
@@ -491,6 +497,9 @@ export function DraftRoomShell({
           {modeBanner ? (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
           ) : null}
+          {keeperStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-keeper-strip-slot">{keeperStrip}</div>
+          ) : null}
           <div className="min-h-[180px] flex-[2] overflow-auto overscroll-contain [overflow-anchor:none] border-b border-white/8 bg-[#050c1d]">
             {draftBoard}
           </div>
@@ -534,6 +543,7 @@ export function DraftRoomShell({
             <div className="shrink-0 border-b border-white/10 bg-[#050c1d]">{auctionStrip}</div>
           )}
           {modeBanner ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{modeBanner}</div> : null}
+          {keeperStrip ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{keeperStrip}</div> : null}
           <div
             className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth p-2 sm:p-3"
             data-testid="draft-mobile-board-scroll"
