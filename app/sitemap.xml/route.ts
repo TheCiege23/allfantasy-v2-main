@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { SPORT_SLUGS, TOOL_SLUGS } from '@/lib/seo-landing/config'
 import { DISCOVERY_LEAGUES_SLUGS } from '@/lib/seo-landing/discovery-leagues-pages'
+import { LEAGUE_TYPE_SLUGS } from '@/lib/seo-landing/league-type-pages'
 import { playerSlug } from '@/lib/core-app/playerSlug'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
@@ -92,6 +93,18 @@ export async function GET() {
   </url>`
   ).join('\n  ')
 
+  // Format landers: the hub, then one per format. The /demo/formats/* samples are noindex
+  // (invented teams) and deliberately stay out.
+  const leagueTypeUrls = ['', ...LEAGUE_TYPE_SLUGS.map((s) => `/${s}`)]
+    .map(
+      (suffix) => `<url>
+    <loc>${baseUrl}/league-types${suffix}</loc>
+    <changefreq>monthly</changefreq>
+    <priority>${suffix ? '0.8' : '0.85'}</priority>
+  </url>`
+    )
+    .join('\n  ')
+
   let blogUrls = ''
   try {
     const published = await prisma.blogArticle.findMany({
@@ -181,6 +194,7 @@ export async function GET() {
   ${sportUrls}
   ${toolUrls}
   ${discoveryLeaguesUrls}
+  ${leagueTypeUrls}
   ${blogUrls}
   ${playerUrls}
 </urlset>`
