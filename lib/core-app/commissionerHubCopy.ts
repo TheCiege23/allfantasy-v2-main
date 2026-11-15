@@ -23,6 +23,14 @@ const ES: Record<string, string> = {
   'Storyline Studio': 'Estudio de historias',
   // ── Header, gate, footer ──────────────────────────────────────────────
   '← All leagues you run': '← Todas las ligas que diriges',
+  // ── The headline and the folds (2026-11-14) ──────────────────────────
+  'This league hasn’t synced yet': 'Esta liga aún no se ha sincronizado',
+  'Nothing needs you right now': 'Nada necesita de ti ahora mismo',
+  '1 thing needs you': '1 cosa necesita de ti',
+  '1 gone quiet': '1 sin actividad',
+  'Turn this week into league action': 'Convierte esta semana en acción para la liga',
+  'Find players for your league': 'Encuentra jugadores para tu liga',
+  'Lineup and roster autopilot': 'Piloto automático de alineaciones y plantillas',
   'Core · Commissioner': 'Core · Comisionado',
   Commissioner: 'Comisionado',
   'Co-commissioner': 'Cocomisionado',
@@ -358,6 +366,8 @@ const PATTERNS: Pattern[] = [
   [/^week (\d+)$/, (w) => `semana ${w}`],
   // access
   [/^(\d+) people$/, (n) => `${n} personas`],
+  [/^(\d+) things need you$/, (n) => `${n} cosas necesitan de ti`],
+  [/^(\d+) gone quiet$/, (n) => `${n} sin actividad`],
   // A platform name only — a broader `On …` would turn a server sentence half Spanish.
   [/^Here and on ([A-Za-z0-9]+)$/, (p) => `Aquí y en ${p}`],
   [/^On ([A-Za-z0-9]+)$/, (p) => `En ${p}`],
