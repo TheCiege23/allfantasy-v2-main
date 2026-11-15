@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { swapTeamsInWeek } from '@/lib/schedule-runtime/matchupSwapService'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -24,6 +25,7 @@ type ScheduleAction =
   | 'advance_week'
   | 'lock_schedule'
   | 'recalculate_standings'
+  | 'swap_teams'
 
 async function resolveSeasonGate(input: {
   seasonId?: string | null
@@ -87,6 +89,8 @@ export async function POST(req: NextRequest) {
     regenerate?: boolean
     commissionerOverride?: boolean
     confirmMidSeasonChange?: boolean
+    rosterA?: string
+    rosterB?: string
   }
   try {
     body = (await req.json()) as typeof body
@@ -120,6 +124,18 @@ export async function POST(req: NextRequest) {
     })
     if (!generated.ok) return NextResponse.json({ error: generated.message, code: generated.code }, { status: 409 })
     return NextResponse.json(generated)
+  }
+
+  // Two teams trade places in one week that has not started (lib/schedule-runtime/matchupSwapService.ts).
+  if (action === 'swap_teams') {
+    const parsedWeek = parseOptionalRedraftPositiveInteger(body.week, 'week')
+    if (!parsedWeek.ok || parsedWeek.value == null) return NextResponse.json({ error: parsedWeek.ok ? 'week required' : parsedWeek.error }, { status: 400 })
+    const rosterA = typeof body.rosterA === 'string' ? body.rosterA.trim() : ''
+    const rosterB = typeof body.rosterB === 'string' ? body.rosterB.trim() : ''
+    const swapped = await swapTeamsInWeek({ seasonId: gate.season.id, week: parsedWeek.value, rosterA, rosterB, actorUserId: userId })
+    if (!swapped.ok) return NextResponse.json({ error: swapped.message, code: swapped.code }, { status: swapped.status })
+    const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: gate.season.id })
+    return NextResponse.json({ ok: true, seasonId: gate.season.id, week: swapped.week, schedule: resolved.ok ? resolved.state : null })
   }
 
   if (action === 'recalculate_standings') {

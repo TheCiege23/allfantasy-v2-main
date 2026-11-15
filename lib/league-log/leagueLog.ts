@@ -483,6 +483,27 @@ export const LOG_ACTIONS: Record<string, Action> = {
         ? { en: 'Turned on auto-subs', es: 'Activó los cambios automáticos' }
         : { en: 'Turned off auto-subs', es: 'Desactivó los cambios automáticos' },
   },
+  // lib/schedule-runtime/matchupSwapService.ts — two teams traded places in one week.
+  schedule_matchup_swap: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const a = team(ctx, m.rosterA)
+      const b = team(ctx, m.rosterB)
+      const wk = week != null ? week : '?'
+      return {
+        en: `Swapped ${a.en} and ${b.en} in the week ${wk} schedule`,
+        es: `Intercambió a ${a.es} y ${b.es} en el calendario de la semana ${wk}`,
+      }
+    },
+  },
+  schedule_regenerated: {
+    category: 'league',
+    members: true,
+    line: () => ({ en: 'Rebuilt the schedule for the weeks that had not started', es: 'Rehízo el calendario de las semanas que no habían empezado' }),
+  },
   commissioner_undo_draft_pick: {
     category: 'draft',
     members: true,
@@ -630,6 +651,7 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
   for (const row of rows) {
     const m = obj(row.metadata)
     if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo' || row.actionType === 'draft_commissioner_action') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if (row.actionType === 'schedule_matchup_swap') for (const k of ['rosterA', 'rosterB']) if (str(m[k])) ids.add(str(m[k])!)
     if (
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||

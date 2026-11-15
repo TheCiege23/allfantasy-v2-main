@@ -2338,6 +2338,16 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.scheduleUpdated": "Calendario actualizado.",
   "commControl.scheduleFailed": "No se pudo actualizar el calendario",
   "commControl.rebuildSchedule": "Rehacer las semanas restantes",
+  "commControl.swapTitle": "Intercambiar dos equipos en una semana",
+  "commControl.swapHelp": "Cada equipo toma el rival (o el descanso) del otro esa semana. Solo cambian las semanas que no han empezado, y queda en el registro de la liga.",
+  "commControl.swapWeek": "Semana",
+  "commControl.swapWeekN": "Semana {{n}}",
+  "commControl.swapTeamA": "Primer equipo",
+  "commControl.swapTeamB": "Segundo equipo",
+  "commControl.swapButton": "Intercambiar equipos",
+  "commControl.swapBye": "descanso",
+  "commControl.swapDone": "Semana {{n}} actualizada.",
+  "commControl.swapNoWeeks": "Todas las semanas de la temporada regular ya empezaron, así que no queda nada por intercambiar.",
   "commControl.rebuildScheduleNote": "Las semanas que ya empezaron no cambian. Las demás reciben nuevos matchups y el cambio queda en el registro de la liga.",
 
   // ─── LEAGUE DUES TRACKER ───
