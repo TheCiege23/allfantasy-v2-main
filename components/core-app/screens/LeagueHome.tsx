@@ -1,6 +1,7 @@
 'use client'
 
 import { MemberStatusCard } from '@/components/league-home/MemberStatusCard'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import Link from 'next/link'
 import { LeagueDisplayPreferences, LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import type { LeagueSectionId } from '@/lib/league/leagueSections'
@@ -868,6 +869,13 @@ export function LeagueHome({
       </section>
       {/* When the draft is and what you owe — renders nothing when neither applies (components/league-home). */}
       <MemberStatusCard leagueId={league.id} />
+
+      {/*
+        Bring the rest of the league (2026-11-15): while teams still have no AllFantasy manager, the
+        invite — carrying this member's referral code — sits on the league's own home, not only behind
+        Settings and Portfolio. Renders nothing while loading, on a failed read, or once every team is claimed.
+      */}
+      <LeagueInvitePanel leagueId={league.id} leagueName={league.name} compact hideWhenFull />
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
       {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}

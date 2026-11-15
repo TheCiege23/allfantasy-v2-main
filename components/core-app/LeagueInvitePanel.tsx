@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-invite.css'
 import { formatGuillotineSeatLine, type GuillotineSeatSummary } from '@/lib/guillotine/lateStartSeatMath'
+import { referralCodeOf, withReferralCode } from '@/lib/referral/referralShareLink'
+import { useMyReferralLink } from '@/lib/referral/myReferralLink'
+import { ProWeekInviteLine } from '@/components/referral/ProWeekInviteLine'
+import { smsInviteHref, whatsAppInviteHref } from '@/lib/league/league-invite-link'
 
 /**
  * The commissioner's invite link, and how many teams are still unclaimed.
@@ -31,14 +35,25 @@ type InviteInfo = {
 export function LeagueInvitePanel({
   leagueId,
   compact = false,
+  hideWhenFull = false,
+  leagueName,
 }: {
   leagueId: string
   /** Denser layout for a list row, versus a full panel on a league page. */
   compact?: boolean
+  /**
+   * The league home's nudge (2026-11-15): say nothing while loading, on a failed load, or once every
+   * team has a manager — it is an invitation to fill the league, not a settings panel.
+   */
+  hideWhenFull?: boolean
+  /** Names the league in the text / WhatsApp message. */
+  leagueName?: string
 }) {
   const [info, setInfo] = useState<InviteInfo | null>(null)
   const [failed, setFailed] = useState(false)
   const [copied, setCopied] = useState(false)
+  // The inviter's referral code on the link (2026-11-15) — see ImportInviteCard; unchanged without one.
+  const referralCode = referralCodeOf(useMyReferralLink())
 
   useEffect(() => {
     let cancelled = false
@@ -68,6 +83,7 @@ export function LeagueInvitePanel({
     }
   }, [leagueId])
 
+  if (failed && hideWhenFull) return null
   if (failed) {
     return (
       <p className="af-inv-failed">
@@ -77,15 +93,20 @@ export function LeagueInvitePanel({
     )
   }
 
-  if (!info) return <p className="af-inv-loading">Loading invite…</p>
+  if (!info) return hideWhenFull ? null : <p className="af-inv-loading">Loading invite…</p>
 
+  const inviteLink = withReferralCode(info.inviteLink, referralCode)
   const pct = info.teamCount > 0 ? Math.round((info.claimedCount / info.teamCount) * 100) : 0
   const unclaimed = Math.max(0, info.teamCount - info.claimedCount)
+  if (hideWhenFull && (info.teamCount === 0 || unclaimed === 0)) return null
+  const inviteMessage = leagueName
+    ? `Join our league "${leagueName}" on AllFantasy — open this to claim your team:`
+    : 'Join our league on AllFantasy — open this to claim your team:'
 
   async function copy() {
     if (!info) return
     try {
-      await navigator.clipboard.writeText(info.inviteLink)
+      await navigator.clipboard.writeText(inviteLink)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2400)
     } catch {
@@ -138,17 +159,26 @@ export function LeagueInvitePanel({
         </div>
       ) : null}
 
+      <ProWeekInviteLine />
       <div className="af-inv-actions">
         <input
           className="af-inv-link"
           readOnly
-          value={info.inviteLink}
+          value={inviteLink}
           onFocus={(e) => e.currentTarget.select()}
           aria-label="League invite link"
         />
         <button type="button" className="af-inv-btn" onClick={copy} data-testid="league-invite-link">
           {copied ? 'Copied' : 'Copy link'}
         </button>
+      </div>
+      <div className="af-inv-actions" data-testid="league-invite-share">
+        <a className="af-btn af-btn--ghost" href={smsInviteHref(inviteMessage, inviteLink)}>
+          Text it
+        </a>
+        <a className="af-btn af-btn--ghost" href={whatsAppInviteHref(inviteMessage, inviteLink)} target="_blank" rel="noreferrer noopener">
+          WhatsApp
+        </a>
       </div>
     </div>
   )

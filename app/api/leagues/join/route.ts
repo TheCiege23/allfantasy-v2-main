@@ -21,6 +21,17 @@ import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/car
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
 import { notifyCommissionerOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+
+/**
+ * Give a week, get a week (lib/referral/proWeek.ts): a referred leaguemate JOINING a league through an
+ * invite brings a league exactly as importing one does, so it earns both a free week of AF Pro. Fired
+ * after the join is committed, never awaited, never throws; the award claims once per friend.
+ */
+function rewardReferredJoin(userId: string): void {
+  void import('@/lib/referral/proWeekGrant')
+    .then((m) => m.awardReferralProWeekOnImport(userId))
+    .catch(() => undefined)
+}
 import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
@@ -101,7 +112,11 @@ export async function POST(req: NextRequest) {
       body.action === 'sleeper_claim_start'
         ? await startSleeperTeamClaim({ userId, leagueId, teamExternalId })
         : await verifySleeperTeamClaim({ userId, leagueId, teamExternalId })
-    if (result.ok) return NextResponse.json(result)
+    if (result.ok) {
+      // A verified claim puts them on their team: that is joining the league.
+      if (body.action === 'sleeper_claim_verify') rewardReferredJoin(userId)
+      return NextResponse.json(result)
+    }
     const status =
       result.reason === 'not_member' || result.reason === 'linked_elsewhere' || result.reason === 'other_account'
         ? 403
@@ -540,6 +555,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!joinResult.alreadyMember) {
+    rewardReferredJoin(userId)
     // After the commit, and never awaited by the response: the join stands whatever the alert does.
     void notifyCommissionerOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
       console.warn('[league-join] commissioner join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })

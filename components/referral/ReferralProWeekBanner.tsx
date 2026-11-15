@@ -27,7 +27,7 @@ export function ReferralProWeekBanner({ code }: { code: string }) {
     >
       <p className="min-w-0 flex-1">
         <span className="font-semibold">A friend invited you.</span>{" "}
-        Import a league and you both get {offer.days} days of AF Pro, free. No card needed.
+        Bring your league and you both get {offer.days} days of AF Pro, free. No card needed.
       </p>
       <Link
         href={`/signup?ref=${encodeURIComponent(code)}`}

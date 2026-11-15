@@ -31,7 +31,7 @@ export function ProWeekOfferCard({ testId = "referral-pro-week-offer" }: { testI
           Give a week, get a week
         </p>
         <p className="mt-1" style={{ color: "var(--muted)" }}>
-          When a friend joins with your link and imports a league, you both get {offer.days} days of AF Pro, free.
+          When a friend joins with your link and brings a league (imports theirs or joins yours), you both get {offer.days} days of AF Pro, free.
           No card needed, for either of you.
         </p>
         {earned != null && offer.cap > 0 ? (

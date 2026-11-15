@@ -420,6 +420,7 @@ function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; 
 }
 
 function SignIn({ callbackUrl }: { callbackUrl: string }) {
+  useReferralClickFromUrl()
   const [method, setMethod] = useState<'password' | 'code'>('password')
 
   return (
@@ -591,8 +592,29 @@ function useReferralProWeekLine(): number {
   useEffect(() => {
     setReferred(Boolean(referralFromUrl()) && !isInIosAppClient())
   }, [])
+  useReferralClickFromUrl()
   const offer = useProWeekOffer(referred)
   return referred ? offer.days : 0
+}
+
+/**
+ * A `?ref=` code on the sign-in or sign-up page itself (a leaguemate invite sends signed-out visitors
+ * here with one, 2026-11-15) is recorded as a click — the same POST the landing page's ReferralTracker
+ * makes, which the auth pages do not mount. That sets the `af_ref` cookie, which is what credits a
+ * Google / Apple / Spotify / Discord sign-up (SocialAccountLinkingService); the email form also sends the
+ * code in its body. Once per page view; a failure changes nothing on screen.
+ */
+function useReferralClickFromUrl(): void {
+  useEffect(() => {
+    const ref = referralFromUrl()
+    if (!ref) return
+    void fetch('/api/referral/track-click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref }),
+      credentials: 'same-origin',
+    }).catch(() => undefined)
+  }, [])
 }
 
 function SignUp({ callbackUrl }: { callbackUrl: string }) {
@@ -788,7 +810,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           </p>
           {proWeekDays > 0 ? (
             <p className="af-au-sub" data-testid="signup-pro-week-offer">
-              <strong>You were invited.</strong> Import a league and you and your friend both get {proWeekDays} days of AF Pro, free.
+              <strong>You were invited.</strong> Bring your league and you and your friend both get {proWeekDays} days of AF Pro, free.
             </p>
           ) : null}
         </div>
@@ -964,7 +986,12 @@ function AuthModeSwitch({ mode }: { mode: AuthMode }) {
   const requested = params?.get('callbackUrl')
   const callback = requested ? safeRedirectPath(requested) : null
   const destination = mode === 'signup' ? '/login' : '/signup'
-  const href = callback ? `${destination}?callbackUrl=${encodeURIComponent(callback)}` : destination
+  // A leaguemate invite's referral code survives the switch between the two (2026-11-15).
+  const ref = params?.get('ref')?.trim() ?? ''
+  const qs = new URLSearchParams()
+  if (callback) qs.set('callbackUrl', callback)
+  if (/^[A-Za-z0-9]{4,16}$/.test(ref)) qs.set('ref', ref)
+  const href = qs.toString() ? `${destination}?${qs.toString()}` : destination
   /*
    * The landing page's header pair, minus the half you are already on: /signup offers
    * Sign in (outlined), /login offers Sign up (filled). The other links sit behind the

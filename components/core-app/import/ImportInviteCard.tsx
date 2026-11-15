@@ -20,6 +20,9 @@ import { useEffect, useState } from 'react'
 
 import { smsInviteHref, whatsAppInviteHref } from '@/lib/league/league-invite-link'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { referralCodeOf, withReferralCode } from '@/lib/referral/referralShareLink'
+import { useMyReferralLink } from '@/lib/referral/myReferralLink'
+import { ProWeekInviteLine } from '@/components/referral/ProWeekInviteLine'
 
 function importInviteUrl(provider: ImportProvider, sourceId: string, origin: string): string {
   const qs = new URLSearchParams({ provider, leagueId: sourceId })
@@ -43,7 +46,13 @@ export function ImportInviteCard({ provider, providerLabel, sourceId, leagueName
     setCanShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function')
   }, [])
 
-  const url = importInviteUrl(provider, sourceId, origin)
+  /*
+   * The inviter's referral code rides the link (2026-11-15): a leaguemate who signs up through it is
+   * credited, and their import of this league earns both a free week of AF Pro. Read before any tap
+   * (fetched once per page); until it arrives — or for anyone without a code — the link is unchanged.
+   */
+  const referralLink = useMyReferralLink()
+  const url = withReferralCode(importInviteUrl(provider, sourceId, origin), referralCodeOf(referralLink))
   const message = `Our league "${leagueName}" is on AllFantasy — open this and sign in to import it with your own team:`
 
   const copy = async () => {
@@ -72,6 +81,7 @@ export function ImportInviteCard({ provider, providerLabel, sourceId, leagueName
         they&rsquo;re in it, we put them on their own team in this copy instead of making a second
         one. Nothing changes on {providerLabel}.
       </p>
+      <ProWeekInviteLine />
       <div className="af-im-invite-link">
         <code className="af-im-invite-url" data-testid="import-invite-url">
           {url}
