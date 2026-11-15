@@ -23,7 +23,7 @@ import {
   type ProviderProfile,
 } from '@/lib/ai/providerProfiles'
 import { openaiChatText, openaiChatTextStream } from '@/lib/openai-client'
-import { xaiChatJson, parseTextFromXaiChatCompletion } from '@/lib/xai-client'
+import { xaiChatJson, parseFinishReason, parseTextFromXaiChatCompletion } from '@/lib/xai-client'
 import { deepseekChat } from '@/lib/deepseek-client'
 import { rateLimitManager } from '@/lib/workers/rate-limit-manager'
 import { anthropicTokenUsage, recordLlmCall, type LlmTokenUsage } from '@/lib/telemetry/llm-usage'
@@ -47,8 +47,27 @@ export type RouterResult =
       tokensUsed: number
       /** Split token counts, where the provider path exposes them (Anthropic). Used for spend metering. */
       usage?: LlmTokenUsage | null
+      /**
+       * True when the provider stopped because it hit `maxTokens` (Anthropic `stop_reason: max_tokens`,
+       * OpenAI-shaped `finish_reason: length`). The text is a fragment, not a whole answer. Absent when
+       * the provider path does not report a stop reason.
+       */
+      truncated?: boolean
     }
-  | { ok: false }
+  | { ok: false; failure?: RouterFailure }
+
+/**
+ * Why every provider failed, with no prompt or answer text in it: one entry per attempt, plus
+ * whether trying again shortly could plausibly succeed (rate limit, overload, 5xx, timeout, empty
+ * reply) as opposed to a dead key, no credit, the spend kill switch or a content refusal.
+ */
+export type RouterFailure = {
+  attempts: Array<{ provider: ProviderName; category: string; status: number | null }>
+  retryable: boolean
+}
+
+/** Failure categories where the same request may succeed a moment later. */
+const TRANSIENT_CATEGORIES = new Set(['rate_limit', 'overload', 'server_error', 'timeout', 'unknown', 'empty'])
 
 /**
  * Who is spending, for `recordLlmCall`. Optional: a caller that passes nothing is recorded as
@@ -214,6 +233,7 @@ async function callAnthropicText(args: TextCallArgs): Promise<RouterResult> {
       provider: 'anthropic',
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
       usage: anthropicTokenUsage(response.usage),
+      truncated: response.stop_reason === 'max_tokens',
     }
   } catch (error: unknown) {
     const status = (error as Record<string, unknown>)?.status as number | undefined
@@ -303,7 +323,7 @@ async function callOpenAIText(args: TextCallArgs): Promise<RouterResult> {
   if (!result.ok) {
     throw Object.assign(new Error(result.details || 'OpenAI call failed'), { status: result.status })
   }
-  return { ok: true, text: result.text, model: result.model, provider: 'openai', tokensUsed: 0 }
+  return { ok: true, text: result.text, model: result.model, provider: 'openai', tokensUsed: 0, truncated: result.finishReason === 'length' }
 }
 
 async function callOpenAIStream(args: StreamCallArgs): Promise<RouterResult> {
@@ -344,7 +364,7 @@ async function callXaiText(args: TextCallArgs): Promise<RouterResult> {
     throw Object.assign(new Error('xAI returned no content'), { status: 200 })
   }
   const echoedModel = (result.json as { model?: string })?.model ?? model
-  return { ok: true, text, model: echoedModel, provider: 'xai', tokensUsed: 0 }
+  return { ok: true, text, model: echoedModel, provider: 'xai', tokensUsed: 0, truncated: parseFinishReason(result.json) === 'length' }
 }
 
 // ─── DeepSeek adapter ─────────────────────────────────────────────────────────
@@ -358,9 +378,18 @@ async function callDeepSeekText(args: TextCallArgs): Promise<RouterResult> {
     model,
     maxTokens: args.maxTokens,
     temperature: args.temperature,
+    // Was never passed, so DeepSeek cached for 30 min even when the caller asked it not to.
+    skipCache: args.skipCache ?? false,
   })
   if (result.error || !result.content) {
-    throw Object.assign(new Error(result.error ?? 'DeepSeek returned no content'), { status: 503 })
+    /*
+     * The REAL status where DeepSeek sent one. A blanket 503 classified every DeepSeek failure —
+     * a 429, a timeout, a 500 — as "unavailable", the same bucket as a missing key, so a caller
+     * could not tell "try again in a second" from "this provider is not configured". With no
+     * status the message decides (a timeout reads as a timeout; a missing key as unavailable).
+     */
+    const status = result.status ?? (result.error ? undefined : 200)
+    throw Object.assign(new Error(result.error ?? 'DeepSeek returned no content'), status != null ? { status } : {})
   }
   return {
     ok: true,
@@ -368,6 +397,7 @@ async function callDeepSeekText(args: TextCallArgs): Promise<RouterResult> {
     model: result.model ?? model,
     provider: 'deepseek',
     tokensUsed: 0,
+    truncated: result.finishReason === 'length',
   }
 }
 
@@ -455,7 +485,8 @@ export async function routeTextCall(args: {
   // Anthropic adapter above, the point where a request actually leaves. A refusal from any of them is
   // classified `spend_disabled` and ends the loop: the switch is global, so no later provider may spend.
   const order = applyPreferredProvider(getProviderOrder(), args.preferredProvider)
-  const attempts: string[] = []
+  const attempts: RouterFailure['attempts'] = []
+  let halted = false
 
   for (const provider of order) {
     const startedAt = Date.now()
@@ -464,6 +495,17 @@ export async function routeTextCall(args: {
         args.timeoutMs != null ? Math.min(120_000, Math.max(5_000, args.timeoutMs)) : PROVIDER_TIMEOUT_MS
       const result = await withTimeout(TEXT_CALLS[provider](args), timeoutMs, provider)
       meterAttempt(args, provider, result, startedAt, null)
+      /*
+       * ⚠ AN EMPTY REPLY IS NOT AN ANSWER. OpenAI and Anthropic could return `ok: true` with '' — a
+       * reasoning model that spends its whole `maxTokens` thinking does exactly that — and the
+       * caller then showed a blank bubble. xAI and DeepSeek already threw on empty; now all four
+       * fall through to the next provider the same way.
+       */
+      if (result.ok && !result.text.trim()) {
+        console.error('[provider-router] text provider returned no text:', { provider, truncated: Boolean(result.truncated) })
+        attempts.push({ provider, category: 'empty', status: 200 })
+        continue
+      }
       return result
     } catch (error: unknown) {
       const norm = normalizeProviderError(error)
@@ -473,13 +515,19 @@ export async function routeTextCall(args: {
         category: norm.category,
         status: norm.status,
       })
-      attempts.push(`${provider}:${norm.category}`)
-      if (!norm.fallbackEligible) break
+      attempts.push({ provider, category: norm.category, status: norm.status })
+      if (!norm.fallbackEligible) {
+        halted = true
+        break
+      }
     }
   }
 
-  console.error('[provider-router] all text providers exhausted:', attempts.join(', '))
-  return { ok: false }
+  console.error('[provider-router] all text providers exhausted:', attempts.map((a) => `${a.provider}:${a.category}`).join(', '))
+  return {
+    ok: false,
+    failure: { attempts, retryable: !halted && attempts.some((a) => TRANSIENT_CATEGORIES.has(a.category)) },
+  }
 }
 
 export async function routeStreamCall(args: {

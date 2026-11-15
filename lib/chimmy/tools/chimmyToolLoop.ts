@@ -519,6 +519,12 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
 
       const message = response.choices?.[0]?.message
       if (!message) return logGiveUp(provider, 'no_message', { turn, toolsUsed, startedAt })
+      /*
+       * ⚠ A CUT-OFF ANSWER WAS RETURNED AS A WHOLE ONE. The Claude loop has always given up on
+       * `max_tokens`; this path never read `finish_reason`, so a Grok/DeepSeek/OpenAI reply that hit
+       * its 1200-token cap reached the user ending mid-sentence. Same treatment as Claude now.
+       */
+      if (response.choices?.[0]?.finish_reason === 'length') return logGiveUp(provider, 'max_tokens', { turn, toolsUsed, startedAt })
 
       messages.push(message)
 

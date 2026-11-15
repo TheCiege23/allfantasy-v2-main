@@ -23,7 +23,7 @@ type DemoTradeVerdict = {
   summary: string
 }
 
-function settingsFor(view: DemoLeagueView): FantasyCalcSettings {
+export function settingsFor(view: DemoLeagueView): FantasyCalcSettings {
   const pos = view.settings.rosterPositions
   const superflex = pos.some((p) => p === 'SUPER_FLEX' || p === 'SF' || p === 'OP') || pos.filter((p) => p === 'QB').length >= 2
   const label = view.settings.scoringLabel
