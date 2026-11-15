@@ -41,6 +41,12 @@ type DraftRoomShellProps = {
   topBar: ReactNode
   managerStrip: ReactNode
   auctionStrip?: ReactNode
+  /**
+   * Offline / auto-pick / mock explanation. Rendered OUTSIDE the board's scroll zone: the board
+   * scrolls itself to the pick on the clock, which pushed a banner placed inside it above the
+   * visible area on desktop (measured 2026-11-15: top at -28px with scrollTop 146).
+   */
+  modeBanner?: ReactNode
   draftBoard: ReactNode
   playerPanel: ReactNode
   queuePanel: ReactNode
@@ -106,6 +112,7 @@ export function DraftRoomShell({
   mobileStickyBar,
   mobileDockAccessory,
   auctionStrip,
+  modeBanner,
   mobileTab,
   onMobileTabChange,
   layout = 'classic',
@@ -290,6 +297,9 @@ export function DraftRoomShell({
               </select>
             </label>
           </div>
+          {modeBanner ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
+          ) : null}
           {/* D.6.2 — board zone grows when the bottom dock is collapsed.
               Expanded:  ~52vh cap so dock has ~48vh; matches Sleeper proportions.
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
@@ -478,6 +488,9 @@ export function DraftRoomShell({
       ) : (
         <div className="hidden min-h-0 flex-1 flex-col overflow-hidden md:flex" data-testid="draft-desktop-layout">
           {auctionStrip && <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>}
+          {modeBanner ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
+          ) : null}
           <div className="min-h-[180px] flex-[2] overflow-auto overscroll-contain [overflow-anchor:none] border-b border-white/8 bg-[#050c1d]">
             {draftBoard}
           </div>
@@ -520,6 +533,7 @@ export function DraftRoomShell({
           {auctionStrip && (
             <div className="shrink-0 border-b border-white/10 bg-[#050c1d]">{auctionStrip}</div>
           )}
+          {modeBanner ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{modeBanner}</div> : null}
           <div
             className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth p-2 sm:p-3"
             data-testid="draft-mobile-board-scroll"

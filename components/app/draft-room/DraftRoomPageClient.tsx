@@ -928,6 +928,10 @@ export function DraftRoomPageClient({
   const rosterConfigBlocked = Boolean(session?.rosterConfigurationIncomplete)
 
   const commissionerOfflinePick = Boolean(draftUISettings?.executionMode === 'offline' && isCommissioner)
+  const draftRoomMode = resolveDraftRoomMode({
+    executionMode: draftUISettings?.executionMode ?? null,
+    viewerAutopickEnabled: session?.viewerAutopick?.enabled ?? false,
+  })
   const isCurrentUserOnClock = Boolean(
     currentUserRosterId &&
       draftCore?.draftStarted &&
@@ -5215,14 +5219,9 @@ export function DraftRoomPageClient({
           {/* Two strips used to sit above the board: "Your pick in ~N / Next up" (RedraftPlanningRibbon)
               and Recent picks / Position run / Your picks vs ADP (DraftPulseStrip). Both removed at the
               user's request (2026-10-29) to match Sleeper, which shows nothing between the top bar and
-              the board. The top bar already shows the pick on the clock. */}
-          <DraftModeBanner
-            mode={resolveDraftRoomMode({
-              executionMode: draftUISettings?.executionMode ?? null,
-              viewerAutopickEnabled: session.viewerAutopick?.enabled ?? false,
-            })}
-            isCommissioner={isCommissioner}
-          />
+              the board. The top bar already shows the pick on the clock.
+              The offline / auto-pick banner lives in the shell's `modeBanner` slot, above the board's
+              scroll zone — inside it, the board's scroll-to-current-pick hid it on desktop. */}
           {isDraftCompleted ? (
             <div
               className="w-full shrink-0 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-center text-sm text-emerald-50 shadow-[0_8px_32px_rgba(16,185,129,0.12)]"
@@ -5332,6 +5331,9 @@ export function DraftRoomPageClient({
             </div>
           </div>
         </div>
+      }
+      modeBanner={
+        draftRoomMode ? <DraftModeBanner mode={draftRoomMode} isCommissioner={isCommissioner} /> : null
       }
       auctionStrip={
         draftRoomState.isAuction && auctionSnapshot ? (
