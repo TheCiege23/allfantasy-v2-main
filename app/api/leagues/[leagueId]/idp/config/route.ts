@@ -14,6 +14,7 @@ import { getIdpPresetScoring } from '@/lib/idp/IDPScoringPresets'
 import { mergeScoringForValidation } from '@/lib/idp/IdpValidationService'
 import type { IdpScoringOverrides } from '@/lib/idp/types'
 import { prisma } from '@/lib/prisma'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export async function GET(
   _req: Request,
@@ -76,6 +77,11 @@ export async function PATCH(
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const unlockOnly = body.unlockSettings === true
+  // The league's settings lock (Format rules). Lifting IDP's own position lock is not a rule change, so it is not held.
+  if (!unlockOnly) {
+    const formatLocked = await formatRulesLockedResponse(leagueId)
+    if (formatLocked) return formatLocked
+  }
 
   const current = await getIdpLeagueConfig(leagueId)
   if (!current?.configId) return NextResponse.json({ error: 'IDP config not found' }, { status: 404 })
@@ -191,6 +197,7 @@ export async function PATCH(
     before,
     after,
   })
+  await logFormatRulesChange({ leagueId, userId: session.user.id, format: 'idp', fields: Object.keys(body) })
 
   return NextResponse.json({
     config: {

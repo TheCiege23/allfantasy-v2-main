@@ -10,6 +10,7 @@ import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isDevyLeague, getDevyConfig, upsertDevyConfig } from '@/lib/devy/DevyLeagueConfig'
 import { mirrorRookieDraftToDynasty, publishVariantConfigChange, readVariantConfigRules } from '@/lib/league-rules-explainer/variantConfigChange'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +92,8 @@ export async function PUT(
 
   const isDevy = await isDevyLeague(leagueId)
   if (!isDevy) return NextResponse.json({ error: 'Not a devy dynasty league' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const body = await req.json().catch(() => ({}))
   // The popup's rookie-draft and taxi rules, before the write, for the "What changed" card.
@@ -123,5 +126,6 @@ export async function PUT(
   // The rookie draft is built from the dynasty config: its rounds and type go there too.
   await mirrorRookieDraftToDynasty(leagueId, body)
   await publishVariantConfigChange({ leagueId, actorUserId: userId, section: 'devy', before: rulesBefore })
+  await logFormatRulesChange({ leagueId, userId, format: 'devy', fields: Object.keys(body) })
   return NextResponse.json({ ok: true, config: updated })
 }

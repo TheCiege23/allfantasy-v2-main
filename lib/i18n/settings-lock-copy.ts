@@ -38,6 +38,10 @@ export const LOCK_AREA_COPY: Record<LockGroup, Record<LockLang, { label: string;
     en: { label: 'Playoffs', help: 'Playoff teams, start week, byes and bracket' },
     es: { label: 'Playoffs', help: 'Equipos en playoffs, semana de inicio, descansos y cuadro' },
   },
+  format: {
+    en: { label: 'Format rules', help: 'Guillotine chops, pirate claims, Big Brother, devy, C2C and IDP rules' },
+    es: { label: 'Reglas del formato', help: 'Eliminaciones Guillotine, reclamos pirata, Big Brother y reglas devy, C2C e IDP' },
+  },
 }
 
 export const LOCK_COPY = {

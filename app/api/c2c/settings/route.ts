@@ -21,6 +21,7 @@ import {
   type SlotConflict,
 } from '@/lib/legacy-specialty-settings/legacySettingsLocks'
 import { legacyParseError, slotConflictResponse } from '@/lib/legacy-specialty-settings/legacySettingsResponses'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +66,8 @@ export async function PATCH(req: NextRequest) {
 
   const current = await prisma.c2CLeague.findUnique({ where: { leagueId } })
   if (!current) return NextResponse.json({ error: 'C2C not configured' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const parsed = parseLegacyPatch(body, C2C_LEGACY_FIELDS, C2C_LEGACY_LOCKED)
   if (!parsed.ok) return legacyParseError(parsed)
@@ -174,6 +177,7 @@ export async function PATCH(req: NextRequest) {
   await notifyCommissionerChange(leagueId, userId, 'C2C Settings', changes).catch(() => {})
 
   const changed = [...Object.keys(data), ...(nextMode ? ['taxiLockMode'] : [])]
+  if (changed.length) await logFormatRulesChange({ leagueId, userId, format: 'c2c', fields: changed })
   return NextResponse.json({
     ok: true,
     c2c: { ...updated, taxiLockMode },

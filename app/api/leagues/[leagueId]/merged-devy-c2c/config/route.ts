@@ -10,6 +10,7 @@ import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isC2CLeague, getC2CConfig, upsertC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { mirrorRookieDraftToDynasty, publishVariantConfigChange, readVariantConfigRules } from '@/lib/league-rules-explainer/variantConfigChange'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,6 +105,8 @@ export async function PATCH(
 
   const isC2C = await isC2CLeague(leagueId)
   if (!isC2C) return NextResponse.json({ error: 'Not a C2C / Merged Devy league' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const body = await req.json().catch(() => ({}))
   // The popup's rookie-draft and taxi rules, before the write, for the "What changed" card.
@@ -148,5 +151,6 @@ export async function PATCH(
   // The rookie draft is built from the dynasty config: its rounds and type go there too.
   await mirrorRookieDraftToDynasty(leagueId, body)
   await publishVariantConfigChange({ leagueId, actorUserId: userId, section: 'c2c', before: rulesBefore })
+  await logFormatRulesChange({ leagueId, userId, format: 'c2c', fields: Object.keys(body) })
   return NextResponse.json({ ok: true, config: updated })
 }

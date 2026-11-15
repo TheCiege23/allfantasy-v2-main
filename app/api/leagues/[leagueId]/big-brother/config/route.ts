@@ -13,6 +13,7 @@ import {
   getBigBrotherConfig,
   upsertBigBrotherConfig,
 } from '@/lib/big-brother/BigBrotherLeagueConfig'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +92,8 @@ export async function PATCH(
 
   const isBB = await isBigBrotherLeague(leagueId)
   if (!isBB) return NextResponse.json({ error: 'Not a Big Brother league' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const body = await req.json().catch(() => ({}))
   const updated = await upsertBigBrotherConfig(leagueId, {
@@ -126,5 +129,6 @@ export async function PATCH(
     ...(body.evictionTieBreakMode !== undefined && { evictionTieBreakMode: String(body.evictionTieBreakMode) }),
     ...(body.weekProgressionPaused !== undefined && { weekProgressionPaused: Boolean(body.weekProgressionPaused) }),
   })
+  await logFormatRulesChange({ leagueId, userId, format: 'big_brother', fields: Object.keys(body) })
   return NextResponse.json({ ok: true, config: updated })
 }

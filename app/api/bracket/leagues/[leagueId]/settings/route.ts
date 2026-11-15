@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
 
     const league = await (prisma as any).bracketLeague.findUnique({
       where: { id: leagueId },
-      select: { ownerId: true, scoringRules: true },
+      select: { ownerId: true, scoringRules: true, tournament: { select: { lockAt: true } } },
     })
 
     if (!league) {
@@ -36,6 +36,19 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueI
 
     if (!isOwner && !isCoCommissioner) {
       return NextResponse.json({ error: "Only the commissioner or co-commissioner can update settings" }, { status: 403 })
+    }
+
+    /*
+     * 🛑 NOTHING HERE CHANGES AFTER THE TOURNAMENT LOCKS (2026-11-15). This route could rewrite `roundPoints` and
+     * `scoringMode` mid-tournament — re-scoring every bracket already filled in — while the pool's own manage route
+     * (`update_rules`) has always refused rule changes after the lock. Same rule, same answer, here too.
+     */
+    const lockAt = league.tournament?.lockAt ?? null
+    if (lockAt && new Date(lockAt) <= new Date()) {
+      return NextResponse.json(
+        { error: "LEAGUE_LOCKED", message: "League rules cannot be changed after the tournament lock time." },
+        { status: 409 },
+      )
     }
 
     const currentRules = (league.scoringRules || {}) as Record<string, any>
