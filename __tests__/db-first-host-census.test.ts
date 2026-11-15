@@ -144,6 +144,10 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * quietly exempting a data read.
    */
   { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|hooks\.stripe\.com|www\.google-analytics\.com)$/i },
+  // Apple MusicKit JS: a <script src> the visitor's browser loads when they open the Apple
+  // Music tab (lib/apple-music/musicKitClient.ts), allowed in script-src. Our code never
+  // fetches it, and the developer-token route signs locally without calling Apple.
+  { name: 'browser-only', why: 'Apple MusicKit JS script tag loaded by the visitor\'s browser and listed in the CSP allowlist; never fetched by our code', test: /^js-cdn\.music\.apple\.com$/i },
   // Ad and analytics vendors Google Tag Manager injects into the visitor's page; named in
   // the report-only CSP (lib/security/cspReportOnly.ts) from the measured csp-report log.
   // Same NEVER_FETCHED guarantee as above: our code must never call them.
