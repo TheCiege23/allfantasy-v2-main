@@ -204,15 +204,36 @@ describe('the day-before reminder', () => {
         count: vi.fn(async ({ where }: { where: { userId: string } }) => (where.userId === 'b' ? 1 : 0)),
       },
       userSubscription: { count: vi.fn(async ({ where }: { where: { userId: string } }) => (where.userId === 'c' ? 1 : 0)) },
+      appUser: { findUnique: vi.fn(async () => ({ email: 'a@allfantasy-test.net' })) },
     }
     const notify = vi.fn(async () => {})
-    const r = await runProWeekEndingReminderPass({ db: db as never, now: NOW, notify: notify as never })
+    const r = await runProWeekEndingReminderPass({
+      db: db as never, now: NOW, notify: notify as never, readSubscription: async () => ({ unsubscribedAt: null }),
+    })
     expect(r).toEqual({ ran: true, candidates: 3, sent: 1, stillCovered: 2, failed: 0 })
     const [params] = notify.mock.calls[0] as unknown as [Record<string, unknown>]
     expect(params.userIds).toEqual(['a'])
     // Keyed on the grant: hourly runs re-see it, the transport sends once.
     expect(params.dedupePrefix).toBe('referral-pro-week-ending:gA')
     expect(params.actionHref).toBe('/pricing?from=referral_week_ending')
+    expect(params.skipChannels).toEqual({ sms: true })
+  })
+
+  it('🛑 an address that clicked Unsubscribe, or whose state cannot be read, gets it in the bell only', async () => {
+    for (const state of [{ unsubscribedAt: new Date('2026-10-01') }, 'unknown' as const]) {
+      const db = {
+        adminSubscriptionGrant: {
+          findMany: vi.fn(async () => [{ id: 'gA', userId: 'a', expiresAt: new Date(NOW.getTime() + 20 * 3_600_000) }]),
+          count: vi.fn(async () => 0),
+        },
+        userSubscription: { count: vi.fn(async () => 0) },
+        appUser: { findUnique: vi.fn(async () => ({ email: 'a@allfantasy-test.net' })) },
+      }
+      const notify = vi.fn(async () => {})
+      await runProWeekEndingReminderPass({ db: db as never, now: NOW, notify: notify as never, readSubscription: async () => state })
+      const [params] = notify.mock.calls[0] as unknown as [Record<string, unknown>]
+      expect(params.skipChannels).toEqual({ sms: true, email: true })
+    }
   })
 })
 
