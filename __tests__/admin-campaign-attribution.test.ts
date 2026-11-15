@@ -196,8 +196,8 @@ describe("admin campaign attribution — data truth", () => {
       .mockResolvedValueOnce([{ ...CAMPAIGN_ROW, imports_completed: 3n }])
       .mockResolvedValueOnce([{ ...TOTALS_ROW, email_verified: 4n, imports_started: 6n, imports_completed: 3n }])
       .mockResolvedValueOnce([
-        { entry_source: "lock_player_depth", started: 10n, paid: 4n },
-        { entry_source: "unknown", started: 2n, paid: 0n },
+        { entry_source: "lock_player_depth", started: 10n, trials: 6n, paid: 4n },
+        { entry_source: "unknown", started: 2n, trials: 0n, paid: 0n },
       ])
 
     const result = await report()
@@ -209,8 +209,8 @@ describe("admin campaign attribution — data truth", () => {
     expect(result.conversions.importStartedToCompleted).toBe(0.5)
     expect(result.campaigns[0]?.importsCompleted).toBe(3)
     expect(result.upgradesByEntry).toEqual([
-      { entrySource: "lock_player_depth", checkoutsStarted: 10, paid: 4, checkoutToPaidRate: 0.4 },
-      { entrySource: "unknown", checkoutsStarted: 2, paid: 0, checkoutToPaidRate: 0 },
+      { entrySource: "lock_player_depth", checkoutsStarted: 10, trialsStarted: 6, paid: 4, checkoutToPaidRate: 0.4 },
+      { entrySource: "unknown", checkoutsStarted: 2, trialsStarted: 0, paid: 0, checkoutToPaidRate: 0 },
     ])
   })
 

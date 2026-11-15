@@ -26,6 +26,7 @@ import { cookies } from "next/headers"
 import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
 import { MONETIZATION } from "@/lib/analytics/eventNames"
 import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
+import { trialDaysForCheckout } from "@/lib/monetization/freeTrialEligibility"
 import {
   validateCouponForUser,
   createPendingRedemption,
@@ -136,6 +137,12 @@ export async function POST(req: Request) {
     const returnPath = resolveSafeReturnPath(body?.returnPath, "/pricing")
     const entrySource = normalizeEntrySource(body?.entrySource)
     /*
+     * The AF Pro free trial (lib/monetization/freeTrial.ts), decided HERE on the server: AF Pro only,
+     * and only for an account that has never had a subscription. The iOS shell never gets this far
+     * (refused at the top of this handler), so a store build is never offered it.
+     */
+    const trialDays = await trialDaysForCheckout(session.user.id, item.sku)
+    /*
      * Founding-member pricing (lib/monetization/foundingMember.ts): an account created before
      * the paywall start gets STRIPE_FOUNDING_COUPON_ID on its subscription. Not looked up when a
      * sponsor code was validated — that code is what the buyer was shown and it wins — and
@@ -154,6 +161,7 @@ export async function POST(req: Request) {
       couponPercentOff: resolvedCouponCode ? couponDiscountPercent : null,
       foundingMember,
       entrySource,
+      trialDays,
     })
     if (!checkout || checkout.purchaseType !== "subscription") {
       return NextResponse.json(
@@ -191,7 +199,7 @@ export async function POST(req: Request) {
         event: MONETIZATION.CHECKOUT_STARTED,
         userId: session.user.id,
         getCookie: (name) => jar.get(name)?.value,
-        meta: { sku: item.sku, plan_family: item.planFamily, entry_source: entrySource ?? "unknown" },
+        meta: { sku: item.sku, plan_family: item.planFamily, entry_source: entrySource ?? "unknown", trial_days: trialDays },
       })
     } catch {
       // Never costs the checkout.
@@ -203,6 +211,7 @@ export async function POST(req: Request) {
       purchaseType: "subscription",
       metaEvent,
       foundingDiscountApplied: checkout.foundingDiscountApplied,
+      trialDays,
       ...(resolvedCouponCode
         ? {
             couponApplied: true,

@@ -4,6 +4,8 @@ const META_EVENT_NAMES = [
   "CompleteRegistration",
   "InitiateCheckout",
   "Purchase",
+  // Meta standard event (2026-11-15): an AF Pro free trial started — never sent as a Purchase.
+  "StartTrial",
   "Lead",
   "early_access_click",
   "find_league_click",
@@ -19,6 +21,7 @@ const META_STANDARD_PIXEL_EVENTS = [
   "CompleteRegistration",
   "InitiateCheckout",
   "Purchase",
+  "StartTrial",
   "Lead",
 ] as const
 
