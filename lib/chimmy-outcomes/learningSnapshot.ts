@@ -25,6 +25,7 @@
 import { confidenceLevelFor, type ChimmyConfidenceLevel, type ChimmyTrackRecord } from '@/lib/chimmy-chat/confidence-rubric'
 import type { ChimmyAnswerType } from '@/lib/chimmy-chat/response-contract'
 import { decayWeight, shrunkWeightedRate } from './shrinkage'
+import type { LedgerSnapshot } from './ledgerRecord'
 
 const LEARNING_SNAPSHOT_VERSION = 1
 /** How far back advice is resolved: a full NFL regular season fits inside it. */
@@ -83,6 +84,12 @@ export type AdviceLearningSnapshot = {
   record?: { start_sit: RecordCounts }
   /** userId → [right, wrong, same] start/sit calls. */
   userRecords?: Record<string, [number, number, number]>
+  /**
+   * ALLFANTASY'S OWN CALLS (2026-11-15): My Team's bench check, the waiver panel's #1 pickup and the
+   * trade grades, graded by `ledgerGrading.ts` in the same rebuild. Optional: a snapshot written before
+   * then has none, and a rebuild that could not read the schedule writes none. See `ledgerRecord.ts`.
+   */
+  ledger?: LedgerSnapshot
 }
 
 /** Graded calls: right, wrong, and `same` (within a point — neither, and never in a rate). */
