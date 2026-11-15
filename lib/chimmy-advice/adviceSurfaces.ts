@@ -19,5 +19,17 @@ export const AF_TIP_SURFACE = 'triage_swap' as const
  */
 export const MY_TEAM_BENCH_SURFACE = 'my_team_bench' as const
 
+/**
+ * The waiver panel's #1 pickup (components/waivers/AIWaiverRecommendationsPanel → /api/ai/waivers/recommend)
+ * — the waiver engine's call, recorded for the advice ledger since 2026-11-15. Ledger-only, like My Team's.
+ */
+export const WAIVER_PANEL_SURFACE = 'waiver_panel' as const
+
+/**
+ * Surfaces recorded for the advice ledger only: AllFantasy's own engines, never Chimmy. Every existing
+ * reader skips them, and each one's upsert touches only its OWN rows (lib/chimmy-advice/adviceStore.ts).
+ */
+export const LEDGER_ONLY_SURFACES: readonly string[] = [MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE]
+
 export const isChimmyAdvice = (a: { surface: string }): boolean =>
-  a.surface !== AF_TIP_SURFACE && a.surface !== MY_TEAM_BENCH_SURFACE
+  a.surface !== AF_TIP_SURFACE && !LEDGER_ONLY_SURFACES.includes(a.surface)

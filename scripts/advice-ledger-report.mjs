@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * READ-ONLY. The advice ledger, start/sit (2026-11-14): how did "start X over Y" turn out?
+ * READ-ONLY. The advice ledger (2026-11-14, waivers 2026-11-15): how did "start X over Y" and
+ * "add X" turn out?
  *
  *   railway run node scripts/advice-ledger-report.mjs [--season=2026] [--season-opener=2026-09-10]
  *
@@ -130,6 +131,56 @@ try {
     console.log(`  ${projStats.n} graded · mean projection error ${round1(projStats.absErr / (projStats.n * 2))} pts per player · real gap minus projected gap ${round1(projStats.gapCaptured / projStats.n)} pts on average`)
     for (const [bucket, b] of [...projBuckets].sort()) console.log(`  ${bucket.padEnd(18)} ${b.n} calls, ${pct(b.right, b.n)} right, avg ${round1(b.margin / b.n)} pts gained`)
   }
+  /*
+   * Waiver adds (2026-11-15): the waiver panel's #1 pickup and Chimmy's chat adds. A free agent has no
+   * league score row until someone rosters him, so adds are graded on the league-independent week-stats
+   * feed instead (`player_game_stats`, keyed by Sleeper id): standard PPR from `pts_ppr`, or the row's
+   * own points when it was scored — never a row marked scored=false, whose 0 is a default. Over the
+   * advice week and the two after it; a window not yet played is pending.
+   */
+  const ADD_WINDOW = 3
+  const adds = await prisma.$queryRaw`
+    WITH pts AS (
+      SELECT "playerId" AS pid, "weekOrRound" AS wk,
+             SUM(COALESCE((normalized_stat_map->>'pts_ppr')::float8,
+                          CASE WHEN normalized_stat_map->>'scored' = 'false' THEN NULL ELSE "fantasyPoints" END)) AS p
+      FROM player_game_stats
+      WHERE "sportType" IN ('NFL', 'nfl') AND season = ${season}
+      GROUP BY 1, 2
+    )
+    SELECT a.surface, a.week,
+           (SELECT SUM(p) FROM pts WHERE pid = a.rec_player_key AND wk BETWEEN a.week AND a.week + ${ADD_WINDOW - 1}) AS rec_pts,
+           (SELECT COUNT(*)::int FROM pts WHERE pid = a.rec_player_key AND wk BETWEEN a.week AND a.week + ${ADD_WINDOW - 1}) AS rec_weeks,
+           (SELECT SUM(p) FROM pts WHERE a.alt_player_key <> '' AND pid = a.alt_player_key AND wk BETWEEN a.week AND a.week + ${ADD_WINDOW - 1}) AS alt_pts,
+           a.alt_player_key <> '' AS has_drop
+    FROM chimmy_advice a
+    WHERE a.advice_type = 'add' AND a.season = ${season}`
+  const addBy = new Map()
+  for (const r of adds) {
+    const s = addBy.get(r.surface) ?? { calls: 0, pending: 0, noStats: 0, graded: 0, pts: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, dropMargin: 0 }
+    addBy.set(r.surface, s)
+    s.calls++
+    if (Number(r.week) + ADD_WINDOW - 1 > through) { s.pending++; continue }
+    if (!Number(r.rec_weeks)) { s.noStats++; continue }
+    const rec = Number(r.rec_pts ?? 0)
+    s.graded++
+    s.pts += rec
+    if (rec / ADD_WINDOW >= 10) s.startable++
+    if (r.has_drop) {
+      const alt = Number(r.alt_pts ?? 0)
+      s.vsDrop++
+      if (rec > alt) s.beatDrop++
+      else if (rec < alt) s.lostDrop++
+      s.dropMargin += rec - alt
+    }
+  }
+  console.log(`\nWaiver adds, graded on standard PPR over the advice week and the next ${ADD_WINDOW - 1} (not each league's scoring):`)
+  if (!addBy.size) console.log('  (none)')
+  for (const [surface, s] of [...addBy].sort((a, b) => b[1].calls - a[1].calls)) {
+    const drop = s.vsDrop ? ` · vs the suggested drop: better ${s.beatDrop} / worse ${s.lostDrop} of ${s.vsDrop}, avg ${round1(s.dropMargin / s.vsDrop)} pts over the window` : ''
+    console.log(`  ${surface.padEnd(22)} ${String(s.calls).padStart(5)} adds · graded ${s.graded}: avg ${s.graded ? round1(s.pts / s.graded / ADD_WINDOW) : '-'} PPR/week, ${pct(s.startable, s.graded)} averaged 10+${drop} · pending ${s.pending} · no stat rows ${s.noStats}`)
+  }
+
   console.log('\nPaste everything above back. It contains counts and points only.')
 } catch (err) {
   console.error('advice-ledger-report failed:', err instanceof Error ? err.message.split('\n').slice(-1)[0] : err)

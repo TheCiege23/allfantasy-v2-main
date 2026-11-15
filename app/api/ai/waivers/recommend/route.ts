@@ -12,6 +12,7 @@ import { loadWaiverPool } from "@/lib/decision-os/waiver/pool"
 import { waiverEngineInputFrom } from "@/lib/decision-os/waiver/engineInput"
 import { claimsToPanelRecommendations } from "@/lib/decision-os/waiver/panelRecommendations"
 import { prisma } from "@/lib/prisma"
+import { schedulePanelWaiverAdvice } from "@/lib/chimmy-advice/panelWaiverAdvice"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -129,6 +130,9 @@ export async function POST(request: Request) {
       },
       { decision: buildLiveWaiverDecisionDeps(facts) },
     )
+
+    // The advice ledger: the #1 pickup this panel shows, recorded to be graded later. Background only.
+    schedulePanelWaiverAdvice({ userId, leagueId, claims: result.decision?.recommended_actions ?? [] })
 
     const isFaab = context.waiverType === "faab"
     const recommendations = claimsToPanelRecommendations(result.decision?.recommended_actions ?? [], {

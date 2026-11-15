@@ -1,12 +1,9 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
 import { recordAdvice } from '@/lib/chimmy-advice/adviceStore'
 import { addAdviceKey } from '@/lib/chimmy-advice/adviceKeys'
-import { asIds, rosterCandidates } from '@/lib/core-app/dash3aPanels'
-import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
-import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { answerMentions } from '@/lib/chimmy/chimmyPlayerCards'
+import { resolveWaiverAddTarget, topWaiverClaim } from './waiverAdviceTarget'
 import type { WaiverClaimRecommendation } from '@/lib/decision-os/waiver/decision'
 
 /**
@@ -56,9 +53,7 @@ export async function recordChatWaiverAdvice(args: {
    */
   onRecorded?: (advice: { key: string; playerName: string }) => void
 }): Promise<ChatWaiverAdviceOutcome> {
-  const top = [...(args.claims ?? [])]
-    .filter((c) => c && c.addPlayerId && c.addPlayerName?.trim())
-    .sort((a, b) => (a.priorityRank ?? Number.POSITIVE_INFINITY) - (b.priorityRank ?? Number.POSITIVE_INFINITY))[0]
+  const top = topWaiverClaim(args.claims)
   if (!top) return 'no_claim'
 
   /*
@@ -69,44 +64,11 @@ export async function recordChatWaiverAdvice(args: {
    */
   if (!answerMentions(args.answer ?? '', top.addPlayerName)) return 'not_in_answer'
 
-  const league = await prisma.league.findUnique({
-    where: { id: args.leagueId },
-    select: { id: true, platform: true, platformLeagueId: true, sport: true },
-  })
-  if (!league || String(league.platform ?? '').toLowerCase() !== 'sleeper' || !league.platformLeagueId) {
-    return 'not_sleeper'
-  }
-
-  // The pool's id is a row id in one of two tables; a malformed id is "not found", never an error.
-  const player =
-    (await prisma.sportsPlayer
-      .findUnique({ where: { id: top.addPlayerId }, select: { sleeperId: true, name: true } })
-      .catch(() => null)) ??
-    (await prisma.playerIdentityMap
-      .findUnique({ where: { id: top.addPlayerId }, select: { sleeperId: true, canonicalName: true } })
-      .then((r) => (r ? { sleeperId: r.sleeperId, name: r.canonicalName } : null))
-      .catch(() => null))
-  const sleeperId = player?.sleeperId?.trim()
-  if (!sleeperId || !player?.name || normalizePlayerName(player.name) !== normalizePlayerName(top.addPlayerName)) {
-    return 'unresolved'
-  }
-
-  const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId: league.id, claimedByUserId: args.userId },
-    select: { externalId: true, platformUserId: true },
-  })
-  if (teams.length !== 1) return 'no_team'
-  const roster = await prisma.roster.findFirst({
-    where: { leagueId: league.id, platformUserId: { in: rosterCandidates(teams[0]!, args.userId) } },
-    select: { playerData: true },
-  })
-  if (!roster) return 'no_team'
-  const pd = (roster.playerData ?? {}) as Record<string, unknown>
-  const yours = new Set([...asIds(pd.players), ...asIds(pd.starters), ...asIds(pd.reserve), ...asIds(pd.taxi)])
-  if (yours.has(sleeperId)) return 'already_yours'
-
-  const current = await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null)
-  if (!current) return 'no_week'
+  const target = await resolveWaiverAddTarget({ userId: args.userId, leagueId: args.leagueId, top })
+  if (!target.ok) return target.reason
+  const league = target.league
+  const sleeperId = target.sleeperId
+  const current = { seasonYear: target.season, week: target.week }
 
   const playerName = top.addPlayerName.trim()
   const outcome = await recordAdvice({

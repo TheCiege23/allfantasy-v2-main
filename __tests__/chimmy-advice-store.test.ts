@@ -145,7 +145,7 @@ describe('listAdviceForUser', () => {
     ])
     const call = $queryRaw.mock.calls[0]
     expect(sqlOf(call)).toMatch(/ORDER BY "given_at" DESC/)
-    expect(valuesOf(call)).toEqual(['u1', ['af-ice'], since, 'my_team_bench', MAX_ADVICE_READ])
+    expect(valuesOf(call)).toEqual(['u1', ['af-ice'], since, ['my_team_bench', 'waiver_panel'], MAX_ADVICE_READ])
   })
 
   it('rows of an unknown type or surface are dropped, not guessed', async () => {
@@ -233,14 +233,22 @@ describe('advice ledger: projections and My Team calls', () => {
     expect(sqlOf($executeRaw.mock.calls[0])).not.toContain('rec_projected')
   })
 
-  it('🛑 every existing read skips My Team rows, so they cannot crowd Chimmy out of the 200-row window', async () => {
+  it('🛑 every existing read skips the ledger-only surfaces, so they cannot crowd Chimmy out of the 200-row window', async () => {
     $queryRaw.mockResolvedValue([])
     await listAdviceForUser({ userId: 'u1', leagueIds: ['af-ice'], since: new Date(0) })
     await listAdviceUsers({ since: new Date(0), limit: 5 })
     for (const call of $queryRaw.mock.calls) {
-      expect(sqlOf(call)).toContain('"surface" <> ?')
-      expect(valuesOf(call)).toContain('my_team_bench')
+      expect(sqlOf(call)).toContain('NOT ("surface" = ANY(?::text[]))')
+      expect(valuesOf(call)).toContainEqual(['my_team_bench', 'waiver_panel'])
     }
+  })
+
+  it('🛑 a waiver-panel add, like My Team, updates only its own row', async () => {
+    $executeRaw.mockResolvedValue(1)
+    await recordAdvice({ ...ADVICE, adviceType: 'add', surface: 'waiver_panel', alt: { key: '4034', name: 'Drop Guy' }, slot: null })
+    const call = $executeRaw.mock.calls[0]
+    expect(sqlOf(call)).toMatch(/WHERE "chimmy_advice"\."surface" = \?/)
+    expect(valuesOf(call).at(-1)).toBe('waiver_panel')
   })
 
   it('withdraws only My Team calls this render no longer makes, and only for players not yet kicked off', async () => {

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 import { prisma } from '@/lib/prisma'
 import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer'
-import { MY_TEAM_BENCH_SURFACE } from './adviceSurfaces'
+import { LEDGER_ONLY_SURFACES, MY_TEAM_BENCH_SURFACE } from './adviceSurfaces'
 
 /**
  * Advice Chimmy gave — the storage half of Chimmy receipts (retention item 6, user decisions
@@ -31,9 +31,10 @@ export type AdviceSurface =
   | 'chimmy_chat_waiver'
   | 'triage_swap'
   | 'my_team_bench'
+  | 'waiver_panel'
 
 // `triage_swap` and `my_team_bench` are AllFantasy's calls, not Chimmy's — see ./adviceSurfaces.ts.
-export { AF_TIP_SURFACE, MY_TEAM_BENCH_SURFACE, isChimmyAdvice } from './adviceSurfaces'
+export { AF_TIP_SURFACE, LEDGER_ONLY_SURFACES, MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE, isChimmyAdvice } from './adviceSurfaces'
 
 export const ADVICE_TYPES: readonly AdviceType[] = ['start_sit', 'add', 'lineup_swap']
 export const ADVICE_SURFACES: readonly AdviceSurface[] = [
@@ -42,6 +43,7 @@ export const ADVICE_SURFACES: readonly AdviceSurface[] = [
   'chimmy_chat_waiver',
   'triage_swap',
   'my_team_bench',
+  'waiver_panel',
 ]
 export const MAX_ADVICE_READ = 200
 
@@ -102,14 +104,14 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
       : null
 
   /*
-   * 🛑 MY TEAM NEVER TAKES OVER ANOTHER SURFACE'S ROW. The row is unique per (user, league, week,
-   * type, pair) and the original upsert rewrites `surface` — fine between two Chimmy surfaces, but My
-   * Team's bench check re-renders on every page view, so the same "start X over Y" from Chimmy would be
-   * relabelled My Team's and drop out of Chimmy's track record. Its upsert is scoped to its own rows
-   * (`DO UPDATE … WHERE surface = 'my_team_bench'`), and a Chimmy call on the same pair still takes
-   * the row, as Chimmy's.
+   * 🛑 A LEDGER-ONLY SURFACE NEVER TAKES OVER ANOTHER SURFACE'S ROW. The row is unique per (user,
+   * league, week, type, pair) and the original upsert rewrites `surface` — fine between two Chimmy
+   * surfaces, but My Team's bench check re-renders on every page view and the waiver panel on every
+   * open, so the same call from Chimmy would be relabelled theirs and drop out of Chimmy's track
+   * record. Their upsert is scoped to their own rows (`DO UPDATE … WHERE surface = <their surface>`),
+   * and a Chimmy call on the same pair still takes the row, as Chimmy's.
    */
-  const ownRowsOnly = input.surface === MY_TEAM_BENCH_SURFACE
+  const ownRowsOnly = LEDGER_ONLY_SURFACES.includes(input.surface)
   const recProjected = finiteOrNull(input.projected?.rec)
   const altProjected = finiteOrNull(input.projected?.alt)
   if (ownRowsOnly || input.projected) {
@@ -134,7 +136,7 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
             "alt_projected"  = EXCLUDED."alt_projected",
             "withdrawn_at"   = NULL,
             "given_at"       = CURRENT_TIMESTAMP
-          WHERE "chimmy_advice"."surface" = ${MY_TEAM_BENCH_SURFACE}
+          WHERE "chimmy_advice"."surface" = ${input.surface}
         `
       } else {
         await prisma.$executeRaw`
@@ -168,7 +170,7 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
       }
     }
     if (ownRowsOnly) {
-      // Unmigrated fallback for My Team: insert once, never touch an existing row (see above).
+      // Unmigrated fallback for a ledger-only surface: insert once, never touch an existing row (see above).
       try {
         await prisma.$executeRaw`
           INSERT INTO "chimmy_advice"
@@ -275,7 +277,7 @@ export async function listAdviceUsers(args: {
       SELECT "user_id", array_agg(DISTINCT "league_id") AS "league_ids"
       FROM "chimmy_advice"
       WHERE "given_at" >= ${args.since}
-        AND "surface" <> ${MY_TEAM_BENCH_SURFACE}
+        AND NOT ("surface" = ANY(${[...LEDGER_ONLY_SURFACES]}::text[]))
       GROUP BY "user_id"
       ORDER BY MAX("given_at") DESC
       LIMIT ${limit}
@@ -323,7 +325,7 @@ export async function listAdviceForUser(args: {
       WHERE "user_id" = ${args.userId}
         AND "league_id" = ANY(${[...args.leagueIds]}::text[])
         AND "given_at" >= ${args.since}
-        AND "surface" <> ${MY_TEAM_BENCH_SURFACE}
+        AND NOT ("surface" = ANY(${[...LEDGER_ONLY_SURFACES]}::text[]))
       ORDER BY "given_at" DESC
       LIMIT ${limit}
     `
