@@ -22,7 +22,7 @@ test('selected league tab stays visible on arrival and after rotation', async ({
   await page.setViewportSize({ width: 360, height: 800 })
   await page.goto('/dev/league-mobile-preview?screen=support')
   const row = page.getByTestId('mobile-support-preview').locator('.af-lt-compact-row')
-  await expect(row.locator('[aria-current="page"]')).toHaveText('Moves')
+  await expect(row.locator('[aria-current="page"]')).toHaveText('Trades')
   for (const size of [{ width: 360, height: 800 }, { width: 844, height: 390 }, { width: 320, height: 640 }]) {
     await page.setViewportSize(size)
     await expect.poll(() => row.evaluate(el => {

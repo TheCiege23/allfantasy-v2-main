@@ -26,7 +26,7 @@ export default function Preview() {
     <div className="af-core p-4">
       <button className="af-btn" onClick={() => setSupportOpen(true)}>Preview core support</button>
       <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} defaultEmail="preview@example.com" />
-      <LeagueTabs leagueId="mobile-preview" leagueName={league.name} activeKey="moves" compact platform="sleeper" />
+      <LeagueTabs leagueId="mobile-preview" leagueName={league.name} activeKey="trades" compact platform="sleeper" />
       <ImportedLeagueQuickActions leagueId="mobile-preview" leagueName={league.name} platform="Sleeper" canRemove />
       <div style={{ height: 1800 }}>This week</div>
     </div>
