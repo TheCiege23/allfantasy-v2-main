@@ -57,7 +57,8 @@ export function WeeklyBlueprint({ data, path, compact = false }: { data: Bluepri
         <Link href={a.href}><strong>{weeklyActionText(a, es)}</strong><span>{a.leagueName}</span></Link>
         <p>{swings.find(s=>s.id===a.id)?.detail ?? weeklyActionReason(a,es)}</p>
         {a.gameAt ? <small>{a.kind === 'deadline' ? m.deadline : m.nextGame}<LocalGameTime iso={a.gameAt} language={language} />. {m.confirmLock}</small> : <small>{m.checkRules}</small>}
-        <button type="button" onClick={()=>askAction(a)} aria-label={m.compareOptionsAria(a.leagueName)}>{m.compareWithChimmy}</button>
+        {/* 2026-11-14: "Compare with Chimmy" once, on the top priority; "Ask Chimmy" above covers the rest. */}
+        {a.id === data.actions[0]?.id ? <button type="button" onClick={()=>askAction(a)} aria-label={m.compareOptionsAria(a.leagueName)}>{m.compareWithChimmy}</button> : null}
       </li>)}</ol> : <p>{m.connectLeague}</p>}
       {data.actionCount > 3 ? <p>{m.firstThree}</p> : null}
       {data.lineupReadFailed ? <p role="status">{m.lineupReadFailed}</p> : null}
@@ -104,7 +105,8 @@ export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
       {inputChanges.length ? <details><summary>{m.inputsChanged}</summary><ul>{inputChanges.map(change=><li key={change}>{change}</li>)}</ul></details> : previous ? <p>{m.noInputChanges}</p> : null}
       {path.points.length > 1 ? <><svg viewBox="0 0 300 100" role="img" aria-label={m.trendAria}><polyline fill="none" stroke="currentColor" strokeWidth="3" points={path.points.map((p,i) => `${10 + i * 280 / (path.points.length - 1)},${90 - p.probability * .8}`).join(' ')} /></svg><details><summary>{m.trendData}</summary><table><thead><tr><th>{m.period}</th><th>%</th></tr></thead><tbody>{path.points.map(p => <tr key={p.period}><td>{p.period}</td><td>{formatPct1(p.probability)}%</td></tr>)}</tbody></table></details></> : null}
       {swing && swing.week >= path.period ? <div className="af-wbp-branches"><h4>{m.scenariosTitle(swing.week)}</h4>{[{ title: m.ifWin, value: swing.ifWin }, { title: m.ifLose, value: swing.ifLose }].map(b => <div key={b.title}><span>{b.title}: {formatPct1(b.value)}%</span><span className="af-wbp-bar" aria-hidden><i style={{ width: `${Math.max(0, Math.min(100,b.value))}%` }} /></span></div>)}</div> : <p>{m.noScenario}</p>}
-      {league!.whatDecidesIt ? <p>{coreUiCopy(league!.whatDecidesIt,language)}</p> : null}
+      {/* 2026-11-14: only where the status line above has not said it ("Long shot…" then "A long-shot forecast…" twice). */}
+      {league!.whatDecidesIt && you!.status == null && you!.playoffPct > 1 && you!.playoffPct < 99 ? <p>{coreUiCopy(league!.whatDecidesIt,language)}</p> : null}
       {delta != null ? <p>{m.movementNote}</p> : null}
       {swing?.week === path.period && swing.helpIfLose?.length ? <p>{m.helpIfLose}{swing.helpIfLose.join(', ')}. {m.conditionalEvidence}</p> : null}
       <details><summary>{m.howCalculated}</summary><p>{m.howCalculatedBody}</p><p>{league!.assumptions.iterations.toLocaleString(getAppIntlLocale())} {m.simulations} · {m.lastCalculated}: <LocalCalculatedTime iso={league!.assumptions.computedAt} language={language}/></p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>

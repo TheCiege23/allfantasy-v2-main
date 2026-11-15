@@ -5510,7 +5510,12 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
             headline, close games, survival leagues, kickoffs, then the scoreboard, then the Blueprint's
             tools folded. The full Blueprint stays on a single league's week and beside `?all=1`.
           */}
-          {weeklyBlueprint && !(weekBoard && !weekBoard.leagueBoard && !showAllLeagues && !rivalriesView) ? (
+          {/*
+            2026-11-14: one league's week also opens on its own page now — the matchup — with the Blueprint
+            folded under it in the same "Week tools" disclosure (below). It used to sit above the page's h1, so
+            the matchup started a screen down. The full Blueprint stays here only beside `?all=1` and Rivalry Radar.
+          */}
+          {weeklyBlueprint && !(weekBoard && !rivalriesView && (weekBoard.leagueBoard || !showAllLeagues)) ? (
             <WeeklyBlueprint data={weeklyBlueprint} path={weeklyPath} />
           ) : null}
           {weekBoard?.historyIncomplete || rivalries?.historyIncomplete ? <WeekHistoryNotice retryHref={retryHref} /> : null}
@@ -5528,7 +5533,14 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
              * rather than rendering an empty hero.
              */
             weekBoard.leagueBoard ? (
-              <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" lineups={ctx.weekLineups} />
+              <>
+                <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" lineups={ctx.weekLineups} />
+                {weeklyBlueprint ? (
+                  <WeekToolsDisclosure>
+                    <WeeklyBlueprint data={weeklyBlueprint} path={weeklyPath} />
+                  </WeekToolsDisclosure>
+                ) : null}
+              </>
             ) : showAllLeagues ? (
               /*
                * The full cross-league table, kept whole behind `?all=1`. The two
