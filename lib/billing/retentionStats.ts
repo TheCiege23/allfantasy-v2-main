@@ -17,9 +17,9 @@ const NAMES = {
 
 type StatsDb = { analyticsEvent: { findMany: (args: unknown) => Promise<RetentionEvent[]> } }
 
-export async function loadRetentionStats(db: StatsDb, now = new Date()): Promise<RetentionStats> {
+export async function loadRetentionStats(db: StatsDb, now = new Date(), days = 30): Promise<RetentionStats> {
   const rows = await db.analyticsEvent.findMany({
-    where: { event: { in: Object.values(NAMES) }, createdAt: { gte: new Date(now.getTime() - 30 * 86_400_000) } },
+    where: { event: { in: Object.values(NAMES) }, createdAt: { gte: new Date(now.getTime() - days * 86_400_000) } },
     select: { event: true, userId: true, createdAt: true, meta: true },
     take: 20_000,
   })
