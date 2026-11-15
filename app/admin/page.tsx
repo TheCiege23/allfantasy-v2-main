@@ -1888,6 +1888,9 @@ export default async function AdminPage(
             <a className="af-cc-tab" href="/admin/growth" data-testid="admin-growth-tab">
               Growth &amp; revenue
             </a>
+            <a className="af-cc-tab" href="/admin/support" data-testid="admin-support-tab">
+              Support inbox
+            </a>
             <a className="af-cc-tab" href="/admin/social-newsroom" data-testid="admin-social-newsroom-tab">
               Social newsroom
             </a>

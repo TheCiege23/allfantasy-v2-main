@@ -107,6 +107,7 @@ const spanish: Record<string, string> = {
   "Everyone in one league's server": 'Todos en el servidor de la liga',
   'Who sees this:': 'Quién puede verlo:',
   'Notification settings': 'Configuración de notificaciones',
+  'Need help? Message us': '¿Necesitas ayuda? Escríbenos',
   'No messages yet — say something to the league': 'Aún no hay mensajes. Saluda a la liga',
   'Open league': 'Abrir liga',
   'Needs you': 'Requiere atención',
