@@ -24,6 +24,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     sport: article.sport,
     category: article.category,
     slug: article.slug,
+    seoTitle: article.seoTitle,
+    seoDescription: article.seoDescription,
   })
   return {
     title: seo.title,
