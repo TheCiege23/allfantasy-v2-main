@@ -16,8 +16,9 @@ export function demoHrefFor(href: string | null | undefined, leagueHome: string)
   const path = href.split(/[?#]/)[0]!
   if (path === '/demo' || path.startsWith('/demo/')) return null
   if (path === '/core/trades') return '/demo/trades'
-  if (path === '/core/players' || path === '/core/player-finder') return '/demo/players'
-  if (path === '/core/chimmy') return '/demo/chimmy'
+  // Only segments /core actually serves (`__tests__/core-app/core-segment-links.test.ts` holds every
+  // `/core/<x>` literal in the code to that) — Chimmy is a dock, not a /core page, so it has no entry.
+  if (path === '/core/players') return '/demo/players'
   if (path === '/core/standings') return `${leagueHome}/standings`
   if (['/core/matchup', '/core/live', '/core/my-team', '/core/schedule'].includes(path)) return leagueHome
   return SIGNED_IN_PREFIXES.some((p) => path === p || path.startsWith(p.endsWith('/') ? p : `${p}/`) || path.startsWith(`${p}?`))
