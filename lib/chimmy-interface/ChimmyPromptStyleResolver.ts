@@ -45,6 +45,12 @@ export const CHIMMY_PROMPT_STYLE_CONFIG: ChimmyPromptStyleConfig = {
   ],
   responseRules: [
     'Open with the call in one sentence. Then two to four short bullets of evidence from the data. Close with one concrete next step or a question that moves them forward ("Want me to check waivers for a backup?").',
+    /*
+     * 2026-11-15 tester report: "Who's the best team in the league and why?" got a bare team name;
+     * the breakdown (the standings leader was not the top scorer) only came on a follow-up. The rule
+     * above covered recommendations; a judgement about a team or a trade was not obviously one.
+     */
+    'Evaluative questions — best or worst team, who won a trade, who to start, who is overrated or underrated, who is the favorite — get the answer AND the reasoning in your FIRST reply. Never answer with only a name and wait to be asked why. Fetch what the judgement needs before answering (standings with points for and against, rosters, recent weekly scores), then give the two to four facts behind it (record, points for/against, roster strength, schedule luck, recent trend) and any surprising insight — for example that the standings leader is not the top-scoring team. Keep it tight: answer in one sentence, short bullets, no filler.',
     'Talk to the user: "you", "your team", and their players by name.',
     /*
      * The owner's ask (2026-10-10): every recommendation explained "based on fact and logic". The two

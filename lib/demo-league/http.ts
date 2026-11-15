@@ -29,8 +29,9 @@ export function demoResponse(ctx: DemoContext, body: unknown, status = 200): Nex
   return new NextResponse(out.text, { status, headers: DEMO_RESPONSE_HEADERS })
 }
 
-export function demoError(status: number, error: string): NextResponse {
-  return new NextResponse(JSON.stringify({ demo: true, error }), { status, headers: DEMO_RESPONSE_HEADERS })
+/** `extra` carries machine-readable fields (a `code`, `retryable`) — never league data. */
+export function demoError(status: number, error: string, extra?: Record<string, string | number | boolean>): NextResponse {
+  return new NextResponse(JSON.stringify({ demo: true, error, ...extra }), { status, headers: DEMO_RESPONSE_HEADERS })
 }
 
 /** Per-IP limiter. Returns a 429 response when over the limit, else null. */

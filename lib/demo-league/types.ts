@@ -37,6 +37,8 @@ export type DemoMatchup = {
   status: 'final' | 'live' | 'upcoming'
 }
 
+export type DemoWeekScores = { week: number; scores: Array<{ slot: number; points: number }> }
+
 export type DemoPlayer = {
   name: string
   position: string | null
@@ -95,6 +97,12 @@ export type DemoLeagueView = {
   teams: DemoTeam[]
   standings: DemoStandingRow[]
   matchups: DemoMatchup[]
+  /**
+   * Every COMPLETED week's score per team, oldest first. Numbers and public slots only — the same
+   * kind of data as `standings`. Demo Chimmy reads it for recent form and schedule luck (all-play
+   * record), so "who is the best team and why" can be answered on the first try.
+   */
+  weeklyScores: DemoWeekScores[]
   rosters: DemoRoster[]
   trades: DemoTrade[]
   health: DemoHealth | null

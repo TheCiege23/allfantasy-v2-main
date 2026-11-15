@@ -13,7 +13,7 @@ import { DEMO_LEAGUE_DISPLAY_NAME, fakeAvatarColor, fakeInitials, fakeManagerNam
 import type { SourceSnapshot, SourceTeam, SourcePlayer } from './source'
 import type { SensitiveTerm } from './redactor'
 import type {
-  DemoAlert, DemoLeagueView, DemoMatchup, DemoPlayer, DemoRoster, DemoStandingRow, DemoTeam, DemoTrade, DemoTradeAsset,
+  DemoAlert, DemoLeagueView, DemoMatchup, DemoPlayer, DemoRoster, DemoStandingRow, DemoTeam, DemoTrade, DemoTradeAsset, DemoWeekScores,
 } from './types'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
 
@@ -146,6 +146,19 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
     matchups.sort((x, y) => x.home.slot - y.home.slot)
   }
 
+  // ── Completed weeks, per team (recent form + all-play for demo Chimmy) ──────
+  const weeklyScores: DemoWeekScores[] = []
+  for (const week of weeks) {
+    if (!weekIsComplete(week)) continue
+    const scores: DemoWeekScores['scores'] = []
+    for (const r of src.weekRows) {
+      if (r.week !== week) continue
+      const slot = slotOf(teamByRosterId(r.rosterId))
+      if (slot != null) scores.push({ slot, points: round1(r.pointsFor) })
+    }
+    if (scores.length > 0) weeklyScores.push({ week, scores: scores.sort((a, b) => a.slot - b.slot) })
+  }
+
   // ── Rosters ────────────────────────────────────────────────────────────────
   const rosters: DemoRoster[] = src.rosters
     .map((r) => {
@@ -255,6 +268,7 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
     teams,
     standings,
     matchups,
+    weeklyScores,
     rosters,
     trades,
     health: health ? { score: health.score, status: health.status, summary: health.summary, strengths: health.strengths, problems: health.problems } : null,

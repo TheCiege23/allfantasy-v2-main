@@ -28,6 +28,8 @@ export interface DeepSeekChatOptions {
   maxTokens?: number
   /** Cancels the underlying HTTP request (OpenAI-compatible SDK). A signalled call bypasses the cache. */
   signal?: AbortSignal
+  /** Bypass the 30-minute response cache, as `skipCache` already does for the OpenAI and xAI clients. */
+  skipCache?: boolean
 }
 
 export interface DeepSeekResult {
@@ -35,14 +37,24 @@ export interface DeepSeekResult {
   model?: string
   usage?: { promptTokens: number; completionTokens: number }
   error?: string
+  /** The provider's stop reason; `length` means the reply hit maxTokens and is cut off. */
+  finishReason?: string | null
+  /** HTTP status of a failed call, when the provider sent one (429, 500…). */
+  status?: number
 }
 
 export async function deepseekChat(
   options: DeepSeekChatOptions
 ): Promise<DeepSeekResult> {
   const key = cacheKey('deepseek', options.prompt, options.systemPrompt, options.model)
-  if (options.signal) return _deepseekChatUncached(options) // cancellable calls bypass the cache
-  return cachedFetch(key, 1800, () => _deepseekChatUncached(options))
+  if (options.signal || options.skipCache) return _deepseekChatUncached(options) // cancellable calls bypass the cache
+  /*
+   * 🛑 ONLY A WHOLE ANSWER IS CACHED. The default `shouldCache` stored every result for 30 minutes —
+   * including `{ content: '', error }` from a timeout or a 5xx, and a reply cut off at maxTokens. One
+   * transient failure then failed every identical request for half an hour, and a retry could not
+   * help because it was served the stored failure. (Found 2026-11-15 chasing "Chimmy is unavailable".)
+   */
+  return cachedFetch(key, 1800, () => _deepseekChatUncached(options), (r) => !r.error && Boolean(r.content?.trim()) && r.finishReason !== 'length')
 }
 
 async function _deepseekChatUncached(
@@ -90,6 +102,7 @@ async function _deepseekChatUncached(
     const content = response.choices[0]?.message?.content ?? ''
     return {
       content,
+      finishReason: response.choices[0]?.finish_reason ?? null,
       model: runtimeModel,
       usage: {
         promptTokens: response.usage?.prompt_tokens ?? 0,
@@ -98,7 +111,12 @@ async function _deepseekChatUncached(
     }
   } catch (e: any) {
     console.error('[DeepSeek] Chat error:', String(e?.message ?? e).slice(0, 240))
-    return { content: '', model: model?.trim() || cfg.model || 'deepseek-chat', error: e?.message ?? 'DeepSeek unavailable' }
+    return {
+      content: '',
+      model: model?.trim() || cfg.model || 'deepseek-chat',
+      error: e?.message ?? 'DeepSeek unavailable',
+      ...(typeof e?.status === 'number' ? { status: e.status } : {}),
+    }
   }
 }
 
