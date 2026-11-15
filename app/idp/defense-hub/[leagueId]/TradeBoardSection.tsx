@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 
 import type { LeagueDefenderBoard, DefenderBoardRow } from '@/lib/values/leagueDefenderBoard'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { defenseHubMessages } from '@/lib/core-app/messages/defenseHub'
 
 /**
  * Every defender in the league and what he is worth HERE — the board a manager reads before
@@ -24,7 +26,15 @@ import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
  * as a dash and never 0; a floor price is muted and labelled; kickers get one value shown once
  * with no rank or projection column. Those are not stylistic — each is a measurement the IDP
  * stack made, and a table that renders them the ordinary way un-makes it.
+ *
+ * 2026-11-14: it opens at the top `BOARD_TOP` by value — a 14-team league listed ~290 rows — with a
+ * button for the rest, and a search or "hide my players" shows every match. Its words are in
+ * lib/core-app/messages/defenseHub.ts (they were English on the Spanish page), and its method notes
+ * are one fold under the table rather than three paragraphs.
  */
+
+/** How many rows the board opens with. */
+export const BOARD_TOP = 25
 
 function Dash() {
   return <span className="text-[var(--faint)]">—</span>
@@ -38,26 +48,13 @@ function Label({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Why the board has nothing to show, said plainly rather than rendered as an empty table. */
-const BLOCKED_COPY: Record<string, string> = {
-  not_idp_league: 'This league does not score defenders, so there is no defensive board to price.',
-  no_scoring_settings: 'We do not hold this league’s scoring settings, so nothing can be priced.',
-  no_projection_history:
-    'No projection history is on file yet, so no defender can be priced. This is normal in the ' +
-    'offseason and resolves when the stat ingest next runs.',
-  valuation_refused:
-    'Replacement level could not be established for this league, so pricing was refused rather ' +
-    'than guessed.',
-  no_league: 'We could not resolve this league.',
-  no_rostered_defenders: 'No rosters in this league carry a defender yet.',
-  ids_unreadable: `${FOREIGN_IDS_UNREADABLE}, so no defender on its rosters can be priced or given an owner.`,
-}
-
 export function TradeBoardSection({ leagueId }: { leagueId: string }) {
+  const m = useMessages(defenseHubMessages)
   const [data, setData] = useState<LeagueDefenderBoard | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [hideMine, setHideMine] = useState(false)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -121,11 +118,9 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
   if (error) {
     return (
       <section>
-        <Label>League trade board</Label>
+        <Label>{m.boardTitle}</Label>
         <div className="rounded-[13px] border border-[color-mix(in_srgb,var(--bad)_30%,transparent)] bg-[var(--bad-soft)] px-4 py-3.5 text-[13px] text-[var(--text)]">
-          {error === 'not-a-member'
-            ? 'You don’t have access to this league.'
-            : 'We couldn’t load the league board. Nothing is shown rather than something wrong.'}
+          {error === 'not-a-member' ? m.notMember : m.boardLoadFailed}
         </div>
       </section>
     )
@@ -134,46 +129,55 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
   if (!data) {
     return (
       <section>
-        <Label>League trade board</Label>
+        <Label>{m.boardTitle}</Label>
         <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 font-mono text-[11px] text-[var(--faint)]">
-          Loading…
+          {m.loading}
         </div>
       </section>
     )
   }
 
   if (data.state !== 'ok') {
+    const blocked: Record<string, string> = {
+      not_idp_league: m.boardBlocked_not_idp_league,
+      no_scoring_settings: m.boardBlocked_no_scoring_settings,
+      no_projection_history: m.boardBlocked_no_projection_history,
+      valuation_refused: m.boardBlocked_valuation_refused,
+      no_league: m.boardBlocked_no_league,
+      no_rostered_defenders: m.boardBlocked_no_rostered_defenders,
+      ids_unreadable: `${FOREIGN_IDS_UNREADABLE}.`,
+    }
     return (
       <section>
-        <Label>League trade board</Label>
+        <Label>{m.boardTitle}</Label>
         <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 text-[13px] text-[var(--muted)]">
-          {BLOCKED_COPY[data.state] ?? 'This board is unavailable for this league.'}
+          {blocked[data.state] ?? m.boardBlocked_other}
         </div>
       </section>
     )
   }
 
+  /* A search or "hide my players" is looking for something specific, so it shows every match. */
+  const filtering = query.trim().length > 0 || hideMine
+  const shown = showAll || filtering ? rows : rows.slice(0, BOARD_TOP)
+  const unpriced = data.rows.filter((r) => r.value == null).length
+  const kickersShown = Boolean(data.kickerValue && data.kickers.length > 0)
+
   return (
-    <section>
-      <Label>League trade board — what to offer</Label>
+    <section data-testid="defense-trade-board">
+      <Label>{m.boardTitle}</Label>
 
       <p className="mb-3 max-w-[620px] text-[12px] leading-relaxed text-[var(--muted)]">
-        Every defender rostered in this league, priced by this league’s own scoring and starting
-        slots, with the team holding him.{' '}
+        {m.boardSub}{' '}
         {/*
           ⚠ THE WEEK IS NOT DECORATION. A number like "5,200" reads as current. In the offseason
           it is a projection for a week that has not been played in months, and the module
           returns `projectedFor` specifically so a surface rendering these can say which one.
         */}
         {data.projectedFor ? (
-          <span className="text-[var(--text2)]">
-            Projections are for {data.projectedFor.season} week {data.projectedFor.week}.
-          </span>
+          <span className="text-[var(--text2)]">{m.boardWeek(data.projectedFor.season, data.projectedFor.week)}</span>
         ) : (
-          <span className="text-[var(--warn)]">
-            We can’t say which week these projections are for, so read the values with that in
-            mind.
-          </span>
+          <span className="text-[var(--warn)]">{m.boardWeekUnknown}</span>
         )}
       </p>
 
@@ -181,18 +185,18 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Find a player, team or manager…"
-          aria-label="Filter the league trade board"
-          className="min-w-[220px] flex-1 rounded-[9px] border border-[var(--line2)] bg-[var(--surface)] px-3 py-2 text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--faint)] focus:border-[var(--accent-line)]"
+          placeholder={m.boardFilter}
+          aria-label={m.boardFilterLabel}
+          className="min-h-[44px] min-w-[220px] flex-1 rounded-[9px] border border-[var(--line2)] bg-[var(--surface)] px-3 py-2 text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--faint)] focus:border-[var(--accent-line)]"
         />
-        <label className="flex cursor-pointer items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--muted)]">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--muted)]">
           <input
             type="checkbox"
             checked={hideMine}
             onChange={(e) => setHideMine(e.target.checked)}
             className="accent-[var(--accent)]"
           />
-          Hide my players
+          {m.hideMine}
         </label>
       </div>
 
@@ -200,48 +204,65 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
         <table className="w-full min-w-[720px] text-left">
           <thead>
             <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
-              <th className="px-4 py-3">Player</th>
-              <th className="px-2 py-3">Pos</th>
-              <th className="px-2 py-3 text-right">Proj</th>
-              <th className="px-2 py-3 text-right">VORP</th>
-              <th className="px-2 py-3 text-right">Pos rank</th>
-              <th className="px-2 py-3 text-right text-[var(--accent)]">Value ↓</th>
-              <th className="px-4 py-3">Held by</th>
+              <th className="px-4 py-3">{m.colPlayer}</th>
+              <th className="px-2 py-3">{m.colPos}</th>
+              <th className="px-2 py-3 text-right">{m.colProj.replace(' ↓', '')}</th>
+              <th className="px-2 py-3 text-right">
+                <abbr title={m.vorpTip} className="no-underline">
+                  {m.colVorp}
+                </abbr>
+              </th>
+              <th className="px-2 py-3 text-right">{m.colPosRank}</th>
+              <th className="px-2 py-3 text-right text-[var(--accent)]">{m.colValue} ↓</th>
+              <th className="px-4 py-3">{m.colHeldBy}</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {shown.map((r) => (
               <BoardRow key={r.sleeperId} row={r} />
             ))}
           </tbody>
         </table>
       </div>
 
-      {rows.length === 0 && (
-        <p className="mt-2 text-[11px] text-[var(--faint)]">
-          {query || hideMine
-            ? 'No defender matches that filter.'
-            : 'No defenders are priced in this league yet.'}
-        </p>
-      )}
+      {rows.length === 0 ? (
+        <p className="mt-2 text-[11px] text-[var(--faint)]">{filtering ? m.boardNoMatch : m.boardNone}</p>
+      ) : null}
+
+      {!filtering && rows.length > BOARD_TOP ? (
+        <button
+          type="button"
+          className="mt-3 min-h-[44px] rounded-[9px] border border-[var(--line2)] bg-[var(--surface)] px-4 text-[13px] font-bold text-[var(--text)]"
+          onClick={() => setShowAll(!showAll)}
+          data-testid="defense-trade-board-more"
+        >
+          {showAll ? m.showTop(BOARD_TOP) : m.showAll(rows.length)}
+        </button>
+      ) : null}
 
       <Kickers data={data} />
 
-      {data.notes.map((n) => (
-        <p key={n} className="mt-2 max-w-[720px] text-[11px] leading-relaxed text-[var(--faint)]">
-          {n}
-        </p>
-      ))}
+      <details className="mt-3 rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3" data-testid="defense-trade-board-how">
+        <summary className="cursor-pointer text-[13px] font-bold text-[var(--text)]">{m.boardHowTitle}</summary>
+        <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-[12px] leading-relaxed text-[var(--muted)]">
+          <li>{m.noteLeague}</li>
+          <li>{m.noteCrossGroup}</li>
+          {unpriced > 0 ? <li>{m.noteUnpriced(unpriced)}</li> : null}
+          {kickersShown ? <li>{m.noteKicker}</li> : null}
+        </ul>
+      </details>
     </section>
   )
 }
 
 function BoardRow({ row }: { row: DefenderBoardRow }) {
+  const m = useMessages(defenseHubMessages)
   return (
     <tr
       className={`border-b border-[var(--line)] last:border-0 ${
         row.ownedBy.isMine ? 'bg-[var(--accent-soft)]' : ''
       }`}
+      data-testid="defense-trade-board-row"
     >
       <td className="px-4 py-3">
         <div className="text-[13px] font-extrabold">{row.name}</div>
@@ -272,16 +293,13 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
            * established for him — an absence of information, not a cheap player. He is sorted
            * to the bottom by the loader for the same reason.
            */
-          <span title="Not priced: replacement level could not be established for him. This is not the same as being worth nothing.">
+          <span title={m.notPricedTip}>
             <Dash />
           </span>
         ) : row.valueIsFloor ? (
-          <span
-            className="text-[var(--muted)]"
-            title="Floor price: below this league's meaningful board, not a measured value. Do not compare two floor-priced defenders."
-          >
+          <span className="text-[var(--muted)]" title={m.floorTip}>
             {row.value.toLocaleString()}
-            <span className="ml-1 text-[11px]">floor</span>
+            <span className="ml-1 text-[11px]"> {m.floor}</span>
           </span>
         ) : (
           row.value.toLocaleString()
@@ -292,7 +310,7 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
           {row.ownedBy.teamName ?? <Dash />}
         </div>
         <div className="font-mono text-[11px] text-[var(--faint)]">
-          {row.ownedBy.isMine ? 'you' : (row.ownedBy.ownerName ?? '—')}
+          {row.ownedBy.isMine ? m.you : (row.ownedBy.ownerName ?? '—')}
         </div>
       </td>
     </tr>
@@ -311,17 +329,18 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
  * six measured season pairs — so those columns would invite a comparison the data refuses.
  */
 function Kickers({ data }: { data: LeagueDefenderBoard }) {
+  const m = useMessages(defenseHubMessages)
   if (!data.kickerValue || data.kickers.length === 0) return null
 
   return (
     <div className="mt-[22px]">
-      <Label>Kickers in this league</Label>
+      <Label>{m.kickersTitle}</Label>
       <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-[13px]">
         <div className="flex items-baseline gap-2.5">
           <div className="font-mono text-[17px] font-black text-[var(--text)]">
             {data.kickerValue.value?.toLocaleString()}
           </div>
-          <div className="text-[11px] text-[var(--muted)]">for any kicker in this league</div>
+          <div className="text-[11px] text-[var(--muted)]">{m.kickerAny}</div>
         </div>
         <p className="mt-1.5 max-w-[560px] text-[11px] leading-relaxed text-[var(--faint)]">
           {data.kickerValue.basis}
@@ -331,7 +350,7 @@ function Kickers({ data }: { data: LeagueDefenderBoard }) {
             <li key={k.sleeperId} className="text-[12px] text-[var(--text2)]">
               {k.name}
               <span className="ml-1.5 font-mono text-[11px] text-[var(--faint)]">
-                {k.ownedBy.isMine ? 'you' : (k.ownedBy.teamName ?? k.ownedBy.ownerName ?? '—')}
+                {k.ownedBy.isMine ? m.you : (k.ownedBy.teamName ?? k.ownedBy.ownerName ?? '—')}
               </span>
             </li>
           ))}
