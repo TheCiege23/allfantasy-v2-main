@@ -34,6 +34,12 @@ export const tradesLeagueGuideMessages = defineMessages({
     moreNote: 'Trade ideas, offers and drafts, the trade finder, value alerts',
     moreWaiting: (n: number) => `${n} ${n === 1 ? 'offer' : 'offers'} waiting on you`,
 
+    /** The builder's own heading (2026-11-14), with the screenshot upload beside it rather than in a fold. */
+    createTitle: 'Create a trade',
+    uploadShot: 'Upload a screenshot',
+    readingShot: 'Reading screenshot…',
+    uploadHint: 'A screenshot of a trade in this league fills in both sides for you.',
+
     /** Followed by the time, in the viewer's own clock (LocalDateTime). */
     historyChecked: (refreshed: boolean) => `Trade history ${refreshed ? 'refreshed' : 'checked'} with Sleeper · grades updated`,
     leagueGradeShort: (got: string, gave: string) => `League grade · got ${got} for ${gave}`,
@@ -68,6 +74,11 @@ export const tradesLeagueGuideMessages = defineMessages({
     more: 'Más formas de encontrar un intercambio',
     moreNote: 'Ideas, ofertas y borradores, el buscador de intercambios, alertas de valor',
     moreWaiting: (n) => `${n} ${n === 1 ? 'oferta te espera' : 'ofertas te esperan'}`,
+
+    createTitle: 'Crea un intercambio',
+    uploadShot: 'Sube una captura',
+    readingShot: 'Leyendo la captura…',
+    uploadHint: 'Una captura de un intercambio de esta liga rellena los dos lados por ti.',
 
     historyChecked: (refreshed) => `Historial de intercambios ${refreshed ? 'actualizado' : 'revisado'} con Sleeper · calificaciones del`,
     leagueGradeShort: (got, gave) => `Calificación de la liga · recibió ${got} por ${gave}`,

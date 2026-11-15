@@ -116,8 +116,18 @@ function pickAsset(p: RebuildPick & { value: number }): PartnerAsset {
   return { id: p.pickId, name: p.label, position: 'PICK', value: p.value, kind: 'pick' }
 }
 
-const pct = (ratio: number | null | undefined, rising: boolean) =>
-  typeof ratio === 'number' && ratio > 0 ? Math.round(Math.abs(rising ? ratio - 1 : 1 - ratio) * 100) : null
+/**
+ * Above this the percentage is not a market reading, it is a near-zero redraft value in the denominator:
+ * "Priced 8724% higher in dynasty than in redraft" printed for a rookie tight end (live, 2026-11-14). The
+ * sentence then says "priced higher" with no number, which every caller already has as its fallback.
+ */
+export const MAX_SHOWN_PCT = 300
+
+export const pct = (ratio: number | null | undefined, rising: boolean): number | null => {
+  if (typeof ratio !== 'number' || !(ratio > 0)) return null
+  const v = Math.round(Math.abs(rising ? ratio - 1 : 1 - ratio) * 100)
+  return v > MAX_SHOWN_PCT ? null : v
+}
 
 function starterIds(players: readonly Priced[], slots: readonly string[]): Set<string> {
   return new Set(

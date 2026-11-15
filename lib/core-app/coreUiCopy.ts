@@ -909,6 +909,8 @@ const spanish: Record<string, string> = {
   'Build a trade': 'Crear intercambio',
   'See the verdict': 'Ver evaluación',
   'Analyzing…': 'Analizando…',
+  'Analyze this trade': 'Analizar este intercambio',
+  'Their team': 'Su equipo',
   'Analyze again': 'Analizar de nuevo',
   'Analyze trade': 'Analizar intercambio',
   'Add what you send': 'Añade lo que envías',

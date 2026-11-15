@@ -24,7 +24,8 @@ type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'man
 export const NAV_SECTION_ORDER: ReadonlyArray<{ id: NavSectionId; heading: string | null; keys: readonly string[] }> = [
   { id: 'top', heading: null, keys: ['home'] },
   { id: 'now', heading: 'This week', keys: ['my-team', 'matchup', 'live', 'waivers'] },
-  { id: 'league', heading: 'League', keys: ['standings', 'schedule', 'trades', 'moves'] },
+  /* No Moves (2026-11-14): it folded into Trades; /core/moves redirects there (next.config.js). */
+  { id: 'league', heading: 'League', keys: ['standings', 'schedule', 'trades'] },
   {
     id: 'plan',
     heading: 'Plan ahead',
