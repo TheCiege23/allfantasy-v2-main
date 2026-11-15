@@ -2286,3 +2286,7 @@
 .af-im-ys-recv-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
 .af-im-ys-recv-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
 .af-im-ys-recv-go { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; margin-top: 8px; }
+
+/* Yahoo tile, allowlisted account: the copy-paste way in instead of "coming soon". */
+.af-im-ys-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.af-im-ys-cta .af-im-fx-go { min-height: 44px; }

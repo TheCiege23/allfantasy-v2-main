@@ -521,9 +521,14 @@ type ImportGuideProps = {
   espnConnected?: boolean | null
   /** The platform mark, so the guide's header matches the tile that is lit. */
   mark: ReactNode
+  /**
+   * Replaces the paused card's title and body when an unavailable platform still has a way in for
+   * this account — today, Yahoo by copy-paste for allowlisted users. Absent = "Coming soon".
+   */
+  pausedNote?: { title: string; body: ReactNode }
 }
 
-export function ImportGuide({ provider, providerLabel, available, espnConnected, mark }: ImportGuideProps) {
+export function ImportGuide({ provider, providerLabel, available, espnConnected, mark, pausedNote }: ImportGuideProps) {
   const guide = GUIDES[provider]
   /*
    * Collapsible on a phone only (CSS ignores it on wide screens). Opens by default for the
@@ -545,12 +550,18 @@ export function ImportGuide({ provider, providerLabel, available, espnConnected,
           {mark}
           <span className="af-guide-head-text">
             <span className="af-label">{providerLabel}</span>
-            <span className="af-guide-title">Coming soon</span>
+            <span className="af-guide-title">{pausedNote?.title ?? 'Coming soon'}</span>
           </span>
         </header>
         <p className="af-guide-paused-body">
-          Not open for imports yet. When it is, you&rsquo;ll sign in with {providerLabel}, approve
-          read-only access and pick your leagues &mdash; no IDs to hunt for.
+          {pausedNote ? (
+            pausedNote.body
+          ) : (
+            <>
+              Not open for imports yet. When it is, you&rsquo;ll sign in with {providerLabel}, approve
+              read-only access and pick your leagues &mdash; no IDs to hunt for.
+            </>
+          )}
         </p>
       </aside>
     )
