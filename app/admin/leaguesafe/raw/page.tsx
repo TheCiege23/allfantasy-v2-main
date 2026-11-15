@@ -11,16 +11,19 @@ export const metadata = { title: "LeagueSafe raw email capture", robots: { index
 const STATUSES = ["captured", "parsed", "unparseable", "rejected"] as const
 type Status = typeof STATUSES[number]
 const PAGE_SIZE = 25
+type RawEmailSearchParams = { status?: string | string[]; after?: string | string[]; id?: string | string[] }
 
 export default async function LeagueSafeRawPage({ searchParams }: {
-  searchParams: { status?: string; after?: string; id?: string }
+  searchParams: Promise<RawEmailSearchParams>
 }) {
   // Gate BEFORE either database read. Render MIME as escaped text, never HTML.
   const access = await getAdminAccessState()
   if (access.status !== "admin") redirect("/admin")
-  const status = STATUSES.includes(searchParams.status as Status) ? searchParams.status as Status : undefined
-  const after = typeof searchParams.after === "string" && searchParams.after.length <= 128 ? searchParams.after : undefined
-  const id = typeof searchParams.id === "string" && searchParams.id.length <= 128 ? searchParams.id : undefined
+  // Next reserves promise.status for React; read URL values only after resolving it.
+  const params = await searchParams
+  const status = typeof params.status === "string" && STATUSES.includes(params.status as Status) ? params.status as Status : undefined
+  const after = typeof params.after === "string" && params.after.length <= 128 ? params.after : undefined
+  const id = typeof params.id === "string" && params.id.length <= 128 ? params.id : undefined
   const query = (values: { status?: string; after?: string; id?: string }) => {
     const params = new URLSearchParams()
     for (const [key, value] of Object.entries(values)) if (value) params.set(key, value)
