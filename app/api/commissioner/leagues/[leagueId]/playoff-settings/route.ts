@@ -95,6 +95,23 @@ export async function PUT(
     return NextResponse.json({ preview: true, adjustment, isPremium })
   }
 
+  /*
+   * 🛑 POSTSEASON STAGES ARE SAVED AND NEVER PLAYED (2026-11-15). Wild Card Weekend, the NBA play-in, bowl games
+   * and the rest were stored in `playoff_config_data.includedStages`, and no bracket, schedule or scorer reads it —
+   * a commissioner could pay for Wild Card Weekend and the playoffs would ignore it. Until real postseason games
+   * are scored, a change to the stages is refused rather than saved as if it worked. The start mode still saves.
+   */
+  if (Array.isArray(body.includedStages)) {
+    const current = (await getPlayoffConfig(leagueId)).includedStages ?? []
+    const same = includedStages.length === current.length && includedStages.every((id) => current.includes(id))
+    if (!same) {
+      return NextResponse.json(
+        { error: 'PLAYOFF_STAGES_COMING_SOON', message: 'Real-life postseason stages are coming soon. They do not change your playoffs yet, so they cannot be turned on.' },
+        { status: 409 },
+      )
+    }
+  }
+
   const result = await savePlayoffConfig(leagueId, { includedStages, startMode }, { isPremium })
 
   if (!result.ok) {

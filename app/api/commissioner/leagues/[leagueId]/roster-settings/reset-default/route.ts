@@ -83,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     ),
   })
 
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/reset-default' })
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/reset-default' })
   return NextResponse.json({
     ok: true, config, unifiedConfig, draftRounds,
     bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],

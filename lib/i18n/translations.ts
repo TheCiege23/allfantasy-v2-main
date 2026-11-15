@@ -1160,6 +1160,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsEd.po.stagesEnabled": "{{n}} stage(s) enabled",
     "lsEd.po.startsWeek": "· Playoffs start Week {{n}}",
     "lsEd.po.premium": "Premium",
+    "lsEd.po.comingSoon": "Real-life postseason stages are coming soon. They don’t change your playoffs yet, so they can’t be turned on.",
     "lsEd.po.weekOne": "+{{n}} week",
     "lsEd.po.weekMany": "+{{n}} weeks",
     "lsEd.po.timing": "Timing: {{timing}}",

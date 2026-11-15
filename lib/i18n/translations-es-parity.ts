@@ -3301,6 +3301,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsEd.po.stagesEnabled": "{{n}} fase(s) activada(s)",
   "lsEd.po.startsWeek": "· Los playoffs empiezan la semana {{n}}",
   "lsEd.po.premium": "Premium",
+  "lsEd.po.comingSoon": "Las fases de postemporada reales llegan pronto. Todavía no cambian tus playoffs, así que no se pueden activar.",
   "lsEd.po.weekOne": "+{{n}} semana",
   "lsEd.po.weekMany": "+{{n}} semanas",
   "lsEd.po.timing": "Momento: {{timing}}",

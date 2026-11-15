@@ -87,6 +87,7 @@ import { C2CAIPanel } from '@/app/c2c/components/settings/C2CAIPanel'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 import { SportConfigSettingsPanel } from './settings/SportConfigSettingsPanel'
 import { CommissionerScoringSettingsPanel } from './settings/CommissionerScoringSettingsPanel'
+import { SportScoringPanel } from '@/components/league-settings/tabs/ScoringTab'
 import type { LeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { SubscriptionGateProvider } from '@/hooks/useSubscriptionGate'
 import { useEntitlements } from '@/hooks/useEntitlements'
@@ -340,6 +341,9 @@ export function CommissionerSettingsModal({
   const canEdit = payload?.canEdit ?? false
   const hasSub = hasCommissioner || (payload?.hasAfCommissionerSub ?? false)
   const initialData = payload?.league as CommissionerSettingsFormData | undefined
+  // IDP defensive scoring and survivor-guillotine capped scoring still read the override rows.
+  const usesOverrideScoring =
+    idpLeague || (payload?.scoringConfig as { leagueVariant?: string | null } | null | undefined)?.leagueVariant === 'survivor_guillotine'
   /** The raw league row from /api/league/settings, for the fields the form data does not type. */
   const leagueRow: Record<string, unknown> = payload?.league ?? {}
 
@@ -450,13 +454,36 @@ export function CommissionerSettingsModal({
             </div>
           ) : activeTab === 'scoring' ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <CommissionerScoringSettingsPanel
-                key={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
-                leagueId={leagueId}
+              {/*
+                🛑 THIS TAB EDITED A STORE LIVE SCORING NEVER READS. CommissionerScoringSettingsPanel saves
+                `LeagueScoringOverride` rows; the live scorer resolves points from `League.settings` only
+                (lib/redraft/leagueScoringRules.ts). A commissioner changed scoring here, saw "saved", and every
+                score stayed the same. The tab now shows the same per-sport editor as League settings → Scoring,
+                which is what the scorer reads.
+              */}
+              <SportScoringPanel
                 sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
-                canEdit={canEdit}
-                scoringConfig={payload?.scoringConfig ?? null}
+                leagueId={leagueId}
+                isCommissioner={canEdit}
               />
+              {/* The two formats whose scoring still reads the override rows: IDP defensive stats
+                  (lib/idp/scoringEngine.ts) and survivor-guillotine capped scoring (lib/survivor-guillotine/capped-scoring.ts). */}
+              {usesOverrideScoring ? (
+                <div className="mt-6 border-t border-white/10 pt-4">
+                  <p className="mb-2 text-xs text-white/55">
+                    {idpLeague
+                      ? 'Defensive (IDP) stat values. These set how defensive players score.'
+                      : 'Capped-scoring stat values. These set how weekly capped scores are counted.'}
+                  </p>
+                  <CommissionerScoringSettingsPanel
+                    key={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
+                    leagueId={leagueId}
+                    sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
+                    canEdit={canEdit}
+                    scoringConfig={payload?.scoringConfig ?? null}
+                  />
+                </div>
+              ) : null}
               <GamesLimitsSettingsPanel
                 sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                 initialData={initialData}

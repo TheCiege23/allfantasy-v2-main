@@ -101,6 +101,6 @@ export async function PUT(
   })
 
   const updated = await getLeagueNbaScoringConfig(leagueId)
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'nba-scoring', detail: { presetKey } })
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'nba-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: updated })
 }

@@ -56,6 +56,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     if (!isPremium) return NextResponse.json({ error: 'premiumRequired' }, { status: 403 })
   }
   await saveLeagueMlbScoringConfig(leagueId, { presetKey, rules: customRules ?? buildFullMlbScoringConfig(presetKey), userId: session.user.id, premiumFeaturesUsed: presetKey === 'custom' })
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'mlb-scoring', detail: { presetKey } })
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'mlb-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: await getLeagueMlbScoringConfig(leagueId) })
 }

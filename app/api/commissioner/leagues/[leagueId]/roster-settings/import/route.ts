@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
       // An imported roster is a roster change like any other: draft rounds and roster limits follow.
       // Like reset-default, it asks for the imported shape, so no manual round count survives it.
       const draftRounds = await applyRosterTemplateChange(leagueId, { keepManualOverride: false, logTag: 'roster-settings import' })
-      await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/import', detail: { sourcePlatform } })
+      await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/import', detail: { sourcePlatform } })
       return NextResponse.json({
         ok: true, action: 'apply', unifiedConfig: config, draftRounds,
         bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],

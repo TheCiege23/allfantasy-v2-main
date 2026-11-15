@@ -241,6 +241,9 @@ describe.each(EDITORS)('$name obeys the scoring/roster lifecycle policy', (edito
         expect(res.status).toBe(200)
         expect(editor.wrote()).toBe(true)
         expect(midSeasonAudits()).toHaveLength(0)
+        // Recorded for the league even before the season — once, never twice (2026-11-15).
+        const logged = h.logAction.mock.calls.filter((c) => (c[0] as { actionType?: string }).actionType === 'settings_patch')
+        expect(logged).toHaveLength(1)
       })
     } else if (expected === 'refused') {
       it(`${state}: refused with 409 even when confirmed, nothing written`, async () => {
