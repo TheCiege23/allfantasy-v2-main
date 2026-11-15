@@ -15,6 +15,12 @@ const m = vi.hoisted(() => ({
     redraftPlayoffRound: { findFirst: vi.fn() },
   },
   scheduleConfig: vi.fn(),
+  loadSeason: vi.fn(async () => null),
+  applySync: vi.fn(async () => ({ rebuilt: true })),
+}))
+vi.mock('@/lib/schedule-runtime/seasonPlayoffStartSyncApply', () => ({
+  loadCurrentSeasonForPlayoffSync: m.loadSeason,
+  applySeasonPlayoffStartSync: m.applySync,
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
@@ -434,5 +440,44 @@ describe('soccer: the same cap at 34 regular weeks (playoffs from week 35 at the
       expect(data.playoffStartWeek, `${concept} ${teamCount} teams`).toBeLessThanOrEqual(35)
       expect(data.settings.playoff_structure?.playoff_start_week ?? data.playoffStartWeek).toBe(data.playoffStartWeek)
     }
+  })
+})
+
+describe('a playoff start change reaches the running season (2026-11-15)', () => {
+  const league = (over: Obj = {}) => ({
+    id: 'L', platform: 'manual', sport: 'NFL', leagueType: 'redraft', leagueSize: 12, timezone: 'UTC', teams: [], leagueSettings: null,
+    waiverSchedule: null, waiverProcessTime: '02:00', playoffTeams: 6, playoffStartWeek: 15, playoffWeeksPerRound: 1,
+    settings: {}, ...over,
+  })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    m.prisma.league.findFirst.mockImplementation(async () => league())
+    m.prisma.league.findUnique.mockResolvedValue({ settings: {}, dynastyConfig: null })
+    m.prisma.league.update.mockResolvedValue({})
+    m.prisma.redraftSeason.findFirst.mockResolvedValue(null)
+    m.prisma.redraftPlayoffRound.findFirst.mockResolvedValue(null)
+  })
+
+  it('before week 1: the season moves with it and its open weeks are rebuilt', async () => {
+    m.loadSeason.mockResolvedValue({ id: 's1', status: 'active', currentWeek: 0, totalWeeks: 17, playoffStartWeek: 15 } as never)
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', playoffStartWeek: 14 })
+    expect(res.status).toBe(200)
+    expect(m.applySync).toHaveBeenCalledWith(expect.objectContaining({ kind: 'apply', seasonId: 's1', playoffStartWeek: 14, totalWeeks: 16 }), 'u')
+  })
+
+  it('mid-season without the confirmation: asks, and writes nothing', async () => {
+    m.loadSeason.mockResolvedValue({ id: 's1', status: 'active', currentWeek: 6, totalWeeks: 17, playoffStartWeek: 15 } as never)
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', playoffStartWeek: 16 })
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('mid_season_confirmation_required')
+    expect(m.prisma.league.update).not.toHaveBeenCalled()
+    expect(m.applySync).not.toHaveBeenCalled()
+  })
+
+  it('into a week that has begun: refused', async () => {
+    m.loadSeason.mockResolvedValue({ id: 's1', status: 'active', currentWeek: 9, totalWeeks: 17, playoffStartWeek: 15 } as never)
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', playoffStartWeek: 8, confirmMidSeasonChange: true })
+    expect(res.status).toBe(409)
+    expect(m.applySync).not.toHaveBeenCalled()
   })
 })

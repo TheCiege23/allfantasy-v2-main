@@ -533,6 +533,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'schedule' ? (
             <ScheduleSettingsPanel
               settingsSnapshot={payload?.settingsSnapshot ?? {}}
+              playoffStartWeek={initialData.playoffStartWeek ?? null}
               canEdit={canEdit}
               debouncedSave={debouncedSave}
             />

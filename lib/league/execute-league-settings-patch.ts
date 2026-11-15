@@ -99,6 +99,9 @@ import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { playoffStartWeekCapRefusal, regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
+import { planSeasonPlayoffStartSync, type PlayoffStartSyncPlan } from '@/lib/schedule-runtime/seasonPlayoffStartSync'
+import { applySeasonPlayoffStartSync, loadCurrentSeasonForPlayoffSync } from '@/lib/schedule-runtime/seasonPlayoffStartSyncApply'
+import { MID_SEASON_CONFIRMATION_CODE, hasMidSeasonConfirmation } from '@/lib/league/midSeasonConfirmation'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
@@ -577,6 +580,22 @@ export async function executeLeagueSettingsPatch(
     }
     const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings, capSport)
     if (mergeRefusal) return jsonError(mergeRefusal, 400)
+  }
+
+  // The current season follows a new playoff start week (lib/schedule-runtime/seasonPlayoffStartSync.ts): refused for
+  // a week that has begun, and mid-season only with the confirmation, since future matchups are rebuilt.
+  let playoffStartSyncPlan: PlayoffStartSyncPlan = { kind: 'none' }
+  if (body.playoffStartWeek != null && Number(body.playoffStartWeek) !== league.playoffStartWeek) {
+    playoffStartSyncPlan = planSeasonPlayoffStartSync(
+      await loadCurrentSeasonForPlayoffSync(leagueId).catch(() => null),
+      Number(body.playoffStartWeek),
+      hasMidSeasonConfirmation(body),
+    )
+    if (playoffStartSyncPlan.kind === 'refuse_past') return jsonError(playoffStartSyncPlan.message, 409)
+    if (playoffStartSyncPlan.kind === 'needs_confirmation') {
+      const message = 'The season has started. Moving the playoffs rebuilds the matchups for the weeks that have not started yet.'
+      return NextResponse.json({ error: message, message, code: MID_SEASON_CONFIRMATION_CODE }, { status: 409 })
+    }
   }
 
   // The extra matchup an odd-team league can play instead of the bye (lib/redraft/oddTeamExtraMatchupRules.ts)
@@ -1358,6 +1377,15 @@ export async function executeLeagueSettingsPatch(
   ])
   // One taxi squad size: roster legality reads the column just saved, taxi moves read the dynasty config.
   if (leagueKeys.includes('taxiSlots')) await syncTaxiSlotsToDynastyConfig(leagueId, body.taxiSlots)
+
+  if (playoffStartSyncPlan.kind === 'apply') {
+    try {
+      const synced = await applySeasonPlayoffStartSync(playoffStartSyncPlan, userId)
+      updatedFieldNames.push(synced.rebuilt ? 'season_playoff_start_and_schedule' : 'season_playoff_start')
+    } catch (e) {
+      console.warn('[executeLeagueSettingsPatch] season playoff start sync', e)
+    }
+  }
 
   if (leagueKeys.some((k) => derivedSyncKeys.has(k))) {
     try {
