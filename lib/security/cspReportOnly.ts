@@ -87,6 +87,14 @@ export const CSP_REPORT_ONLY_DIRECTIVES: Record<string, string[]> = {
     'https://connect.facebook.net',
     'https://js.stripe.com', // /support's buy button
     'https://sdk.scdn.co', // Spotify Web Playback SDK
+    /*
+     * Apple MusicKit JS v3, loaded on demand by lib/apple-music/musicKitClient.ts when a
+     * signed-in user opens the Apple Music tab of the music player. Without it the enforced
+     * policy blocks the script (measured 2026-11-15: `script-src-elem` violation) and the tab
+     * can only ever say "Apple Music didn't load". Its API calls need nothing here: the
+     * enforced connect-src is `https:`, and media-src already allows blob:/https:.
+     */
+    'https://js-cdn.music.apple.com',
     'https://platform.twitter.com', // opt-in X posts
     ...AD_VENDOR_SCRIPTS,
   ],
