@@ -1,0 +1,15 @@
+/*
+ * The real app screens inside the demo frame (DemoCoreShell). Only what a visitor must not see or
+ * cannot use is changed here; everything else is the app's own styling.
+ */
+
+/* League Home's footer: "Imported from …", Customize page, Contact support, Back to home — member
+   controls with no meaning (or no listener) in the demo. */
+.af-core[data-demo-league] .af-lh-foot { display: none; }
+
+/* "More about this league" folds only the member sections the demo hides (DEMO_HIDDEN_HOME_SECTIONS),
+   so it would open onto nothing. */
+.af-core[data-demo-league] .af-lho-more { display: none; }
+
+/* The live demo league has no image; its rail tile shows the AF crest letters on the app's tile. */
+.af-core[data-demo-league] .af-rail-tile-art { overflow: hidden; }
