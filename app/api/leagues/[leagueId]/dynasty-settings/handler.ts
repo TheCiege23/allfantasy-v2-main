@@ -27,6 +27,7 @@ import {
 import { prisma } from '@/lib/prisma'
 import { settingsKeysLockedResponse } from '@/lib/league/settingsLockGuard'
 import { logAction } from '@/server/services/auditService'
+import { syncTaxiSlotsToLeague } from '@/lib/taxi/taxiSlotsSync'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import {
   DYNASTY_ROSTER_PRESETS,
@@ -322,6 +323,7 @@ export async function PUT(
   const taxiBefore = touchesTaxi ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
 
   const config = await upsertDynastyConfig(leagueId, dynastyPayload)
+  if (dynastyPayload.taxiSlots != null) await syncTaxiSlotsToLeague(leagueId, dynastyPayload.taxiSlots)
 
   const taxiAfter = taxiBefore ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
   const taxiChange = taxiBefore && taxiAfter ? [taxiRulesFromEffective(taxiBefore), taxiRulesFromEffective(taxiAfter)] : [{}, {}]

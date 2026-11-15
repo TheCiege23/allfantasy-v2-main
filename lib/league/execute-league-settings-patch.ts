@@ -67,6 +67,7 @@ import {
   type PriorWaiverProcessing,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { syncTaxiSlotsToDynastyConfig } from '@/lib/taxi/taxiSlotsSync'
 import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
 import {
   HUB_WAIVER_OPTION_KEYS,
@@ -1355,6 +1356,9 @@ export async function executeLeagueSettingsPatch(
     'waiverProcessTime',
     'waiverSchedule',
   ])
+  // One taxi squad size: roster legality reads the column just saved, taxi moves read the dynasty config.
+  if (leagueKeys.includes('taxiSlots')) await syncTaxiSlotsToDynastyConfig(leagueId, body.taxiSlots)
+
   if (leagueKeys.some((k) => derivedSyncKeys.has(k))) {
     try {
       // Only the columns this save wrote: the playoffs and waivers panels write the derived copies
