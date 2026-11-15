@@ -1090,7 +1090,10 @@ export async function middleware(request: NextRequest) {
     cleaned.set("x-nonce", nonce)
     cleaned.set(mode === "nonce" ? "content-security-policy" : "content-security-policy-report-only", buildNoncePolicy(nonce))
   }
-  const trusted = new NextRequest(request, { headers: cleaned })
+  // Requests crossing runtime realms may fail NextRequest's instanceof check;
+  // its URL-only fallback defaults to GET. Preserve the original method so
+  // method-bound machine exemptions and internal-hop verification stay correct.
+  const trusted = new NextRequest(request, { headers: cleaned, method: request.method })
 
   const response = await routeMiddleware(trusted)
   return applyBaselineSecurityHeaders(applyAttributionCapture(trusted, response), nonce, mode)

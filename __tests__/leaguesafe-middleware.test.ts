@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
+import { createRequire } from "node:module"
 
 const mocks = vi.hoisted(() => ({
   getToken: vi.fn(), fetchProxycheck: vi.fn(), fetchIpApi: vi.fn(),
@@ -37,6 +38,26 @@ function request(path = PATH, method = "POST", ip = HOSTING_IP, region = "OR", e
   })
 }
 
+// A real Request from Next's separate edge VM fails the Node Request identity check.
+// Add the NextRequest URL/cookie views used by the middleware without changing its method.
+const { EdgeRuntime } = createRequire(import.meta.url)("next/dist/compiled/edge-runtime") as {
+  EdgeRuntime: new () => { context: { Request: typeof Request } }
+}
+const edgeRuntime = new EdgeRuntime()
+function edgeRequest(...args: Parameters<typeof request>): NextRequest {
+  const original = request(...args)
+  const inbound = new edgeRuntime.context.Request(original.url, {
+    method: original.method,
+    headers: [...original.headers.entries()],
+    ...(original.method === "POST" ? { body: "{}" } : {}),
+  })
+  Object.defineProperties(inbound, {
+    nextUrl: { value: original.nextUrl },
+    cookies: { value: original.cookies },
+  })
+  return inbound as NextRequest
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   __resetAnonymizerCache()
@@ -60,6 +81,35 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 describe("LeagueSafe machine ingestion through the real middleware", () => {
+  it("preserves an edge-runtime POST through header sanitization", async () => {
+    const inbound = edgeRequest()
+    expect(inbound.method).toBe("POST")
+    expect(inbound instanceof Request).toBe(false)
+    const response = await middleware(inbound)
+    expect(response.status).toBe(200)
+    expect(response.headers.get("x-middleware-next")).toBe("1")
+    expect(mocks.fetchProxycheck).not.toHaveBeenCalled()
+  })
+  it.each(["GET", "HEAD", "PUT", "DELETE"])("does not exempt an edge-runtime %s", async (method) => {
+    const response = await middleware(edgeRequest(PATH, method))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ error: "VPN_BLOCKED" })
+  })
+  it("keeps adjacent edge-runtime POSTs gated", async () => {
+    const response = await middleware(edgeRequest(PATH + "/other"))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ error: "VPN_BLOCKED" })
+  })
+  it("enforces the origin lock before allowing an edge-runtime POST", async () => {
+    vi.stubEnv("CF_ORIGIN_AUTH_SECRET", "synthetic-origin-lock-secret")
+    vi.stubEnv("CF_ORIGIN_LOCK_MODE", "enforce")
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    const response = await middleware(edgeRequest())
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe("Forbidden")
+    expect(mocks.fetchProxycheck).not.toHaveBeenCalled()
+    expect(mocks.createMany).not.toHaveBeenCalled()
+  })
   it("allows the exact inbound POST from a data center to reach its HMAC handler", async () => {
     const response = await middleware(request())
     expect(response.status).toBe(200)
@@ -93,12 +143,15 @@ describe("LeagueSafe machine ingestion through the real middleware", () => {
     expect(await response.text()).toBe("Forbidden")
     expect(mocks.createMany).not.toHaveBeenCalled()
   })
-  it.each(["unsigned", "forged"])("still refuses %s ingestion at the HMAC handler without database writes", async (kind) => {
+  it.each([
+    { kind: "unsigned", runtime: "node" }, { kind: "forged", runtime: "node" },
+    { kind: "unsigned", runtime: "edge" }, { kind: "forged", runtime: "edge" },
+  ])("still refuses $kind ingestion from $runtime without database writes", async ({ kind, runtime }) => {
     const headers: Record<string, string> = kind === "forged" ? {
       "x-ls-timestamp": String(Math.floor(Date.now() / 1000)),
       "x-ls-signature": "v1=" + "0".repeat(64),
     } : {}
-    const inbound = request(PATH, "POST", HOSTING_IP, "OR", headers)
+    const inbound = (runtime === "edge" ? edgeRequest : request)(PATH, "POST", HOSTING_IP, "OR", headers)
     expect((await middleware(inbound)).headers.get("x-middleware-next")).toBe("1")
     vi.spyOn(console, "warn").mockImplementation(() => {})
     // Next executes middleware and the Node handler in separate request contexts.
