@@ -27,7 +27,11 @@ import {
 import {
   EspnImportConnectionError,
   EspnImportLeagueNotFoundError,
+  fetchEspnLeagueForImport,
+  parseEspnLeagueInput,
 } from "@/lib/league-import/espn/EspnLeagueFetchService";
+import { isEspnMlbSource, parseEspnMlbSource } from "@/lib/league-import/espn/EspnMlbSource";
+import { espnTeamCodeFor } from "@/lib/league-import/espn/espnTeamCode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +43,8 @@ export const dynamic = "force-dynamic";
  *                 private, league name, team count, and whether pasted/saved cookies open it.
  *   mode "import" (default, every existing caller) — save cookies if given, verify the importer
  *                 has a team, normalize and persist.
+ *   mode "team_code" — this user's ESPN team code for the league (`espnTeamCode.ts`): the phone
+ *                 path for proving which team is yours. Computed, never stored; no ESPN request.
  *
  * 🛑 THE COOKIES ARE AN ESPN LOGIN. They arrive in the BODY (never a query string), are validated
  * before anything is stored, are encrypted at rest by `/lib/league-auth-crypto`, and are never
@@ -46,7 +52,9 @@ export const dynamic = "force-dynamic";
  * (`redactEspnSecrets` runs over anything logged from here).
  */
 const bodySchema = z.object({
-  mode: z.enum(["test", "import"]).optional(),
+  mode: z.enum(["test", "import", "team_code"]).optional(),
+  /** mode "team_code" only: also read the league once and say whether the code is on a team yet. */
+  check: z.boolean().optional(),
   /** A league id, a full ESPN league URL, or `2025:123`. */
   leagueId: z.string().min(1).max(600),
   /** Optional: omitted means "work it out" (see `espnSeasonCandidates`). */
@@ -111,6 +119,82 @@ export async function POST(req: Request) {
 
     const { leagueId, season, espnS2, swid, attestation } = parsed.data;
     const mode = parsed.data.mode ?? "import";
+
+    if (mode === "team_code") {
+      /*
+       * No ESPN request and nothing written: the code is an HMAC of (this user, this league id), so
+       * it is the same every time they ask and useless to anyone else. Verifying it is just the
+       * normal preview/import again — the ESPN fetch looks for it whenever the cookie cannot answer.
+       */
+      let espnLeagueId: string;
+      try {
+        espnLeagueId = isEspnMlbSource(leagueId)
+          ? parseEspnMlbSource(leagueId).leagueId
+          : parseEspnLeagueInput(toSourceId(leagueId, season)).leagueId;
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Enter an ESPN league ID or paste your league URL.", code: "INVALID_INPUT" },
+          { status: 400 },
+        );
+      }
+      const code = espnTeamCodeFor(userId, espnLeagueId);
+      if (!code) {
+        return NextResponse.json({ error: "Team codes are not available right now.", code: "UNAVAILABLE" }, { status: 503 });
+      }
+      if (!parsed.data.check) {
+        return NextResponse.json({ ok: true, code, leagueId: espnLeagueId });
+      }
+
+      /*
+       * "I set it — check": one ESPN read, so the screen can say "not there yet" without throwing
+       * away the person's place. The import itself re-proves it through the gate; this answer is a
+       * convenience, never authorization.
+       */
+      const limit = consumeRateLimit({
+        scope: "espn",
+        action: "team_code_check",
+        sleeperUsername: userId,
+        maxRequests: 20,
+        windowMs: 10 * 60_000,
+      });
+      if (!limit.success) {
+        return NextResponse.json(
+          buildRateLimit429({ message: "Too many checks. Wait a few minutes, then try again.", rl: limit }),
+          { status: 429 },
+        );
+      }
+      try {
+        const payload = await fetchEspnLeagueForImport(userId, toSourceId(leagueId, season), {
+          includePreviousSeasons: false,
+        });
+        const team = payload.viewerTeamId
+          ? payload.teams.find((t) => t.teamId === payload.viewerTeamId) ?? null
+          : null;
+        return NextResponse.json({
+          ok: true,
+          code,
+          leagueId: espnLeagueId,
+          found: Boolean(payload.viewerTeamId),
+          proof: payload.viewerTeamProof ?? null,
+          teamName: team?.teamName ?? null,
+        });
+      } catch (error) {
+        if (error instanceof EspnImportConnectionError) {
+          return NextResponse.json({
+            ok: true,
+            code,
+            leagueId: espnLeagueId,
+            found: false,
+            reason: "private",
+            message:
+              "This league is private, so ESPN won't show it to us without your ESPN cookies, and a team code can't help. Connect ESPN once from a computer instead.",
+          });
+        }
+        console.error("[Import ESPN] team code check", redactEspnSecrets(error instanceof Error ? `${error.name}: ${error.message}` : String(error), null));
+        const safe = userSafeMessage(error);
+        return NextResponse.json({ error: safe.message }, { status: safe.status });
+      }
+    }
 
     const anyCookie = Boolean(espnS2?.trim() || swid?.trim());
     if (anyCookie) {

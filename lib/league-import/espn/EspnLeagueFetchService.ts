@@ -19,6 +19,7 @@ import {
 } from './espnLookups'
 import { recordEspnCookiesAccepted, recordEspnCookiesRejected } from './espnConnectionHealth'
 import { fillEspnPlayerDirectory, type EspnPlayerSummary } from './espnPlayerDirectoryFill'
+import { resolveEspnViewerTeamWithCode } from './espnTeamCode'
 import type {
   EspnImportDraftPick,
   EspnImportLeague,
@@ -1434,7 +1435,18 @@ export async function fetchEspnLeagueForImport(
       })
     : []
 
-  const viewerTeamId = resolveEspnViewerTeamId(raw, auth.swid)
+  /*
+   * The SWID cookie first; the phone-friendly team code only when the cookie cannot answer
+   * (`espnTeamCode.ts`). Both feed the SAME field, so the commissioner gate and the normalized
+   * import agree on which team is the importer's however it was proven.
+   */
+  const viewer = resolveEspnViewerTeamWithCode({
+    raw,
+    swidTeamId: resolveEspnViewerTeamId(raw, auth.swid),
+    userId,
+    espnLeagueId: leagueId,
+  })
+  const viewerTeamId = viewer.teamId
   const commissionerTeamIds = resolveEspnCommissionerTeamIds(raw)
 
   return {
@@ -1449,6 +1461,7 @@ export async function fetchEspnLeagueForImport(
     draftFetched: draftRaw != null,
     previousSeasons,
     viewerTeamId,
+    viewerTeamProof: viewer.proof,
     viewerEspnConnected: buildEspnCookieHeader(auth) !== null,
     commissionerTeamIds,
   }
