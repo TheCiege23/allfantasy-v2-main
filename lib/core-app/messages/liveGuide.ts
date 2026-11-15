@@ -13,6 +13,21 @@ export const liveGuideMessages = defineMessages({
     headBetween: 'Nothing of yours is playing right now',
     headNoRoster: 'Live scores for your leagues',
     headRosterFailed: 'Live scores — we couldn’t read your rosters',
+    /** The headline with a league held and its matchup scored: the score, then who is still on the field. */
+    headScore: (lead: 'lead' | 'trail' | 'tied', final: boolean, you: string, them: string, playing: number) =>
+      `${final ? (lead === 'lead' ? 'You won' : lead === 'trail' ? 'You lost' : 'Tied') : lead === 'lead' ? 'You lead' : lead === 'trail' ? 'You trail' : 'Tied'} ${you}–${them}${
+        !final && playing > 0 ? ` · ${playing} ${playing === 1 ? 'starter' : 'starters'} playing now` : ''
+      }`,
+    stripVs: (opponent: string) => `vs ${opponent}`,
+    stripFinal: 'Final',
+    stripWin: (pct: number) => `${pct}% to win`,
+    leftBoth: (you: number, them: number) => `${you} left to play vs their ${them}`,
+    leftYou: (you: number) => `${you} left to play`,
+    leftThem: (them: number) => `they have ${them} left to play`,
+    leftNone: 'everyone has played',
+    openMatchup: 'Open matchup',
+    stripStale: 'could not refresh, showing the last reading',
+    boxScore: 'Box score',
     intro:
       'Open this while games are on: see who’s scoring for you and which matchups could still flip. It only reads your leagues — it never changes them.',
     introNoRoster: 'Claim your team in a league and this page follows your starters game by game.',
@@ -52,6 +67,20 @@ export const liveGuideMessages = defineMessages({
     headBetween: 'Ninguno de tus jugadores está jugando ahora',
     headNoRoster: 'Marcadores en vivo de tus ligas',
     headRosterFailed: 'Marcadores en vivo — no pudimos leer tus plantillas',
+    headScore: (lead: 'lead' | 'trail' | 'tied', final: boolean, you: string, them: string, playing: number) =>
+      `${final ? (lead === 'lead' ? 'Ganaste' : lead === 'trail' ? 'Perdiste' : 'Empate') : lead === 'lead' ? 'Vas ganando' : lead === 'trail' ? 'Vas perdiendo' : 'Empate'} ${you}–${them}${
+        !final && playing > 0 ? ` · ${playing} ${playing === 1 ? 'titular jugando' : 'titulares jugando'} ahora` : ''
+      }`,
+    stripVs: (opponent: string) => `contra ${opponent}`,
+    stripFinal: 'Final',
+    stripWin: (pct: number) => `${pct}% de ganar`,
+    leftBoth: (you: number, them: number) => `te quedan ${you} por jugar, a ellos ${them}`,
+    leftYou: (you: number) => `te quedan ${you} por jugar`,
+    leftThem: (them: number) => `a ellos les quedan ${them} por jugar`,
+    leftNone: 'ya jugaron todos',
+    openMatchup: 'Abrir enfrentamiento',
+    stripStale: 'no se pudo actualizar; se muestra la última lectura',
+    boxScore: 'Estadísticas del partido',
     intro:
       'Ábrelo mientras hay partidos: mira quién suma para ti y qué enfrentamientos aún pueden cambiar. Solo lee tus ligas; nunca las modifica.',
     introNoRoster: 'Reclama tu equipo en una liga y esta página seguirá a tus titulares partido a partido.',

@@ -4,7 +4,7 @@ import { TopicTip } from '@/components/core-app/TopicTip'
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
+import { LiveMatchupStrip, stripLead, useLiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
 import { LiveLeaguesGlance } from '@/components/core-app/screens/LiveLeaguesGlance'
 import { LiveNowStrip } from '@/components/core-app/screens/LiveNowStrip'
 import { liveGameAnchor, liveSlateStrip } from '@/lib/live/liveSlateStrip'
@@ -61,6 +61,7 @@ import '@/components/core-app/af-core-redraft-matchup.css'
 import '@/components/core-app/af-core-redraft-live.css'
 import { liveGameBug } from '@/lib/core-app/redraftCoreScoreBug'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { messagesFor } from '@/lib/i18n/messages'
 import {
   countSuffix,
   finalCount,
@@ -517,8 +518,29 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
   const activeSportLabel =
     data.counts.find((c) => c.sport === data.sport)?.label ?? data.sport
+  /* Inside a league, its sport alone; across leagues (or on "All games") every sport, games first. */
+  const sportTabs = useMemo(() => {
+    const ordered = orderSportTabs(data.counts)
+    if (!leagueFilterId) return ordered
+    const own = ordered.filter((c) => c.sport === data.sport)
+    return own.length > 0 ? own : ordered
+  }, [data.counts, data.sport, leagueFilterId])
 
   const heldWeek = selectedLeagueId ? (leagueWeek?.byLeague?.[selectedLeagueId] ?? null) : null
+  /*
+   * ⚠ ONE READ OF YOUR MATCHUP FOR THE HEADLINE AND THE STRIP (2026-11-15). The headline now says the
+   * score, so it polls with the strip rather than beside it — two polls could put 29.0 in the h1 and
+   * 31.4 a line below it.
+   */
+  const heldStrip = useLiveMatchupStrip({
+    initial: matchupStrip,
+    leagueId: selectedLeagueId ?? '',
+    pollMs: pollIntervalMs,
+    standing: heldWeek?.unpaired ? heldWeek.standing : null,
+    eliminated: heldWeek?.eliminated === true,
+    enabled: selectedLeagueId != null,
+  })
+  const scoredStrip = selectedLeagueId && heldStrip.strip?.kind === 'scored' ? heldStrip.strip : null
   /* Only this tab's sport: an NBA league has nothing to say about the NFL slate under it. */
   const glance = useMemo(
     () => (selectedLeagueId ? null : buildLeaguesAtAGlance(leagueWeek?.byLeague, leagueWeek?.leagues ?? [], data.sport)),
@@ -540,6 +562,22 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     nowMs: Number.isFinite(fetchedMs) ? fetchedMs : 0,
   })
   const chips = liveChips(moment, glance)
+  /*
+   * The headline answer (2026-11-15). With a league held and its matchup scored, the page leads with the
+   * score and how many of your starters are on the field: "You trail 29.0–41.7 · 3 starters playing now".
+   * A roster failure or an empty roster keeps its own sentence — the score is not the news then.
+   */
+  const scoreInHeadline = scoredStrip != null && (moment.kind === 'live' || moment.kind === 'between')
+  const headline =
+    scoreInHeadline && scoredStrip
+      ? guide.headScore(
+          stripLead(scoredStrip),
+          scoredStrip.isFinal,
+          scoredStrip.you.points.toFixed(1),
+          scoredStrip.opponent.points.toFixed(1),
+          moment.kind === 'live' ? moment.playing : 0,
+        )
+      : liveGuideTitle(moment, guide)
 
   /*
    * Newest play per game, for the in-card panel.
@@ -606,9 +644,15 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           eyebrowClassName="af-hg-eyebrow af-lg-eyebrow"
           titleClassName="af-live-title af-hg-title"
           subClassName="af-live-lede af-hg-intro"
-          eyebrow={<LiveGuideEyebrow moment={moment} sportLabel={activeSportLabel} leagueScoped={leagueFilterId != null} />}
-          title={<span id="af-live-h1">{liveGuideTitle(moment, guide)}</span>}
-          sub={moment.kind === 'no-roster' ? guide.introNoRoster : guide.intro}
+          eyebrow={
+            <>
+              <LiveGuideEyebrow moment={moment} sportLabel={activeSportLabel} leagueScoped={leagueFilterId != null} />{' '}
+              {/* What the page is for sits behind the "?" — it was a paragraph under every headline. */}
+              <TopicTip topic="livePage" />
+            </>
+          }
+          title={<span id="af-live-h1" data-testid="live-headline">{headline}</span>}
+          sub={moment.kind === 'no-roster' ? guide.introNoRoster : null}
         />
         <LiveGuideChips chips={chips} />
       </section>
@@ -629,6 +673,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           pollMs={pollIntervalMs}
           standing={heldWeek?.unpaired ? heldWeek.standing : null}
           eliminated={heldWeek?.eliminated === true}
+          state={heldStrip}
+          scoreInHeadline={scoreInHeadline}
         />
       ) : (
         <LiveLeaguesGlance glance={glance} sportLabel={activeSportLabel} guided />
@@ -722,8 +768,13 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           into. They genuinely do swap the slate below, so the slate is the
           panel and the wiring says so.
         */}
+        {/*
+          ⚠ ONE SPORT INSIDE A LEAGUE (2026-11-15). Scoped to one league the slate is that league's sport, and
+          a row of every other sport's count (NBA 9, NHL 5…) answered a question the page was not asking.
+          "All games" widens the scope and brings every sport back.
+        */}
         <div className="af-live-sports" role="tablist" aria-label={lsc('Sport', language)}>
-          {orderSportTabs(data.counts).map((c) => (
+          {sportTabs.map((c) => (
             <button
               key={c.sport}
               type="button"
@@ -744,7 +795,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                 if (!keys.includes(event.key)) return
                 event.preventDefault()
                 // Arrow keys move in the order the tabs are DRAWN (sports with games first).
-                const tabs = orderSportTabs(data.counts)
+                const tabs = sportTabs
                 const index = tabs.findIndex(item => item.sport === c.sport)
                 const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
                 pickSport(tabs[next].sport)
@@ -865,6 +916,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                     detailHref={gameDetailHref(game, '/core/live', selectedLeagueId)}
                     scoreChanged={litGames.has(game.gameId)}
                     starterLimit={STARTERS_SHOWN}
+                    foldDetails
                   />
                 ))}
               <FinalGames
@@ -875,7 +927,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               />
             </>
           )}
-          {visibleGames.length > 0 ? (
+          {/* Across leagues only: with one league held there is only one league’s scoring to compare. */}
+          {visibleGames.length > 0 && !leagueFilterId ? (
             <p className="af-lg-teach">
               <b>{guide.why}</b> {guide.slateTeach}
             </p>
@@ -1156,6 +1209,7 @@ export function GameCard({
   detailHref = null,
   scoreChanged = false,
   starterLimit,
+  foldDetails = false,
 }: {
   game: LiveGameCard
   /** "My games" adds your starters under the game; "All games" is the game alone. */
@@ -1186,6 +1240,13 @@ export function GameCard({
   scoreChanged?: boolean
   /** Show this many of your starters before "Show all". Omitted shows every one (the public page). */
   starterLimit?: number
+  /**
+   * Live scores' slate (2026-11-15): your starters right under the score, and the box score — periods,
+   * field, last play, leaders, win estimate, venue — folded under "Box score". A game that has not kicked
+   * off shows only its time and your starters' projections. Off for the public page and the clicked-game
+   * view, which are the game itself and keep every block in view.
+   */
+  foldDetails?: boolean
 }) {
   const lowDataOn = useLowData().lowData
   const { language } = useOptionalLanguage()
@@ -1203,6 +1264,18 @@ export function GameCard({
   const isBaseball =
     game.sport === 'MLB' || situation?.baseball != null || game.home.hits != null || game.away.hits != null
   const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
+  const pregame = !game.isLive && !game.completed
+  const startersList =
+    starters.length > 0 ? (
+      <MyStarters
+        gameId={game.gameId}
+        sport={game.sport}
+        groups={starters}
+        selectedLeagueId={selectedLeagueId}
+        limit={starterLimit}
+        upcoming={pregame}
+      />
+    ) : null
   /* The status bar's tone, lead word and period text (lib/core-app/redraftCoreScoreBug.ts). */
   const bug = liveGameBug(game)
   /* A marquee college rivalry wears its own AllFantasy crest (never a school's logo). */
@@ -1275,6 +1348,11 @@ export function GameCard({
         />
       </div>
 
+      {foldDetails ? startersList : null}
+
+      {/* Before kickoff a folded card has no box score to offer: the season-to-date leaders were not from this game. */}
+      {foldDetails && pregame ? null : (
+      <BoxScoreFold fold={foldDetails} label={messagesFor(liveGuideMessages, language).boxScore}>
       <Linescore game={game} isFootball={isFootball} isBaseball={isBaseball} />
 
       {/*
@@ -1383,18 +1461,25 @@ export function GameCard({
           {game.venue.location ? <span> · {game.venue.location}</span> : null}
         </p>
       ) : null}
+      </BoxScoreFold>
+      )}
 
-      {starters.length > 0 ? (
-        <MyStarters
-          gameId={game.gameId}
-          sport={game.sport}
-          groups={starters}
-          selectedLeagueId={selectedLeagueId}
-          limit={starterLimit}
-          upcoming={!game.isLive && !game.completed}
-        />
-      ) : null}
+      {foldDetails ? null : startersList}
     </article>
+  )
+}
+
+/** The box score behind one "Box score" line when `fold`; otherwise the blocks render in place, as before. */
+function BoxScoreFold({ fold, label, children }: { fold: boolean; label: string; children: ReactNode }) {
+  if (!fold) return <>{children}</>
+  return (
+    <details className="af-live-game-more" data-testid="live-box-score">
+      <summary className="af-live-game-more-toggle">
+        <span className="af-label">{label}</span>
+        <span className="af-live-mine-chev" aria-hidden />
+      </summary>
+      <div className="af-live-game-more-body">{children}</div>
+    </details>
   )
 }
 
@@ -1991,6 +2076,8 @@ export function MyStarters({
   const shownGroups = capped ? groups.slice(0, limit) : groups
   const listId = `af-live-mine-list-${gameId}`
   const leagueCount = new Set(groups.flatMap((g) => g.leagues.map((l) => l.leagueId))).size
+  /* With a league held and every starter here in it alone, "· 1 league" is always 1 — leave it out. */
+  const leaguesShown = selectedLeagueId != null && leagueCount === 1 ? 0 : leagueCount
   return (
     <div className="af-live-tieins" data-open={open}>
       <button
@@ -2001,7 +2088,7 @@ export function MyStarters({
         onClick={() => setOpen((o) => !o)}
       >
         <span className="af-label af-live-tieins-head">
-          {yourStartersHead(groups.length, leagueCount, language)}
+          {yourStartersHead(groups.length, leaguesShown, language)}
         </span>
         <span className="af-live-mine-chev" aria-hidden />
       </button>
@@ -2068,6 +2155,16 @@ function StarterRow({
    * own rules, labelled "proj", or a dash when it could not be priced.
    */
   const points = upcoming ? projectionCopy(formatStarterProjection(group, selectedLeagueId), language) : formatStarterPoints(group, selectedLeagueId)
+  /*
+   * ⚠ ONLY IN THE HELD LEAGUE: NO "1 league" CHIP AND NOTHING TO OPEN (2026-11-15). Inside a league every
+   * row read "1 league", and opening it listed that same league with the same number. The points stay.
+   */
+  const onlyHeld = selected != null && n === 1
+  const pointsTitle = upcoming
+    ? projectionTitle(selected ? selected.leagueName : null, language)
+    : selected
+      ? pointsIn(selected.leagueName, language)
+      : undefined
 
   return (
     <li className="af-live-mine-row" data-open={open} data-selected={selected != null}>
@@ -2090,6 +2187,13 @@ function StarterRow({
           />
           {group.position ? <span className="af-live-mine-pos"> {group.position}</span> : null}
         </span>
+        {onlyHeld ? (
+          <span className="af-live-mine-toggle" data-static="true">
+            <span className="af-live-mine-pts af-num" data-kind={upcoming ? 'projection' : undefined} title={pointsTitle}>
+              {points}
+            </span>
+          </span>
+        ) : (
         <button
           type="button"
           className="af-live-mine-toggle"
@@ -2103,21 +2207,16 @@ function StarterRow({
           <span
             className="af-live-mine-pts af-num"
             data-kind={upcoming ? 'projection' : undefined}
-            title={
-              upcoming
-                ? projectionTitle(selected ? selected.leagueName : null, language)
-                : selected
-                  ? pointsIn(selected.leagueName, language)
-                  : undefined
-            }
+            title={pointsTitle}
           >
             {points}
           </span>
           <span className="af-live-mine-chev" aria-hidden />
         </button>
+        )}
       </div>
       {statLine}
-      {open ? (
+      {open && !onlyHeld ? (
         <ul id={panelId} className="af-live-mine-leagues">
           {group.leagues.map((l) => (
             <li key={l.leagueId} data-selected={l.leagueId === selectedLeagueId}>

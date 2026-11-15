@@ -45,22 +45,31 @@ describe('liveMoment', () => {
 })
 
 describe('liveChips', () => {
-  it('between games: playing, behind, close, then the next kickoff — four numbers, each linking to its section', () => {
+  /*
+   * 2026-11-15: no "Playing now" chip — the headline is that number, so a tile repeating it said it twice.
+   */
+  it('between games: behind, close, then the next kickoff — each linking to its section', () => {
     const chips = liveChips({ kind: 'between', nextAt: '2026-11-15T18:00:00.000Z', done: 13 }, glance(2, 6))
-    expect(chips.map((c) => c.key)).toEqual(['playing', 'behind', 'close', 'next'])
+    expect(chips.map((c) => c.key)).toEqual(['behind', 'close', 'next'])
     expect(chips.find((c) => c.key === 'behind')).toMatchObject({ value: 2, href: '#af-live-glance', tone: 'bad' })
     expect(chips.find((c) => c.key === 'next')).toMatchObject({ href: '#af-live-next' })
   })
 
-  it('during games the fourth chip is "done today", and a zero links nowhere', () => {
+  it('during games the last chip is "done today", and a zero links nowhere', () => {
     const chips = liveChips({ kind: 'live', playing: 4, done: 3 }, glance(0, 0))
-    expect(chips.map((c) => c.key)).toEqual(['playing', 'behind', 'close', 'done'])
-    expect(chips.find((c) => c.key === 'playing')).toMatchObject({ value: 4, tone: 'live' })
+    expect(chips.map((c) => c.key)).toEqual(['behind', 'close', 'done'])
+    expect(chips.find((c) => c.key === 'playing')).toBeUndefined()
     expect(chips.find((c) => c.key === 'behind')).toMatchObject({ value: 0, href: null, tone: 'plain' })
   })
 
+  it('"done today" only once something is done — "0 Done today" says nothing', () => {
+    expect(liveChips({ kind: 'live', playing: 3, done: 0 }, null)).toEqual([])
+    expect(liveChips({ kind: 'live', playing: 3, done: 2 }, null).map((c) => c.key)).toEqual(['done'])
+  })
+
   it('with a league held there is no cross-league glance, so no matchup counts', () => {
-    expect(liveChips({ kind: 'between', nextAt: null, done: 0 }, null).map((c) => c.key)).toEqual(['playing', 'done'])
+    expect(liveChips({ kind: 'between', nextAt: null, done: 0 }, null).map((c) => c.key)).toEqual([])
+    expect(liveChips({ kind: 'between', nextAt: '2026-11-15T18:00:00.000Z', done: 0 }, null).map((c) => c.key)).toEqual(['next'])
     expect(liveChips({ kind: 'roster-failed' }, null)).toEqual([])
   })
 })

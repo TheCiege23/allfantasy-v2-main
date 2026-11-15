@@ -206,7 +206,8 @@ describe('your live impact — starters in action, not points summed across leag
      */
     const head = container.querySelector('.af-lg-head') as HTMLElement
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2 of your starters are playing right now')
-    expect(head.querySelector('[data-chip="playing"]')!.textContent).toBe('2Playing now')
+    // 2026-11-15: the h1 says the 2; no tile repeats it. "Done today" stays because it is not said elsewhere.
+    expect(head.querySelector('[data-chip="playing"]')).toBeNull()
     expect(head.querySelector('[data-chip="done"]')!.textContent).toBe('1Done today')
     expect(container.querySelector('.af-live-impact')).toBeNull()
     // The old headline summed 20 + 30 + 8.4 across leagues; that number must not lead the page.

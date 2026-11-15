@@ -1,8 +1,10 @@
 'use client'
 
-import AfCoreShell from '@/components/core-app/AfCoreShell'
+import AfCoreShell, { type RailLeague } from '@/components/core-app/AfCoreShell'
 import { LiveScores } from '@/components/core-app/screens/LiveScores'
 import type { RailMatchup } from '@/lib/core-app/railMatchups'
+import type { MatchupStrip } from '@/lib/live/matchupStrip'
+import type { ScoreboardGame, ScoreboardTeam } from '@/lib/core-app/leagueScoreboard'
 import type { LiveGameCard, LivePageData, LivePlay, LiveRosterTieIn } from '@/lib/live/liveScoresPage'
 
 /**
@@ -148,7 +150,88 @@ const LIVE: LivePageData = {
   fetchedAt: '2026-11-15T19:30:00.000Z',
 }
 
-export default function LiveGuideHarnessClient({ mode }: { mode: 'live' | 'between' }) {
+/*
+ * ?league=1 (2026-11-15): the page as a manager in one league sees it — your matchup scored, the rest of
+ * the league, one live game with its full box score and one that has not kicked off. SAMPLE data.
+ */
+const HELD_STRIP: MatchupStrip = {
+  kind: 'scored',
+  week: 10,
+  isFinal: false,
+  you: { name: 'Sample Jets', points: 29 },
+  opponent: { name: 'Sample Dolphins', points: 41.7 },
+  margin: -12.7,
+  pWin: 0.08,
+  remaining: { you: { upcoming: 13, live: 3 }, opponent: { upcoming: 11, live: 3 } },
+}
+
+const team = (rosterId: string, teamName: string, points: number | null): ScoreboardTeam =>
+  ({ rosterId, teamName, managerName: null, avatarUrl: null, points, projected: 95, projectedFrom: 9, starterCount: 9 }) as ScoreboardTeam
+const lgGame = (i: number, a: number | null, b: number | null): ScoreboardGame =>
+  ({ matchupId: i, teams: [team(`a${i}`, `Sample Team ${i * 2 - 1}`, a), team(`b${i}`, `Sample Team ${i * 2}`, b)], winProbability: null, unplayed: a == null }) as unknown as ScoreboardGame
+
+const LEAGUE_GAMES = {
+  week: 10,
+  allUnplayed: false,
+  weekFinal: false,
+  games: [lgGame(1, 20.3, 16), lgGame(2, 29.8, 0), lgGame(3, 43.5, 107.3), lgGame(4, 30.5, 12), lgGame(5, 35.2, 4.7), lgGame(6, 0, 17.7)],
+}
+
+const BOX_GAME = game('g2', {
+  clockLabel: 'Q2 · 0:00',
+  statusDetail: 'Q2 · 0:00',
+  away: side('SMA', 'Sample Away', 3, [3, 0]),
+  home: side('SMH', 'Sample Home', 21, [7, 14]),
+  winProbability: { home: 98, away: 2, isEstimate: true },
+  leaders: [
+    { label: 'PASS', name: 'Sample Passer', headshot: null, statLine: '12/20, 211 YDS, 2 TD', position: 'QB', teamAbbrev: 'SMH' },
+    { label: 'RUSH', name: 'Sample Runner', headshot: null, statLine: '13 CAR, 93 YDS, 1 TD', position: 'RB', teamAbbrev: 'SMH' },
+  ] as LiveGameCard['leaders'],
+  venue: { name: 'Sample Stadium', location: 'Sample City' } as LiveGameCard['venue'],
+  broadcast: 'FOX',
+  tieIns: [tie('Sample Safety', 4), tie('Sample Tackle', 8.5), tie('Sample Linebacker', 16.5)],
+  leaguesAffected: 1,
+})
+const PRE_GAME = game('g4', {
+  isLive: false,
+  status: 'STATUS_SCHEDULED',
+  statusDetail: '11/15 - 4:25 PM EST',
+  clockLabel: null,
+  away: { ...side('SMB', 'Sample Bills', 0), score: null },
+  home: { ...side('SMN', 'Sample Nets', 0), score: null },
+  leaders: [{ label: 'PASS', name: 'Sample Veteran', headshot: null, statLine: '2078 YDS, 12 TD', position: 'QB', teamAbbrev: 'SMN' }] as LiveGameCard['leaders'],
+  leadersArePregame: true,
+  venue: { name: 'Sample Dome', location: 'Elsewhere' } as LiveGameCard['venue'],
+  broadcast: 'CBS',
+  tieIns: [tie('Sample Rookie', 0), tie('Sample Wideout', 0)],
+  leaguesAffected: 1,
+})
+const IN_LEAGUE: LivePageData = {
+  ...BETWEEN,
+  counts: counts(2),
+  games: [BOX_GAME, PRE_GAME],
+  impact: { ...BETWEEN.impact, livePlayers: 3, liveGames: 1, finishedPlayers: 0, upcomingPlayers: 2, plays: [] },
+  fetchedAt: '2026-11-15T19:30:00.000Z',
+}
+const HELD_LEAGUE: RailLeague = { id: 'L1', name: 'Sample Dynasty A', platform: 'sleeper', sport: 'NFL', mark: 'S' }
+
+export default function LiveGuideHarnessClient({ mode, league = false }: { mode: 'live' | 'between'; league?: boolean }) {
+  if (league) {
+    return (
+      <AfCoreShell
+        active="live"
+        leagues={[HELD_LEAGUE]}
+        selectedLeagueId="L1"
+        syncAge={{ label: 'just now', stale: false }}
+        syncEligibleCount={0}
+        comms={{ leagues: [], chimmyTokenCost: null, dockable: false, supportEmail: null }}
+      >
+        <div data-testid="live-guide-harness">
+          <LiveScores data={IN_LEAGUE} selectedLeagueId="L1" matchupStrip={HELD_STRIP} leagueGames={LEAGUE_GAMES} />
+        </div>
+      </AfCoreShell>
+    )
+  }
   return (
     <AfCoreShell
       active="live"
