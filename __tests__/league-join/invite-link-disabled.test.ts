@@ -112,3 +112,15 @@ describe('finding the league a code points at', () => {
     expect(h.queryRaw).not.toHaveBeenCalled()
   })
 })
+
+describe('the settings window\'s "Disable league invite links" switch (2026-11-15)', () => {
+  it('REGRESSION: the League.disableInviteLinks column turns the link off too', async () => {
+    h.findUnique.mockResolvedValue({ ...league({}), disableInviteLinks: true })
+    expect(await validateFantasyInviteCode('join-code', { userId: 'u-new' })).toMatchObject({ valid: false, error: 'INVITE_DISABLED' })
+  })
+
+  it('with neither switch off, the link works', async () => {
+    h.findUnique.mockResolvedValue({ ...league({}), disableInviteLinks: false })
+    expect(await validateFantasyInviteCode('join-code', { userId: 'u-new' })).toMatchObject({ valid: true })
+  })
+})
