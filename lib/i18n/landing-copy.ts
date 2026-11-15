@@ -195,6 +195,8 @@ type LandingCopy = {
   network: { label: string; cards: NetworkCard[] }
   footer: {
     playerFinder: string
+    /** Link to /blog — the guides had no link from the homepage. */
+    blog: string
     dashboard: string
     privacy: string
     terms: string
@@ -394,6 +396,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
     },
     footer: {
       playerFinder: 'Player finder',
+      blog: 'Blog',
       dashboard: 'Dashboard',
       privacy: 'Privacy',
       terms: 'Terms',
@@ -607,6 +610,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
     },
     footer: {
       playerFinder: 'Buscador de jugadores',
+      blog: 'Blog',
       dashboard: 'Panel',
       privacy: 'Privacidad',
       terms: 'Términos',

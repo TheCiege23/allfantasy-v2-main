@@ -51,6 +51,8 @@ const FOOTER_SECTIONS = [
     heading: 'Company',
     links: [
       { href: '/mission', label: 'Mission' },
+      // The blog's only internal links used to be /blog itself and the sitemap.
+      { href: '/blog', label: 'Blog' },
       { href: '/no-gambling-policy', label: 'No Gambling Policy' },
       { href: '/ai-transparency', label: 'AI Transparency' },
       { href: '/privacy', label: 'Privacy' },
