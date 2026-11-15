@@ -18,28 +18,85 @@ export type YouTubeStation = {
 }
 
 /**
- * Checked 2026-11-15 against YouTube's oEmbed endpoint (title and channel
- * returned). These are long-running live streams; if one ever ends, its tile
- * shows YouTube's own "unavailable" card — swap the id here.
+ * Genre playlists of real artists, plus one lo-fi stream for focus.
+ *
+ * Every entry was PLAYED in YouTube's embedded player (youtube-nocookie
+ * videoseries) in Chrome on 2026-11-15 — not just looked up — because a
+ * playlist can exist and still refuse embedded playback. First tracks heard:
+ * Crime Mob, 50 Cent, Thomas Rhett, Dolly Parton, Linkin Park, The Police,
+ * Olivia Rodrigo, Ariana Grande, Alan Walker.
+ *
+ * ⚠ THE `RDCLAK5uy_…` IDS ARE YOUTUBE MUSIC'S OWN EDITORIAL PLAYLISTS, which
+ * YouTube keeps current — and YouTube's oEmbed endpoint answers 404 for every
+ * one of them. That 404 is NOT evidence a list is gone; only an embed test is.
+ * Hip-hop has no findable editorial list, so those two are curator lists:
+ * Warner Records' own, and Redlist's.
+ *
+ * Playlists drift: a label can pull a video or block embedding on it. YouTube
+ * then skips or shows its own "unavailable" card for that track. If a whole
+ * station dies, swap the id here and re-run the embed test.
  */
 export const YOUTUBE_STATIONS: YouTubeStation[] = [
   {
+    id: 'hiphop-hype',
+    label: 'Hip-hop hype',
+    channel: 'Warner Records',
+    source: { kind: 'playlist', listId: 'PLHAJiQEawl7gyNq4C8PbcqkrM163oroMJ' },
+  },
+  {
+    id: 'rap-workout',
+    label: 'Rap workout',
+    channel: 'Redlist',
+    source: { kind: 'playlist', listId: 'PLi13rLFLL6Q87nSTlAwpgczsy7kP35oYH' },
+  },
+  {
+    id: 'country',
+    label: 'Country hits',
+    channel: 'YouTube Music',
+    source: { kind: 'playlist', listId: 'RDCLAK5uy_lJ8xZWiZj2GCw7MArjakb6b0zfvqwldps' },
+  },
+  {
+    id: 'classic-country',
+    label: 'Classic country',
+    channel: 'YouTube Music',
+    source: { kind: 'playlist', listId: 'RDCLAK5uy_kVfoKrYSsJaHx3SLO8mp3WYuRHMrS8U_Q' },
+  },
+  {
+    id: 'rock',
+    label: 'Rock hits',
+    channel: 'YouTube Music',
+    source: { kind: 'playlist', listId: 'RDCLAK5uy_l3PeyHeqJh1dR78WjfsMJwRHJx9ofMvvc' },
+  },
+  {
+    id: 'classic-rock',
+    label: 'Classic rock',
+    channel: 'YouTube Music',
+    source: { kind: 'playlist', listId: 'RDCLAK5uy_nZiG9ehz_MQoWQxY5yElsLHCcG0tv9PRg' },
+  },
+  {
+    id: 'pop',
+    label: 'Pop hits',
+    channel: 'YouTube Music',
+    source: { kind: 'playlist', listId: 'RDCLAK5uy_nSq67AJ2d75MFNJ3j_4ClEtSgC-opBM84' },
+  },
+  {
+    id: 'rnb',
+    label: 'R&B',
+    channel: 'YouTube Music',
+    source: { kind: 'playlist', listId: 'RDCLAK5uy_lOprH1vCx0efMJQDYichTFzifw_BkJgbg' },
+  },
+  {
+    id: 'edm',
+    label: 'EDM',
+    channel: 'YouTube Music',
+    source: { kind: 'playlist', listId: 'RDCLAK5uy_kHSavu4ofFfVIOzsA_wa4SuMS3dc76TYQ' },
+  },
+  {
+    // A 24/7 live stream, not a playlist: the one quiet option, for focus.
     id: 'lofi',
     label: 'Lo-fi beats',
     channel: 'Chillhop Music',
     source: { kind: 'video', videoId: '7NOSDKb0HlU' },
-  },
-  {
-    id: 'jazzy',
-    label: 'Jazzy lo-fi',
-    channel: 'Chillhop Music',
-    source: { kind: 'video', videoId: '5yx6BWlEVcY' },
-  },
-  {
-    id: 'synthwave',
-    label: 'Synthwave',
-    channel: 'Lofi Girl',
-    source: { kind: 'video', videoId: '4xDzrJKXOOY' },
   },
 ]
 
