@@ -24,6 +24,7 @@ import {
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import type { YahooSnapshotChecklist } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotModel'
 import { buildYahooSnapshotBookmarklet } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotBookmarklet'
+import { OPEN_YAHOO_COPY_PASTE_EVENT, useYahooCopyPasteEnabled } from './yahooCopyPaste'
 
 const ENDPOINT = '/api/leagues/import/yahoo-snapshot'
 
@@ -78,7 +79,7 @@ function Mark({ done }: { done: boolean }) {
 }
 
 export function YahooSnapshotImport() {
-  const [enabled, setEnabled] = useState(false)
+  const enabled = useYahooCopyPasteEnabled()
   const [phase, setPhase] = useState<Phase>({ k: 'start' })
   const [leagueInput, setLeagueInput] = useState('')
   const [sourceId, setSourceId] = useState<string | null>(null)
@@ -93,18 +94,16 @@ export function YahooSnapshotImport() {
   const fileRef = useRef<HTMLInputElement>(null)
   const bookmarkRef = useRef<HTMLAnchorElement>(null)
   const [open, setOpen] = useState(false)
+  const detailsRef = useRef<HTMLDetailsElement>(null)
 
+  /* The Yahoo tile's "Import by copy-paste" button: open, and bring the panel into view. */
   useEffect(() => {
-    let alive = true
-    fetch(ENDPOINT, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body) => {
-        if (alive && body?.enabled === true) setEnabled(true)
-      })
-      .catch(() => {})
-    return () => {
-      alive = false
+    const onOpen = () => {
+      setOpen(true)
+      window.requestAnimationFrame(() => detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     }
+    window.addEventListener(OPEN_YAHOO_COPY_PASTE_EVENT, onOpen)
+    return () => window.removeEventListener(OPEN_YAHOO_COPY_PASTE_EVENT, onOpen)
   }, [])
 
   const start = useCallback(async (league?: string) => {
@@ -259,7 +258,7 @@ export function YahooSnapshotImport() {
   const rostersAdded = checklist?.teams.filter((t) => t.hasRoster).length ?? 0
 
   return (
-    <details className="af-im-ys" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+    <details ref={detailsRef} id="af-yahoo-copy-paste" className="af-im-ys" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary className="af-im-fx-link af-im-fx-link--foot af-im-ys-toggle">Yahoo league? Import it by copy-paste →</summary>
       {/* No heading of its own: the summary above already says what this is, once. */}
       <section className="af-im-fx" aria-label="Import a Yahoo league by copy-paste">

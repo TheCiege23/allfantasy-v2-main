@@ -32,6 +32,7 @@ import {
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import { YahooSnapshotImport } from '@/components/core-app/import/YahooSnapshotImport'
+import { openYahooCopyPaste, useYahooCopyPasteEnabled } from '@/components/core-app/import/yahooCopyPaste'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-app/import/EspnLeagueCheck'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
@@ -1008,6 +1009,9 @@ export function ImportV4({
   const [espnCheck, setEspnCheck] = useState<EspnLeagueCheckStatus>({ k: 'idle' })
 
   const selectable = isImportProviderAvailable(provider)
+  /* Yahoo is coming soon, but an allowlisted account can import it by copy-paste instead. */
+  const yahooCopyPasteEnabled = useYahooCopyPasteEnabled()
+  const yahooViaPaste = provider === 'yahoo' && !selectable && yahooCopyPasteEnabled
   // Provider display name comes from the shared config, never a local literal — the same
   // reason availability does (see the header note).
   const providerLabel = getImportProviderLabel(provider)
@@ -2623,7 +2627,11 @@ export function ImportV4({
           {IMPORT_PROVIDER_UI_OPTIONS.map((opt) => {
             const available = opt.available
             const active = provider === opt.provider
-            const tag = available ? PROVIDER_PILL_TAG[opt.provider] : 'Coming soon'
+            const tag = available
+              ? PROVIDER_PILL_TAG[opt.provider]
+              : opt.provider === 'yahoo' && yahooCopyPasteEnabled
+                ? 'copy-paste'
+                : 'Coming soon'
             return (
               <button
                 key={opt.provider}
@@ -2690,7 +2698,9 @@ export function ImportV4({
             {selectable
               ? PROVIDER_TAGLINE[provider] ??
                 (canDiscover ? 'Finds your leagues automatically' : 'League ID · read-only')
-              : 'Paused — see below'}
+              : yahooViaPaste
+                ? 'Copy-paste for now — see below'
+                : 'Paused — see below'}
           </span>
           {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
             .map((sport) => (
@@ -2712,6 +2722,20 @@ export function ImportV4({
           providerLabel={providerLabel}
           available={selectable}
           espnConnected={espnConnected}
+          pausedNote={
+            yahooViaPaste
+              ? {
+                  title: 'By copy-paste for now',
+                  body: (
+                    <>
+                      Yahoo&rsquo;s direct connection isn&rsquo;t open yet. Copy two pages from your league &mdash;
+                      settings and standings &mdash; into the checklist and it imports. On a computer, the Send to
+                      AllFantasy bookmark makes it one click per page.
+                    </>
+                  ),
+                }
+              : undefined
+          }
           mark={
             <span className="af-platform af-platform-mark" data-platform={provider} aria-hidden>
               {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
@@ -2753,7 +2777,21 @@ export function ImportV4({
           looking at, so it gets the "selected?" framing and a full sentence rather
           than a footnote.
         */}
-        {!selectable ? (
+        {yahooViaPaste ? (
+          /*
+            Yahoo is not live, but this account has the copy-paste way in (lib/yahoo/yahooAvailability.ts).
+            A "coming soon" sentence here buried the one path that works under three dead ends.
+          */
+          <div className="af-im-blocked af-im-blocked--selected af-im-ys-cta" role="status">
+            <span className="af-im-blocked-line">
+              <span className="af-label">Yahoo</span>
+              <span>Bring your league in now by copying a few pages from Yahoo.</span>
+            </span>
+            <button type="button" className="af-im-fx-go" onClick={openYahooCopyPaste}>
+              Import by copy-paste →
+            </button>
+          </div>
+        ) : !selectable ? (
           <p className="af-im-blocked af-im-blocked--selected" role="status">
             <span className="af-im-blocked-line">
               <span className="af-label">{providerLabel} selected?</span>
