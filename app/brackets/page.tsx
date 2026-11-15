@@ -21,8 +21,17 @@ import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPr
 import { makeBracketsT } from "@/lib/brackets/bracketsI18n"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { orderHubTournaments, type HubTournament } from "@/lib/brackets/hubTournaments"
+import type { Metadata } from "next"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export const dynamic = "force-dynamic"
+
+// On the PAGE, not app/brackets/layout.tsx: a layout's canonical is inherited by
+// every /brackets/* child that sets none, which would mark them all as copies of
+// this hub. Title and description still come from the layout.
+export const metadata: Metadata = {
+  alternates: { canonical: `${getPublicSiteOrigin()}/brackets` },
+}
 
 /** Public server shell with a deterministic preview. The client workspace reads only
  * authenticated bracket APIs; no useSession participates in first-render hydration.

@@ -3,7 +3,9 @@
  * Ensures meta descriptions and titles are within length limits; supports canonical.
  */
 
-const BASE = "https://allfantasy.ai"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
+
+const BASE = getPublicSiteOrigin()
 const SITE_NAME = "AllFantasy"
 
 export interface BlogSEOInput {

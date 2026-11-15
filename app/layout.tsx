@@ -47,10 +47,13 @@ export const metadata: Metadata = {
     title: 'AllFantasy – Fantasy Sports Tools Powered by Chimmy',
     description:
       'AllFantasy combines fantasy sports leagues, bracket challenges, and Chimmy-powered tools to help players draft smarter, analyze trades, and dominate their leagues.',
-    // canonicalPath, not a hardcoded host: the origin resolves through
-    // getPublicSiteOrigin like the sitemap does, so the homepage canonical can
-    // never name a host that redirects to the other one.
-    canonicalPath: '/',
+    // ⚠ NO canonical HERE. Next.js hands a layout's `alternates` down to every
+    // page that does not set its own, so `canonicalPath: '/'` in the ROOT layout
+    // told Google that /brackets, /world-cup, /discover/leagues, /creator-leagues,
+    // /af-legacy and every other page without a canonical was a duplicate of the
+    // homepage — the strongest available hint to drop them from the index.
+    // A page with no canonical is self-canonical, which is the safe default.
+    // The homepage sets its own in app/page.tsx; every other page sets its own.
     keywords: [
       'fantasy sports',
       'fantasy football tools',

@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import MockDraftSleeperRoomClient from '@/components/mock-draft/MockDraftSleeperRoomClient'
@@ -13,7 +14,7 @@ export const metadata = buildMetadata(
   getSEOPageConfig('mock-draft') ?? {
     title: 'Mock Drafts – AllFantasy',
     description: 'Create, run, and share unlimited AllFantasy mock drafts with AI-powered insights.',
-    canonical: 'https://allfantasy.ai/mock-draft',
+    canonical: `${getPublicSiteOrigin()}/mock-draft`,
   }
 )
 

@@ -4,6 +4,7 @@
  */
 
 import { SPORT_CONFIG, type SportSlug } from './config'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 export interface SportSeoPageConfig {
   title: string
@@ -14,7 +15,8 @@ export interface SportSeoPageConfig {
   keywords?: string[]
 }
 
-const BASE = 'https://allfantasy.ai'
+// www via the shared helper: the apex 301s to www, so an apex canonical names a redirect.
+const BASE = getPublicSiteOrigin()
 
 /** Map flat route slug to existing SPORT_CONFIG or custom config for NCAA combined page. */
 const SPORT_PAGE_SLUGS = [

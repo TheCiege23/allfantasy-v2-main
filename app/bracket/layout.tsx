@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 import type { ReactNode } from "react"
 import ProductShellLayout from "@/components/navigation/ProductShellLayout"
 import { buildMetadata, getSEOPageConfig } from "@/lib/seo"
@@ -8,7 +9,7 @@ export const metadata: Metadata = buildMetadata(
     title: "AllFantasy NCAA Bracket Challenge – Pools, Picks & Standings",
     description:
       "Play the AllFantasy NCAA Bracket Challenge. Create pools, invite friends, track standings, and use AI to pressure-test your picks.",
-    canonical: "https://allfantasy.ai/bracket",
+    canonical: `${getPublicSiteOrigin()}/bracket`,
   }
 )
 

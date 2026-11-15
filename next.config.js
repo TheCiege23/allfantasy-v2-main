@@ -439,6 +439,31 @@ const nextConfig = {
       // /app/tournament/* → /tournament/* (5 pages collapsed to 2 redirects)
       { source: '/app/tournament', destination: '/tournament', permanent: true },
       { source: '/app/tournament/:path*', destination: '/tournament/:path*', permanent: true },
+      // Duplicate sport landers (2026-11-14). /fantasy-football and /sports/fantasy-football
+      // served the same title, each claiming to be canonical, so they split one sport's
+      // ranking between two URLs. /sports/* wins: it is the one in the sitemap, it carries
+      // ~3x the copy, and it is the only tree with the NCAA pages. EXACT paths only —
+      // /fantasy-football/leagues and the other discovery pages are separate and stay.
+      { source: '/fantasy-football', destination: '/sports/fantasy-football', permanent: true },
+      { source: '/fantasy-basketball', destination: '/sports/fantasy-basketball', permanent: true },
+      { source: '/fantasy-baseball', destination: '/sports/fantasy-baseball', permanent: true },
+      { source: '/fantasy-hockey', destination: '/sports/fantasy-hockey', permanent: true },
+      { source: '/fantasy-soccer', destination: '/sports/fantasy-soccer', permanent: true },
+      // Bare format paths 404'd: each tree only has /<format>/[leagueId] (and similar) under it.
+      // Send them to the public format lander. EXACT paths only, so every league route under
+      // them is untouched. TEMPORARY on purpose: if a signed-in hub ever lands at one of these
+      // paths, a 308 cached in browsers would keep sending people here.
+      { source: '/bestball', destination: '/league-types/best-ball', permanent: false },
+      { source: '/survivor', destination: '/league-types/survivor', permanent: false },
+      { source: '/survivor-guillotine', destination: '/league-types/survivor-guillotine', permanent: false },
+      { source: '/zombie', destination: '/league-types/zombie', permanent: false },
+      { source: '/big-brother', destination: '/league-types/big-brother', permanent: false },
+      { source: '/devy', destination: '/league-types/devy', permanent: false },
+      { source: '/c2c', destination: '/league-types/c2c', permanent: false },
+      { source: '/idp', destination: '/league-types/idp', permanent: false },
+      // The Pirate "coming soon" preview, retired once Pirate shipped (#2852). PERMANENT: the old
+      // page is gone for good and its replacement is the indexable lander.
+      { source: '/formats/pirate', destination: '/league-types/pirate', permanent: true },
     ]
   },
 
