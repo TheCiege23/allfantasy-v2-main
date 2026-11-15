@@ -41,6 +41,7 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { isIdpLeague } from '@/lib/idp'
 import { writeIdpSettingsAudit } from '@/lib/idp/IdpSettingsAudit'
 import { prisma } from '@/lib/prisma'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -183,6 +184,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ leagueId
 
   const errors = validate(body)
   if (errors.length) return NextResponse.json({ error: 'Invalid cap settings', errors }, { status: 400 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const before = await prisma.iDPCapConfig.findUnique({ where: { leagueId } })
 
@@ -225,5 +228,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ leagueId
     /* An audit failure must not lose the commissioner's setting. */
   })
 
+  await logFormatRulesChange({ leagueId, userId: g.userId, format: 'idp', fields: Object.keys(body ?? {}) })
   return NextResponse.json({ ok: true, created: !before, config })
 }

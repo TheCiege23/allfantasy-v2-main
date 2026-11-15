@@ -20,6 +20,7 @@ import {
   type SlotConflict,
 } from '@/lib/legacy-specialty-settings/legacySettingsLocks'
 import { legacyParseError, slotConflictResponse } from '@/lib/legacy-specialty-settings/legacySettingsResponses'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,6 +108,8 @@ export async function PATCH(req: NextRequest) {
 
   const current = await prisma.devyLeague.findUnique({ where: { leagueId } })
   if (!current) return NextResponse.json({ error: 'Devy league not configured' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const parsed = parseLegacyPatch(body, DEVY_LEGACY_FIELDS, DEVY_LEGACY_LOCKED)
   if (!parsed.ok) return legacyParseError(parsed)
@@ -177,6 +180,7 @@ export async function PATCH(req: NextRequest) {
   }))
   await notifyCommissionerChange(leagueId, userId, 'Devy Settings', changes).catch(() => {})
 
+  await logFormatRulesChange({ leagueId, userId, format: 'devy', fields: Object.keys(data) })
   return NextResponse.json({ ok: true, config, changed: Object.keys(data) })
 }
 

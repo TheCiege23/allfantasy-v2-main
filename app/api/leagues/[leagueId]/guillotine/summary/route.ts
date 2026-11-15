@@ -37,6 +37,7 @@ import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
 import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -212,6 +213,8 @@ export async function PATCH(
     )
   }
 
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
   const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown } | null
   if (body && 'rules' in body) {
     try {
@@ -229,6 +232,7 @@ export async function PATCH(
           changes: diffRuleSnapshots(guillotineRulesSnapshot(before.rules), guillotineRulesSnapshot(saved.view.rules)),
         })
       }
+      await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['rules'] })
       return NextResponse.json({ ok: true, ...saved.view })
     } catch (e) {
       console.error('[guillotine/summary PATCH rules]', e instanceof Error ? e.message : 'unknown error')
@@ -251,6 +255,7 @@ export async function PATCH(
         changes: diffRuleSnapshots(guillotineAdvancedSnapshot(before), guillotineAdvancedSnapshot(saved.value)),
       })
     }
+    await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['chopSchedule'] })
     const config = await getGuillotineConfig(leagueId)
     return NextResponse.json({ ok: true, advanced: saved.value, scheduleLines: config ? describeSchedule(saved.value, config.teamsPerChop, config.eliminationStartWeek) : [] })
   }
@@ -273,6 +278,7 @@ export async function PATCH(
         ),
       })
     }
+    await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['eliminationStartWeek'] })
     return NextResponse.json({
       ok: true,
       config: {
