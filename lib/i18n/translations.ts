@@ -603,7 +603,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsRules.lt.formatAria": "League format",
     "lsRules.lt.carryOverAria": "Do rosters carry over?",
     "lsRules.lt.carryOver": "Rosters carry over?",
-    "lsRules.lt.piratePreview": "Preview the Pirate format",
+    "lsRules.lt.piratePreview": "How Pirate works",
     "lsRules.lt.buyInOptional": "Buy-in (optional)",
     "lsRules.lt.saving": "Saving…",
     "lsRules.lt.update": "Update format",

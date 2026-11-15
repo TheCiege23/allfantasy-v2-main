@@ -260,10 +260,13 @@ function SuccessContent() {
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              Sneak peek:{' '}
+              {/* Pirate shipped (#2852), so it is no longer a sneak peek; the survey options above are
+                  stored answers and keep their wording. */}
+              Coming soon:{' '}
               <Link href="/formats/king-of-the-hill" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">King of the Hill</Link>
               {' · '}
-              <Link href="/formats/pirate" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">Pirate</Link>
+              Live now:{' '}
+              <Link href="/league-types/pirate" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">Pirate</Link>
             </p>
             {errors.experimentalInterest && <p className="text-xs text-red-400 mt-1">{errors.experimentalInterest.message}</p>}
           </div>
