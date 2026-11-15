@@ -10,7 +10,24 @@ export function zombieItemId(asset: Asset): string {
   if (typeof id !== 'string' || !id || id.length > 160) throw new Error('Zombie item assets require an inventory item id.')
   return id
 }
-export async function validateBetaTradeItems(db: Tx, leagueId: string, rosterIds: string[], assets: readonly Asset[]) {
+/**
+ * The commissioner's "Do not allow trading Serums and Weapons after games have been completed" switch
+ * (`ZombieLeague.commissionerUiPrefs.lockSerumWeaponTradesAfterGames`, components/zombie/ZombieTradePolicyCard.tsx).
+ *
+ * 🛑 IT WAS SAVED AND NEVER READ. The card told commissioners "@chimmy enforces this"; nothing did, so an item could
+ * be traded after the week's games — when its holder already knows how the week went.
+ *
+ * When on: once BOTH teams' last starters have kicked off for the week, their games are under way or over, and item
+ * trades between them wait until the week resolves (the week then moves on and the window opens again). A starter
+ * with no known game time keeps the lock closed rather than guessing it open.
+ */
+export function itemTradesLockedAfterGames(prefs: unknown): boolean {
+  return Boolean(prefs) && typeof prefs === 'object' && !Array.isArray(prefs) && (prefs as Record<string, unknown>).lockSerumWeaponTradesAfterGames === true
+}
+
+export const ITEM_TRADES_LOCKED_MESSAGE = 'Your commissioner locked Serum and Weapon trades once this week’s games are played. They open again when the week resolves.'
+
+export async function validateBetaTradeItems(db: Tx, leagueId: string, rosterIds: string[], assets: readonly Asset[], now: Date = new Date()) {
   if (rosterIds.length !== 2) throw new Error('Zombie item trades currently support two teams.')
   const z = await db.zombieLeague.findUnique({ where: { leagueId } })
   if (z?.correctionHoldFromWeek != null) throw new Error('A stat correction is awaiting commissioner recovery. Trades are held.')
@@ -29,6 +46,16 @@ export async function validateBetaTradeItems(db: Tx, leagueId: string, rosterIds
     return team
   }
   rosterIds.forEach(teamFor)
+  if (itemTradesLockedAfterGames(z.commissionerUiPrefs)) {
+    let lastKickoffs: Array<Date | null>
+    try {
+      lastKickoffs = await Promise.all(rosterIds.map((id) => lastStarterDeadline(db, id, z.season, z.currentWeek)))
+    } catch {
+      throw new Error(ITEM_TRADES_LOCKED_MESSAGE)
+    }
+    const started = lastKickoffs.filter((d): d is Date => d != null)
+    if (started.length && started.every((d) => d.getTime() <= now.getTime())) throw new Error(ITEM_TRADES_LOCKED_MESSAGE)
+  }
   const seen = new Set<string>()
   for (const asset of assets) {
     const id = zombieItemId(asset)
