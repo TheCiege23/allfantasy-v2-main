@@ -30,6 +30,7 @@ import { MONETIZATION } from "@/lib/analytics/eventNames"
 import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
 import { isTrialStartInvoice, readTrialDays, trialEndsAt } from "@/lib/monetization/freeTrial"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
+import { onPaymentFailed, onPaymentRecovered, onSubscriptionCanceled, wasPastDue } from "@/lib/billing/retentionWebhook"
 import { redeemCouponFromWebhook } from "@/lib/promotions/sponsorCoupon"
 import { assertLeagueEntryFeeProcessingEnabled } from "@/lib/monetization/leagueEntryFeeKillSwitch"
 
@@ -641,6 +642,8 @@ export async function POST(req: NextRequest) {
           if (userId) {
             await markSubscriptionAsExpired(deletedSub, userId)
             await syncUserProfileFromSubscriptions(userId)
+            // Retention (lib/billing/retention.ts): recorded now; the win-back note follows in three days.
+            await onSubscriptionCanceled(deletedSub, userId)
           }
           break
         }
@@ -651,6 +654,8 @@ export async function POST(req: NextRequest) {
           if (userId) {
             await markSubscriptionPastDue(invoice, userId)
             await syncUserProfileFromSubscriptions(userId)
+            // Retention: tell them now (once per invoice, however often Stripe retries). Never throws.
+            await onPaymentFailed(invoice, userId)
           }
           break
         }
@@ -661,7 +666,10 @@ export async function POST(req: NextRequest) {
             const customerId = typeof invoice.customer === "string" ? invoice.customer : null
             const userId = customerId ? await resolveUserIdFromStripeCustomerId(customerId) : null
             if (userId) {
+              // Read BEFORE the refresh writes `active`: a paid invoice on a past-due row is a recovered card.
+              const recovering = await wasPastDue(invoice, userId)
               await refreshSubscriptionPeriod(invoice, userId)
+              if (recovering) await onPaymentRecovered(invoice, userId)
               await syncUserProfileFromSubscriptions(userId)
               await grantMonthlyCreditsFromInvoice(invoice, userId)
               await recordTrialConversion(invoice, userId)

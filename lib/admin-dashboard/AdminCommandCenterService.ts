@@ -38,6 +38,8 @@ import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getPlayInstallStats, type PlayInstallStatsResult } from "@/lib/google-play/playInstallStats"
 import { describeMrrEstimate, estimateMrr, formatUsdCents } from "@/lib/monetization/mrrEstimate"
 import { describeProWeekStats, loadProWeekStats, type ProWeekStats } from "@/lib/referral/proWeekStats"
+import { describeRetention, loadRetentionStats } from "@/lib/billing/retentionStats"
+import type { RetentionStats } from "@/lib/billing/retention"
 
 type MetricValue = number | string
 
@@ -630,6 +632,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   const waitlistPromise = loadWaitlist()
   // "Give a week, get a week" (lib/referral/proWeek.ts). A failed read reports "not tracked", never a 0.
   const proWeekPromise: Promise<ProWeekStats | null> = loadProWeekStats(prisma as never).catch(() => null)
+  // Retention (lib/billing/retention.ts): failed→recovered, trials→paid, cancelled→came back. A failed read is "not tracked".
+  const retentionPromise: Promise<RetentionStats | null> = loadRetentionStats(prisma as never).catch(() => null)
   const leaguesByPlatformPromise = loadLeaguesByPlatform()
   const aiProvidersPromise = Promise.race([
     probeAiProviders().catch(() => null),
@@ -922,7 +926,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   ])
 
   // Keep these outside the positional query array, but await them together.
-  const [waitlist, leaguesByPlatform, proWeek] = await Promise.all([waitlistPromise, leaguesByPlatformPromise, proWeekPromise])
+  const [waitlist, leaguesByPlatform, proWeek, retention] = await Promise.all([waitlistPromise, leaguesByPlatformPromise, proWeekPromise, retentionPromise])
+  const retentionNotes = retention ? describeRetention(retention) : null
 
   // Login counts are only meaningful once IdentitySignal has captured at least one
   // login. Before that, a "0" would be indistinguishable from the old silent-zero
@@ -1044,6 +1049,13 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       proWeek
         ? metric("Referral Pro weeks (30 days)", proWeek.granted30d, describeProWeekStats(proWeek))
         : notTracked("Referral Pro weeks (30 days)", "Could not read referral weeks"),
+      ...(retention && retentionNotes
+        ? [
+            metric("Failed payments (30 days)", retention.failedInvoices, retentionNotes.payments),
+            metric("Free trials (30 days)", retention.trialsStarted, retentionNotes.trials),
+            metric("Cancellations (30 days)", retention.cancellations, retentionNotes.cancellations),
+          ]
+        : [notTracked("Retention (30 days)", "Could not read payment, trial and cancellation events")]),
     ],
     tokens: [
       metric("Token balances total", tokenBalanceSummary._sum.balance ?? 0),

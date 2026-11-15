@@ -60,6 +60,14 @@ export const MONETIZATION = {
    * NOT a paid conversion: that is recorded when the first real charge lands, with `from_trial: true`.
    */
   TRIAL_STARTED: 'monetization.trial_started',
+  /**
+   * Retention (2026-11-15, lib/billing/retention.ts). Webhook-recorded, once per Stripe INVOICE
+   * (`meta.invoice_id`) for the payment pair, once per subscription for the cancellation.
+   */
+  PAYMENT_FAILED: 'monetization.payment_failed',
+  /** A payment that succeeded on a subscription that was past due: the card was fixed. */
+  PAYMENT_RECOVERED: 'monetization.payment_recovered',
+  SUBSCRIPTION_CANCELED: 'monetization.subscription_canceled',
 } as const
 
 /** Create-league funnel (client beacon + server confirmation). */
