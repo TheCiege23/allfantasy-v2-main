@@ -1,9 +1,10 @@
 /**
  * "GIVE A WEEK, GET A WEEK" — the rules, PURE (owner's call 2026-11-15).
  *
- *   - When someone a member referred IMPORTS A LEAGUE, both of them get a week of AF Pro, free: no
- *     card, nothing to cancel. The import, not the sign-up, is the trigger — it is the funnel's own
- *     activation, and a throwaway account that never brings a league earns nobody anything.
+ *   - When someone a member referred BRINGS A LEAGUE — imports one, or joins one through an invite
+ *     (2026-11-15, leaguemate invites) — both of them get a week of AF Pro, free: no card, nothing to
+ *     cancel. The league, not the sign-up, is the trigger — it is the funnel's own activation, and a
+ *     throwaway account that never brings a league earns nobody anything.
  *   - Once per referred friend, ever (`lib/referral/proWeekGrant.ts` claims it on the referral row).
  *   - The REFERRER earns at most `REFERRER_WEEKS_PER_WINDOW` weeks in any rolling 30 days, so a
  *     referral link cannot be farmed into permanent Pro. The FRIEND's week is never capped.
@@ -87,20 +88,20 @@ export function friendProWeekNotice(referrerName: string, days: number, endsOn: 
 export function referrerProWeekNotice(friendName: string, days: number, endsOn: string): ProWeekNotice {
   return {
     title: `${friendName} joined. You've got ${days} days of AF Pro`,
-    body: `${friendName} used your link and imported a league, so you both get ${days} days of AF Pro, free. Yours runs until ${endsOn}.`,
+    body: `${friendName} used your link and brought a league, so you both get ${days} days of AF Pro, free. Yours runs until ${endsOn}.`,
   }
 }
 
 export function referrerCappedNotice(friendName: string): ProWeekNotice {
   return {
     title: `${friendName} joined with your link`,
-    body: `${friendName} imported a league and has a free week of AF Pro. You've already earned ${REFERRER_WEEKS_PER_WINDOW} free weeks in the last 30 days, which is the most one month can hold, so this one doesn't add another. Thanks for bringing people in.`,
+    body: `${friendName} brought a league and has a free week of AF Pro. You've already earned ${REFERRER_WEEKS_PER_WINDOW} free weeks in the last 30 days, which is the most one month can hold, so this one doesn't add another. Thanks for bringing people in.`,
   }
 }
 
 export function proWeekEndingNotice(endsOn: string): ProWeekNotice {
   return {
     title: 'Your free week of AF Pro ends tomorrow',
-    body: `Your free AF Pro ends ${endsOn}. Upgrade to keep it, or bring another friend: when they import a league you both get another week.`,
+    body: `Your free AF Pro ends ${endsOn}. Upgrade to keep it, or bring another friend: when they bring a league you both get another week.`,
   }
 }

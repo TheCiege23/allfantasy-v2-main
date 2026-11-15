@@ -1,5 +1,5 @@
 import { MRR_BILLED_STATUSES, MRR_PAID_SOURCES } from '@/lib/monetization/mrrEstimate'
-import { PRO_WEEK_REASONS } from './proWeek'
+import { PRO_WEEK_REASON_FRIEND, PRO_WEEK_REASONS } from './proWeek'
 
 /**
  * "Give a week, get a week" on the admin dashboard (lib/referral/proWeek.ts): weeks handed out in the
@@ -7,7 +7,14 @@ import { PRO_WEEK_REASONS } from './proWeek'
  * subscription started after their first referral week. The last is the figure the offer exists for.
  */
 
-export type ProWeekStats = { granted30d: number; runningNow: number; peopleWithWeek: number; convertedToPaid: number }
+export type ProWeekStats = {
+  granted30d: number
+  runningNow: number
+  peopleWithWeek: number
+  convertedToPaid: number
+  /** Referred friends who brought a league (imported or joined through an invite) in 30 days: one friend week each. */
+  friendsBroughtLeague30d: number
+}
 
 type GrantRow = { userId: string; createdAt: Date }
 type SubRow = { userId: string; createdAt: Date; status: string | null; source: string | null }
@@ -43,8 +50,9 @@ const MAX_ROWS = 5000
 export async function loadProWeekStats(db: StatsDb, now = new Date()): Promise<ProWeekStats> {
   const reason = { in: [...PRO_WEEK_REASONS] }
   const since = new Date(now.getTime() - 30 * 86_400_000)
-  const [granted30d, runningNow, grants] = await Promise.all([
+  const [granted30d, friendsBroughtLeague30d, runningNow, grants] = await Promise.all([
     db.adminSubscriptionGrant.count({ where: { reason, createdAt: { gte: since } } }),
+    db.adminSubscriptionGrant.count({ where: { reason: PRO_WEEK_REASON_FRIEND, createdAt: { gte: since } } }),
     db.adminSubscriptionGrant.count({ where: { reason, revokedAt: null, expiresAt: { gt: now } } }),
     db.adminSubscriptionGrant.findMany({ where: { reason }, select: { userId: true, createdAt: true }, take: MAX_ROWS }),
   ])
@@ -56,9 +64,9 @@ export async function loadProWeekStats(db: StatsDb, now = new Date()): Promise<P
         take: MAX_ROWS,
       })
     : []
-  return { granted30d, runningNow, ...countConvertedToPaid(grants, subs) }
+  return { granted30d, friendsBroughtLeague30d, runningNow, ...countConvertedToPaid(grants, subs) }
 }
 
 export function describeProWeekStats(s: ProWeekStats): string {
-  return `${s.runningNow} running now · ${s.convertedToPaid} of ${s.peopleWithWeek} people who had one went on to pay`
+  return `${s.friendsBroughtLeague30d} referred friends brought a league · ${s.runningNow} running now · ${s.convertedToPaid} of ${s.peopleWithWeek} people who had one went on to pay`
 }
