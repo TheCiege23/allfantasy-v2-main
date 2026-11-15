@@ -443,6 +443,12 @@ export async function routeTextCall(args: {
    * fallback, so a preferred provider being down degrades rather than fails.
    */
   preferredProvider?: ProviderName | null
+  /**
+   * Per-provider timeout for THIS call, in ms (clamped 5–120 s). Default: the router's 12 s, which
+   * suits chat. A long structured transcription (a whole Yahoo draft-results page) needs more, and
+   * a timeout that always fires is not a fallback — it just fails every provider in turn.
+   */
+  timeoutMs?: number
 } & RouterMetering): Promise<RouterResult> {
   // NOTE: the spend guard is NOT in this loop. It lives at each provider boundary — the clients this
   // router delegates to (`lib/openai-client`, `lib/xai-client`, `lib/deepseek-client`) and the inline
@@ -454,7 +460,9 @@ export async function routeTextCall(args: {
   for (const provider of order) {
     const startedAt = Date.now()
     try {
-      const result = await withTimeout(TEXT_CALLS[provider](args), PROVIDER_TIMEOUT_MS, provider)
+      const timeoutMs =
+        args.timeoutMs != null ? Math.min(120_000, Math.max(5_000, args.timeoutMs)) : PROVIDER_TIMEOUT_MS
+      const result = await withTimeout(TEXT_CALLS[provider](args), timeoutMs, provider)
       meterAttempt(args, provider, result, startedAt, null)
       return result
     } catch (error: unknown) {

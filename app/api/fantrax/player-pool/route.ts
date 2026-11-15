@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { getClientIp, rateLimit } from '@/lib/rate-limit'
 import {
   getFantraxLeagueInfo,
@@ -12,7 +12,7 @@ const SPORTS = new Set<FantraxSport>(['CFB', 'NCAAF', 'NFL', 'MLB', 'NBA', 'NHL'
 
 /** Read-only, league-specific waiver wire and free-agent listing. */
 export async function GET(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) return auth.response
 
   const ip = getClientIp(req) || 'unknown'

@@ -82,7 +82,7 @@ describe('League trade board', () => {
   it('CONTROL: no_rostered_defenders keeps its own words', async () => {
     serve(BOARD('no_rostered_defenders'))
     render(<TradeBoardSection leagueId="L1" />)
-    expect(await screen.findByText('No rosters in this league carry a defender yet.')).toBeTruthy()
+    expect(await screen.findByText('No team in this league rosters a defender yet.')).toBeTruthy()
   })
 })
 

@@ -23,6 +23,14 @@ interface DefenderRoleResult {
   lines: DefenderRoleLine[]
   /** Defensive games that carried a snap count — the sample behind every line above. */
   games: number
+  /**
+   * The counts behind the lines, so a screen can word them in the reader's language (Defense Hub's
+   * "How much they play" table, 2026-11-14). `tackles` is null when the games carry no tackle
+   * column at all — a gap, not a zero.
+   */
+  snaps: number
+  sacks: number
+  tackles: number | null
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -46,6 +54,7 @@ export function deriveDefenderRole(
   let snaps = 0
   let sacks = 0
   let tackles = 0
+  let tackleColumn = false
   let games = 0
 
   for (const raw of statMaps) {
@@ -67,17 +76,22 @@ export function deriveDefenderRole(
     const total = m.idp_tkl
     if (typeof total === 'number') {
       tackles += total
+      tackleColumn = true
     } else {
       const solo = m.idp_tkl_solo
       const ast = m.idp_tkl_ast
       if (typeof solo === 'number') tackles += solo
       if (typeof ast === 'number') tackles += ast
+      if (typeof solo === 'number' || typeof ast === 'number') tackleColumn = true
     }
   }
 
   if (games === 0) {
     return {
       games: 0,
+      snaps: 0,
+      sacks: 0,
+      tackles: null,
       lines: [
         {
           label: 'Role',
@@ -135,5 +149,5 @@ export function deriveDefenderRole(
     basis: 'no targets-allowed column is ingested by any provider we read',
   })
 
-  return { lines, games }
+  return { lines, games, snaps, sacks: round1(sacks), tackles: tackleColumn ? round1(tackles) : null }
 }

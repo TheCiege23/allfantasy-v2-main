@@ -38,17 +38,20 @@ describe('WarStrategyBrief — next season in Spanish', () => {
     const t = text(renderToStaticMarkup(<WarStrategyBrief format={null} nextSeason={plan} />))
     expect(t).toContain('Próxima temporada')
     expect(t).toContain('Reconstrucción')
-    expect(t).toContain('Récord 3-6-1 (porcentaje de victorias 0.35).')
     expect(t).toContain('El 22% del valor está en activos jóvenes (señal de sostenibilidad).')
-    expect(t).toContain('Edad promedio de los titulares: 28.4.')
-    expect(t).toContain('Capital de selecciones: 3 selecciones futuras, 2 tempranas, valor total por niveles 95.')
+    // 2026-11-14: the record, the age and the pick capital are said once, in the line above the list.
+    expect(t).toContain('Edad promedio de los titulares 28.4')
+    expect(t).not.toContain('Récord 3-6-1')
+    expect(t).not.toContain('Capital de selecciones')
     expect(t).not.toMatch(/Record |Young-asset|Average starter age|Pick capital/)
   })
 
   it('English mode still shows the engine’s own English', () => {
     lang.language = 'en'
     const t = text(renderToStaticMarkup(<WarStrategyBrief format={null} nextSeason={plan} />))
-    expect(t).toContain('Record 3-6-1 (win% 0.35).')
-    expect(t).toContain('Average starter age 28.4.')
+    expect(t).toContain('Young-asset value share 22% (sustainability signal).')
+    expect(t).toContain('Average starter age 28.4 · 2 early picks held')
+    expect(t).not.toContain('Record 3-6-1 (win% 0.35).')
+    expect(t).not.toContain('Pick capital:')
   })
 })

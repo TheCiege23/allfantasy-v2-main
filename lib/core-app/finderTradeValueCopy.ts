@@ -123,6 +123,8 @@ export type TradeValueCopy = {
   sharesSub: (players: number, rosters: number) => string
   sharesUnsupported: (n: number) => string
   sharesUnidentified: (n: number) => string
+  /** 2026-11-14: the two caveats, said once at the board's foot instead of on its first line. */
+  sharesNotCounted: (unsupported: number, unidentified: number) => string
   sharesNone: string
   sharesOf: string
   sharesStarting: (n: number) => string

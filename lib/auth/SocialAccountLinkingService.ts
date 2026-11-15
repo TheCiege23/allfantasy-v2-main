@@ -341,6 +341,28 @@ export async function linkSocialAccountToAppUser(
             console.warn("[social-link] signup funnel event failed (non-blocking):", funnelErr);
           }
         })();
+        /*
+         * 🛑 REFERRAL CREDIT FOR OAUTH SIGN-UPS (2026-11-15). Only the email/phone register route read the
+         * `af_ref` cookie (set by ReferralTracker when a visitor lands on `/?ref=CODE`), so someone who
+         * followed a friend's link and chose Google, Apple, Spotify or Discord was never credited to that
+         * friend. Same attribution as /api/auth/register, from this create branch only — a returning
+         * OAuth login returns before here and is never re-attributed. Best-effort, never blocks sign-in.
+         */
+        void (async () => {
+          try {
+            const { cookies } = await import("next/headers");
+            const code = (await cookies()).get("af_ref")?.value?.trim();
+            if (!code) return;
+            const { attributeSignup } = await import("@/lib/referral");
+            const attribution = await attributeSignup(user.id, code);
+            if (attribution?.referrerId) {
+              const { recordAttribution } = await import("@/lib/viral-loop");
+              await recordAttribution(user.id, "referral", { sourceId: attribution.referrerId, metadata: { authMethod: `oauth:${input.provider}` } });
+            }
+          } catch (referralErr) {
+            console.warn("[social-link] referral attribution failed (non-blocking):", referralErr);
+          }
+        })();
       } catch (error) {
         if (!isUniqueConstraintError(error)) {
           throw error;

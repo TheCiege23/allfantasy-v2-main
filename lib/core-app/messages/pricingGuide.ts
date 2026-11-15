@@ -16,6 +16,12 @@ export const pricingGuideMessages = defineMessages({
     supremeMonth: (supreme: string, separately: string) => `Both paid plans for ${supreme} a month instead of ${separately}.`,
     supremeYear: (supreme: string, separately: string) => `Both paid plans for ${supreme} a year instead of ${separately}.`,
     inYourPlan: 'In your plan',
+    // The AF Pro free trial (lib/monetization/freeTrial.ts) — web only; never shown in a store build.
+    trialCta: (days: number) => `Start your ${days}-day free trial`,
+    trialTerms: (days: number, price: string, per: string) =>
+      `Free for ${days} days, then ${price} ${per}. Cancel before the trial ends and you won’t be charged.`,
+    trialNewMembers: (days: number) => `New members get ${days} days free.`,
+    trialPer: (interval: 'month' | 'year'): string => (interval === 'month' ? 'a month' : 'a year'),
     compareSummary: 'Compare every feature',
     comingSoon: (list: string) => `Coming soon on every plan: ${list}.`,
     tokensTitle: 'Or pay only for what you use',
@@ -32,6 +38,11 @@ export const pricingGuideMessages = defineMessages({
     supremeMonth: (supreme: string, separately: string) => `Los dos planes de pago por ${supreme} al mes en vez de ${separately}.`,
     supremeYear: (supreme: string, separately: string) => `Los dos planes de pago por ${supreme} al año en vez de ${separately}.`,
     inYourPlan: 'En tu plan',
+    trialCta: (days) => `Empieza tu prueba gratis de ${days} días`,
+    trialTerms: (days, price, per) =>
+      `Gratis durante ${days} días y después ${price} ${per}. Cancela antes de que termine la prueba y no se te cobrará.`,
+    trialNewMembers: (days) => `Los miembros nuevos tienen ${days} días gratis.`,
+    trialPer: (interval) => (interval === 'month' ? 'al mes' : 'al año'),
     compareSummary: 'Comparar todas las funciones',
     comingSoon: (list: string) => `Próximamente en todos los planes: ${list}.`,
     tokensTitle: 'O paga solo por lo que uses',

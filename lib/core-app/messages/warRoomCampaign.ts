@@ -24,6 +24,8 @@ export const warRoomCampaignMessages = defineMessages({
     swing: (pts: string) => `${pts}-point swing`,
     biggest: 'Biggest game left',
     small: 'Barely moves your odds',
+    /** 2026-11-14: said once, rather than "Barely moves your odds" under every game left. */
+    allSmall: (pct: string) => `You’re at ${pct}% to make the playoffs, and no game you have left moves that much.`,
     inProgress: (week: number) => `Week ${week} is under way, so it isn’t ranked here.`,
     unpriced: (n: number) => `${n} later ${n === 1 ? 'game isn’t' : 'games aren’t'} priced here.`,
     median: 'This league also plays the week’s median score; these odds fix only the head-to-head result.',
@@ -54,6 +56,7 @@ export const warRoomCampaignMessages = defineMessages({
     swing: (pts) => `${pts} puntos de diferencia`,
     biggest: 'El partido más importante que queda',
     small: 'Apenas cambia tus probabilidades',
+    allSmall: (pct) => `Tienes un ${pct}% de llegar a los playoffs, y ningún partido que te queda lo cambia mucho.`,
     inProgress: (week) => `La semana ${week} está en juego, así que no se ordena aquí.`,
     unpriced: (n) => (n === 1 ? 'Un partido posterior no se calcula aquí.' : `${n} partidos posteriores no se calculan aquí.`),
     median: 'Esta liga también juega contra la mediana de la semana; estas probabilidades fijan solo el resultado directo.',

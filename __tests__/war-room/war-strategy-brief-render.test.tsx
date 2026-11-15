@@ -85,7 +85,9 @@ describe('WarStrategyBrief — next season', () => {
     expect(t).toContain('Next season')
     expect(t).toContain('Rebuild')
     expect(t).toContain('Sell: move aging starters for young players and picks.')
-    expect(t).toContain('Average starter age 28.4 · 2 early picks held · contention score 31/100')
+    expect(t).toContain('Average starter age 28.4 · 2 early picks held')
+    // 2026-11-14: no internal "contention score"; a fact that adds something ("second-oldest") stays.
+    expect(t).not.toContain('contention score')
     expect(t).toContain('second-oldest in the league')
   })
 

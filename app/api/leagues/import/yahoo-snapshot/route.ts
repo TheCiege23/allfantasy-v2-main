@@ -14,7 +14,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server'
 import { withApiUsage } from '@/lib/telemetry/usage'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { isYahooSnapshotImportOpenFor } from '@/lib/yahoo/yahooAvailability'
 import {
@@ -43,7 +43,7 @@ function closed(): NextResponse {
 
 export const GET = withApiUsage({ endpoint: '/api/leagues/import/yahoo-snapshot', tool: 'YahooSnapshot' })(
   async (req: NextRequest) => {
-    const auth = await requireVerifiedUser()
+    const auth = await requireAgeConfirmedUser()
     if (!auth.ok) return auth.response
     // 200 with enabled:false, not 403: the panel asks this on every load to decide whether to render.
     if (!isYahooSnapshotImportOpenFor(auth.userId)) return NextResponse.json({ enabled: false })
@@ -64,7 +64,7 @@ export const GET = withApiUsage({ endpoint: '/api/leagues/import/yahoo-snapshot'
 
 export const POST = withApiUsage({ endpoint: '/api/leagues/import/yahoo-snapshot', tool: 'YahooSnapshot' })(
   async (req: NextRequest) => {
-    const auth = await requireVerifiedUser()
+    const auth = await requireAgeConfirmedUser()
     if (!auth.ok) return auth.response
     if (!isYahooSnapshotImportOpenFor(auth.userId)) return closed()
 
@@ -151,7 +151,7 @@ export const POST = withApiUsage({ endpoint: '/api/leagues/import/yahoo-snapshot
 
 export const DELETE = withApiUsage({ endpoint: '/api/leagues/import/yahoo-snapshot', tool: 'YahooSnapshot' })(
   async (req: NextRequest) => {
-    const auth = await requireVerifiedUser()
+    const auth = await requireAgeConfirmedUser()
     if (!auth.ok) return auth.response
     if (!isYahooSnapshotImportOpenFor(auth.userId)) return closed()
     const leagueId = parseYahooLeagueId(req.nextUrl.searchParams.get('league'))

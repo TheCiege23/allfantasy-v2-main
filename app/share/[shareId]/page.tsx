@@ -8,6 +8,7 @@ import { MatchupSharePageContent } from '@/components/matchup-sharing/MatchupSha
 import type { MatchupSharePayload } from '@/lib/matchup-sharing/types';
 import { LeagueStoryPageContent } from '@/components/league-story/LeagueStoryPageContent';
 import type { LeagueStoryPayload } from '@/lib/league-story-engine/types';
+import { shareLandingHref } from '@/lib/referral/referralShareLink';
 
 const DRAFT_SHARE_TYPES = ['draft_grade', 'draft_rankings', 'draft_winner'];
 const MATCHUP_SHARE_TYPE = 'matchup_share';
@@ -36,6 +37,21 @@ export default async function ShareMomentPage({ params }: { params: Promise<{ sh
   });
   if (!moment) notFound();
 
+  /*
+   * "Try AllFantasy" goes to the landing with the SHARER'S referral code (2026-11-15), so the visit is
+   * counted and a signup is credited to them — or to /signup when they have no code. It used to go to
+   * /app, which sends someone without an account straight to a sign-in wall. Read-only: a page view
+   * never creates a code.
+   */
+  const sharerCode = await prisma.referralCode
+    .findFirst({
+      where: { userId: moment.userId, status: 'active' },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      select: { code: true },
+    })
+    .catch(() => null);
+  const ctaHref = shareLandingHref(sharerCode?.code);
+
   const meta = moment.metadata as {
     payload?: DraftShareCardPayload | MatchupSharePayload | LeagueStoryPayload;
   } | null;
@@ -49,15 +65,15 @@ export default async function ShareMomentPage({ params }: { params: Promise<{ sh
   if (draftPayload) {
     const base = process.env.NEXTAUTH_URL ?? '';
     const shareUrl = base ? `${base.replace(/\/$/, '')}/share/${moment.id}` : '';
-    return <DraftSharePageContent payload={draftPayload} shareUrl={shareUrl} />;
+    return <DraftSharePageContent payload={draftPayload} shareUrl={shareUrl} ctaHref={ctaHref} />;
   }
 
   if (matchupPayload) {
-    return <MatchupSharePageContent payload={matchupPayload} />;
+    return <MatchupSharePageContent payload={matchupPayload} ctaHref={ctaHref} />;
   }
 
   if (leagueStoryPayload) {
-    return <LeagueStoryPageContent payload={leagueStoryPayload} />;
+    return <LeagueStoryPageContent payload={leagueStoryPayload} ctaHref={ctaHref} />;
   }
 
   const Icon = TYPE_ICONS[moment.shareType] ?? Trophy;
@@ -76,7 +92,8 @@ export default async function ShareMomentPage({ params }: { params: Promise<{ sh
           Shared with AllFantasy — fantasy tools and rankings.
         </p>
         <Link
-          href="/app"
+          href={ctaHref}
+          data-testid="share-moment-cta"
           className="mt-6 inline-block rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500"
         >
           Try AllFantasy

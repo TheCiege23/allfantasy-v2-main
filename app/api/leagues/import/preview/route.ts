@@ -10,7 +10,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
+import { recordImportStarted } from '@/lib/analytics/importFunnel'
 import { orchestrateImportPreview } from '@/lib/league-import/importOrchestrator'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
@@ -36,7 +37,7 @@ function mapImportPreviewErrorStatus(code: string): number {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) {
     return auth.response
   }
@@ -78,6 +79,9 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   }
+
+  // The funnel's "import started" — a pasted league id skips discovery, so preview counts too.
+  void recordImportStarted(auth.userId, provider, 'preview')
 
   // Gate at preview too — no reason to surface data to someone who can't commit.
   const gate = await assertImportCommissioner({
