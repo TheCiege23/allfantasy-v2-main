@@ -403,13 +403,15 @@ async function runRedraftReconciliation() {
               .canCall('sleeper', 'stats/nfl/week')
               .catch(() => true)
 
-            await syncPlayerWeeklyScoresForRedraftSeason({
+            const synced = await syncPlayerWeeklyScoresForRedraftSeason({
               seasonId,
               week,
               actorId: 'system:score-sync-backfill',
             })
             await recalculateMatchupsForSeasonWeek(seasonId, week)
-            return { rateLimited: !canCall }
+            // Lines the provider just returned for this league's players: what lets the finalizer seal a
+            // small or short-handed week whose only missing starters provably did not play.
+            return { rateLimited: !canCall, providerRows: synced?.weekStatsFromProvider ?? 0 }
           },
         },
       )

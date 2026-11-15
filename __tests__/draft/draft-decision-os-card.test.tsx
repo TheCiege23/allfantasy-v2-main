@@ -99,6 +99,52 @@ describe('DraftDecisionOsCard', () => {
     expect(ctx.textContent).toContain('Run on WR')
   })
 
+  it('lists the managers before your next pick — facts, with past drafts only when the plan has them', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        decision: decision({
+          context: {
+            scoringWindow: null,
+            run: null,
+            teamsAhead: null,
+            managersAhead: {
+              managers: [
+                { name: 'Bea', slot: 2, thisDraft: 'This draft: RB, RB (2 picks) — no QB or WR or TE yet.', history: ['Their first-round pick was at RB in 2 of their 3 drafts.'] },
+                { name: 'Cal', slot: 3, thisDraft: "Hasn't picked yet in this draft.", history: [] },
+              ],
+              history: 'shown',
+            },
+          },
+        }),
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    const box = await screen.findByTestId('draft-decision-os-managers-ahead')
+    expect(box.textContent).toContain('Before your next pick (2)')
+    expect(box.textContent).toContain('Bea — This draft: RB, RB (2 picks)')
+    expect(box.textContent).toContain('Past drafts: Their first-round pick was at RB')
+    expect(screen.queryByTestId('draft-decision-os-managers-ahead-locked')).toBeNull()
+  })
+
+  it('says what Competitive Edge would add when the plan lacks it, and shows no history', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        decision: decision({
+          context: {
+            scoringWindow: null,
+            run: null,
+            teamsAhead: null,
+            managersAhead: { managers: [{ name: 'Bea', slot: 2, thisDraft: 'This draft: RB (1 pick) — no QB or WR or TE yet.', history: [] }], history: 'locked' },
+          },
+        }),
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    await screen.findByTestId('draft-decision-os-managers-ahead')
+    expect(screen.getByTestId('draft-decision-os-managers-ahead-locked').textContent).toContain('Competitive Edge')
+    expect(screen.queryByText(/Past drafts:/)).toBeNull()
+  })
+
   it('renders auction advice instead of hiding an auction (2026-11-14)', async () => {
     fetchMock.mockReturnValue(
       respond(200, {

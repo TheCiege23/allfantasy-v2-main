@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   fit: vi.fn(),
   recommend: vi.fn(),
   auction: vi.fn(),
+  managersAhead: vi.fn(async () => null),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
@@ -22,6 +23,7 @@ vi.mock('@/lib/live-draft-engine/RosterFitValidation', () => ({ validateRosterFi
 vi.mock('@/lib/shared-services/draft/DraftContextAssembler', () => ({ buildDraftDecisionContext: h.context }))
 vi.mock('@/lib/draft-helper/RecommendationEngine', () => ({ computeDraftRecommendation: h.recommend }))
 vi.mock('@/lib/shared-services/draft/auctionDecision', () => ({ buildAuctionDecision: h.auction }))
+vi.mock('@/lib/competitive-edge/liveDraftManagers', () => ({ loadManagersAhead: h.managersAhead }))
 
 import { GET } from '@/app/api/leagues/[leagueId]/draft/decision/route'
 
@@ -125,11 +127,23 @@ describe('GET /api/leagues/[leagueId]/draft/decision', () => {
       runInsight: 'Run on WR (5 of the last 8 picks).',
       teamsAheadInsight: '6 picks before your next turn: 4 of 6 still need a starting TE.',
     })
-    const body = (await (await GET(req, params)).json()) as { decision: { context: Record<string, string | null> } }
+    const ahead = { managers: [{ name: 'Bea', slot: 2, thisDraft: 'This draft: RB (1 pick) — no QB or WR or TE yet.', history: [] }], history: 'locked' }
+    h.managersAhead.mockResolvedValueOnce(ahead as never)
+    const body = (await (await GET(req, params)).json()) as { decision: { context: Record<string, unknown> } }
     expect(body.decision.context).toEqual({
       scoringWindow: 'Scoring window: KBI round 2 (weeks 11–12).',
       run: 'Run on WR (5 of the last 8 picks).',
       teamsAhead: '6 picks before your next turn: 4 of 6 still need a starting TE.',
+      managersAhead: ahead,
     })
+    expect(h.managersAhead).toHaveBeenCalledWith({ leagueId: 'lg1', userId: expect.any(String) })
+  })
+
+  it('a failed managers-ahead read never fails the decision', async () => {
+    h.managersAhead.mockRejectedValueOnce(new Error('db down'))
+    const res = await GET(req, params)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { decision: { context: Record<string, unknown> } }
+    expect(body.decision.context.managersAhead).toBeNull()
   })
 })

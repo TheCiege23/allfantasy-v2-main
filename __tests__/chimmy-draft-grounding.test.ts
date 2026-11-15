@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   viewerRoster: vi.fn(),
   buildDraftDecisionContext: vi.fn(),
   computeDraftRecommendation: vi.fn(),
+  managersAhead: vi.fn(async () => null),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -23,6 +24,8 @@ vi.mock('@/lib/shared-services/draft/DraftContextAssembler', () => ({
 vi.mock('@/lib/draft-helper/RecommendationEngine', () => ({
   computeDraftRecommendation: mocks.computeDraftRecommendation,
 }))
+
+vi.mock('@/lib/competitive-edge/liveDraftManagers', () => ({ loadManagersAhead: mocks.managersAhead }))
 
 import { buildDraftContext, buildDraftOsRecommendationLines } from '@/lib/chimmy/draftGrounding'
 
@@ -258,5 +261,46 @@ describe('Draft OS recommendation in the draft context', () => {
     mocks.computeDraftRecommendation.mockReturnValue(rec)
     const lines = (await buildDraftOsRecommendationLines('lg1', 'roster-1')) ?? []
     expect(lines.join(' ')).toContain('do not describe the pick as a reach or a value')
+  })
+})
+
+describe('the managers before the user’s next pick (2026-11-14)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.sessionFindUnique.mockResolvedValue(session())
+    mocks.pickFindMany.mockResolvedValue([pick(2, 'Second Pick', 'Manager 2'), pick(1, 'First Pick', 'Manager 1')])
+    mocks.pickCount.mockResolvedValue(2)
+    mocks.viewerRoster.mockImplementation(async (_leagueId, userId) => userId === 'app-user-1' ? 'roster-1' : null)
+    mocks.buildDraftDecisionContext.mockResolvedValue({ engineInput: { marker: 'engine-input' } })
+    mocks.computeDraftRecommendation.mockReturnValue(recommendation())
+  })
+
+  it('gives Chimmy each manager’s facts, and forbids labels and predictions', async () => {
+    mocks.managersAhead.mockResolvedValueOnce({
+      managers: [{ name: 'Manager 3', slot: 3, thisDraft: "Hasn't picked yet in this draft.", history: ['Their first-round pick was at RB in 2 of their 3 drafts.'] }],
+      history: 'shown',
+    })
+    const out = await buildDraftContext('lg1', 'app-user-1')
+    expect(mocks.managersAhead).toHaveBeenCalledWith({ leagueId: 'lg1', userId: 'app-user-1' })
+    expect(out).toContain("MANAGERS PICKING BEFORE THIS USER'S NEXT TURN")
+    expect(out).toContain('never label a manager')
+    expect(out).toContain('Manager 3: Hasn\'t picked yet in this draft. Past drafts in this league: Their first-round pick was at RB')
+  })
+
+  it('🛑 tells Chimmy not to describe history the user’s plan does not include', async () => {
+    mocks.managersAhead.mockResolvedValueOnce({
+      managers: [{ name: 'Manager 3', slot: 3, thisDraft: "Hasn't picked yet in this draft.", history: [] }],
+      history: 'locked',
+    })
+    const out = await buildDraftContext('lg1', 'app-user-1')
+    expect(out).toContain('Competitive Edge, which this user')
+    expect(out).not.toContain('Past drafts in this league')
+  })
+
+  it('keeps the rest of the context when the read fails', async () => {
+    mocks.managersAhead.mockRejectedValueOnce(new Error('db down'))
+    const out = await buildDraftContext('lg1', 'app-user-1')
+    expect(out).toContain('ON THE CLOCK')
+    expect(out).not.toContain('MANAGERS PICKING')
   })
 })

@@ -340,3 +340,104 @@ describe('the escalation as the commissioner reads it', () => {
     expect(entry?.category).toBe('scoring')
   })
 })
+
+/*
+ * Below the coverage floor (2026-11-14). A 12-team test league with one player per roster sat at week 5
+ * for six weeks: 9 of 12 starters had lines, the other three were on a bye or inactive, and 75% is under
+ * the 80% floor — a RATIO, which cannot tell "three players did not play" from "a quarter of the data is
+ * missing". Right after a backfill that returned provider lines, a week under the floor now seals when
+ * EVERY missing starter is a proven non-appearance; anything unproven still holds it.
+ */
+describe('below the floor, proven non-appearances seal — only right after a fresh fetch', () => {
+  /** Three real lines, `x` (BUF: teammates have lines — did not play) and `y` (SEA: a bye). 3/5 = 0.6. */
+  const smallWeek = (yTeam: string | null = 'SEA') => ({
+    roster: [p('a1', 'BUF'), p('a2', 'PHI'), p('a3', 'DAL'), p('x', 'BUF'), p('y', yTeam)],
+    ownScores: [
+      { playerId: 'a1', stats: { rec: 4 } },
+      { playerId: 'a2', stats: { rec: 2 } },
+      { playerId: 'a3', stats: { rush_yd: 30 } },
+    ],
+  })
+  const run = (prisma: any, extra: Record<string, unknown> = {}) =>
+    finalizeRedraftWeek({ seasonId: SEASON.id, week: 2, ...extra }, { prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc as any, ...quiet })
+
+  it('without the flag the floor is absolute, exactly as before', async () => {
+    const { prisma, calls } = makePrisma(smallWeek())
+    const result = await run(prisma)
+    expect(result.refusal).toBe('stat_coverage_below_floor')
+    expect(result.coverage).toBe(0.6)
+    expect(writes(calls)).toHaveLength(0)
+  })
+
+  it('with it, every missing starter proven (did not play + bye): sealed, both zeroed', async () => {
+    const { prisma } = makePrisma(smallWeek())
+    const result = await run(prisma, { allowProvenNonAppearanceBelowFloor: true })
+    expect(result.refusal).toBeNull()
+    expect(result.finalized).toBe(true)
+    expect([...result.zeroedPlayerIds].sort()).toEqual(['x', 'y'])
+    expect(result.unverifiedZeroPlayerIds).toBeUndefined()
+  })
+
+  it('🛑 a missing starter whose game the feed never delivered still holds the week', async () => {
+    // y is on KC: KC played, and nothing anywhere holds a KC line.
+    const { prisma, calls } = makePrisma(smallWeek('KC'))
+    const result = await run(prisma, { allowProvenNonAppearanceBelowFloor: true })
+    expect(result.refusal).toBe('stat_coverage_below_floor')
+    expect(writes(calls)).toHaveLength(0)
+  })
+
+  it('🛑 an unplaced starter (no team) is not proof under the floor either', async () => {
+    const { prisma, calls } = makePrisma(smallWeek(null))
+    const result = await run(prisma, { allowProvenNonAppearanceBelowFloor: true })
+    expect(result.refusal).toBe('stat_coverage_below_floor')
+    expect(writes(calls)).toHaveLength(0)
+  })
+
+  const sweep = (providerRows: number | undefined, rateLimited = false) => {
+    // The fake answers its matchup read once per instance, so the retry after the backfill reads a fresh
+    // one — the same week, the same rows (the backfill found nothing new for x and y).
+    const { prisma: before } = makePrisma(smallWeek())
+    const { prisma: after } = makePrisma(smallWeek())
+    let synced = false
+    const syncWeekStats = vi.fn(async () => {
+      synced = true
+      return { rateLimited, providerRows }
+    })
+    return {
+      syncWeekStats,
+      result: finalizeWeekWithRefresh(
+        { seasonId: SEASON.id, week: 2 },
+        {
+          now: () => AFTER_GRACE,
+          recalculateMatchups: recalc as any,
+          ...quiet,
+          syncWeekStats,
+          get prisma() {
+            return synced ? after : before
+          },
+        } as any,
+      ),
+    }
+  }
+
+  it('the sweep seals it after a backfill that returned provider lines', async () => {
+    const { syncWeekStats, result } = sweep(9)
+    const r = await result
+    expect(syncWeekStats).toHaveBeenCalledOnce()
+    expect(r.refusal).toBeNull()
+    expect(r.finalized).toBe(true)
+  })
+
+  it('🛑 an EMPTY backfill (an outage, or a fetcher that reports nothing) keeps the floor absolute', async () => {
+    for (const rows of [0, undefined]) {
+      const r = await sweep(rows).result
+      expect(r.refusal).toBe('stat_coverage_below_floor')
+      expect(r.finalized).toBe(false)
+    }
+  })
+
+  it('🛑 a rate-limited backfill never excuses the floor, and still says why', async () => {
+    const r = await sweep(9, true).result
+    expect(r.refusal).toBe('provider_rate_limited')
+  })
+})

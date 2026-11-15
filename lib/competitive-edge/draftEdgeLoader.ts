@@ -24,28 +24,38 @@ function ownerOf(metadata: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null
 }
 
-export async function loadDraftEdge(input: { leagueId: string; userId: string }): Promise<SectionState<DraftEdge>> {
+type DraftEdgeInput =
+  | { ok: false; reason: string }
+  | {
+      ok: true
+      picks: EdgeDraftPick[]
+      teams: Array<{ externalId: string; ownerName: string | null; teamName: string | null; platformUserId: string | null; claimedByUserId: string | null }>
+      unattributed: number[]
+    }
+
+/** The league's attributed draft history — shared by Draft HQ's edge and the live draft room's. */
+async function readDraftEdgeInput(leagueId: string): Promise<DraftEdgeInput> {
   const league = await prisma.league.findUnique({
-    where: { id: input.leagueId },
+    where: { id: leagueId },
     select: { platform: true, platformLeagueId: true, sport: true },
   })
-  if (!league) return { available: false, reason: 'This league could not be read.' }
+  if (!league) return { ok: false, reason: 'This league could not be read.' }
 
   const platform = String(league.platform ?? '').toLowerCase()
   if (platform !== 'sleeper' || !league.platformLeagueId) {
     return {
-      available: false,
+      ok: false,
       reason: `Competitive Edge reads Sleeper draft history today. ${platformLabel(platform)} leagues aren't connected yet.`,
     }
   }
 
   const [rows, teams] = await Promise.all([
     prisma.draftFact.findMany({
-      where: { leagueId: input.leagueId },
+      where: { leagueId },
       select: { season: true, round: true, playerId: true, metadata: true },
     }),
     prisma.leagueTeam.findMany({
-      where: { leagueId: input.leagueId },
+      where: { leagueId },
       select: { externalId: true, ownerName: true, teamName: true, platformUserId: true, claimedByUserId: true },
     }),
   ])
@@ -84,6 +94,13 @@ export async function loadDraftEdge(input: { leagueId: string; userId: string })
     position: positionBySleeperId.get(p.playerId) ?? null,
     ownerSleeperId: p.owner,
   }))
+  return { ok: true, picks, teams, unattributed: [...unattributed] }
+}
+
+export async function loadDraftEdge(input: { leagueId: string; userId: string }): Promise<SectionState<DraftEdge>> {
+  const read = await readDraftEdgeInput(input.leagueId)
+  if (!read.ok) return { available: false, reason: read.reason }
+  const { picks, teams, unattributed } = read
 
   const managers = teams
     .filter((t) => t.platformUserId?.trim())
@@ -100,9 +117,15 @@ export async function loadDraftEdge(input: { leagueId: string; userId: string })
       picks,
       managers,
       viewerOwnerSleeperId: viewer?.platformUserId?.trim() || null,
-      unattributedSeasons: [...unattributed],
+      unattributedSeasons: unattributed,
     }),
   }
+}
+
+/** The league's attributed past-draft picks, or null when the league has none to read (not Sleeper). */
+export async function loadDraftHistoryPicks(leagueId: string): Promise<EdgeDraftPick[] | null> {
+  const read = await readDraftEdgeInput(leagueId)
+  return read.ok ? read.picks : null
 }
 
 /**

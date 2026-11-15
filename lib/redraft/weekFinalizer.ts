@@ -236,7 +236,7 @@ export type WeekFinalizerDeps = {
   syncWeekStats?: (args: {
     seasonId: string
     week: number
-  }) => Promise<{ rateLimited?: boolean } | void>
+  }) => Promise<{ rateLimited?: boolean; providerRows?: number } | void>
 }
 
 export type FinalizeRedraftWeekParams = {
@@ -261,7 +261,31 @@ export type FinalizeRedraftWeekParams = {
    * is sealed, exactly as before.
    */
   rosterIds?: string[]
+  /**
+   * Let a week under the coverage floor seal when EVERY starter still without a row is a proven
+   * non-appearance (`did_not_play`, `no_game` or `inactive` in `weekStatEvidence.ts`).
+   *
+   * 🛑 SET ONLY BY {@link finalizeWeekWithRefresh}, AND ONLY RIGHT AFTER A BACKFILL THAT RETURNED
+   * PROVIDER LINES. The floor guards two different failures. One is a feed outage, which the
+   * evidence check catches by itself: a team whose game the feed never delivered is
+   * `game_box_missing` and still blocks. The other is a past week whose stats nobody fetched — and
+   * there the evidence check is fooled, because teammates on OTHER leagues' rosters hold rows, so a
+   * player who played but was never fetched for THIS league reads as `did_not_play`. A fresh
+   * backfill that just returned lines for this league's players removes that case: a starter still
+   * without a row after it genuinely recorded nothing.
+   *
+   * Why it exists, measured 2026-11-14: a 12-team test league with one player per roster sat at
+   * week 5 for six weeks — every tick refused at 9/12 = 75%, with the three missing starters on a
+   * bye or inactive. The floor is a ratio, so a small league, or a real one with an inactive
+   * manager starting injured and bye-week players, can sit under it forever with nothing missing.
+   * NCAAF is untouched: its floor is 1.0 because the college sync writes explicit rows for a
+   * verified non-appearance.
+   */
+  allowProvenNonAppearanceBelowFloor?: boolean
 }
+
+/** Verdicts that prove a starter recorded nothing this week, so a 0 is the truth (weekStatEvidence.ts). */
+const PROVEN_NON_APPEARANCE: ReadonlySet<MissingStatVerdict> = new Set(['did_not_play', 'no_game', 'inactive'])
 
 function emptyResult(
   base: Pick<WeekFinalizeResult, 'seasonId' | 'leagueId' | 'sport' | 'season' | 'week'>,
@@ -661,9 +685,21 @@ export async function finalizeRedraftWeek(
       slate, matchupsConsidered, starters: starters.size, startersWithStats, coverage,
     })
   }
+  const missing = [...starters.values()].filter((s) => !existing.has(`${s.sport}::${s.playerId}`))
+
+  /*
+   * 🛑 THE FLOOR FORGIVES A SHARE, NOT A GAME. Before any zero is written, every missing player must be
+   * a provable non-appearance — see `weekStatEvidence.ts` and the header's fourth condition. Run on a
+   * dry run too: `finalizeWeekWithRefresh` asks a dry run whether the week is ready.
+   *
+   * Asked BEFORE the floor only when `allowProvenNonAppearanceBelowFloor` could use the answer; the
+   * ordinary below-floor refusal stays the cheap one it always was.
+   */
   // College sync writes explicit rows for verified byes/non-appearances. A missing college
   // row therefore means missing identity or ingestion evidence, never a zero to invent.
-  if (coverage < (sport === 'NCAAF' ? 1 : coverageFloor)) {
+  const belowFloor = coverage < (sport === 'NCAAF' ? 1 : coverageFloor)
+  const mayExcuseFloor = belowFloor && params.allowProvenNonAppearanceBelowFloor === true && sport !== 'NCAAF' && missing.length > 0
+  if (belowFloor && !mayExcuseFloor) {
     return emptyResult(base, 'stat_coverage_below_floor', {
       slate,
       matchupsConsidered,
@@ -672,14 +708,6 @@ export async function finalizeRedraftWeek(
       coverage,
     })
   }
-
-  const missing = [...starters.values()].filter((s) => !existing.has(`${s.sport}::${s.playerId}`))
-
-  /*
-   * 🛑 THE FLOOR FORGIVES A SHARE, NOT A GAME. Before any zero is written, every missing player must be
-   * a provable non-appearance — see `weekStatEvidence.ts` and the header's fourth condition. Run on a
-   * dry run too: `finalizeWeekWithRefresh` asks a dry run whether the week is ready.
-   */
   const { verdicts, gapTeams } = await classifyMissingStatPlayers(prisma as never, {
     sport,
     season: season.season,
@@ -688,6 +716,15 @@ export async function finalizeRedraftWeek(
     missing,
     now,
   })
+  if (mayExcuseFloor && !missing.every((m) => PROVEN_NON_APPEARANCE.has(verdicts.get(`${m.sport}::${m.playerId}`) as MissingStatVerdict))) {
+    return emptyResult(base, 'stat_coverage_below_floor', {
+      slate,
+      matchupsConsidered,
+      starters: starters.size,
+      startersWithStats,
+      coverage,
+    })
+  }
   const verdictOf = (m: { sport: string; playerId: string }): MissingStatVerdict | undefined => verdicts.get(`${m.sport}::${m.playerId}`)
   const gapPlayers = missing.filter((m) => {
     const v = verdictOf(m)
@@ -1005,7 +1042,16 @@ export async function finalizeWeekWithRefresh(
   if (backfillable && deps.syncWeekStats && !params.dryRun) {
     try {
       const backfill = await deps.syncWeekStats({ seasonId: params.seasonId, week: params.week })
-      result = await attempt()
+      /*
+       * The fresh fetch is what makes a below-floor seal safe (see `allowProvenNonAppearanceBelowFloor`):
+       * only when it returned provider lines for this league's players may a starter still without a
+       * row be read as a proven non-appearance. A refused or empty fetch keeps the floor absolute.
+       */
+      const freshLines = (backfill && typeof backfill.providerRows === 'number' ? backfill.providerRows : 0) > 0
+      result = await finalizeRedraftWeek(
+        { ...params, allowProvenNonAppearanceBelowFloor: freshLines && !backfill?.rateLimited },
+        deps,
+      )
       /*
        * ⚠ REPORT THE CAUSE THAT IS TRUE. A spent quota makes the provider hand back an empty
        * payload, so the retry's coverage is the same number for a completely different

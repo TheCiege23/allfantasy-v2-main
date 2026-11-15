@@ -1831,6 +1831,12 @@ model ChimmyAdvice {
   slot          String?  @db.VarChar(16)
   confidencePct Int?     @map("confidence_pct")
   givenAt       DateTime @default(now()) @map("given_at")
+  /// What the advice knew (2026-11-14, the advice ledger): each player's projection when it was said.
+  recProjected  Float?   @map("rec_projected")
+  altProjected  Float?   @map("alt_projected")
+  /// Set when a surface stopped giving the advice BEFORE either player's kickoff (My Team's bench
+  /// check after projections flip). A withdrawn call is not graded: the user was not left with it.
+  withdrawnAt   DateTime? @map("withdrawn_at")
 
   @@unique([userId, leagueId, season, week, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_type_rec_alt_key")
   @@index([userId, givenAt(sort: Desc)], map: "chimmy_advice_user_id_given_at_idx")
