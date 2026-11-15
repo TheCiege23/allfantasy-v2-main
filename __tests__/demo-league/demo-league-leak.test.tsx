@@ -377,7 +377,8 @@ describe('demo league — no real identifier reaches any response, page, prompt 
       expect(findLeaks(html), url).toEqual([])
       expect(html, url).not.toContain('sleepercdn.com/avatars')
     }
-  })
+    // Eleven pages through the app's real Home and Standings; over 30s cold on a loaded machine.
+  }, 120_000)
 
   it('nothing logged while serving demo requests contains a real identifier', async () => {
     const { GET } = await import('@/app/api/demo/league/route')

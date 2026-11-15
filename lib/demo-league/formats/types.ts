@@ -8,6 +8,7 @@
  */
 import type { DemoLeagueView } from '../types'
 import type { RequestableFormat } from '@/lib/create-league-v2/requestedFormat'
+import type { FormatRealScreen } from './realScreens'
 
 export type Tone = 'danger' | 'success' | 'warning' | 'info' | 'muted'
 
@@ -52,4 +53,6 @@ export type FormatDemo = FormatDemoMeta & {
    * screen then reads Safe / On the bubble / Eliminated instead of a playoff line such a league lacks.
    */
   elimination?: { eliminatedSlots: number[]; bubbleSlots: number[] | null }
+  /** The type's own app screen, fed this example's data (realScreens.ts). Absent for types whose screen is not pure. */
+  real?: FormatRealScreen
 }
