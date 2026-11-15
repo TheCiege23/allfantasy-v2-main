@@ -38,6 +38,10 @@ export const SMS_OPT_OUT_LINE = "Reply STOP to opt out."
  */
 export function formatProgramSms(body: string): string {
   const text = body.trim()
-  const named = /allfantasy/i.test(text) ? text : `${SMS_PROGRAM_BRAND}: ${text}`
+  // 🛑 A LINK IS NOT A NAME (2026-11-15). "Fix: https://allfantasy.ai/…" contains the word, so every text
+  // carrying one of our links went out with no sender named: the injury final call among them. Only the
+  // words outside links count.
+  const words = text.replace(/https?:\/\/\S+/gi, ' ')
+  const named = /allfantasy/i.test(words) ? text : `${SMS_PROGRAM_BRAND}: ${text}`
   return /reply\s+stop/i.test(named) ? named : `${named}\n${SMS_OPT_OUT_LINE}`
 }

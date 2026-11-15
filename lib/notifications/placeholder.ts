@@ -73,7 +73,7 @@ function getPlaceholderNotifications(): PlatformNotification[] {
  */
 export function mergeWithPlaceholders(
   fromApi: PlatformNotification[],
-  usePlaceholders = true
+  usePlaceholders = false
 ): PlatformNotification[] {
   if (!usePlaceholders || fromApi.length > 0) return fromApi
   return getPlaceholderNotifications()
