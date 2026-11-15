@@ -572,6 +572,13 @@ function DevBypassSignIn({ callbackUrl }: { callbackUrl: string }) {
   )
 }
 
+/** `?ref=CODE` on the sign-up page itself — a short token, or nothing. */
+function referralFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const ref = new URLSearchParams(window.location.search).get('ref')?.trim() ?? ''
+  return /^[A-Za-z0-9]{4,16}$/.test(ref) ? ref : null
+}
+
 function SignUp({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
   const [displayName, setDisplayName] = useState('')
@@ -688,6 +695,12 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             ? { phone: codeSentTo ?? phone.trim(), phoneVerificationCode: code.replace(/\s/g, '') }
             : {}),
           ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
+          /*
+           * A friend's code in this page's own URL (`/signup?ref=CODE`, 2026-11-15). The auth pages do not
+           * mount ReferralTracker, so the `af_ref` cookie is only there when the visitor came through the
+           * landing; the register route prefers this and falls back to the cookie.
+           */
+          ...(referralFromUrl() ? { referralCode: referralFromUrl() } : {}),
         }),
       })
 
