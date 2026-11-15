@@ -848,6 +848,9 @@ export function CommsDrawer({
             into. What is true is narrower, and it is the part that matters: we never change your
             league on the platform it lives on.
           */}
+          {/* The support inbox (lib/support): a person answers, in /help and by email. A footLINK, not a
+              footnote: footnotes are hidden on a phone, and this is the one line that must show there. */}
+          <a href="/help" className="af-cm-footlink" data-testid="comms-get-help">{coreUiCopy('Need help? Message us', language)}</a>
           <span className="af-cm-footnote">AllFantasy never changes your league on {availableImportPlatformsPhrase()}.</span>
         </footer>
       </aside>
