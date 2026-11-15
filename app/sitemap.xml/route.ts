@@ -2,6 +2,15 @@ import { prisma } from '@/lib/prisma'
 import { SPORT_SLUGS, TOOL_SLUGS } from '@/lib/seo-landing/config'
 import { DISCOVERY_LEAGUES_SLUGS } from '@/lib/seo-landing/discovery-leagues-pages'
 import { LEAGUE_TYPE_SLUGS } from '@/lib/seo-landing/league-type-pages'
+import { liveArticleWhere } from '@/lib/automated-blog/liveArticles'
+
+function blogIndexUrl(baseUrl: string): string {
+  return `<url>
+    <loc>${baseUrl}/blog</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`
+}
 import { playerSlug } from '@/lib/core-app/playerSlug'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
@@ -42,7 +51,7 @@ export async function GET() {
   const baseUrl = getPublicSiteOrigin()
 
   const staticPages = [
-    { path: 'blog', priority: '0.8', changefreq: 'weekly' },
+    // `blog` is NOT here: it is listed below only when at least one article is live.
     { path: '', priority: '1.0', changefreq: 'weekly' },
     /*
      * ⚠ ONLY PAGES A LOGGED-OUT CRAWLER CAN READ. Removed 2026-11-14, each measured
@@ -105,24 +114,37 @@ export async function GET() {
     )
     .join('\n  ')
 
+  /*
+   * Blog: the /blog index plus every LIVE article — published, or scheduled and due
+   * (lib/automated-blog/liveArticles.ts). A plain `publishStatus: 'published'` filter here left
+   * scheduled posts out forever, because nothing ever flips them.
+   *
+   * ⚠ THE INDEX IS LISTED ONLY WHEN SOMETHING IS LIVE. Production had zero articles (2026-11-15) and
+   * this file still submitted /blog at 0.8 — an empty page Google was asked to crawl. app/blog/page
+   * applies the same condition to its robots tag. On a query FAILURE the index stays listed, the same
+   * fail-open choice that page makes, and the failure is logged rather than swallowed: the old empty
+   * `catch {}` is how "zero articles" and "the query broke" looked identical from outside.
+   */
   let blogUrls = ''
   try {
-    const published = await prisma.blogArticle.findMany({
-      where: { publishStatus: 'published' },
-      select: { slug: true, updatedAt: true },
+    const live = await prisma.blogArticle.findMany({
+      where: liveArticleWhere(),
+      select: { slug: true, updatedAt: true, publishedAt: true },
     })
-    blogUrls = published
-      .map(
-        (a) => `<url>
+    const articleUrls = live.map((a) => {
+      // A scheduled post's row is last touched when it was scheduled; it changed when it went live.
+      const changed = a.publishedAt && a.publishedAt > a.updatedAt ? a.publishedAt : a.updatedAt
+      return `<url>
     <loc>${baseUrl}/blog/${a.slug}</loc>
-    <lastmod>${a.updatedAt.toISOString().slice(0, 10)}</lastmod>
+    <lastmod>${changed.toISOString().slice(0, 10)}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>`
-      )
-      .join('\n  ')
-  } catch {
-    // ignore
+    })
+    blogUrls = live.length > 0 ? [blogIndexUrl(baseUrl), ...articleUrls].join('\n  ') : ''
+  } catch (err) {
+    console.error('[sitemap] blog articles query failed; listing /blog without articles:', err instanceof Error ? err.message : err)
+    blogUrls = blogIndexUrl(baseUrl)
   }
 
   /*

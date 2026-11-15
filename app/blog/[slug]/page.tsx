@@ -7,6 +7,7 @@ import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
 import { renderBlogBodyHtml } from "@/lib/automated-blog/renderBlogBody"
 import { isBlogAdmin } from "@/lib/automated-blog/blogAdminGate"
+import { isArticleLive } from "@/lib/automated-blog/liveArticles"
 
 type Props = { params: Promise<{ slug: string }>; searchParams?: Promise<{ preview?: string }> }
 
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await prisma.blogArticle.findUnique({
     where: { slug },
   })
-  if (!article || article.publishStatus !== "published") return { title: "Blog | AllFantasy" }
+  if (!article || !isArticleLive(article)) return { title: "Blog | AllFantasy" }
   const seo = buildBlogSEO({
     title: article.title,
     excerpt: article.excerpt,
@@ -56,7 +57,7 @@ export default async function BlogArticlePage({ params, searchParams }: Props) {
   if (!article) notFound()
   // `?preview=1` shows an unpublished article, so it is an admin view — for
   // anyone else a draft does not exist.
-  if (article.publishStatus !== "published" && !(isPreview && (await isBlogAdmin()))) notFound()
+  if (!isArticleLive(article) && !(isPreview && (await isBlogAdmin()))) notFound()
 
   const bodyHtml = renderBlogBodyHtml(article.body)
 

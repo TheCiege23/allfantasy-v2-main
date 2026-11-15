@@ -303,7 +303,7 @@ export function LeagueTypeConfirm({
                 </button>
               ))}
               <Link
-                href="/formats/pirate"
+                href="/league-types/pirate"
                 className="ml-auto inline-flex min-h-[44px] items-center text-xs font-bold text-[#3fd0e8] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3fd0e8]"
               >
                 {t('lsRules.lt.piratePreview')}

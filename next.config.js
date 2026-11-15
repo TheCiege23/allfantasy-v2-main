@@ -461,6 +461,9 @@ const nextConfig = {
       { source: '/devy', destination: '/league-types/devy', permanent: false },
       { source: '/c2c', destination: '/league-types/c2c', permanent: false },
       { source: '/idp', destination: '/league-types/idp', permanent: false },
+      // The Pirate "coming soon" preview, retired once Pirate shipped (#2852). PERMANENT: the old
+      // page is gone for good and its replacement is the indexable lander.
+      { source: '/formats/pirate', destination: '/league-types/pirate', permanent: true },
     ]
   },
 
