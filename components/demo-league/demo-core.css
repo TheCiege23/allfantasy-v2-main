@@ -16,5 +16,15 @@
 .af-core[data-demo-league] .af-st-share,
 .af-core[data-demo-league] .af-st-noteam { display: none; }
 
+/* League-type screens (FormatRealScreen). Controls that open member-only views do nothing for a
+   visitor, so they are hidden rather than left inert:
+   - Salary Cap's "Back" (the first button of both the dashboard and the contracts table);
+   - the Devy hero's "DM @chimmy" and "League settings";
+   - Survivor Guilly's "Your tribe" (a visitor has none) and the commissioner's "Tribe setup". */
+.af-core[data-demo-league] [data-testid='format-real-screen-salary-cap'] .space-y-6 > button:first-child,
+.af-core[data-demo-league] [data-testid='format-real-screen-devy'] button,
+.af-core[data-demo-league] [data-testid='format-real-screen-survivor-guilly'] [data-testid='sg-tribedraw'],
+.af-core[data-demo-league] [data-testid='format-real-screen-survivor-guilly'] [data-testid='sg-tribesetup'] { display: none; }
+
 /* The live demo league has no image; its rail tile shows the AF crest letters on the app's tile. */
 .af-core[data-demo-league] .af-rail-tile-art { overflow: hidden; }

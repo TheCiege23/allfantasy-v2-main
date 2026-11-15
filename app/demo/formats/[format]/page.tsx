@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { FORMAT_DEMO_META, getFormatDemo } from '@/lib/demo-league/formats/registry'
 import { DemoLeagueExtras, DemoOverview } from '@/components/demo-league/DemoScreens'
 import { FormatPanels } from '@/components/demo-league/formats/FormatPanels'
+import { FormatRealScreen } from '@/components/demo-league/formats/FormatRealScreen'
 import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
 import { DEMO_HIDDEN_HOME_SECTIONS, demoLeagueHome } from '@/lib/demo-league/coreHome'
 
@@ -49,6 +50,7 @@ export default async function DemoFormatPage(props: { params: Promise<{ format: 
         </div>
       </header>
 
+      {demo.real ? <FormatRealScreen screen={demo.real} /> : null}
       <FormatPanels panels={demo.panels} teams={demo.view.teams} />
 
       {demo.standingsNote ? <p className="text-sm af-muted">{demo.standingsNote}</p> : null}

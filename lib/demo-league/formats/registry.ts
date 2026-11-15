@@ -13,8 +13,10 @@
  */
 import { buildSampleBase, IDP_POOL, NFL_POOL, PROSPECT_POOL, teamNameOf, type SampleBase } from './sample'
 import type { FormatDemo, FormatDemoMeta, FormatPanel, PanelItem } from './types'
+import { demoRosterId, type FormatRealScreen } from './realScreens'
+import { defaultSGConfig } from '@/lib/survivor-guillotine/config'
 
-type Built = { base: SampleBase; panels: FormatPanel[]; standingsMode?: 'record' | 'points'; standingsTitle?: string; standingsNote?: string; elimination?: FormatDemo['elimination'] }
+type Built = { base: SampleBase; panels: FormatPanel[]; standingsMode?: 'record' | 'points'; standingsTitle?: string; standingsNote?: string; elimination?: FormatDemo['elimination']; real?: FormatRealScreen }
 type Entry = FormatDemoMeta & { build: () => Built }
 
 const r1 = (n: number) => Math.round(n * 10) / 10
@@ -174,11 +176,48 @@ const ENTRIES: Entry[] = [
       const rows = t.roster.map((p, i) => ({ cells: [`${p.name} (${p.position})`, `$${salaries[i] ?? 1}`, `${years[i] ?? 1} yr`] }))
       const used = t.roster.reduce((sum, _p, i) => sum + (salaries[i] ?? 1), 0)
       const space = base.teams.slice(0, 6).map((x, i) => ({ slot: x.slot, cells: ['', `$${[used, 241, 228, 249, 212, 236][i]}`, `$${250 - [used, 241, 228, 249, 212, 236][i]!}`] }))
+      // The app's cap dashboard and contracts table, for the same team and the same contracts.
+      const contracts = t.roster.map((p, i) => {
+        const yearsTotal = Math.max(years[i] ?? 1, 1) + (i % 2)
+        return {
+          id: `demo-contract-${i + 1}`, playerId: '', playerName: p.name, position: p.position,
+          salary: salaries[i] ?? 1, yearsTotal, contractYear: yearsTotal - (years[i] ?? 1) + 1, yearsRemaining: years[i] ?? 1,
+          status: 'active', source: i === 6 ? 'waiver' : i >= 4 ? 'rookie' : 'auction',
+        }
+      })
+      const real: FormatRealScreen = {
+        kind: 'salary-cap',
+        summary: {
+          config: {
+            mode: 'dynasty', startupCap: 250, capGrowthPercent: 5, contractMinYears: 1, contractMaxYears: 4, rookieContractYears: 3,
+            minimumSalary: 1, deadMoneyEnabled: true, deadMoneyPercentPerYear: 50, rolloverEnabled: true, rolloverMax: 10,
+            capFloorEnabled: false, capFloorAmount: null, extensionsEnabled: true, franchiseTagEnabled: true,
+            startupDraftType: 'auction', futureDraftType: 'snake', auctionHoldback: 0, weightedLotteryEnabled: false, offseasonPhase: null,
+          },
+          myRosterId: demoRosterId(t.slot),
+          ledger: { rosterId: demoRosterId(t.slot), capYear: 2026, totalCapHit: used, deadMoneyHit: 0, rolloverUsed: 0, capSpace: 250 - used },
+          futureProjection: [2027, 2028, 2029].map((capYear, k) => {
+            const ceiling = Math.round(250 * 1.05 ** (k + 1))
+            const hit = contracts.filter((c) => c.yearsRemaining > k + 1).reduce((s, c) => s + c.salary, 0)
+            return { capYear, capCeiling: ceiling, totalCapHit: hit, deadMoney: 0, projectedSpace: ceiling - hit, contractCount: contracts.filter((c) => c.yearsRemaining > k + 1).length }
+          }),
+          contracts,
+          expiringCount: contracts.filter((c) => c.yearsRemaining === 1).length,
+          extensionCandidatesCount: contracts.filter((c) => c.yearsRemaining === 1).length,
+          tagCandidatesCount: 1,
+          deadMoneyTotal: 0,
+          rookieContractCount: contracts.filter((c) => c.source === 'rookie').length,
+          events: [],
+          lottery: null,
+          league: { name: 'Salary Cap example', sport: 'NFL', season: 2026, teamCount: base.teams.length, capYear: 2026 },
+        },
+      }
       return {
         base,
+        real,
         panels: [
-          { kind: 'table', title: `Contracts — ${teamNameOf(base, t.slot)}`, subtitle: `$${used} of $250 used`, columns: ['Player', 'Salary', 'Years left'], rows },
-          { kind: 'table', title: 'Cap space', columns: ['Team', 'Committed', 'Space'], rows: space },
+          // The contracts table is the app's own now (above); the league-wide cap space stays a panel.
+          { kind: 'table', title: 'Cap space', subtitle: `${teamNameOf(base, t.slot)} has $${250 - used} of $250 left`, columns: ['Team', 'Committed', 'Space'], rows: space },
         ],
       }
     },
@@ -196,6 +235,7 @@ const ENTRIES: Entry[] = [
       const rows = PROSPECT_POOL.slice(0, 8).map((p, i) => ({ slot: base.teams[i % base.teams.length]!.slot, cells: ['', p.name, p.position, p.team] }))
       return {
         base,
+        real: { kind: 'devy', leagueName: 'Devy example', season: 2026, dynastyYear: 3 },
         panels: [
           { kind: 'table', title: 'Devy board', subtitle: 'College prospects held by each team (sample names)', columns: ['Team', 'Prospect', 'Pos', 'School'], rows },
           { kind: 'callout', title: 'Promotion', body: 'When a prospect declares for the pros, his manager promotes him to the active roster before the rookie draft.', tone: 'info' },
@@ -279,19 +319,48 @@ const ENTRIES: Entry[] = [
       const chops = chopOrder(base, 5)
       const out = new Set(chops.map((c) => c.slot))
       const tribes = [{ name: 'Tribe Kaimana', slots: base.teams.filter((t) => t.slot % 2 === 1) }, { name: 'Tribe Solano', slots: base.teams.filter((t) => t.slot % 2 === 0) }]
+      // The app's Survivor Guilly boards (tribe race, chop line, idol vault): the same two tribes, the
+      // same chops, Match Play pairs of one Kaimana member against one Solano member this period.
+      const alive = (slots: typeof tribes[number]['slots']) => slots.filter((t) => !out.has(t.slot))
+      const kai = alive(tribes[0]!.slots)
+      const sol = alive(tribes[1]!.slots)
+      const chopWeek = new Map(chops.map((c) => [c.slot, c.week]))
+      const sg: FormatRealScreen = {
+        kind: 'survivor-guilly',
+        input: {
+          season: {
+            config: { ...defaultSGConfig('NFL'), teamCount: base.teams.length, tribeCount: 2 },
+            tribes: base.teams.map((t) => ({ rosterId: demoRosterId(t.slot), tribeId: t.slot % 2 === 1 ? 'tribe-0' : 'tribe-1' })),
+            periodState: {
+              period: 6,
+              matchups: kai.slice(0, Math.min(kai.length, sol.length)).map((t, i) => ({ team1: demoRosterId(t.slot), team2: demoRosterId(sol[i]!.slot) })),
+              champions: [], sitOuts: [], priorSitOuts: [], ceremonyAt: null, ceremonyStarted: false,
+            },
+            currentPeriod: 6,
+            status: 'active',
+            periodHistory: {},
+          },
+          ownRosterId: null,
+          teams: base.teams.map((t) => ({
+            legacyRosterId: demoRosterId(t.slot), teamName: teamNameOf(base, t.slot), ownerName: teamNameOf(base, t.slot),
+            eliminatedAt: chopWeek.has(t.slot) ? `2026-${String(9 + Math.floor(chopWeek.get(t.slot)! / 4)).padStart(2, '0')}-0${(chopWeek.get(t.slot)! % 4) + 1}T12:00:00Z` : null,
+          })),
+          scores: base.teams.filter((t) => !out.has(t.slot)).map((t) => ({ rosterId: demoRosterId(t.slot), totalPoints: r1((base.weekly.get(t.key)?.[5] ?? 100)), status: 'final' })),
+          powers: [],
+        },
+      }
       return {
         base,
+        real: sg,
         // Chopped so far; the at-risk tribe's survivors are this week's bubble (the Tribes panel's "At risk").
         elimination: { eliminatedSlots: [...out], bubbleSlots: tribes[0]!.slots.filter((t) => !out.has(t.slot)).map((t) => t.slot) },
         standingsMode: 'points',
         standingsTitle: 'Season points',
+        // The tribes and the hidden powers are on the app's own boards above (`real`), under the
+        // tribe names that screen draws; repeating them here under other names read as two leagues.
+        // What the boards do not show — who was chopped with how many points — stays.
         panels: [
-          {
-            kind: 'groups', title: 'Tribes — week 6', subtitle: 'Tribe Solano won immunity this week',
-            groups: tribes.map((tr, i) => ({ name: tr.name, tone: i === 1 ? 'success' : 'warning', members: tr.slots.map((t) => ({ slot: t.slot, label: out.has(t.slot) ? 'Chopped' : i === 1 ? 'Immune' : 'At risk', tone: out.has(t.slot) ? 'danger' : i === 1 ? 'success' : 'warning' })) })),
-          },
           { kind: 'timeline', title: 'Chop Night replay', entries: chops.map((c) => ({ when: `Week ${c.week}`, item: { slot: c.slot, label: `Chopped with ${c.points}`, tone: 'danger' } })) },
-          { kind: 'callout', title: 'Private powers', body: 'Personal Immunity, Ally Immunity, Player Steal, Tribe Swap and FAAB Cache are hidden on drafted players. Only the holder sees them — until they play one. All powers expire at the merge.', tone: 'info' },
         ],
       }
     },
@@ -312,6 +381,12 @@ const ENTRIES: Entry[] = [
       const survivors = base.teams.map((t) => t.slot).filter((s) => s !== whisperer && !zombies.includes(s))
       return {
         base,
+        // The app's command hero: the same counts the horde panel shows, the turned teams "chompin'".
+        real: {
+          kind: 'zombie', leagueName: 'Zombie example', week: 10,
+          survivorCount: survivors.length, hordeCount: zombies.length, whispererCount: 1,
+          chompinNames: zombies.map((slot) => teamNameOf(base, slot)),
+        },
         panels: [
           {
             kind: 'groups', title: 'The horde — week 10', subtitle: `${survivors.length} Survivors left`,
@@ -385,20 +460,35 @@ const ENTRIES: Entry[] = [
       // would show evictees still playing.
       const base = buildSampleBase({ seed: 'big-brother', leagueType: 'big_brother', noMatchups: true })
       const evicted = [6, 12, 2]
+      // The app's ceremony center for week 10: HOH 4 nominated 9 and 1, 7 won the Veto and saved 1,
+      // 11 went up in their place — the same week the evictions panel below leads into.
+      const id = demoRosterId
+      const big: FormatRealScreen = {
+        kind: 'big-brother',
+        summary: {
+          config: { sport: 'NFL', finaleFormat: 'jury_vote', juryStartMode: 'after_merge' },
+          cycle: {
+            id: 'demo-cycle-10', week: 10, phase: 'EVICTION_VOTE',
+            hohRosterId: id(4), nominee1RosterId: id(9), nominee2RosterId: id(11),
+            vetoWinnerRosterId: id(7), vetoParticipantRosterIds: [id(4), id(9), id(1), id(7), id(3), id(10)],
+            vetoUsed: true, vetoSavedRosterId: id(1), replacementNomineeRosterId: id(11), evictedRosterId: null,
+            voteDeadlineAt: null, voteOpenedAt: null, closedAt: null,
+          },
+          finalNomineeRosterIds: [id(9), id(11)],
+          eligibility: null,
+          jury: evicted.map((slot, i) => ({ rosterId: id(slot), evictedWeek: 7 + i })),
+          finalists: [],
+          ballot: null,
+          myRosterId: null,
+          myStatus: null,
+          rosterDisplayNames: Object.fromEntries(base.teams.map((t) => [id(t.slot), teamNameOf(base, t.slot)])),
+        },
+      }
       return {
         base,
+        real: big,
         standingsNote: 'Fantasy standings still decide the champion; evicted teams stop scoring from the week they leave the house.',
         panels: [
-          {
-            kind: 'list', title: 'Week 10 in the house',
-            items: [
-              { slot: 4, label: 'Head of Household', badge: 'HOH', tone: 'warning' },
-              { slot: 9, label: 'Nominated', badge: 'On the block', tone: 'danger' },
-              { slot: 1, label: 'Nominated, then saved', badge: 'Veto used', tone: 'success' },
-              { slot: 11, label: 'Replacement nominee', badge: 'On the block', tone: 'danger' },
-              { slot: 7, label: 'Won the Power of Veto', badge: 'Veto', tone: 'info' },
-            ],
-          },
           { kind: 'timeline', title: 'Evictions', subtitle: 'Only the final vote totals are public', entries: evicted.map((slot, i) => ({ when: `Week ${[7, 8, 9][i]}`, item: { slot, label: `Evicted ${['6–2', '5–3', '7–0'][i]}`, tone: 'danger' } })) },
         ],
       }
@@ -443,7 +533,7 @@ export function getFormatDemo(id: string): FormatDemo | null {
   if (!entry) return null
   const { build, ...meta } = entry
   const built = build()
-  const demo: FormatDemo = { ...meta, view: built.base.view, panels: built.panels, standingsNote: built.standingsNote, standingsMode: built.standingsMode, standingsTitle: built.standingsTitle, elimination: built.elimination }
+  const demo: FormatDemo = { ...meta, view: built.base.view, panels: built.panels, standingsNote: built.standingsNote, standingsMode: built.standingsMode, standingsTitle: built.standingsTitle, elimination: built.elimination, real: built.real }
   cache.set(id, demo)
   return demo
 }
