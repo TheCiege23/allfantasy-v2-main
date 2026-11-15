@@ -18,7 +18,8 @@ export function demoHrefFor(href: string | null | undefined, leagueHome: string)
   if (path === '/core/trades') return '/demo/trades'
   if (path === '/core/players' || path === '/core/player-finder') return '/demo/players'
   if (path === '/core/chimmy') return '/demo/chimmy'
-  if (['/core/standings', '/core/matchup', '/core/live', '/core/my-team', '/core/schedule'].includes(path)) return leagueHome
+  if (path === '/core/standings') return `${leagueHome}/standings`
+  if (['/core/matchup', '/core/live', '/core/my-team', '/core/schedule'].includes(path)) return leagueHome
   return SIGNED_IN_PREFIXES.some((p) => path === p || path.startsWith(p.endsWith('/') ? p : `${p}/`) || path.startsWith(`${p}?`))
     ? '/signup'
     : null

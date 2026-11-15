@@ -38,27 +38,35 @@ export type DemoRailItem = {
   theme: 'redraft' | 'dynasty'
 }
 
-const MENU: Array<{ href: string; label: string; icon: Parameters<typeof CoreNavIcon>[0]['navKey'] }> = [
-  { href: '/demo', label: 'Home', icon: 'home' },
-  { href: '/demo/trades', label: 'Trades', icon: 'trades' },
-  { href: '/demo/chimmy', label: 'Chimmy', icon: 'play' },
-  { href: '/demo/players', label: 'Player Finder', icon: 'players' },
-  { href: '/demo/trade-evaluator', label: 'Trade Evaluator', icon: 'tools' },
-  { href: '/demo/formats', label: 'League types', icon: 'my-leagues' },
-]
+type MenuItem = { href: string; label: string; icon: Parameters<typeof CoreNavIcon>[0]['navKey']; active: (path: string) => boolean }
 
-function isActive(path: string, href: string): boolean {
-  if (href === '/demo') return path === '/demo' || path.startsWith('/demo/teams')
-  if (href === '/demo/formats') return path === '/demo/formats'
-  return path.startsWith(href)
+/**
+ * Home and Standings belong to whichever league the rail has selected (the live demo or a league-type
+ * example); Trades, Chimmy, Player Finder and the Trade Evaluator are the live demo league's tools.
+ */
+function menuFor(leagueHome: string): MenuItem[] {
+  const live = leagueHome === '/demo'
+  return [
+    { href: leagueHome, label: 'Home', icon: 'home', active: (p) => p === leagueHome || (live && p.startsWith('/demo/teams')) },
+    { href: `${leagueHome}/standings`, label: 'Standings', icon: 'standings', active: (p) => p === `${leagueHome}/standings` },
+    { href: '/demo/trades', label: 'Trades', icon: 'trades', active: (p) => p.startsWith('/demo/trades') },
+    { href: '/demo/chimmy', label: 'Chimmy', icon: 'play', active: (p) => p.startsWith('/demo/chimmy') },
+    { href: '/demo/players', label: 'Player Finder', icon: 'players', active: (p) => p.startsWith('/demo/players') },
+    { href: '/demo/trade-evaluator', label: 'Trade Evaluator', icon: 'tools', active: (p) => p.startsWith('/demo/trade-evaluator') },
+    { href: '/demo/formats', label: 'League types', icon: 'my-leagues', active: (p) => p === '/demo/formats' },
+  ]
 }
+
+/** `/demo/formats/survivor` must not claim `/demo/formats/survivor-guilly`. */
+const within = (path: string, href: string) => path === href || path.startsWith(`${href}/`)
 
 export function DemoCoreShell({ rail, children }: { rail: DemoRailItem[]; children: ReactNode }) {
   const path = usePathname() ?? '/demo'
-  const inFormat = rail.find((r) => r.href !== '/demo' && path.startsWith(r.href))
+  const inFormat = rail.find((r) => r.href !== '/demo' && within(path, r.href))
   const selected = inFormat ?? rail.find((r) => r.href === '/demo')
   const leagueName = selected?.name ?? 'Demo league'
   const leagueHome = selected?.href ?? '/demo'
+  const menu = menuFor(leagueHome)
 
   /*
    * The real screens link into the signed-in app (/core/…?league=…). Rewrite those anchors to demo
@@ -147,8 +155,8 @@ export function DemoCoreShell({ rail, children }: { rail: DemoRailItem[]; childr
               <span className="af-nav-league-name">{leagueName}</span>
             </div>
             <ul className="af-nav-items" aria-label="This league">
-              {MENU.map((item) => {
-                const active = isActive(path, item.href)
+              {menu.map((item) => {
+                const active = item.active(path)
                 return (
                   <li key={item.href}>
                     <Link href={item.href} className="af-nav-item" data-active={active} aria-current={active ? 'page' : undefined}>
@@ -187,8 +195,8 @@ export function DemoCoreShell({ rail, children }: { rail: DemoRailItem[]; childr
       </div>
 
       <nav className="af-tabbar" aria-label="Demo league menu">
-        {MENU.slice(0, 5).map((item) => {
-          const active = isActive(path, item.href)
+        {menu.slice(0, 5).map((item) => {
+          const active = item.active(path)
           return (
             <Link key={item.href} href={item.href} className="af-tabbar-item" data-active={active} aria-current={active ? 'page' : undefined}>
               <span className="af-tabbar-glyph" aria-hidden><CoreNavIcon navKey={item.icon} size={20} /></span>

@@ -14,7 +14,7 @@
 import { buildSampleBase, IDP_POOL, NFL_POOL, PROSPECT_POOL, teamNameOf, type SampleBase } from './sample'
 import type { FormatDemo, FormatDemoMeta, FormatPanel, PanelItem } from './types'
 
-type Built = { base: SampleBase; panels: FormatPanel[]; standingsMode?: 'record' | 'points'; standingsTitle?: string; standingsNote?: string }
+type Built = { base: SampleBase; panels: FormatPanel[]; standingsMode?: 'record' | 'points'; standingsTitle?: string; standingsNote?: string; elimination?: FormatDemo['elimination'] }
 type Entry = FormatDemoMeta & { build: () => Built }
 
 const r1 = (n: number) => Math.round(n * 10) / 10
@@ -248,6 +248,8 @@ const ENTRIES: Entry[] = [
       const projected = alive.map((t) => ({ slot: t.slot, pts: r1(seasonPoints(base, t.slot) / 9 + base.rng.int(-15, 15)) })).sort((a, b) => a.pts - b.pts)
       return {
         base,
+        // The same facts the Chop Watch and history panels draw: chopped, and this week's bottom three.
+        elimination: { eliminatedSlots: chops.map((c) => c.slot), bubbleSlots: projected.slice(0, 3).map((x) => x.slot) },
         standingsMode: 'points',
         standingsTitle: 'Season points',
         panels: [
@@ -279,6 +281,8 @@ const ENTRIES: Entry[] = [
       const tribes = [{ name: 'Tribe Kaimana', slots: base.teams.filter((t) => t.slot % 2 === 1) }, { name: 'Tribe Solano', slots: base.teams.filter((t) => t.slot % 2 === 0) }]
       return {
         base,
+        // Chopped so far; the at-risk tribe's survivors are this week's bubble (the Tribes panel's "At risk").
+        elimination: { eliminatedSlots: [...out], bubbleSlots: tribes[0]!.slots.filter((t) => !out.has(t.slot)).map((t) => t.slot) },
         standingsMode: 'points',
         standingsTitle: 'Season points',
         panels: [
@@ -352,6 +356,8 @@ const ENTRIES: Entry[] = [
       const outSet = new Set(out.map((o) => o.slot))
       return {
         base,
+        // Voted out so far; Tribe Ika (heading to Tribal Council) is this week's bubble.
+        elimination: { eliminatedSlots: [...outSet], bubbleSlots: tribes[2]!.slots.filter((s) => !outSet.has(s)) },
         standingsMode: 'points',
         standingsTitle: 'Season points',
         panels: [
@@ -437,7 +443,7 @@ export function getFormatDemo(id: string): FormatDemo | null {
   if (!entry) return null
   const { build, ...meta } = entry
   const built = build()
-  const demo: FormatDemo = { ...meta, view: built.base.view, panels: built.panels, standingsNote: built.standingsNote, standingsMode: built.standingsMode, standingsTitle: built.standingsTitle }
+  const demo: FormatDemo = { ...meta, view: built.base.view, panels: built.panels, standingsNote: built.standingsNote, standingsMode: built.standingsMode, standingsTitle: built.standingsTitle, elimination: built.elimination }
   cache.set(id, demo)
   return demo
 }
