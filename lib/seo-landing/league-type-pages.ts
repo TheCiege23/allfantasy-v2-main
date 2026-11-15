@@ -370,6 +370,11 @@ export function getLeagueTypeSports(page: LeagueTypePage): LeagueSport[] {
   )
 }
 
+/** League types a manager can create in `sport` — the same rule as each lander's sports list. */
+export function getLeagueTypesForSport(sport: string): LeagueTypePage[] {
+  return LEAGUE_TYPE_PAGES.filter((p) => (getLeagueTypeSports(p) as string[]).includes(sport))
+}
+
 export const SPORT_DISPLAY: Record<LeagueSport, { label: string; lander: SportSlug }> = {
   NFL: { label: 'NFL', lander: 'fantasy-football' },
   NBA: { label: 'NBA', lander: 'fantasy-basketball' },
