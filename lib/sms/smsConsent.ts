@@ -55,6 +55,41 @@ export function hasSmsConsent(notificationPreferences: unknown, phone: string | 
  * out is the compliance trail. Every other preference passes through untouched. An already
  * withdrawn (or absent) record is returned as-is, so the original withdrawal date is not rewritten.
  */
+/** Withdrawals a texted START can undo: the person's own STOP, however the app learned of it. */
+const STOP_REASONS = new Set(['twilio_21610', 'sms_stop'])
+
+/**
+ * The preferences object with a STOP undone, when the person texts START (2026-11-15).
+ *
+ * Only a consent this number really gave (through the opt-in box) and then withdrew BY TEXTING STOP comes
+ * back. Anything else returns null, and the START changes nothing in the app:
+ *   - no consent ever recorded — texting START is not the opt-in the A2P campaign promises;
+ *   - withdrawn some other way (the phone was removed from the account, a later settings choice) —
+ *     that was not undone by a text, so a text does not undo it;
+ *   - recorded for a different number — consent is per number.
+ * The withdrawal is kept beside the restored record (`lastRevokedAt`), so the trail of when someone opted
+ * in, out and back in survives.
+ */
+export function restoreSmsConsentAfterStart(
+  notificationPreferences: unknown,
+  phone: string,
+  now: Date = new Date(),
+): Record<string, unknown> | null {
+  const prefs =
+    notificationPreferences && typeof notificationPreferences === 'object' && !Array.isArray(notificationPreferences)
+      ? (notificationPreferences as Record<string, unknown>)
+      : {}
+  const record = readSmsConsent(prefs)
+  if (!record?.consentedAt || !record.revokedAt) return null
+  if (!STOP_REASONS.has(record.revokedReason ?? '')) return null
+  if (record.phone && !sameNumber(record.phone, phone)) return null
+  const { revokedAt, revokedReason, ...rest } = record
+  return {
+    ...prefs,
+    smsConsent: { ...rest, restoredAt: now.toISOString(), restoredVia: 'sms_start', lastRevokedAt: revokedAt, lastRevokedReason: revokedReason },
+  }
+}
+
 export function withdrawSmsConsent(notificationPreferences: unknown, reason: string, now: Date = new Date()): Record<string, unknown> {
   const prefs =
     notificationPreferences && typeof notificationPreferences === 'object' && !Array.isArray(notificationPreferences)
