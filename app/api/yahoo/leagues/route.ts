@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import {
   getYahooIdentityForUser,
   linkYahooIdentity,
@@ -121,7 +121,7 @@ export const GET = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLe
   const live = isYahooImportLive()
   if (!live && !isYahooPreviewConfigured()) return yahooComingSoonJson()
 
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!live && !isYahooOpenForUser(auth.ok ? auth.userId : null)) return yahooComingSoonJson()
   if (!auth.ok) {
     return auth.response
@@ -224,7 +224,7 @@ export const POST = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooL
   const live = isYahooImportLive()
   if (!live && !isYahooPreviewConfigured()) return yahooComingSoonJson()
 
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!live && !isYahooOpenForUser(auth.ok ? auth.userId : null)) return yahooComingSoonJson()
   if (!auth.ok) {
     return auth.response

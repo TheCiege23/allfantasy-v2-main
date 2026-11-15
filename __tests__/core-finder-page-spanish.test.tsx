@@ -896,7 +896,8 @@ describe('Player Finder — the whole page, in Spanish', () => {
     expect(container.querySelector('.af-pf-tv, .af-pf-tw, .af-core-free-until')).toBeNull()
     for (const l of locks) {
       expect(l.textContent).toMatch(/: parte de AF Pro/)
-      expect(l.querySelector('a.af-core-lock-cta')?.getAttribute('href')).toBe('/upgrade?plan=pro')
+      // Every lock links to AF Pro and names itself (from=lock_<depth>, lib/monetization/upgradeEntrySource.ts).
+      expect(l.querySelector('a.af-core-lock-cta')?.getAttribute('href')).toMatch(/^\/upgrade\?plan=pro&from=lock_[a-z_]+$/)
     }
     const out = ownText(container)
     expectWholeSpanish(out, 'locked')

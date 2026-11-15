@@ -24,6 +24,9 @@ import { refuseCheckoutForRestrictedBillingState } from "@/lib/subscription/paid
 import { lockAccountForCardBillingState } from "@/lib/geo/accountGeoLockServer"
 import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/leagueFinanceService"
 import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
+import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
+import { MONETIZATION } from "@/lib/analytics/eventNames"
+import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
 import { redeemCouponFromWebhook } from "@/lib/promotions/sponsorCoupon"
 import { assertLeagueEntryFeeProcessingEnabled } from "@/lib/monetization/leagueEntryFeeKillSwitch"
@@ -324,6 +327,30 @@ async function trackSubscriptionPurchaseFromCheckout(
   })
 }
 
+/**
+ * The funnel's `monetization.paid_conversion_confirmed` (2026-11-15): webhook-confirmed, after the
+ * paid-state refusal check, carrying the surface that sent the buyer (`metadata.entrySource`, set by
+ * the checkout route). Stripe can deliver one event more than once, so the row carries the session id
+ * and the admin funnel counts distinct sessions. No cookies here — this is Stripe calling, not the buyer.
+ */
+async function recordPaidConversion(
+  session: Stripe.Checkout.Session,
+  context: { userId: string; sku: MonetizationSku } | null,
+): Promise<void> {
+  if (!context?.userId || !context.sku) return
+  const metadata = (session.metadata ?? {}) as Record<string, string | undefined>
+  await recordFunnelEvent({
+    event: MONETIZATION.PAID_CONVERSION_CONFIRMED,
+    userId: context.userId,
+    getCookie: () => undefined,
+    meta: {
+      sku: context.sku,
+      entry_source: normalizeEntrySource(metadata.entrySource) ?? "unknown",
+      stripe_session_id: session.id,
+    },
+  })
+}
+
 async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<string | null> {
   const purchaseType = resolveCheckoutPurchaseType(session)
   const checkoutContext = resolveCheckoutContext(session)
@@ -378,6 +405,7 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
         await syncUserProfileFromSubscriptions(checkoutContext.userId)
       }
       await trackSubscriptionPurchaseFromCheckout(session, checkoutContext)
+      await recordPaidConversion(session, checkoutContext)
     } else if (purchaseType === "tokens") {
       await persistTokenPurchaseFromCheckout(session, checkoutContext)
     }

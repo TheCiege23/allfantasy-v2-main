@@ -44,6 +44,19 @@ export const ACQUISITION = {
   DASHBOARD_ACTIVATED: 'acquisition.dashboard_activated',
 } as const
 
+/**
+ * The paid half of the funnel (2026-11-15). Both server-emitted through recordFunnelEvent, so campaign
+ * attribution rides along exactly as it does for signup. `entry_source` (meta) names the surface that
+ * sent the buyer to /upgrade — e.g. `lock_player_depth` for the /core player-depth lock card — so the
+ * admin can see which locked feature actually sells (lib/monetization/upgradeEntrySource.ts).
+ */
+export const MONETIZATION = {
+  /** A Stripe Checkout Session was created for a subscription. */
+  CHECKOUT_STARTED: 'monetization.checkout_started',
+  /** checkout.session.completed for a subscription, after the paid-state refusal check. Webhook-confirmed only. */
+  PAID_CONVERSION_CONFIRMED: 'monetization.paid_conversion_confirmed',
+} as const
+
 /** Create-league funnel (client beacon + server confirmation). */
 export const CREATE_LEAGUE = {
   FUNNEL_OPEN: 'product.create_league.funnel_open',

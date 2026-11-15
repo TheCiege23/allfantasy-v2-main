@@ -36,6 +36,7 @@ import {
 } from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getPlayInstallStats, type PlayInstallStatsResult } from "@/lib/google-play/playInstallStats"
+import { describeMrrEstimate, estimateMrr, formatUsdCents } from "@/lib/monetization/mrrEstimate"
 
 type MetricValue = number | string
 
@@ -731,6 +732,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       select: {
         status: true,
         sku: true,
+        // The MRR estimate counts only store-billed rows (lib/monetization/mrrEstimate.ts).
+        source: true,
         plan: { select: { code: true } },
       },
     }),
@@ -935,6 +938,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     },
     { annual: 0, monthly: 0, unknown: 0 }
   )
+  const mrr = estimateMrr(subscriptions.map((sub) => ({ status: sub.status, source: sub.source, sku: sub.sku, planCode: sub.plan.code })))
   const activeSubscriptionUserCount = activeSubscriptionUsers
   const completedRevenueCents = bracketPaymentRevenue._sum.amountCents ?? null
   const inviteAccepts = worldCupInviteUseSummary._sum.useCount ?? 0
@@ -1028,7 +1032,12 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments only"),
       metric("Token sales revenue", `$${(tokenSalesRevenueCents / 100).toFixed(2)}`, `${tokenSalesPayments} completed token payment rows`),
       metric("Coupon redemptions", couponRedemptions, `${couponRedemptionsRedeemed} redeemed`),
-      notTracked("MRR estimate", "Subscription prices are not reliably stored on subscription rows"),
+      /*
+       * MRR (2026-11-15): the price is still not stored on the row, but the SKU is, and the catalog
+       * prices every SKU — the same prices Stripe is checked against. GROSS LIST PRICE, before coupons
+       * and store fees, so it can over-state and never under-state; the note says so.
+       */
+      metric("MRR estimate", formatUsdCents(mrr.mrrCents), describeMrrEstimate(mrr)),
     ],
     tokens: [
       metric("Token balances total", tokenBalanceSummary._sum.balance ?? 0),

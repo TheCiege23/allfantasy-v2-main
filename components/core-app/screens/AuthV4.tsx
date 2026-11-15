@@ -754,7 +754,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           <p className="af-au-sub">
             {method === 'phone'
               ? 'Free to create or connect leagues. We’ll text you a code to confirm your number.'
-              : 'Free to create or connect leagues. Next: verify your email, then choose how to start.'}
+              : 'Free to create or connect leagues. Next: bring in your league. We’ll email you a link to confirm your address.'}
           </p>
         </div>
       </header>
@@ -828,7 +828,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           <span className="af-au-hint">
             {method === 'phone'
               ? 'Link it now and your Sleeper leagues import in one click.'
-              : 'Link it now and, once your email is verified, your Sleeper leagues import in one click.'}
+              : 'Link it now and your Sleeper leagues import in one click, right after you sign up.'}
           </span>
         </label>
 

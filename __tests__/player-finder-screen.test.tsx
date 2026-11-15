@@ -1028,7 +1028,7 @@ describe('Player Finder — player depth paywall', () => {
     renderCore({ detail: WITHHELD, depthAccess: LOCKED })
     expect(screen.queryByRole('region', { name: 'Recommended moves' })).toBeNull()
     const moves = screen.getByRole('region', { name: 'Recommended moves — AF Pro' })
-    expect(within(moves).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro')
+    expect(within(moves).getByRole('link', { name: 'See AF Pro' })).toHaveAttribute('href', '/upgrade?plan=pro&from=lock_player_depth')
 
     const side = screen.getByRole('complementary', { name: 'What to do' })
     expect(within(side).queryByRole('region', { name: 'Chimmy verdict' })).toBeNull()

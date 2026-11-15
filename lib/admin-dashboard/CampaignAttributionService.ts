@@ -18,7 +18,7 @@
 import { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/prisma"
-import { ACQUISITION } from "@/lib/analytics/eventNames"
+import { ACQUISITION, MONETIZATION } from "@/lib/analytics/eventNames"
 import { ATTRIBUTION_LINK_EVENT } from "@/lib/analytics/linkAttributionToUser"
 
 /**
@@ -58,12 +58,16 @@ export type CampaignRow = {
   events: number
   landingViews: number
   signupsCompleted: number
+  /** DISTINCT users who completed a league import (2026-11-15). */
+  importsCompleted: number
   dashboardsActivated: number
   attributionLinked: number
   firstActivity: string | null
   latestActivity: string | null
   /** Each is null when its denominator is 0 — never 0, which would read as a real failure. */
   visitorToSignupRate: number | null
+  /** Distinct users with a completed import ÷ accounts created. */
+  signupToImportRate: number | null
   signupToActivationRate: number | null
   visitorToActivationRate: number | null
 }
@@ -82,12 +86,24 @@ export type CampaignAttributionReport = {
   /** Each null when its denominator is 0, never 0 — a 0% would read as a real failure. */
   conversions: {
     visitorToSignup: number | null
+    /** Accounts that confirmed their email ÷ accounts created (email sign-ups confirm; OAuth is born verified). */
+    signupToEmailVerified: number | null
+    /** Distinct users who started an import ÷ accounts created. */
+    signupToImportStarted: number | null
+    /** Distinct users who completed an import ÷ distinct users who started one. */
+    importStartedToCompleted: number | null
     signupToActivation: number | null
     visitorToActivation: number | null
   }
   summary: Metric[]
   campaigns: CampaignRow[]
   campaignsTruncated: boolean
+  /**
+   * Which surface sends paying subscribers (2026-11-15): per `entry_source` — e.g. `lock_player_depth`
+   * for the /core player-depth lock — distinct users who started a checkout and distinct Stripe sessions
+   * that paid, in the window. `unknown` = a checkout from a surface that does not tag itself yet.
+   */
+  upgradesByEntry: { entrySource: string; checkoutsStarted: number; paid: number; checkoutToPaidRate: number | null }[]
   /** Per-stage build status, so the UI can say "not built yet" instead of showing 0. */
   stageInventory: { stage: string; status: MetricStatus; note: string }[]
   errors: string[]
@@ -97,6 +113,9 @@ export type CampaignAttributionReport = {
 const IMPLEMENTED_EVENTS = [
   ACQUISITION.LANDING_VIEWED,
   ACQUISITION.SIGNUP_COMPLETED,
+  ACQUISITION.EMAIL_VERIFIED,
+  ACQUISITION.IMPORT_STARTED,
+  ACQUISITION.IMPORT_COMPLETED,
   ACQUISITION.DASHBOARD_ACTIVATED,
   ATTRIBUTION_LINK_EVENT,
 ] as const
@@ -109,14 +128,9 @@ const IMPLEMENTED_EVENTS = [
 const UNIMPLEMENTED_STAGES: { stage: string; note: string }[] = [
   { stage: "start_clicked", note: "No emitter on the /start CTA." },
   { stage: "signup_started", note: "No emitter; only completion is recorded." },
-  { stage: "email_verified", note: "Event name reserved; verification flow not yet wired." },
   { stage: "onboarding_started", note: "No emitter." },
   { stage: "onboarding_completed", note: "No emitter." },
-  { stage: "import_started", note: "Event name reserved; import flow not yet wired." },
-  { stage: "import_completed", note: "Event name reserved; import flow not yet wired." },
   { stage: "returning_authenticated", note: "No emitter. attribution_linked is idempotent and is NOT a proxy." },
-  { stage: "checkout_started", note: "Deferred to the Stripe phase." },
-  { stage: "paid_conversion_confirmed", note: "Deferred to the Stripe phase; webhook-confirmed only." },
   { stage: "support_requested", note: "Deferred to the Support phase." },
 ]
 
@@ -187,6 +201,9 @@ export async function getCampaignAttributionReport(
     events: unknown
     landing_views: unknown
     signups: unknown
+    email_verified: unknown
+    imports_started: unknown
+    imports_completed: unknown
     activations: unknown
     linked: unknown
     last_event: Date | null
@@ -206,6 +223,7 @@ export async function getCampaignAttributionReport(
         events: unknown
         landing_views: unknown
         signups: unknown
+        imports_completed: unknown
         activations: unknown
         linked: unknown
         first_activity: Date | null
@@ -224,6 +242,7 @@ export async function getCampaignAttributionReport(
         COUNT(*)                                                           AS events,
         COUNT(*) FILTER (WHERE event = ${ACQUISITION.LANDING_VIEWED})      AS landing_views,
         COUNT(*) FILTER (WHERE event = ${ACQUISITION.SIGNUP_COMPLETED})    AS signups,
+        COUNT(DISTINCT "userId") FILTER (WHERE event = ${ACQUISITION.IMPORT_COMPLETED}) AS imports_completed,
         COUNT(*) FILTER (WHERE event = ${ACQUISITION.DASHBOARD_ACTIVATED}) AS activations,
         COUNT(*) FILTER (WHERE event = ${ATTRIBUTION_LINK_EVENT})          AS linked,
         MIN("createdAt")                                                   AS first_activity,
@@ -245,6 +264,7 @@ export async function getCampaignAttributionReport(
     campaigns = rows.slice(0, limit).map((r) => {
       const uniqueVisitors = toNumber(r.unique_visitors)
       const signupsCompleted = toNumber(r.signups)
+      const importsCompleted = toNumber(r.imports_completed)
       const dashboardsActivated = toNumber(r.activations)
       return {
         platform: r.platform ?? "other",
@@ -258,11 +278,13 @@ export async function getCampaignAttributionReport(
         events: toNumber(r.events),
         landingViews: toNumber(r.landing_views),
         signupsCompleted,
+        importsCompleted,
         dashboardsActivated,
         attributionLinked: toNumber(r.linked),
         firstActivity: r.first_activity?.toISOString() ?? null,
         latestActivity: r.latest_activity?.toISOString() ?? null,
         visitorToSignupRate: rate(signupsCompleted, uniqueVisitors),
+        signupToImportRate: rate(importsCompleted, signupsCompleted),
         signupToActivationRate: rate(dashboardsActivated, signupsCompleted),
         visitorToActivationRate: rate(dashboardsActivated, uniqueVisitors),
       }
@@ -278,6 +300,9 @@ export async function getCampaignAttributionReport(
         events: unknown
         landing_views: unknown
         signups: unknown
+        email_verified: unknown
+        imports_started: unknown
+        imports_completed: unknown
         activations: unknown
         linked: unknown
         last_event: Date | null
@@ -288,6 +313,9 @@ export async function getCampaignAttributionReport(
         COUNT(*)                                                           AS events,
         COUNT(*) FILTER (WHERE event = ${ACQUISITION.LANDING_VIEWED})      AS landing_views,
         COUNT(*) FILTER (WHERE event = ${ACQUISITION.SIGNUP_COMPLETED})    AS signups,
+        COUNT(DISTINCT "userId") FILTER (WHERE event = ${ACQUISITION.EMAIL_VERIFIED})   AS email_verified,
+        COUNT(DISTINCT "userId") FILTER (WHERE event = ${ACQUISITION.IMPORT_STARTED})   AS imports_started,
+        COUNT(DISTINCT "userId") FILTER (WHERE event = ${ACQUISITION.IMPORT_COMPLETED}) AS imports_completed,
         COUNT(*) FILTER (WHERE event = ${ACQUISITION.DASHBOARD_ACTIVATED}) AS activations,
         COUNT(*) FILTER (WHERE event = ${ATTRIBUTION_LINK_EVENT})          AS linked,
         MAX("createdAt")                                                   AS last_event
@@ -301,6 +329,30 @@ export async function getCampaignAttributionReport(
     errors.push(`summary query failed: ${error instanceof Error ? error.message : "unknown"}`)
   }
 
+  let upgradesByEntry: CampaignAttributionReport["upgradesByEntry"] = []
+  try {
+    const rows = await prisma.$queryRaw<Array<{ entry_source: string | null; started: unknown; paid: unknown }>>(Prisma.sql`
+      SELECT
+        COALESCE(meta->>'entry_source', 'unknown') AS entry_source,
+        COUNT(DISTINCT "userId") FILTER (WHERE event = ${MONETIZATION.CHECKOUT_STARTED}) AS started,
+        COUNT(DISTINCT meta->>'stripe_session_id') FILTER (WHERE event = ${MONETIZATION.PAID_CONVERSION_CONFIRMED}) AS paid
+      FROM "AnalyticsEvent"
+      WHERE event IN (${MONETIZATION.CHECKOUT_STARTED}, ${MONETIZATION.PAID_CONVERSION_CONFIRMED})
+        AND "createdAt" >= ${from}
+        AND "createdAt" <= ${now}
+      GROUP BY 1
+      ORDER BY paid DESC, started DESC
+      LIMIT 50
+    `)
+    upgradesByEntry = rows.map((r) => {
+      const checkoutsStarted = toNumber(r.started)
+      const paid = toNumber(r.paid)
+      return { entrySource: r.entry_source ?? "unknown", checkoutsStarted, paid, checkoutToPaidRate: rate(paid, checkoutsStarted) }
+    })
+  } catch (error) {
+    errors.push(`upgrades-by-entry query failed: ${error instanceof Error ? error.message : "unknown"}`)
+  }
+
   // Bind to a local so TypeScript narrows the null away; a `queryFailed` boolean does not
   // narrow the outer `let`, and the values below must never be read from a failed query.
   const totals = totalsRow
@@ -309,6 +361,9 @@ export async function getCampaignAttributionReport(
   const uniqueVisitors = totals ? toNumber(totals.unique_visitors) : 0
   const landingViews = totals ? toNumber(totals.landing_views) : 0
   const signups = totals ? toNumber(totals.signups) : 0
+  const emailVerified = totals ? toNumber(totals.email_verified) : 0
+  const importsStarted = totals ? toNumber(totals.imports_started) : 0
+  const importsCompleted = totals ? toNumber(totals.imports_completed) : 0
   const activations = totals ? toNumber(totals.activations) : 0
   const linked = totals ? toNumber(totals.linked) : 0
   const lastEventAt = totals ? totals.last_event : null
@@ -363,6 +418,27 @@ export async function getCampaignAttributionReport(
       `AnalyticsEvent.${ACQUISITION.SIGNUP_COMPLETED}`,
     ),
     countMetric(
+      "email_verified",
+      "Emails confirmed",
+      emailVerified,
+      "Distinct accounts that confirmed their email for the first time (emitted on /verify/email). OAuth sign-ups are born verified and never emit it. Since 2026-11-15 confirming no longer gates the import.",
+      `AnalyticsEvent.${ACQUISITION.EMAIL_VERIFIED}`,
+    ),
+    countMetric(
+      "import_started",
+      "Imports started",
+      importsStarted,
+      "Distinct users whose import request was accepted — a supported provider at discovery or preview. Retries count once. Emitted since 2026-11-15.",
+      `AnalyticsEvent.${ACQUISITION.IMPORT_STARTED}`,
+    ),
+    countMetric(
+      "import_completed",
+      "Imports completed",
+      importsCompleted,
+      "Distinct users with at least one successful import commit (a league now on the account, including joining a leaguemate's import). Emitted since 2026-11-15.",
+      `AnalyticsEvent.${ACQUISITION.IMPORT_COMPLETED}`,
+    ),
+    countMetric(
       "attribution_linked",
       "Anonymous journeys joined to an account",
       linked,
@@ -390,6 +466,7 @@ export async function getCampaignAttributionReport(
     summary,
     campaigns,
     campaignsTruncated,
+    upgradesByEntry,
     // Every campaign row is grouped by FIRST-touch (`meta->>'first_*'`), the acquisition
     // question: which campaign originally earned this visitor. Latest-touch data is stored
     // on every row and is available for a future re-engagement view, but the two are never
@@ -397,12 +474,20 @@ export async function getCampaignAttributionReport(
     attributionGrouping: "first_touch",
     conversions: {
       visitorToSignup: rate(signups, uniqueVisitors),
+      signupToEmailVerified: rate(emailVerified, signups),
+      signupToImportStarted: rate(importsStarted, signups),
+      importStartedToCompleted: rate(importsCompleted, importsStarted),
       signupToActivation: rate(activations, signups),
       visitorToActivation: rate(activations, uniqueVisitors),
     },
     stageInventory: [
       { stage: ACQUISITION.LANDING_VIEWED, status: "confirmed", note: "Client beacon, server-validated + deduplicated (30 min)." },
       { stage: ACQUISITION.SIGNUP_COMPLETED, status: "confirmed", note: "Emitted at both email and OAuth signup paths." },
+      { stage: ACQUISITION.EMAIL_VERIFIED, status: "confirmed", note: "Emitted on the first confirmation of an account's email (/verify/email), since 2026-11-15." },
+      { stage: ACQUISITION.IMPORT_STARTED, status: "confirmed", note: "Emitted by import discover and preview on an accepted request, since 2026-11-15. Counted per distinct user." },
+      { stage: ACQUISITION.IMPORT_COMPLETED, status: "confirmed", note: "Emitted on every successful import commit, since 2026-11-15. Counted per distinct user." },
+      { stage: MONETIZATION.CHECKOUT_STARTED, status: "confirmed", note: "Emitted when a subscription Stripe Checkout Session is created, since 2026-11-15, with entry_source. See upgradesByEntry." },
+      { stage: MONETIZATION.PAID_CONVERSION_CONFIRMED, status: "confirmed", note: "Webhook-confirmed (checkout.session.completed, after the paid-state check), since 2026-11-15. Counted per distinct Stripe session." },
       { stage: ACQUISITION.DASHBOARD_ACTIVATED, status: "confirmed", note: "Server-side on the /dashboard success path; idempotent per user." },
       { stage: ATTRIBUTION_LINK_EVENT, status: "confirmed", note: "Emitted in the NextAuth signIn event." },
       ...UNIMPLEMENTED_STAGES.map(({ stage, note }) => ({ stage, status: "not_implemented" as const, note })),
