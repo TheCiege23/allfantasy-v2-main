@@ -18,6 +18,7 @@ import { rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { resolveSleeperPlayers } from '@/lib/core-app/sleeperPlayerRefs'
 import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { persistedRecentTrades } from '@/lib/core-app/persistedRecentTrades'
+import { findInProgressNflWeek } from './inProgressWeek'
 import type { RecentTrade, RecentTradesLeague } from '@/lib/core-app/recentTrades'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
 
@@ -73,6 +74,12 @@ export type SourceSnapshot = {
   /** Every AppUser linked to a team (or the importer) — identifiers only, for the redactor. */
   users: Array<{ id: string; email: string | null; username: string | null; displayName: string | null }>
   weekRows: SourceWeekRow[]
+  /**
+   * The week the NFL schedule says is still being played, when every team already has points in it
+   * (`inProgressWeek.ts`). Optional so the DB-free e2e harness need not supply it; absent means the
+   * scores rule alone decides which weeks are finished.
+   */
+  inProgressWeek?: number | null
   rosters: SourceRoster[]
   trades: RecentTrade[]
   openAlertHeadlines: string[]
@@ -163,6 +170,7 @@ export async function loadDemoSource(leagueId: string): Promise<SourceSnapshot |
     : []
   const latestSeason = weekRowsAll.length ? Math.max(...weekRowsAll.map((r) => r.seasonYear)) : null
   const weekRows = latestSeason == null ? [] : weekRowsAll.filter((r) => r.seasonYear === latestSeason)
+  const inProgressWeek = await findInProgressNflWeek(String(league.sport), latestSeason, weekRows).catch(() => null)
 
   // Rosters, joined to teams the way the scoreboard does (platformUserId → claimed user → externalId).
   const rosterRows = await prisma.roster.findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
@@ -211,6 +219,7 @@ export async function loadDemoSource(leagueId: string): Promise<SourceSnapshot |
     teams,
     users: userRows.map((u) => ({ id: u.id, email: emptyToNull(u.email), username: emptyToNull(u.username), displayName: emptyToNull(u.displayName) })),
     weekRows,
+    inProgressWeek,
     rosters,
     trades,
     openAlertHeadlines: alerts.map((a) => a.headline),
