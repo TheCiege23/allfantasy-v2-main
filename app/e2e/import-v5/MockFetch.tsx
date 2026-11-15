@@ -52,6 +52,8 @@ export async function MockFetch({ mode }: { mode: string }) {
         const method = (init && init.method) || 'GET';
         if (method === 'DELETE') { ys.pages = []; return json({ ok: true }); }
         if (method === 'POST') {
+          // Record what actually arrived, so a bookmark hand-off can be checked byte for byte.
+          try { const t = init.body && init.body.get && init.body.get('text'); window.__afLastPaste = { league: init.body.get('league'), length: t ? t.length : 0, head: t ? t.slice(0, 400) : '', text: t || '' }; } catch (e) {}
           await new Promise((r) => setTimeout(r, 700));
           const next = ys.order.find((k) => !ys.pages.includes(k)) || 'roster';
           if (!ys.pages.includes(next)) ys.pages.push(next);

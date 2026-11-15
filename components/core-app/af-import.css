@@ -2243,3 +2243,46 @@
 .af-im-ys-attest { margin-top: 14px; min-height: 44px; }
 /* The intro shows only on the first step; whatever leads the card after that sits flush. */
 .af-im-ys .af-im-fx > :first-child { margin-top: 0; }
+
+/* ── "Send to AllFantasy" bookmark (yahooSnapshotBookmarklet.ts) ───────── */
+.af-im-ys-bm {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px dashed var(--accent-line, var(--line2));
+  border-radius: 12px;
+  background: var(--accent-soft, transparent);
+}
+.af-im-ys-bm-h { margin: 0; font-size: 13.5px; font-weight: 800; color: var(--text); }
+.af-im-ys-bm .af-im-fx-note { margin-top: 6px; }
+.af-im-ys-bm-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 0 16px;
+  border-radius: 11px;
+  border: 1px solid var(--accent-line, var(--line2));
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: grab;
+}
+.af-im-ys-bm-btn:active { cursor: grabbing; }
+/* A phone has no bookmarks bar to drag to; screenshots are the way in there. */
+@media (hover: none), (max-width: 700px) {
+  .af-im-ys-bm { display: none; }
+}
+
+/* The small window the bookmark opens (/import/yahoo-receive). */
+.af-im-ys-recv {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+.af-im-ys-recv > .af-im-fx { max-width: 520px; margin: 0 auto; }
+.af-im-ys-recv-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.af-im-ys-recv-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
+.af-im-ys-recv-go { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; margin-top: 8px; }
