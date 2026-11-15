@@ -61,6 +61,10 @@ const BEST_BALL: BlogGuideLink = {
   slug: 'best-ball-fantasy-football',
   title: 'What Is Best Ball? How Best Ball Fantasy Football Works',
 }
+const SALARY_CAP: BlogGuideLink = {
+  slug: 'salary-cap-fantasy-football',
+  title: 'How Salary Cap Fantasy Football Works: Contracts, Cap Space and Dead Money',
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
@@ -69,11 +73,12 @@ export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGui
   devy: [DEVY, DYNASTY],
   keeper: [KEEPER, DYNASTY],
   'best-ball': [BEST_BALL],
+  'salary-cap': [SALARY_CAP, DYNASTY],
 }
 
 /** Guides for /sports/<slug>. */
 export const SPORT_GUIDES: Partial<Record<SportSlug, readonly BlogGuideLink[]>> = {
-  'fantasy-football': [DYNASTY, KEEPER, BEST_BALL, TRADE_DEADLINE, GUILLOTINE],
+  'fantasy-football': [DYNASTY, KEEPER, BEST_BALL, SALARY_CAP, TRADE_DEADLINE, GUILLOTINE],
   'fantasy-basketball': [POINTS_VS_CATEGORIES, NBA_CUP_POOL],
   'fantasy-hockey': [HOCKEY],
   'fantasy-soccer': [SOCCER],
