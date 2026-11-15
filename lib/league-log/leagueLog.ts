@@ -349,6 +349,23 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  // Written when the commissioner undoes a Guilly chop (lib/guillotine/chopUndoService.ts). Members see it: a chop
+  // being taken back is exactly the kind of ruling the league log exists to make visible.
+  guillotine_chop_undone: {
+    category: 'rulings',
+    members: true,
+    line: (ctx) => {
+      const a = obj(ctx.row.afterState)
+      const week = num(obj(ctx.row.metadata).week)
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const wk = { en: week != null ? ` week ${week}` : '', es: week != null ? ` de la semana ${week}` : '' }
+      const restored = Array.isArray(a.restoredRosterIds) ? a.restoredRosterIds.length : 0
+      return {
+        en: `Undid the${wk.en} chop: ${names(a.restoredRosterIds, 'en') || 'a team'} ${restored === 1 ? 'is' : 'are'} back in`,
+        es: `Deshizo la eliminación${wk.es}: ${names(a.restoredRosterIds, 'es') || 'un equipo'} ${restored === 1 ? 'vuelve' : 'vuelven'}`,
+      }
+    },
+  },
   dispute_ruled: {
     category: 'rulings',
     members: true,
@@ -578,6 +595,11 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)
+    }
+    if (row.actionType === 'guillotine_chop_undone') {
+      for (const id of (Array.isArray(obj(row.afterState).restoredRosterIds) ? (obj(row.afterState).restoredRosterIds as unknown[]) : [])) {
+        if (str(id)) ids.add(str(id)!)
+      }
     }
     if (row.actionType === 'guillotine_tiebreak_decided') {
       const a = obj(row.afterState)

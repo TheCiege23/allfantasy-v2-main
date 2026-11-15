@@ -27,7 +27,7 @@ async function writeEntry(leagueId: string, key: string, entry: CommissionerTieb
 }
 
 /** The league owner and the source platform's head commissioner (lib/commissioner/permissions.ts). */
-async function commissionerUserIds(leagueId: string, ownerId: string | null | undefined): Promise<string[]> {
+export async function commissionerUserIds(leagueId: string, ownerId: string | null | undefined): Promise<string[]> {
   const heads = await prisma.leagueTeam.findMany({
     where: { leagueId, isCommissioner: true, role: { not: 'viewer' }, claimedByUserId: { not: null } },
     select: { claimedByUserId: true },

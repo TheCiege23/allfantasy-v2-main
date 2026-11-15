@@ -446,10 +446,11 @@ describe('Guilly full regression matrix', () => {
     it('with "split", hands it to the teams still alive and says so in chat', async () => {
       chopLowOfTwo()
       prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'split' } })
-      redistributeChoppedFaabMock.mockResolvedValue({ pool: 60, perTeam: 30, survivors: 2, shares: new Map([['r-mid', 30], ['r-top', 30]]) })
+      redistributeChoppedFaabMock.mockResolvedValue({ pool: 60, perTeam: 30, survivors: 2, shares: new Map([['r-mid', 30], ['r-top', 30]]), taken: new Map([['r-low', 60]]) })
       await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026, systemUserId: 'system' })
       expect(redistributeChoppedFaabMock).toHaveBeenCalledWith({ choppedRosterIds: ['r-low'], survivorRosterIds: ['r-mid', 'r-top'] })
-      expect(appendEventMock).toHaveBeenCalledWith('league-1', 'faab_split', expect.objectContaining({ pool: 60 }))
+      // `taken` is what an undone chop gives back (lib/guillotine/chopUndo.ts).
+      expect(appendEventMock).toHaveBeenCalledWith('league-1', 'faab_split', expect.objectContaining({ pool: 60, taken: { 'r-low': 60 } }))
       expect(createLeagueChatMessageMock).toHaveBeenCalledWith('league-1', 'system', expect.stringContaining('$60'), expect.objectContaining({
         idempotencyKey: 'guillotine-faab-split:league-1:2026:w3',
       }))
