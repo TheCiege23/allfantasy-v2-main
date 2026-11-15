@@ -20,7 +20,7 @@ vi.mock('@/components/core-app/screens/NotificationRowMute', () => ({ Notificati
 
 import { NotificationsCenter } from '@/components/core-app/screens/NotificationsCenter'
 
-afterEach(() => { cleanup(); lang.value = 'en' })
+afterEach(() => { cleanup(); vi.useRealTimers(); lang.value = 'en' })
 
 const row = (id: string, o: Partial<NotificationRow> = {}): NotificationRow => ({
   id, kind: 'lineups', title: 'Check your lineup', detail: 'A starter is out',
@@ -184,6 +184,9 @@ describe('the page', () => {
   })
 
   it("shows a headline's time only when it differs from the one above it", () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    // Keep these headlines on one UTC day; near midnight they form separate groups.
+    vi.setSystemTime(new Date('2026-11-14T12:00:00Z'))
     const rows = [
       news('n1', 'NCAAF', 'First', { createdAt: new Date(Date.now() - 60_000).toISOString() }),
       news('n2', 'NCAAF', 'Second', { createdAt: new Date(Date.now() - 13 * 60_000).toISOString() }),

@@ -216,12 +216,15 @@ The installer is idempotent: running it twice does not create a second trigger.
 | Gmail is not defined / access denied | Add Advanced Gmail service, manifest scopes, and authorize again |
 | HTTP 301/302/307/308 | Use the canonical HTTPS hostname; do not enable redirect following |
 | HTTP 401 | Same exact secret on both sides; deployed environment; valid timestamp |
+| HTTP 403 | Check the app middleware/server policy before rotating secrets; the exact inbound POST must reach its HMAC handler from Google data centers |
 | HTTP 400/415 | Use the provided complete script/envelope without modifying encoding |
 | HTTP 413 / size error | Original message exceeds the 2 MiB encoded request limit; inspect manually |
 | HTTP 500 / viewer unavailable | Database connectivity, generated Prisma client, migration installation |
 | HTTP 503 | LS_INBOUND_SECRET is too short/unset or LS_SENDER_DOMAINS is empty/invalid; redeploy |
 | Stored rejected | Inspect original Authentication-Results and rejection reason; verify exact From/DKIM domains |
 | Label visible but new email missing | Do not add thread-wide Gmail filters that apply af-processed automatically |
+| Failed at raw_decode | Replace Code.gs with the current version; the Advanced Gmail service can return already-decoded bytes |
+| Failed at gmail_read / http_send / receipt_decode / gmail_label | The stage identifies the failed step; share only the sanitized stage/error, never email source or secrets |
 | Repeated failures fill the batch | Inspect the unprocessed messages/Executions, fix the cause, then run again |
 
 If you revise the verified sender domain configuration, previously stored rejected rows remain
