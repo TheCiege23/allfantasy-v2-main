@@ -2862,3 +2862,90 @@ button.af-ch-os-chip {
   cursor: default;
   opacity: 0.7;
 }
+
+/*
+ * The hub, folded (2026-11-14): everything below "Needs you now" is one row per section — its title and,
+ * where there is one, the fact worth seeing closed — and opens in place (HubFold.tsx). Inside an open fold
+ * the section's own heading is hidden from sight, not from screen readers, because the summary already
+ * says it; its notes and buttons stay.
+ */
+.af-core .af-ch-back-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+.af-core .af-ch-back-more {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  text-decoration: none;
+}
+.af-core .af-ch-back-more:hover {
+  color: var(--accent);
+}
+.af-core .af-ch-fold {
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: var(--surface);
+}
+.af-core .af-ch-fold + .af-ch-fold {
+  margin-top: 8px;
+}
+.af-core .af-ch-fold-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-ch-fold-summary::-webkit-details-marker {
+  display: none;
+}
+.af-core .af-ch-fold-summary::before {
+  content: '▸';
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+.af-core .af-ch-fold[open] > .af-ch-fold-summary::before {
+  transform: rotate(90deg);
+}
+.af-core .af-ch-fold-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-ch-fold-note {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-core .af-ch-fold-body {
+  padding: 0 12px 12px;
+}
+/* The section inside sits flat in the fold: one frame, not a card in a card. */
+.af-core .af-ch-fold-body > .af-card,
+.af-core .af-ch-fold-body > section,
+.af-core .af-ch-fold-body > .af-rdc-health > .af-card {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  margin: 0;
+}
+.af-core .af-ch-fold-body .af-ch-section-head > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-ch-fold-summary::before {
+    transition: none;
+  }
+}
