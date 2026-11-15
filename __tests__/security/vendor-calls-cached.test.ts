@@ -35,7 +35,8 @@ describe('the TheAudioDB adapter never lets its key out', () => {
 
   it('🛑 every failure is a bare null — no message that could carry the URL', async () => {
     const { fetchAudioDbArtists, fetchAudioDbTopTracks } = await import('@/lib/music/theAudioDbFetch')
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError(`fetch failed https://www.theaudiodb.com/api/v1/json/${SECRET}/x`) }))
+    // An error that carries the key in its message, as a fetch error carrying the URL would.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError(`fetch failed for /api/v1/json/${SECRET}/x`) }))
     await expect(fetchAudioDbArtists('Queen')).resolves.toBeNull()
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 429, json: async () => ({}) })))
     await expect(fetchAudioDbTopTracks('Queen')).resolves.toBeNull()
