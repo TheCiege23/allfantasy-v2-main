@@ -165,6 +165,13 @@ const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
       <circle cx="8" cy="17.5" r="2" />
     </>
   ),
+  /* Gear — one league's own settings (2026-11-15). */
+  'league-settings': (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.5v2.6M12 17.9v2.6M3.5 12h2.6M17.9 12h2.6M6 6l1.8 1.8M16.2 16.2 18 18M6 18l1.8-1.8M16.2 7.8 18 6" />
+    </>
+  ),
   /* Mortarboard — college prospects. */
   devy: (
     <>

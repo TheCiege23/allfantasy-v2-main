@@ -47,7 +47,7 @@ import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
-import { ScopeSwitcher, type ScopeSwitcherField, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
+import { ScopeResetLink, ScopeSwitcher, type ScopeSwitcherField, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
 import {
   FAVORITES_SECTION,
@@ -98,6 +98,7 @@ import '@/components/core-app/af-survivor-theme.css'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import {
   LEAGUE_CHIP_SECTION,
+  LEAGUE_RAIL_OMITTED_SECTIONS,
   NAV_SECTION_ORDER,
   NAV_SECTION_ORDER_NO_LEAGUE,
   leagueDestinationHidden,
@@ -305,6 +306,8 @@ export type CoreNavKey =
    * which is the "not built yet" panel problem this rail already learned once.
    */
   | 'defense-hub'
+  /* One league's own settings — the League Settings hub, read-only for an imported league (2026-11-15). */
+  | 'league-settings'
   /*
    * The admin command center at /admin. A full page OUTSIDE /core, like
    * `settings` above, so it is an exit and never the active item.
@@ -887,6 +890,16 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
             href: `/core/schedule?league=${encodeURIComponent(props.selectedLeagueId)}`,
           },
           /* No Moves (2026-11-14): it folded into Trades, and /core/moves lands there (next.config.js). */
+          /*
+           * The league's rules (2026-11-15): the League Settings hub, which mirrors an imported
+           * league's own settings read-only and lets an AllFantasy league's commissioner edit.
+           */
+          {
+            key: 'league-settings' as const,
+            label: navLabel('league-settings'),
+            glyph: '⚙',
+            href: `/core/league-settings?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
         ]
       : []),
     /* Projects from played weeks — nothing to project from yet. */
@@ -1355,6 +1368,11 @@ function AfCoreShell(incoming: AfCoreShellProps) {
   // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
   useLineupAutoSync(props.selectedLeagueId)
   const sections = useMemo(() => navSections(props), [props])
+  /* The desktop and tablet rail inside a league: the league's own groups only — see LEAGUE_RAIL_OMITTED_SECTIONS. */
+  const navRailSections = useMemo(
+    () => (props.selectedLeagueId ? sections.filter((s) => !LEAGUE_RAIL_OMITTED_SECTIONS.has(s.id)) : sections),
+    [sections, props.selectedLeagueId],
+  )
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
     const primary = props.selectedLeagueId ? MOBILE_BAR_KEYS : MOBILE_BAR_KEYS_NO_LEAGUE
@@ -2414,7 +2432,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
           support") were the two furthest from the fold.
         */}
         <div className="af-nav-scroll">
-        {sections.map((section) => (
+        {navRailSections.map((section) => (
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
               <div className="af-nav-heading af-label" aria-hidden>
@@ -2492,6 +2510,28 @@ function AfCoreShell(incoming: AfCoreShellProps) {
             })()}
           </div>
         ))}
+
+        {/*
+          Inside a league, ONE way out to everything account-wide (2026-11-15) instead of the "All
+          leagues" and "Manage" groups: Your week, My Leagues, Rankings, Your career, Brackets and Find
+          a League are on the all-leagues view this opens. It clears the remembered home filter, like
+          the scope switcher's own "All leagues".
+        */}
+        {props.selectedLeagueId ? (
+          <div className="af-nav-group af-nav-group-exit">
+            <ul className="af-nav-items" aria-label={copy('All leagues')}>
+              <li>
+                <ScopeResetLink className="af-nav-item af-nav-all-leagues">
+                  <span className="af-nav-glyph" aria-hidden>
+                    <CoreNavIcon navKey="portfolio" size={16} />
+                  </span>
+                  <span className="af-nav-label">{copy('All leagues')}</span>
+                  <span className="af-nav-all-arrow" aria-hidden>→</span>
+                </ScopeResetLink>
+              </li>
+            </ul>
+          </div>
+        ) : null}
 
         </div>
 
@@ -2721,6 +2761,34 @@ function AfCoreShell(incoming: AfCoreShellProps) {
                 </div>
               </div>
             </details>
+
+            {/*
+              Notifications, with its count, while a league is open (2026-11-15). The rail drops its
+              "Manage" group inside a league, and this count was only ever there. Not on a phone
+              (af-core-shell.css): there the More sheet keeps Notifications.
+            */}
+            {props.selectedLeagueId ? (
+              <Link
+                href={`/core/notifications?league=${encodeURIComponent(props.selectedLeagueId)}`}
+                className="af-topbar-inbox"
+                prefetch={false}
+                data-testid="topbar-inbox"
+                data-active={active === 'notifications'}
+                aria-label={
+                  props.notificationCount && props.notificationCount > 0
+                    ? `${copy('Notifications')}, ${props.notificationCount}`
+                    : copy('Notifications')
+                }
+              >
+                <span aria-hidden>✉</span>
+                <span className="af-topbar-inbox-label">{copy('Notifications')}</span>
+                {props.notificationCount && props.notificationCount > 0 ? (
+                  <span className="af-topbar-inbox-badge af-num" aria-hidden>
+                    {badgeText(navCountText(props.notificationCount), language)}
+                  </span>
+                ) : null}
+              </Link>
+            ) : null}
 
             {/*
               ⚠ ONE ACCOUNT MENU, NOT FIVE PEER CHIPS (2026-11-02 nav redesign). The top bar carried
@@ -3071,6 +3139,18 @@ function AfCoreShell(incoming: AfCoreShellProps) {
                   </span>
                   <span>{copy('Leagues')}</span>
                 </button>
+                {/*
+                  The rail's way out of a league (2026-11-15), here too: on a tablet the rail is hidden
+                  and this sheet stands in for it, so its "All leagues" row has to be reachable from here.
+                */}
+                {props.selectedLeagueId ? (
+                  <ScopeResetLink className="af-mobile-more-link">
+                    <span className="af-mobile-more-icon" aria-hidden>
+                      <CoreNavIcon navKey="portfolio" />
+                    </span>
+                    <span>{copy('All leagues')}</span>
+                  </ScopeResetLink>
+                ) : null}
               </div>
               {sections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>

@@ -127,6 +127,9 @@
 .af-lsh-team-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .af-lsh-field { flex: 1 1 220px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .af-lsh-field label { font-size: 14px; font-weight: 700; }
+/* An imported league's team: the name as text, not a field (2026-11-15). */
+.af-lsh-field .af-lsh-label { font-size: 14px; font-weight: 700; }
+.af-lsh-team-name { font-size: 18px; font-weight: 800; overflow-wrap: anywhere; }
 .af-lsh-input { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.16); background: #070c1e; color: var(--lsh-text); font-size: 15px; outline: none; }
 .af-lsh-input:focus { border-color: var(--lsh-accent); }
 .af-lsh-inline { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -205,3 +208,14 @@
 @keyframes af-lsh-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .af-lsh-skeleton { animation: none; } }
 .af-lsh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/*
+ * Inside /core (2026-11-15): the hub is drawn for a dark surface — light text, dark cards — and the
+ * /league app always gave it one. /core can be in light mode, which left the league name and the tab
+ * labels light-on-light. So in /core the hub paints its own surface; in /league nothing changes.
+ */
+.af-core-league-settings > .af-lsh {
+  background: var(--lsh-bg);
+  border-radius: var(--af-radius-card, 16px);
+  padding: 16px;
+}

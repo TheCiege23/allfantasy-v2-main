@@ -66,9 +66,10 @@ describe('the shell in a Survivor league', () => {
     expect(survivor.labels).not.toContain('War Room')
     // Same screens, same order: only Defense Hub is gone.
     expect(survivor.hrefs).toEqual(standard.hrefs.filter((h) => !h.startsWith('/core/defense-hub')))
-    // Account-wide entries keep their names.
-    expect(survivor.labels).toContain('Settings')
-    expect(survivor.labels).toContain('Brackets')
+    // Account-wide entries leave a league's rail (2026-11-15); its one way out keeps its plain name.
+    expect(survivor.labels).not.toContain('Settings')
+    expect(survivor.labels).not.toContain('Brackets')
+    expect(survivor.labels.at(-1)).toBe('All leagues')
   })
 
   it('renames the league sections and marks the root for the island theme', () => {

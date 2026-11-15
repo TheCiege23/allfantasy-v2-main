@@ -32,6 +32,7 @@ export const CORE_NAV_LABELS = {
   'season-outlook': { label: 'Season Outlook', short: 'Outlook' },
   moves: { label: 'Moves' },
   schedule: { label: 'Schedule' },
+  'league-settings': { label: 'League settings', short: 'Settings' },
 } as const satisfies Record<string, { label: string; short?: string }>
 
 type CoreNavLabelKey = keyof typeof CORE_NAV_LABELS

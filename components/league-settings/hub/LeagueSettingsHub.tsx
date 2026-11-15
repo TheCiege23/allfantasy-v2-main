@@ -181,7 +181,22 @@ export function LeagueSettingsHub({
   }, [payload, canEdit, native, leagueId, myTeam?.externalId])
 
   const kind = useMemo(
-    () => resolveHubKind({ leagueType: league.leagueType ?? (payload?.league?.leagueType as string | undefined), leagueVariant: league.leagueVariant, settings: league.settings, isDynasty: league.isDynasty, guillotineMode: league.guillotineMode, bestBallMode: league.bestBallMode }),
+    /*
+     * The props first, then the settings read's own league fields: /core passes only what its rail
+     * holds (id, name, platform, sport), so a guillotine or best-ball league opened there would
+     * otherwise resolve as redraft.
+     */
+    () => {
+      const pl = (payload?.league ?? {}) as Record<string, unknown>
+      return resolveHubKind({
+        leagueType: league.leagueType ?? (pl.leagueType as string | undefined),
+        leagueVariant: league.leagueVariant ?? (pl.leagueVariant as string | null | undefined),
+        settings: league.settings ?? payload?.settings ?? undefined,
+        isDynasty: league.isDynasty ?? (pl.isDynasty as boolean | null | undefined),
+        guillotineMode: league.guillotineMode ?? (pl.guillotineMode as boolean | null | undefined),
+        bestBallMode: league.bestBallMode ?? (pl.bestBallMode as boolean | null | undefined),
+      })
+    },
     [league, payload],
   )
 
