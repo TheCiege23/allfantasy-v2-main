@@ -23,6 +23,7 @@ import {
   submitImportCreation,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import type { YahooSnapshotChecklist } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotModel'
+import { buildYahooSnapshotBookmarklet } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotBookmarklet'
 
 const ENDPOINT = '/api/leagues/import/yahoo-snapshot'
 
@@ -90,6 +91,8 @@ export function YahooSnapshotImport() {
   const [isCommissioner, setIsCommissioner] = useState(false)
   const [alreadyImported, setAlreadyImported] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const bookmarkRef = useRef<HTMLAnchorElement>(null)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -104,11 +107,11 @@ export function YahooSnapshotImport() {
     }
   }, [])
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (league?: string) => {
     setError(null)
     setBusy(true)
     try {
-      const res = await fetch(`${ENDPOINT}?league=${encodeURIComponent(leagueInput.trim())}`, { cache: 'no-store' })
+      const res = await fetch(`${ENDPOINT}?league=${encodeURIComponent((league ?? leagueInput).trim())}`, { cache: 'no-store' })
       const body = await res.json().catch(() => ({}))
       if (!res.ok || !body.checklist) {
         setError(body.error ?? 'That league link did not work. Check it and try again.')
@@ -121,6 +124,48 @@ export function YahooSnapshotImport() {
       setBusy(false)
     }
   }, [leagueInput])
+
+  /*
+   * `/import?yahooLeague=<id>` — where the bookmark's window sends you to review. Opens the panel
+   * straight on that league's checklist instead of asking for the link again.
+   */
+  useEffect(() => {
+    if (!enabled) return
+    const league = new URLSearchParams(window.location.search).get('yahooLeague')
+    if (!league) return
+    setOpen(true)
+    setLeagueInput(league)
+    void start(league)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the panel first becomes available
+  }, [enabled])
+
+  /*
+   * Pages sent with the bookmark land in another window, so the checklist here goes stale. Re-read it
+   * when the commissioner comes back to this tab — one cheap GET, no AI call.
+   */
+  useEffect(() => {
+    if (phase.k !== 'collect' || !checklist) return
+    const leagueId = checklist.leagueId
+    const refresh = () => {
+      fetch(`${ENDPOINT}?league=${encodeURIComponent(leagueId)}`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((body) => {
+          if (body?.checklist) setChecklist(body.checklist)
+        })
+        .catch(() => {})
+    }
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [phase.k, checklist?.leagueId])
+
+  /*
+   * ⚠ THE HREF IS SET ON THE DOM NODE, NOT IN JSX. React refuses `javascript:` URLs in `href`
+   * (it renders a blocked placeholder), and a bookmarklet is nothing but a `javascript:` URL. The
+   * origin is this page's, so a preview or staging deployment builds a bookmark for itself.
+   */
+  useEffect(() => {
+    bookmarkRef.current?.setAttribute('href', buildYahooSnapshotBookmarklet(window.location.origin))
+  }, [phase.k])
 
   const readPage = useCallback(async () => {
     if (!checklist) return
@@ -214,7 +259,7 @@ export function YahooSnapshotImport() {
   const rostersAdded = checklist?.teams.filter((t) => t.hasRoster).length ?? 0
 
   return (
-    <details className="af-im-ys">
+    <details className="af-im-ys" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary className="af-im-fx-link af-im-fx-link--foot af-im-ys-toggle">Yahoo league? Import it by copy-paste →</summary>
       {/* No heading of its own: the summary above already says what this is, once. */}
       <section className="af-im-fx" aria-label="Import a Yahoo league by copy-paste">
@@ -308,6 +353,25 @@ export function YahooSnapshotImport() {
                 standings if a team was renamed.
               </p>
             ) : null}
+
+            <div className="af-im-ys-bm">
+              <p className="af-im-ys-bm-h">Faster on a computer: one click per page</p>
+              <p className="af-im-fx-note">
+                Drag this button to your bookmarks bar. Then on each Yahoo page above, click the bookmark and the
+                page comes straight here.
+              </p>
+              <a
+                ref={bookmarkRef}
+                className="af-im-ys-bm-btn"
+                draggable
+                onClick={(e) => {
+                  e.preventDefault()
+                  setNotice('Drag the Send to AllFantasy button to your bookmarks bar, then click it on a Yahoo page.')
+                }}
+              >
+                Send to AllFantasy
+              </a>
+            </div>
 
             <label className="af-im-ys-paste-label" htmlFor="af-im-ys-paste">
               On the Yahoo page press <kbd>Ctrl</kbd>+<kbd>A</kbd>, then <kbd>Ctrl</kbd>+<kbd>C</kbd>, and paste it here

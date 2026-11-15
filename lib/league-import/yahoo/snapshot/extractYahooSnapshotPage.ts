@@ -49,6 +49,8 @@ export const YAHOO_SNAPSHOT_SYSTEM_PROMPT = [
   '- Roster "slot" is the slot shown (QB, RB, WR, TE, W/R/T, K, DEF, BN, IR). Bench is "BN".',
   '- Draft "pick" is the number WITHIN its round as printed; it restarts at 1 every round. A team defense such as "Texans" is a player with position "DEF".',
   '- Copy team, manager and player names exactly as shown. Include every row the page shows.',
+  '- Yahoo glues labels onto player names ("Derrick HenryVideo ForecastPlayer Note", "New Player Note"). Drop those labels: the name is "Derrick Henry".',
+  '- On a roster page, "Det - QB" under a name is the NFL team and position. Ignore projections, stats, % rostered, bye weeks and game times.',
 ].join('\n')
 
 export type YahooSnapshotExtractResult =
