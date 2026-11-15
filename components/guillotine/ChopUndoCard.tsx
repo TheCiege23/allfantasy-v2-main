@@ -46,7 +46,7 @@ const COPY = {
     week: (w: number) => `Eliminación de la semana ${w}`,
     chopped: "Eliminado",
     cannot: "Esta eliminación ya no se puede deshacer:",
-    can: "Puedes traer de vuelta a este equipo con sus jugadores, hasta que la próxima ronda de waivers procese solicitudes.",
+    can: "Puedes traer de vuelta a este equipo con sus jugadores, hasta el próximo procesamiento de reclamos.",
     insteadLabel: "Eliminar a otro equipo en su lugar (opcional)",
     noInstead: "Ninguno — solo traer de vuelta al equipo",
     suggested: "una corrección de estadísticas dice que este equipo debió caer",
