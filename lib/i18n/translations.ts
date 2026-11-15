@@ -1127,6 +1127,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsEd.ro.saved": "Roster settings saved.",
     "lsEd.ro.draftSynced": "Draft updated to {{n}} rounds to match the new roster (IR spots are not drafted).",
     "lsEd.ro.draftKept": "Your custom draft round count was kept. Change it in Draft settings if you want it to follow the roster.",
+    "lsEd.ro.lineupsNeedFix": "{{n}} team(s) have a saved lineup that no longer fits the new roster spots. Their managers were alerted to fix it.",
     "lsEd.ro.draftStarted": "The draft has already started, so its rounds were not changed.",
     "lsEd.ro.resetLeague": "Reset to League Default",
     "lsEd.ro.reset": "Reset",
