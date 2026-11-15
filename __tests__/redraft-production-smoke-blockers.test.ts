@@ -43,12 +43,11 @@ describe('redraft production smoke blockers', () => {
   })
 
   it('roster settings show polished standard redraft slot controls including Superflex default 0', () => {
-    expect(rosterSettings).toContain("key: 'SF'")
-    expect(rosterSettings).toContain("label: 'Superflex (QB/RB/WR/TE)'")
-    expect(rosterSettings).toContain('defaultValue: 0')
+    // 🛑 The settings window's own football-only slot grid sent `rosterSlotCounts`, which the save ignores
+    // (2026-11-15). Its Roster tab now renders the League settings roster editor, which saves what lineups read.
     expect(rosterSettings).toContain('data-testid="roster-slot-controls"')
-    expect(rosterSettings).toContain('data-testid={`roster-slot-${testKey}`}')
-    expect(rosterSettings).toContain('SLOT_BADGE_CLASS')
+    expect(rosterSettings).toContain('<RosterSettingsEditor')
+    expect(rosterSettings).not.toContain('rosterSlotCounts')
     expect(rosterSettings).toContain('Advanced reserve settings')
     expect(rosterSettingsEditor).toContain('SUPERFLEX: 0')
     expect(rosterSettingsEditor).toContain('next.SUPERFLEX = Number(next.SF || 0)')

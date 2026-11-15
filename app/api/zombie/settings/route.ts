@@ -1,3 +1,4 @@
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -29,6 +30,9 @@ export async function PATCH(req: Request) {
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
+  // 🛑 Zombie rules and money skipped the settings lock and the league log (2026-11-15), unlike every other format.
+  const locked = await formatRulesLockedResponse(leagueId)
+  if (locked) return locked
 
   if (['status', 'currentWeek', 'universeId'].some((key) => body[key] !== undefined)) {
     return NextResponse.json({ error: 'League lifecycle and universe membership use dedicated commissioner actions.' }, { status: 400 })
@@ -354,5 +358,6 @@ export async function PATCH(req: Request) {
     await generateRulesDocument(z.id)
   }
 
+  await logFormatRulesChange({ leagueId, userId, format: 'zombie', fields: Object.keys(body).filter((k) => k !== 'leagueId') })
   return NextResponse.json({ zombieLeague: row, config, paidConfig, freeRewardConfig })
 }

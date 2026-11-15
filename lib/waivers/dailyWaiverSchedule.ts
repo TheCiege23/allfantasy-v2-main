@@ -402,3 +402,17 @@ export function isWithinDropHold(droppedAt: Date | null | undefined, now: Date, 
   if (!droppedAt || !holdHours || holdHours <= 0) return false
   return now.getTime() - droppedAt.getTime() < holdHours * 3_600_000
 }
+
+/**
+ * A stored UTC "HH:MM" as the league's local clock time, for display (e.g. "03:00" in New York → "10:00 PM").
+ * Taken at `ref`, like the derivation above. Returns null for an unreadable time.
+ */
+export function utcProcessTimeAsLocalLabel(hhmm: string | null | undefined, timeZone: string | null | undefined, ref: Date = new Date()): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? '').trim())
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 23 || min > 59) return null
+  const at = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate(), h, min))
+  return new Intl.DateTimeFormat('en-US', { timeZone: safeTimeZone(timeZone), hour: 'numeric', minute: '2-digit' }).format(at)
+}

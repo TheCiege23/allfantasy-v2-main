@@ -99,6 +99,8 @@ const SECTION_LABELS: Record<string, Line> = {
   playoffs: { en: 'playoff', es: 'playoffs' },
   commissioner: { en: 'commissioner', es: 'comisionado' },
   conceptRules: { en: 'format', es: 'formato' },
+  dynasty: { en: 'dynasty', es: 'dinastía' },
+  divisions: { en: 'division', es: 'divisiones' },
   ai: { en: 'AI', es: 'IA' },
 }
 

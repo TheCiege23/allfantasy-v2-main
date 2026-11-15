@@ -492,14 +492,16 @@ export function CommissionerSettingsModal({
               />
               <details className="border-t border-white/[0.06] bg-[#0a0f18]/40">
                 <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-[#ffb8d1]/80">
-                  League format, roster slots & advanced sport config
+                  League format & advanced sport config
                 </summary>
                 <SportConfigSettingsPanel
                   sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                   leagueSettings={initialData as Record<string, unknown>}
                   canEdit={canEdit}
                   onSportConfigChange={(next) => debouncedSave({ sportConfig: next })}
-                  omitSections={{ scoring: true }}
+                  // Roster slots here wrote `sportConfig.rosterSlotCounts`, which no lineup check reads; the Roster
+                  // tab's editor is where slots live (2026-11-15).
+                  omitSections={{ scoring: true, roster: true }}
                 />
               </details>
             </div>
