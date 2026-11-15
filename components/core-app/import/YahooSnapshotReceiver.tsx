@@ -26,6 +26,11 @@ const PAGE_LABEL: Record<string, string> = {
   roster: 'Roster',
 }
 
+/** How often the window asks for the page, how long it keeps asking, and when it shows a hint. */
+export const YAHOO_READY_INTERVAL_MS = 1_000
+export const YAHOO_READY_GIVE_UP_MS = 10 * 60 * 1000
+export const YAHOO_READY_SLOW_HINT_MS = 10_000
+
 type State =
   | { k: 'waiting' }
   | { k: 'orphan' }
@@ -35,6 +40,7 @@ type State =
 
 export function YahooSnapshotReceiver() {
   const [state, setState] = useState<State>({ k: 'waiting' })
+  const [slow, setSlow] = useState(false)
   const handled = useRef(false)
 
   useEffect(() => {
@@ -52,6 +58,7 @@ export function YahooSnapshotReceiver() {
       const parsed = parseYahooPageMessage(event, rid)
       if (!parsed.ok) return
       handled.current = true
+      stopAsking()
       setState({ k: 'reading' })
       try {
         const form = new FormData()
@@ -70,17 +77,31 @@ export function YahooSnapshotReceiver() {
     }
     window.addEventListener('message', onMessage)
 
-    // Say "ready" until the page arrives — the opener may attach its listener a moment after opening us.
+    /*
+     * 🛑 SAY "READY" UNTIL THE PAGE ARRIVES, NOT FOR A FIXED 20 SECONDS. Measured on a real league
+     * 2026-11-15: Yahoo's team pages can keep their main thread busy (ads, live stats) for longer than
+     * that right after loading, so the bookmark answered only after this window had stopped asking,
+     * and the window sat on "Waiting…" for good. Asked again by hand, the same page answered at once.
+     * So: ask every second until the page arrives, for as long as the bookmark itself listens
+     * (10 minutes), and stop the moment it does.
+     */
     const sayReady = () => {
       if (!handled.current) opener.postMessage({ type: YAHOO_READY_MESSAGE, rid }, YAHOO_FOOTBALL_ORIGIN)
     }
     sayReady()
-    const timer = window.setInterval(sayReady, 500)
-    const stop = window.setTimeout(() => window.clearInterval(timer), 20_000)
-    return () => {
-      window.removeEventListener('message', onMessage)
+    const timer = window.setInterval(sayReady, YAHOO_READY_INTERVAL_MS)
+    const stop = window.setTimeout(() => window.clearInterval(timer), YAHOO_READY_GIVE_UP_MS)
+    const slowTimer = window.setTimeout(() => {
+      if (!handled.current) setSlow(true)
+    }, YAHOO_READY_SLOW_HINT_MS)
+    function stopAsking() {
       window.clearInterval(timer)
       window.clearTimeout(stop)
+      window.clearTimeout(slowTimer)
+    }
+    return () => {
+      window.removeEventListener('message', onMessage)
+      stopAsking()
     }
   }, [])
 
@@ -88,6 +109,11 @@ export function YahooSnapshotReceiver() {
     <main className="af-im-ys-recv">
       <section className="af-im-fx" aria-live="polite">
         {state.k === 'waiting' ? <p className="af-im-fx-p">Waiting for your Yahoo page…</p> : null}
+        {state.k === 'waiting' && slow ? (
+          <p className="af-im-fx-note">
+            Yahoo is still loading that page. If nothing happens, go back to it and click the bookmark again.
+          </p>
+        ) : null}
         {state.k === 'reading' ? <p className="af-im-fx-p">Reading your Yahoo page…</p> : null}
         {state.k === 'orphan' ? (
           <p className="af-im-fx-p">

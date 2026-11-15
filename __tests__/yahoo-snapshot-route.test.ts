@@ -195,7 +195,8 @@ describe('building a snapshot', () => {
   })
 })
 
-describe('the import routes let a snapshot through — and only a snapshot', () => {
+// Each case re-imports the whole import route (vi.resetModules), ~25s cold under a busy box.
+describe('the import routes let a snapshot through — and only a snapshot', { timeout: 120_000 }, () => {
   beforeEach(() => {
     vi.doMock('@/lib/league-import/commissionerGate', () => ({
       // Reaching the commissioner gate at all proves the provider gate let the request through.
@@ -239,7 +240,7 @@ describe('the import routes let a snapshot through — and only a snapshot', () 
   })
 })
 
-describe('commissioner gate for a pasted league', () => {
+describe('commissioner gate for a pasted league', { timeout: 120_000 }, () => {
   async function gate() {
     vi.resetModules()
     vi.doMock('@/lib/league-sync-core', () => ({ getDecryptedAuth: vi.fn() }))
