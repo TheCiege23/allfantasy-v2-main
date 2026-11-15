@@ -41,6 +41,8 @@ describe('the entry source', () => {
     expect(withEntrySource('/upgrade', 'lock_trade_depth')).toBe('/upgrade?from=lock_trade_depth')
     expect(withEntrySource('/upgrade?plan=pro&from=chimmy-drawer', 'lock_player_depth')).toBe('/upgrade?plan=pro&from=chimmy-drawer')
     expect(withEntrySource('https://evil.test/x', 'lock_player_depth')).toBe('https://evil.test/x')
+    // 🛑 an access object with no upgrade path passes through — the lock card must never be the crash.
+    expect(withEntrySource(undefined as never, 'lock_player_depth')).toBeUndefined()
   })
 
   it('keeps only a short token — never free text into Stripe metadata', () => {

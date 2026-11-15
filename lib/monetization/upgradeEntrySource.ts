@@ -23,7 +23,9 @@ export function normalizeEntrySource(value: unknown): string | null {
 /** `/upgrade?plan=pro` + `lock_player_depth` → `/upgrade?plan=pro&from=lock_player_depth`. An existing `from` wins. */
 export function withEntrySource(path: string, source: string): string {
   const s = normalizeEntrySource(source)
-  if (!s || !path.startsWith('/')) return path
+  // A caller (or a test fixture) can hand over an access object with no upgrade path at all: pass it
+  // through untouched rather than throwing inside a render — the lock card must never be the crash.
+  if (!s || typeof path !== 'string' || !path.startsWith('/')) return path
   const [base, hash] = path.split('#', 2)
   const [pathname, query = ''] = base!.split('?', 2)
   const params = new URLSearchParams(query)
