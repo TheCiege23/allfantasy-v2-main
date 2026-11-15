@@ -24,6 +24,8 @@ import {
 import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { isYahooSnapshotSourceId } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotModel'
+import { isYahooSnapshotImportOpenFor } from '@/lib/yahoo/yahooAvailability'
 import {
   applyAttestedCommissioner,
   assertImportCommissioner,
@@ -208,7 +210,14 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'Unsupported import provider' }, { status: 400 })
   }
 
-  if (!isImportProviderAvailable(provider)) {
+  /*
+   * A PASTED Yahoo league (yahoo-snapshot:<id>) needs no Yahoo API access, so it is not held to
+   * Yahoo's coming-soon state — only to the snapshot rollout (lib/yahoo/yahooAvailability.ts).
+   * The API path for Yahoo stays refused here exactly as before.
+   */
+  const yahooSnapshotAllowed =
+    provider === 'yahoo' && isYahooSnapshotSourceId(sourceId) && isYahooSnapshotImportOpenFor(auth.userId)
+  if (!isImportProviderAvailable(provider) && !yahooSnapshotAllowed) {
     return NextResponse.json(
       { error: importComingSoonMessage(provider), code: 'coming_soon' },
       { status: 400 }

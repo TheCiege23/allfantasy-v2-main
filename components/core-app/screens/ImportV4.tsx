@@ -31,6 +31,7 @@ import {
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
+import { YahooSnapshotImport } from '@/components/core-app/import/YahooSnapshotImport'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-app/import/EspnLeagueCheck'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
@@ -3178,6 +3179,14 @@ export function ImportV4({
           foot of the import screen rather than inside a provider step: you
           reach it after importing both halves, not while importing one.
         */}
+        {/*
+          Yahoo by copy-paste, for while Yahoo's API access is unapproved. A foot link like the two
+          around it, opening in place. Renders nothing unless the server says this account may use it
+          (lib/yahoo/yahooAvailability.ts), so it is invisible outside the rollout. Its own file, like
+          FantraxUpload, to keep this one stable.
+        */}
+        <YahooSnapshotImport />
+
         <p className="af-im-fx-link af-im-fx-link--foot">
           <Link href="/core/connect-leagues">
             Run a college league alongside a pro one? Connect them →
