@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-war-room.css'
-import DraftRoomMusic from '@/components/core-app/draft-music/DraftRoomMusic'
+import { AppMusicLauncher } from '@/components/app-music/AppMusicDock'
 import type { BoardCell, BoardColumn, DraftBoardData } from '@/lib/core-app/draftBoard'
 import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import { buildDraftBoard, cellForSlot } from '@/lib/draft-board/draftBoardGrid'
@@ -182,14 +182,14 @@ export function DraftBoard({ data }: DraftBoardProps) {
       </header>
 
       {/*
-        Draft room music — YouTube for everyone, Apple Music for subscribers.
-        Closed by default and in NORMAL FLOW between the status bar and the
-        board. Not floating, not overlaid: a strip that covers a pick during a
-        draft is worse than no music at all. It never autoplays — audio starts
-        only when someone presses play. (Replaces the Spotify widget, which
-        could not reach real users: Spotify's app is stuck in 25-user dev mode.)
+        The draft room's way into the app-wide music player (mounted once in
+        the root layout, so the music keeps playing after the draft). A slim bar
+        in NORMAL FLOW between the status bar and the board — never over a pick —
+        and nothing plays until someone chooses. (Replaces the Spotify widget,
+        which could not reach real users: Spotify's app is stuck in 25-user dev
+        mode.)
       */}
-      <DraftRoomMusic />
+      <AppMusicLauncher />
 
       {/* ── Board ───────────────────────────────────────────────────── */}
       <section className="af-frame af-wr-section">
