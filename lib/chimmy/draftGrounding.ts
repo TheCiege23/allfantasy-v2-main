@@ -6,10 +6,11 @@ import {
   getSlotInRoundForOverall,
   getUpcomingPickOwners,
 } from '@/lib/live-draft-engine/DraftOrderService'
-import type { DraftType, SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import type { DraftType } from '@/lib/live-draft-engine/types'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import type { RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
+import { parseSlotOrder } from '@/lib/competitive-edge/liveDraftManagersFacts'
 
 /**
  * THE DRAFT — live, scheduled, or finished.
@@ -130,17 +131,6 @@ type SessionRow = {
   slotOrder: unknown
 }
 
-function parseSlotOrder(value: unknown): SlotOrderEntry[] {
-  if (!Array.isArray(value)) return []
-  const out: SlotOrderEntry[] = []
-  for (const raw of value) {
-    if (!raw || typeof raw !== 'object') continue
-    const { slot, rosterId, displayName } = raw as Record<string, unknown>
-    if (typeof slot !== 'number' || typeof rosterId !== 'string') continue
-    out.push({ slot, rosterId, displayName: typeof displayName === 'string' ? displayName : rosterId })
-  }
-  return out
-}
 
 /**
  * Draft state for the league in scope. Returns null when the league has no draft
@@ -352,6 +342,26 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
   if (mine && viewerRosterId && !isAuction && !paused && nextOverall <= totalPicks) {
     const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId)
     if (draftOsLines) lines.push(...draftOsLines)
+  }
+
+  /*
+   * The managers on the clock before this user's next pick: what each has taken in THIS draft, and —
+   * only for a plan with Competitive Edge — their history in this league's past drafts. Facts the
+   * user can check, under the Competitive Edge contract (lib/competitive-edge/liveDraftManagersFacts.ts).
+   */
+  if (mine && !isAuction && !paused && nextOverall <= totalPicks) {
+    const { loadManagersAhead } = await import('@/lib/competitive-edge/liveDraftManagers')
+    const ahead = await loadManagersAhead({ leagueId, userId }).catch(() => null)
+    if (ahead && ahead.managers.length > 0) {
+      lines.push(
+        `MANAGERS PICKING BEFORE THIS USER'S NEXT TURN (facts only — never label a manager's style or say what they will pick; state the facts and let the user decide): ${ahead.managers
+          .map((m) => `${m.name}: ${m.thisDraft}${m.history.length ? ` Past drafts in this league: ${m.history.join(' ')}` : ''}`)
+          .join(' | ')}`,
+      )
+      if (ahead.history === 'locked') {
+        lines.push("Their history in this league's past drafts is part of Competitive Edge, which this user's plan does not include. Do not describe it.")
+      }
+    }
   }
 
   lines.push(

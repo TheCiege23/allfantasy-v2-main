@@ -27,6 +27,7 @@ import { computeDraftRecommendation, type RecommendationResult } from '@/lib/dra
 import { buildAuctionDecision } from '@/lib/shared-services/draft/auctionDecision'
 import { runDraftPickDecision } from '@/lib/decision-os/draft'
 import { scheduleDraftRecommendationRecord } from '@/lib/shared-services/draft/recommendationRecorder'
+import { loadManagersAhead } from '@/lib/competitive-edge/liveDraftManagers'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,6 +78,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     input: context.engineInput,
   })
   const existingPicks = snapshot.picks.map((p) => ({ rosterId: p.rosterId, position: p.position }))
+  // The managers on the clock before this viewer's next pick (facts; history only with Competitive
+  // Edge) — read alongside the decision, and never allowed to fail it.
+  const managersAheadRead = loadManagersAhead({ leagueId, userId }).catch(() => null)
   // Captured so the response can carry the engine's draft-context lines alongside the decision.
   let engineResult: RecommendationResult | null = null
   const { decision } = await runDraftPickDecision(
@@ -114,6 +118,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
         scoringWindow: (engineResult as RecommendationResult | null)?.scoringWindowInsight ?? null,
         run: (engineResult as RecommendationResult | null)?.runInsight ?? null,
         teamsAhead: (engineResult as RecommendationResult | null)?.teamsAheadInsight ?? null,
+        managersAhead: await managersAheadRead,
       },
     },
   })

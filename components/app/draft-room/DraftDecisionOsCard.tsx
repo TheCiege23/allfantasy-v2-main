@@ -31,7 +31,16 @@ export type DraftDecisionPayload = {
   uncertaintySources: string[]
   forOverall: number | null
   /** The specifics of THIS draft (2026-11-14): scoring window, position run, teams ahead. */
-  context?: { scoringWindow: string | null; run: string | null; teamsAhead: string | null }
+  context?: {
+    scoringWindow: string | null
+    run: string | null
+    teamsAhead: string | null
+    /** The managers on the clock before your next pick — facts only (lib/competitive-edge/liveDraftManagers.ts). */
+    managersAhead?: {
+      managers: Array<{ name: string; slot: number; thisDraft: string; history: string[] }>
+      history: 'shown' | 'locked' | 'unavailable'
+    } | null
+  }
 }
 
 type AuctionPrice = { playerName: string; position: string; team: string | null; marketPrice: number; yourPrice: number; surplus: number; reason: string }
@@ -161,6 +170,7 @@ export function DraftDecisionOsCard({ leagueId, refreshKey }: { leagueId: string
           </div>
 
           <DraftContextLines context={decision.context} />
+          <ManagersAhead ahead={decision.context?.managersAhead ?? null} />
 
           {decision.recommendedActions.length > 1 ? (
             <ol className="space-y-0.5 border-t border-white/10 pt-1.5" data-testid="draft-decision-os-alternatives">
@@ -198,6 +208,37 @@ function DraftContextLines({ context }: { context?: DraftDecisionPayload['contex
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * Before your next pick: each manager on the clock ahead of you, with what they have taken in this draft
+ * and — with Competitive Edge — their history in this league's past drafts. Facts, never labels or
+ * predictions: the card states them and leaves the read to the manager.
+ */
+function ManagersAhead({ ahead }: { ahead: NonNullable<DraftDecisionPayload['context']>['managersAhead'] }) {
+  if (!ahead || ahead.managers.length === 0) return null
+  return (
+    <div className="space-y-1 border-t border-white/10 pt-1.5" data-testid="draft-decision-os-managers-ahead">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+        Before your next pick ({ahead.managers.length})
+      </p>
+      <ul className="space-y-1">
+        {ahead.managers.map((m) => (
+          <li key={m.slot} className="text-white/75" data-testid="draft-decision-os-manager-ahead">
+            <span className="font-semibold text-white">{m.name}</span> — {m.thisDraft}
+            {m.history.length > 0 ? (
+              <span className="block text-white/55">Past drafts: {m.history.join(' ')}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {ahead.history === 'locked' ? (
+        <p className="text-white/45" data-testid="draft-decision-os-managers-ahead-locked">
+          Competitive Edge adds each manager&apos;s picks from this league&apos;s past drafts.
+        </p>
+      ) : null}
+    </div>
   )
 }
 
