@@ -37,6 +37,7 @@ import {
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getPlayInstallStats, type PlayInstallStatsResult } from "@/lib/google-play/playInstallStats"
 import { describeMrrEstimate, estimateMrr, formatUsdCents } from "@/lib/monetization/mrrEstimate"
+import { describeProWeekStats, loadProWeekStats, type ProWeekStats } from "@/lib/referral/proWeekStats"
 
 type MetricValue = number | string
 
@@ -627,6 +628,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   // Start independent reports before the main query batch. A cold external API
   // must never add its full timeout to the database work on the critical path.
   const waitlistPromise = loadWaitlist()
+  // "Give a week, get a week" (lib/referral/proWeek.ts). A failed read reports "not tracked", never a 0.
+  const proWeekPromise: Promise<ProWeekStats | null> = loadProWeekStats(prisma as never).catch(() => null)
   const leaguesByPlatformPromise = loadLeaguesByPlatform()
   const aiProvidersPromise = Promise.race([
     probeAiProviders().catch(() => null),
@@ -919,7 +922,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   ])
 
   // Keep these outside the positional query array, but await them together.
-  const [waitlist, leaguesByPlatform] = await Promise.all([waitlistPromise, leaguesByPlatformPromise])
+  const [waitlist, leaguesByPlatform, proWeek] = await Promise.all([waitlistPromise, leaguesByPlatformPromise, proWeekPromise])
 
   // Login counts are only meaningful once IdentitySignal has captured at least one
   // login. Before that, a "0" would be indistinguishable from the old silent-zero
@@ -1038,6 +1041,9 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
        * and store fees, so it can over-state and never under-state; the note says so.
        */
       metric("MRR estimate", formatUsdCents(mrr.mrrCents), describeMrrEstimate(mrr)),
+      proWeek
+        ? metric("Referral Pro weeks (30 days)", proWeek.granted30d, describeProWeekStats(proWeek))
+        : notTracked("Referral Pro weeks (30 days)", "Could not read referral weeks"),
     ],
     tokens: [
       metric("Token balances total", tokenBalanceSummary._sum.balance ?? 0),
