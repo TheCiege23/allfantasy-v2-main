@@ -330,6 +330,7 @@ export function CampaignAttributionPanel() {
                     <tr>
                       <th scope="col" className="py-2 pr-3">Entry point</th>
                       <th scope="col" className="py-2 pr-3 text-right">Checkouts started</th>
+                      <th scope="col" className="py-2 pr-3 text-right">Trials started</th>
                       <th scope="col" className="py-2 pr-3 text-right">Paid</th>
                       <th scope="col" className="py-2 pr-3 text-right">Start→Paid</th>
                     </tr>
@@ -339,6 +340,7 @@ export function CampaignAttributionPanel() {
                       <tr key={row.entrySource} className="align-top text-white/70">
                         <td className="py-3 pr-3 font-mono text-[11px] text-white">{row.entrySource}</td>
                         <td className="py-3 pr-3 text-right">{row.checkoutsStarted.toLocaleString()}</td>
+                        <td className="py-3 pr-3 text-right">{(row.trialsStarted ?? 0).toLocaleString()}</td>
                         <td className="py-3 pr-3 text-right font-black text-violet-200">{row.paid.toLocaleString()}</td>
                         <td className="py-3 pr-3 text-right">{formatRate(row.checkoutToPaidRate)}</td>
                       </tr>

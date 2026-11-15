@@ -55,6 +55,11 @@ export const MONETIZATION = {
   CHECKOUT_STARTED: 'monetization.checkout_started',
   /** checkout.session.completed for a subscription, after the paid-state refusal check. Webhook-confirmed only. */
   PAID_CONVERSION_CONFIRMED: 'monetization.paid_conversion_confirmed',
+  /**
+   * An AF Pro free trial began (checkout completed with nothing charged — lib/monetization/freeTrial.ts).
+   * NOT a paid conversion: that is recorded when the first real charge lands, with `from_trial: true`.
+   */
+  TRIAL_STARTED: 'monetization.trial_started',
 } as const
 
 /** Create-league funnel (client beacon + server confirmation). */

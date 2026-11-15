@@ -103,7 +103,7 @@ export type CampaignAttributionReport = {
    * for the /core player-depth lock — distinct users who started a checkout and distinct Stripe sessions
    * that paid, in the window. `unknown` = a checkout from a surface that does not tag itself yet.
    */
-  upgradesByEntry: { entrySource: string; checkoutsStarted: number; paid: number; checkoutToPaidRate: number | null }[]
+  upgradesByEntry: { entrySource: string; checkoutsStarted: number; trialsStarted: number; paid: number; checkoutToPaidRate: number | null }[]
   /** Per-stage build status, so the UI can say "not built yet" instead of showing 0. */
   stageInventory: { stage: string; status: MetricStatus; note: string }[]
   errors: string[]
@@ -331,13 +331,14 @@ export async function getCampaignAttributionReport(
 
   let upgradesByEntry: CampaignAttributionReport["upgradesByEntry"] = []
   try {
-    const rows = await prisma.$queryRaw<Array<{ entry_source: string | null; started: unknown; paid: unknown }>>(Prisma.sql`
+    const rows = await prisma.$queryRaw<Array<{ entry_source: string | null; started: unknown; trials: unknown; paid: unknown }>>(Prisma.sql`
       SELECT
         COALESCE(meta->>'entry_source', 'unknown') AS entry_source,
         COUNT(DISTINCT "userId") FILTER (WHERE event = ${MONETIZATION.CHECKOUT_STARTED}) AS started,
+        COUNT(DISTINCT meta->>'stripe_session_id') FILTER (WHERE event = ${MONETIZATION.TRIAL_STARTED}) AS trials,
         COUNT(DISTINCT meta->>'stripe_session_id') FILTER (WHERE event = ${MONETIZATION.PAID_CONVERSION_CONFIRMED}) AS paid
       FROM "AnalyticsEvent"
-      WHERE event IN (${MONETIZATION.CHECKOUT_STARTED}, ${MONETIZATION.PAID_CONVERSION_CONFIRMED})
+      WHERE event IN (${MONETIZATION.CHECKOUT_STARTED}, ${MONETIZATION.TRIAL_STARTED}, ${MONETIZATION.PAID_CONVERSION_CONFIRMED})
         AND "createdAt" >= ${from}
         AND "createdAt" <= ${now}
       GROUP BY 1
@@ -347,7 +348,8 @@ export async function getCampaignAttributionReport(
     upgradesByEntry = rows.map((r) => {
       const checkoutsStarted = toNumber(r.started)
       const paid = toNumber(r.paid)
-      return { entrySource: r.entry_source ?? "unknown", checkoutsStarted, paid, checkoutToPaidRate: rate(paid, checkoutsStarted) }
+      // `paid` includes a trial's first real charge (recorded once per subscription, from_trial: true).
+      return { entrySource: r.entry_source ?? "unknown", checkoutsStarted, trialsStarted: toNumber(r.trials), paid, checkoutToPaidRate: rate(paid, checkoutsStarted) }
     })
   } catch (error) {
     errors.push(`upgrades-by-entry query failed: ${error instanceof Error ? error.message : "unknown"}`)
