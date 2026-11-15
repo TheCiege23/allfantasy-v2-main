@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
+import { usePathname } from "next/navigation"
 import { isNewVersionReady, subscribeNewVersionReady } from "@/lib/core-app/deployGuard"
 
 /**
@@ -24,6 +25,19 @@ import { isNewVersionReady, subscribeNewVersionReady } from "@/lib/core-app/depl
  */
 
 export const IDLE_RELOAD_MS = 3 * 60_000
+
+/*
+ * ⚠ ON SOME SCREENS "UNTOUCHED" MEANS "WATCHING", NOT "AWAY".
+ *
+ * A draft — a live room, a mock, or Draft HQ's own board and clock — is never reloaded by this,
+ * not even in the background: a reload there drops the room for the seconds it takes to rejoin,
+ * which can be the seconds someone is on the clock. The next link they click picks the build up.
+ *
+ * A game — the live scores and the matchup board — is watched for minutes without a tap, so the
+ * idle rule would reload exactly the screen being watched. There it reloads only while hidden.
+ */
+export const NEVER_AUTO_RELOAD = /^\/(core\/draft-hq|draft|drafts|mock-draft|mock-draft-simulator|league\/[^/]+\/(draft|dispersal-draft))(\/|$)/
+export const NO_IDLE_RELOAD = /^\/(core\/live|core\/matchup|live)(\/|$)/
 
 const ACTIVITY_EVENTS = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const
 
@@ -56,14 +70,21 @@ export function wouldLoseTyping(typed: Iterable<Element>, doc: Document = docume
 }
 
 export function NewVersionReload() {
+  const pathname = usePathname()
+  const pathRef = useRef(pathname ?? "")
+  pathRef.current = pathname ?? ""
+
   useEffect(() => {
     const typed = new Set<Element>()
     let lastActivity = Date.now()
     let idleTimer: number | undefined
     let reloading = false
 
-    const reloadIfSafe = () => {
+    const reloadIfSafe = (reason: "hidden" | "idle") => {
       if (reloading || !isNewVersionReady()) return
+      const path = pathRef.current
+      if (NEVER_AUTO_RELOAD.test(path)) return
+      if (reason === "idle" && NO_IDLE_RELOAD.test(path)) return
       for (const el of typed) if (!el.isConnected) typed.delete(el)
       if (wouldLoseTyping(typed)) return
       reloading = true
@@ -79,7 +100,7 @@ export function NewVersionReload() {
           scheduleIdle()
           return
         }
-        reloadIfSafe()
+        reloadIfSafe("idle")
       }, wait)
     }
 
@@ -93,14 +114,14 @@ export function NewVersionReload() {
       onActivity()
     }
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") reloadIfSafe()
+      if (document.visibilityState === "hidden") reloadIfSafe("hidden")
     }
 
     for (const type of ACTIVITY_EVENTS) window.addEventListener(type, onActivity, { capture: true, passive: true })
     document.addEventListener("input", onInput, true)
     document.addEventListener("visibilitychange", onVisibility)
     const unsubscribe = subscribeNewVersionReady(() => {
-      if (document.visibilityState === "hidden") reloadIfSafe()
+      if (document.visibilityState === "hidden") reloadIfSafe("hidden")
       else scheduleIdle()
     })
     if (isNewVersionReady()) scheduleIdle()

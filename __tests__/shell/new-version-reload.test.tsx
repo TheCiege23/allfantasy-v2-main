@@ -13,6 +13,8 @@ vi.mock('@/lib/core-app/deployGuard', () => ({
     return () => guard.listeners.delete(fn)
   },
 }))
+const route = vi.hoisted(() => ({ path: '/core' }))
+vi.mock('next/navigation', () => ({ usePathname: () => route.path }))
 
 import { IDLE_RELOAD_MS, NewVersionReload } from '@/components/shell/NewVersionReload'
 
@@ -38,6 +40,7 @@ function hideTab() {
 beforeEach(() => {
   vi.useFakeTimers()
   guard.ready = false
+  route.path = '/core'
   guard.listeners.clear()
   reload.mockClear()
   setVisibility('visible')
@@ -113,6 +116,46 @@ describe('NewVersionReload', () => {
 
     deployLands()
     hideTab()
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('screens that are watched, not used', () => {
+  it.each([
+    '/core/draft-hq',
+    '/draft/room/d1',
+    '/draft/live/d1',
+    '/mock-draft',
+    '/mock-draft-simulator',
+    '/league/L1/draft',
+    '/league/L1/dispersal-draft/d1',
+  ])('🛑 a draft screen (%s) is never reloaded — not idle, not even in the background', (path) => {
+    route.path = path
+    render(<NewVersionReload />)
+    deployLands()
+    act(() => void vi.advanceTimersByTime(IDLE_RELOAD_MS * 2))
+    hideTab()
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it.each(['/core/live', '/core/matchup', '/live'])(
+    'a game screen (%s) is not reloaded for being untouched, but is once it goes into the background',
+    (path) => {
+      route.path = path
+      render(<NewVersionReload />)
+      deployLands()
+      act(() => void vi.advanceTimersByTime(IDLE_RELOAD_MS * 2))
+      expect(reload).not.toHaveBeenCalled()
+      hideTab()
+      expect(reload).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('every other screen keeps the idle rule', () => {
+    route.path = '/core/standings'
+    render(<NewVersionReload />)
+    deployLands()
+    act(() => void vi.advanceTimersByTime(IDLE_RELOAD_MS + 1000))
     expect(reload).toHaveBeenCalledTimes(1)
   })
 })

@@ -2052,6 +2052,14 @@ export function DraftRoomPageClient({
         // Server pre-seeded the session snapshot — skip the blocking session GET
         // and mark access as ok so the board renders immediately on first paint.
         setDraftSessionAccess('ok')
+        /*
+         * ⚠ BUT RECONCILE AT ONCE, WITHOUT BLOCKING (2026-11-14). The snapshot is no longer always
+         * fresh: a room reopened within 30s by an in-app link comes from the client router cache
+         * (`staleTimes.dynamic` in next.config.js), so it can be up to 30s — several picks — old,
+         * and the live sync's first poll is 8s away. One GET now puts the right pick and the
+         * right team on the clock on screen within a request, however the room was reached.
+         */
+        void fetchSession()
       } else {
         setLoading(true)
 
