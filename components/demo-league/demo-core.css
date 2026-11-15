@@ -11,5 +11,10 @@
    so it would open onto nothing. */
 .af-core[data-demo-league] .af-lho-more { display: none; }
 
+/* Standings: "Share standings" renders an image from a members-only API (a visitor gets nothing), and
+   "we cannot tell which team is yours" is true of every visitor, so it is noise here. */
+.af-core[data-demo-league] .af-st-share,
+.af-core[data-demo-league] .af-st-noteam { display: none; }
+
 /* The live demo league has no image; its rail tile shows the AF crest letters on the app's tile. */
 .af-core[data-demo-league] .af-rail-tile-art { overflow: hidden; }

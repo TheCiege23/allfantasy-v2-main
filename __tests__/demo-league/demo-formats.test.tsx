@@ -70,6 +70,7 @@ describe('format demos', () => {
     const Layout = (await import('@/app/demo/layout')).default
     const Gallery = (await import('@/app/demo/formats/page')).default
     const FormatPage = (await import('@/app/demo/formats/[format]/page')).default
+    const StandingsPage = (await import('@/app/demo/formats/[format]/standings/page')).default
     const { FORMAT_DEMO_META } = await import('@/lib/demo-league/formats/registry')
 
     pathname = '/demo/formats'
@@ -87,8 +88,24 @@ describe('format demos', () => {
       expect(html, f.id).not.toMatch(/sample (owner|team) \d/i)
       // A sample has no team pages behind it.
       expect(html, f.id).not.toContain('/demo/teams/')
+
+      // Its standings, on the app's own Standings screen.
+      pathname = `/demo/formats/${f.id}/standings`
+      const st = renderToStaticMarkup(React.createElement(Layout, null, await StandingsPage({ params: Promise.resolve({ format: f.id }) })))
+      expect(st, `${f.id} standings`).toContain('Demo league — example data')
+      expect(st, `${f.id} standings`).not.toMatch(/sample (owner|team) \d/i)
     }
     expect(dbTouches, 'prisma accessed while rendering format demos').toEqual([])
+  })
+
+  it('elimination formats draw Eliminated / On the bubble on the standings, never a playoff line', async () => {
+    const StandingsPage = (await import('@/app/demo/formats/[format]/standings/page')).default
+    for (const id of ['guillotine', 'survivor', 'survivor-guilly']) {
+      pathname = `/demo/formats/${id}/standings`
+      const html = renderToStaticMarkup(await StandingsPage({ params: Promise.resolve({ format: id }) }))
+      expect(html, id).toContain('Eliminated')
+      expect(html, id).not.toMatch(/PLAYOFF LINE|Playoff line/)
+    }
   })
 
   it('404s an unknown format', async () => {

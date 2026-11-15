@@ -47,4 +47,9 @@ export type FormatDemo = FormatDemoMeta & {
   /** 'points' for formats with no head-to-head record (Guilly, Survivor, Survivor Guilly). */
   standingsMode?: 'record' | 'points'
   standingsTitle?: string
+  /**
+   * For an elimination format: who is out and who is this week's bubble, by seat. The real Standings
+   * screen then reads Safe / On the bubble / Eliminated instead of a playoff line such a league lacks.
+   */
+  elimination?: { eliminatedSlots: number[]; bubbleSlots: number[] | null }
 }

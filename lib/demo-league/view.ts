@@ -13,7 +13,7 @@ import { DEMO_LEAGUE_DISPLAY_NAME, fakeAvatarColor, fakeInitials, fakeManagerNam
 import type { SourceSnapshot, SourceTeam, SourcePlayer } from './source'
 import type { SensitiveTerm } from './redactor'
 import type {
-  DemoAlert, DemoLeagueView, DemoMatchup, DemoPlayer, DemoRoster, DemoStandingRow, DemoTeam, DemoTrade, DemoTradeAsset, DemoWeekScores,
+  DemoAlert, DemoLeagueView, DemoMatchup, DemoPlayer, DemoRoster, DemoStandingRow, DemoTeam, DemoTrade, DemoTradeAsset, DemoUpcomingWeek, DemoWeekScores,
 } from './types'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
 import { makeWeekIsFinished } from './weekProgress'
@@ -159,9 +159,24 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
     for (const r of src.weekRows) {
       if (r.week !== week) continue
       const slot = slotOf(teamByRosterId(r.rosterId))
-      if (slot != null) scores.push({ slot, points: round1(r.pointsFor) })
+      if (slot != null) scores.push({ slot, points: round1(r.pointsFor), matchupId: r.matchupId ?? null })
     }
     if (scores.length > 0) weeklyScores.push({ week, scores: scores.sort((a, b) => a.slot - b.slot) })
+  }
+
+  // ── The rest of the schedule: games where neither side has scored ───────────
+  const upcoming: DemoUpcomingWeek[] = []
+  for (const week of weeks) {
+    if (weekIsComplete(week)) continue
+    const games = new Map<number, number[]>()
+    for (const r of src.weekRows) {
+      if (r.week !== week || r.matchupId == null || r.pointsFor > 0 || r.pointsAgainst > 0) continue
+      const slot = slotOf(teamByRosterId(r.rosterId))
+      if (slot == null) continue
+      games.set(r.matchupId, [...(games.get(r.matchupId) ?? []), slot])
+    }
+    const pairs = [...games.values()].filter((g): g is [number, number] => g.length === 2)
+    if (pairs.length > 0) upcoming.push({ week, pairs })
   }
 
   // ── Rosters ────────────────────────────────────────────────────────────────
@@ -274,6 +289,7 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
     standings,
     matchups,
     weeklyScores,
+    upcoming,
     rosters,
     trades,
     health: health ? { score: health.score, status: health.status, summary: health.summary, strengths: health.strengths, problems: health.problems } : null,

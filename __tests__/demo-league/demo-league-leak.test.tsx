@@ -232,10 +232,12 @@ const PAGE_FILES = [
   'app/demo/chimmy/page.tsx',
   'app/demo/players/page.tsx',
   'app/demo/trade-evaluator/page.tsx',
+  'app/demo/standings/page.tsx',
   // Generated sample leagues: no source data at all. Rendered, and checked to never touch the
   // database, in demo-formats.test.tsx.
   'app/demo/formats/page.tsx',
   'app/demo/formats/[format]/page.tsx',
+  'app/demo/formats/[format]/standings/page.tsx',
 ]
 
 function walk(dir: string, name: string): string[] {
@@ -366,6 +368,7 @@ describe('demo league — no real identifier reaches any response, page, prompt 
       ['/demo/chimmy', async () => (await import('@/app/demo/chimmy/page')).default()],
       ['/demo/players', async () => (await import('@/app/demo/players/page')).default()],
       ['/demo/trade-evaluator', async () => (await import('@/app/demo/trade-evaluator/page')).default()],
+      ['/demo/standings', async () => (await import('@/app/demo/standings/page')).default()],
       ...[1, 2, 3, 4].map((slot) => [`/demo/teams/${slot}`, async () => (await import('@/app/demo/teams/[slot]/page')).default({ params: Promise.resolve({ slot: String(slot) }) })] as [string, () => Promise<React.ReactElement>]),
     ]
     for (const [url, render] of pages) {
