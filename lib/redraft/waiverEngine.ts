@@ -11,6 +11,7 @@ import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdo
 import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
 import { withLeagueWaiverLock } from '@/lib/waiver-wire/leagueWaiverLock'
 import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
+import { sendWaiverResultNotices, waiverResultNotices } from './waiverResultNotices'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -397,6 +398,27 @@ async function processWaiverWindowLocked(
       payload: { claimId: r.claimId, result: r.status },
     })
   }
+  // Tell each manager whether they got their player (lib/redraft/waiverResultNotices.ts). Settled first, then told.
+  // Nothing here may reach the run: the claims are settled, and an alert that fails is only an alert.
+  if (results.length > 0) {
+    try {
+      const owners = await prisma.redraftRoster.findMany({
+        where: { id: { in: [...new Set(claims.map((c) => c.rosterId))] } },
+        select: { id: true, ownerId: true },
+      })
+      const ownerOf = new Map(owners.map((o) => [o.id, o.ownerId]))
+      sendWaiverResultNotices(
+        leagueId,
+        waiverResultNotices(
+          claims.map((c) => ({ id: c.id, ownerId: ownerOf.get(c.rosterId), addPlayerName: c.addPlayerName, dropPlayerName: c.dropPlayerName, bidAmount: c.bidAmount })),
+          results.map((r) => ({ claimId: r.claimId, status: r.status === 'approved' ? 'approved' : 'denied', reason: r.reason })),
+        ),
+      )
+    } catch (e) {
+      console.error('[redraft-waivers] result alerts failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   // Only summarise a window that actually DID something.
   //
   // This is called on every waiver cron fire — every five minutes — and previously emitted a
