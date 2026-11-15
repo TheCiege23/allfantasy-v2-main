@@ -18,6 +18,7 @@ import type { ExileRailStatus } from '@/lib/core-app/survivorExileStatus'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
+import { PaymentIssueBanner } from '@/components/billing/PaymentIssueBanner'
 import { SmsOptInCard } from '@/components/notifications/SmsOptInCard'
 import { TeamFollowPrompt } from '@/components/follows/TeamFollowPrompt'
 import CommsDock from '@/components/core-app/comms/CommsDock'
@@ -2802,6 +2803,8 @@ function AfCoreShell(incoming: AfCoreShellProps) {
             The optional prompts queue for ONE slot on home (HomePromptSlot) instead of stacking
             up to four deep above the content. Off home the slot is disabled; the tour shows on home only.
           */}
+          {/* A failing card, on every screen (lib/billing/retention.ts). Renders nothing unless past due. */}
+          <PaymentIssueBanner />
           <HomePromptSlot enabled={active === 'home'}>
             {active === 'home' ? <GameDayAlertsBanner /> : null}
             {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
