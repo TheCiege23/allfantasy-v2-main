@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { requireVerifiedUser } from "@/lib/auth-guard";
+import { requireAgeConfirmedUser } from "@/lib/auth-guard";
 import { encrypt } from "@/lib/league-auth-crypto";
 import { getDecryptedAuth } from "@/lib/league-sync-core";
 import { consumeRateLimit, buildRateLimit429 } from "@/lib/rate-limit";
@@ -90,7 +90,7 @@ function toSourceId(leagueId: string, season: number | undefined): string {
 export async function POST(req: Request) {
   let pasted: EspnCredentials | null = null;
   try {
-    const auth = await requireVerifiedUser();
+    const auth = await requireAgeConfirmedUser();
     if (!auth.ok) {
       return auth.response;
     }

@@ -22,6 +22,11 @@ import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo
 import { enforcePaidAccountLock } from "@/lib/geo/enforcePaidAccountLock"
 import { buildSubscriptionMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
+import { cookies } from "next/headers"
+import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
+import { MONETIZATION } from "@/lib/analytics/eventNames"
+import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
+import { trialDaysForCheckout } from "@/lib/monetization/freeTrialEligibility"
 import {
   validateCouponForUser,
   createPendingRedemption,
@@ -34,6 +39,8 @@ type CheckoutSubscriptionBody = {
   returnPath?: string
   /** Optional sponsor/promo code entered by user at checkout (e.g. "WassupFred") */
   couponCode?: string
+  /** Which surface sent the buyer (lib/monetization/upgradeEntrySource.ts). Normalized; junk is dropped. */
+  entrySource?: string
 }
 
 export async function POST(req: Request) {
@@ -128,6 +135,13 @@ export async function POST(req: Request) {
     }
 
     const returnPath = resolveSafeReturnPath(body?.returnPath, "/pricing")
+    const entrySource = normalizeEntrySource(body?.entrySource)
+    /*
+     * The AF Pro free trial (lib/monetization/freeTrial.ts), decided HERE on the server: AF Pro only,
+     * and only for an account that has never had a subscription. The iOS shell never gets this far
+     * (refused at the top of this handler), so a store build is never offered it.
+     */
+    const trialDays = await trialDaysForCheckout(session.user.id, item.sku)
     /*
      * Founding-member pricing (lib/monetization/foundingMember.ts): an account created before
      * the paywall start gets STRIPE_FOUNDING_COUPON_ID on its subscription. Not looked up when a
@@ -146,6 +160,8 @@ export async function POST(req: Request) {
       couponCode: resolvedCouponCode,
       couponPercentOff: resolvedCouponCode ? couponDiscountPercent : null,
       foundingMember,
+      entrySource,
+      trialDays,
     })
     if (!checkout || checkout.purchaseType !== "subscription") {
       return NextResponse.json(
@@ -173,12 +189,29 @@ export async function POST(req: Request) {
       return null
     })
 
+    /*
+     * The funnel's `monetization.checkout_started` (2026-11-15), with the surface that sent the buyer.
+     * Best-effort: recordFunnelEvent never throws, and the cookie read is guarded for the same reason.
+     */
+    try {
+      const jar = await cookies()
+      await recordFunnelEvent({
+        event: MONETIZATION.CHECKOUT_STARTED,
+        userId: session.user.id,
+        getCookie: (name) => jar.get(name)?.value,
+        meta: { sku: item.sku, plan_family: item.planFamily, entry_source: entrySource ?? "unknown", trial_days: trialDays },
+      })
+    } catch {
+      // Never costs the checkout.
+    }
+
     return NextResponse.json({
       url: checkout.url,
       sku: item.sku,
       purchaseType: "subscription",
       metaEvent,
       foundingDiscountApplied: checkout.foundingDiscountApplied,
+      trialDays,
       ...(resolvedCouponCode
         ? {
             couponApplied: true,

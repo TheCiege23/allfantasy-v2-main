@@ -1,5 +1,5 @@
 import { loadConnectLeagueFacts } from '@/lib/core-app/connectLeagueReads'
-import { connectLeagueCopy, connectLeagueHref, connectLeagueStep } from '@/lib/core-app/connectLeague'
+import { CONFIRM_EMAIL_NUDGE, connectLeagueCopy, connectLeagueHref, connectLeagueStep } from '@/lib/core-app/connectLeague'
 import { ResendVerificationButton } from './ResendVerificationButton'
 
 /**
@@ -24,14 +24,17 @@ export async function ConnectLeagueCard({ userId, leagueCount }: { userId: strin
         <p className="af-connect-text">{copy.body}</p>
       </div>
       <div className="af-connect-actions">
-        {step === 'verify' ? (
-          <ResendVerificationButton label={copy.cta} />
-        ) : (
-          <a className="af-connect-go" href={connectLeagueHref({ sleeperLinked: facts.sleeperLinked })}>
-            {copy.cta}
-          </a>
-        )}
+        <a className="af-connect-go" href={connectLeagueHref({ sleeperLinked: facts.sleeperLinked })}>
+          {copy.cta}
+        </a>
       </div>
+      {/* Confirming the email no longer gates the import — it is a nudge under the league, not before it. */}
+      {facts.verified ? null : (
+        <div className="af-connect-confirm" data-kind="confirm-email">
+          <p className="af-connect-text">{CONFIRM_EMAIL_NUDGE.body}</p>
+          <ResendVerificationButton label={CONFIRM_EMAIL_NUDGE.cta} />
+        </div>
+      )}
     </section>
   )
 }

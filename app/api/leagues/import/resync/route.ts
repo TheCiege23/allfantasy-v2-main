@@ -3,7 +3,7 @@
  * Re-run normalization + merge for an already-imported external league (commissioner / owner).
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { resyncImportedLeague } from '@/lib/league-import/resyncImportUtility'
@@ -11,7 +11,7 @@ import { resyncImportedLeague } from '@/lib/league-import/resyncImportUtility'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) return auth.response
 
   const body = await req.json().catch(() => ({}))

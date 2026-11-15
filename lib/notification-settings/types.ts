@@ -206,11 +206,21 @@ export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[]
  * Categories whose EMAIL channel starts off (in-app and push stay on). A live game moment is stale
  * by the time an inbox is read — "close game, 2:00 left" an hour later is noise, and a busy NBA
  * night is a dozen of them. The person can still switch email on.
+ *
+ * 🛑 EMAIL IS THE CHANNEL THAT REACHES PEOPLE (2026-11-15). Measured 2026-10-25: 2–3 of ~45 notified
+ * users could take a push, so an alert with email off reaches the bell and nothing else. Two came OFF
+ * this list because they are rare, personal and acted on:
+ *   - `lineup_alerts` — "your starter is out", sent only when a starter of YOURS is ruled out;
+ *   - `trade_proposals` — a leaguemate's offer waiting on you.
+ * `lineup_reminders` stays here: it also carries the daily NBA/NHL waiver tip and the best-ball depth
+ * check, which would be an email a day. Its weekly lineup check — once a week, only when there is a
+ * fix to make — emails by default on its own (lib/notifications/channelPolicy.ts `emailsByDefaultForEvent`).
+ * A row the user saved with an explicit `email` value keeps it; this only changes the DEFAULT.
  */
 export const EMAIL_DEFAULT_OFF_CATEGORY_IDS: readonly NotificationCategoryId[] = [
   "live_game_alerts", "followed_team_scores", "followed_players", "followed_teams",
-  "breaking_news", "performance_alerts", "lineup_alerts", "lineup_reminders",
-  "ai_alerts", "autocoach", "league_drama", "trade_proposals", "waiver_processing",
+  "breaking_news", "performance_alerts", "lineup_reminders",
+  "ai_alerts", "autocoach", "league_drama", "waiver_processing",
 ]
 
 /**
