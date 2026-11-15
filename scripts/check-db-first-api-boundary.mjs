@@ -427,6 +427,22 @@ const ALLOWED_PATH_PATTERNS = [
    * read and nothing else, so the exemption covers nothing else.
    */
   /^lib\/league-join\/sleeperOwnershipFetch\.ts$/,
+  /*
+   * ONE file, by exact path, earned by caller census (2026-11-15): the TheAudioDB vendor boundary.
+   * Its ONLY runtime importer is lib/music/musicCatalog.ts, a 30-day read-through cache over
+   * sportsDataCache, which the /api/music routes read. Same shape as lib/weather/openWeatherGeocode.ts.
+   * TheAudioDB v1 carries its key as a path segment, so this file is also the only place that URL is
+   * built. The exemption holds only while `git grep "music/theAudioDbFetch"` shows the reader alone.
+   */
+  /^lib\/music\/theAudioDbFetch\.ts$/,
+  /*
+   * ONE file, by exact path, earned by caller census (2026-11-15): the Sleeper reads behind the live
+   * roster panel. Its ONLY runtime importer is lib/sleeper/liveLeagueFeed.ts, a short shared cache
+   * (rosters 60s, picks 10s, in-flight calls shared) that app/api/league/live-roster reads. Not
+   * DB-first on purpose: the panel shows a live draft pick seconds after it is made, which a scheduled
+   * copy cannot. Holds only while `git grep "sleeper/liveLeagueFetch"` shows the feed alone.
+   */
+  /^lib\/sleeper\/liveLeagueFetch\.ts$/,
   /^lib\/.*(ingest|ingestion|sync)/i,
   // Explicit commissioner-triggered ingestion only: this builder supplies the
   // verified download contract to the browser connector; it is not a scoreboard
