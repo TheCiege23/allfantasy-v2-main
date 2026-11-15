@@ -60,7 +60,7 @@ describe('who gets an editor', () => {
     )
     const advanced = await findByText('Advanced settings')
     advanced.click()
-    expect(push).toHaveBeenCalledWith('/league/n1?tab=settings')
+    expect(push).toHaveBeenCalledWith('/league/n1?view=settings')
   })
 
   it('an AllFantasy league’s member gets no Advanced settings', async () => {

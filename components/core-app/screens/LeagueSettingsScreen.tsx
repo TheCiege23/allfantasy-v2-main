@@ -33,7 +33,7 @@ export function LeagueSettingsScreen({
   const router = useRouter()
   const native = isNativePlatform(String(league.platform ?? '').trim().toLowerCase() || 'manual')
   const commissioner = native && Boolean(league.isCommissioner)
-  const legacy = `/league/${encodeURIComponent(league.id)}`
+  const id = encodeURIComponent(league.id)
 
   return (
     <div className="af-core-league-settings" data-testid="core-league-settings" data-native={native ? 'true' : 'false'}>
@@ -48,9 +48,10 @@ export function LeagueSettingsScreen({
         userId={userId}
         isHeadCommissioner={commissioner}
         onOpenEditor={(panelId) => {
-          if (native) router.push(`${legacy}?settingsPanel=${encodeURIComponent(panelId)}`)
+          // Explicit ?view= deep links into the editors the /league app owns (see core-league-links.test).
+          if (native) router.push(`/league/${id}?view=settings&settingsPanel=${encodeURIComponent(panelId)}`)
         }}
-        advanced={commissioner ? { label: 'Advanced settings', onOpen: () => router.push(`${legacy}?tab=settings`) } : undefined}
+        advanced={commissioner ? { label: 'Advanced settings', onOpen: () => router.push(`/league/${id}?view=settings`) } : undefined}
       />
     </div>
   )
