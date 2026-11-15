@@ -119,6 +119,21 @@ function KeeperList({ label, lines, m }: { label: string; lines: KeeperLine[]; m
   )
 }
 
+/**
+ * The engine's facts that say something the summary line does not. Exported for the test.
+ *
+ * ⚠ ONLY THE EXACT REPEAT FORMS. "Average starter age 28.4." repeats the line above; "Average starter age
+ * 28.4 is the second-oldest in the league." says something new and stays.
+ */
+const REPEATS = [
+  /^Record \d+-\d+(?:-\d+)? \(win% [\d.]+\)\.$/,
+  /^Average starter age [\d.]+\.$/,
+  /^Pick capital: \d+ future pick\(s\), \d+ early(?:, tier total [\d.]+)?\.$/,
+]
+export function engineFacts(facts: string[]): string[] {
+  return facts.filter((f) => !REPEATS.some((re) => re.test(f)))
+}
+
 function NextSeasonSection({ plan, m, language }: { plan: NextSeasonView; m: Copy; language: string }) {
   return (
     <section className="af-wb-section" aria-labelledby="af-wb-next">
@@ -135,15 +150,20 @@ function NextSeasonSection({ plan, m, language }: { plan: NextSeasonView; m: Cop
             {[
               plan.avgStarterAge != null ? m.avgAge(plan.avgStarterAge.toFixed(1)) : null,
               m.earlyPicks(plan.earlyPickCount),
-              plan.contendScore != null ? m.contendScore(Math.round(plan.contendScore)) : null,
+              /* 2026-11-14: no "contention score 27/100" — an internal number, not something a manager acts on. */
             ]
               .filter(Boolean)
               .join(' · ')}
           </p>
-          {plan.facts.length > 0 ? (
+          {/*
+            2026-11-14: the engine's facts, minus the three the line above already says ("Average starter age
+            26.5" twice, "Pick capital: 12 future pick(s), 6 early, tier total 87.5" beside "6 early picks
+            held") and the record the headline and the cards carry ("Record 2-7 (win% 0.22).").
+          */}
+          {engineFacts(plan.facts).length > 0 ? (
             <ul className="af-wb-engine-facts">
               {/* The engine writes English; translated here, where it is drawn (dynastyFactsSpanish.ts). */}
-              {plan.facts.map((f) => (
+              {engineFacts(plan.facts).map((f) => (
                 <li key={f}>{dynastyFactSentence(f, language)}</li>
               ))}
             </ul>
