@@ -111,6 +111,10 @@ interface DefenseHubRoleCard {
   name: string
   lines: DefenderRoleLine[]
   games: number
+  /** The counts behind `lines` (deriveDefenderRole), so the screen can word them in either language. */
+  snaps: number
+  sacks: number
+  tackles: number | null
 }
 
 interface DefenseHubTendencyCard {
@@ -163,6 +167,11 @@ export interface DefenseHubPayload {
    * what is missing and why, not a placeholder.
    */
   notes: string[]
+  /**
+   * Roster entries in an id space we cannot resolve (also stated in `notes`), as a count so the
+   * screen can say it in the reader's language. Optional: a server older than 2026-11-14 omits it.
+   */
+  unresolvedIds?: number
 }
 
 const EMPTY = (state: DefenseHubState, notes: string[] = []): DefenseHubPayload => ({
@@ -433,7 +442,15 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
 
   const roles: DefenseHubRoleCard[] = myDefenders.map((d) => {
     const derived = deriveDefenderRole(logsByPlayer.get(d.sleeperId) ?? [])
-    return { sleeperId: d.sleeperId, name: d.name, lines: derived.lines, games: derived.games }
+    return {
+      sleeperId: d.sleeperId,
+      name: d.name,
+      lines: derived.lines,
+      games: derived.games,
+      snaps: derived.snaps,
+      sacks: derived.sacks,
+      tackles: derived.tackles,
+    }
   })
 
   /*
@@ -492,5 +509,6 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     roles,
     tendencies,
     notes: [...notes, TENDENCY_NOTE, ...(kickers.length > 0 ? [KICKER_NOTE] : [])],
+    unresolvedIds: unresolved,
   }
 }
