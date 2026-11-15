@@ -100,8 +100,22 @@ const shares: SectionState<PlayerShares> = {
     ],
     leaguesRead: 5,
     playersHeld: 61,
-    unsupportedLeagues: 0,
-    teamSplit: null,
+    /* 2026-11-14: the two caveats, so the board's foot line ("Not counted: …") draws. SAMPLE counts. */
+    unsupportedLeagues: 1,
+    unidentifiedPlayers: 3,
+    /* SAMPLE: where your starters come from, now a closed fold under the board. */
+    teamSplit: {
+      totalStarts: 40,
+      teams: [
+        { team: 'BUF', starts: 9, share: 0.225, players: ['Josh Allen', 'James Cook', 'Dalton Kincaid'] },
+        { team: 'NYJ', starts: 6, share: 0.15, players: ['Garrett Wilson', 'Breece Hall'] },
+        { team: 'GB', starts: 5, share: 0.125, players: ['Jordan Love', 'Tucker Kraft'] },
+      ],
+      others: { teams: 9, starts: 20 },
+      unknownStarts: 0,
+      worstBye: { week: 12, starts: 8, share: 0.2, teams: ['BUF', 'NYJ'] },
+      byesKnown: true,
+    },
   },
 }
 

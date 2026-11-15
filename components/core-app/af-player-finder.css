@@ -4056,9 +4056,28 @@
 /* ── Where your starters come from (teamSplit.ts) — inside Your shares, all-leagues mode ──────── */
 .af-core .af-pf-split {
   margin-top: 14px;
-  padding-top: 12px;
+  padding-top: 4px;
   border-top: 1px solid var(--line);
 }
+/* 2026-11-14: folded. The heading is the summary; an arrow says it opens, and the row is a 44px target. */
+.af-core .af-pf-split > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.af-core .af-pf-split > summary::-webkit-details-marker { display: none; }
+.af-core .af-pf-split > summary::after {
+  content: '▾';
+  color: var(--muted);
+  font-size: 14px;
+  transition: transform 0.15s ease;
+}
+.af-core .af-pf-split[open] > summary::after { transform: rotate(180deg); }
+.af-core .af-pf-split > summary h4 { margin: 0; }
 .af-core .af-pf-split-sub {
   margin: 2px 0 8px;
   color: var(--muted);

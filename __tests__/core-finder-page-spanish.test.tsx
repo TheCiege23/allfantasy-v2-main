@@ -304,7 +304,8 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
     expect(out).toContain('Comparar con Dalton Keene')
     expect(out).toContain('Búsquedas recientes')
     expect(out).toContain('También coinciden')
-    expect(out).toContain('Las estadísticas, las lesiones y las noticias vienen de datos deportivos en vivo: nunca un número inventado.')
+    // 2026-11-14: the rail's "never an invented number" footer is gone, in both languages.
+    expect(out).not.toContain('nunca un número inventado')
 
     // The chip and the header line.
     expect(container.querySelector('.af-pf-name-row .af-pf-ready')?.textContent).toBe('Dudoso')
@@ -871,7 +872,7 @@ describe('Player Finder — the whole page, in Spanish', () => {
     const card = container.querySelector('section.af-pf-trend') as HTMLElement
     expectWholeSpanish(ownText(container), 'home, trending adds')
     expect(card.querySelector('h2')?.textContent).toBe('Los más añadidos esta semana')
-    expect(card.querySelector('.af-pf-trend-sub')?.textContent).toBe('de 189 ligas con altas · hasta el 28 sep')
+    expect(card.querySelector('.af-pf-trend-sub')?.textContent).toBe('Los más añadidos en 189 ligas · hasta el 28 sep')
     expect([...card.querySelectorAll('.af-pf-trend-count')].map((n) => n.getAttribute('aria-label'))).toEqual(['añadido en 66 ligas', 'añadido en 41 ligas'])
     // Only the words follow the language: the count, the link and the row that cannot link do not.
     expect(card.querySelector('a')?.getAttribute('href')).toBe('/core/players?q=Zach%20Ertz&player=NFL%3AE1339')
@@ -987,11 +988,41 @@ describe('Player Finder — English is unchanged', () => {
       'rostered by another manager',
       'value 6,100',
       "Not checked: Office Pool — we could not verify this player's roster status in this ESPN league.",
-      'Stats, injuries and news come from live sports data — never an invented number.',
     ]) {
       expect(text, s).toContain(s)
     }
+    expect(text).not.toContain('never an invented number')
     expect([...container.querySelectorAll('.af-pf-value[title]')].map((v) => v.getAttribute('title'))).toEqual([FIT.reason, 'dynasty · superflex'])
     expect(container.querySelector('.af-pf-value-fit')?.getAttribute('aria-label')).toBe('adjusted for this league’s scoring')
+  })
+})
+
+/* ── 2026-11-14: the home's headline counts your flagged starters ─────────────────────────────────── */
+describe('Player Finder — the home headline answers', () => {
+  const triageRow = (name: string) => ({
+    player: { sport: 'NFL', externalId: name, sleeperId: name, name, position: 'WR', team: 'NYJ', imageUrl: null },
+    status: { label: 'Out', tone: 'bad' as const },
+    description: null,
+    reportedAt: null,
+    leagues: [{ leagueId: 'L1', leagueName: 'Sample League', platform: 'sleeper', platformLeagueId: null, season: 2026, teamId: null }],
+    kickoff: '2026-11-15T18:00:00.000Z',
+    noGame: false,
+    inactive: null,
+    bye: false,
+  })
+  const triage = (n: number) =>
+    ({ available: true, data: { rows: Array.from({ length: n }, (_, i) => triageRow(`Sample ${i}`)), week: { season: 2026, week: 10 }, leaguesRead: 2, startersRead: 18 } }) as never
+
+  it('says how many of your starters may not play, or that none is flagged', () => {
+    lang.language = 'en'
+    const four = renderFinder({ detail: null, matches: [], query: '', triage: triage(4) })
+    expect(four.getByTestId('pf-home-title').textContent).toBe('4 of your starters may not play this week')
+    four.unmount()
+    const none = renderFinder({ detail: null, matches: [], query: '', triage: triage(0) })
+    expect(none.getByTestId('pf-home-title').textContent).toBe('None of your starters is flagged this week')
+    none.unmount()
+    // No game-day read on the page: the old title, which says what the page does.
+    const unread = renderFinder({ detail: null, matches: [], query: '', triage: null })
+    expect(unread.getByTestId('pf-home-title').textContent).toBe('Find any player across all your leagues')
   })
 })
