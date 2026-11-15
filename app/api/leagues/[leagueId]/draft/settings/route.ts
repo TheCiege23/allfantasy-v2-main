@@ -15,7 +15,7 @@ import { prisma } from '@/lib/prisma'
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
 import { sanitizeRoundList } from '@/lib/draft-defaults/draftRoundList'
-import { isDraftTypeAllowedOnSettingsTab } from '@/lib/draft-types/draftTypeRegistry'
+import { isDraftTypeAllowedOnSettingsTab, leagueSettingsDraftTypeFor } from '@/lib/draft-types/draftTypeRegistry'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { validateLeagueSettings } from '@/lib/league-settings-validation'
 import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
@@ -36,6 +36,7 @@ import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { logAction } from '@/server/services/auditService'
 import { legacyDraftLotteryRestriction } from '@/lib/draft-lottery/dynastyYearGuard'
 
 export const dynamic = 'force-dynamic'
@@ -406,6 +407,13 @@ export async function PATCH(
     lsSyncKeys.add('cpuAutoPick')
   }
   if (typeof configPatch.rounds === 'number') lsPatch.rounds = configPatch.rounds as number
+  // One draft type: the LeagueSettings copy follows the Draft tab (lib/draft-types/draftTypeRegistry.ts).
+  if (configPatch.draft_type !== undefined || configPatch.third_round_reversal !== undefined) {
+    const current = (await currentVariant()).config
+    const type = String(configPatch.draft_type ?? current?.draft_type ?? 'snake')
+    const reversal = (configPatch.third_round_reversal ?? current?.third_round_reversal ?? false) === true
+    lsPatch.draftType = leagueSettingsDraftTypeFor(type, reversal)
+  }
   if (typeof configPatch.timer_seconds === 'number') {
     const { preset, customSeconds } = classifySeconds(configPatch.timer_seconds as number)
     lsPatch.pickTimerPreset = preset
@@ -698,6 +706,16 @@ export async function PATCH(
           ]
         : [],
     })
+    // The league log's "Changed the draft settings" (lib/league-log/leagueLog.ts): the "What changed" card above
+    // fades, and a draft change is exactly the kind of commissioner action the league must be able to look up.
+    await logAction({
+      leagueId,
+      userId,
+      actionType: 'settings_patch',
+      entityType: 'league',
+      entityId: leagueId,
+      metadata: { section: 'draft', source: 'draft-settings', updatedFields: Object.keys(body).filter((k) => k !== 'leagueId').slice(0, 40) },
+    }).catch(() => {})
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
       const orphanEnabledChanged =

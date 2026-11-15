@@ -212,7 +212,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     })
   }
 
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
   return NextResponse.json({
     ok: true, config, unifiedConfig, draftRounds,
     bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],

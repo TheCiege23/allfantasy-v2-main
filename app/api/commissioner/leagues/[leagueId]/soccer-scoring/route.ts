@@ -44,6 +44,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if ((presetKey === 'custom' || body.rules) && !(await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring').then(a => a.allowed).catch(() => false)))
     return NextResponse.json({ error: 'premiumRequired' }, { status: 403 })
   await saveLeagueSoccerScoringConfig(leagueId, { presetKey, rules: body.rules ?? buildFullSoccerScoringConfig(presetKey), userId: session.user.id, premiumFeaturesUsed: presetKey === 'custom' })
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'soccer-scoring', detail: { presetKey } })
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'soccer-scoring', detail: { presetKey } })
   return NextResponse.json({ ok: true, config: await getLeagueSoccerScoringConfig(leagueId) })
 }

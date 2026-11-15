@@ -15,7 +15,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
  * Exactly ONE sport's editor renders — the league's own sport. There is no football fallback:
  * an NBA league gets the NBA panel (no Passing/Rushing), and an unsupported sport gets a message.
  */
-function SportScoringPanel({ sport, leagueId, isCommissioner }: { sport: string; leagueId: string; isCommissioner: boolean }) {
+export function SportScoringPanel({ sport, leagueId, isCommissioner }: { sport: string; leagueId: string; isCommissioner: boolean }) {
   const { t } = useLanguage()
   const props = { leagueId, isCommissioner }
   switch (String(sport ?? '').trim().toUpperCase()) {

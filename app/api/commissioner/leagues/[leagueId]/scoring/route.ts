@@ -149,7 +149,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
 
   await replaceLeagueScoringOverrides(params.leagueId, overrides)
 
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: params.leagueId, userId: userId, section: 'scoring', source: 'scoring', detail: { overrideCount: overrides.length } })
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: params.leagueId, userId: userId, section: 'scoring', source: 'scoring', detail: { overrideCount: overrides.length } })
 
   queueLeagueScoringRecalcAfterRulesChange(params.leagueId)
 
