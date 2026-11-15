@@ -11,7 +11,7 @@
  *
  *   right   the recommended player outscored the one he was recommended over
  *   wrong   the other way round
- *   same    a tie
+ *   same    within a point either way — the Receipts card's rule (LEDGER_SAME_BAND), so the counts agree
  *   pending the week is not over (its Monday night has not passed)
  *   unscored either player has no score row that week
  *   withdrawn the surface stopped making the call before kickoff (My Team only) — never graded
@@ -98,9 +98,10 @@ try {
     const alt = Number(r.alt_pts)
     const d = rec - alt
     s.margin += d
-    if (d > 0) s.right++
-    else if (d < 0) s.wrong++
-    else s.same++
+    // lib/chimmy-outcomes/ledgerRecord.ts `gradeStartSit`: within 1 point is "same", as on the Receipts card.
+    if (Math.abs(d) < 1) s.same++
+    else if (d > 0) s.right++
+    else s.wrong++
 
     if (r.rec_proj != null && r.alt_proj != null) {
       const rp = Number(r.rec_proj)

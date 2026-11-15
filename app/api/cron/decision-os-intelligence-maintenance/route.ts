@@ -34,6 +34,9 @@ function tickWarnings(draftOutcomes: unknown, adviceLearning: unknown): string[]
   if (adviceLearning && typeof adviceLearning === 'object' && (adviceLearning as { status?: unknown }).status === 'error') {
     warnings.push(`adviceLearning: ${String((adviceLearning as { error?: unknown }).error ?? 'error')}`)
   }
+  if (adviceLearning && typeof adviceLearning === 'object' && (adviceLearning as { ledger?: unknown }).ledger === 'error') {
+    warnings.push('adviceLearning: AllFantasy call ledger failed to grade')
+  }
   return warnings
 }
 

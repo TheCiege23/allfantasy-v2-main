@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   listAdviceUsers: vi.fn(),
   resolveCurrentWeek: vi.fn(),
   resolveOutcomes: vi.fn(),
+  recomputeLedger: vi.fn(async () => null),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -24,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/chimmy-advice/adviceStore', () => ({ listAdviceUsers: h.listAdviceUsers }))
 vi.mock('@/lib/core-app/currentWeek', () => ({ resolveCurrentWeek: h.resolveCurrentWeek }))
 vi.mock('@/lib/core-app/decisionReceipts', () => ({ resolveChimmyAdviceOutcomes: h.resolveOutcomes }))
+vi.mock('@/lib/chimmy-outcomes/ledgerGrading', () => ({ recomputeLedgerRecord: h.recomputeLedger }))
 
 import {
   ADVICE_LEARNING_CACHE_KEY,
