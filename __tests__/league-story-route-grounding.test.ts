@@ -18,6 +18,7 @@ const getServerSessionMock = vi.fn()
 const resolveLeagueAccessMock = vi.fn()
 const leagueFindUniqueMock = vi.fn()
 const teamWeekResultFindManyMock = vi.fn()
+const teamWeekResultFindFirstMock = vi.fn()
 const storylineCreateMock = vi.fn()
 const openaiChatTextMock = vi.fn()
 const ingestMock = vi.fn()
@@ -32,7 +33,10 @@ vi.mock('@/lib/league-access', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: (...a: unknown[]) => leagueFindUniqueMock(...a) },
-    teamWeekResult: { findMany: (...a: unknown[]) => teamWeekResultFindManyMock(...a) },
+    teamWeekResult: {
+      findMany: (...a: unknown[]) => teamWeekResultFindManyMock(...a),
+      findFirst: (...a: unknown[]) => teamWeekResultFindFirstMock(...a),
+    },
     leagueStoryline: { create: (...a: unknown[]) => storylineCreateMock(...a) },
   },
 }))
@@ -113,8 +117,24 @@ describe('refuses rather than inventing', () => {
     expect(ingestMock).not.toHaveBeenCalled()
   })
 
-  it('400s when no week is given instead of narrating "Week ?"', async () => {
+  // 🛑 The league page's card sends no week (2026-11-15): the story is about the latest scored week, never "Week ?".
+  it('with no week, writes about the latest week that has scored results', async () => {
+    teamWeekResultFindFirstMock.mockResolvedValue({ week: 7 })
     const res = await post({ leagueId: 'L1' })
+    expect(res.status).not.toBe(400)
+    expect(teamWeekResultFindManyMock.mock.calls[0]![0]).toMatchObject({ where: { leagueId: 'L1', week: 7 } })
+  })
+
+  it('with no week and nothing scored yet, says so and writes nothing', async () => {
+    teamWeekResultFindFirstMock.mockResolvedValue(null)
+    const res = await post({ leagueId: 'L1' })
+    expect(res.status).toBe(409)
+    expect((await res.json()).detail).toMatch(/has been scored yet/)
+    expect(openaiChatTextMock).not.toHaveBeenCalled()
+  })
+
+  it('400s for a week that is not a number', async () => {
+    const res = await post({ leagueId: 'L1', week: 'soon' })
     expect(res.status).toBe(400)
     expect(openaiChatTextMock).not.toHaveBeenCalled()
   })
