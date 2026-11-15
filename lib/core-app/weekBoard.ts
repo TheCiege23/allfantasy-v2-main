@@ -184,6 +184,8 @@ export type LeagueSideline = {
  */
 export type LeagueWeekBoard = {
   format?: WeeklyFormat
+  /** The league's sport (2026-11-14): "Week 10" for a weekly sport rather than "Period 10". Null when unknown. */
+  sport?: string | null
   leagueId: string
   leagueName: string
   platform: string
@@ -411,6 +413,7 @@ type History = {
 
 type LeagueMeta = {
   id: string
+  sport?: string | null
   name: string
   platform: string
   elimination: boolean
@@ -565,6 +568,7 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
   for (const l of leagues) {
     leagueByPlatformId.set(weeklyScopeKey(l), {
       id: l.id,
+      sport: l.sport ?? null,
       name: l.name?.trim() || 'League',
       platform: String(l.platform ?? 'manual').toLowerCase(),
       elimination: weeklyFormat(l) === 'elimination',
@@ -1437,6 +1441,7 @@ export async function getWeekBoard(
 
       leagueBoard = {
         format: meta.format,
+        sport: meta.sport ?? null,
         leagueId: meta.id,
         leagueName: meta.name,
         platform: meta.platform,
