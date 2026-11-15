@@ -47,6 +47,7 @@ export const YAHOO_SNAPSHOT_SYSTEM_PROMPT = [
   '- Scoring "points" is per ONE unit of the stat. "Passing Yards: 25 yards per point" -> 0.04. "Receptions: 1" -> 1. Keep negative values negative.',
   '- Use the stat names exactly as the page writes them.',
   '- Roster "slot" is the slot shown (QB, RB, WR, TE, W/R/T, K, DEF, BN, IR). Bench is "BN".',
+  '- Draft "pick" is the number WITHIN its round as printed; it restarts at 1 every round. A team defense such as "Texans" is a player with position "DEF".',
   '- Copy team, manager and player names exactly as shown. Include every row the page shows.',
 ].join('\n')
 
@@ -83,7 +84,9 @@ async function readTextWithClaude(text: string): Promise<string | null> {
     const client = new Anthropic({ apiKey, maxRetries: 1, timeout: 90_000 })
     const response = await client.messages.create({
       model: resolveChimmyClaudeModel(),
-      max_tokens: 16_000,
+      // A 14-team, 16-round draft is ~9k tokens of JSON. 20k leaves room and stays under the SDK's
+      // non-streaming ceiling (~21k), above which it refuses the request outright.
+      max_tokens: 20_000,
       system: YAHOO_SNAPSHOT_SYSTEM_PROMPT,
       messages: [
         {

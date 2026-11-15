@@ -76,8 +76,12 @@ export const yahooSnapshotDraftSchema = z.object({
     .array(
       z.object({
         round: z.number().int().min(1).max(60),
-        /** Overall pick number when shown; derived from round order otherwise. */
-        pick: z.number().int().min(1).max(2000).nullish(),
+        /**
+         * The pick number WITHIN ITS ROUND, as Yahoo's draft results print it ("1. Saquon Barkley" in
+         * Round 2 is round 2, pick 1). Measured on a real league 2026-11-14: Yahoo restarts at 1 every
+         * round, so reading this as the overall pick gave every round the same numbers.
+         */
+        pick: z.number().int().min(1).max(40).nullish(),
         teamName: name,
         ...playerRow,
       }),

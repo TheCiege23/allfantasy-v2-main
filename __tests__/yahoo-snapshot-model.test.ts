@@ -82,7 +82,7 @@ const draft: YahooSnapshotDraft = {
     { round: 1, pick: null, teamName: 'Turf Toe', playerName: "Ja'Marr Chase", position: 'WR', nflTeam: 'CIN' },
     { round: 1, pick: null, teamName: 'Gridiron Ghosts', playerName: 'Bijan Robinson', position: 'RB', nflTeam: 'ATL' },
     { round: 1, pick: null, teamName: 'Nobody FC', playerName: 'Ghost Player', position: 'WR', nflTeam: 'NYJ' },
-    { round: 2, pick: 9, teamName: 'Punt Club', playerName: 'Patrick Mahomes', position: 'QB', nflTeam: 'KC' },
+    { round: 2, pick: 4, teamName: 'Punt Club', playerName: 'Patrick Mahomes', position: 'QB', nflTeam: 'KC' },
   ],
 }
 
@@ -185,9 +185,23 @@ describe('buildYahooSnapshotPayload', () => {
     expect(p.draftPicks.map((d) => [d.round, d.pickNumber, d.teamKey, d.playerName])).toEqual([
       [1, 1, 'nfl.l.987654.t.1', "Ja'Marr Chase"],
       [1, 2, 'nfl.l.987654.t.2', 'Bijan Robinson'],
-      [2, 9, 'nfl.l.987654.t.4', 'Patrick Mahomes'],
+      [2, 8, 'nfl.l.987654.t.4', 'Patrick Mahomes'],
     ])
     expect(p.league.draftStatus).toBe('postdraft')
+  })
+
+  it("turns Yahoo's in-round pick numbers into distinct overall picks", () => {
+    // Real Yahoo draft results restart at "1." every round (measured on a live league).
+    const s = mergeYahooSnapshotPage(full(), {
+      kind: 'draft',
+      picks: [
+        { round: 1, pick: 1, teamName: 'Turf Toe', playerName: 'Bijan Robinson', position: 'RB', nflTeam: 'Atl' },
+        { round: 1, pick: 4, teamName: 'Punt Club', playerName: 'CeeDee Lamb', position: 'WR', nflTeam: 'Dal' },
+        { round: 2, pick: 1, teamName: 'Punt Club', playerName: 'Saquon Barkley', position: 'RB', nflTeam: 'Phi' },
+        { round: 2, pick: 4, teamName: 'Turf Toe', playerName: 'Texans', position: 'DEF', nflTeam: 'Hou' },
+      ],
+    })
+    expect(buildYahooSnapshotPayload(s).draftPicks.map((d) => d.pickNumber)).toEqual([1, 4, 5, 8])
   })
 
   it('gives a drafted player the same id he has on a roster', () => {
