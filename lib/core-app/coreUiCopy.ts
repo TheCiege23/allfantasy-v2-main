@@ -35,6 +35,8 @@ const spanish: Record<string, string> = {
   Devy: 'Devy',
   'Devy (league)': 'Devy (liga)',
   Standings: 'Clasificación',
+  /* The league's own rules page (2026-11-15) — the hub's own words for it, so the two match. */
+  'League settings': 'Ajustes de la liga',
   'Season Outlook': 'Proyección de temporada',
   Outlook: 'Proyección',
   'Your career': 'Tu trayectoria',

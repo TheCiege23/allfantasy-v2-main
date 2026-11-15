@@ -45,6 +45,7 @@ import { SurvivorIslandControl } from '@/components/core-app/survivor/SurvivorIs
 import { navLabel } from '@/lib/core-app/navLabels'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
+import { LeagueSettingsScreen } from '@/components/core-app/screens/LeagueSettingsScreen'
 import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
 import { createLeagueContext, type LeagueContext } from '@/lib/core-app/leagueContext'
 import {
@@ -348,6 +349,7 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   'war-room': 'war-room',
   'draft-hq': 'draft-hq',
   'defense-hub': 'defense-hub',
+  'league-settings': 'league-settings',
   /* Two segments because the handoff is two screens: a cross-league hub and a
      per-league tab. See the CoreNavKey note in AfCoreShell. */
   devy: 'devy',
@@ -460,6 +462,10 @@ const TAB_META: Record<string, { title: string; description: string }> = {
       'Scout the managers you play, and the moves you owe before kickoff. ?view=plan for the game plan.',
   },
   'draft-hq': { title: 'Draft HQ', description: 'Draft order, pick slots and board settings.' },
+  'league-settings': {
+    title: 'League settings',
+    description: 'This league’s rules, roster, scoring, draft and record book — mirrored read-only from an imported league’s platform.',
+  },
   'defense-hub': {
     title: 'Defense Hub',
     description: 'Your defenders and kickers, priced by this league’s own scoring and starting slots.',
@@ -5188,6 +5194,35 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
             leagues={rail}
           />
         )
+      ) : activeKey === 'league-settings' ? (
+        /*
+         * League settings (2026-11-15) — the League Settings hub, fed from the rail's own row for the
+         * league. The hub reads everything else itself and degrades section by section.
+         */
+        (() => {
+          const settingsLeague = selectedLeagueId ? (rail.find((l) => l.id === selectedLeagueId) ?? null) : null
+          return settingsLeague ? (
+            <LeagueSettingsScreen
+              league={{
+                id: settingsLeague.id,
+                name: settingsLeague.name,
+                platform: String(settingsLeague.platform),
+                sport: settingsLeague.sport ?? null,
+                imageUrl: settingsLeague.imageUrl ?? null,
+                isCommissioner: settingsLeague.isCommissioner,
+              }}
+              userId={userId}
+            />
+          ) : (
+            <PickALeague
+              tabKey="league-settings"
+              title="League settings"
+              blurb="Rules, roster, scoring and the record book are one league's, so pick a league."
+              issues={issues}
+              leagues={rail}
+            />
+          )
+        })()
       ) : activeKey === 'draft-hq' ? (
         draftHq ? (
           <>

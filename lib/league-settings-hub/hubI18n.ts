@@ -970,6 +970,7 @@ const PATTERNS: Array<[RegExp, (m: RegExpExecArray, tr: Tr) => string]> = [
   [/^Imported from (.+)$/, (m) => `Importada de ${m[1]}`],
   [/^These rules mirror your host league\. Change them on (.+) and they sync here\.$/, (m) => `Estas reglas copian tu liga de origen. Cámbialas en ${m[1]} y se sincronizan aquí.`],
   [/^Co-owners are managed on (.+)\.$/, (m) => `Los copropietarios se gestionan en ${m[1]}.`],
+  [/^Change your team name and avatar on (.+)\.$/, (m) => `Cambia el nombre y el avatar de tu equipo en ${m[1]}.`],
   [/^Invitation sent to (.+)$/, (m) => `Invitación enviada a ${m[1]}`],
   [/^Co-commissioner: (.+)$/, (m) => `Cocomisionado: ${m[1]}`],
   [/^Runner-up (.+)$/, (m) => `Subcampeón ${m[1]}`],

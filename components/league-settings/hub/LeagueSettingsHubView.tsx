@@ -253,7 +253,12 @@ export function seasonsLabel(seasons: number[]): string {
 
 function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; label: string }> {
   const meta = HUB_KIND_META[data.kind]
-  if (tab === 'my') return [{ id: 'team', label: 'My Team' }, { id: 'notifications', label: 'Notifications' }, { id: 'leave', label: 'Leave League' }]
+  /* An imported league is left on its host platform, so "Leave League" is not offered for one. */
+  if (tab === 'my') {
+    const out = [{ id: 'team', label: 'My Team' }, { id: 'notifications', label: 'Notifications' }]
+    if (!data.importedFrom) out.push({ id: 'leave', label: 'Leave League' })
+    return out
+  }
   if (tab === 'setup') {
     const out = [{ id: 'general', label: 'General' }, { id: 'waivers', label: 'Waivers' }]
     if (data.typeRules === undefined || data.typeRules.length) out.push({ id: 'rules', label: meta.rulesTitle })
@@ -403,6 +408,22 @@ function MyTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
         <div className="af-lsh-card-body">
           {data.myTeam === undefined ? <Loading lines={2} /> : data.myTeam === null ? (
             <p className="af-lsh-note">{t('You don’t manage a team in this league.')}</p>
+          ) : data.importedFrom ? (
+            /*
+              Read-only for an imported league (2026-11-15): a rename or avatar saved here would never
+              reach the host platform, and the next sync would put the old name back. Show it, and say
+              where it changes.
+            */
+            <div className="af-lsh-team" data-testid="lsh-team-mirror">
+              <div className="af-lsh-team-avatar" aria-hidden>
+                {data.myTeam.avatarUrl ? <img src={data.myTeam.avatarUrl} alt="" /> : initials(data.myTeam.name)}
+              </div>
+              <div className="af-lsh-field">
+                <span className="af-lsh-label">{t('Team Name')}</span>
+                <strong className="af-lsh-team-name">{data.myTeam.name}</strong>
+                <p className="af-lsh-note" style={{ margin: 0 }}>{t(`Change your team name and avatar on ${data.importedFrom}.`)}</p>
+              </div>
+            </div>
           ) : (
             <>
               <div className="af-lsh-team">
@@ -454,6 +475,7 @@ function MyTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
         )}
       </Card>
 
+      {data.importedFrom ? null : (
       <Card id="leave" title="Leave League">
         <div className="af-lsh-card-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
           <span style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--lsh-muted)' }}>
@@ -463,6 +485,7 @@ function MyTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
           <button type="button" className="af-lsh-btn" data-variant="danger" disabled={!cb.onLeaveLeague} onClick={cb.onLeaveLeague}>{t('LEAVE LEAGUE')}</button>
         </div>
       </Card>
+      )}
     </>
   )
 }

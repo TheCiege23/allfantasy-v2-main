@@ -4933,3 +4933,43 @@ button.af-rail-sport:focus-visible {
 .af-core .af-core-bracket-promo {
   margin: 18px 0 0;
 }
+
+/*
+ * Inside a league (2026-11-15): the rail's one way out to everything account-wide, and Notifications
+ * in the top bar with its count. See AfCoreShell and LEAGUE_RAIL_OMITTED_SECTIONS.
+ */
+.af-core .af-nav-group-exit { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.af-core .af-nav-all-arrow { margin-left: auto; color: var(--faint); }
+.af-core .af-topbar-inbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.af-core .af-topbar-inbox[data-active='true'] { border-color: var(--accent-line); color: var(--accent); }
+.af-core .af-topbar-inbox-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bad, #ef4444);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
+}
+@media (max-width: 1080px) {
+  .af-core .af-topbar-inbox-label { display: none; }
+}
+@media (max-width: 720px) {
+  .af-core .af-topbar-inbox { display: none; }
+}

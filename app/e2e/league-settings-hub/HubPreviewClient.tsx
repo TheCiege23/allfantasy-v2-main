@@ -95,7 +95,27 @@ function fixtureRoster(kind: HubKind) {
   return { rosterConfig: { sections } }
 }
 
-export function HubPreviewClient({ type, role, tab, native = false, sport = 'NFL' }: { type: string; role: 'commish' | 'manager'; tab: string; native?: boolean; sport?: string }) {
+/**
+ * `importedFrom` previews an imported league's read-only mirror; `embedded` drops the page chrome and the
+ * kind switcher, for /e2e/league-settings-guide, which draws the hub inside the real /core shell.
+ */
+export function HubPreviewClient({
+  type,
+  role,
+  tab,
+  native = false,
+  sport = 'NFL',
+  importedFrom = null,
+  embedded = false,
+}: {
+  type: string
+  role: 'commish' | 'manager'
+  tab: string
+  native?: boolean
+  sport?: string
+  importedFrom?: string | null
+  embedded?: boolean
+}) {
   const sf = SPORT_FIXTURES[sport]
   const [kind, setKind] = useState<HubKind>((KINDS as string[]).includes(type) ? (type as HubKind) : 'redraft')
   const [commish, setCommish] = useState(role === 'commish')
@@ -114,7 +134,7 @@ export function HubPreviewClient({ type, role, tab, native = false, sport = 'NFL
     for (const g of groups) for (const r of g.rows) on[r.id] = !muted.includes(r.id) && r.id !== 'league_drama'
     return {
       leagueId: 'kn-2026', kind, leagueName: 'Kingdom North', leagueAvatarUrl: null, sport, season: 2026,
-      teamCount: Number(p.league?.teamCount), leagueArt: null, canEdit: commish, isHeadCommissioner: commish, importedFrom: null,
+      teamCount: Number(p.league?.teamCount), leagueArt: null, canEdit: commish, isHeadCommissioner: commish, importedFrom,
       myTeam: { name: 'Ghost Protocol', avatarUrl: null },
       notifications: { groups, on, leagueEnabled: leagueOn },
       general: buildGeneralGroups(p, kind), waivers: buildWaiverGroups(p, kind), typeRules: buildTypeRuleGroups(p, kind),
@@ -157,7 +177,29 @@ export function HubPreviewClient({ type, role, tab, native = false, sport = 'NFL
         })),
       },
     }
-  }, [kind, commish, muted, leagueOn, co, note, native, sport, sf])
+  }, [kind, commish, muted, leagueOn, co, note, native, sport, sf, importedFrom])
+
+  const hub = (
+    <LeagueSettingsHubView
+      key={kind + String(commish)}
+      data={data}
+      initialTab={(['my', 'setup', 'members', 'record'].includes(tab) ? tab : 'setup') as HubTabId}
+      advanced={commish ? { label: 'Advanced settings', onOpen: () => {} } : undefined}
+      cb={{
+        onToggleSetting: () => {},
+        onSaveTeamName: async () => null,
+        onSaveNote: async (t) => { setNote(t); return null },
+        onToggleNotification: (id, isOn) => setMuted((m) => (isOn ? m.filter((x) => x !== id) : [...m, id])),
+        onToggleLeagueNotifications: setLeagueOn,
+        onToggleCoCommissioner: (id, next) => setCo((c) => ({ ...c, [id]: next })),
+        onInviteCoOwner: async () => null,
+        onOpenEditor: () => {},
+        onLeaveLeague: importedFrom ? undefined : () => {},
+        onCopy: () => {},
+      }}
+    />
+  )
+  if (embedded) return hub
 
   return (
     <div style={{ minHeight: '100vh', background: '#050814', fontFamily: 'Inter, "Segoe UI", system-ui, sans-serif' }}>
