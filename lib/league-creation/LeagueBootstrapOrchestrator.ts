@@ -384,6 +384,9 @@ export async function runLeagueBootstrap(
     try {
       const { upsertBigBrotherConfig } = await import('@/lib/big-brother/BigBrotherLeagueConfig')
       await upsertBigBrotherConfig(leagueId, {})
+      // The commissioner's setup choices (tie-break, finale, jury, HOH challenge) become the game's rules.
+      const { applyBigBrotherSetupRules } = await import('@/lib/big-brother/bigBrotherSetupRulesApply')
+      await applyBigBrotherSetupRules(leagueId)
       try {
         const { runBigBrotherLeagueBootstrap } = await import('@/lib/big-brother/bigBrotherLeagueBootstrap')
         const boot = await runBigBrotherLeagueBootstrap(leagueId)
