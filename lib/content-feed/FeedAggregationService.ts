@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/prisma";
 import { getTrendFeed } from "@/lib/player-trend/TrendDetectionService";
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope";
+import { liveArticleWhere } from "@/lib/automated-blog/liveArticles";
 import type { ContentFeedItem } from "./types";
 
 const MAX_PER_SOURCE = 12;
@@ -62,10 +63,11 @@ export async function fetchBlogFeedItems(
   sportFilter: string | null,
   limit: number = MAX_PER_SOURCE
 ): Promise<ContentFeedItem[]> {
-  const where: { publishStatus: string } = { publishStatus: "published" };
-  if (sportFilter && SUPPORTED_SPORTS.includes(sportFilter as any)) {
-    (where as any).sport = sportFilter;
-  }
+  // Live = published, or scheduled and due (lib/automated-blog/liveArticles.ts).
+  const where = {
+    ...liveArticleWhere(),
+    ...(sportFilter && SUPPORTED_SPORTS.includes(sportFilter as any) ? { sport: sportFilter } : {}),
+  };
   const articles = await prisma.blogArticle
     .findMany({
       where,
