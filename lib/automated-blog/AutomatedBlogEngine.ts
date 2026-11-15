@@ -44,6 +44,8 @@ export function getSEOForArticle(article: {
   sport: string
   category: string
   slug: string
+  seoTitle?: string | null
+  seoDescription?: string | null
 }) {
   return buildBlogSEO(article)
 }
