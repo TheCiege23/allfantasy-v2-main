@@ -79,8 +79,8 @@ function sameName(a: string | null | undefined, b: string | null | undefined): b
   return x.length > 0 && x === y
 }
 
-/** A screenshot's label against every name the roster's manager goes by. */
-function rosterIsNamed(r: LeagueRoster, label: string | null | undefined): boolean {
+/** A screenshot's label against every name the roster's manager goes by. Shared with matchMultiOffer.ts. */
+export function rosterIsNamed(r: LeagueRoster, label: string | null | undefined): boolean {
   return [r.ownerName, ...(r.ownerHandles ?? [])].some((n) => sameName(n, label))
 }
 
