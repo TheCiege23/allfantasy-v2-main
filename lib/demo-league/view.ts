@@ -16,6 +16,7 @@ import type {
   DemoAlert, DemoLeagueView, DemoMatchup, DemoPlayer, DemoRoster, DemoStandingRow, DemoTeam, DemoTrade, DemoTradeAsset, DemoWeekScores,
 } from './types'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
+import { makeWeekIsFinished } from './weekProgress'
 
 export function aliasTeam(index: number): DemoTeam {
   const teamName = fakeTeamName(index)
@@ -85,8 +86,14 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
     teamByRosterId(id) ?? src.teams.find((t) => t.platformUserId === id || t.claimedByUserId === id)
   const slotOf = (t: SourceTeam | undefined): number | null => (t ? aliasFor.get(t.key)?.slot ?? null : null)
 
+  // ── Which weeks are over ───────────────────────────────────────────────────
+  // One rule for the standings, the current week and Chimmy's recent form — see weekProgress.ts for
+  // the mid-Sunday week that used to count half-played games as wins and losses.
+  const weeks = [...new Set(src.weekRows.map((r) => r.week))].sort((a, b) => a - b)
+  const weekIsComplete = makeWeekIsFinished(src.weekRows, src.inProgressWeek)
+
   // ── Standings ──────────────────────────────────────────────────────────────
-  const scored = src.weekRows.filter((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
+  const scored = src.weekRows.filter((r) => weekIsComplete(r.week))
   let standings: DemoStandingRow[]
   if (scored.length > 0) {
     const agg = new Map<number, Omit<DemoStandingRow, 'rank'>>()
@@ -116,8 +123,6 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
   }
 
   // ── Current week + matchups ────────────────────────────────────────────────
-  const weeks = [...new Set(src.weekRows.map((r) => r.week))].sort((a, b) => a - b)
-  const weekIsComplete = (w: number) => src.weekRows.filter((r) => r.week === w).every((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
   const currentWeek = weeks.find((w) => !weekIsComplete(w)) ?? weeks[weeks.length - 1] ?? null
 
   const matchups: DemoMatchup[] = []
