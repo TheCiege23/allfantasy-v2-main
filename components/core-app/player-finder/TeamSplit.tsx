@@ -25,10 +25,16 @@ export function TeamSplit({ data }: { data: TeamSplitData | null }) {
   if (!data || data.teams.length === 0) return null
   const top = data.teams[0].starts
   return (
-    <div className="af-pf-split" role="group" aria-labelledby="af-pf-split-h">
-      <h4 className="af-label" id="af-pf-split-h">
-        {t.splitHeading}
-      </h4>
+    /*
+      2026-11-14: folded, closed by default. Five clubs, 500 slots and the worst bye week are a deep dive under
+      "Your shares", not something the home needs open. The heading is the summary, so it is said once.
+    */
+    <details className="af-pf-split" data-testid="pf-team-split">
+      <summary className="af-pf-split-summary">
+        <h4 className="af-label" id="af-pf-split-h">
+          {t.splitHeading}
+        </h4>
+      </summary>
       <p className="af-pf-split-sub af-num">{t.splitSub(data.totalStarts)}</p>
       <ol className="af-pf-split-list">
         {data.teams.map((row) => (
@@ -64,6 +70,6 @@ export function TeamSplit({ data }: { data: TeamSplitData | null }) {
       ) : (
         <p className="af-pf-split-rest">{t.splitByesUnknown}</p>
       )}
-    </div>
+    </details>
   )
 }

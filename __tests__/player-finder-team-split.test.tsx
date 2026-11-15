@@ -191,7 +191,11 @@ describe('TeamSplit block', () => {
 
   it('shows each club\'s share of all your starting slots, and the biggest bye ahead', () => {
     render(<TeamSplit data={data} />)
-    expect(screen.getByRole('group', { name: 'Where your starters come from' })).toBeTruthy()
+    // 2026-11-14: a closed fold whose summary is the heading, said once.
+    const fold = screen.getByTestId('pf-team-split')
+    expect(fold.tagName).toBe('DETAILS')
+    expect((fold as HTMLDetailsElement).open).toBe(false)
+    expect(fold.querySelector('summary')?.textContent).toBe('Where your starters come from')
     expect(screen.getByText('12 starting QB/RB/WR/TE slots across your rosters')).toBeTruthy()
     expect(screen.getByText('50% · 6 slots')).toBeTruthy()
     expect(screen.getByText('2 with no club on file')).toBeTruthy()

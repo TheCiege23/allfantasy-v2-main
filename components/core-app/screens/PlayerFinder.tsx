@@ -509,6 +509,9 @@ export function PlayerFinder({
   const { language } = useOptionalLanguage()
   const t = finderCopy(language)
   const g = messagesFor(finderGuideMessages, language)
+  /* The home's headline: how many of your starters may not play, when the game-day read is on the page. */
+  const flaggedStarters = triage?.available ? triage.data.rows.length : null
+  const homeTitle = flaggedStarters == null ? g.homeTitle : flaggedStarters > 0 ? g.homeFlagged(flaggedStarters) : g.homeClear
   const [matchPos, setMatchPos] = useState<string | null>(null)
   /** A loader's reason, in the reader's language (whole, or English as written). */
   const why = (reason: string) => reasonText(reason, language)
@@ -931,11 +934,10 @@ export function PlayerFinder({
         ) : null}
 
         {/*
-          The live-data promise is pinned to the foot of the rail, where the
-          handoff puts it. It is a claim about every number on this screen, so
-          it belongs beside the search rather than buried under one section.
+          2026-11-14: the rail's foot no longer says "Stats, injuries and news come from live sports data —
+          never an invented number." It is a claim about the product, not something a manager can use, and
+          every number it vouched for already carries its own source line where it is drawn.
         */}
-        <p className="af-pf-rail-foot af-pf-d-only">{t.railFoot}</p>
       </aside>
 
       {sheet ? <Link className="af-pf-psheet-backdrop" href={sheetCloseHref} aria-hidden tabIndex={-1} /> : null}
@@ -959,7 +961,7 @@ export function PlayerFinder({
         {myPlayersHome ? (
           <header className="af-pf-home-head">
             {/* What the page is for (2026-11-13 guide): game-day alerts land here; search by name or team. */}
-            <h2 className="af-display af-pf-home-title">{g.homeTitle}</h2>
+            <h2 className="af-display af-pf-home-title" data-testid="pf-home-title">{homeTitle}</h2>
             <p className="af-pf-home-sub">{g.homeSub}</p>
           </header>
         ) : null}
