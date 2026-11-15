@@ -187,7 +187,7 @@ export async function POST(req: Request) {
             found: false,
             reason: "private",
             message:
-              "This league is private, so ESPN won't show it to us without your ESPN cookies, and a team code can't help. Connect ESPN once from a computer instead.",
+              "This league is private, so ESPN won't show it to us from a phone. Make it public on ESPN (LM Tools > League Settings > Basic Settings > Make League Viewable to Public) and keep it public, or connect ESPN from a computer instead.",
           });
         }
         console.error("[Import ESPN] team code check", redactEspnSecrets(error instanceof Error ? `${error.name}: ${error.message}` : String(error), null));

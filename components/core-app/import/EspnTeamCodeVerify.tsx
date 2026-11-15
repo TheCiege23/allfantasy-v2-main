@@ -30,6 +30,7 @@ type CheckState =
   | { k: 'idle' }
   | { k: 'checking' }
   | { k: 'missing'; message: string }
+  | { k: 'private' }
   | { k: 'found'; teamName: string | null }
 
 type TeamCodeResponse = {
@@ -94,12 +95,13 @@ export function EspnTeamCodeVerify({
       onVerified()
       return
     }
+    if (data.reason === 'private') {
+      setCheck({ k: 'private' })
+      return
+    }
     setCheck({
       k: 'missing',
-      message:
-        data.reason === 'private' && data.message
-          ? data.message
-          : `We don't see ${codeState.code} on any team in this league yet. ESPN can take a minute to update. Make sure you saved it, then check again.`,
+      message: `We don't see ${codeState.code} on any team in this league yet. ESPN can take a minute to update. Make sure you saved it, then check again.`,
     })
   }, [codeState, leagueInput, onVerified])
 
@@ -134,6 +136,23 @@ export function EspnTeamCodeVerify({
         <p className="af-espn-code-msg" role="status">
           {check.message}
         </p>
+      ) : null}
+      {check.k === 'private' ? (
+        <div className="af-espn-code-private" role="status" data-testid="espn-team-code-private">
+          <p className="af-espn-code-msg">
+            <strong>Your league is private,</strong> so ESPN won&rsquo;t show it to us from a phone. Make it
+            public, then check again:
+          </p>
+          <ol className="af-espn-code-steps">
+            <li>On espn.com, open your league and go to LM Tools &rarr; League Settings &rarr; Basic Settings.</li>
+            <li>Set &ldquo;Make League Viewable to Public&rdquo; to Yes and save.</li>
+            <li>Tap Check again.</li>
+          </ol>
+          <p className="af-espn-code-note">
+            Keep it public. If it goes back to private, scores and rosters stop updating here until someone
+            connects ESPN from a computer. Rather keep it private? Connect ESPN from a computer instead.
+          </p>
+        </div>
       ) : null}
       {check.k === 'found' ? (
         <p className="af-espn-code-msg" data-ok="true" role="status">

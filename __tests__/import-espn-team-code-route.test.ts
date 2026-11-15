@@ -104,6 +104,7 @@ describe('POST /api/import-espn mode team_code', () => {
     const res = await POST(post({ mode: 'team_code', leagueId: '2026:123456', check: true }))
     const body = await res.json()
     expect(body).toMatchObject({ ok: true, found: false, reason: 'private' })
+    expect(body.message).toMatch(/Make League Viewable to Public/)
   })
 
   it('refuses input that is not an ESPN league', async () => {
