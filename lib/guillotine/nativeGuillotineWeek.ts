@@ -27,6 +27,7 @@ import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { isPastCorrectionCutoff, savePeriodScores } from '@/lib/guillotine/GuillotineWeekEvaluator'
 import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
+import { AWAITING_COMMISSIONER_TIEBREAK_REASON } from '@/lib/guillotine/commissionerTiebreakStore'
 import { ensureGuillotineSeason } from '@/lib/guillotine/ensureGuillotineSeason'
 import { finalizeRedraftWeek, readWeekSlate, WEEK_KEYED_SPORTS } from '@/lib/redraft/weekFinalizer'
 import { scoreRosterForWeek, type DailyBestBallDetail } from '@/lib/redraft/scoringEngine'
@@ -375,6 +376,8 @@ export async function runNativeGuillotineWeek(
     if (result?.reason === 'final stage complete') return { ...(await completeSeason(season.id, gSeason, base)), week }
     if (result?.reason === 'final stage scored') return { ...base, outcome: 'final_stage_scored', week }
     if (result?.reason === 'no chop scheduled') return { ...base, outcome: 'no_chop', week }
+    // A tie is waiting on the commissioner's pick (./commissionerTiebreak.ts); the next run chops once they decide.
+    if (result?.reason === AWAITING_COMMISSIONER_TIEBREAK_REASON) return { ...base, outcome: 'waiting', week, reason: 'commissioner_tiebreak' }
     if (!result || result.choppedRosterIds.length === 0) {
       return { ...base, outcome: 'refused', week, reason: result?.reason ?? 'engine_returned_nothing' }
     }

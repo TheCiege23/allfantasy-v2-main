@@ -27,6 +27,8 @@ import { previousPeriodEnd, readPeriodWeeks } from './eliminationPeriods'
 import { readFaabOnChop } from './faabOnChop'
 import { redistributeChoppedFaab } from './faabOnChopApply'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
+import { readCommissionerTiebreak, tiebreakKey, tiebreakState } from './commissionerTiebreak'
+import { AWAITING_COMMISSIONER_TIEBREAK_REASON, holdChopForCommissioner } from './commissionerTiebreakStore'
 
 export interface RunEliminationInput {
   leagueId: string
@@ -236,9 +238,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
   const immunity = applyImmunity(evalResult.scores, immuneRosterIds(advanced, previousWeek, evalResult.activeRosterIds), chopCount)
   const draftSlotByRoster = await getDraftSlotByRoster(input.leagueId)
 
-  const { choppedRosterIds, stepUsed, reason } = recoveryScores
-    ? { choppedRosterIds: started.map(row => row.rosterId), stepUsed: null, reason: 'Recovered previously selected chop; no new elimination' }
-    : resolveTiebreak({
+  const tiebreakArgs = {
     candidates: immunity.candidates,
     tiebreakerOrder: config.tiebreakerOrder,
     teamsPerChop: chopCount,
@@ -248,7 +248,34 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
       ? input.commissionerChoppedRosterIds
       : undefined,
     tiebreakSeed: `${input.leagueId}:${input.season ?? ''}`,
-  })
+  }
+  let resolved = recoveryScores ? null : resolveTiebreak(tiebreakArgs)
+  /*
+   * "Commissioner decides" (./commissionerTiebreak.ts). A tie that reached the step with no pick holds the chop —
+   * NOTHING about the week is written below this point — and asks the commissioner; the pick, once made, is applied
+   * here on the next run. Only for the SAME tie it was asked about: a pick made for other teams is never applied.
+   * After the window, or for a tie that changed under a decision, the next step's answer stands, as it always did.
+   */
+  let commissionerDecided = false
+  if (resolved?.awaitingCommissioner && !input.commissionerChoppedRosterIds?.length) {
+    const asked = resolved.awaitingCommissioner
+    const key = tiebreakKey(input.season, input.weekOrPeriod)
+    const entry = readCommissionerTiebreak(endgameLeague?.settings, key)
+    const askedAt = new Date()
+    const state = tiebreakState(entry, askedAt)
+    const sameTie = entry != null && entry.needed === asked.needed
+      && entry.tiedRosterIds.length === asked.tiedRosterIds.length
+      && asked.tiedRosterIds.every(id => entry.tiedRosterIds.includes(id))
+    if (state === 'decided' && sameTie && entry.decidedRosterIds!.every(id => asked.tiedRosterIds.includes(id))) {
+      resolved = resolveTiebreak({ ...tiebreakArgs, commissionerChoppedRosterIds: entry.decidedRosterIds })
+      commissionerDecided = true
+    } else if (state === 'none' || state === 'waiting') {
+      await holdChopForCommissioner({ leagueId: input.leagueId, key, week: input.weekOrPeriod, existing: entry, tiedRosterIds: asked.tiedRosterIds, needed: asked.needed, now: askedAt })
+      return { leagueId: input.leagueId, weekOrPeriod: input.weekOrPeriod, choppedRosterIds: [], tiebreakStepUsed: null, reason: AWAITING_COMMISSIONER_TIEBREAK_REASON }
+    }
+  }
+  const { choppedRosterIds, stepUsed, reason } = resolved
+    ?? { choppedRosterIds: started.map(row => row.rosterId), stepUsed: null, reason: 'Recovered previously selected chop; no new elimination' }
 
   if (choppedRosterIds.length === 0) {
     return {
@@ -462,7 +489,7 @@ async function runEliminationLocked(input: RunEliminationInput): Promise<Guillot
     choppedRosterIds,
     tiebreakStepUsed: stepUsed,
     reason,
-    commissionerOverride: Boolean(input.commissionerChoppedRosterIds?.length),
+    commissionerOverride: Boolean(input.commissionerChoppedRosterIds?.length) || commissionerDecided,
   })
 
   /*

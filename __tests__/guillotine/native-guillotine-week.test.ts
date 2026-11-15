@@ -223,6 +223,16 @@ describe('runNativeGuillotineWeek', () => {
     expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
   })
 
+  it('a chop tie waiting on the commissioner ends as waiting, not refused, and drops nobody', async () => {
+    arrange()
+    m.runElimination.mockResolvedValue({ leagueId: 'L1', weekOrPeriod: 3, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'awaiting commissioner tiebreak' })
+
+    const r = await run()
+
+    expect(r).toMatchObject({ outcome: 'waiting', week: 3, reason: 'commissioner_tiebreak' })
+    expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
+  })
+
   it('does nothing for a league that is not guillotine', async () => {
     arrange()
     m.isGuillotineLeague.mockResolvedValue(false)
