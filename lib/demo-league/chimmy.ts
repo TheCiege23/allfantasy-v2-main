@@ -40,6 +40,16 @@ const DEMO_CHIMMY_MAX_TOKENS = 900
 /** Per provider. The router's 12 s default is tight for a reasoning model writing 200 words. */
 const DEMO_CHIMMY_PROVIDER_TIMEOUT_MS = 15_000
 
+/*
+ * The demo's two LIMITS, and what a visitor is told at each. Both are the demo's own spend bounds —
+ * the visitor has no account, so neither is about anyone's plan — but both are the moment someone has
+ * used the demo enough to want more, so the client turns the `code` into a sign-up / AF Pro card
+ * rather than an error. A service failure deliberately gets no such card: paying would not fix it.
+ */
+export const DEMO_CHIMMY_PER_VISITOR = { max: 8, windowMs: 10 * 60_000 }
+export const DEMO_CHIMMY_PER_VISITOR_LIMIT_MESSAGE = "You've reached the demo's limit of 8 questions in 10 minutes."
+export const DEMO_CHIMMY_DAILY_CAP_MESSAGE = 'The demo Chimmy has answered all it can for today.'
+
 let day = ''
 let usedToday = 0
 

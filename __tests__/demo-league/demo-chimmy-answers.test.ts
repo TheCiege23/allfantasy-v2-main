@@ -211,6 +211,49 @@ describe('reliability: retry, then a friendly error with a retry flag — never 
   })
 })
 
+describe('the demo limits come back tagged, so the page can offer sign-up / AF Pro instead of an error', () => {
+  const fromIp = (ip: string, body: unknown) => new Request('http://localhost/api/demo/chimmy', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+    body: JSON.stringify(body),
+  })
+
+  it('the 9th question in 10 minutes from one visitor is a 429 tagged demo_limit, with a Retry-After', async () => {
+    routeTextCall.mockResolvedValue(ok(AFTER_ANSWER))
+    const { POST } = await import('@/app/api/demo/chimmy/route')
+    const { DEMO_CHIMMY_PER_VISITOR, DEMO_CHIMMY_PER_VISITOR_LIMIT_MESSAGE } = await import('@/lib/demo-league/chimmy')
+    for (let i = 0; i < DEMO_CHIMMY_PER_VISITOR.max; i += 1) {
+      expect((await POST(fromIp('203.0.113.77', { message: 'Who is the best team?' }))).status).toBe(200)
+    }
+    const res = await POST(fromIp('203.0.113.77', { message: 'Who is the best team?' }))
+    expect(res.status).toBe(429)
+    expect(res.headers.get('Retry-After')).toBe('600')
+    expect(JSON.parse(await res.text())).toMatchObject({ code: 'demo_limit', error: DEMO_CHIMMY_PER_VISITOR_LIMIT_MESSAGE })
+    // The message states the same numbers the limiter enforces.
+    expect(DEMO_CHIMMY_PER_VISITOR_LIMIT_MESSAGE).toContain(`${DEMO_CHIMMY_PER_VISITOR.max} questions in ${DEMO_CHIMMY_PER_VISITOR.windowMs / 60_000} minutes`)
+  })
+
+  it('the site-wide daily cap is a 429 tagged daily_cap, and the model is never called', async () => {
+    vi.stubEnv('DEMO_CHIMMY_DAILY_CAP', '0')
+    try {
+      const { POST } = await import('@/app/api/demo/chimmy/route')
+      const res = await POST(post({ message: 'Who is the best team?' }))
+      expect(res.status).toBe(429)
+      expect(JSON.parse(await res.text())).toMatchObject({ code: 'daily_cap' })
+      expect(routeTextCall).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('a service failure is NOT tagged as a limit — paying would not fix an outage', async () => {
+    routeTextCall.mockResolvedValue(fail(false))
+    const { POST } = await import('@/app/api/demo/chimmy/route')
+    const body = JSON.parse(await (await POST(post({ message: 'Who is the best team?' }))).text())
+    expect(body.code).toBe('chimmy_unavailable')
+  })
+})
+
 describe('routeTextCallWithRetry', () => {
   it('backs off exponentially and stops at the retry limit', async () => {
     routeTextCall.mockResolvedValue(fail(true))

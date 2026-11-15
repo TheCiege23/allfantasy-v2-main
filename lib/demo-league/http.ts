@@ -34,12 +34,21 @@ export function demoError(status: number, error: string, extra?: Record<string, 
   return new NextResponse(JSON.stringify({ demo: true, error, ...extra }), { status, headers: DEMO_RESPONSE_HEADERS })
 }
 
-/** Per-IP limiter. Returns a 429 response when over the limit, else null. */
-export function demoRateLimit(req: Request, bucket: string, max: number, windowMs: number): NextResponse | null {
+/**
+ * Per-IP limiter. Returns a 429 response when over the limit, else null. `body` lets a caller say
+ * something kinder than the generic line and tag it with a `code` its client can act on.
+ */
+export function demoRateLimit(
+  req: Request,
+  bucket: string,
+  max: number,
+  windowMs: number,
+  body?: { error: string; code: string },
+): NextResponse | null {
   const ip = clientIpFromHeaders(req.headers) ?? 'unknown'
   const r = rateLimit(`demo:${bucket}:${ip}`, max, windowMs)
   if (r.success) return null
-  return new NextResponse(JSON.stringify({ demo: true, error: 'Too many requests — try again in a minute.' }), {
+  return new NextResponse(JSON.stringify({ demo: true, error: 'Too many requests — try again in a minute.', ...body }), {
     status: 429,
     headers: { ...DEMO_RESPONSE_HEADERS, 'Retry-After': String(Math.ceil(windowMs / 1000)) },
   })

@@ -1,5 +1,12 @@
 import { demoError, demoRateLimit, demoResponse, withDemoContext } from '@/lib/demo-league/http'
-import { askDemoChimmy, takeDemoChimmyBudget, type DemoChimmyTurn } from '@/lib/demo-league/chimmy'
+import {
+  askDemoChimmy,
+  DEMO_CHIMMY_DAILY_CAP_MESSAGE,
+  DEMO_CHIMMY_PER_VISITOR,
+  DEMO_CHIMMY_PER_VISITOR_LIMIT_MESSAGE,
+  takeDemoChimmyBudget,
+  type DemoChimmyTurn,
+} from '@/lib/demo-league/chimmy'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +23,10 @@ const UNAVAILABLE_MESSAGE = "Chimmy couldn't get an answer through just now — 
  * question before the model sees them.
  */
 export async function POST(req: Request) {
-  const limited = demoRateLimit(req, 'chimmy', 8, 10 * 60_000)
+  const limited = demoRateLimit(req, 'chimmy', DEMO_CHIMMY_PER_VISITOR.max, DEMO_CHIMMY_PER_VISITOR.windowMs, {
+    error: DEMO_CHIMMY_PER_VISITOR_LIMIT_MESSAGE,
+    code: 'demo_limit',
+  })
   if (limited) return limited
   let message = ''
   let history: DemoChimmyTurn[] = []
@@ -38,7 +48,7 @@ export async function POST(req: Request) {
   if (!message.trim()) return demoError(400, 'Ask Chimmy something about the demo league.')
 
   return withDemoContext(async (ctx) => {
-    if (!takeDemoChimmyBudget()) return demoError(429, 'Demo Chimmy has answered its fill for today — sign up to keep asking.', { code: 'daily_cap' })
+    if (!takeDemoChimmyBudget()) return demoError(429, DEMO_CHIMMY_DAILY_CAP_MESSAGE, { code: 'daily_cap' })
     /*
      * 🛑 NEUTRAL, NOT ALIAS. A visitor who types a real manager's name must not get it back
      * rewritten as that manager's fake name — that would confirm who the alias is. Real names
