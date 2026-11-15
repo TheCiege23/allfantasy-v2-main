@@ -137,6 +137,29 @@ export function parseProviderRosterPositions(raw: unknown): { entries: Array<{ t
   return { entries, pairs }
 }
 
+/**
+ * `roster_positions` as one token per seat, whichever shape was stored: `["QB:1","RB:2"]` becomes
+ * `["QB","RB","RB"]`, and a Sleeper list comes back as it was (upper-cased).
+ *
+ * 🛑 A READER THAT COMPARES RAW ENTRIES SEES `"QB:1"`, NOT `"QB"`. The import preview did exactly that
+ * and told every ESPN manager "AF does not support these lineup spots yet: QB:1, RB:2, WR:2…" on an
+ * ordinary redraft league, which a commissioner read as "AllFantasy doesn't support redraft"
+ * (2026-11-15).
+ */
+export function expandProviderRosterPositions(raw: unknown): string[] {
+  const parsed = parseProviderRosterPositions(raw)
+  if (!parsed) {
+    return Array.isArray(raw) ? raw.map((v) => String(v ?? '').trim().toUpperCase()).filter(Boolean) : []
+  }
+  return parsed.entries.flatMap(({ token, count: n }) => Array.from({ length: Math.max(0, n) }, () => token))
+}
+
+/** A football provider slot name in this module's vocabulary (`D/ST` → DST, `BE` → bench), or null. */
+export function footballSlotSpec(token: string): { kind: SlotKind; name: string } | null {
+  const spec = FOOTBALL_SLOTS[String(token ?? '').trim().toUpperCase()]
+  return spec ? { kind: spec.kind, name: spec.name } : null
+}
+
 function count(value: unknown): number | null {
   if (value == null || value === '') return null
   const n = Number(value)

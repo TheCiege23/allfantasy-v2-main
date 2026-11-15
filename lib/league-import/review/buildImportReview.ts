@@ -44,6 +44,7 @@ const SLOT_LABELS: Record<string, string> = {
   WRRB_FLEX: 'Flex (RB/WR)',
   IDP_FLEX: 'IDP flex',
   BN: 'Bench',
+  BE: 'Bench',
   BENCH: 'Bench',
   IR: 'Injured reserve',
   RES: 'Injured reserve',
@@ -130,9 +131,20 @@ function yesNo(v: boolean | undefined): string {
   return v ? 'Yes' : 'No'
 }
 
+/**
+ * One entry per seat. ESPN, Yahoo, MFL and Fantrax store `SLOT:COUNT` pairs ("RB:2"); counting those
+ * raw showed a lineup as "RB:2 × 1" and an ESPN roster as 9 spots instead of 17.
+ */
+function seats(positions: string[]): string[] {
+  return positions.flatMap((p) => {
+    const m = /^(.+):(\d+)$/.exec(String(p).trim())
+    return m ? Array.from({ length: Number(m[2]) }, () => m[1]!) : [String(p)]
+  })
+}
+
 function countSlots(positions: string[]): Array<{ slot: string; count: number }> {
   const counts = new Map<string, number>()
-  for (const p of positions) {
+  for (const p of seats(positions)) {
     const label = labelRosterSlot(p)
     counts.set(label, (counts.get(label) ?? 0) + 1)
   }
@@ -141,7 +153,7 @@ function countSlots(positions: string[]): Array<{ slot: string; count: number }>
 
 /** Roster spots that hold active players (everything except IR and taxi). */
 function activeRosterSpots(positions: string[]): number {
-  return positions.filter((p) => !['IR', 'RES', 'TAXI'].includes(String(p).toUpperCase())).length
+  return seats(positions).filter((p) => !['IR', 'RES', 'TAXI'].includes(String(p).toUpperCase())).length
 }
 
 function pluralize(n: number, one: string, many = `${one}s`): string {
