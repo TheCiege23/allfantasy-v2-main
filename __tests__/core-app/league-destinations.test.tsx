@@ -103,7 +103,8 @@ describe('the rail, grouped by job', () => {
     const { groups } = shell()
     const group = (h: string) => groups.find((g) => g.heading === h)!.hrefs
     expect(group('This week')).toEqual(['/core/my-team?league=l1', '/core/matchup?league=l1', '/core/live?league=l1', '/core/waivers?league=l1'])
-    expect(group('League')).toEqual(['/core/standings?league=l1', '/core/schedule?league=l1', '/core/trades?league=l1', '/core/moves?league=l1'])
+    // No Moves (2026-11-14): it folded into Trades.
+    expect(group('League')).toEqual(['/core/standings?league=l1', '/core/schedule?league=l1', '/core/trades?league=l1'])
     expect(group('Plan ahead')).toContain('/core/season-outlook?league=l1')
     expect(group('Plan ahead')).toContain('/core/draft-hq?league=l1')
   })

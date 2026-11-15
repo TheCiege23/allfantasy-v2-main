@@ -127,6 +127,7 @@ import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import { MatchupPickerBlurb } from '@/components/core-app/MatchupPickerCopy'
 import { startTradesRead } from '@/lib/core-app/trades'
 import { TradesHistorySlot, completedHistoryOf } from '@/components/core-app/screens/TradesHistorySection'
+import { TradesLeagueActivity } from '@/components/core-app/screens/TradesLeagueActivity'
 import { getTradesBoard, pointBoardAtReachableLeagues } from '@/lib/core-app/tradesBoard'
 import { readTradesBoardSummary } from '@/lib/core-app/tradesBoardSummary'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
@@ -5080,6 +5081,12 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
                 ) : null
               }
               completedHistory={tradesStart ? completedHistoryOf(tradesStart.data) : []}
+              /* League activity (adds, drops, claims): what the Moves tab held before it folded in here. */
+              activity={
+                <Suspense fallback={null}>
+                  <TradesLeagueActivity leagueId={trades.league.id} language={language} />
+                </Suspense>
+              }
               edgeAccess={corePaywall?.competitive_edge ?? null}
               startWithOfferEntry={sp.enter === 'offer' && trades.league.platform === 'sleeper'}
             />

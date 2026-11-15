@@ -408,6 +408,8 @@ const nextConfig = {
 
   async redirects() {
     return [
+      // Moves folded into Trades (2026-11-14). The query string — ?league= — is passed through.
+      { source: '/core/moves', destination: '/core/trades', permanent: false },
       // Alias pages removed from build to stay under Vercel's 2048-route cap.
       { source: '/march-madness', destination: '/brackets', permanent: false },
       { source: '/march-madness/join', destination: '/brackets/join', permanent: false },

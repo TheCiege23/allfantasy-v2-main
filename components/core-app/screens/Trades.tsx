@@ -23,6 +23,7 @@ import { redraftGradeTone } from '@/lib/core-app/redraftCoreTrades'
 import LocalDateTime from '@/components/core-app/LocalDateTime'
 import { tradesLeagueGuideMessages } from '@/lib/core-app/messages/tradesLeagueGuide'
 import { readHistoryNotice, realizedNet } from '@/lib/core-app/tradesLeagueGuide'
+import { shortPickLabel } from '@/lib/core-app/messages/tradesActivity'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
@@ -329,9 +330,14 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                 {side.picks?.map((pick, j) => {
                   const value = values[side.received.length + j] ?? null
                   const drafted = side.pickDrafted?.[j] ?? null
+                  /*
+                    A pick is its own chip, like a player (2026-11-14). It used to trail the players as
+                    ", 2027 round 1" with its value right after, so the row read "2027 round 12,698" —
+                    round 1, worth 2,698.
+                  */
                   return (
-                    <span key={`${pick}-${j}`}>
-                      {side.received.length > 0 || j > 0 ? ', ' : ''}{pick}
+                    <span className="af-tr-player-asset af-tr-pick-asset" key={`${pick}-${j}`} data-testid="trade-pick-asset">
+                      <span className="af-tr-pick-label">{shortPickLabel(pick, language)}</span>
                       {drafted ? <span className="af-tr-pick-drafted"> ({copy('drafted')} {drafted})</span> : null}
                       {value != null ? <em className="af-tr-asset-value af-num">{Math.round(value).toLocaleString(getAppIntlLocale())}</em> : null}
                     </span>

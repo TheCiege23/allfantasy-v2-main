@@ -4,6 +4,10 @@ import { Trades } from '@/components/core-app/screens/Trades'
 import type { StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
 import type { TradeRecord, TradesData } from '@/lib/core-app/trades'
 import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
+import { cookies } from 'next/headers'
+import { resolveLanguage } from '@/lib/i18n/constants'
+import { TradesLeagueActivityView } from '@/components/core-app/screens/TradesLeagueActivityView'
+import type { ActivityRow } from '@/lib/core-app/tradesActivity'
 
 /**
  * DB-free render of ONE league's Trades tab (2026-11-13) inside the real AfCoreShell: the deadline
@@ -15,6 +19,8 @@ import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineC
  *   /e2e/trades-league-guide?state=last   the last week to trade
  *   /e2e/trades-league-guide?state=closed the deadline has passed
  *   /e2e/trades-league-guide?state=open   no deadline
+ *
+ * League activity (2026-11-14, from the retired Moves tab) is SAMPLE rows below, in the af_lang language.
  *
  * The rosters, offers and finder read live APIs, so in this harness they show their loading or empty
  * states; the header, switcher and history are rendered from the sample below.
@@ -97,6 +103,13 @@ const HISTORY: TradesData = {
   agentIdeas: { available: false, reason: 'No trade last night was near-even and good for both rosters.' },
 } as unknown as TradesData
 
+/** SAMPLE adds, drops and claims for League activity. Names are invented. */
+const ACTIVITY: ActivityRow[] = [
+  { id: 'a1', team: 'Sample Team Nine', kind: 'waiver', adds: ['Sample Linebacker (LB · SMA)'], drops: ['Sample Receiver (WR · SMB)'], bid: 7, at: '2026-11-12T15:00:00.000Z' },
+  { id: 'a2', team: 'Sample Team Four', kind: 'roster_move', adds: [], drops: ['Sample Back (RB · SMC)'], bid: null, at: '2026-11-11T15:00:00.000Z' },
+  { id: 'a3', team: 'Sample Team Two', kind: 'waiver', adds: ['Sample Corner (CB · SMD)'], drops: [], bid: null, at: '2026-11-10T15:00:00.000Z' },
+]
+
 const COUNTDOWN: Record<string, TradeDeadlineCountdown> = {
   weeks: { state: 'weeks', deadlineWeek: 11, currentWeek: 10, weeksLeft: 1 },
   last: { state: 'weeks', deadlineWeek: 11, currentWeek: 11, weeksLeft: 0 },
@@ -111,6 +124,7 @@ export default async function TradesLeagueGuideHarnessPage({
 }) {
   const sp = await searchParams
   const state = typeof sp.state === 'string' && sp.state in COUNTDOWN ? sp.state : 'weeks'
+  const language = resolveLanguage((await cookies()).get('af_lang')?.value ?? null)
   return (
     <AfCoreShell
       active="trades"
@@ -130,6 +144,7 @@ export default async function TradesLeagueGuideHarnessPage({
           deadlineCountdown={COUNTDOWN[state]}
           leagues={LEAGUES}
           history={<Trades data={HISTORY} hidePending />}
+          activity={<TradesLeagueActivityView rows={ACTIVITY} language={language} />}
           completedHistory={[]}
         />
       </div>

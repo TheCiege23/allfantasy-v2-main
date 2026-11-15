@@ -885,12 +885,7 @@ function baseNavItems(props: AfCoreShellProps): NavItem[] {
             glyph: '▦',
             href: `/core/schedule?league=${encodeURIComponent(props.selectedLeagueId)}`,
           },
-          {
-            key: 'moves' as const,
-            label: navLabel('moves'),
-            glyph: '⇆',
-            href: `/core/moves?league=${encodeURIComponent(props.selectedLeagueId)}`,
-          },
+          /* No Moves (2026-11-14): it folded into Trades, and /core/moves lands there (next.config.js). */
         ]
       : []),
     /* Projects from played weeks — nothing to project from yet. */

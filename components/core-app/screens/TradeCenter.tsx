@@ -152,20 +152,6 @@ function assetTypesFor(leagueType: string | null | undefined): { types: typeof A
   return { types: ASSET_TYPES.filter((a) => keys.has(a.key)), scoped: true }
 }
 
-/** Single letter for a platform mark, matching the rail's PLATFORM_MARK. */
-const PLATFORM_MARK: Record<string, string> = {
-  sleeper: 'S',
-  espn: 'E',
-  yahoo: 'Y',
-  cbs: 'C',
-  mfl: 'M',
-  fantrax: 'F',
-  fleaflicker: 'L',
-}
-function platformMark(platform: string): string {
-  return PLATFORM_MARK[platform.toLowerCase()] ?? platform.charAt(0).toUpperCase()
-}
-
 type Line = {
   name: string
   position?: string | null
@@ -796,6 +782,11 @@ export function TradeCenter(props: {
    */
   history?: ReactNode
   /**
+   * League activity — adds, drops and claims — streamed under the history (2026-11-14). It is what the
+   * Moves tab had that Trades did not; Moves is gone and /core/moves lands here (next.config.js).
+   */
+  activity?: ReactNode
+  /**
    * The league's completed Sleeper trades, merged into the offers fold and the timeline. A promise
    * when the page streams them (`/core/trades`: the history read is the slow one, so the Trade Center
    * paints without it and merges them in when they land); a list when the caller already has them.
@@ -1122,7 +1113,7 @@ export function TradeCenter(props: {
       .sort((a, b) => (rankOf.get(a.r.rosterId) ?? Infinity) - (rankOf.get(b.r.rosterId) ?? Infinity) || a.i - b.i)
       .map(({ r }) => r)
   })()
-  const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
+  const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? copy('Their team')
   const valueActions = props.valueActions ?? []
 
   /*
@@ -1899,24 +1890,13 @@ export function TradeCenter(props: {
       />
       )}
 
-      {props.league && !props.embedded ? (
+      {/*
+        2026-11-14: no longer the league's name, format and team count — the eyebrow and the top bar say
+        those. The row stays only for what nothing else says: the opponent chip and a dynasty's separate
+        pick-trade deadline.
+      */}
+      {props.league && !props.embedded && (props.opponentLabel || props.pickTradeDeadline) ? (
         <div className="af-tc-context">
-          {props.platform ? (
-            <span
-              className="af-tc-mark af-platform"
-              data-platform={props.platform.toLowerCase()}
-              aria-hidden
-            >
-              {platformMark(props.platform)}
-            </span>
-          ) : null}
-          <span className="af-tc-context-name">{props.league.name}</span>
-          <span className="af-tc-context-meta">
-            {[props.league.format, props.league.teamCount ? `${props.league.teamCount} ${copy('teams')}` : null]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-          <span className="af-tc-spacer" />
           {props.opponentLabel ? <span className="af-tc-chip">{props.opponentLabel}</span> : null}
           {/* The trade deadline is the headline now; only a dynasty's separate pick-trade rule stays here. */}
           <PickTradeDeadlineChip view={props.pickTradeDeadline} className="af-tc-chip af-tc-chip--deadline" />
@@ -1940,7 +1920,8 @@ export function TradeCenter(props: {
       ) : null}
 
       {/* Every league at a glance — folded to one line; see the strip's own header. */}
-      {props.leagues && props.leagues.length > 0 ? (
+      {/* Inside a league the top bar switches leagues (2026-11-14); the fold stays on the all-leagues page. */}
+      {props.leagues && props.leagues.length > 0 && !props.league ? (
         <details className="af-tc-switcher">
           <summary>{lg.switchLeague} <span>{lg.leaguesConnected(props.leagues.length)}</span></summary>
           {/*
@@ -1949,18 +1930,17 @@ export function TradeCenter(props: {
             offers" — the same non-answer 82 times. Offers waiting still get a tile (`waitingOnly`), and
             the Sleeper note is said once there.
           */}
-          <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} waitingOnly />
-          <TradeLeagueSwitchList leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
+          {/* Only drawn with no league selected, so there is no active league to mark. */}
+          <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} waitingOnly />
+          <TradeLeagueSwitchList leagues={props.leagues} activeLeagueId={null} />
         </details>
       ) : null}
 
       {/* Dynasty only — the board is measured on the dynasty chart. Folded so the builder still leads. */}
-      {props.dynasty && !props.embedded ? (
-        <details className="af-tc-switcher" data-testid="trade-center-market">
-          <summary>{copy('What real trades say')} <span>{copy('values from completed trades')}</span></summary>
-          <TradeMarketMovers limit={5} heading={copy('Risers and fallers from real trades')} testId="trade-center-market-movers" />
-        </details>
-      ) : null}
+      {/*
+        "What real trades say" (market risers and fallers) is gone from a league's Trades tab (2026-11-14):
+        it is the whole market, not this league, and it sat between the headline and the builder.
+      */}
 
       {/*
         ⚠ FORMAT BLOCKERS LEAD THE PAGE. This is a correctness statement rather
@@ -2035,6 +2015,43 @@ export function TradeCenter(props: {
         card; this row is the ranked shortcut to the same choice, on the league page only.
       */}
       <div ref={builderTopRef} aria-hidden />
+      {/*
+        ── CREATE A TRADE (2026-11-14) ─────────────────────────────────────────────────────────────
+        The builder gets a heading, and the screenshot upload sits beside it. It used to live only in the
+        inbox's Sleeper note, inside "Offers, drafts and alerts", inside "More ways to find a trade": two
+        folds deep, so nobody found it. Same reader (readOfferScreenshot), same result: both sides filled
+        in, ready to analyze.
+      */}
+      {props.league?.id && !props.embedded ? (
+        <div className="af-tc-create" data-testid="trade-create">
+          <div className="af-tc-create-head">
+            <h2 className="af-tc-create-title">{lg.createTitle}</h2>
+            <label className="af-btn af-btn--ghost af-tc-create-upload" aria-disabled={screenshotRead.busy || undefined}>
+              {screenshotRead.busy ? lg.readingShot : lg.uploadShot}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="sr-only"
+                disabled={screenshotRead.busy}
+                data-testid="trade-create-screenshot-input"
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0]
+                  // Cleared so choosing the same file again still fires.
+                  e.currentTarget.value = ''
+                  if (file) readOfferScreenshot(file)
+                }}
+              />
+            </label>
+          </div>
+          {screenshotRead.error ? (
+            <p className="af-tc-create-note" role="alert">{copy(screenshotRead.error)}</p>
+          ) : screenshotRead.done ? (
+            <p className="af-tc-create-note" role="status">{copy(screenshotRead.done)}</p>
+          ) : (
+            <p className="af-tc-create-note">{lg.uploadHint}</p>
+          )}
+        </div>
+      ) : null}
       {otherRosters.length > 0 && !props.embedded ? (
         <div className="af-tc-partner">
           <span className="af-label">{copy('Trading with')}</span>
@@ -2448,7 +2465,7 @@ export function TradeCenter(props: {
           onClick={analyze}
           disabled={busy || (giveAssets.length === 0 && getAssets.length === 0)}
         >
-          {busy ? 'Analyzing…' : 'Analyze this trade'}
+          {copy(busy ? 'Analyzing…' : 'Analyze this trade')}
         </button>
         <button
           type="button"
@@ -2954,7 +2971,8 @@ export function TradeCenter(props: {
         team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
       */}
       {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
-        <details className="af-tc-fold af-tc-rebuild-fold" open={rosterData?.rebuildPlan?.trigger === 'eliminated' || undefined}>
+        /* Folded by default (2026-11-14): open, it pushed your offers and the trade history a screen down. */
+        <details className="af-tc-fold af-tc-rebuild-fold">
           <summary>
             <span>{copy('Rebuild plan')}</span>
             <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
@@ -3187,6 +3205,7 @@ export function TradeCenter(props: {
           {props.history}
         </div>
       ) : null}
+      {props.activity ? <div className="af-tc-mstep-wrap">{props.activity}</div> : null}
     </div>
   )
 }
