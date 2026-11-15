@@ -197,7 +197,7 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
                     </span>
                     {delta != null ? (
                       <span className="af-olk-move-delta af-olk-scn-delta af-num" data-dir={delta >= 0.05 ? 'up' : delta <= -0.05 ? 'down' : 'flat'}>
-                        {signedPts(delta)} pts
+                        {signedPts(delta)}%
                       </span>
                     ) : (
                       <span className="af-olk-g">{m.baseline}</span>

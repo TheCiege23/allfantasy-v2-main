@@ -22,7 +22,7 @@ export const outlookPartsMessages = defineMessages({
     openLeague: 'Open the league',
     lineupWeek: (week: number | string | null) => `Lineup · week ${week}`,
     waiversRest: 'Waivers · rest of season',
-    playoffPts: 'playoff pts',
+    playoffPts: 'playoff odds',
     title: 'title',
     ptsPerWeek: 'pts/wk',
     setLineup: 'Set lineup',
@@ -31,6 +31,8 @@ export const outlookPartsMessages = defineMessages({
     safeIn: 'gets you in 9 times in 10',
     likelyIn: 'gets you in more often than not',
     winsForSeed: (seed: string) => `wins for the ${seed} seed, usually`,
+    /** "7 to 9", never "7–9", which beside "9–5" reads as a win-loss record (2026-11-14). */
+    winsRange: (lo: number, hi: number) => `${lo} to ${hi}`,
     pointsForSeed: (seed: string) => `points for the ${seed} seed`,
     onPace: (record: string, points: string | null) =>
       `On pace for ${record}${points != null ? ` and about ${points} points` : ''} — the middle of your simulated finishes.`,
@@ -118,7 +120,7 @@ export const outlookPartsMessages = defineMessages({
     openLeague: 'Abrir la liga',
     lineupWeek: (week) => `Alineación · semana ${week}`,
     waiversRest: 'Agentes libres · resto de la temporada',
-    playoffPts: 'pts de playoffs',
+    playoffPts: 'prob. de playoffs',
     title: 'título',
     ptsPerWeek: 'pts/sem',
     setLineup: 'Ajustar alineación',
@@ -126,6 +128,7 @@ export const outlookPartsMessages = defineMessages({
     safeIn: 'te clasifica 9 de cada 10 veces',
     likelyIn: 'te clasifica más de la mitad de las veces',
     winsForSeed: (seed) => `victorias para el ${seed} puesto, normalmente`,
+    winsRange: (lo, hi) => `${lo} a ${hi}`,
     pointsForSeed: (seed) => `puntos para el ${seed} puesto`,
     onPace: (record, points) =>
       `Vas camino de ${record}${points != null ? ` y unos ${points} puntos` : ''}: el punto medio de tus finales simulados.`,

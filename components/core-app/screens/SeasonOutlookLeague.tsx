@@ -88,24 +88,36 @@ export type SeasonOutlookLeagueProps = {
   history?: OddsHistoryPoint[] | null
 }
 
+/*
+ * 2026-11-14: four tabs, down from seven. Roster risk sits under Moves, the schedule-strength table under
+ * All teams, and the assumptions moved to a fold under the panel — "Assumptions" was a tab nobody
+ * opened to find an answer.
+ */
 const TABS = [
   { key: 'path', label: 'tabPath' },
   { key: 'whatif', label: 'tabWhatif' },
   { key: 'moves', label: 'tabMoves' },
-  { key: 'schedule', label: 'tabSchedule' },
-  { key: 'roster', label: 'tabRoster' },
-  { key: 'standings', label: 'tabStandings' },
-  { key: 'basis', label: 'tabBasis' },
+  { key: 'teams', label: 'tabTeams' },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
 
 const TAB_PARAM = 'so_tab'
 
+/** Links saved before the merge still land on the tab that now holds what they pointed at. */
+const OLD_TAB: Record<string, TabKey> = { roster: 'moves', schedule: 'teams', standings: 'teams', basis: 'path' }
+
 function readTab(): TabKey | null {
   if (typeof window === 'undefined') return null
   const v = new URLSearchParams(window.location.search).get(TAB_PARAM)
+  if (v && OLD_TAB[v]) return OLD_TAB[v]
   return TABS.some((t) => t.key === v) ? (v as TabKey) : null
+}
+
+/** Whether the stored odds moved enough to be worth a chart: a flat line at 0% says nothing. */
+function oddsMoved(history: OddsHistoryPoint[]): boolean {
+  const spread = (k: 'playoffPct' | 'titlePct') => Math.max(...history.map((p) => p[k])) - Math.min(...history.map((p) => p[k]))
+  return spread('playoffPct') >= 2 || spread('titlePct') >= 2
 }
 
 export function SeasonOutlookLeague({ league, swing, basis, priorities = [], freshness = null, lineups = null, history = null }: SeasonOutlookLeagueProps) {
@@ -171,10 +183,16 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
   const cutTeam = league.teams.find((t) => t.seed === league.playoffTeams) ?? null
   const gamesFromCut = cutTeam ? you.wins - cutTeam.wins : null
   const topMove = focus?.moves.find((m) => m.playoffDelta > 0) ?? null
+  /*
+   * The loader's "what decides it" sentence, only where the headline has not already said it: clinched,
+   * eliminated, a long shot ("A long-shot forecast; a nonzero probability is not mathematical
+   * elimination.") and a near-certainty all read as the headline did, in jargon.
+   */
+  const decidesSaysMore = you.status == null && league.weeksRemaining > 0 && you.playoffPct > 1 && you.playoffPct < 99
 
   return (
     <div className="af-sol af-olk">
-      <Header league={league} freshness={freshness} />
+      <Header league={league} freshness={freshness} title={m.headline(you.status, you.playoffPct)} />
 
       {/* ── The forecast ─────────────────────────────────────────────── */}
       <section className="af-olk-hero" aria-labelledby="so-forecast">
@@ -226,19 +244,12 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             sub={m.titleSub}
             tone="neutral"
           />
-          <OddsTile
-            icon="miss"
-            label={you.status === 'eliminated' ? m.eliminated : m.missPlayoffs}
-            value={you.missPct}
-            range={you.range ? { lo: 100 - you.range.playoff.hi, hi: 100 - you.range.playoff.lo } : null}
-            sub={m.missSub}
-            tone="invert"
-          />
+          {/* 2026-11-14: no "Miss the playoffs" tile — it was 100 minus the playoffs tile, said again. */}
         </div>
 
-        <p className="af-olk-decides">{say(league.whatDecidesIt)}</p>
+        {decidesSaysMore ? <p className="af-olk-decides">{say(league.whatDecidesIt)}</p> : null}
 
-        {history && history.length >= 2 ? <OddsHistoryChart points={history} /> : null}
+        {history && history.length >= 2 && oddsMoved(history) ? <OddsHistoryChart points={history} /> : null}
 
         <div className="af-olk-hero-grid">
           <div className="af-olk-next">
@@ -249,7 +260,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
                 <p className="af-olk-next-d">
                   {say(topMove.detail)}{' '}
                   <b className="af-num">
-                    {signedPts(topMove.playoffDelta)} {m.playoffPts}
+                    {signedPts(topMove.playoffDelta)}% {m.playoffPts}
                   </b>
                 </p>
                 <Link className="af-btn af-olk-next-cta" href={topMove.href}>
@@ -264,9 +275,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
                 </p>
                 <p className="af-olk-next-d">
                   {m.worthPrefix}
-                  <b className="af-num">
-                    {swing.swing.toFixed(0)} {m.points}
-                  </b>
+                  <b className="af-num">{swing.swing.toFixed(0)}%</b>
                   {m.swingOdds(pct(swing.ifWin), pct(swing.ifLose))}
                 </p>
                 <Link className="af-btn af-olk-next-cta" href={`/core/matchup?league=${encodeURIComponent(league.leagueId)}`}>
@@ -370,36 +379,40 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             </p>
             <h3 className="af-label">{m.everyFactor}</h3>
             {focus ? <DriverList drivers={focus.drivers} /> : null}
+            <h3 className="af-label" data-testid="olk-roster-risk">{m.rosterRisk}</h3>
+            {focus?.durability ? (
+              <DurabilityPanel d={focus.durability} />
+            ) : (
+              <p className="af-olk-empty">
+                {focus?.scenario.refusal ?? focus?.notes[0]
+                  ? say((focus?.scenario.refusal ?? focus?.notes[0])!)
+                  : m.rosterRiskUnavailable}
+              </p>
+            )}
           </>
-        ) : tab === 'schedule' ? (
-          <SchedulePanel teams={league.teams} />
-        ) : tab === 'roster' ? (
-          focus?.durability ? (
-            <DurabilityPanel d={focus.durability} />
-          ) : (
-            <p className="af-olk-empty">
-              {focus?.scenario.refusal ?? focus?.notes[0]
-                ? say((focus?.scenario.refusal ?? focus?.notes[0])!)
-                : m.rosterRiskUnavailable}
-            </p>
-          )
-        ) : tab === 'standings' ? (
-          <Standings league={league} lineups={lineups} />
         ) : (
           <>
-            <p className="af-sol-basis">{say(basis)}</p>
-            <AssumptionsPanel
-              a={league.assumptions}
-              nowMs={nowMs}
-              extra={{
-                branchIterations: focus?.branchIterations,
-                basisWeek: focus?.scenario.basisWeek ?? null,
-                notes: focus?.notes,
-              }}
-            />
+            <Standings league={league} lineups={lineups} />
+            <h3 className="af-label" data-testid="olk-schedule-strength">{m.scheduleStrength}</h3>
+            <SchedulePanel teams={league.teams} />
           </>
         )}
       </div>
+
+      {/* The assumptions, folded: the basis of every number above, for whoever wants to check it. */}
+      <details className="af-sol-basis-fold" data-testid="olk-how-worked-out">
+        <summary>{m.howWorkedOut}</summary>
+        <p className="af-sol-basis">{say(basis)}</p>
+        <AssumptionsPanel
+          a={league.assumptions}
+          nowMs={nowMs}
+          extra={{
+            branchIterations: focus?.branchIterations,
+            basisWeek: focus?.scenario.basisWeek ?? null,
+            notes: focus?.notes,
+          }}
+        />
+      </details>
 
       {elsewhere.length > 0 ? (
         <section className="af-sol-attention">
@@ -426,9 +439,12 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
 function Header({
   league,
   freshness,
+  title,
 }: {
   league: OutlookLeague
   freshness: SeasonOutlookLeagueProps['freshness']
+  /** The answer, when there is a team to answer for; "Season Outlook" otherwise. */
+  title?: string
 }) {
   const m = useMessages(seasonOutlookLeagueMessages)
   return (
@@ -438,8 +454,8 @@ function Header({
       titleRowClassName="af-olk-titlerow"
       titleClassName="af-sol-title"
       subClassName="af-sol-sub"
-      eyebrow={league.leagueName}
-      title={m.seasonOutlookTitle}
+      eyebrow={title ? `${m.seasonOutlookTitle} · ${league.leagueName}` : league.leagueName}
+      title={title ?? m.seasonOutlookTitle}
       titleAside={
         freshness ? (
           <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
@@ -502,13 +518,7 @@ function Clinch({ league, swing }: { league: OutlookLeague; swing: SwingMatchup 
           </p>
         </div>
 
-        <div className="af-sol-branch" data-tone="accent">
-          <span className="af-label">{m.swing}</span>
-          <span className="af-sol-branch-v af-num">{swing.swing.toFixed(0)} pts</span>
-          <p className="af-sol-branch-b">
-            {m.swingNote}
-          </p>
-        </div>
+        {/* 2026-11-14: no "Swing" tile — it was "if you win" minus "if you lose", said a third time. */}
       </div>
 
       <Link href={`/core/matchup?league=${encodeURIComponent(league.leagueId)}`} className="af-btn af-sol-clinch-cta">
