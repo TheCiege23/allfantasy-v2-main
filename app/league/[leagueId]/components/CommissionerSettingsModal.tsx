@@ -39,8 +39,6 @@ import {
   isC2cSettingsTab,
 } from './settings/SettingsNav'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
-import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
-import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { IDPCapPanel } from '@/app/idp/components/settings/IDPCapPanel'
 import { KeeperCommissionerDashboard } from './KeeperCommissionerDashboard'
@@ -659,11 +657,9 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'zombie_ai' ? (
             <ZombieAIPanel hasAfSub={hasSub} />
           ) : activeTab === 'idp_roster' ? (
-            <IDPRosterPanel />
-          ) : activeTab === 'idp_scoring' ? (
-            <IDPScoringPanel />
-          ) : activeTab === 'idp_display' ? (
-            <IDPDisplayPanel />
+            <div className="px-6 py-6">
+              <IDPRosterPanel leagueId={leagueId} canEdit={canEdit} />
+            </div>
           ) : activeTab === 'idp_ai' ? (
             <IDPAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={payload?.canEdit ?? false} />
           ) : activeTab === 'idp_cap' ? (
