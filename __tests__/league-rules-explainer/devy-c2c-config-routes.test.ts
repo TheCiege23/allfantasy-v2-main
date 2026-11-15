@@ -10,7 +10,10 @@ const h = vi.hoisted(() => ({
   publish: vi.fn(),
   upsertDevy: vi.fn(),
   upsertC2C: vi.fn(),
+  league: { leagueVariant: 'merged_devy_c2c', sport: 'NFL' } as { leagueVariant: string; sport: string },
 }))
+// The C2C route reads the league's sport: basketball refuses settings that stop it scoring (lib/c2c/basketballC2CRules.ts).
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: vi.fn(async () => h.league) } } }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'U1' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: vi.fn(async () => true) }))
@@ -33,6 +36,7 @@ const ctx = { params: Promise.resolve({ leagueId: 'L1' }) }
 beforeEach(() => {
   vi.clearAllMocks()
   h.order = []
+  h.league = { leagueVariant: 'merged_devy_c2c', sport: 'NFL' }
   h.read.mockImplementation(async () => { h.order.push('read'); return { rookieDraftRounds: 4 } })
   h.mirror.mockImplementation(async () => { h.order.push('mirror') })
   h.publish.mockImplementation(async () => { h.order.push('publish') })
@@ -49,5 +53,23 @@ describe.each([
     expect(h.order).toEqual(['read', 'write', 'mirror', 'publish'])
     expect(h.mirror).toHaveBeenCalledWith('L1', expect.objectContaining({ rookieDraftRounds: 3, rookieDraftType: 'snake' }))
     expect(h.publish).toHaveBeenCalledWith({ leagueId: 'L1', actorUserId: 'U1', section, before: { rookieDraftRounds: 4 } })
+  })
+})
+
+describe('basketball Campus to Canton (lib/c2c/basketballC2CRules.ts)', () => {
+  it('refuses college best ball and non-unified standings, and writes nothing', async () => {
+    h.league = { leagueVariant: 'merged_devy_c2c', sport: 'NBA' }
+    for (const body of [{ bestBallCollege: true }, { standingsModel: 'hybrid' }, { standingsModel: 'separate', taxiSize: 3 }]) {
+      const res = await c2cPatch(req('PATCH', body), ctx)
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toContain('Basketball Campus to Canton')
+    }
+    expect(h.upsertC2C).not.toHaveBeenCalled()
+  })
+  it('lets a stuck league turn them back off, and leaves football alone', async () => {
+    h.league = { leagueVariant: 'merged_devy_c2c', sport: 'NBA' }
+    expect((await c2cPatch(req('PATCH', { bestBallCollege: false, standingsModel: 'unified' }), ctx)).status).toBe(200)
+    h.league = { leagueVariant: 'merged_devy_c2c', sport: 'NFL' }
+    expect((await c2cPatch(req('PATCH', { bestBallCollege: true, standingsModel: 'hybrid' }), ctx)).status).toBe(200)
   })
 })
