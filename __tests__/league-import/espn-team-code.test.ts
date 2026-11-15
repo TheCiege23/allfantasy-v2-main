@@ -190,6 +190,31 @@ describe('end to end through the real NFL capture, with no cookies', () => {
     expect(result.sourceManagerId).toBe(owner)
   })
 
+  it('a leaguemate who is NOT the commissioner passes the commit gate as a member with their code', async () => {
+    // Find a team ESPN does not flag as commissioner, from the capture itself.
+    serve(fixture)
+    const plain = await fetchEspnLeagueForImport('friend', '2026:123456', { includePreviousSeasons: false })
+    const commish = new Set((plain.commissionerTeamIds ?? []).map(String))
+    const team = (fixture as any).teams.find((t: any) => !commish.has(String(t.id)) && t.owners?.length)
+    expect(team).toBeTruthy()
+    vi.unstubAllGlobals()
+
+    serve(leagueWithAbbrev(team.id, espnTeamCodeFor('friend', '123456')!))
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const result = await assertImportCommissioner({
+      appUserId: 'friend',
+      provider: 'espn',
+      sourceLeagueId: '2026:123456',
+      requireCommissioner: true,
+    })
+    // Exactly what the commit needs to attach them to their team in the commissioner's copy
+    // (`claimExistingLeagueForMember` matches on this id), and no commissioner claim.
+    expect(result.ok).toBe(true)
+    expect(result.verification).toBe('member')
+    expect(result.isCommissioner).not.toBe(true)
+    expect(result.sourceManagerId).toBe(team.owners[0])
+  })
+
   it('and without the code it refuses exactly as before (control)', async () => {
     serve(fixture)
     const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')

@@ -993,6 +993,16 @@ export function ImportV4({
   const [error, setError] = useState<string | null>(null)
   /* The step an unverified account was refused at, or null. Cleared by any other outcome. */
   const [verifyGate, setVerifyGate] = useState<VerifyResume | null>(null)
+  /*
+   * A PUBLIC ESPN league its commissioner already brought to AllFantasy, reached by a leaguemate with
+   * no proof (the source id). The no-cookie "pick your team" import refuses it on purpose
+   * (`LEAGUE_RUN_BY_COMMISSIONER` in espnPublicMemberImport.ts): that league is run by a person, and
+   * a picked team proves nothing. What it needs is the same proof the commissioner gave, and on a
+   * phone that is the team code. Once the code is on their team the preview's gate finds it, the
+   * commit attaches them to their own team in the commissioner's copy
+   * (`claimExistingLeagueForMember`), and nothing here is trusted on its own.
+   */
+  const [espnJoinProof, setEspnJoinProof] = useState<string | null>(null)
   const [verifyResuming, setVerifyResuming] = useState(false)
   /* Fantrax Secret ID: stored via the same encrypted `leagueAuth` row every other
      provider uses, never held in component state after it is saved. */
@@ -1455,6 +1465,16 @@ export function ImportV4({
           })
           return
         }
+        if (provider === 'espn' && res.code === 'LEAGUE_RUN_BY_COMMISSIONER') {
+          /*
+           * Their invite link landed them here, and this used to end with "ask them for the invite
+           * link" — the link they had just used. Re-open the preview in join mode instead; the
+           * team-code panel below takes it from there.
+           */
+          setEspnJoinProof(sourceId)
+          await runPreview(sourceId, attested)
+          return
+        }
         setError(res.error || 'We could not finish that import.')
         setPhase({ k: 'idle' })
         return
@@ -1518,7 +1538,7 @@ export function ImportV4({
     // `leagues` joins the deps for the sport lookup above. Safe: runCommit is
     // referenced only from onClick handlers, never from an effect's dep array,
     // so a new identity per discovery re-runs nothing.
-    [provider, leagues, espnConnected]
+    [provider, leagues, espnConnected, runPreview]
   )
 
   /**
@@ -3403,7 +3423,7 @@ export function ImportV4({
             Only for a public league we could read but not prove membership in. "ESPN runs it" and
             "someone else" import with no cookies as a member; "I'm the commissioner" needs proof.
           */}
-          {previewImportState(provider, phase).espnAsk ? (
+          {previewImportState(provider, phase).espnAsk && espnJoinProof !== phase.sourceId ? (
             <fieldset className="af-im-runby" data-testid="import-espn-run-by">
               <legend className="af-label">Who&rsquo;s the commissioner of this league on ESPN?</legend>
               {ESPN_RUN_BY_OPTIONS.map((o) => (
@@ -3504,6 +3524,18 @@ export function ImportV4({
               />
             </>
           ) : null}
+          {previewImportState(provider, phase).espnAsk && espnJoinProof === phase.sourceId ? (
+            <div data-testid="import-espn-join-proof">
+              <p className="af-im-field-help" role="status">
+                <strong>Your commissioner already set this league up on AllFantasy.</strong> Confirm which
+                team is yours and you&rsquo;ll join their league on your own team.
+              </p>
+              <EspnTeamCodeVerify
+                leagueInput={phase.sourceId}
+                onVerified={() => void runPreview(phase.sourceId, phase.attested)}
+              />
+            </div>
+          ) : null}
           {/*
             ── Are you the commissioner? ───────────────────────────────────────────
             Only when the server says it cannot tell (Fantrax reports no commissioner). Unticked by
@@ -3547,7 +3579,9 @@ export function ImportV4({
                 )
               }}
             >
-              {importButtonLabel(provider, phase)}
+              {previewImportState(provider, phase).espnAsk && espnJoinProof === phase.sourceId
+                ? 'Confirm your team first'
+                : importButtonLabel(provider, phase)}
             </button>
             <button
               type="button"
