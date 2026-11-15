@@ -10,6 +10,7 @@
  * Connected to real API endpoints for all actions.
  */
 
+import { requestScheduleRebuild } from '@/lib/schedule-runtime/rebuildScheduleRequest'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Lock, Unlock, Check } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -521,28 +522,32 @@ export function CommissionerControlPanel({ leagueId }: Props) {
           <h3 className="text-[16px] font-bold text-white">{t('commControl.editSchedule')}</h3>
           <p className="mt-0.5 text-[12px] text-white/40">{t('commControl.editScheduleDesc')}</p>
         </div>
-        <p className="text-[12px] text-white/50">
-          {t('commControl.scheduleNote')}
+        <p className="text-[12px] text-white/50" data-testid="schedule-rebuild-note">
+          {t('commControl.rebuildScheduleNote')}
         </p>
+        {/* 🛑 This sent a key the schedule-settings PUT ignores and always reported success (2026-11-15). It now
+            rebuilds through the schedule route and shows what the server said (lib/schedule-runtime/rebuildScheduleRequest.ts). */}
         <button type="button"
+          data-testid="schedule-rebuild-button"
           onClick={async () => {
             setActionLoading(true)
+            setError(null)
             try {
-              await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/schedule`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ regenerate: true }),
-              })
-              setSuccess(t('commControl.scheduleUpdated'))
-              setTimeout(() => setSuccess(null), 3000)
-            } catch { setError(t('commControl.scheduleFailed')) }
-            finally { setActionLoading(false) }
+              const outcome = await requestScheduleRebuild(leagueId, (message) => window.confirm(message))
+              if (outcome.ok) {
+                setSuccess(t('commControl.scheduleUpdated'))
+                setTimeout(() => setSuccess(null), 3000)
+              } else if (!outcome.cancelled) {
+                setError(outcome.message ?? t('commControl.scheduleFailed'))
+              }
+            } finally { setActionLoading(false) }
           }}
           disabled={actionLoading}
           className="w-full rounded-lg bg-[#1a2744] px-4 py-3 text-[12px] font-bold uppercase tracking-wide text-white hover:bg-[#1e2d52] disabled:opacity-50 border border-white/10">
-          {t('commControl.editSchedule')}
+          {t('commControl.rebuildSchedule')}
         </button>
         {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{success}</div>}
+        {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{error}</div>}
       </div>
     )
   }

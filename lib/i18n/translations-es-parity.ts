@@ -2299,7 +2299,7 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.lockRoster": "Bloquear Plantilla",
   "commControl.lockRosterDesc": "Bloquear a un equipo de hacer transacciones de plantilla.",
   "commControl.editSchedule": "Editar Matchups del Calendario",
-  "commControl.editScheduleDesc": "Cambiar matchups para cualquier semana. (Solo permitido en temporada regular)",
+  "commControl.editScheduleDesc": "Vuelve a armar los matchups de las semanas que no han empezado. (Solo temporada regular)",
   "commControl.back": "Atrás",
   "commControl.recalculate": "Recalcular Todos los Récords de Matchups para la Semana {{week}}",
   "commControl.selectTeam": "Seleccionar un equipo para ver la plantilla",
@@ -2337,6 +2337,8 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.scheduleNote": "La edición del calendario está disponible a través de la API de calendario de la liga. Los cambios se reflejarán en todos los matchups, clasificaciones y proyecciones.",
   "commControl.scheduleUpdated": "Calendario actualizado.",
   "commControl.scheduleFailed": "No se pudo actualizar el calendario",
+  "commControl.rebuildSchedule": "Rehacer las semanas restantes",
+  "commControl.rebuildScheduleNote": "Las semanas que ya empezaron no cambian. Las demás reciben nuevos matchups y el cambio queda en el registro de la liga.",
 
   // ─── LEAGUE DUES TRACKER ───
   "dues.title": "Seguimiento de Cuotas de Liga",
