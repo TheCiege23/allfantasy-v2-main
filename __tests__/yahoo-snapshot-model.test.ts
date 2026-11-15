@@ -149,6 +149,69 @@ describe('checklist and merge', () => {
   })
 })
 
+describe('matching a roster to its standings team', () => {
+  // Measured on a real league: standings say "4th & Short Darren", the roster page reads as "4th & Short".
+  const withNames = (names: string[]) =>
+    mergeYahooSnapshotPage(mergeYahooSnapshotPage(emptyYahooSnapshot(LEAGUE), settings), {
+      kind: 'standings',
+      teams: names.map((teamName, i) => ({ rank: i + 1, teamName, wins: 0, losses: 0, ties: 0, pointsFor: 0 })),
+    })
+  const pasteRoster = (s: YahooLeagueSnapshot, teamName: string) => mergeYahooSnapshotPage(s, { ...roster, teamName })
+
+  it('matches a roster whose name is the start of exactly one team name', () => {
+    const s = pasteRoster(withNames(['4th & Short Darren', 'G8', 'Overtime Joe']), '4th & Short')
+    const c = yahooSnapshotChecklist(s)
+    expect(c.teams.map((t) => t.hasRoster)).toEqual([true, false, false])
+    expect(c.unmatchedRosters).toEqual([])
+    const p = buildYahooSnapshotPayload(s)
+    expect(p.teams[0]!.rosterFetchStatus).toBe('fetched')
+    expect(p.teams[0]!.rosterPlayerIds).toHaveLength(4)
+  })
+
+  it('matches the other way round too: the roster name carries the extra word', () => {
+    const s = pasteRoster(withNames(['Overtime', 'G8']), 'Overtime Joe')
+    expect(yahooSnapshotChecklist(s).teams.map((t) => t.hasRoster)).toEqual([true, false])
+  })
+
+  it('does not guess when two teams start with the same name', () => {
+    const s = pasteRoster(withNames(['Red Zone Andrew', 'Red Zone Bob']), 'Red Zone')
+    const c = yahooSnapshotChecklist(s)
+    expect(c.teams.every((t) => !t.hasRoster)).toBe(true)
+    expect(c.unmatchedRosters).toEqual(['Red Zone'])
+    expect(buildYahooSnapshotPayload(s).teams.every((t) => t.rosterFetchStatus === 'failed')).toBe(true)
+  })
+
+  it('only matches at a word boundary, never mid-word', () => {
+    const s = pasteRoster(withNames(['G8 Nation', 'Overtime Joe']), 'G')
+    expect(yahooSnapshotChecklist(s).unmatchedRosters).toEqual(['G'])
+  })
+
+  it('lets an exact name win, and never gives one team two rosters', () => {
+    let s = withNames(['Pass Rush', 'Pass Rush William'])
+    s = pasteRoster(s, 'Pass Rush')
+    s = mergeYahooSnapshotPage(s, { ...roster, teamName: 'Pass Rush William', players: roster.players.slice(0, 1) })
+    const p = buildYahooSnapshotPayload(s)
+    expect(p.teams.map((t) => t.rosterPlayerIds.length)).toEqual([4, 1])
+  })
+
+  it('does not take a team an exact roster already holds', () => {
+    let s = withNames(['4th & Short Darren', 'G8'])
+    s = mergeYahooSnapshotPage(s, { ...roster, teamName: '4th & Short Darren', players: roster.players.slice(0, 1) })
+    s = pasteRoster(s, '4th & Short')
+    const c = yahooSnapshotChecklist(s)
+    expect(c.unmatchedRosters).toEqual(['4th & Short'])
+    expect(buildYahooSnapshotPayload(s).teams[0]!.rosterPlayerIds).toHaveLength(1)
+  })
+
+  it('maps a draft pick by the same rule', () => {
+    const s = mergeYahooSnapshotPage(withNames(['4th & Short Darren', 'G8']), {
+      kind: 'draft',
+      picks: [{ round: 1, pick: 1, teamName: '4th & Short', playerName: 'Bijan Robinson', position: 'RB', nflTeam: 'ATL' }],
+    })
+    expect(buildYahooSnapshotPayload(s).draftPicks.map((d) => d.teamKey)).toEqual(['nfl.l.987654.t.1'])
+  })
+})
+
 describe('buildYahooSnapshotPayload', () => {
   it('refuses to build without settings and standings', () => {
     expect(() => buildYahooSnapshotPayload(mergeYahooSnapshotPage(emptyYahooSnapshot(LEAGUE), standings))).toThrow(

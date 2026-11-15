@@ -136,9 +136,58 @@ function orderedStandingsTeams(snapshot: YahooLeagueSnapshot) {
     .map(({ team }) => team)
 }
 
+/** Does one normalized name extend the other at a word boundary ("4th short" / "4th short darren")? */
+function extendsAtWordBoundary(a: string, b: string): boolean {
+  if (!a || !b || a === b) return false
+  return a.startsWith(`${b} `) || b.startsWith(`${a} `)
+}
+
+/**
+ * The ONE standings team (normalized name) a name read from another page belongs to, or null.
+ *
+ * 🛑 EXACT FIRST, THEN A UNIQUE WORD-BOUNDARY PREFIX — NEVER A GUESS. Measured on a real league
+ * 2026-11-15: Yahoo's default team names carry the manager's first name ("4th & Short Darren"), and
+ * the roster page also prints that manager on its own line, so the reader returned "4th & Short" and
+ * the roster matched nothing. A name that extends, or is extended by, exactly one team's name now
+ * matches it. Two candidates, or a team another roster already holds, means no match: an unmatched
+ * roster is reported to the commissioner, a wrongly matched one silently moves players between teams.
+ */
+export function resolveSnapshotTeam(
+  teamNorms: readonly string[],
+  name: string,
+  taken?: ReadonlySet<string>,
+): string | null {
+  const norm = normalizeSnapshotTeamName(name)
+  if (!norm) return null
+  if (teamNorms.includes(norm)) return norm
+  const candidates = teamNorms.filter((t) => !taken?.has(t) && extendsAtWordBoundary(t, norm))
+  return candidates.length === 1 ? candidates[0]! : null
+}
+
+/** Each standings team's pasted roster: exact names first, so a prefix match can never take a team an exact one owns. */
+function matchRostersToTeams(snapshot: YahooLeagueSnapshot): {
+  byTeam: Map<string, YahooSnapshotRoster>
+  unmatched: YahooSnapshotRoster[]
+} {
+  const teamNorms = orderedStandingsTeams(snapshot).map((t) => normalizeSnapshotTeamName(t.teamName))
+  const byTeam = new Map<string, YahooSnapshotRoster>()
+  const pending: YahooSnapshotRoster[] = []
+  for (const [key, roster] of Object.entries(snapshot.rosters)) {
+    if (teamNorms.includes(key)) byTeam.set(key, roster)
+    else pending.push(roster)
+  }
+  const unmatched: YahooSnapshotRoster[] = []
+  for (const roster of pending) {
+    const team = resolveSnapshotTeam(teamNorms, roster.teamName, new Set(byTeam.keys()))
+    if (team) byTeam.set(team, roster)
+    else unmatched.push(roster)
+  }
+  return { byTeam, unmatched }
+}
+
 export function yahooSnapshotChecklist(snapshot: YahooLeagueSnapshot): YahooSnapshotChecklist {
   const teams = orderedStandingsTeams(snapshot)
-  const known = new Set(teams.map((t) => normalizeSnapshotTeamName(t.teamName)))
+  const { byTeam, unmatched } = matchRostersToTeams(snapshot)
   const missing: string[] = []
   if (!snapshot.settings) missing.push('League settings')
   if (!snapshot.standings) missing.push('Standings')
@@ -150,11 +199,9 @@ export function yahooSnapshotChecklist(snapshot: YahooLeagueSnapshot): YahooSnap
     draft: !!snapshot.draft,
     teams: teams.map((t) => ({
       name: t.teamName,
-      hasRoster: !!snapshot.rosters[normalizeSnapshotTeamName(t.teamName)],
+      hasRoster: byTeam.has(normalizeSnapshotTeamName(t.teamName)),
     })),
-    unmatchedRosters: Object.entries(snapshot.rosters)
-      .filter(([key]) => !known.has(key))
-      .map(([, roster]) => roster.teamName),
+    unmatchedRosters: unmatched.map((roster) => roster.teamName),
     ready: missing.length === 0,
     missing,
     links: {
@@ -199,11 +246,12 @@ export function buildYahooSnapshotPayload(snapshot: YahooLeagueSnapshot, now: Da
   const leagueKey = `nfl.l.${snapshot.leagueId}`
   const ordered = orderedStandingsTeams(snapshot)
   const teamKeyByName = new Map<string, string>()
+  const { byTeam: rosterByTeam } = matchRostersToTeams(snapshot)
   const teams: YahooImportTeam[] = ordered.map((t, i) => {
     const teamKey = `${leagueKey}.t.${i + 1}`
     const norm = normalizeSnapshotTeamName(t.teamName)
     teamKeyByName.set(norm, teamKey)
-    const roster: YahooSnapshotRoster | undefined = snapshot.rosters[norm]
+    const roster: YahooSnapshotRoster | undefined = rosterByTeam.get(norm)
     const playerMap: YahooImportTeam['playerMap'] = {}
     const rosterIds: string[] = []
     const starterIds: string[] = []
@@ -303,7 +351,8 @@ export function buildYahooSnapshotPayload(snapshot: YahooLeagueSnapshot, now: Da
   if (snapshot.draft) {
     const perRoundIndex = new Map<number, number>()
     for (const pick of snapshot.draft.picks) {
-      const teamKey = teamKeyByName.get(normalizeSnapshotTeamName(pick.teamName))
+      const pickTeam = resolveSnapshotTeam([...teamKeyByName.keys()], pick.teamName)
+      const teamKey = pickTeam ? teamKeyByName.get(pickTeam) : undefined
       const inRound = (perRoundIndex.get(pick.round) ?? 0) + 1
       perRoundIndex.set(pick.round, inRound)
       if (!teamKey) continue
