@@ -40,7 +40,7 @@ vi.mock('@/lib/league-join/careerJoinGate', () => ({
   careerJoinRefusal: vi.fn(),
 }))
 vi.mock('@/lib/league-join/classRequests', () => ({ requestClassException: vi.fn() }))
-vi.mock('@/lib/league-join/notifyCommissionerOfJoin', () => ({ notifyCommissionerOfJoin: vi.fn(async () => undefined) }))
+vi.mock('@/lib/league-join/notifyCommissionerOfJoin', () => ({ notifyCommissionerOfJoin: vi.fn(async () => undefined), notifyInviterOfJoin: vi.fn(async () => undefined) }))
 vi.mock('@/lib/league-finance/joinGate', () => ({
   assertPaidJoinAllowed: vi.fn(async () => ({ ok: true })),
   linkDuesToRoster: vi.fn(async () => undefined),

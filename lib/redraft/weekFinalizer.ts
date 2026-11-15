@@ -217,6 +217,11 @@ export type WeekFinalizerDeps = {
    * (lib/trade-intel/rebuildPlanNotice.ts), once a season. Loaded on first use.
    */
   notifyRebuildPlans?: (args: { prisma: PrismaClient; seasonId: string }) => Promise<unknown>
+  /**
+   * "You clinched a playoff spot" / "Your playoff race is over" (lib/redraft/playoffStatusNotify.ts), once
+   * a season per manager. After the rebuild notice, which it does not repeat. Loaded on first use.
+   */
+  notifyPlayoffStatus?: (args: { prisma: PrismaClient; seasonId: string }) => Promise<unknown>
   /** Settles the league chat's prediction polls once the week is final. Loaded on first use. */
   resolvePredictions?: (args: { prisma: PrismaClient; leagueId: string }) => Promise<unknown>
   prisma?: PrismaClient
@@ -885,6 +890,21 @@ export async function finalizeRedraftWeek(
       await notify({ prisma, seasonId: season.id })
     } catch (error) {
       console.error('[weekFinalizer] Unable to send rebuild plan notices', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    /*
+     * Clinched or eliminated, by Season Outlook's own arithmetic, once a season per manager. Same all-final
+     * gate, and after the rebuild notice so a manager already told they are out is not told twice.
+     */
+    try {
+      const notify =
+        deps.notifyPlayoffStatus ?? (await import('./playoffStatusNotify')).notifyNativePlayoffStatus
+      await notify({ prisma, seasonId: season.id })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to send playoff status notices', {
         leagueId: season.leagueId,
         week: params.week,
         error: error instanceof Error ? error.message : String(error),
