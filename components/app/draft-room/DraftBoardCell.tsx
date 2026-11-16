@@ -283,7 +283,7 @@ function DraftBoardCellInner({
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
       } ${
         isCurrentPick
-          ? 'bg-[radial-gradient(120%_140%_at_0%_0%,rgba(34,211,238,0.28),#0d1020_62%)] ring-2 ring-cyan-300'
+          ? 'bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--af-league-accent,#22d3ee)_28%,transparent),#0d1020_62%)] ring-2 ring-[color:var(--af-league-accent,#67e8f9)]'
           : isEmpty
             ? 'bg-[#2a2f45]'
             : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300' : ''} ${highlightClass(pickHighlight)}`
@@ -390,7 +390,7 @@ function DraftBoardCellInner({
 
       {isEmpty && isCurrentPick ? (
         <span
-          className="pointer-events-none mt-auto self-center text-[11px] font-black uppercase tracking-[0.04em] text-cyan-300"
+          className="pointer-events-none mt-auto self-center text-[11px] font-black uppercase tracking-[0.04em] text-[color:var(--af-league-accent,#67e8f9)]"
           data-testid={`draft-board-cell-on-clock-${pick.overall}`}
         >
           {headerCopy.onTheClock}

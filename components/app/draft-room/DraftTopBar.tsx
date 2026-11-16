@@ -15,9 +15,12 @@ import { effectiveDueAt, formatClockTime, isLongPickClock, type QuietWindow } fr
 import { useMessages } from '@/components/i18n/useMessages'
 import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlanner'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
+import type { LeagueAccent } from '@/lib/draft-room/leagueAccent'
 
 type DraftTopBarProps = {
   leagueName: string
+  /** Room v2: a chip naming the league type, in its accent color, beside the league name. */
+  leagueAccent?: LeagueAccent | null
   /** League avatar / logo URL. Rendered next to the name when provided. */
   leagueLogoUrl?: string | null
   sport: string
@@ -226,6 +229,7 @@ const DYN_CONDENSED_STYLE: CSSProperties = {
 
 export function DraftTopBar({
   leagueName,
+  leagueAccent = null,
   leagueLogoUrl,
   sport,
   draftType,
@@ -703,6 +707,23 @@ export function DraftTopBar({
                 <h1 className="truncate text-sm font-bold tracking-tight text-white drop-shadow-sm sm:text-base">
                   {leagueName}
                 </h1>
+                {/* sm+ only: a phone's header row has no room (it ran into Pause at 390px); there the
+                    accent stripe under the header carries the color. */}
+                {leagueAccent ? (
+                  <span
+                    data-testid="draft-topbar-league-type"
+                    data-league-type={leagueAccent.concept}
+                    className="hidden shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold leading-none sm:inline-flex"
+                    style={{
+                      color: leagueAccent.color,
+                      borderColor: `color-mix(in srgb, ${leagueAccent.color} 45%, transparent)`,
+                      background: `color-mix(in srgb, ${leagueAccent.color} 14%, transparent)`,
+                    }}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: leagueAccent.color }} aria-hidden />
+                    {leagueAccent.label}
+                  </span>
+                ) : null}
                 {dyn && dynastyDraftKindLabel ? (
                   <span
                     data-testid="draft-topbar-dynasty-kind"

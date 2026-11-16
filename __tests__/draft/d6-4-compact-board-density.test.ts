@@ -58,8 +58,8 @@ describe('DraftBoardCell — current-pick glow (Commit 21; cyan since room v2)',
     expect(cellSrc).toMatch(/data-current=\{isCurrentPick \? 'true' : 'false'\}/)
   })
 
-  it('the current pick is the v2 cyan clock tile with an "On the clock" label, not a gold fill', () => {
-    expect(cellSrc).toMatch(/ring-2 ring-cyan-300/)
+  it('the current pick is the v2 clock tile (the league accent, cyan by default) with an "On the clock" label, not a gold fill', () => {
+    expect(cellSrc).toContain('ring-2 ring-[color:var(--af-league-accent,#67e8f9)]')
     expect(cellSrc).toMatch(/draft-board-cell-on-clock-\$\{pick\.overall\}/)
     expect(cellSrc).not.toMatch(/ring-\[#f6c445\]/)
   })

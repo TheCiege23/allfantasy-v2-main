@@ -471,7 +471,7 @@ function DraftBoardInner({
               data-testid="draft-board-legend"
             >
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-[2px] border border-cyan-300 bg-[#0d1020] shadow-[0_0_6px_rgba(34,211,238,0.8)]" aria-hidden />
+                <span className="h-2 w-2 rounded-[2px] border border-[color:var(--af-league-accent,#67e8f9)] bg-[#0d1020] shadow-[0_0_6px_var(--af-league-accent,#22d3ee)]" aria-hidden data-testid="draft-board-legend-on-clock" />
                 on the clock
               </span>
               <span className="inline-flex items-center gap-1">

@@ -136,6 +136,7 @@ import {
   getAssistantFeedForPlayer,
 } from '@/lib/draft-room/assistantFeedLookup'
 import { buildDraftChatPlayerContextFromDisplay } from '@/lib/draft-room/draft-chat-player-context'
+import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
 import type { DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 
 type DraftRoomPageClientProps = {
@@ -150,6 +151,8 @@ type DraftRoomPageClientProps = {
   isCommissioner: boolean
   /** When IDP league, pass 'IDP' for position filters and roster template. */
   formatType?: string
+  /** `League.leagueType` as stored; the room's league-type accent (room v2). */
+  leagueType?: string | null
   /** Premium chrome for live snake redraft route. */
   presentationVariant?: 'default' | 'redraft_snake'
   /**
@@ -272,10 +275,12 @@ export function DraftRoomPageClient({
   isDynasty = false,
   isCommissioner,
   formatType,
+  leagueType = null,
   presentationVariant = 'default',
   initialSnapshot,
   initialPoolReadiness = null,
 }: DraftRoomPageClientProps) {
+  const leagueAccent = useMemo(() => leagueAccentFor(leagueType, { isDynasty }), [leagueType, isDynasty])
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
   const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
@@ -4747,6 +4752,7 @@ export function DraftRoomPageClient({
     ) : null}
     <DraftRoomShell
       layout="premium"
+      leagueAccent={leagueAccent}
       playerSpacePriority={session.draftType !== 'auction'}
       surfaceVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : isDynasty ? 'dynasty' : 'default'}
       // D.6 — War Room moved out of the left aside. teamPanel=null collapses the
@@ -5212,6 +5218,7 @@ export function DraftRoomPageClient({
           ) : null}
           <DraftTopBar
             leagueName={leagueName}
+            leagueAccent={leagueAccent}
             leagueLogoUrl={leagueLogoUrl ?? null}
             sport={effectiveDraftSport}
             draftType={session.draftType}

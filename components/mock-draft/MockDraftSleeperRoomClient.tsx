@@ -12,6 +12,7 @@ import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/DraftRoundOneAnnouncementOverlay'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
 import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 import { LanguageFallbackBoundary } from '@/components/i18n/LanguageProviderClient'
 import { mockDraftRoomMessages } from '@/lib/core-app/messages/mockDraftRoom'
@@ -2483,6 +2484,8 @@ export default function MockDraftSleeperRoomClient({
     )
 
     const status = draftState.status
+    /* A league mock takes its league's accent (dynasty or redraft); an open mock has no league, so no chip. */
+    const leagueAccent = leaguePayload ? leagueAccentFor(null, { isDynasty: leaguePayload.isDynasty }) : null
     const pausePill =
       status === 'complete' ? null : status === 'drafting' ? (
         <button
@@ -2508,6 +2511,7 @@ export default function MockDraftSleeperRoomClient({
       <>
         <DraftTopBar
           leagueName={leaguePayload?.leagueName ?? mockCopy.openMock}
+          leagueAccent={leagueAccent}
           sport={sport}
           draftType={draftState.settings.draftType}
           teamCount={draftState.settings.teamCount}
@@ -2577,6 +2581,7 @@ export default function MockDraftSleeperRoomClient({
       <LanguageFallbackBoundary>
         <DraftRoomShell
           layout="premium"
+          leagueAccent={leagueAccent}
           topBar={topBar}
           managerStrip={null}
           modeBanner={<DraftModeBanner mode="mock" />}

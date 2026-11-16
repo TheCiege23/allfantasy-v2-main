@@ -154,6 +154,7 @@ export default async function DraftsByIdPage({
         isDynasty={context.isDynasty}
         isCommissioner={context.isCommissioner}
         formatType={context.formatType}
+        leagueType={context.leagueType}
         presentationVariant={
           !context.isDynasty &&
           context.routeType === 'snake' &&
