@@ -2,8 +2,16 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import './af-app-music.css'
-import { YOUTUBE_STATIONS, describeYouTubeLinkProblem, parseYouTubeLink } from '@/lib/draft-music/youtube'
-import { SUBSCRIPTION_NOTE, musicBus } from './musicBus'
+import { YOUTUBE_STATIONS, parseYouTubeLink, youTubeLinkProblem } from '@/lib/draft-music/youtube'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  APPLE_QUICK_SEARCHES,
+  appMusicCopy,
+  appMusicLang,
+  stationText,
+  type AppMusicCopyKey,
+} from '@/lib/i18n/app-music-copy'
+import { musicBus, type AppleMsg } from './musicBus'
 
 /**
  * The chat panel's Music tab — the CONTROLS for the app-wide music engine.
@@ -22,14 +30,18 @@ import { SUBSCRIPTION_NOTE, musicBus } from './musicBus'
  *
  * Styled with the chat panel's own tokens (--accent, --surface…), so it looks like
  * the other chat tabs rather than like a separate widget.
+ *
+ * Every word is English or Spanish from lib/i18n/app-music-copy.ts. Notes are
+ * kept as copy KEYS, not sentences, so a switch of language rewords what is
+ * already on screen.
  */
 
 type Source = 'youtube' | 'apple'
 const SOURCE_KEY = 'af:draft-music:source'
-const APPLE_QUICK_SEARCHES = ['Game day', 'Hip-hop hits', 'Rock anthems', 'Lo-fi']
 
 type YtHit = { videoId: string; title: string; channel: string; thumb: string | null }
-type YtSearch = { query: string; hits: YtHit[]; note: string | null }
+type YtNote = { key: AppMusicCopyKey; q?: string }
+type YtSearch = { query: string; hits: YtHit[]; note: YtNote | null }
 
 /*
  * The chat panel is remounted on every /core screen change, so the last YouTube
@@ -37,13 +49,11 @@ type YtSearch = { query: string; hits: YtHit[]; note: string | null }
  */
 let lastYtSearch: YtSearch | null = null
 
-const STILL_WORKS = 'Stations and pasted links still work.'
-
 /** Ask our server, which caches every search and holds the daily limits. */
-async function fetchYouTubeSearch(query: string): Promise<{ hits: YtHit[]; note: string | null }> {
+async function fetchYouTubeSearch(query: string): Promise<{ hits: YtHit[]; note: YtNote | null }> {
   try {
     const res = await fetch(`/api/music/youtube-search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
-    if (res.status === 401) return { hits: [], note: 'Sign in to search YouTube.' }
+    if (res.status === 401) return { hits: [], note: { key: 'ytSignIn' } }
     const body = (await res.json()) as
       | { status: 'ok'; results: YtHit[] }
       | { status: 'limit'; scope: 'user' | 'app' }
@@ -51,30 +61,41 @@ async function fetchYouTubeSearch(query: string): Promise<{ hits: YtHit[]; note:
     if (body.status === 'ok') {
       return body.results.length
         ? { hits: body.results, note: null }
-        : { hits: [], note: `Nothing found for “${query}”.` }
+        : { hits: [], note: { key: 'nothingFound', q: query } }
     }
     if (body.status === 'limit') {
-      return {
-        hits: [],
-        note:
-          body.scope === 'user'
-            ? `You’ve used today’s YouTube searches. ${STILL_WORKS}`
-            : `YouTube search is resting until tomorrow. ${STILL_WORKS}`,
-      }
+      return { hits: [], note: { key: body.scope === 'user' ? 'ytLimitUser' : 'ytLimitApp' } }
     }
   } catch {
     /* fall through */
   }
-  return { hits: [], note: `YouTube search isn’t working right now. ${STILL_WORKS}` }
+  return { hits: [], note: { key: 'ytBroken' } }
+}
+
+type T = (key: AppMusicCopyKey, vars?: Record<string, string>) => string
+
+function appleMessage(t: T, msg: AppleMsg): string {
+  switch (msg.code) {
+    case 'connect-failed':
+      return t('appleConnectFailed')
+    case 'nothing-found':
+      return t('nothingFound', { q: msg.term })
+    case 'search-failed':
+      return t('appleSearchFailed')
+    case 'play-failed':
+      return `${t('applePlayFailed')} ${t('subscriptionNote')}`
+  }
 }
 
 export function MusicPanel() {
   const snap = useSyncExternalStore(musicBus.subscribe, musicBus.getSnapshot, musicBus.getServerSnapshot)
   const act = musicBus.actions()
+  const lang = appMusicLang(useOptionalLanguage().language)
+  const t: T = (key, vars) => appMusicCopy(lang, key, vars)
 
   const [source, setSource] = useState<Source>('youtube')
   const [link, setLink] = useState('')
-  const [linkError, setLinkError] = useState<string | null>(null)
+  const [linkError, setLinkError] = useState<'mix' | 'not-youtube' | null>(null)
   const [query, setQuery] = useState('')
   const [ytQuery, setYtQuery] = useState(() => lastYtSearch?.query ?? '')
   const [ytSearch, setYtSearch] = useState<YtSearch | null>(() => lastYtSearch)
@@ -156,10 +177,10 @@ export function MusicPanel() {
     e.preventDefault()
     const parsed = parseYouTubeLink(link)
     if (!parsed) {
-      setLinkError(describeYouTubeLinkProblem(link))
+      setLinkError(youTubeLinkProblem(link))
       return
     }
-    act?.playYouTube({ key: `link:${link}`, label: 'Your YouTube link', source: parsed })
+    act?.playYouTube({ key: `link:${link}`, label: t('yourLink'), source: parsed })
     setLink('')
     setLinkError(null)
   }
@@ -167,7 +188,7 @@ export function MusicPanel() {
   if (!snap.ready || !act) {
     return (
       <div className="af-cm-panel af-amp">
-        <p className="af-amp-msg af-amp-pad">Music isn’t available on this page.</p>
+        <p className="af-amp-msg af-amp-pad">{t('notHere')}</p>
       </div>
     )
   }
@@ -176,7 +197,7 @@ export function MusicPanel() {
     <div className="af-cm-panel af-amp" data-testid="comms-music-panel">
       {/* ── Now playing: fixed above the list ─────────────────────────── */}
       {snap.yt ? (
-        <section className="af-amp-now" aria-label="Now playing">
+        <section className="af-amp-now" aria-label={t('nowPlaying')}>
           <div ref={screenRef} className="af-amp-screen" />
           <div className="af-amp-nowrow">
             <span className="af-amp-nowtext">
@@ -184,12 +205,12 @@ export function MusicPanel() {
               <span>YouTube</span>
             </span>
             <button type="button" className="af-amp-chip" onClick={act.stop}>
-              Stop
+              {t('stop')}
             </button>
           </div>
         </section>
       ) : snap.appleNow ? (
-        <section className="af-amp-now" aria-label="Now playing">
+        <section className="af-amp-now" aria-label={t('nowPlaying')}>
           <div className="af-amp-apple">
             {snap.appleNow.art ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -200,27 +221,27 @@ export function MusicPanel() {
               </span>
             )}
             <span className="af-amp-nowtext">
-              <b>{snap.appleNow.title}</b>
+              <b>{snap.appleNow.title || t('unknownTrack')}</b>
               <span>{snap.appleNow.artist || 'Apple Music'}</span>
             </span>
           </div>
           <div className="af-amp-transport">
-            <button type="button" className="af-amp-icon" aria-label="Previous track" onClick={act.applePrev}>
+            <button type="button" className="af-amp-icon" aria-label={t('previousTrack')} onClick={act.applePrev}>
               ⏮
             </button>
             <button
               type="button"
               className="af-amp-icon af-amp-icon--main"
-              aria-label={snap.appleNow.playing ? 'Pause' : 'Play'}
+              aria-label={snap.appleNow.playing ? t('pause') : t('play')}
               onClick={act.appleToggle}
             >
               {snap.appleNow.playing ? '❚❚' : '▶'}
             </button>
-            <button type="button" className="af-amp-icon" aria-label="Next track" onClick={act.appleNext}>
+            <button type="button" className="af-amp-icon" aria-label={t('nextTrack')} onClick={act.appleNext}>
               ⏭
             </button>
             <button type="button" className="af-amp-chip" onClick={act.stop}>
-              Stop
+              {t('stop')}
             </button>
           </div>
         </section>
@@ -228,7 +249,7 @@ export function MusicPanel() {
 
       {/* ── Picker: the part that scrolls ─────────────────────────────── */}
       <div className="af-amp-scroll">
-        <div className="af-amp-switch" role="tablist" aria-label="Music source">
+        <div className="af-amp-switch" role="tablist" aria-label={t('musicSource')}>
           <button
             type="button"
             role="tab"
@@ -255,14 +276,14 @@ export function MusicPanel() {
               <input
                 className="af-amp-input"
                 type="search"
-                aria-label="Search YouTube"
-                placeholder="Search YouTube"
+                aria-label={t('searchYouTube')}
+                placeholder={t('searchYouTube')}
                 maxLength={80}
                 value={ytQuery}
                 onChange={(e) => setYtQuery(e.target.value)}
               />
               <button type="submit" className="af-amp-btn" disabled={ytQuery.trim().length < 2 || ytSearching}>
-                {ytSearching ? 'Searching…' : 'Search'}
+                {ytSearching ? t('searching') : t('search')}
               </button>
             </form>
 
@@ -270,15 +291,15 @@ export function MusicPanel() {
               <div className="af-amp-found">
                 <div className="af-amp-found-head">
                   <span>
-                    Results for <b>“{ytSearch.query}”</b>
+                    {t('resultsFor')} <b>“{ytSearch.query}”</b>
                   </span>
                   <button type="button" className="af-amp-linkbtn" onClick={clearYouTubeSearch}>
-                    Clear
+                    {t('clear')}
                   </button>
                 </div>
                 {ytSearch.note ? (
                   <p className="af-amp-msg" role="status">
-                    {ytSearch.note}
+                    {t(ytSearch.note.key, ytSearch.note.q ? { q: ytSearch.note.q } : undefined)}
                   </p>
                 ) : (
                   <ul className="af-amp-results">
@@ -317,23 +338,26 @@ export function MusicPanel() {
             ) : null}
 
             <div className="af-amp-stations">
-              {YOUTUBE_STATIONS.map((station) => (
-                <button
-                  key={station.id}
-                  type="button"
-                  className="af-amp-station"
-                  data-active={snap.yt?.key === station.id ? 'true' : undefined}
-                  onClick={() => act.playYouTube({ key: station.id, label: station.label, source: station.source })}
-                >
-                  <span className="af-amp-station-title">{station.label}</span>
-                  <span className="af-amp-station-sub">{station.channel}</span>
-                </button>
-              ))}
+              {YOUTUBE_STATIONS.map((station) => {
+                const text = stationText(lang, station)
+                return (
+                  <button
+                    key={station.id}
+                    type="button"
+                    className="af-amp-station"
+                    data-active={snap.yt?.key === station.id ? 'true' : undefined}
+                    onClick={() => act.playYouTube({ key: station.id, label: text.label, source: station.source })}
+                  >
+                    <span className="af-amp-station-title">{text.label}</span>
+                    <span className="af-amp-station-sub">{text.channel}</span>
+                  </button>
+                )
+              })}
             </div>
 
             <form className="af-amp-link" onSubmit={submitLink}>
               <label className="af-amp-label" htmlFor="af-amp-link-input">
-                Or paste any YouTube song or playlist link
+                {t('pasteLink')}
               </label>
               <div className="af-amp-row">
                 <input
@@ -349,12 +373,12 @@ export function MusicPanel() {
                   }}
                 />
                 <button type="submit" className="af-amp-btn" disabled={!link.trim()}>
-                  Play
+                  {t('play')}
                 </button>
               </div>
               {linkError ? (
                 <p className="af-amp-error" role="alert">
-                  {linkError}
+                  {t(linkError === 'mix' ? 'linkIsMix' : 'linkNotYouTube')}
                 </p>
               ) : null}
             </form>
@@ -362,18 +386,18 @@ export function MusicPanel() {
         ) : (
           <div role="tabpanel" aria-label="Apple Music" className="af-amp-section">
             {snap.appleStatus === 'idle' || snap.appleStatus === 'checking' ? (
-              <p className="af-amp-msg">Checking Apple Music…</p>
+              <p className="af-amp-msg">{t('appleChecking')}</p>
             ) : null}
 
             {snap.appleStatus === 'unavailable' ? (
-              <p className="af-amp-msg">Apple Music isn’t set up yet. YouTube works for everyone.</p>
+              <p className="af-amp-msg">{t('appleUnavailable')}</p>
             ) : null}
 
             {snap.appleStatus === 'error' ? (
               <div className="af-amp-row">
-                <p className="af-amp-msg">Apple Music didn’t load.</p>
+                <p className="af-amp-msg">{t('appleLoadFailed')}</p>
                 <button type="button" className="af-amp-chip" onClick={act.startApple}>
-                  Try again
+                  {t('tryAgain')}
                 </button>
               </div>
             ) : null}
@@ -393,20 +417,20 @@ export function MusicPanel() {
                   <input
                     className="af-amp-input"
                     type="search"
-                    aria-label="Search Apple Music"
-                    placeholder="Search Apple Music"
+                    aria-label={t('searchApple')}
+                    placeholder={t('searchApple')}
                     maxLength={80}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   <button type="submit" className="af-amp-btn" disabled={!query.trim() || snap.searching}>
-                    {snap.searching ? 'Searching…' : 'Search'}
+                    {snap.searching ? t('searching') : t('search')}
                   </button>
                 </form>
 
                 {snap.results.length === 0 ? (
                   <div className="af-amp-quick">
-                    {APPLE_QUICK_SEARCHES.map((term) => (
+                    {APPLE_QUICK_SEARCHES[lang].map((term) => (
                       <button
                         key={term}
                         type="button"
@@ -436,7 +460,7 @@ export function MusicPanel() {
                           <span className="af-amp-nowtext">
                             <b>{item.title}</b>
                             <span>
-                              {item.kind === 'playlist' ? 'Playlist' : 'Song'}
+                              {item.kind === 'playlist' ? t('playlist') : t('song')}
                               {item.subtitle ? ` · ${item.subtitle}` : ''}
                             </span>
                           </span>
@@ -448,19 +472,19 @@ export function MusicPanel() {
 
                 {snap.appleStatus === 'ready' ? (
                   <button type="button" className="af-amp-linkbtn" onClick={act.disconnectApple}>
-                    Disconnect Apple Music
+                    {t('disconnectApple')}
                   </button>
                 ) : (
                   <div className="af-amp-connect">
                     {/* Never disabled while connecting: Apple's window can be closed half-way, and a
                         second press re-opens it (observed 2026-11-15). */}
                     <button type="button" className="af-amp-btn af-amp-btn--apple" onClick={act.connectApple}>
-                      {snap.appleStatus === 'connecting' ? 'Open Apple sign-in again' : 'Connect Apple Music'}
+                      {snap.appleStatus === 'connecting' ? t('reopenAppleSignIn') : t('connectApple')}
                     </button>
                     <p className="af-amp-msg">
                       {snap.appleStatus === 'connecting'
-                        ? 'Finish signing in on Apple’s window, including any “Allow” step. Closed it? Press the button again.'
-                        : `Search anytime. To play, connect Apple Music. ${SUBSCRIPTION_NOTE}`}
+                        ? t('appleConnecting')
+                        : `${t('appleSearchAnytime')} ${t('subscriptionNote')}`}
                     </p>
                   </div>
                 )}
@@ -469,16 +493,13 @@ export function MusicPanel() {
 
             {snap.appleMsg ? (
               <p className="af-amp-error" role="status">
-                {snap.appleMsg}
+                {appleMessage(t, snap.appleMsg)}
               </p>
             ) : null}
           </div>
         )}
 
-        <p className="af-amp-note">
-          Keeps playing when you close chat or change pages. YouTube shrinks to a small box; Apple Music plays
-          hidden.
-        </p>
+        <p className="af-amp-note">{t('keepsPlaying')}</p>
       </div>
     </div>
   )
