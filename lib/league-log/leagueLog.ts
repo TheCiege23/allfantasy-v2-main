@@ -122,6 +122,10 @@ export const LOG_ACTIONS: Record<string, Action> = {
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
       const label = section ? SECTION_LABELS[section] : undefined
+      // Shared scoring (2026-11-16) says so, without naming the other league: its members are not this league's.
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring settings to the commissioner’s shared scoring', es: 'Cambió la puntuación a la puntuación compartida del comisionado' }
+      }
       return label
         ? { en: `Changed the ${label.en} settings`, es: `Cambió los ajustes de ${label.es}` }
         : { en: 'Changed the league settings', es: 'Cambió los ajustes de la liga' }
@@ -132,6 +136,9 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring rules mid-season to the commissioner’s shared scoring', es: 'Cambió la puntuación a mitad de temporada a la puntuación compartida del comisionado' }
+      }
       return section === 'scoring'
         ? { en: 'Changed the scoring rules mid-season', es: 'Cambió la puntuación a mitad de temporada' }
         : { en: 'Changed the roster settings mid-season', es: 'Cambió la plantilla a mitad de temporada' }
