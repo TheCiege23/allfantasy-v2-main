@@ -161,6 +161,8 @@ export function selectSportWaiverPicks(
     .filter(
       (r) =>
         allowedLeagueIds.has(r.leagueId) &&
+        // A category league's gain is a category score: the bar and every word here are points per game.
+        r.valueKind !== 'categories' &&
         r.drop != null &&
         Number.isFinite(r.netGain) &&
         r.netGain >= rule.minGainPerGame,

@@ -143,12 +143,13 @@ Then B2B visuals, then gating + checkout (owner's order).
 | 8–11 | ✅ Done: IDP/kicker slice and the cached roster grade; the `waiverDecision` kill switch; Commissioner Managers as facts; Manager Psychology as facts only, paid, on every platform with a named reason where data cannot support it | #3745 |
 | 12 · NBA | ✅ Done: Chimmy value (#3745), then Waivers, FAAB and the player card on the league's own board, plus the season blend (#3748) | #3745, #3748 |
 | 12 · MLB | ✅ Done: same surfaces; the sample is at-bats or innings; pitchers file SP/RP from the board; the blend handles innings notation and rate stats, and keeps pitcher share per season | #3751 |
-| 12 · NHL | ✅ Done: same surfaces and blend; 🛑 goalies now count for their share of team games (a backup was valued as if he started every night, which also corrects NHL trade grades) | this change |
-| 12 · Soccer | ⏳ Next: the board already blends two seasons and scales players to club matches (`soccerBoard.ts`); which leagues it can cover is still to be measured | — |
+| 12 · NHL | ✅ Done: same surfaces and blend; 🛑 goalies now count for their share of team games (a backup was valued as if he started every night, which also corrects NHL trade grades) | #3753 |
+| 12 · all-leagues Waivers | ✅ Done: NBA/MLB/NHL *category* leagues are priced on their own board, not default points; Chimmy's "pts per game" alert leaves them out rather than mislabel a category score | this change |
+| 12 · Soccer | ⏳ Measured from code 2026-11-16, not switched on. The trade grade already values soccer: two seasons blended and every player scaled to his share of club matches (`soccerBoard.ts`), with Fantrax's published points where a Fantrax league has them. Switching soccer on would give Chimmy and the player card values at once. **Waivers and FAAB would stay "no producer"**: they draw free agents from the season-projection pool, and soccer has no rows there — the board reads match rows instead. Which competitions have match rows needs a production read the owner runs. | — |
 
-Open follow-ups: the all-leagues Waivers board keeps NBA/MLB/NHL *category* leagues on AllFantasy's default
-scoring (its alert reads every gain as "pts per game"); Fantrax/Fleaflicker completed-trade history needs owner
-decisions; provider draft history per manager needs an importer change plus a production backfill.
+Open follow-ups: Chimmy's waiver alert has no bar for category leagues (a category-score threshold needs
+calibrating first); Fantrax/Fleaflicker completed-trade history needs owner decisions; provider draft history per
+manager needs an importer change plus a production backfill.
 
 ## 0.4 ✅ R0.2 RESOLVED — `domain_os_facts` DOES NOT EXIST IN PRODUCTION
 

@@ -144,6 +144,11 @@ export type WaiverBoardRow = {
    * priced on its own value board (`league_value_board`) in a section otherwise on the season rate.
    */
   basis?: WaiverValueBasis
+  /**
+   * `categories`: a category league priced on its own value board — `netGain` and `projected` are a
+   * per-game CATEGORY SCORE, never points. Absent means points.
+   */
+  valueKind?: 'points' | 'categories'
   /** FAAB left, when the league runs FAAB and a budget was read. */
   faabRemaining: number | null
   /** "Wednesday 09:00 UTC", when the league publishes a processing time. */

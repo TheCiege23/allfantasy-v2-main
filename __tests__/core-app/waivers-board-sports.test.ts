@@ -61,6 +61,13 @@ vi.mock('@/lib/injuries/injuryReadPort', () => ({
   resolveInjuryFacts: async () => ({ byPlayer: new Map([...h.injuries].map(([k, v]) => [k, { ...v }])) }),
 }))
 
+const vb = vi.hoisted(() => ({ boards: new Map<string, unknown>() }))
+vi.mock('@/lib/sport-values/leagueValueBoard', async (orig) => ({
+  ...(await orig<typeof import('@/lib/sport-values/leagueValueBoard')>()),
+  // Only a league a test puts here has a board; every other league reads as before.
+  loadLeagueValueBoard: async (id: string) => vb.boards.get(id) ?? { kind: 'not_board_sport' },
+}))
+
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 
 const league = (id: string, sport: string, platform: string, settings: Row = { roster_positions: ['C', 'PG', 'UTIL', 'BN'] }) => ({
@@ -150,6 +157,7 @@ beforeEach(() => {
     snap('x-college', 'College Guy', 'WR', 9, 'NCAAF'),
   ]
   h.injuries = new Map([['hurt star', { status: 'Out', stale: false }]])
+  vb.boards = new Map()
 })
 
 const sectionOf = async (sport: string) => (await getWaiversBoard('me')).sports?.find((s) => s.sport === sport)
@@ -223,3 +231,27 @@ describe('getWaiversBoard — every sport gets a section, and a sport with no pr
     expect(board.sports?.map((s) => s.sport)).toEqual(['NCAAF', 'NBA', 'NHL', 'SOCCER'])
   })
 })
+
+describe('a category league on its own value board (2026-11-16)', () => {
+  const bp = (id: string, name: string, position: string, perGame: number) => ({ id, name, position, perGame, sampleGames: 40, aliases: [] })
+  beforeEach(() => {
+    // Category score per game: the board disagrees with the default points on purpose (Free Guard wins here).
+    const board = [bp('k-me-c', 'Me Centre', 'C', 0.4), bp('k-me-pg', 'Me Guard', 'PG', 0.6), bp('k-me-bench', 'Me Bench', 'SG', -0.5),
+      bp('k-free', 'Free Centre', 'C', -0.2), bp('k-free-2', 'Free Guard', 'PG', 0.9)]
+    vb.boards.set('B1', {
+      kind: 'ok', sport: 'NBA', byId: new Map(board.map((p) => [p.id, p])),
+      ctx: { sport: 'NBA', board, replacementByPosition: new Map(), window: { season: 2026, seasonLabel: '2026-27', gamesRemaining: 60 }, scoringBasis: 'league', teams: 2, valueKind: 'categories', categoryList: 'PTS, REB and AST' },
+    })
+  })
+
+  it('🛑 is priced on its categories — never on AllFantasy’s default points — and says so on the row', async () => {
+    const nba = await sectionOf('NBA')
+    const row = nba!.rows.find((r) => r.leagueId === 'B1')!
+    expect(row.basis).toBe('league_value_board')
+    expect(row.valueKind).toBe('categories')
+    expect(row.add.name).toBe('Free Guard')
+    expect(row.reasoning).toContain("in category score on this league's own value board")
+    expect(row.reasoning).not.toContain("AllFantasy's default scoring")
+  })
+})
+

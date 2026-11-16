@@ -59,8 +59,12 @@ import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } fr
  * 🛑 A POINTS LEAGUE IN A LEAGUE-VALUE-BOARD SPORT (NBA first, 2026-11-16) IS PRICED ON ITS OWN BOARD — the
  * trade grade's per-game points under that league's rules, as the one-league board does
  * (`seasonRateWaiverBoard.ts`). Each such row carries `basis: 'league_value_board'`, so a message about
- * it never claims AllFantasy's default scoring. A CATEGORY league stays on the season rate here: this
- * section's gains are read as "points per game" downstream, and a category score is not points.
+ * it never claims AllFantasy's default scoring.
+ *
+ * A CATEGORY league is priced on its board too (2026-11-16): before, it was priced on AllFantasy's default
+ * POINTS, a number with no meaning in a category league. Its row carries `valueKind: 'categories'` — its
+ * gain is a per-game category score, not points — and Chimmy's waiver alert, whose bar and wording are
+ * points per game, leaves such rows out rather than mislabel them (`selectSportWaiverPicks`).
  */
 
 /** Projected players considered per sport. The wire below this is noise, as on the NFL board. */
@@ -239,7 +243,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     await Promise.all(
       leagueIds.map(async (id) => {
         const b = await loadLeagueValueBoard(id).catch((): LeagueValueBoard => ({ kind: 'not_board_sport' }))
-        if (b.kind === 'ok' && b.ctx.valueKind !== 'categories') boards.set(id, b)
+        if (b.kind === 'ok') boards.set(id, b)
       }),
     )
   }
@@ -260,7 +264,10 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     }
 
     const onBoard = boards.get(c.leagueId) ?? null
-    const basisPhrase = onBoard ? "on this league's own value board" : seasonRatePhrase
+    const categories = onBoard?.ctx.valueKind === 'categories'
+    const basisPhrase = onBoard
+      ? categories ? "in category score on this league's own value board" : "on this league's own value board"
+      : seasonRatePhrase
     const scoring = extractScoringSettings(l.settings)
     if (!onBoard && basis === 'season_per_game_league' && !scoring) {
       withheld.noScoring++
@@ -399,6 +406,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       reasoning,
       sport,
       ...(onBoard ? { basis: 'league_value_board' as const } : {}),
+      ...(categories ? { valueKind: 'categories' as const } : {}),
     })
   }
 

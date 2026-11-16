@@ -264,6 +264,11 @@ describe('what it says', () => {
     expect(m.email.html).not.toContain('default NBA scoring')
   })
 
+  it('🛑 a category league’s row never becomes a "pts per game" alert — its gain is a category score', () => {
+    const s = section('NBA', [row('A', 9, { basis: 'league_value_board', valueKind: 'categories' }), row('B', 8)])
+    expect(selectSportWaiverPicks(s, rule('NBA'), new Set(['A', 'B'])).map((p) => p.leagueId)).toEqual(['B'])
+  })
+
   it('🛑 opens Chimmy in the PICK’S sport — not the NFL the weekly links default to', () => {
     const m = renderSportWaiverCheck([pick('NHL', 'H1', 3)])!
     expect(new URL(m.actionHref, 'https://x.test').searchParams.get('sport')).toBe('NHL')
