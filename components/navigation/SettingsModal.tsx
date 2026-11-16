@@ -26,7 +26,7 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: "blocked", label: "Blocked Users", icon: Slash },
 ]
 
-export interface SettingsModalProps {
+interface SettingsModalProps {
   open: boolean
   onClose: () => void
   username?: string | null

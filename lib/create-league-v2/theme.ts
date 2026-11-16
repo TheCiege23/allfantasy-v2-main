@@ -86,6 +86,14 @@ export const ACCENTS: Record<LeagueTypeId, AccentTone> = {
     ring: 'ring-rose-400/60',
     glow: 'shadow-[0_0_40px_-8px_rgba(244,63,94,0.55)]',
   },
+  survivor_guillotine: {
+    label: 'Amber',
+    text: 'text-amber-300',
+    hex: '#F59E0B',
+    hexSoft: '#78350F',
+    ring: 'ring-amber-400/60',
+    glow: 'shadow-[0_0_40px_-8px_rgba(245,158,11,0.55)]',
+  },
   salary_cap: {
     label: 'Emerald Gold',
     text: 'text-emerald-200',
@@ -141,26 +149,6 @@ export const DEFAULT_ACCENT: AccentTone = ACCENTS.redraft
 export function getAccent(leagueType: LeagueTypeId | null | undefined): AccentTone {
   if (!leagueType) return DEFAULT_ACCENT
   return ACCENTS[leagueType] ?? DEFAULT_ACCENT
-}
-
-/** Page background — layered cinematic mesh with deep galaxy vignette. */
-export const PAGE_BG_CLASS =
-  'min-h-screen bg-[#060a18] bg-[radial-gradient(ellipse_120%_60%_at_50%_-15%,rgba(30,60,140,0.45),transparent_70%),radial-gradient(ellipse_80%_50%_at_80%_100%,rgba(15,25,80,0.3),transparent_60%),radial-gradient(ellipse_60%_40%_at_20%_80%,rgba(10,20,60,0.25),transparent_50%)] text-white'
-
-/** Glass surface — frosted panel with layered depth and subtle inner shine. */
-export const GLASS_SURFACE =
-  'rounded-3xl border border-white/[0.08] bg-gradient-to-b from-white/[0.06] to-white/[0.02] backdrop-blur-2xl shadow-[0_24px_80px_-20px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)]'
-
-/** Softer surface for inner sub-panels with subtle depth. */
-export const GLASS_INNER =
-  'rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.015] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
-
-/** Ambient glow overlay — position behind content, tinted by accent hex. */
-export function ambientGlowStyle(hex: string): React.CSSProperties {
-  return {
-    background: `radial-gradient(600px circle at 50% 0%, ${hex}12, transparent 70%)`,
-    pointerEvents: 'none' as const,
-  }
 }
 
 // ── Media registry for videos + posters ─────────────────────────────
@@ -260,6 +248,12 @@ export const LEAGUE_TYPE_MEDIA: Record<string, MediaAsset> = {
     fallback: '/league-type-c2c-intro.mp4',
   },
   guillotine: {
+    video: '/media/create-league/concept/videos/Guillotine.mp4',
+    poster: '/media/create-league/concept/thumbnails/Guillotine.png',
+    fallback: '/league-type-guillotine-intro.mp4',
+  },
+  // No dedicated clip yet: Survivor Guilly shares Guilly's chop footage.
+  survivor_guillotine: {
     video: '/media/create-league/concept/videos/Guillotine.mp4',
     poster: '/media/create-league/concept/thumbnails/Guillotine.png',
     fallback: '/league-type-guillotine-intro.mp4',

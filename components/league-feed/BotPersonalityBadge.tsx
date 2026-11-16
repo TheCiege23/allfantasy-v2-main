@@ -2,7 +2,7 @@
 
 import type { BotArchetypeId } from '@/lib/ai/opponents/types'
 
-export type BotPersonalityBadgeProps = {
+type BotPersonalityBadgeProps = {
   /** Short label, e.g. "Balanced Builder" */
   archetypeLabel: string
   archetypeId?: BotArchetypeId | string | null

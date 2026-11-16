@@ -3,6 +3,4 @@ export {
   legalLastUpdated,
   LegalBox,
   LegalCallout,
-  LegalGrid,
-  LegalPolicyGrid,
 } from "@/components/legal/LegalPageShell"

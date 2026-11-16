@@ -6,10 +6,10 @@
  * could edit. Posted as a commissioner announcement, through the same guard the broadcast composer
  * uses (`broadcastRefusal`: AllFantasy-run leagues, chat moderators only).
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { prisma } from '@/lib/prisma'
 import { broadcastRefusal } from '@/lib/commissioner/broadcastAccess'
 import { postLeagueAnnouncement } from '@/lib/commissioner/postLeagueAnnouncement'
@@ -22,9 +22,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
-  const role = await getLeagueRole(leagueId, userId)
-  if (role === null) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, userId, 'chat')
+  if (refused) return refused
 
   const body = (await req.json().catch(() => null)) as { rosterId?: unknown } | null
   const rosterId = typeof body?.rosterId === 'string' ? body.rosterId.trim() : ''

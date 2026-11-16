@@ -31,7 +31,10 @@ import {
 import {
   normalizeNflWeeklyStats,
   normalizeNflTeamDefenseWeeklyStats,
+  teamAbbrevFromDefPlayerId,
 } from '@/lib/redraft/playerWeeklyScoreService'
+import { getAllCanonicalTeams } from '@/lib/team-abbrev'
+import { recordNflWeeklyCoverage } from '@/lib/sports-data/statCoverage'
 import { buildTeamDefensePlayerId } from '@/lib/redraft/teamDefenseStatsIngest'
 import { normalizeNflTeam } from '@/lib/redraft/lineupLock'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
@@ -108,7 +111,7 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
   }
 
   async fetchPlayerStatsForGames(
-    query: LiveStatsQuery & { games: readonly LiveGameLite[]; playerIds: readonly string[] },
+    query: LiveStatsQuery & { games: readonly LiveGameLite[]; playerIds: readonly string[]; certifyAbsentPlayers?: boolean },
   ): Promise<Map<string, Record<string, number>>> {
     const out = new Map<string, Record<string, number>>()
     if (query.playerIds.length === 0) return out
@@ -139,10 +142,22 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
     const byId = asPlayerStatMap(payload)
     if (!byId) return out
     const want = new Set(query.playerIds)
+    const strict = query.certifyAbsentPlayers === true
+    if (strict && (seasonType !== 'regular' || !await recordNflWeeklyCoverage(this.prisma, query.season, query.week, byId))) return out
+    const absent = strict
+      ? new Set((await this.prisma.playerIdentityMap.findMany({
+        where: { sport: 'NFL', sleeperId: { in: [...want].filter(id => !byId.has(id)) } },
+        select: { sleeperId: true },
+      })).map(row => row.sleeperId))
+      : new Set<string | null>()
     for (const playerId of want) {
-      const raw = byId.get(playerId)
-      if (!raw) continue
-      const normalized = normalizeNflWeeklyStats(raw)
+      const defense = strict ? teamAbbrevFromDefPlayerId(playerId) : null
+      const raw = byId.get(defense ?? playerId)
+      if (!raw) {
+        if (absent.has(playerId) || (defense && getAllCanonicalTeams().some(team => team.abbrev === defense))) out.set(playerId, {})
+        continue
+      }
+      const normalized = defense ? normalizeNflTeamDefenseWeeklyStats(raw) : normalizeNflWeeklyStats(raw)
       if (Object.keys(normalized).length > 0) out.set(playerId, normalized)
     }
     return out

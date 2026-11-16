@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
 
-export type NflModalPayload = {
+type NflModalPayload = {
   kind: 'nfl'
   name: string
   position: string
@@ -13,7 +13,7 @@ export type NflModalPayload = {
   scoringLabel?: string
 }
 
-export type DevyModalPayload = {
+type DevyModalPayload = {
   kind: 'devy'
   playerId: string
   name: string

@@ -12,7 +12,7 @@
  */
 
 /** Intents that are inherently about the user's own team. */
-export const LEAGUE_GROUNDED_INTENTS = [
+const LEAGUE_GROUNDED_INTENTS = [
   'trade_evaluation',
   'waiver_wire',
   'matchup_simulator',

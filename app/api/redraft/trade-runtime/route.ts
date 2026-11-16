@@ -101,7 +101,7 @@ async function proposalAccess(proposalId: string, userId: string) {
     select: { id: true, ownerId: true },
   })
   const owners = new Map(rosters.map((roster: { id: string; ownerId: string | null }) => [roster.id, roster.ownerId]))
-  const commissioner = await assertLeagueCommissioner(proposal.leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(proposal.leagueId, userId, 'trades')
   return {
     ok: true as const,
     proposal,
@@ -128,7 +128,7 @@ async function rosterOwnerAccess(input: {
   })
   if (!roster) return { ok: false as const, status: 404 as const, error: 'Roster not found' }
   if (roster.ownerId === input.userId || await isAcceptedCoOwnerForRedraftRoster(input.leagueId, roster.id, input.userId)) return { ok: true as const, roster, isCommissioner: false }
-  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId)
+  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId, 'trades')
   if (commissioner.ok) return { ok: true as const, roster, isCommissioner: true }
   return { ok: false as const, status: 403 as const, error: 'Forbidden' }
 }
@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
-  const commissioner = await assertLeagueCommissioner(leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(leagueId, userId, 'view')
 
   const resolved = await resolveNflRedraftTradeRuntime({
     seasonId,

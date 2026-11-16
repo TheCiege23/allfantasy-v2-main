@@ -5,7 +5,7 @@
 
 import type { RunPresetEngineInput } from '@/lib/league-creation/preset-engine/runPresetEngine'
 
-export type EngineTestScenarioId =
+type EngineTestScenarioId =
   | 'standard_redraft_nfl'
   | 'dynasty_nfl'
   | 'devy_nfl'

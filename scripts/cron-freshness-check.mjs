@@ -344,6 +344,7 @@ export const PROBES = {
   // NBA Cup live scores (2026-11-01). A heartbeat: outside a Cup game window it correctly fetches
   // nothing, so an output probe would cry wolf for most of the year.
   '/api/cron/nba-cup-live': { heartbeat: 'cron-nba-cup-live' },
+  '/api/cron/season-tournaments': { heartbeat: 'cron-season-tournaments' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
@@ -555,6 +556,13 @@ export const PROBES = {
    * reason in `warnings` and the count in rowsSkipped: the job did what it is configured to do.
    */
   '/api/cron/trade-weekly-recalibration': { heartbeat: 'cron-trade-weekly-recalibration' },
+
+  /*
+   * Weekly check of the Music tab's YouTube stations (lib/app-music/stationHealth.ts). A week
+   * where a station needs a look records `partial`, and a missing YOUTUBE_API_KEY records
+   * `failed` -- so this heartbeat answers both "did it fire" and "could it actually check".
+   */
+  '/api/cron/music-station-health': { heartbeat: 'cron-music-station-health' },
 
   /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output

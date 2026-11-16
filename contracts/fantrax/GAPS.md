@@ -317,3 +317,16 @@ each own-goal scorer matches a unique participant. Secondary assists, clean-shee
 and result eligibility still need compatible events or verified scoring definitions.
 The season view reads published Fantrax team totals. Projections report partial scoring when
 source rules are omitted.
+
+A production backfill on 2026-11-09 applied 635 one-to-one links and left the 135 unmatched
+and one ambiguous player alone. No Fantrax Soccer league was present for a live grade check.
+
+The points grader can also use a complete Fantrax league player board without recreating each
+category. Run the operator script under tsx with the audit preload and target DB configured.
+Pass the AllFantasy league ID alone to get the source league ID, season, and scoring-rule digest.
+Prepare JSON with source set to fantrax-player-export, those three fields, a UTC through timestamp,
+fullPool set to true, and a players array. Each player needs fantraxId, name, position (GK, DEF,
+MID or FWD), fantasyPoints, appearances, and clubMatches over the same period. Include all
+rostered players and free agents. Pass the league ID and file for a dry run, then append --apply
+to save. The grader checks the current scoring digest, season and roster coverage on every read.
+The ordinary partial projection remains the fallback while a matching export is unavailable.

@@ -19,7 +19,7 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { getTournamentStandingsBoard } from '@/lib/tournament/standingsBoard'
 import { parseAudience, resolveAudience } from '@/lib/tournament/broadcastAudience'
 
-export type SweepOutcome = {
+type SweepOutcome = {
   /** Announcements whose time had come. */
   due: number
   posted: number

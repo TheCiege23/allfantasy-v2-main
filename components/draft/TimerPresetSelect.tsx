@@ -8,16 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import {
-  CUSTOM_BOUNDS,
-  TIMER_PRESETS,
-  bestUnit,
-  classifySeconds,
-  resolveTimerSeconds,
-  unitToSeconds,
-  validateCustom,
-  type TimerUnit,
-} from '@/lib/draft/timer-presets'
+import { TIMER_PRESETS, bestUnit, classifySeconds, resolveTimerSeconds, unitToSeconds, validateCustom, type TimerUnit } from '@/lib/draft/timer-presets'
 
 interface Props {
   seconds: number | null

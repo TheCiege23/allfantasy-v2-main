@@ -17,10 +17,7 @@ import 'server-only'
  *    the LeagueContext envelope (slice 5) and the payload says so.
  */
 
-import {
-  getLeagueContext,
-  type LeagueContextEnvelope,
-} from '@/lib/league-context/leagueContextService'
+import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import {
   adpFor,
   getSeasonBoard,
@@ -98,9 +95,9 @@ export type DraftListItem = {
   teams: number
   rounds: number
 }
-export type DraftNeedRow = { slot: string; required: number; filled: number }
-export type DraftRunRow = { position: string; lastWindow: number; total: number; active: boolean }
-export type DraftManagerRead = {
+type DraftNeedRow = { slot: string; required: number; filled: number }
+type DraftRunRow = { position: string; lastWindow: number; total: number; active: boolean }
+type DraftManagerRead = {
   userId: string
   name: string
   avatar: string | null
@@ -109,7 +106,7 @@ export type DraftManagerRead = {
   extraPicksAcquired: number
   picksTradedAway: number
 }
-export type DraftRecentPick = {
+type DraftRecentPick = {
   pickNo: number
   round: number
   label: string
@@ -119,8 +116,8 @@ export type DraftRecentPick = {
   byName: string
   byUserId: string | null
 }
-export type DraftFocusItem = { slot: string; reason: string }
-export type DraftBestAvailable = {
+type DraftFocusItem = { slot: string; reason: string }
+type DraftBestAvailable = {
   playerId: string
   name: string
   position: string | null
@@ -134,7 +131,7 @@ export type DraftBestAvailable = {
   /** Viewer's open starter slots this player can fill (empty = depth pick). */
   fillsSlots: string[]
 }
-export type DraftContextSummary = {
+type DraftContextSummary = {
   leagueName: string
   idp: boolean
   superflex: boolean

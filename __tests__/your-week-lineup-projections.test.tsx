@@ -69,7 +69,9 @@ describe('the Your Week screens draw the lineup line', () => {
     } as LeagueWeekBoard
     const { container } = render(<YourWeekLeague board={board} allWeeksHref="/core/week" lineups={lineups()} />)
     const line = container.querySelector('.af-wk-lineup')
-    expect(line?.textContent).toBe('Lineup proj · AF 121.5–115.0 · Sleeper 118.2–112.4')
+    // 2026-11-14: one projection in plain words; both sources stay in the tooltip.
+    expect(line?.textContent).toBe('Projected: 121.5–115.0')
+    expect(line?.getAttribute('title')).toContain('AF 121.5–115.0 · Sleeper 118.2–112.4')
   })
 
   it('the full table — including a matchup the week model cannot project yet', () => {

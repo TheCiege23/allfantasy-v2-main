@@ -1,3 +1,4 @@
+import { isCanonicalLeagueRules, renderLeagueRules } from './leagueRulesText'
 import type { DecisionOsGroundingPacket, GroundedSlice } from './packet'
 
 /**
@@ -95,6 +96,13 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
    * precisely the failure this file was rewritten to fix for values.
    */
   if (isDecisionFact(value)) return renderDecision(value)
+
+  /*
+   * The league ruleset (`CanonicalLeagueRules`), field by field. 🛑 THIS BRANCH MUST PRECEDE `renderObject`, which
+   * prints every nested object as "present" — so the whole slice read `scoring: present`, `trades: present`, and
+   * Chimmy guessed PPR, the trade deadline and the FAAB budget (2026-11-16 re-score item 5).
+   */
+  if (isCanonicalLeagueRules(value)) return renderLeagueRules(value)
 
   /*
    * 🛑 PLAIN OBJECTS RENDERED AS THE WORD "available" AND NOTHING ELSE — G11, STILL LIVE.
@@ -319,7 +327,15 @@ function renderItem(item: unknown): string | null {
     // `rescored` is surfaced because "under your league's rules" and "under our default" are
     // different claims, and a reader who cannot tell them apart will assume the first.
     const scored = o.rescored === true ? ' — rescored for this league' : ' — canonical preset, NOT this league'
-    return `${o.playerName}${pos} ${fmt(o.points)} pts${scored}`
+    /*
+     * 🛑 THE WEEK, ON EVERY ROW (Projection OS, 2026-11-16). A row printed "Name 14.2 pts" was read as "this
+     * week" whatever it was: the week-less row is a per-game season baseline, and a weekly row is one specific
+     * week. Say which, so a season number is never quoted as this week's.
+     */
+    const when = typeof o.week === 'number' && o.week > 0
+      ? `, week ${o.week}${typeof o.season === 'number' ? ` ${o.season}` : ''}`
+      : ', season baseline per game (no weekly projection on file — NOT a projection for this week)'
+    return `${o.playerName}${pos} ${fmt(o.points)} pts${when}${scored}`
   }
 
   return null

@@ -57,7 +57,7 @@ type Summary = {
   } | null
 }
 
-export interface GuillotineHomeProps {
+interface GuillotineHomeProps {
   leagueId: string
   /** Used for AI / intelligence deep links (tab availability varies by sport). */
   sport: string

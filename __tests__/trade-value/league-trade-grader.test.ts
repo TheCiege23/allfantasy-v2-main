@@ -199,15 +199,14 @@ describe('createLeagueTradeGrader', () => {
     expect(email.subject).toContain('you D, sharpshoooter B')
     expect(email.html).toContain('1,766')
     expect(email.html).toContain('1,584')
-    expect(email.html).toContain('Personal roster fit is shown separately')
+    expect(email.html).toContain('How it fits your roster is shown separately')
     expect(email.html).not.toContain('a bad season by the team that owes one moves this grade')
   })
-  it('shares specialty coverage limits and rejects a prohibited format through the real grade path', async () => {
+  it('withholds a keeper grade without league terms and rejects a prohibited format', async () => {
     const deal = { give: [{ kind: 'player' as const, name: 'Drake London' }], get: [{ kind: 'player' as const, name: 'Puka Nacua' }], viewerSide: false }
     h.leagueType = 'keeper'
     const keeper = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
-    const read = graded(await keeper.grade(deal))
-    expect(read.basis).toContain('Keeper costs and future keeper surplus are not included')
+    expect(await keeper.grade(deal)).toMatchObject({ graded: false, reason: expect.stringContaining('league season') })
     h.leagueType = 'survivor_guillotine'
     const prohibited = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
     const result = await prohibited.grade(deal)
@@ -338,7 +337,7 @@ describe('P0 package and team-direction regression through the shared league gra
     }))
     expect(view.letter).toBe('A')
     expect(view.action).toBe('review')
-    expect(view.recommendation).toContain('may require drops')
+    expect(view.recommendation).toContain('you’ll have to drop someone')
     expect(view.lines.map(line => line.assetKind)).toEqual(['player', 'player', 'player'])
   })
   it.each([0.85, 1.2])('roster utility factor %s moves the your-team letter and leaves the market letter alone', async factor => {

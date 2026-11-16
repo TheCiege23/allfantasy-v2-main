@@ -31,7 +31,7 @@ type HubData = {
   }>
 }
 
-export interface ZombieUniverseForumClientProps {
+interface ZombieUniverseForumClientProps {
   universeId: string
 }
 

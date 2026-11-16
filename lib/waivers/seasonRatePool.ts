@@ -108,7 +108,7 @@ export function leagueIdColumn(platform: string | null | undefined): LeagueIdCol
 }
 
 /** Where a sport's projection key lives on `PlayerIdentityMap`. */
-export function projectionKeyField(sport: string): 'id' | 'cfbdId' {
+function projectionKeyField(sport: string): 'id' | 'cfbdId' {
   return sport.trim().toUpperCase() === 'NCAAF' ? 'cfbdId' : 'id'
 }
 
@@ -211,7 +211,7 @@ export async function loadSeasonRateRows(
 }
 
 /** What the identity map knows about one projection key. */
-export type KeyIdentity = {
+type KeyIdentity = {
   team: string | null
   /** The key's id in each league column; `null` when the column is empty on every row for it. */
   ids: Partial<Record<LeagueIdColumn, string | null>>

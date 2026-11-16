@@ -1,0 +1,112 @@
+/*
+ * The My team guide (MyTeam.tsx MyTeamGuide). Builds on the home guide's `af-hg-*` headline so Home,
+ * Week, Live, Trades and My team read as one product. Token layer only. No text below 11px
+ * (__tests__/core-app/type-floor.test.ts).
+ */
+.af-core .af-mtg-head { margin-bottom: 14px; }
+/*
+ * Always first. On a phone .af-mt is a flex column that re-orders its sections (af-my-team.css,
+ * "lineup first": head -2, decision -1); without this the guide sank below all of them.
+ */
+.af-core .af-mt > .af-mtg-head { order: -100; }
+.af-core .af-mtg-chip { cursor: default; }
+.af-core .af-mtg-chip:hover { border-color: var(--line2); }
+.af-core .af-mtg-head a.af-hg-chip { color: inherit; text-decoration: none; }
+
+/* "Why it matters" under "What to do". */
+.af-core .af-mtg-teach {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-line);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.af-core .af-mtg-teach b { color: var(--accent); }
+
+/* Byes: the count is the fact, the names one tap away. */
+.af-core .af-mt-byes-who > summary { cursor: pointer; color: var(--text2); }
+.af-core .af-mt-byes-who > span { display: block; margin-top: 4px; color: var(--muted); }
+
+/* Best lineup: seat-only moves folded. */
+.af-core .af-mt-opt-moves-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .af-core .af-mt-opt-moves-fold > summary,
+  .af-core .af-mt-byes-who > summary { min-height: 44px; display: flex; align-items: center; }
+}
+
+/* ── 2026-11-14: each fact once ─────────────────────────────────────────────────────────────── */
+/* "Checked just now with Sleeper · Refresh lineup": one line under the team name. */
+.af-core .af-lv-line {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.af-core .af-lv-refresh-link {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-lv-refresh-link:disabled { opacity: 0.6; cursor: default; }
+/* What to do: with items to check, the boilerplate paragraph renders empty and takes no room. */
+.af-core .af-mt-decision p:empty { display: none; }
+
+/* Future draft picks — a dynasty team's picks, under Taxi. */
+.af-core .af-mt-picks-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.af-core .af-mt-picks-trade {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-mt-picks-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.af-core .af-mt-picks-list li { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; gap: 10px; }
+.af-core .af-mt-picks-season { color: var(--text2); font-size: 13px; font-weight: 700; padding-top: 6px; }
+.af-core .af-mt-picks-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.af-core .af-mt-pick {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  max-width: 100%;
+}
+.af-core .af-mt-pick small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+.af-core .af-mt-pick[data-round='1'] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }

@@ -7,7 +7,7 @@ import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 const BASE = getPublicSiteOrigin()
 
-export type PageKey =
+type PageKey =
   | "home"
   | "tools-hub"
   | "trade-analyzer"
@@ -101,25 +101,6 @@ const STATIC_PAGES: Record<string, SEOPageConfig> = {
     canonical: BASE + "/chimmy",
     keywords: ["Chimmy AI", "fantasy assistant", "AI fantasy", "draft help"],
   },
-}
-
-/** Resolve page key from pathname (e.g. /waiver-ai -> waiver-ai). */
-export function resolvePageKeyFromPath(pathname: string): PageKey | null {
-  const normalized = pathname.replace(/\/$/, "") || "/"
-  if (normalized === "/") return "home"
-  const segment = normalized.split("/")[1]
-  if (segment === "tools-hub") return "tools-hub"
-  if (segment === "trade-analyzer") return "trade-analyzer"
-  if (segment === "trade-evaluator") return "trade-evaluator"
-  if (segment === "waiver-ai") return "waiver-ai"
-  if (segment === "mock-draft") return "mock-draft"
-  if (segment === "brackets") return "brackets"
-  if (segment === "bracket") return "bracket-challenge"
-  if (segment === "leagues") return "leagues"
-  if (segment === "chimmy") return "chimmy"
-  if (segment === "sports") return "sport"
-  if (segment === "tools") return "tool"
-  return null
 }
 
 /** Get static SEO config for a page key. For sport/tool use seo-landing config. */

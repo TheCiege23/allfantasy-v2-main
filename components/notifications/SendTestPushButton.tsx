@@ -73,4 +73,3 @@ export function SendTestPushButton() {
   )
 }
 
-export default SendTestPushButton

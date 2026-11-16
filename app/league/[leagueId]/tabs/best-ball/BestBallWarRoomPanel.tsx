@@ -32,6 +32,7 @@ import type { BestBallTradeAnalysis, BestBallTradeFinderResult } from '@/lib/bes
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
+import { FeatureGate } from '@/components/subscription/FeatureGate'
 
 type Tool = 'upside' | 'draft-plan' | 'stacks' | 'risk' | 'waivers' | 'trade-analyze' | 'trade-find' | null
 
@@ -49,6 +50,7 @@ const STATE_COLOR: Record<string, string> = { thin: 'text-rose-300/85', balanced
 export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [context, setContext] = useState<BestBallWarRoomContext | null>(null)
   const [construction, setConstruction] = useState<BestBallConstructionResult | null>(null)
+  const [constructionLocked, setConstructionLocked] = useState(false)
   const [depth, setDepth] = useState<BestBallDepthResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +81,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
         if (!active) return
         setContext(res.context)
         setConstruction(res.construction)
+        setConstructionLocked(res.constructionLocked === true)
         setDepth(res.depth)
         setError(null)
       })
@@ -179,8 +182,14 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
       <div className="grid gap-2 rounded-lg border border-white/[0.06] bg-[#07071a] p-3 sm:grid-cols-3" data-testid="best-ball-war-room-rules-card">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Build grade</p>
-          <p className="text-[14px] font-bold text-violet-100">{construction?.grade ?? '—'}</p>
-          <p className="text-[11px] text-white/45">roster {construction?.rosterSize ?? 0}/{context.roster.recommendedRosterSize}</p>
+          {constructionLocked ? (
+            <p className="text-[12px] font-semibold text-amber-200" data-testid="best-ball-war-room-grade-locked">🔒 AF Legacy</p>
+          ) : (
+            <>
+              <p className="text-[14px] font-bold text-violet-100">{construction?.grade ?? '—'}</p>
+              <p className="text-[11px] text-white/45">roster {construction?.rosterSize ?? 0}/{context.roster.recommendedRosterSize}</p>
+            </>
+          )}
         </div>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Rules</p>
@@ -198,7 +207,14 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
         </div>
       </div>
 
-      {/* Roster construction by position */}
+      {/* Roster construction by position — AF Legacy (roster_construction_planning) */}
+      {constructionLocked && (
+        <div data-testid="best-ball-war-room-construction-locked">
+          <FeatureGate featureId="roster_construction_planning" featureNameOverride="Roster construction">
+            <span />
+          </FeatureGate>
+        </div>
+      )}
       {construction && (
         <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3" data-testid="best-ball-war-room-construction">
           <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Roster construction</p>

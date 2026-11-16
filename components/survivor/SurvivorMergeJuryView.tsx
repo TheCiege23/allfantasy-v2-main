@@ -7,7 +7,7 @@ import { JuryFinale } from './late/JuryFinale'
 import { TribeBuff } from './late/TribeBuff'
 import { SurvivorShareCardsButton } from './share/SurvivorShareCards'
 
-export interface SurvivorMergeJuryViewProps {
+interface SurvivorMergeJuryViewProps {
   leagueId: string
   summary: SurvivorSummary
   names: Record<string, string>

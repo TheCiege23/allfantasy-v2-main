@@ -608,7 +608,6 @@ async function getCachedOrFetch<T>(cacheKey: string, ttlMs: number, fetcher: () 
   }
 }
 
-const ONE_HOUR = 3600_000
 const ONE_DAY = 86_400_000
 const SEVEN_DAYS = 7 * ONE_DAY
 const THIRTY_DAYS = 30 * ONE_DAY

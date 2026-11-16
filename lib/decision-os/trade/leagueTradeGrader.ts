@@ -7,7 +7,7 @@ import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { leagueTypeBasis, type LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { loadLeagueForTrade, type LoadedTradeLeague } from '@/lib/trade-value-console/league-loader'
-import { gradeBaseOf, gradeOnLeagueValue, isNonPlayerLine, type LeagueGrade } from '@/lib/trade-value-console/leagueGrade'
+import { gradeBaseOf, gradeOnLeagueValue, isNonPlayerLine, type LeagueGrade, type LeagueGradeInput } from '@/lib/trade-value-console/leagueGrade'
 import {
   applyChartTePremium,
   resolveAssets,
@@ -35,6 +35,9 @@ export { providerNameInChartOrder } from './tradePlayers'
 import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligibility'
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createSportPointsGrader } from './sportPointsGrader'
+import { createFootballTradeFormatGrader } from './footballTradeFormatGrade'
+import { createFootballCombinedPickQuote } from './footballCampusTradeValue'
+import { createFootballCampusDraftGrader } from './footballCampusDraftGrade'
 import { createGuillotineGrader } from './guillotineGrader'
 import { createZombieGrader } from './zombieGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
@@ -173,6 +176,14 @@ export async function gradePricedSides(args: {
   allowGenericMarketGrade?: boolean
   /** Sentences the basis must carry about how some lines were priced (e.g. devy prospects). */
   basisNotes?: readonly string[]
+  /**
+   * The AllFantasy trade market's move per line, index-aligned with the lines. Only the trade console
+   * passes it today; every other grader omits it and grades exactly as before.
+   */
+  tradeMarket?: LeagueGradeInput['tradeMarket']
+  /** The measured lineup move per line, and the sentence for an unusual lineup that got none. Console only, like `tradeMarket`. */
+  lineup?: LeagueGradeInput['lineup']
+  lineupNote?: string | null
   mark?: (name: string) => void
 }): Promise<{ leagueGrade: LeagueGrade; grade: TradeGradeView; needFactors: NeedFactors | null }> {
   const { chart } = args
@@ -208,6 +219,9 @@ export async function gradePricedSides(args: {
     league: chart.marketCtx ? { scoringSettings: chart.marketCtx.scoring.settings } : null,
     chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
     needFactors: null,
+    tradeMarket: args.tradeMarket ?? null,
+    lineup: args.lineup ?? null,
+    lineupNote: args.lineupNote ?? null,
   })
 
   const rosterFitGrade = needFactors && !needFactors.gap
@@ -219,6 +233,9 @@ export async function gradePricedSides(args: {
         league: chart.marketCtx ? { scoringSettings: chart.marketCtx.scoring.settings } : null,
         chart: { dynasty: chart.chartIsDynasty, superflex: chart.isSuperFlex, teams: chart.leagueSize, ppr: chart.pprNfl },
         needFactors,
+        tradeMarket: args.tradeMarket ?? null,
+        lineup: args.lineup ?? null,
+        lineupNote: args.lineupNote ?? null,
       })
     : null
 
@@ -394,9 +411,16 @@ export async function createLeagueTradeGrader(args: {
   const leagueType = leagueTypeBasis({
     settings: leagueRow.settings,
     leagueType: leagueRow.leagueType,
+    leagueVariant: leagueRow.leagueVariant,
     platform: leagueRow.platform ?? null,
   })
   const withType = (view: TradeGradeView): TradeGradeView => ({ ...view, leagueType })
+  const footballFormat = sport === 'NFL' ? createFootballTradeFormatGrader({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, type: leagueType.type }) : null
+  const combinedPickQuote = sport === 'NFL' && leagueType.type === 'c2c'
+    ? createFootballCombinedPickQuote({ id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season }) : null
+  const campusDraft = sport === 'NFL' ? createFootballCampusDraftGrader({
+    id: args.leagueId, platform: leagueRow.platform, season: leagueRow.season, leagueSize: leagueRow.leagueSize, status: leagueRow.status, type: leagueType.type,
+  }) : null
   // College football redraft and dynasty use the league’s stored projections and scoring.
   const college =
     sport === 'NCAAF'
@@ -415,6 +439,7 @@ export async function createLeagueTradeGrader(args: {
     league: {
       id: args.leagueId,
       platform: leagueRow.platform,
+      platformLeagueId: leagueRow.platformLeagueId,
       settings: leagueRow.settings,
       leagueType: leagueType.type,
       leagueSize: leagueRow.leagueSize ?? null,
@@ -432,7 +457,7 @@ export async function createLeagueTradeGrader(args: {
     sport,
     leagueType: leagueType.type,
     leagueVariant: leagueRow.leagueVariant ?? null,
-    league: { id: args.leagueId, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
+    league: { id: args.leagueId, platform: leagueRow.platform, settings: leagueRow.settings, leagueSize: leagueRow.leagueSize ?? null },
   })
   const zombie = createZombieGrader({
     leagueType: leagueType.type,
@@ -483,6 +508,7 @@ export async function createLeagueTradeGrader(args: {
         fcPlayers: chart.fcPlayers,
         resolveEnrichmentIds: false,
         pickSlots: chart.pickSlots ?? null,
+        ...(combinedPickQuote ? { combinedPickQuote: combinedPickQuote(chart) } : {}),
       }
       let [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])
       /*
@@ -550,8 +576,11 @@ export async function createLeagueTradeGrader(args: {
     book,
     profile,
     async grade(deal) {
+      const campus = await campusDraft?.(deal.give, deal.get, dated, chart)
+      if (campus) return withType(campus)
       // A dated grade is never priced for roster need: the roster it would read is today's.
-      return withType(await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal))
+      const view = await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal)
+      return withType(footballFormat ? await footballFormat(view, chart, [...deal.give, ...deal.get], dated) : view)
     },
     ...(book
       ? {

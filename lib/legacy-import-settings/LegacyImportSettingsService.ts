@@ -3,7 +3,7 @@ import type { LegacyImportStatusResponse } from "./types"
 /**
  * Fetches legacy import status for the current user (Sleeper link + job status; others placeholder).
  */
-export async function getLegacyImportStatus(): Promise<LegacyImportStatusResponse> {
+async function getLegacyImportStatus(): Promise<LegacyImportStatusResponse> {
   const res = await fetch("/api/user/legacy-import-status", { cache: "no-store" })
   /*
    * ⚠ THROW, DO NOT RETURN AN EMPTY RESULT. An empty `providers` renders as "every platform coming

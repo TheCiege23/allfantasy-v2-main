@@ -120,8 +120,9 @@ export type SportPointsContext = {
    * Present in an NBA, NHL or MLB dynasty league: what the multi-season grade reads
    * (`./sportDynastyValue.ts`). Board id → age today, and the year of the next rookie draft.
    */
-  dynasty?: { ages: ReadonlyMap<string, number>; classYears?: ReadonlyMap<string, number>; nextDraftYear: number }
+  dynasty?: import('./sportDynastyValue').SportDynastyContext
   verifiedSoccerOwnGoals?: boolean
+  publishedSoccerPoints?: boolean
   /** Only this provider’s alias may resolve an explicit roster ID. */
   rosterProvider?: string
 }
@@ -134,7 +135,7 @@ export const SPORT_FAAB_REASON =
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 export function sportPointsBasis(
-  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList' | 'verifiedSoccerOwnGoals'>,
+  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList' | 'verifiedSoccerOwnGoals' | 'publishedSoccerPoints'>,
 ): string {
   const label = SPORT_LABEL[ctx.sport]
   const teamCountNote = ctx.teamCountAssumed ? ` This league has no verified team count. The grade uses ${ctx.teams} teams.` : ''
@@ -185,8 +186,9 @@ export function sportPointsBasis(
   // A quality start is a one-game test that a season line cannot pass or fail.
   const qs = mlb ? ' Quality starts are not projected.' : ''
   // Soccer's board blends two seasons and scales to club matches (`./soccerBoard.ts`).
-  const clubs = soccer
-    ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in.${ctx.verifiedSoccerOwnGoals ? ' Own goals use verified match timelines.' : ' Own goals are not projected.'}`
+  const clubs = ctx.publishedSoccerPoints
+    ? ' Projections use the league’s published Fantrax fantasy-point totals per club match, including the scoring categories Fantrax applied.'
+    : soccer ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in.${ctx.verifiedSoccerOwnGoals ? ' Own goals use verified match timelines.' : ' Own goals are not projected.'}`
     : ''
   return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}${teamCountNote}`
 }
@@ -399,6 +401,56 @@ export function replacementFromLineups(
 
 type Priced = { name: string; value: number }
 
+/** One player's price on the board, or why not — what a value lookup and the trade grade both read. */
+export type BoardPlayerPrice =
+  | {
+      ok: true
+      player: BoardPlayer
+      /** The best free agent at his position, per game, under the league's rules. */
+      replacementPerGame: number
+      replacementName: string
+      /** Rest-of-season value over replacement: max(0, perGame − replacement) × games left. */
+      value: number
+    }
+  | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' }
+
+/**
+ * ONE player, priced the way the trade grade prices him (2026-11-16): the same resolution, sample bar,
+ * replacement level and rest-of-season multiplier. `priceSide` below calls this, so a player's value and
+ * a deal's grade cannot disagree about him. The refusal reasons are the grade's own, minus its
+ * "This deal is not graded." tail.
+ */
+export function priceBoardPlayer(
+  asset: { playerId?: string | null; rosterPlayerId?: string | null; name?: string | null },
+  ctx: SportPointsContext,
+  index: ReadonlyMap<string, BoardPlayer> = indexBoard(ctx.board),
+): BoardPlayerPrice {
+  const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
+  if (!found.ok) return { ok: false, reason: found.reason, valuationGap: found.valuationGap }
+  const { player } = found
+  if (!meetsSampleBar(player)) {
+    const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
+    const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
+    return { ok: false, reason: `${player.name}’s projection rests on ${has}, too few to price — values start at ${needs}.` }
+  }
+  const pos = player.position.trim().toUpperCase()
+  const replacement = ctx.replacementByPosition.get(pos)
+  if (!replacement) {
+    return {
+      ok: false,
+      reason: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level.`,
+    }
+  }
+  // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
+  return {
+    ok: true,
+    player,
+    replacementPerGame: replacement.perGame,
+    replacementName: replacement.name,
+    value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining,
+  }
+}
+
 function priceSide(
   assets: readonly TradeAssetInput[],
   ctx: SportPointsContext,
@@ -408,23 +460,12 @@ function priceSide(
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: SPORT_PICKS_REASON(ctx.sport) }
     if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
-    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
-    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
-    const { player } = found
-    if (!meetsSampleBar(player)) {
-      const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
-      const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
-      return { withheld: `${player.name}’s projection rests on ${has}, too few to price — grades start at ${needs}. This deal is not graded.` }
+    const price = priceBoardPlayer(asset, ctx, index)
+    if (!price.ok) {
+      const reason = price.reason.replace(/ — values start at /, ' — grades start at ')
+      return { withheld: `${reason} This deal is not graded.`, ...(price.valuationGap ? { valuationGap: price.valuationGap } : {}) }
     }
-    const pos = player.position.trim().toUpperCase()
-    const replacement = ctx.replacementByPosition.get(pos)
-    if (!replacement) {
-      return {
-        withheld: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level. This deal is not graded.`,
-      }
-    }
-    // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
-    priced.push({ name: player.name, value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining })
+    priced.push({ name: price.player.name, value: price.value })
   }
   return { priced }
 }

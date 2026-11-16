@@ -5,7 +5,7 @@
 
 import { logLeagueEngineEvent } from '@/lib/league-engine-performance/observability'
 
-export type DeadLetterContext = {
+type DeadLetterContext = {
   queueName: string
   jobName: string
   jobId?: string

@@ -13,7 +13,7 @@
 /** The AllFantasy Etsy storefront (artbyciege). Every shop surface links here. */
 export const ETSY_SHOP_URL = 'https://artbyciege.etsy.com'
 
-export type MerchDesign = {
+type MerchDesign = {
   id: string
   title: string
   /** Public path of the web preview. */

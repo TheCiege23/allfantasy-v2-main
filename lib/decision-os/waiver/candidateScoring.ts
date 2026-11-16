@@ -1,12 +1,12 @@
 import type { AssetValue } from '@/lib/hybrid-valuation'
-import type { TeamNeedsMap, UserGoal, SlotNeed, PositionalDepth } from '@/lib/waiver-engine/team-needs'
+import type { TeamNeedsMap, UserGoal, SlotNeed } from '@/lib/waiver-engine/team-needs'
 import {
   foldPosition,
   scorableWithoutLeagueEvidence,
   TEAM_UNIT_POSITIONS,
 } from '@/lib/waiver-engine/team-needs'
 import type { PlayerAnalytics } from '@/lib/player-analytics'
-import { computeAthleticGrade, computeCollegeProductionGrade } from '@/lib/player-analytics'
+import { computeAthleticGrade } from '@/lib/player-analytics'
 
 export type CrowdTrendData = {
   addCount: number
@@ -112,7 +112,6 @@ export type ScoredWaiverTarget = {
     riskLabel: string
   } | null
 }
-
 
 export type WaiverIntelSignal = {
   playerName: string
@@ -935,5 +934,4 @@ export function scoreWaiverCandidates(
 
   return scored.slice(0, maxResults)
 }
-
 

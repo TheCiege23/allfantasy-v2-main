@@ -12,6 +12,7 @@ import { TokenSpendService } from "@/lib/tokens/TokenSpendService"
 import { syncUserProfileFromSubscriptions } from "@/lib/subscription/syncBridge"
 import {
   grantMonthlyCreditsFromInvoice,
+  invoiceSubscriptionId,
   markSubscriptionAsExpired,
   markSubscriptionPastDue,
   refreshSubscriptionPeriod,
@@ -23,8 +24,13 @@ import { isFullRefund, reverseSubscriptionForPayment } from "@/lib/subscription/
 import { refuseCheckoutForRestrictedBillingState } from "@/lib/subscription/paidStateRefusal"
 import { lockAccountForCardBillingState } from "@/lib/geo/accountGeoLockServer"
 import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/leagueFinanceService"
-import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
+import { buildSubscriptionMetaEvent, buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
+import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
+import { MONETIZATION } from "@/lib/analytics/eventNames"
+import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
+import { isTrialStartInvoice, readTrialDays, trialEndsAt } from "@/lib/monetization/freeTrial"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
+import { onPaymentFailed, onPaymentRecovered, onSubscriptionCanceled, wasPastDue } from "@/lib/billing/retentionWebhook"
 import { redeemCouponFromWebhook } from "@/lib/promotions/sponsorCoupon"
 import { assertLeagueEntryFeeProcessingEnabled } from "@/lib/monetization/leagueEntryFeeKillSwitch"
 
@@ -165,7 +171,13 @@ async function persistSubscriptionEntitlementFromCheckout(
   if (!subscriptions) return
 
   const now = new Date()
-  const currentPeriodEnd = addBillingInterval(now, item.interval)
+  /*
+   * An AF Pro free trial (lib/monetization/freeTrial.ts) is TRIALING until it ends, not active for a
+   * month: that is what the MRR estimate, the admin counts and the period end must all say. The
+   * plan is fully unlocked either way — the entitlement resolver treats trialing as active.
+   */
+  const trialDays = checkoutTrialDays(session)
+  const currentPeriodEnd = trialDays > 0 ? trialEndsAt(now, trialDays) : addBillingInterval(now, item.interval)
   const stripeSubscriptionId =
     typeof session.subscription === "string" ? session.subscription : null
 
@@ -175,7 +187,7 @@ async function persistSubscriptionEntitlementFromCheckout(
   const baseData = {
     userId: context.userId,
     subscriptionPlanId: plan.id,
-    status: "active",
+    status: trialDays > 0 ? "trialing" : "active",
     source: "stripe",
     sku: item.sku,
     stripeCustomerId:
@@ -189,6 +201,7 @@ async function persistSubscriptionEntitlementFromCheckout(
     metadata: {
       purchaseType: "subscription",
       stripeSessionMode: session.mode ?? "subscription",
+      ...(trialDays > 0 ? { trialDays } : {}),
     },
   }
 
@@ -307,7 +320,14 @@ async function trackSubscriptionPurchaseFromCheckout(
   const item = getMonetizationCatalogItemBySku(context.sku)
   if (!item || item.type !== "subscription") return
 
-  const metaEvent = buildSubscriptionPurchaseMetaEvent(item, session.id)
+  /*
+   * A trial start is NOT a purchase: telling Meta "Purchase" for a $0 trial teaches the ad optimiser to
+   * buy people who never pay. It gets StartTrial; the Purchase is sent when the first real charge lands
+   * (recordTrialConversion, on the invoice).
+   */
+  const metaEvent = checkoutTrialDays(session) > 0
+    ? buildSubscriptionMetaEvent("StartTrial", item, { sourceId: `stripe_trial:${session.id}`, deterministic: true, orderId: session.id })
+    : buildSubscriptionPurchaseMetaEvent(item, session.id)
   await trackMetaServerEvent({
     eventName: metaEvent.eventName,
     eventId: metaEvent.eventId,
@@ -322,6 +342,83 @@ async function trackSubscriptionPurchaseFromCheckout(
   }).catch((metaError) => {
     console.warn("[stripe webhook] Meta Purchase failed:", metaError)
   })
+}
+
+/**
+ * The funnel's `monetization.paid_conversion_confirmed` (2026-11-15): webhook-confirmed, after the
+ * paid-state refusal check, carrying the surface that sent the buyer (`metadata.entrySource`, set by
+ * the checkout route). Stripe can deliver one event more than once, so the row carries the session id
+ * and the admin funnel counts distinct sessions. No cookies here — this is Stripe calling, not the buyer.
+ */
+async function recordPaidConversion(
+  session: Stripe.Checkout.Session,
+  context: { userId: string; sku: MonetizationSku } | null,
+): Promise<void> {
+  if (!context?.userId || !context.sku) return
+  const metadata = (session.metadata ?? {}) as Record<string, string | undefined>
+  const trialDays = checkoutTrialDays(session)
+  await recordFunnelEvent({
+    // A trial start is counted as one, never as a paid conversion — that comes with the first charge.
+    event: trialDays > 0 ? MONETIZATION.TRIAL_STARTED : MONETIZATION.PAID_CONVERSION_CONFIRMED,
+    userId: context.userId,
+    getCookie: () => undefined,
+    meta: {
+      sku: context.sku,
+      entry_source: normalizeEntrySource(metadata.entrySource) ?? "unknown",
+      stripe_session_id: session.id,
+      ...(trialDays > 0 ? { trial_days: trialDays } : {}),
+    },
+  })
+}
+
+/** The trial a completed checkout started: only when the session says so AND nothing was charged. */
+function checkoutTrialDays(session: Stripe.Checkout.Session): number {
+  const metadata = (session.metadata ?? {}) as Record<string, string | undefined>
+  const days = readTrialDays(metadata.trialDays)
+  return days > 0 && session.payment_status === "no_payment_required" ? days : 0
+}
+
+/**
+ * A trial that just became a paying subscription (2026-11-15): the first invoice with money on it for
+ * a subscription that started as a trial. Recorded ONCE per subscription — a renewal a month later is
+ * a renewal, not a conversion — as the paid conversion, with the surface that started it, and Meta gets
+ * its Purchase now rather than at the $0 start.
+ */
+async function recordTrialConversion(invoice: Stripe.Invoice, userId: string): Promise<void> {
+  if (invoice.billing_reason !== "subscription_cycle" || !((invoice.amount_paid ?? 0) > 0)) return
+  const raw = invoice as unknown as Record<string, any>
+  const subMeta = (raw.parent?.subscription_details?.metadata ?? raw.subscription_details?.metadata ?? {}) as Record<string, string | undefined>
+  if (readTrialDays(subMeta.trialDays) <= 0) return
+  const subscriptionId = invoiceSubscriptionId(invoice)
+  if (!subscriptionId) return
+  const key = `sub:${subscriptionId}`
+  const already = await prisma.analyticsEvent
+    .findFirst({
+      where: { event: MONETIZATION.PAID_CONVERSION_CONFIRMED, userId, meta: { path: ["stripe_session_id"], equals: key } },
+      select: { id: true },
+    })
+    .catch(() => null)
+  if (already) return
+  const sku = typeof subMeta.sku === "string" ? subMeta.sku.trim().toLowerCase() : ""
+  await recordFunnelEvent({
+    event: MONETIZATION.PAID_CONVERSION_CONFIRMED,
+    userId,
+    getCookie: () => undefined,
+    meta: { sku: sku || "unknown", entry_source: normalizeEntrySource(subMeta.entrySource) ?? "unknown", stripe_session_id: key, from_trial: true },
+  })
+  const item = sku ? getMonetizationCatalogItemBySku(sku as MonetizationSku) : null
+  if (item && item.type === "subscription") {
+    const metaEvent = buildSubscriptionMetaEvent("Purchase", item, { sourceId: `stripe_trial_conversion:${subscriptionId}`, deterministic: true, orderId: subscriptionId })
+    await trackMetaServerEvent({
+      eventName: metaEvent.eventName,
+      eventId: metaEvent.eventId,
+      customData: metaEvent.customData,
+      userId,
+      source: "stripe_webhook_trial_converted",
+    }).catch((metaError) => {
+      console.warn("[stripe webhook] Meta trial Purchase failed:", metaError)
+    })
+  }
 }
 
 async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<string | null> {
@@ -378,6 +475,7 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
         await syncUserProfileFromSubscriptions(checkoutContext.userId)
       }
       await trackSubscriptionPurchaseFromCheckout(session, checkoutContext)
+      await recordPaidConversion(session, checkoutContext)
     } else if (purchaseType === "tokens") {
       await persistTokenPurchaseFromCheckout(session, checkoutContext)
     }
@@ -544,6 +642,8 @@ export async function POST(req: NextRequest) {
           if (userId) {
             await markSubscriptionAsExpired(deletedSub, userId)
             await syncUserProfileFromSubscriptions(userId)
+            // Retention (lib/billing/retention.ts): recorded now; the win-back note follows in three days.
+            await onSubscriptionCanceled(deletedSub, userId)
           }
           break
         }
@@ -554,6 +654,8 @@ export async function POST(req: NextRequest) {
           if (userId) {
             await markSubscriptionPastDue(invoice, userId)
             await syncUserProfileFromSubscriptions(userId)
+            // Retention: tell them now (once per invoice, however often Stripe retries). Never throws.
+            await onPaymentFailed(invoice, userId)
           }
           break
         }
@@ -564,9 +666,13 @@ export async function POST(req: NextRequest) {
             const customerId = typeof invoice.customer === "string" ? invoice.customer : null
             const userId = customerId ? await resolveUserIdFromStripeCustomerId(customerId) : null
             if (userId) {
+              // Read BEFORE the refresh writes `active`: a paid invoice on a past-due row is a recovered card.
+              const recovering = await wasPastDue(invoice, userId)
               await refreshSubscriptionPeriod(invoice, userId)
+              if (recovering) await onPaymentRecovered(invoice, userId)
               await syncUserProfileFromSubscriptions(userId)
               await grantMonthlyCreditsFromInvoice(invoice, userId)
+              await recordTrialConversion(invoice, userId)
             }
           }
           break

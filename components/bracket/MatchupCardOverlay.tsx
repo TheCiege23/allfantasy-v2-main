@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X, ChevronRight, Zap, Shield, TrendingUp } from "lucide-react"
+import { X, ChevronRight, Zap, TrendingUp } from "lucide-react"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 
 type Node = {

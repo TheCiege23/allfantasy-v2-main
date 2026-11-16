@@ -1,7 +1,8 @@
 'use client'
 
 import type { SeasonBlueprint } from '@/lib/tournament/seasonBlueprint'
-import { assessSeasonRules, defaultSeasonRules, type SeasonRules } from '@/lib/tournament/seasonRules'
+import { assessSeasonRules, defaultSeasonRules, SEASON_DRAFT_DEADLINE_POLICY, type SeasonDraftOverride, type SeasonRules } from '@/lib/tournament/seasonRules'
+import { buildSeasonLeagueLayout } from '@/lib/tournament/seasonLeagueLayout'
 
 const field = 'min-h-11 w-full rounded-xl border border-white/20 bg-slate-900 px-3 py-2 text-white'
 const utcInput = (value: string) => value ? new Date(value).toISOString().slice(0, 16) : ''
@@ -17,6 +18,16 @@ export function SeasonPlayingRulesEditor({ config, onChange }: { config: SeasonB
     onChange(rules)
   }
   const update = <K extends keyof SeasonRules>(key: K, value: SeasonRules[K]) => r && onChange({ ...r, [key]: value })
+  let layout: ReturnType<typeof buildSeasonLeagueLayout> = []
+  try {
+    layout = buildSeasonLeagueLayout({ ...config, name: 'Schedule preview', rules: undefined })
+  } catch {
+    // Draft override rows can still be removed while the field layout is incomplete.
+  }
+  const overrides = r?.calendar.draftOverrides ?? []
+  const updateOverrides = (draftOverrides: SeasonDraftOverride[]) => {
+    if (r) update('calendar', { ...r.calendar, scheduleReviewed: false, draftOverrides })
+  }
   return <section className="space-y-4 rounded-xl border border-cyan-300/20 p-3 sm:p-4" aria-label="Playing rules and calendar">
     <h3 className="text-lg font-semibold">Playing rules and season calendar</h3>
     <p className="text-sm text-slate-300">Save your work as a draft while completing the contract. Rule readiness is separate from live launch readiness.</p>
@@ -71,7 +82,33 @@ export function SeasonPlayingRulesEditor({ config, onChange }: { config: SeasonB
         {(['regularSeasonStartsAt', 'regularSeasonEndsAt'] as const).map((key, i) => <label key={key} className="block">Regular season {i === 0 ? 'starts' : 'ends'} (UTC)<input className={field} type="datetime-local" value={utcInput(r.calendar[key])} onChange={e => update('calendar', { ...r.calendar, [key]: utcValue(e.target.value), scheduleReviewed: false })} /></label>)}
         <button type="button" className="min-h-11 rounded-xl border border-white/20 px-3" onClick={() => update('calendar', { ...r.calendar, scheduleReviewed: false, periods: Array.from({ length: config.finalWeek - config.startWeek + 1 }, (_, i) => r.calendar.periods.find(p => p.number === config.startWeek + i) ?? { number: config.startWeek + i, startsAt: '', endsAt: '', finalizesAt: '' }), drafts: [1, 2, 3].map(stage => r.calendar.drafts.find(d => d.stage === stage) ?? { stage, startsAt: '', completeBy: '' }) })}>Sync calendar rows to scoring periods</button>
         {r.calendar.periods.map((p, index) => <div key={p.number} className="space-y-2 rounded-xl border border-white/15 p-3"><h4 className="font-medium">Period {p.number}</h4>{(['startsAt', 'endsAt', 'finalizesAt'] as const).map(key => <label key={key} className="block text-sm">Period {p.number} {key === 'startsAt' ? 'starts' : key === 'endsAt' ? 'ends' : 'scores finalize'} (UTC)<input className={field} type="datetime-local" value={utcInput(p[key])} onChange={e => update('calendar', { ...r.calendar, scheduleReviewed: false, periods: r.calendar.periods.map((row, i) => i === index ? { ...row, [key]: utcValue(e.target.value) } : row) })} /></label>)}</div>)}
-        {r.calendar.drafts.map((d, index) => <div key={d.stage} className="space-y-2 rounded-xl border border-white/15 p-3"><h4 className="font-medium">Stage {d.stage} draft</h4>{(['startsAt', 'completeBy'] as const).map(key => <label key={key} className="block text-sm">Stage {d.stage} draft {key === 'startsAt' ? 'starts' : 'complete by'} (UTC)<input className={field} type="datetime-local" value={utcInput(d[key])} onChange={e => update('calendar', { ...r.calendar, scheduleReviewed: false, drafts: r.calendar.drafts.map((row, i) => i === index ? { ...row, [key]: utcValue(e.target.value) } : row) })} /></label>)}</div>)}
+        <p className="text-sm text-slate-300">Set a default window for each stage. A league override takes priority over an opening division override. Every league shares the same scoring lock.</p>
+        {r.calendar.draftOverrides && <p className="text-sm text-amber-200">{SEASON_DRAFT_DEADLINE_POLICY}</p>}
+        {r.calendar.drafts.map((draft, index) => {
+          const leagues = layout.find(stage => stage.stage === draft.stage)?.leagues ?? []
+          const options = [
+            ...[...new Set(leagues.flatMap(league => league.division ? [league.division] : []))].map(target => ({ scope: 'division' as const, target, label: 'Division ' + target })),
+            ...leagues.map(league => ({ scope: 'league' as const, target: league.key, label: league.name })),
+          ].filter(option => !overrides.some(row => row.stage === draft.stage && row.scope === option.scope && row.target === option.target))
+          return <div key={draft.stage} className="space-y-2 rounded-xl border border-white/15 p-3">
+            <h4 className="font-medium">Stage {draft.stage} default draft</h4>
+            {(['startsAt', 'completeBy'] as const).map(key => <label key={key} className="block text-sm">Stage {draft.stage} draft {key === 'startsAt' ? 'starts' : 'complete by'} (UTC)<input className={field} type="datetime-local" value={utcInput(draft[key])} onChange={e => update('calendar', { ...r.calendar, scheduleReviewed: false, drafts: r.calendar.drafts.map((row, i) => i === index ? { ...row, [key]: utcValue(e.target.value) } : row) })} /></label>)}
+            {options.length > 0 && <label className="block text-sm">Add stage {draft.stage} draft override<select className={field} value="" onChange={e => {
+              if (e.target.value === '') return
+              const { scope, target } = options[Number(e.target.value)]!
+              updateOverrides([...overrides, { ...draft, scope, target }])
+            }}><option value="">Choose a division or league</option>{options.map((option, i) => <option key={option.scope + ':' + option.target} value={i}>{option.label}</option>)}</select></label>}
+          </div>
+        })}
+        {overrides.map((row, index) => {
+          const league = layout.find(stage => stage.stage === row.stage)?.leagues.find(pool => pool.key === row.target)
+          const title = 'Stage ' + row.stage + ' ' + (row.scope === 'division' ? 'division ' + row.target : league?.name ?? row.target)
+          return <div key={JSON.stringify([row.stage, row.scope, row.target])} className="space-y-2 rounded-xl border border-white/15 p-3">
+            <h4 className="font-medium">{title} override</h4>
+            {(['startsAt', 'completeBy'] as const).map(key => <label key={key} className="block text-sm">{title} {key === 'startsAt' ? 'starts' : 'complete by'} (UTC)<input className={field} type="datetime-local" value={utcInput(row[key])} onChange={e => updateOverrides(overrides.map((entry, i) => i === index ? { ...entry, [key]: utcValue(e.target.value) } : entry))} /></label>)}
+            <button type="button" className="min-h-11 rounded-xl border border-white/20 px-3" onClick={() => updateOverrides(overrides.filter((_, i) => i !== index))}>Remove {title} override</button>
+          </div>
+        })}
         <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={r.calendar.scheduleReviewed} onChange={e => update('calendar', { ...r.calendar, scheduleReviewed: e.target.checked })} />I reviewed these windows against actual games and season breaks</label>
       </div></details>
       <button type="button" className="min-h-11 rounded-xl border border-amber-300/30 px-3 text-amber-200" onClick={initialize}>Reset playing rules and calendar to defaults</button>

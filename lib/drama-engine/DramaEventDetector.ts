@@ -73,12 +73,6 @@ function canonicalPair(a: string, b: string): string {
   return a <= b ? `${a}::${b}` : `${b}::${a}`
 }
 
-function parseNum(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value) || 0
-  return 0
-}
-
 function toManagerIds(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((v): v is string => Boolean(v && String(v).trim().length > 0)))]
 }

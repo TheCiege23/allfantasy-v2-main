@@ -4,12 +4,12 @@ import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import { getSeverityStyle } from './severityStyles'
 
-export interface KpiCardTrend {
+interface KpiCardTrend {
   direction: 'up' | 'down' | 'flat'
   label: string
 }
 
-export interface KpiCardProps {
+interface KpiCardProps {
   label: string
   value: string
   size?: 'large' | 'small'

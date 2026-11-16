@@ -1,7 +1,7 @@
 import { matchupNoun } from "./singleGame"
 import type { PlayoffSeriesView } from "./types"
 
-export const PLAYOFF_LATE_PICK_LOCK_RULES = new Set(["none", "commissioner_override"])
+const PLAYOFF_LATE_PICK_LOCK_RULES = new Set(["none", "commissioner_override"])
 
 export function allowsPlayoffLatePicks(lockRule: string | null | undefined): boolean {
   return PLAYOFF_LATE_PICK_LOCK_RULES.has(String(lockRule ?? "").trim().toLowerCase())

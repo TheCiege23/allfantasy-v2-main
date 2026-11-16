@@ -14,7 +14,6 @@
  * basics, scoring and roster only — never a trades, waivers or playoffs line that may not apply to it.
  */
 export const RULES_EXPLAINER_SPORTS = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const
-export type RulesSport = (typeof RULES_EXPLAINER_SPORTS)[number]
 export type RulesFormat = 'redraft' | 'guillotine' | 'keeper' | 'dynasty' | 'best_ball' | 'specialty'
 
 /** The concepts the overview names, beyond the format itself (`overview.concept.*`). */
@@ -33,7 +32,7 @@ export const RULES_CONCEPTS = [
 ] as const
 export type RulesConcept = (typeof RULES_CONCEPTS)[number]
 
-export type GuillotineChopStep = { fromWeek: number; chops: number }
+type GuillotineChopStep = { fromWeek: number; chops: number }
 
 /**
  * A league's explainable rules, in one canonical shape. Built from the league row (and, on the
@@ -123,6 +122,8 @@ export type RuleSnapshot = {
   blindAuction?: boolean | null
   /** Guilly: best ball — lineups set themselves; each team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
   bestBallLineups?: boolean | null
+  /** Guilly: weeks per elimination period — 1, or 2 for an MLB two-week league (lib/guillotine/eliminationPeriods.ts). */
+  chopPeriodWeeks?: number | null
   /** Keeper leagues: `League.keeperCount`, `keeperCostSystem`, `keeperMaxYears`. */
   keeperCount?: number | null
   keeperCost?: string | null
@@ -207,8 +208,8 @@ export type RuleSnapshot = {
   draftCollegeRounds?: number[] | null
 }
 
-export type DraftStatus = 'scheduled' | 'in_progress' | 'completed'
-export type DraftOvernightPause = { from: string; to: string; picksAllowed: boolean }
+type DraftStatus = 'scheduled' | 'in_progress' | 'completed'
+type DraftOvernightPause = { from: string; to: string; picksAllowed: boolean }
 
 /**
  * The rookie lottery as it actually draws (WeightedDraftLotteryEngine / standingsForLottery), not as
@@ -257,7 +258,7 @@ export type RuleText = { k: string; vars?: Record<string, RuleVar> }
 
 export type RuleLine = { id: string; text: RuleText }
 
-export type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft' | 'feeder'
+type RuleSectionId = 'overview' | 'scoring' | 'roster' | 'lineups' | 'playoffs' | 'trades' | 'waivers' | 'guillotine' | 'keeper' | 'dynasty' | 'draft' | 'feeder'
 
 export type RuleSection = { id: RuleSectionId; title: RuleText; lines: RuleLine[] }
 

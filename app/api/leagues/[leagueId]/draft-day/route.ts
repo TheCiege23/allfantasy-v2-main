@@ -9,6 +9,7 @@
  *
  * Free on every tier: running a league is free (owner decision, 2026-10-15).
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { leagueId } = await ctx.params
   const role = await getLeagueRole(leagueId, userId)
   if (role === null) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   if (body.action === 'start_show') {

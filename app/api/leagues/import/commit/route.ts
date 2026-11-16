@@ -10,7 +10,23 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import {
+  applyImportReviewOverrides,
+  parseImportReviewOverrides,
+} from '@/lib/league-import/review/importReviewOverrides'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
+import { recordImportCompleted } from '@/lib/analytics/importFunnel'
+
+/**
+ * Give a week, get a week (lib/referral/proWeek.ts): a referred friend's import earns them and their
+ * referrer a week of AF Pro. Fire-and-forget after the import succeeded — never awaited, never throws,
+ * and safe to fire on every commit because the award claims once per friend.
+ */
+function rewardReferredImport(userId: string): void {
+  void import('@/lib/referral/proWeekGrant')
+    .then((m) => m.awardReferralProWeekOnImport(userId))
+    .catch(() => undefined)
+}
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import {
@@ -20,6 +36,8 @@ import {
 import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { isYahooSnapshotSourceId } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotModel'
+import { isYahooSnapshotImportOpenFor } from '@/lib/yahoo/yahooAvailability'
 import {
   applyAttestedCommissioner,
   assertImportCommissioner,
@@ -109,6 +127,8 @@ async function commitPublicEspnLeagueAsMember(args: {
     if (!outcome.ok) {
       return NextResponse.json({ error: outcome.error, code: outcome.code }, { status: outcome.status })
     }
+    await recordImportCompleted(args.userId, 'espn', { existed: outcome.existed === true, joinedExisting: outcome.joinedExisting === true })
+    rewardReferredImport(args.userId)
     return NextResponse.json({
       leagueId: outcome.league.id,
       name: outcome.league.name,
@@ -148,7 +168,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleImportCommit(req: NextRequest): Promise<Response> {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) {
     return auth.response
   }
@@ -184,6 +204,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
      * PUBLIC league imports without cookies as a member — see `espnPublicMemberImport.ts`.
      */
     espnLeagueRunBy?: string
+    /** Commissioner edits from the review screen — see `lib/league-import/review/importReviewOverrides.ts`. */
+    reviewOverrides?: unknown
   }
   try {
     body = await req.json()
@@ -202,7 +224,14 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
     return NextResponse.json({ error: 'Unsupported import provider' }, { status: 400 })
   }
 
-  if (!isImportProviderAvailable(provider)) {
+  /*
+   * A PASTED Yahoo league (yahoo-snapshot:<id>) needs no Yahoo API access, so it is not held to
+   * Yahoo's coming-soon state — only to the snapshot rollout (lib/yahoo/yahooAvailability.ts).
+   * The API path for Yahoo stays refused here exactly as before.
+   */
+  const yahooSnapshotAllowed =
+    provider === 'yahoo' && isYahooSnapshotSourceId(sourceId) && isYahooSnapshotImportOpenFor(auth.userId)
+  if (!isImportProviderAvailable(provider) && !yahooSnapshotAllowed) {
     return NextResponse.json(
       { error: importComingSoonMessage(provider), code: 'coming_soon' },
       { status: 400 }
@@ -287,11 +316,19 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
   }
 
   try {
-    const canonical = buildCanonicalImportBundle(result.normalized)
+    /*
+     * Edits the commissioner made on the "Review your import" screen. Keyed on SOURCE ids and
+     * applied to this fresh fetch — commit never trusts the preview's copy of the league.
+     */
+    const normalized = applyImportReviewOverrides(
+      result.normalized,
+      parseImportReviewOverrides(body.reviewOverrides),
+    )
+    const canonical = buildCanonicalImportBundle(normalized)
     const { persisted, runId, skipped } = await persistImportWithCanonicalAudit({
       userId: auth.userId,
       provider,
-      normalized: result.normalized,
+      normalized,
       canonical,
       allowUpdateExisting: Boolean(body.force),
       /*
@@ -352,6 +389,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
      * The 409/"Already imported" path is unreachable for anything imported once
      * before, which is precisely the case a re-run hits.
      */
+    await recordImportCompleted(auth.userId, provider, { existed: persisted.existed === true, joinedExisting: persisted.joinedExisting === true })
+    rewardReferredImport(auth.userId)
     return NextResponse.json({
       leagueId: persisted.league.id,
       name: persisted.league.name,

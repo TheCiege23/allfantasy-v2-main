@@ -146,7 +146,7 @@ export function parseLivePayload(payload: unknown, capturedAt: Date): GameSnapsh
   return out
 }
 
-export type PollOutcome =
+type PollOutcome =
   | { kind: 'unchanged' }
   | { kind: 'changed'; snapshots: GameSnapshot[] }
   | { kind: 'error'; status: number }

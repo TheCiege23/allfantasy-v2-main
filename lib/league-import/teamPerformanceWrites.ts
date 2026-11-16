@@ -74,7 +74,7 @@ export function changedTeamPerformances(
   })
 }
 
-export type TeamPerformanceWriteResult = {
+type TeamPerformanceWriteResult = {
   /** Distinct (team, week) rows the schedule carried — what the old path counted as "created". */
   processed: number
   /** Rows sent because they were new or differed. */

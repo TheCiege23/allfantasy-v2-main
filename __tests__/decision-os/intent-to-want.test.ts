@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 
 import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
@@ -61,9 +63,20 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  it('manager_psychology turns on psychologyConsistency, and nothing else', () => {
+  /*
+   * 🛑 INVERTED 2026-11-16 (re-score item 9): the slice ran on every psychology question and nothing printed it —
+   * `serialize.ts` has no entry for it. It comes back with the facts-only, paid psychology renderer (item 11).
+   */
+  it('NO intent runs psychologyConsistency while nothing renders it', () => {
+    for (const intent of ALL_INTENTS) expect(deriveWantFromIntent(intent).psychologyConsistency).toBe(false)
+    const serializer = readFileSync(resolve(process.cwd(), 'lib/decision-os/grounding/serialize.ts'), 'utf8')
+    // The day the serializer renders it, this fails — and the mapping above can be restored with item 11.
+    expect(serializer).not.toMatch(/packet\.psychologyConsistency/)
+  })
+
+  it('manager_psychology turns on nothing else either', () => {
     const w = deriveWantFromIntent('manager_psychology')
-    expect(w.psychologyConsistency).toBe(true)
+    expect(w.psychologyConsistency).toBe(false)
     expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
@@ -85,9 +98,15 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
    * the base packet's own cost -- `marketValues` serialised behind `leagueRules`, 2,995 ms median
    * and itself over the ceiling under load. Restore this mapping only after that read is fixed.
    */
-  it('player_value turns on NOTHING — rosterValueGrade is the packet critical path', () => {
+  /*
+   * ✅ RESTORED 2026-11-16 (re-score item 8) — BECAUSE THE PACKET NO LONGER WAITS ON IT, NOT BECAUSE IT GOT FAST.
+   * The packet reads `loadRosterValueGradeSliceCached`: a cached grade is served at once and a miss computes in the
+   * background, so the 4.6 s above is off the critical path on every turn. The guard below keeps that true: the
+   * packet may only reach the grade through the cache-only read.
+   */
+  it('player_value turns on rosterValueGrade, and nothing else', () => {
     const w = deriveWantFromIntent('player_value')
-    expect(w.rosterValueGrade).toBe(false)
+    expect(w.rosterValueGrade).toBe(true)
     expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.psychologyConsistency).toBe(false)
@@ -95,14 +114,17 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
   })
 
   /**
-   * The same structural guard the lineup slice has: no intent may ask for `rosterValueGrade` on
-   * any path. Without it, re-adding `intent === 'player_value'` reddens only the test above, which
-   * reads like a stale assertion to update rather than a budget being breached.
+   * The structural guard, moved to where the budget now lives: only player_value asks for the grade, and the
+   * packet never calls the uncached compute — re-wiring the direct `loadRosterValueGradeSlice` would put 4.6 s back
+   * on the critical path with every assertion above still green.
    */
-  it('NO intent asks for rosterValueGrade, on any path', () => {
+  it('only player_value asks for rosterValueGrade, and the packet reads it cache-only', () => {
     for (const intent of ALL_INTENTS) {
-      expect(deriveWantFromIntent(intent).rosterValueGrade).toBe(false)
+      expect(deriveWantFromIntent(intent).rosterValueGrade).toBe(intent === 'player_value')
     }
+    const packet = readFileSync(resolve(process.cwd(), 'lib/decision-os/grounding/packet.ts'), 'utf8')
+    expect(packet).toMatch(/kick\('rosterValueGrade', loadRosterValueGradeSliceCached\(/)
+    expect(packet).not.toMatch(/loadRosterValueGradeSlice\(/)
   })
 
   /**

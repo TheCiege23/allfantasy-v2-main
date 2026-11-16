@@ -48,14 +48,3 @@ export const FOCUS_REFETCH_THROTTLE_MS = 5000
  * - Expose refetch() for post-action sync (e.g. after purchase or settings change).
  */
 
-export const REFRESH_TRIGGERS_DOC = {
-  auth: 'SessionProvider (next-auth). Mount + refetch when needed; after profile/settings change call update() from useSession().',
-  tokens: 'useTokenBalance: mount, window focus (throttled), refetch/post-purchase.',
-  entitlement: 'useEntitlement: mount, window focus (throttled), refetch/post-purchase.',
-  leagueList: 'useLeagueList: mount, window focus (throttled); keeps dashboard list fresh after create/join.',
-  leagues: 'useLeagueSectionData: mount, focus/visibility (throttled), manual reload, state-event listeners; plus server cache invalidation.',
-  drafts: 'Draft sections/APIs: mount, focus/visibility (throttled), manual reload, state-event listeners.',
-  chat: 'Per-thread fetch. No surface dispatches chat refresh events since useAIChat was removed (2026-09-29).',
-  ai: 'Per-request/session fetch; AI hooks emit refresh events after successful actions.',
-  events: 'dispatchStateRefreshEvent/addStateRefreshListener provide cross-domain invalidation signals for auth/leagues/drafts/chat/ai/tokens/subscriptions.',
-} as const

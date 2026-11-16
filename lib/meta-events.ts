@@ -1,9 +1,11 @@
-export const META_EVENT_NAMES = [
+const META_EVENT_NAMES = [
   "PageView",
   "ViewContent",
   "CompleteRegistration",
   "InitiateCheckout",
   "Purchase",
+  // Meta standard event (2026-11-15): an AF Pro free trial started — never sent as a Purchase.
+  "StartTrial",
   "Lead",
   "early_access_click",
   "find_league_click",
@@ -13,12 +15,13 @@ export type MetaEventName = (typeof META_EVENT_NAMES)[number]
 
 export const DEFAULT_META_PIXEL_ID = "1607977376870461"
 
-export const META_STANDARD_PIXEL_EVENTS = [
+const META_STANDARD_PIXEL_EVENTS = [
   "PageView",
   "ViewContent",
   "CompleteRegistration",
   "InitiateCheckout",
   "Purchase",
+  "StartTrial",
   "Lead",
 ] as const
 
@@ -103,7 +106,7 @@ export function normalizeMetaCustomData(
   }
 }
 
-export function createMetaEventId(eventName: string, sourceId?: string | null): string {
+function createMetaEventId(eventName: string, sourceId?: string | null): string {
   const eventPart = sanitizeEventIdPart(eventName) || "event"
   const sourcePart = sourceId ? sanitizeEventIdPart(sourceId) : ""
   const randomPart = sanitizeEventIdPart(randomIdPart())

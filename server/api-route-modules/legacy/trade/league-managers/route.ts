@@ -79,13 +79,6 @@ interface SleeperDraft {
   slot_to_roster_id?: Record<string, number> // slot position -> roster_id
 }
 
-interface SleeperDraftPickDetails {
-  round: number
-  pick_no: number // pick within round (1-12)
-  roster_id: number
-  draft_slot: number
-}
-
 interface SleeperPlayer {
   full_name?: string
   first_name?: string
@@ -268,7 +261,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trade/league-managers",
 
       // Calculate draft picks owned by this roster
       const draftPicks: { season: string; round: number; slot: number | null; originalOwner: string; originalRosterId: number }[] = []
-      const numTeams = rosters.length
       
       // Start with default picks for future years
       futureYears.forEach(year => {
@@ -445,7 +437,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trade/league-managers",
     return NextResponse.json({ error: 'Failed to load league managers', details: String(e) }, { status: 500 })
   }
 })
-
 
 /**
  * Trade psychology for the managers of a Sleeper league, keyed by roster id.

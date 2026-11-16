@@ -25,12 +25,12 @@ import { createHash } from 'node:crypto'
 import type { FantraxDraftResults, FantraxPlayerRef, ResolvedRoster } from './fantraxApi'
 import { deriveFantraxTransactions, type PeriodRoster } from './deriveFantraxTransactions'
 
-export const FANTRAX_DRAFT_KEY = 'fantraxDraft'
-export const FANTRAX_DERIVED_KEY = 'fantraxDerived'
+const FANTRAX_DRAFT_KEY = 'fantraxDraft'
+const FANTRAX_DERIVED_KEY = 'fantraxDerived'
 /** Bound on stored inferred rows, so a long-lived dynasty snapshot cannot grow without limit. */
-export const FANTRAX_DERIVED_CAP = 2000
+const FANTRAX_DERIVED_CAP = 2000
 
-export type StoredFantraxDraftPick = {
+type StoredFantraxDraftPick = {
   round: number
   /** OVERALL pick number (see `fantraxDraft.ts` — `pick` is overall, `pickInRound` is not). */
   pick: number
@@ -46,7 +46,7 @@ export type StoredFantraxDraftPick = {
   team: string | null
 }
 
-export type StoredFantraxDraft = {
+type StoredFantraxDraft = {
   draftState: string | null
   /** Slots on the board, made or not. */
   slots: number
@@ -54,7 +54,7 @@ export type StoredFantraxDraft = {
   picks: StoredFantraxDraftPick[]
 }
 
-export type StoredFantraxMove = {
+type StoredFantraxMove = {
   id: string
   /** The scoring period current when the change was observed, when known. */
   period: number | null
@@ -65,7 +65,7 @@ export type StoredFantraxMove = {
   drops: string[]
 }
 
-export type StoredFantraxSuspectedTrade = {
+type StoredFantraxSuspectedTrade = {
   id: string
   period: number | null
   observedAt: string

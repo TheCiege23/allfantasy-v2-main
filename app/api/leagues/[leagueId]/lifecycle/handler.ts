@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,7 +9,7 @@ import {
   transitionLeagueState,
   normalizeLifecycleState,
 } from '@/server/services/leagueLifecycleService'
-import { isElevatedCommissioner, isHeadCommissioner } from '@/server/services/permissionService'
+import { isHeadCommissioner } from '@/server/services/permissionService'
 import type { LeagueLifecycleState } from '@prisma/client'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
@@ -50,7 +51,7 @@ export async function GET(
   )
 
   const [elevated, head] = await Promise.all([
-    isElevatedCommissioner(params.leagueId, userId),
+    canCommissionerAct(params.leagueId, userId, 'league'),
     isHeadCommissioner(params.leagueId, userId),
   ])
 
@@ -72,7 +73,7 @@ export async function POST(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const elevated = await isElevatedCommissioner(params.leagueId, userId)
+  const elevated = await canCommissionerAct(params.leagueId, userId, 'league')
   if (!elevated) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   let body: { nextState?: string; force?: boolean }

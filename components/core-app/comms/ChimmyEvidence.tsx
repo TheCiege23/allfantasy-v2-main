@@ -95,6 +95,7 @@ const SOURCE_LABELS: Record<string, string> = {
   find_league_by_name: 'Found the league you named',
   get_my_roster: 'Your roster, scoring and waiver budget',
   get_league_trade_activity: 'Trade block, proposals and league trade history',
+  get_manager_record: "A leaguemate's trades, waivers and drafts",
   get_league_trade_history: "Your league's completed trades, itemized",
   get_available_players: 'Who is actually available',
   get_player_value: 'Player trade values',
@@ -205,7 +206,6 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
   const detailId = useId()
 
   const {
-    confidencePct,
     level,
     rationale,
     leagueContext,
@@ -346,4 +346,3 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
   )
 }
 
-export default ChimmyEvidenceBlock

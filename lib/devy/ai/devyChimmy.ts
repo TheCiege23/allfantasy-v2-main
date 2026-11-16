@@ -19,7 +19,7 @@ Use only the context provided. Clearly label confirmed facts vs projections. Nev
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
-export type DevySetupRec = {
+type DevySetupRec = {
   startupFormat: string
   futureDraftFormat: string
   taxiSlots: number
@@ -29,7 +29,7 @@ export type DevySetupRec = {
   warnings: string[]
 }
 
-export type DevyProspectEval = {
+type DevyProspectEval = {
   ceiling: string
   timeline: string
   fit: string
@@ -38,7 +38,7 @@ export type DevyProspectEval = {
   verdict: string
 }
 
-export type DevyRankingEntry = {
+type DevyRankingEntry = {
   rank: number
   name: string
   school: string | null
@@ -47,13 +47,13 @@ export type DevyRankingEntry = {
   note: string
 }
 
-export type DevyRankingList = {
+type DevyRankingList = {
   positionFilter?: string
   classFilter?: string
   entries: DevyRankingEntry[]
 }
 
-export type BreakoutAlert = {
+type BreakoutAlert = {
   playerId: string
   name: string
   alertType: string
@@ -61,14 +61,14 @@ export type BreakoutAlert = {
   action: string
 }
 
-export type PipelineHealth = {
+type PipelineHealth = {
   mode: 'contender' | 'rebuild' | 'balanced' | 'aging'
   pipelineScore: number
   concerns: string[]
   recommendations: string[]
 }
 
-export type PromoteDecision = {
+type PromoteDecision = {
   recommendation: 'promote' | 'hold' | 'wait'
   confidence: number
   reasoning: string
@@ -84,16 +84,16 @@ export type SuggestedMatch = {
   reason: string
 }
 
-export type ImportSummaryNarrative = {
+type ImportSummaryNarrative = {
   narrative: string
   auditConfidence: string
 }
 
-export type ChimmyResponse = {
+type ChimmyResponse = {
   reply: string
 }
 
-export type DraftStrategyResponse = {
+type DraftStrategyResponse = {
   recommendation: string
   topOptions: string[]
   risk: string

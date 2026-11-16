@@ -16,7 +16,7 @@ import {
   trackUpgradePromptOpened,
 } from '@/lib/monetization-analytics'
 
-export interface LockedFeatureCardProps {
+interface LockedFeatureCardProps {
   featureName: string
   featureId?: string
   requiredPlan: string

@@ -27,7 +27,7 @@ import {
 import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 
 /** One side's roster, however that platform stores it. */
-export type FranchiseSideRoster = {
+type FranchiseSideRoster = {
   role: FranchiseRole
   platform: string
   leagueName: string | null
@@ -41,7 +41,7 @@ export type FranchiseSideRoster = {
   unavailableReason: string | null
 }
 
-export type FranchiseDetail = {
+type FranchiseDetail = {
   view: FranchiseView
   sides: FranchiseSideRoster[]
   /** Total across both halves, for the "one team" headline. */
@@ -206,7 +206,7 @@ export async function listFranchises(ownerUserId: string): Promise<FranchiseView
   )
 }
 
-export type RecordedTrade = {
+type RecordedTrade = {
   tradeId: string
   settlement: Settlement
 }

@@ -46,3 +46,45 @@ export async function notifyCommissionerOfJoin(params: { leagueId: string; joine
     dedupePrefix: `league_member_joined:${leagueId}:${joinerUserId}`,
   })
 }
+
+/**
+ * "Sam joined Dynasty Bros from your invite" — to the leaguemate whose invite link brought them
+ * (2026-11-15: "build the league-moment alerts").
+ *
+ * The commissioner hears every join (above); the leaguemate who actually shared the link heard nothing,
+ * although their invite carries their referral code (lib/referral/referralShareLink.ts). The referral
+ * records who brought this person, so this tells THAT person — and only when they play in this league
+ * themselves, which is what makes "from your invite" true. A commissioner who referred them is already
+ * told above, so is not told twice. Once per league and joiner.
+ *
+ * Bell and phone only (`league_announcements`, low severity: no text, and no email for good news that
+ * is not time-sensitive). Best-effort, like the commissioner's alert.
+ */
+export async function notifyInviterOfJoin(params: { leagueId: string; joinerUserId: string }): Promise<void> {
+  const { leagueId, joinerUserId } = params
+  const referral = await prisma.referral.findUnique({ where: { referredUserId: joinerUserId }, select: { referrerId: true } })
+  const inviter = referral?.referrerId
+  if (!inviter || inviter === joinerUserId) return
+  const [league, inviterTeam, profile] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, userId: true } }),
+    prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: inviter }, select: { id: true } }),
+    prisma.userProfile.findFirst({ where: { userId: joinerUserId }, select: { displayName: true, sleeperUsername: true } }),
+  ])
+  if (!league || league.userId === inviter || !inviterTeam) return
+  const who = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'Your friend'
+  const leagueName = league.name?.trim() || 'your league'
+  await dispatchNotification({
+    userIds: [inviter],
+    category: 'league_announcements',
+    type: 'league_invite_accepted',
+    title: `${who} joined ${leagueName}`,
+    body: 'They joined from your invite. Say hello in the league chat.',
+    actionHref: `/league/${leagueId}`,
+    actionLabel: 'Open league',
+    leagueId,
+    meta: { joinerUserId },
+    severity: 'low',
+    skipChannels: { email: true, sms: true },
+    dedupePrefix: `league_invite_accepted:${leagueId}:${joinerUserId}`,
+  })
+}

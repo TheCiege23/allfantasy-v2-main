@@ -5,8 +5,8 @@ import type {
 } from '@/lib/league-runtime'
 import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
 
-export type RosterRuntimeSection = 'starters' | 'bench' | 'ir'
-export type RosterRuntimeActorRole = 'manager' | 'commissioner' | 'system'
+type RosterRuntimeSection = 'starters' | 'bench' | 'ir'
+type RosterRuntimeActorRole = 'manager' | 'commissioner' | 'system'
 
 export type RosterRuntimePlayer = {
   playerId: string
@@ -26,7 +26,7 @@ export type RosterRuntimeSections = {
   ir: RosterRuntimePlayer[]
 }
 
-export type CanonicalRosterSlot = {
+type CanonicalRosterSlot = {
   slotId: string
   label: string
   section: 'starter' | 'bench' | 'ir'
@@ -36,14 +36,14 @@ export type CanonicalRosterSlot = {
   flexible: boolean
 }
 
-export type CanonicalRosterSlotAssignment = {
+type CanonicalRosterSlotAssignment = {
   slot: CanonicalRosterSlot
   player: RosterRuntimePlayer | null
   locked: boolean
   lockReason: string | null
 }
 
-export type RosterRuntimeValidationIssue = {
+type RosterRuntimeValidationIssue = {
   code:
     | 'ACTIVE_ROSTER_OVER_LIMIT'
     | 'BENCH_OVER_LIMIT'
@@ -109,7 +109,7 @@ export type CanonicalRosterRuntimeState = {
   runtimeInvariants: RosterRuntimeValidationIssue[]
 }
 
-export type RosterMoveInput = {
+type RosterMoveInput = {
   rules: CanonicalLeagueRules
   team: CanonicalRosterRuntimeTeamState
   playerId: string
@@ -121,7 +121,7 @@ export type RosterMoveInput = {
   scoringWeek?: number | null
 }
 
-export type RosterMoveResult =
+type RosterMoveResult =
   | {
       ok: true
       sections: RosterRuntimeSections
@@ -373,7 +373,7 @@ function allowedRosterPositions(rules: CanonicalLeagueRules): Set<string> {
   return allowed
 }
 
-export function validateCanonicalRosterLineup(input: {
+function validateCanonicalRosterLineup(input: {
   rules: CanonicalLeagueRules
   sections: RosterRuntimeSections
   starterAssignments: CanonicalRosterSlotAssignment[]

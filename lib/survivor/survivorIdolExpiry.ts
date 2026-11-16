@@ -8,7 +8,7 @@ import type { SurvivorIdolExpiryMode } from './survivorSettings'
  * Pure and client-safe.
  */
 
-export type SurvivorIdolExpiryRule = { mode: SurvivorIdolExpiryMode; playersLeft: number; week: number }
+type SurvivorIdolExpiryRule = { mode: SurvivorIdolExpiryMode; playersLeft: number; week: number }
 
 type ExpirySettings = {
   idolExpiryMode?: SurvivorIdolExpiryMode | string | null

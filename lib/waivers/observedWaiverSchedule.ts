@@ -24,8 +24,8 @@ import { zonedParts, type WaiverSchedule } from '@/lib/core-app/waiverRunClock'
  *   for months after each US daylight-saving change. If Sleeper's clock is not Pacific, the
  *   change splits the runs, agreement drops below the floor and this returns nothing until it
  *   re-forms — silence, never a confident wrong hour.
- * - Clock-free: it reads the most recent runs, never "the last N days", so the cross-league board
- *   can serve it from its cache (see waiversBoardSummary.ts).
+ * - Clock-free: it reads the most recent runs, never "the last N days", so a cached read of it
+ *   cannot go stale by the clock alone.
  */
 
 export const OBSERVED_TIME_ZONE = 'America/Los_Angeles'

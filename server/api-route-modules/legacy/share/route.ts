@@ -287,7 +287,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/share", tool: "LegacyS
       rateLimit: { action: 'share', maxRequests: 5, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
-    const sleeper_username = gate.identity.sleeperUsername.toLowerCase()
 
     /*
      * PROVIDER BOUNDARY. The fetch below is inline in this handler, so this IS the

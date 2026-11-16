@@ -15,7 +15,7 @@ import type { ContentFeedItem, FeedMode, FeedItemType } from "./types"
 const DEFAULT_LIMIT = 30
 const MAX_ITEMS_PER_SOURCE = 15
 
-export interface GetContentFeedOptions {
+interface GetContentFeedOptions {
   tab?: FeedMode
   sport?: string | null
   contentType?: FeedItemType | null

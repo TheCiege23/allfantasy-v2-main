@@ -6,7 +6,6 @@
 import { xaiChatJson, parseTextFromXaiChatCompletion } from "@/lib/xai-client";
 import { openaiChatText } from "@/lib/openai-client";
 import { deepseekChat } from "@/lib/deepseek-client";
-import { normalizeToSupportedSport } from "@/lib/sport-scope";
 import {
   isOpenAIAvailable,
   isXaiAvailable,
@@ -28,7 +27,6 @@ import {
   buildOpenAIUserPrompt,
 } from "./prompts";
 import { moderateAIClipResult } from "./moderation";
-import { CLIP_INPUT_TYPES, CLIP_OUTPUT_TYPES } from "./types";
 
 const MAX_RETRIES = 2;
 
@@ -167,7 +165,7 @@ function isDeepSeekConfigured(): boolean {
   return isDeepSeekAvailable();
 }
 
-export interface OrchestratorResult {
+interface OrchestratorResult {
   success: boolean;
   result: AIClipResult | null;
   error?: string;
@@ -181,7 +179,6 @@ export interface OrchestratorResult {
 export async function runAISocialClipPipeline(
   input: AIClipGenerateInput
 ): Promise<OrchestratorResult> {
-  const sport = normalizeToSupportedSport(input.sport);
   const providerStatus = {
     xai: isXaiConfigured(),
     openai: isOpenAIConfigured(),
@@ -299,4 +296,3 @@ export async function runAISocialClipPipeline(
   return { success: true, result: final, providerStatus };
 }
 
-export { isXaiConfigured, isOpenAIConfigured, isDeepSeekConfigured };

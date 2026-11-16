@@ -79,6 +79,61 @@ Collapsing it into `null` is how a sport silently looks broken.
 
 ---
 
+## 0.46 🔄 RE-SCORE ON TODAY'S CODE — 2026-11-16 (supersedes §3 and §0.36 marks)
+
+Every mark below was re-measured from code at `e6f75628f`, not carried forward. §3 and §0.36 had drifted in
+both directions: Lineup was scored 100% and is ~42% (`lib/decision-os/lineup-os/` was deleted 2026-09-29);
+Manager Psychology was scored 100% and is ~40% (retired from users and Chimmy in the Competitive Edge privacy
+pass); Waiver was scored 70% and is ~93% (`waiverDecision` got a producer — `decisionBridge.ts:346`).
+
+⚠ **Axis 4 (Cron) is CODE-SCHEDULED ONLY.** Production tables were not read. §0.35's rule — score cron by output
+tables — still stands; these marks are an upper bound until someone with production access checks them.
+
+⚠ **Chimmy answers through the TOOL LOOP by default** (`lib/chimmy-chat/feature-flags.ts:59`), which receives the
+packet as `groundingLine` (`app/api/chat/chimmy/route.ts:3192`). Several OS's reach the model through tools
+rather than the packet; axis 6 marks ⚠ for "reaches the model, not through the packet".
+
+| OS | 1 Feed | 2 Kernel | 3 Engine | 4 Cron | 5 Packet | 6 Chimmy | 7 User | **%** |
+|---|---|---|---|---|---|---|---|---|
+| **Import OS** | ✅ | ✅ | n/a | ✅ | ✅ | ✅ | ✅ | **~100%** |
+| **Projection OS** | ✅ | ✅ | n/a | ✅ NFL only | ✅ | ✅ week-mixing defect | ✅ not via feed | **~100%** |
+| **Waiver OS** | ✅ | ✅ | ✅ outcome hook no-op | ⚠ warmed entry unread | ✅ | ✅ | ✅ | **~93%** |
+| **League OS** | ✅ | ✅ | n/a | n/a (60s TTL) | ✅ | ⚠ renders as `present` placeholders | ✅ | **~90%** |
+| **Player Value OS** | ✅ | ✅ | n/a | ✅ | ✅ | ⚠ idpKicker + rosterGrade never requested | ⚠ screens read another path | **~83%** |
+| **Commissioner OS (UI)** | — | — | — | — | — | — | 11 of 13 namespaces live | **~80%** if prod `isLiveReady` rows are set |
+| **Trade OS** | ✅ | ✅ | ✅ outcome hook no-op | ⚠ feed not warmed | ❌ by design | ⚠ tools/side paths; pending AF + provider offers invisible | ✅ | **~70%** |
+| **Draft OS** | ⚠ feed has no reader | ✅ | ⚠ no outcome stage | ⚠ warms an unread feed | ❌ | ⚠ tool only; skips rules gate; no auction prices | ✅ | **~57%** |
+| **Lineup OS** | ❌ deleted | ⚠ name only | ⚠ never runs in prod | n/a | ✅ slice exists, never requested | ❌ third optimizer | ⚠ My Team uses `bestLineup` | **~42%** |
+| **Manager Psychology OS** | ⚠ orphaned | ✅ | n/a | ⚠ | ⚠ one slice, no producer | ❌ retired | ❌ 14 routes return 410 | **~40%** |
+
+### Owner decisions taken with this re-score (2026-11-16)
+
+- **Trade first.** Every pending offer a user receives — native AllFantasy (`AfLeagueTrade`) and provider
+  (Sleeper etc.) — is graded automatically, the user is notified with the verdict, Chimmy can see and discuss it,
+  and Chimmy proposes **counter-offers** that would make the deal work.
+- **Manager Psychology returns as FACTS ONLY, PAID.** Observed behaviour ("traded 9 times, usually sells RBs") —
+  never labels, never predictions about a person — gated behind the Competitive Edge tier.
+- **Player values for every sport, in order: NBA, then MLB, then NHL and soccer**, after NFL is finished.
+
+### Ranked B2C build list
+
+| # | Item | OS | Size | What a player notices today |
+|---|---|---|---|---|
+| 1 | Pending native + provider offers reach Chimmy (`pendingTradeDecisionGrounding.ts` reads only `redraft_trade_proposals`, 0 rows in prod) | Trade | S–M | Chimmy can't see an offer you were sent |
+| 2 | Auto-grade + notify on every received offer; counter-offer suggestions | Trade | M | No verdict until you ask; no counter ideas |
+| 3 | Native trade history carries frozen grades (`afTradeHistoryGrounding.ts`) | Trade | S–M | "Who won that trade?" has no grade in native leagues |
+| 4 | Projection slice passes and prints the week (`chat route` passes no week; `facts.ts:135`) | Projection | S | Chimmy can quote a season or other-week number as "this week" |
+| 5 | Real renderer for the league-rules slice (`serialize.ts renderObject` stops at nested objects) | League | S–M | Chimmy guesses PPR / deadline / FAAB |
+| 6 | One start/sit answer: Chimmy uses My Team's `optimizeLineup`; retire the dormant lineup engine + slice | Lineup | M | Chimmy can disagree with My Team's best lineup |
+| 7 | Chimmy draft lines through `runDraftPickDecision` (rules gate) + auction prices (`buildAuctionDecision`) | Draft | S | Chimmy says "take X" while the card says "skip X"; no bid prices |
+| 8 | Request `idpKicker` for IDP/K leagues; cache `rosterValueGrade` | Value | S / M | No league-scored IDP/K prices in Chimmy |
+| 9 | Kill switch for `waiverDecision`; stop the wasted `psychologyConsistency` run | Hub | S | Operational safety; fewer dropped packets |
+| 10 | Commissioner Managers module shows a false "No manager history" (410 retirement) | Commissioner | S | Paying commissioners see a wrong empty state |
+| 11 | Manager Psychology as facts only, paid | Psychology | L | — (new, per decision above) |
+| 12 | Player values for NBA → MLB → NHL/soccer | Value | L each | Non-NFL leagues get no values in Chimmy |
+
+Then B2B visuals, then gating + checkout (owner's order).
+
 ## 0.4 ✅ R0.2 RESOLVED — `domain_os_facts` DOES NOT EXIST IN PRODUCTION
 
 Owner ran it 2026-09-01: **`Did not find any relation named "domain_os_facts"`.**
@@ -347,7 +402,7 @@ class of truth, a **Decision domain** owns a class of question, and a hub, page 
 | Identity OS | **Fact OS** | `decision-os/import/assertions` (R4) |
 | Manager Psychology OS | **Fact OS** — now inside the hub | `decision-os/psychology-os` (R4b) |
 | Lineup · Waiver · Trade · Commissioner | **Decision domains** — all four have engines | `decision-os/{lineup,waiver,trade,commissioner-health}` |
-| Draft | **Decision domain with NO engine** | feed only; D5 unresolved |
+| Draft | **Decision domain — engine exists** (2026-11-14 correction): `decision-os/draft/decision.ts` wraps `draft-helper/RecommendationEngine.ts`; duplicate rankers converging, see `docs/os/OS_BACKBONE_PRINCIPLES.md` §2 | `decision-os/draft` |
 | Decision OS | **the hub** — the only thing that assembles, grades and answers | `decision-os/grounding` |
 | Chimmy | **the interface** | `/api/chat/chimmy` |
 | Platform OS · Manager OS | ❌ **nav labels, not systems** — seven names routing to two pages | `FantasyOsGateway` |

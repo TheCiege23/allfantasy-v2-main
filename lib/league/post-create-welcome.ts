@@ -16,7 +16,7 @@
  */
 
 /** Flags `buildPostCreateLeagueHomeHref` adds. Cleared once the league page has read them. */
-export const POST_CREATE_HANDOFF_KEYS = ['created', 'showInvite', 'playIntro', 'guide', 'openChat'] as const
+const POST_CREATE_HANDOFF_KEYS = ['created', 'showInvite', 'playIntro', 'guide', 'openChat'] as const
 
 function truthy(value: string | null): boolean {
   return value === '1' || value === 'true'
@@ -97,7 +97,7 @@ function storage(): Storage | null {
   }
 }
 
-export function isFirstEntryIntroSeen(kind: FirstEntryIntroKind, leagueId: string, userId: string): boolean {
+function isFirstEntryIntroSeen(kind: FirstEntryIntroKind, leagueId: string, userId: string): boolean {
   try {
     return Boolean(storage()?.getItem(firstEntryIntroStorageKey(kind, leagueId, userId)))
   } catch {

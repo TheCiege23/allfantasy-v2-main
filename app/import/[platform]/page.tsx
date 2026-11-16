@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -40,7 +41,7 @@ export function generateStaticParams() {
   return platformLandingSlugs().map((platform) => ({ platform }))
 }
 
-const SITE = 'https://allfantasy.ai'
+const SITE = getPublicSiteOrigin()
 
 export async function generateMetadata({
   params,

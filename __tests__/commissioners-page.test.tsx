@@ -23,7 +23,8 @@ describe('/commissioners', () => {
     const doc = await renderCommissioners()
     const h1s = doc.querySelectorAll('h1')
     expect(h1s).toHaveLength(1)
-    expect(h1s[0].textContent).toBe('Built by a commissioner,for commissioners.')
+    // "long-time", matching the landing page's commissioner band (owner's wording, 2026-11-13).
+    expect(h1s[0].textContent).toBe('Built by a long-time commissioner,for commissioners.')
     // No heading level is skipped: every h3 sits after some h2.
     const levels = [...doc.querySelectorAll('h1, h2, h3, h4')].map((h) => Number(h.tagName[1]))
     levels.forEach((lvl, i) => {
@@ -38,6 +39,19 @@ describe('/commissioners', () => {
     const signedIn = await renderCommissioners(true)
     expect(signedIn.querySelector('[data-testid="commissioners-hero-primary"]')?.getAttribute('href')).toBe('/import')
     expect(out.querySelector('[data-testid="commissioners-hero-pricing"]')?.getAttribute('href')).toBe('/pricing')
+  })
+
+  it('header shows Sign in beside the import button on desktop and phone, and hides it when signed in', async () => {
+    const out = await renderCommissioners(false)
+    for (const id of ['commissioners-nav-sign-in', 'commissioners-mobile-sign-in']) {
+      const a = out.querySelector(`[data-testid="${id}"]`)
+      expect(a?.getAttribute('href'), id).toBe('/login')
+      expect(a?.textContent, id).toBe('Sign in')
+      expect(a?.closest('details'), id).toBeNull()
+    }
+    expect(out.querySelector('.af-lp-mobile-actions [data-testid="commissioners-mobile-sign-in"]')).not.toBeNull()
+    const signedIn = await renderCommissioners(true)
+    expect(signedIn.querySelector('a[href="/login"]')).toBeNull()
   })
 
   it('renders all five features, each with a screenshot slot that has alt text', async () => {
@@ -88,14 +102,15 @@ describe('/commissioners', () => {
 })
 
 describe('/ — every "For commissioners" link goes to /commissioners', () => {
-  it('nav, mobile menu and footer link to /commissioners, the hero carries the line, and none goes to /pricing', async () => {
+  it('nav, mobile menu and footer link to /commissioners, the commissioner band carries the line, and none goes to /pricing', async () => {
     const { LandingV4 } = await import('@/components/core-app/screens/LandingV4')
     const doc = new DOMParser().parseFromString(renderToStaticMarkup(<LandingV4 lang="en" launch={null} />), 'text/html')
     const commishLinks = [...doc.querySelectorAll('a')].filter((a) => /for commissioners/i.test(a.textContent ?? ''))
     expect(commishLinks.length).toBeGreaterThanOrEqual(3)
     commishLinks.forEach((a) => expect(a.getAttribute('href')).toBe('/commissioners'))
     const line = doc.querySelector('[data-testid="landing-commish-line"]')
-    expect(line?.textContent).toMatch(/Built by a commissioner, for commissioners\./)
+    // The owner's wording for the landing band (2026-11-13): a LONG-TIME commissioner, in bold.
+    expect(line?.textContent).toMatch(/Built by a long-time commissioner, for commissioners\./)
     expect(line?.querySelector('a')?.getAttribute('href')).toBe('/commissioners')
   })
 })

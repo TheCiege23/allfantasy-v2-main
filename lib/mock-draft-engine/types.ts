@@ -5,7 +5,7 @@
 
 export type MockDraftStatus = 'pre_draft' | 'in_progress' | 'paused' | 'completed'
 
-export type MockSlotType = 'human' | 'cpu'
+type MockSlotType = 'human' | 'cpu'
 export type MockRoomMode = 'solo' | 'cpu_only' | 'mixed' | 'linked_public'
 
 export interface MockSlotConfigEntry {
@@ -15,7 +15,7 @@ export interface MockSlotConfigEntry {
   displayName?: string | null
 }
 
-export interface MockKeeperEntry {
+interface MockKeeperEntry {
   overall?: number
   round?: number
   slot?: number

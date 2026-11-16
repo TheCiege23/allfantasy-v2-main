@@ -22,7 +22,7 @@ export interface FeatureGatePrincipal {
   tenantId?: string
 }
 
-export type FeatureGateDecision = 'allow' | 'deny' | 'upgrade_required'
+type FeatureGateDecision = 'allow' | 'deny' | 'upgrade_required'
 
 /** Entitlement port. Default impl allows all; production impl maps Stripe → grants. */
 export interface IFeatureGate {
@@ -30,7 +30,7 @@ export interface IFeatureGate {
 }
 
 /** G15.4 default: everything allowed (no paid enforcement yet). */
-export class AllowAllFeatureGate implements IFeatureGate {
+class AllowAllFeatureGate implements IFeatureGate {
   decide(): FeatureGateDecision {
     return 'allow'
   }

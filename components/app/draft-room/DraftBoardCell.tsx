@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, Gavel, History, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, Gavel, History, Lock, Pencil } from 'lucide-react'
 import { withAlpha } from '@/lib/draft-room'
 import { PlayerAvatar } from './PlayerAvatar'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -11,6 +11,8 @@ import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 
 export type DraftBoardCellPick = {
   overall: number
@@ -28,7 +30,10 @@ export type DraftBoardCellPick = {
   byeWeek: number | null
   displayName: string | null
   amount?: number | null
+  /** A kept player pre-assigned to this slot before the draft — not a pick anyone made. */
   isKeeper?: boolean
+  /** The kept player belongs to the viewer's roster. */
+  isViewerKeeper?: boolean
   isDevyPick?: boolean
   isCollegePick?: boolean
   isProPick?: boolean
@@ -86,7 +91,7 @@ function TinyHeadshot({
 
 export type PickHighlightTone = 'none' | 'user' | 'ai'
 
-export type DraftBoardCellProps = {
+type DraftBoardCellProps = {
   pick: DraftBoardCellPick
   isEmpty: boolean
   isCurrentPick?: boolean
@@ -115,6 +120,9 @@ export type DraftBoardCellProps = {
 }
 
 /**
+ * Room v2 (2026-11): the on-the-clock tile is a dark tile with a cyan border, glow and an "On the
+ * clock" label, not a solid fill; your picks keep a thin cyan ring. Before v2:
+ *
  * ⚠ GOLD BELONGS TO "ON THE CLOCK" AND NOTHING ELSE ON THIS BOARD.
  *
  * The user tone used to be amber — the same family as the `#f6c445` on-the-clock cell. On a
@@ -166,8 +174,8 @@ function DraftBoardCellInner({
   onCommissionerEditPick,
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
-  const rs = presentationVariant === 'redraft_snake'
   const { tInterpolate, t } = useOptionalLanguage()
+  const headerCopy = useMessages(draftRoomHeaderMessages)
   const sportNorm = normalizeToSupportedSport(pick.sport ?? sport ?? DEFAULT_SPORT)
 
   const normalized = React.useMemo(() => {
@@ -201,15 +209,31 @@ function DraftBoardCellInner({
   // Sleeper-style: a flat slate tile when empty, a solid position-coloured tile once filled.
   // Trade colouring still wins when the commissioner turned it on.
   const tradeHex = tradedPickColorMode ? pick.tradedPickMeta?.tintColor ?? null : null
-  const positionHex = !isEmpty ? positionTintHex(pick.position) : null
+  const positionHex = !isEmpty ? positionTintHex(pick.position, sportNorm) : null
   const fillHex = !isEmpty ? positionHex : tradeHex
-  const tileStyle: React.CSSProperties | undefined = fillHex
-    ? isEmpty
-      ? { backgroundColor: withAlpha(fillHex, 0.22), boxShadow: `inset 0 0 0 1px ${withAlpha(fillHex, 0.55)}` }
-      : { backgroundColor: fillHex }
-    : undefined
-  // Filled tiles carry dark text on the bright position colour, as Sleeper does.
-  const onFill = !isEmpty && Boolean(positionHex)
+  /**
+   * A kept player was assigned before the draft — nobody picked them. A solid position tile made
+   * them indistinguishable from a real pick (the old cue was an 11px "K"), so a keeper is drawn
+   * LOCKED instead: dark striped tile, position-coloured edge, light text. The viewer's own keeper
+   * adds the accent ring the board already uses for "yours".
+   */
+  const isKept = Boolean(pick.isKeeper) && !isEmpty
+  const keptHex = positionHex ?? '#8b949e'
+  const tileStyle: React.CSSProperties | undefined = isKept
+    ? {
+        backgroundColor: '#101a2e',
+        backgroundImage: `repeating-linear-gradient(135deg, ${withAlpha(keptHex, 0.24)} 0 7px, transparent 7px 14px)`,
+        boxShadow: pick.isViewerKeeper
+          ? `inset 0 0 0 2px ${keptHex}, 0 0 0 2px #22d3ee`
+          : `inset 0 0 0 2px ${keptHex}`,
+      }
+    : fillHex
+      ? isEmpty
+        ? { backgroundColor: withAlpha(fillHex, 0.22), boxShadow: `inset 0 0 0 1px ${withAlpha(fillHex, 0.55)}` }
+        : { backgroundColor: fillHex }
+      : undefined
+  // Filled tiles carry dark text on the bright position colour. Kept tiles are dark.
+  const onFill = !isEmpty && Boolean(positionHex) && !isKept
 
   const ownerLabel = pick.tradedPickMeta?.newOwnerName ?? pick.displayName ?? null
   const showTradeChip = Boolean(isEmpty && ownerLabel && pick.tradedPickMeta?.newOwnerName)
@@ -223,7 +247,9 @@ function DraftBoardCellInner({
 
   const ariaLabel = isEmpty
     ? `Draft pick ${compactLabel}, empty slot`
-    : `${pick.playerName ?? 'Player'}, ${pick.position ?? ''}, ${pick.team ?? ''}, pick ${compactLabel}`
+    : isKept
+      ? `${pick.isViewerKeeper ? 'Your kept player' : 'Kept player'} ${pick.playerName ?? ''}, ${pick.position ?? ''}, ${pick.team ?? ''}, uses pick ${compactLabel}`
+      : `${pick.playerName ?? 'Player'}, ${pick.position ?? ''}, ${pick.team ?? ''}, pick ${compactLabel}`
 
   const hasRealHeadshot = Boolean(headshotSrc && classifyAvatarSource(headshotSrc) === 'headshot')
   const hasStatusBadges = Boolean(
@@ -236,17 +262,28 @@ function DraftBoardCellInner({
       (isEmpty && (isCollegeRound || isDevyRound)),
   )
 
+  /*
+   * Tile buttons. Empty tiles keep trade / history bottom-right. A filled tile's text runs to the
+   * bottom edge, and below md these buttons are always visible (no hover on touch), so there they
+   * move to the top-left corner, which a filled tile leaves free (the pick number is top-right).
+   */
+  const topLeftStart = onCommissionerEditPick ? 'left-6' : 'left-0.5'
+  const tradeSpot = isEmpty ? 'bottom-0.5 right-0.5' : `top-0.5 ${topLeftStart}`
+  const historySpot = isEmpty
+    ? onTradeFromCell ? 'bottom-0.5 right-6' : 'bottom-0.5 right-0.5'
+    : `top-0.5 ${onTradeFromCell ? (onCommissionerEditPick ? 'left-[46px]' : 'left-6') : topLeftStart}`
+
   const nameParts = (pick.playerName ?? '').trim().split(/\s+/)
   const firstName = nameParts.length > 1 ? nameParts[0] : ''
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : nameParts[0] ?? ''
 
   return (
     <div
-      className={`group relative flex aspect-square w-full max-w-[144px] flex-col overflow-hidden rounded-[4px] px-1.5 py-1 text-[11px] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
+      className={`group relative flex h-[68px] w-full flex-col overflow-hidden rounded-lg px-1.5 py-1 text-[11px] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
       } ${
         isCurrentPick
-          ? 'bg-[#4a5378] ring-2 ring-[#f6c445] shadow-[0_0_40px_rgba(246,196,69,0.35)]'
+          ? 'bg-[radial-gradient(120%_140%_at_0%_0%,rgba(34,211,238,0.28),#0d1020_62%)] ring-2 ring-cyan-300'
           : isEmpty
             ? 'bg-[#2a2f45]'
             : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300' : ''} ${highlightClass(pickHighlight)}`
@@ -288,7 +325,7 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-trade-${pick.overall}`}
           title={t('draftRoom.board.offerPickTrade')}
           aria-label={t('draftRoom.board.offerPickTradeAria')}
-          className="absolute bottom-0.5 right-0.5 z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+          className={`absolute ${tradeSpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <ArrowLeftRight className="h-3 w-3" />
         </button>
@@ -303,7 +340,7 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-history-${pick.overall}`}
           title="View trade history for this pick"
           aria-label="View trade history for this pick"
-          className={`absolute ${onTradeFromCell ? 'bottom-0.5 right-6' : 'bottom-0.5 right-0.5'} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-amber-200 opacity-80 transition duration-150 hover:bg-black/65 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
+          className={`absolute ${historySpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-amber-200 opacity-80 transition duration-150 hover:bg-black/65 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <History className="h-3 w-3" />
         </button>
@@ -319,7 +356,16 @@ function DraftBoardCellInner({
 
       {hasStatusBadges ? (
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden pr-8">
-          {pick.isKeeper ? <StatusBadge label="K" className="bg-emerald-500/30 text-emerald-100" /> : null}
+          {isKept ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px font-mono text-[11px] font-extrabold uppercase leading-[13px] tracking-[0.04em] text-[#14172a]"
+              style={{ backgroundColor: keptHex }}
+              data-testid={`draft-board-cell-keeper-${pick.overall}`}
+            >
+              <Lock className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+              {pick.isViewerKeeper ? 'Yours' : 'Kept'}
+            </span>
+          ) : null}
           {pick.isDevyPick ? <StatusBadge label="D" className="bg-violet-500/30 text-violet-100" /> : null}
           {pick.isCollegePick ? <StatusBadge label="C" className="bg-violet-500/30 text-violet-100" /> : null}
           {pick.isProPick ? <StatusBadge label="P" className="bg-cyan-500/30 text-cyan-100" /> : null}
@@ -342,6 +388,14 @@ function DraftBoardCellInner({
         </div>
       ) : null}
 
+      {isEmpty && isCurrentPick ? (
+        <span
+          className="pointer-events-none mt-auto self-center text-[11px] font-black uppercase tracking-[0.04em] text-cyan-300"
+          data-testid={`draft-board-cell-on-clock-${pick.overall}`}
+        >
+          {headerCopy.onTheClock}
+        </span>
+      ) : null}
       {isEmpty ? (
         <div className="mt-auto flex min-w-0 items-center justify-between gap-1 text-white/45">
           {emptyCellDirection === 'reverse' ? (
@@ -359,71 +413,22 @@ function DraftBoardCellInner({
           ) : null}
         </div>
       ) : (
-        <div className={`mt-auto flex min-w-0 items-end gap-1 ${onFill ? 'text-[#14172a]' : 'text-white'}`}>
-          <div className="min-w-0 flex-1 leading-none">
-            {viaOwner ? (
-              <span className="flex min-w-0 items-center gap-1 pr-7 text-[11px] leading-[12px]">
-                {firstName ? (
-                  <span className="min-w-0 shrink-[4] truncate font-medium opacity-80" title={pick.playerName ?? undefined}>
-                    {firstName}{' '}
-                  </span>
-                ) : null}
-                <span
-                  className={`min-w-0 max-w-[64px] truncate rounded-[3px] px-0.5 font-semibold ${onFill ? 'bg-black/20 text-[#14172a]' : 'bg-white/15 text-white'}`}
-                  title={tInterpolate('draftRoom.board.originally', { owner: viaOwner })}
-                  data-testid={`draft-board-cell-via-${pick.overall}`}
-                >
-                  {tInterpolate('draftRoom.board.viaOwner', { owner: viaOwner })}
-                </span>{' '}
-              </span>
-            ) : firstName ? (
-              <span className="block truncate pr-7 text-[11px] font-medium leading-[12px] opacity-80" title={pick.playerName ?? undefined}>
-                {firstName}
-                {/* The two name lines are separate blocks; keep a space so the tile's text (and a
-                    screen reader) reads "Atlas Runner", not "AtlasRunner". */}{' '}
-              </span>
-            ) : null}
-            <span className="block truncate text-[12px] font-extrabold leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
-              {lastName}
-            </span>
-            <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-[13px] opacity-75">
-              <span className="truncate">
-                {(pick.position ?? '—').toString()} - {(pick.team ?? '—').toString()}
-                {pick.byeWeek != null && pick.byeWeek > 0 ? ` (${pick.byeWeek})` : ''}
-              </span>
-              {pick.injuryStatus ? (
-                <span className="shrink-0 font-bold text-red-700" title={pick.injuryStatus}>
-                  {pick.injuryStatus.slice(0, 1).toUpperCase()}
-                </span>
-              ) : null}
-              {pick.experienceBadge ? (
-                <span className="shrink-0 rounded bg-black/20 px-0.5 text-[11px] font-bold uppercase">
-                  {pick.experienceBadge}
-                </span>
-              ) : null}
-              {pick.amount != null && pick.amount > 0 ? (
-                <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-black/20 px-0.5 font-bold tabular-nums">
-                  <Gavel className="h-2.5 w-2.5" aria-hidden />${pick.amount}
-                </span>
-              ) : null}
-              {pick.adpDelta != null && pick.adpDelta !== 0 ? (
-                <span
-                  className="shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums"
-                  title={
-                    pick.adpDelta > 0
-                      ? `Taken ${pick.adpDelta} picks after ADP`
-                      : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
-                  }
-                  data-testid="draft-board-cell-adp-delta"
-                >
-                  {pick.adpDelta > 0 ? `+${pick.adpDelta}` : `−${Math.abs(pick.adpDelta)}`}
-                </span>
-              ) : null}
-            </span>
-          </div>
-          {/* Only a real photo: with none, an initials circle read as a dark blob over the name. */}
-          {hasRealHeadshot ? (
-            <div className="shrink-0 overflow-hidden rounded-full">
+        /*
+         * Room v2 (2026-11): the headshot sits centred at the top of the tile, the name under it
+         * as "A. Runner", then position · team. Centred rather than tucked into a corner is the
+         * AF tile; it also keeps the name from wrapping around the photo on narrow boards.
+         */
+        <div
+          className={`flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-center ${onFill ? 'text-[#14172a]' : 'text-white'}`}
+          data-testid={`draft-board-cell-body-${pick.overall}`}
+        >
+          {/* Only a real photo: with none, an initials circle read as a dark blob over the name. A tile
+              already carrying a badge row (keeper, devy, trade) gives the photo's height to the text. */}
+          {hasRealHeadshot && !hasStatusBadges ? (
+            <div
+              className={`shrink-0 overflow-hidden rounded-full ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}
+              data-testid={`draft-board-cell-headshot-wrap-${pick.overall}`}
+            >
               <TinyHeadshot
                 name={pick.playerName}
                 src={headshotSrc}
@@ -433,6 +438,65 @@ function DraftBoardCellInner({
                 size={26}
               />
             </div>
+          ) : null}
+          {viaOwner ? (
+            <span
+              className={`max-w-full truncate rounded-[3px] px-0.5 text-[11px] font-semibold leading-[12px] ${onFill ? 'bg-black/20 text-[#14172a]' : 'bg-white/15 text-white'}`}
+              title={tInterpolate('draftRoom.board.originally', { owner: viaOwner })}
+              data-testid={`draft-board-cell-via-${pick.overall}`}
+            >
+              {tInterpolate('draftRoom.board.viaOwner', { owner: viaOwner })}
+            </span>
+          ) : null}
+          <span className="block max-w-full truncate text-[12px] leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
+            {/* "A. Runner" for the eye; the full name for screen readers and text search. */}
+            <span aria-hidden>
+              {firstName ? <span className="font-medium opacity-80">{firstName.slice(0, 1)}. </span> : null}
+              <span className="font-extrabold">{lastName}</span>
+            </span>
+            <span className="sr-only">{pick.playerName}</span>
+          </span>
+          <span className="flex max-w-full min-w-0 flex-wrap items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80">
+            <span className="truncate">
+              {(pick.position ?? '—').toString()} · {(pick.team ?? '—').toString()}
+            </span>
+            {pick.injuryStatus ? (
+              <span className="shrink-0 font-bold text-red-700" title={pick.injuryStatus}>
+                {pick.injuryStatus.slice(0, 1).toUpperCase()}
+              </span>
+            ) : null}
+            {pick.experienceBadge ? (
+              <span className="shrink-0 rounded bg-black/20 px-0.5 text-[11px] font-bold uppercase">
+                {pick.experienceBadge}
+              </span>
+            ) : null}
+            {pick.amount != null && pick.amount > 0 ? (
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-black/20 px-0.5 font-bold tabular-nums">
+                <Gavel className="h-2.5 w-2.5" aria-hidden />${pick.amount}
+              </span>
+            ) : null}
+            {pick.adpDelta != null && pick.adpDelta !== 0 ? (
+              <span
+                className="shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums"
+                title={
+                  pick.adpDelta > 0
+                    ? `Taken ${pick.adpDelta} picks after ADP`
+                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
+                }
+                data-testid="draft-board-cell-adp-delta"
+              >
+                {pick.adpDelta > 0 ? `+${pick.adpDelta}` : `−${Math.abs(pick.adpDelta)}`}
+              </span>
+            ) : null}
+          </span>
+          {isKept ? (
+            <span
+              className="block max-w-full truncate text-[11px] font-bold leading-[13px]"
+              style={{ color: keptHex }}
+              data-testid={`draft-board-cell-keeper-cost-${pick.overall}`}
+            >
+              {pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
+            </span>
           ) : null}
         </div>
       )}

@@ -19,7 +19,7 @@
  */
 import { prisma } from '@/lib/prisma'
 
-export type LeagueRosteredPlayers = {
+type LeagueRosteredPlayers = {
   /** playerId → the season roster that holds him. */
   byId: Map<string, string>
   /** normalized name → the season roster that holds him (name-only picks). */
@@ -28,7 +28,7 @@ export type LeagueRosteredPlayers = {
 
 const EMPTY: LeagueRosteredPlayers = { byId: new Map(), byName: new Map() }
 
-export function normalizeRosteredName(name: string | null | undefined): string {
+function normalizeRosteredName(name: string | null | undefined): string {
   return String(name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 

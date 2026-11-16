@@ -1,6 +1,6 @@
 import type { UserLineupPreferenceProfileInput } from '@/lib/lineup-decision-engine/types'
 import { LINEUP_PREFERENCE_DECAY_RULES, LINEUP_PREFERENCE_TIEBREAKER_RULES } from './rules'
-import { AUX_LINEUP_TRAIT_IDS, LINEUP_PREFERENCE_TRAIT_IDS, type LineupPreferenceTraitId } from './trait-ids'
+import { LINEUP_PREFERENCE_TRAIT_IDS, type LineupPreferenceTraitId } from './trait-ids'
 import type {
   LineupPreferenceEventKind,
   LineupPreferenceExample,
@@ -68,7 +68,7 @@ export function traitMapFromRows(
   return map
 }
 
-export function ensureTrait(
+function ensureTrait(
   map: Map<string, TraitStoredState>,
   traitId: string,
   createdAt: Date
@@ -86,7 +86,7 @@ function pushExample(t: TraitStoredState, summary: string, kind?: string, at = n
   t.examples = next
 }
 
-export function reinforceTrait(
+function reinforceTrait(
   t: TraitStoredState,
   strength: number,
   summary: string,
@@ -101,7 +101,7 @@ export function reinforceTrait(
   pushExample(t, summary, kind)
 }
 
-export function penalizeTrait(t: TraitStoredState, strength: number, summary: string, kind?: string): void {
+function penalizeTrait(t: TraitStoredState, strength: number, summary: string, kind?: string): void {
   const s = clamp01(strength)
   t.confidence = clamp01(t.confidence - PENALIZE_BASE * s)
   t.sampleSize += 1

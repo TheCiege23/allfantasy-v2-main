@@ -13,7 +13,7 @@
 import { Bot, Loader2, MessageSquare } from "lucide-react"
 import type { WorldCupChatMode } from "./worldCupChatTypes"
 
-export type WorldCupChatEmptyStateProps = {
+type WorldCupChatEmptyStateProps = {
   mode: WorldCupChatMode
   isLoading: boolean
   error?: string | null

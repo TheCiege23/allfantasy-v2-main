@@ -174,11 +174,6 @@ function toStringArray(value: unknown): string[] {
     .filter((entry): entry is string => Boolean(entry))
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
-}
-
 function titleCase(value: string): string {
   return value
     .replace(/[_-]+/g, ' ')
@@ -201,14 +196,6 @@ function formatDateTime(date: Date | string | null | undefined): string {
     hour: 'numeric',
     minute: '2-digit',
   })
-}
-
-function formatCompactNumber(value: number | null | undefined): string {
-  if (value == null) return '-'
-  if (Math.abs(value) >= 1000) {
-    return `${value > 0 ? '+' : ''}${(value / 1000).toFixed(1)}K`
-  }
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}`
 }
 
 function logOptionalLeagueDataWarning(scope: string, error: unknown): void {
@@ -621,14 +608,6 @@ function toResolvedLeaguePlayer(
     ownerLabel: extras?.ownerLabel,
     stats: extras?.stats ?? extractNumericStats(entry?.stats ?? {}, entry?.position || 'FLEX'),
   }
-}
-
-function sumLineupSlots(lineup: unknown): number {
-  if (!lineup || typeof lineup !== 'object' || Array.isArray(lineup)) return 0
-  return Object.values(lineup as Record<string, unknown>).reduce<number>((sum, value) => {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? sum + parsed : sum
-  }, 0)
 }
 
 async function buildVariantSummary(context: LeagueContext): Promise<LeagueVariantSummary> {
@@ -1155,7 +1134,6 @@ function buildLeagueTeamRows(
 
 async function buildRosterCard(context: LeagueContext): Promise<LeagueRosterCard> {
   const sport = context.league.sport
-  const settings = toJsonRecord(context.league.settings)
   const currentRoster = context.currentRoster
   const playerData = currentRoster?.playerData ?? {}
   const playerDataRecord = toJsonRecord(playerData)
@@ -1555,12 +1533,6 @@ async function buildTradesData(context: LeagueContext): Promise<LeagueTradesData
   }).catch(() => [])
 
   const blockPlayerIds = tradeBlockRows.map((row) => row.playerId)
-  const tradePlayerIds = histories.flatMap((history) =>
-    history.trades.flatMap((trade) => [
-      ...jsonAssetLabels(trade.playersGiven as Prisma.JsonValue),
-      ...jsonAssetLabels(trade.playersReceived as Prisma.JsonValue),
-    ])
-  )
   // `currentListings` yields Sleeper ids whatever the league's platform — say so, or a Sleeper NBA
   // league's ids would be read by the native rule as Rolling Insights numbers.
   const mediaIndex = await resolvePlayerIndex(String(context.league.sport), blockPlayerIds, 'sleeper')
@@ -1895,12 +1867,6 @@ export async function getLeagueActivityView(leagueId: string, userId: string) {
   const context = await loadLeagueContext(leagueId, userId)
   if (!context) return null
   return buildActivityItems(context)
-}
-
-export async function getLeagueTradesView(leagueId: string, userId: string) {
-  const context = await loadLeagueContext(leagueId, userId)
-  if (!context) return null
-  return buildTradesData(context)
 }
 
 export async function getLeagueHomeData(

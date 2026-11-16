@@ -62,7 +62,8 @@ export interface BigBrotherSummary {
   } | null
   jury: { rosterId: string; evictedWeek: number }[]
   finalists: { rosterId: string; stats?: { hohWins?: number; vetoWins?: number; timesNominated?: number } }[]
-  ballot: { canVote: boolean; voteDeadlineAt: string | null; closed: boolean } | null
+  /** `hasVoted`: the viewer's own ballot is in this cycle (never who for). Older payloads omit it. */
+  ballot: { canVote: boolean; voteDeadlineAt: string | null; closed: boolean; hasVoted?: boolean } | null
   myRosterId: string | null
   myStatus: BigBrotherUserStatus | null
   rosterDisplayNames: Record<string, string>

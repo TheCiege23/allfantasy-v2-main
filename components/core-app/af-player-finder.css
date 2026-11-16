@@ -804,8 +804,13 @@
  * Below the three-column width the decision column moves under the main content
  * rather than being dropped: on a phone "what do I do" is the whole reason the
  * screen was opened, so it must not be the thing that disappears.
+ *
+ * ⚠ 1560px, NOT 1180px (2026-11-13 guide). The query reads the VIEWPORT, but this grid sits beside the
+ * shell's own ~330px nav, so at 1280px the three columns left the player 160px wide — his name broke
+ * one word per line and the every-league list an injury alert opens was a sliver. Measured: 360 + 160 +
+ * 384 at a 1280px viewport.
  */
-@media (max-width: 1180px) {
+@media (max-width: 1560px) {
   .af-core.af-pf--2a,
   .af-core.af-pf--2a:not(:has(.af-pf-side)) {
     grid-template-columns: 320px minmax(0, 1fr);
@@ -4051,9 +4056,28 @@
 /* ── Where your starters come from (teamSplit.ts) — inside Your shares, all-leagues mode ──────── */
 .af-core .af-pf-split {
   margin-top: 14px;
-  padding-top: 12px;
+  padding-top: 4px;
   border-top: 1px solid var(--line);
 }
+/* 2026-11-14: folded. The heading is the summary; an arrow says it opens, and the row is a 44px target. */
+.af-core .af-pf-split > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.af-core .af-pf-split > summary::-webkit-details-marker { display: none; }
+.af-core .af-pf-split > summary::after {
+  content: '▾';
+  color: var(--muted);
+  font-size: 14px;
+  transition: transform 0.15s ease;
+}
+.af-core .af-pf-split[open] > summary::after { transform: rotate(180deg); }
+.af-core .af-pf-split > summary h4 { margin: 0; }
 .af-core .af-pf-split-sub {
   margin: 2px 0 8px;
   color: var(--muted);
@@ -4461,6 +4485,21 @@
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 13px;
+}
+/* Sport tabs over the home (HomeSportTabs.tsx, 2026-11-11): the shared chip row, as links. */
+.af-core .af-pf-home-sports {
+  margin: 0 0 16px;
+}
+.af-core .af-pf-home-sports .af-pg-chip {
+  text-decoration: none;
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.af-core .af-pf-home-sports .af-pg-chip[data-active='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }
 .af-core .af-pf-following {
   margin-top: 14px;

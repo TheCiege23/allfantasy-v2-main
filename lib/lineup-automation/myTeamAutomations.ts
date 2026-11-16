@@ -13,7 +13,7 @@ import { readAutoHandover } from '@/lib/inactive-manager/autoHandover'
 
 export type MyTeamAutomation = { key: string; en: string; es: string }
 
-export type MyTeamFacts = {
+type MyTeamFacts = {
   settings: unknown
   /** Lineups are set week by week (not daily, not automatic): the lineup automations apply. */
   weeklyLineups: boolean

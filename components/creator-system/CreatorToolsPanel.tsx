@@ -5,7 +5,7 @@ import { Check, Copy, PencilLine, Plus, RefreshCcw } from 'lucide-react'
 import { CREATOR_LEAGUE_SPORTS } from '@/lib/creator-system/types'
 import type { CreatorLeagueDto, CreatorProfileDto } from '@/lib/creator-system/types'
 
-export interface CreatorToolsPanelProps {
+interface CreatorToolsPanelProps {
   creator: CreatorProfileDto
   leagues: CreatorLeagueDto[]
   baseUrl?: string

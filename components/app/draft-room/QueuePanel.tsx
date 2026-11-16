@@ -11,7 +11,7 @@ import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-r
 
 type QueueSortMode = 'queue' | 'name' | 'adp' | 'rank'
 
-export type QueuePanelProps = {
+type QueuePanelProps = {
   queue: QueueEntry[]
   playerMetaById?: Record<
     string,

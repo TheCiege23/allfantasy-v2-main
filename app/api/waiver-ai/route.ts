@@ -82,11 +82,9 @@ interface TripleAIWaiverResult {
   }
 }
 
-const DEEPSEEK_TEMP = 0.1
 const GROK_TEMP = 0.3
 const OPENAI_TEMP = 0.4
 
-const DEEPSEEK_TOKENS = 900
 const GROK_TOKENS = 500
 const OPENAI_TOKENS = 1200
 

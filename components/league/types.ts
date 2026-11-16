@@ -4,30 +4,22 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
-export type LeaguePlayersSubtab = 'search' | 'trend' | 'available' | 'leaders' | 'trade'
+type LeagueVariantMode = 'standard' | 'devy' | 'c2c'
 
-export type LeagueVariantMode = 'standard' | 'devy' | 'c2c'
-
-export type LeagueRecord = {
+type LeagueRecord = {
   wins: number
   losses: number
   ties: number
 }
 
-export type LeagueLifecycleSnapshot = {
+type LeagueLifecycleSnapshot = {
   state: string
   locked: boolean
   emergencyPaused: boolean
   allowedActions: string[]
 }
 
-/** Authoritative role flags from GET `/api/leagues/:id/lifecycle` (preferred over SSR `leagueRole` when present). */
-export type LeagueLifecyclePermissions = {
-  isElevatedCommissioner: boolean
-  isHeadCommissioner: boolean
-}
-
-export type LeagueHeaderInfo = {
+type LeagueHeaderInfo = {
   id: string
   name: string
   sport: string
@@ -59,7 +51,7 @@ export type LeagueTeamRow = {
   isCurrentUser: boolean
 }
 
-export type LeagueScoringRow = {
+type LeagueScoringRow = {
   id: string
   label: string
   value: string
@@ -308,7 +300,7 @@ export type LeagueTradesData = {
   history: LeagueTradeHistoryItem[]
 }
 
-export type LeagueSearchDefenseItem = {
+type LeagueSearchDefenseItem = {
   id: string
   name: string
   teamCode: string | null
@@ -416,7 +408,7 @@ export type LeagueBracketRound = {
   matchups: LeagueBracketMatchup[]
 }
 
-export type LeaguePlayoffBracketData = {
+type LeaguePlayoffBracketData = {
   rounds: LeagueBracketRound[]
 }
 

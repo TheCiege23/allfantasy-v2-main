@@ -6,7 +6,7 @@ import type { FantraxLeagueInfo } from '@/lib/league-import/fantrax/fantraxApi'
 
 type JsonObject = Record<string, unknown>
 
-export type TradeLeagueTeam = {
+type TradeLeagueTeam = {
   id: string
   externalId: string
   name: string
@@ -15,7 +15,7 @@ export type TradeLeagueTeam = {
   rank: number | null
 }
 
-export type TradeLeagueContext = {
+type TradeLeagueContext = {
   leagueId: string
   platformLeagueId: string
   name: string | null

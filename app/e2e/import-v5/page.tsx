@@ -7,7 +7,8 @@ import { MockFetch } from './MockFetch'
  * Design harness for /import. The real route redirects to /login before rendering, so the screen
  * cannot be reviewed without a session; this renders the same component with no auth and stubbed
  * data. `?provider=` picks the platform the way the real deep links do; `?mock=leagues` returns a
- * league list from discovery, `?mock=espn-connected` reports ESPN as connected.
+ * league list from discovery, `?mock=espn-connected` reports ESPN as connected, `?mock=yahoo-paste`
+ * shows the Yahoo copy-paste panel and walks its checklist one page per "Read this page".
  */
 export const dynamic = 'force-dynamic'
 

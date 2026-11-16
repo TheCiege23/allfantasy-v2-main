@@ -22,7 +22,7 @@ export const CHIMMY_AI_EVENT_NAMES = [
   'guard_observed',
 ] as const
 
-export const CHIMMY_AI_SURFACES = [
+const CHIMMY_AI_SURFACES = [
   'dashboard',
   'league',
   'draft_room',
@@ -33,7 +33,7 @@ export const CHIMMY_AI_SURFACES = [
   'chimmy_chat',
 ] as const
 
-export const CHIMMY_AI_MODES = [
+const CHIMMY_AI_MODES = [
   'fast_take',
   'deep_analysis',
   'commissioner_view',
@@ -41,7 +41,7 @@ export const CHIMMY_AI_MODES = [
   'dfs_upside',
 ] as const
 
-export const CHIMMY_AI_TOPICS = [
+const CHIMMY_AI_TOPICS = [
   'trade',
   'start_sit',
   'waiver',
@@ -66,7 +66,7 @@ export const ChimmyAIAnalyticsEventSchema = z.object({
 })
 
 export type ChimmyAIAnalyticsIngressEvent = z.infer<typeof ChimmyAIAnalyticsEventSchema>
-export type ChimmyAIAnalyticsEvent = Omit<ChimmyAIAnalyticsIngressEvent, 'user_id'> & {
+type ChimmyAIAnalyticsEvent = Omit<ChimmyAIAnalyticsIngressEvent, 'user_id'> & {
   user_id: string
 }
 

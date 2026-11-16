@@ -2,14 +2,14 @@
  * DashboardQuickActionResolver — quick action buttons for dashboard.
  */
 
-export interface QuickActionConfig {
+interface QuickActionConfig {
   id: string
   label: string
   href: string
   description: string
 }
 
-export const DASHBOARD_QUICK_ACTIONS: QuickActionConfig[] = [
+const DASHBOARD_QUICK_ACTIONS: QuickActionConfig[] = [
   {
     id: "create_bracket_pool",
     label: "Create Bracket Pool",
@@ -54,7 +54,7 @@ export const DASHBOARD_QUICK_ACTIONS: QuickActionConfig[] = [
   },
 ]
 
-export interface DashboardQuickActionInput {
+interface DashboardQuickActionInput {
   isAdmin?: boolean
 }
 

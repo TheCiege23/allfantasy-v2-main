@@ -1,7 +1,7 @@
 import type { EnrichedPlayer } from './types'
 
 /** Statuses that mean the player cannot score — auto-sub allowed only for these. */
-export const AUTO_SUB_INELIGIBLE_STATUSES = [
+const AUTO_SUB_INELIGIBLE_STATUSES = [
   'OUT',
   'IR',
   'INJURED RESERVE',
@@ -37,7 +37,7 @@ function normalizeStatus(raw?: string | null): string {
  * Strict injury-only gate: returns true only when status is confirmed as unable to participate.
  * Questionable / probable / limited never qualify.
  */
-export function isZeroParticipationStatus(status?: string | null): boolean {
+function isZeroParticipationStatus(status?: string | null): boolean {
   const s = normalizeStatus(status)
   if (!s) return false
   if (QUESTIONABLE.has(s) || s.includes('QUESTIONABLE') || s.includes('PROBABLE') || s.includes('LIMITED'))
@@ -64,7 +64,7 @@ export function isZeroParticipationWithSignals(
   return isZeroParticipationStatus(status)
 }
 
-export interface AutoSubCandidate {
+interface AutoSubCandidate {
   starter: EnrichedPlayer
   replacement: EnrichedPlayer
   replacementReason: string

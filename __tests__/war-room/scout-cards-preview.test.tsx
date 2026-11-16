@@ -65,7 +65,7 @@ describe('War Room manager cards', () => {
   it('adds no button when every card already shows', () => {
     render(<Scout data={data(SCOUT_CARDS_PREVIEW) as never} {...props} />)
     expect(cards()).toBe(SCOUT_CARDS_PREVIEW)
-    expect(document.querySelector('.af-sc-more')).toBeNull()
+    expect(document.querySelector('.af-sc-cards-toggle')).toBeNull()
   })
 
   it('puts the four facts in one row on a phone, each column as wide as its content', () => {

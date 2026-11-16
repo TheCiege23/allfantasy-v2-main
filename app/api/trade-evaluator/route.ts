@@ -10,7 +10,6 @@ import {
   clampNegotiationToAllowed,
 } from '@/lib/trade-finder/negotiation-helpers'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { consumeRateLimit } from '@/lib/rate-limit'
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
 import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, isEvidencedPrice, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
@@ -26,7 +25,7 @@ import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
 import type { Asset } from '@/lib/trade-engine/types'
 import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'
-import { parsePickLabel } from '@/lib/parsePickLabel'
+import { parsePickLabel, type C2CDraftSide } from '@/lib/parsePickLabel'
 import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
 import { checkBehaviorRules, logRuleViolations } from '@/lib/ai/behavior-rules'
@@ -98,6 +97,8 @@ const PickInputSchema = z.object({
   year: z.number().int().min(2000).max(2099),
   round: z.number().int().min(1).max(25),
   projected_range: z.enum(['early', 'mid', 'late', 'unknown']).optional(),
+  draftSide: z.enum(['campus', 'canton', 'combined']).optional(),
+  overall: z.number().int().positive().optional(),
 })
 
 const TeamInputSchema = z.object({
@@ -329,7 +330,7 @@ function unreadablePickLabels(picks: readonly unknown[]): string[] {
   return picks.filter((p): p is string => typeof p === 'string' && parsePickLabel(p) === null)
 }
 
-function resolvePickData(p: string | { year: number; round: number; projected_range?: string }) {
+function resolvePickData(p: string | { year: number; round: number; projected_range?: string; draftSide?: C2CDraftSide; overall?: number }) {
   if (typeof p === 'string') {
     const parsed = parsePickLabel(p)
     /*
@@ -351,12 +352,16 @@ function resolvePickData(p: string | { year: number; round: number; projected_ra
       year: parsed.year,
       round: parsed.round,
       tier: parsed.bucket,
+      draftSide: parsed.draftSide,
+      overall: undefined,
       label: p,
     }
   }
   return {
     year: p.year,
     round: p.round,
+    draftSide: p.draftSide,
+    overall: p.overall,
     tier: (p.projected_range === 'unknown' ? undefined : p.projected_range) as 'early' | 'mid' | 'late' | undefined,
     label: `${p.year} Round ${p.round}${p.projected_range ? ` (${p.projected_range})` : ''}`,
   }
@@ -425,7 +430,7 @@ async function evaluateLeagueOffer(
     for (const raw of side.gives_picks) {
       const p = resolvePickData(raw)
       const tier = p.tier === 'early' || p.tier === 'mid' || p.tier === 'late' ? p.tier : undefined
-      inputs.assets.push({ kind: 'pick', year: p.year, round: p.round, ...(tier ? { tier } : {}) })
+      inputs.assets.push({ kind: 'pick', year: p.year, round: p.round, ...(tier ? { tier } : {}), ...(p.draftSide ? { draftSide: p.draftSide } : {}), ...(p.overall != null ? { overall: p.overall } : {}) })
     }
     if (side.gives_faab > 0) inputs.assets.push({ kind: 'faab', amount: side.gives_faab })
     return inputs
@@ -2000,7 +2005,6 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       sensitivitySentence: tradeDriverData.sensitivitySentence,
     } : null
 
-
     let negotiationToolkit: import('@/lib/trade-engine/types').NegotiationToolkit | null = null
     if (tradeDriverData) {
       const benchAssets: Asset[] = (data.sender.roster || [])
@@ -2276,7 +2280,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     }
     logAiFailure(error, { tool: 'TradeEvaluator', endpoint: '/api/trade-evaluator' })
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request format', details: error.errors }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request format', details: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to evaluate trade' }, { status: 500 })
   }

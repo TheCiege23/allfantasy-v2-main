@@ -1,4 +1,3 @@
-import { coreUiCopy } from './coreUiCopy'
 import { infoReasonText } from './finderPlayerInfoCopy'
 import { designationText } from './playerFinderCopy'
 import { ageText } from './shellCopy'
@@ -318,7 +317,7 @@ export function insightText(insight: PlayerCardInsight, language: string): { hea
 
 /* ── the Waivers screens' Competitive Edge card ─────────────────────────────────────────────────── */
 
-export type WaiverEdgeCopy = {
+type WaiverEdgeCopy = {
   heading: string
   aria: string
   basis: (season: number, asOf: string, stale: boolean) => string

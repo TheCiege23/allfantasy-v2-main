@@ -67,7 +67,7 @@ function sanitize(text: string): string {
 
 // ── 1. Commissioner Invite Message ──────────────────────────────────────────
 
-export type WorldCupInviteMessageInput = {
+type WorldCupInviteMessageInput = {
   /** Pool display name. */
   poolName: string
   /** Public join URL — required. */
@@ -82,7 +82,7 @@ export type WorldCupInviteMessageInput = {
   locale?: WorldCupLocale | string | null
 }
 
-export type WorldCupInviteMessageResult = {
+type WorldCupInviteMessageResult = {
   status: "ready" | "member_blocked"
   message: string
   /** Lines used to build the message — useful for previewing. */
@@ -212,7 +212,7 @@ export function buildWorldCupInviteMessage(
 
 // ── 2. Finalized Bracket Share Message ──────────────────────────────────────
 
-export type WorldCupBracketShareInput = {
+type WorldCupBracketShareInput = {
   poolName: string
   entryName?: string | null
   championName?: string | null
@@ -228,7 +228,7 @@ export type WorldCupBracketShareInput = {
   locale?: WorldCupLocale | string | null
 }
 
-export type WorldCupBracketShareResult = {
+type WorldCupBracketShareResult = {
   status: "ready" | "incomplete"
   message: string
   lines: string[]
@@ -365,7 +365,7 @@ export function buildWorldCupBracketShareMessage(
 
 // ── 3. Social Caption Helper ────────────────────────────────────────────────
 
-export type WorldCupSocialCaptionInput = WorldCupBracketShareInput & {
+type WorldCupSocialCaptionInput = WorldCupBracketShareInput & {
   /**
    * Optional tone scaffolding (Phase 6). Defaults to "friendly". Tone
    * variants stay sports-centered and pass the existing `sanitize()`

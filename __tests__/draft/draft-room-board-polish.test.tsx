@@ -58,20 +58,31 @@ describe('draft room panel size', () => {
     expect(zone.getAttribute('data-dock-size')).toBe('half')
   })
 
-  it('keeps the board selector and panel presets in one consistent state', () => {
+  it('keeps hide-board and the panel presets in one consistent state (one control since room v2)', () => {
     const zone = renderShell()
     const shell = screen.getByTestId('draft-room-shell')
-    fireEvent.change(screen.getByRole('combobox', { name: 'Draft board size' }), { target: { value: 'hidden' } })
+    expect(screen.queryByRole('combobox', { name: 'Draft board size' })).toBeNull()
+    fireEvent.click(screen.getByTestId('draft-board-hide'))
     expect(shell.getAttribute('data-board-size')).toBe('hidden')
     expect(zone.getAttribute('data-dock-size')).toBe('tall')
+    expect(screen.getByTestId('draft-board-hide').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('draft-dock-size-tall').getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(screen.getByTestId('draft-dock-collapse-toggle'))
     expect(zone.getAttribute('data-dock-size')).toBe('min')
     expect(shell.getAttribute('data-board-size')).not.toBe('hidden')
-    fireEvent.change(screen.getByRole('combobox', { name: 'Draft board size' }), { target: { value: 'balanced' } })
+    fireEvent.click(screen.getByTestId('draft-dock-size-half'))
     expect(zone.getAttribute('data-dock-size')).toBe('half')
     fireEvent.click(screen.getByTestId('draft-dock-size-tall'))
-    expect((screen.getByRole('combobox', { name: 'Draft board size' }) as HTMLSelectElement).value).toBe('compact')
+    expect(screen.getByTestId('draft-dock-size-tall').getAttribute('aria-pressed')).toBe('true')
     expect(shell.getAttribute('data-board-size')).toBe('compact')
+  })
+
+  it('remembers a hidden board across reloads', () => {
+    renderShell()
+    fireEvent.click(screen.getByTestId('draft-board-hide'))
+    cleanup()
+    renderShell()
+    expect(screen.getByTestId('draft-room-shell').getAttribute('data-board-size')).toBe('hidden')
   })
 
   it('migrates the older compact board preference into the larger player panel', () => {
@@ -155,5 +166,18 @@ describe('position tile colours', () => {
     expect(positionTintHex('XYZ')).toBe(positionTintHex('XYZ'))
     expect(positionTintHex(null)).toBeNull()
     expect(positionTintHex('—')).toBeNull()
+  })
+})
+
+describe('room v2: hidden board keeps its size control clear of the on-the-clock alert', () => {
+  it('moves the control to the right end while the board is hidden, centred otherwise', () => {
+    renderShell()
+    const bar = screen.getByTestId('draft-dock-size-bar')
+    expect(bar.className).toContain('justify-center')
+    fireEvent.click(screen.getByTestId('draft-board-hide'))
+    expect(bar.getAttribute('data-board-hidden')).toBe('true')
+    expect(bar.className).toContain('justify-end')
+    fireEvent.click(screen.getByTestId('draft-dock-size-half'))
+    expect(bar.className).toContain('justify-center')
   })
 })

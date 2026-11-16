@@ -9,8 +9,8 @@ import 'server-only'
  */
 import type { SyncLock, SyncStore, RunResult } from '@/lib/import-os/runner'
 import type { SnapshotDraft } from './snapshot'
-import { canCertify, countSnapshot } from './snapshot'
-import { diffSnapshot, type DiffEvent } from './events'
+import { canCertify } from './snapshot'
+import { type DiffEvent } from './events'
 
 type PgPool = { query: (text: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount?: number }> }
 

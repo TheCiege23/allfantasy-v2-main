@@ -200,6 +200,8 @@ type LeagueHealthRow = {
    * it the engine cannot tell a healthy league from one nobody has ever looked at.
    */
   lastSyncedAt?: Date | string | null
+  /** The source platform; a league AllFantasy runs is written live and never "syncs". */
+  platform?: string | null
   name?: string | null
   sport?: string | null
   season?: number | string | null
@@ -690,11 +692,19 @@ export function buildCommissionerHealthSnapshot(
    */
   const syncedAt = toOptionalDate(league.lastSyncedAt)
   const syncAgeDays = syncedAt ? (now.getTime() - syncedAt.getTime()) / 86_400_000 : null
+  /*
+   * 🛑 A LEAGUE ALLFANTASY RUNS NEVER SYNCS (2026-11-15). Only the import sync writes `lastSyncedAt`, so every native
+   * league read as "never synced": its score was withheld and the page told the commissioner to sync. Its data is
+   * written here as things happen, so only an empty roster set lowers its confidence.
+   */
+  const nativeLeague = league.platform !== undefined && isNativePlatform(league.platform)
   const dataConfidence: CommissionerHealthDataConfidence =
     source === 'dashboard-fallback'
       ? 'low'
       : rosters.length === 0
         ? 'low'
+        : nativeLeague
+          ? 'high'
         : syncAgeDays === null
           ? 'low'
           : syncAgeDays > STALE_SYNC_DAYS
@@ -946,6 +956,78 @@ export function withDynastyAlerts(alerts: readonly string[], signals: DynastyHea
   return [...alerts.slice(0, 2), ...lines, ...alerts.slice(2)].slice(0, 4)
 }
 
+export type CommissionerHealthCounts = {
+  tradeActivity: number
+  pendingTrades: number
+  waiverActivity: number
+  pendingWaiverClaims: number
+  chatMessagesLast7Days: number
+  commissionerActions: number
+  openAiAlerts: number
+}
+
+export const EMPTY_HEALTH_COUNTS: CommissionerHealthCounts = {
+  tradeActivity: 0, pendingTrades: 0, waiverActivity: 0, pendingWaiverClaims: 0,
+  chatMessagesLast7Days: 0, commissionerActions: 0, openAiAlerts: 0,
+}
+
+/** Trade statuses still waiting on someone: the other manager, the commissioner, or a league vote. */
+const OPEN_TRADE_STATUSES = ['pending', 'awaiting_commissioner', 'awaiting_votes']
+
+/**
+ * The league activity a health snapshot is scored on, for every league at once (2026-11-15).
+ *
+ * 🛑 TWO GAPS MADE A BUSY LEAGUE LOOK DEAD.
+ *   1. The in-league health page built its snapshot with NO counts, so trades, waivers, chat, commissioner actions and
+ *      alerts all read 0 for every league. It now loads them here, the same way the hub does.
+ *   2. The counts read only the NFL-redraft trade and claim tables. The main trade flow writes `AfLeagueTrade` and the
+ *      waiver wire writes `WaiverClaim`, so most native leagues' trades and claims were never counted. Both are now
+ *      counted beside the redraft tables (each trade or claim lives in exactly one of them, so nothing is counted twice),
+ *      plus imported leagues' synced activity.
+ *
+ * Every read degrades to 0 rather than throwing.
+ */
+export async function loadCommissionerHealthCounts(
+  leagueIds: string[],
+  since: Date,
+): Promise<Map<string, CommissionerHealthCounts>> {
+  const inLeagues = { leagueId: { in: leagueIds } }
+  const [
+    redraftTrades, legacyTrades, afTrades,
+    redraftPendingTrades, afPendingTrades,
+    redraftClaims, wireClaims,
+    redraftPendingClaims, wirePendingClaims,
+    chat, commissionerActions, openAiAlerts, imported,
+  ] = await Promise.all([
+    safeGroupCount((prisma as any).redraftTradeProposal, { ...inLeagues, createdAt: { gte: since } }),
+    safeGroupCount((prisma as any).redraftLeagueTrade, { ...inLeagues, createdAt: { gte: since } }),
+    safeGroupCount((prisma as any).afLeagueTrade, { ...inLeagues, createdAt: { gte: since } }),
+    safeGroupCount((prisma as any).redraftTradeProposal, { ...inLeagues, status: 'pending' }),
+    safeGroupCount((prisma as any).afLeagueTrade, { ...inLeagues, status: { in: OPEN_TRADE_STATUSES } }),
+    safeGroupCount((prisma as any).redraftWaiverClaim, { ...inLeagues, submittedAt: { gte: since } }),
+    safeGroupCount((prisma as any).waiverClaim, { ...inLeagues, createdAt: { gte: since } }),
+    safeGroupCount((prisma as any).redraftWaiverClaim, { ...inLeagues, status: 'pending' }),
+    safeGroupCount((prisma as any).waiverClaim, { ...inLeagues, status: 'pending' }),
+    safeGroupCount((prisma as any).leagueChatMessage, { ...inLeagues, createdAt: { gte: since } }),
+    safeGroupCount((prisma as any).leagueAuditLog, { ...inLeagues, createdAt: { gte: since } }),
+    safeGroupCount((prisma as any).aiCommissionerAlert, { ...inLeagues, status: 'open' }),
+    loadImportedActivityByLeague(leagueIds, since),
+  ])
+  const out = new Map<string, CommissionerHealthCounts>()
+  for (const id of leagueIds) {
+    out.set(id, {
+      tradeActivity: countMapValue(redraftTrades, id) + countMapValue(legacyTrades, id) + countMapValue(afTrades, id) + countMapValue(imported.trades, id),
+      pendingTrades: countMapValue(redraftPendingTrades, id) + countMapValue(afPendingTrades, id),
+      waiverActivity: countMapValue(redraftClaims, id) + countMapValue(wireClaims, id) + countMapValue(imported.waivers, id),
+      pendingWaiverClaims: countMapValue(redraftPendingClaims, id) + countMapValue(wirePendingClaims, id),
+      chatMessagesLast7Days: countMapValue(chat, id),
+      commissionerActions: countMapValue(commissionerActions, id),
+      openAiAlerts: countMapValue(openAiAlerts, id),
+    })
+  }
+  return out
+}
+
 export async function getCommissionerHubHealthForUser(
   userId: string,
   leagues: UserLeague[],
@@ -980,14 +1062,7 @@ export async function getCommissionerHubHealthForUser(
   try {
     const [
       dbLeagues,
-      tradeActivity,
-      legacyTradeActivity,
-      pendingTrades,
-      waiverActivity,
-      pendingWaiverClaims,
-      chatMessagesLast7Days,
-      commissionerActions,
-      openAiAlerts,
+      countsByLeague,
       shadowProfile,
     ] = await Promise.all([
       (prisma as any).league.findMany({
@@ -995,6 +1070,7 @@ export async function getCommissionerHubHealthForUser(
         select: {
           id: true,
           lastSyncedAt: true,
+          platform: true,
           name: true,
           sport: true,
           season: true,
@@ -1021,38 +1097,7 @@ export async function getCommissionerHubHealthForUser(
           },
         },
       }),
-      safeGroupCount((prisma as any).redraftTradeProposal, {
-        leagueId: { in: leagueIds },
-        createdAt: { gte: sevenDaysAgo },
-      }),
-      safeGroupCount((prisma as any).redraftLeagueTrade, {
-        leagueId: { in: leagueIds },
-        createdAt: { gte: sevenDaysAgo },
-      }),
-      safeGroupCount((prisma as any).redraftTradeProposal, {
-        leagueId: { in: leagueIds },
-        status: 'pending',
-      }),
-      safeGroupCount((prisma as any).redraftWaiverClaim, {
-        leagueId: { in: leagueIds },
-        submittedAt: { gte: sevenDaysAgo },
-      }),
-      safeGroupCount((prisma as any).redraftWaiverClaim, {
-        leagueId: { in: leagueIds },
-        status: 'pending',
-      }),
-      safeGroupCount((prisma as any).leagueChatMessage, {
-        leagueId: { in: leagueIds },
-        createdAt: { gte: sevenDaysAgo },
-      }),
-      safeGroupCount((prisma as any).leagueAuditLog, {
-        leagueId: { in: leagueIds },
-        createdAt: { gte: sevenDaysAgo },
-      }),
-      safeGroupCount((prisma as any).aiCommissionerAlert, {
-        leagueId: { in: leagueIds },
-        status: 'open',
-      }),
+      loadCommissionerHealthCounts(leagueIds, sevenDaysAgo),
       shadowFilters.hasUsernameFilter
         ? prisma.userProfile.findUnique({
             where: { userId },
@@ -1079,9 +1124,8 @@ export async function getCommissionerHubHealthForUser(
     // Gated and bounded — see loadParticipationByLeague. Empty map when the gate is off, so
     // this costs nothing and every snapshot keeps `participation: null`.
     // Independent reads, so neither waits on the other. Both degrade to empty rather than throw.
-    const [participationByLeague, importedActivity, dynastyByLeague] = await Promise.all([
+    const [participationByLeague, dynastyByLeague] = await Promise.all([
       loadParticipationByLeague(leagueIds),
-      loadImportedActivityByLeague(leagueIds, sevenDaysAgo),
       options.dynastySignals
         ? loadDynastySignalsByLeague(leagueIds, userId).catch(() => new Map<string, DynastyHealthSignals>())
         : Promise.resolve(new Map<string, DynastyHealthSignals>()),
@@ -1096,18 +1140,7 @@ export async function getCommissionerHubHealthForUser(
         now,
         source: 'database',
         nflDataCoverage: nflCoverageByLeague.get(leagueId) ?? null,
-        counts: {
-          tradeActivity:
-            countMapValue(tradeActivity, leagueId) +
-            countMapValue(legacyTradeActivity, leagueId) +
-            countMapValue(importedActivity.trades, leagueId),
-          pendingTrades: countMapValue(pendingTrades, leagueId),
-          waiverActivity: countMapValue(waiverActivity, leagueId) + countMapValue(importedActivity.waivers, leagueId),
-          pendingWaiverClaims: countMapValue(pendingWaiverClaims, leagueId),
-          chatMessagesLast7Days: countMapValue(chatMessagesLast7Days, leagueId),
-          commissionerActions: countMapValue(commissionerActions, leagueId),
-          openAiAlerts: countMapValue(openAiAlerts, leagueId),
-        },
+        counts: countsByLeague.get(leagueId) ?? EMPTY_HEALTH_COUNTS,
       })
     }).map((snap) => {
       // `?? null` rather than leaving the key off: a surface reading this must see an explicit

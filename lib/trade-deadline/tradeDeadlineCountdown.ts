@@ -27,7 +27,7 @@ export type TradeDeadlineCountdown =
   /** A deadline exists but no season is in progress, so it does not bind yet. */
   | { state: 'scheduled'; deadlineWeek: number | null; closesAtIso: string | null }
 
-export type CountdownVerdictInput = {
+type CountdownVerdictInput = {
   passed: boolean
   by: 'week' | 'time' | null
   deadlineWeek: number | null

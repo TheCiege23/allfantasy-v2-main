@@ -19,6 +19,39 @@ import { platformLabel } from '@/lib/core-app/platformLinks'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { buildTradeEdge, type EdgeDealAsset, type TradeEdge } from './tradeEdge'
 
+/** A league's Sleeper trade history, read from the cache the Trades list warms — shared by the trade
+ *  decision's edge and a manager's record (./managerRecordLoader.ts). */
+export type SleeperTradeHistory = {
+  trades: TradeGradesPayload['trades']
+  seasonsScanned: string[]
+  historyGaps: string[]
+  asOf: string
+  stale: boolean
+}
+
+export async function readSleeperTradeHistory(platformLeagueId: string, now: Date): Promise<SectionState<SleeperTradeHistory>> {
+  const cached = await prisma.sportsDataCache.findUnique({ where: { cacheKey: `${TRADE_GRADES_CACHE_PREFIX}${platformLeagueId}` } })
+  const payload =
+    cached?.data && typeof cached.data === 'object' ? (cached.data as unknown as TradeGradesPayload) : null
+  if (!payload || payload.version !== 2 || !Array.isArray(payload.trades)) {
+    return {
+      available: false,
+      reason:
+        "This league's trade history hasn't been read yet. It loads with the Trades list on this page — analyze again in a moment.",
+    }
+  }
+  return {
+    available: true,
+    data: {
+      trades: payload.trades,
+      seasonsScanned: payload.seasonsScanned ?? [],
+      historyGaps: payload.missing ?? [],
+      asOf: payload.fetchedAt,
+      stale: Boolean(payload.staleAsOf) || (cached ? cached.expiresAt.getTime() < now.getTime() : false),
+    },
+  }
+}
+
 export async function loadTradeEdge(input: {
   leagueId: string
   userId: string
@@ -42,7 +75,7 @@ export async function loadTradeEdge(input: {
     }
   }
 
-  const [opponent, viewer, cached] = await Promise.all([
+  const [opponent, viewer, history] = await Promise.all([
     prisma.leagueTeam.findUnique({
       where: { leagueId_externalId: { leagueId: input.leagueId, externalId: input.opponentTeamExternalId } },
       select: { externalId: true, platformUserId: true, ownerName: true, teamName: true },
@@ -51,7 +84,7 @@ export async function loadTradeEdge(input: {
       where: { leagueId: input.leagueId, claimedByUserId: input.userId },
       select: { platformUserId: true },
     }),
-    prisma.sportsDataCache.findUnique({ where: { cacheKey: `${TRADE_GRADES_CACHE_PREFIX}${league.platformLeagueId}` } }),
+    readSleeperTradeHistory(league.platformLeagueId, now),
   ])
 
   const ownerId = opponent?.platformUserId?.trim()
@@ -61,32 +94,22 @@ export async function loadTradeEdge(input: {
       reason: "We can't match this team to a Sleeper manager, so there is no trade history to read for them.",
     }
   }
-
-  const payload =
-    cached?.data && typeof cached.data === 'object' ? (cached.data as unknown as TradeGradesPayload) : null
-  if (!payload || payload.version !== 2 || !Array.isArray(payload.trades)) {
-    return {
-      available: false,
-      reason:
-        "This league's trade history hasn't been read yet. It loads with the Trades list on this page — analyze again in a moment.",
-    }
-  }
-
-  const stale = Boolean(payload.staleAsOf) || (cached ? cached.expiresAt.getTime() < now.getTime() : false)
+  if (!history.available) return history
+  const h = history.data
 
   return {
     available: true,
     data: buildTradeEdge({
-      trades: payload.trades,
+      trades: h.trades,
       managerOwnerId: ownerId,
       managerName: opponent.ownerName?.trim() || opponent.teamName?.trim() || 'This manager',
       teamExternalId: opponent.externalId,
       viewerOwnerId: viewer?.platformUserId?.trim() || null,
       deal: input.deal,
-      seasonsScanned: payload.seasonsScanned ?? [],
-      historyGaps: payload.missing ?? [],
-      asOf: payload.fetchedAt,
-      stale,
+      seasonsScanned: h.seasonsScanned,
+      historyGaps: h.historyGaps,
+      asOf: h.asOf,
+      stale: h.stale,
     }),
   }
 }

@@ -64,18 +64,3 @@ export async function sendCriticalSms(
   return ok ? { ok: true, userId } : { ok: false, userId, error: "Send failed" }
 }
 
-/**
- * Send the same critical SMS to multiple users. Skips users without phone/SMS enabled.
- */
-export async function sendCriticalSmsToUsers(
-  userIds: string[],
-  category: NotificationCategoryId,
-  message: string
-): Promise<SmsSendResult[]> {
-  const results: SmsSendResult[] = []
-  for (const userId of userIds) {
-    const result = await sendCriticalSms(userId, category, message)
-    results.push(result)
-  }
-  return results
-}

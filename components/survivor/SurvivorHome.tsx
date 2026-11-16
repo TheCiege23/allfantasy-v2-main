@@ -34,7 +34,7 @@ const VIEW_LABELS: Record<SurvivorView, string> = {
   ai: 'AI Host',
 }
 
-export interface SurvivorHomeProps {
+interface SurvivorHomeProps {
   leagueId: string
 }
 

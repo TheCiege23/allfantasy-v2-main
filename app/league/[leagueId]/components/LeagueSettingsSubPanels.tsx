@@ -33,22 +33,8 @@ import { DiscordLeagueSyncPanel } from './DiscordLeagueSyncPanel'
 import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '@/components/league-settings/TournamentLeagueNotes'
 import { PlayoffSettingsEditor as PlayoffSettingsEditorLazy } from '@/components/league-settings/PlayoffSettingsEditor'
 import { RosterSettingsEditor as RosterSettingsEditorLazy } from '@/components/league-settings/RosterSettingsEditor'
-import {
-  detectScoringFlavor,
-  getDivisionCount,
-  getDraftIdFromSettings,
-  getScoringSettings,
-  getSleeperLikeBundle,
-  getSettingsRecord,
-  groupRosterSlotCounts,
-  initialsFromName,
-  leagueAvatarSrc,
-  sleeperAvatarUrl,
-  waiverTypeText,
-} from './league-settings-modal-utils'
+import { detectScoringFlavor, getDivisionCount, getDraftIdFromSettings, getScoringSettings, getSleeperLikeBundle, getSettingsRecord, groupRosterSlotCounts, initialsFromName, sleeperAvatarUrl, waiverTypeText } from './league-settings-modal-utils'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
-import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
-import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -120,22 +106,6 @@ function SleeperLink({ href, children }: { href: string; children: React.ReactNo
       className="mt-3 inline-flex text-[13px] font-semibold text-[#ff3d81]/95 underline-offset-2 hover:text-[#ff9ec0]"
     >
       {children}
-    </a>
-  )
-}
-
-function CommishLinkRow({ href, label }: { href: string; label: string }) {
-  const testId = `commish-menu-${label.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}`
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-between gap-2 border-b border-white/[0.06] py-3.5 first:pt-0 last:border-0"
-      data-testid={testId}
-    >
-      <span className="text-[14px] font-medium text-white/95">{label}</span>
-      <ChevronRight className="h-5 w-5 shrink-0 text-white/40" aria-hidden />
     </a>
   )
 }
@@ -925,11 +895,7 @@ export function SettingsSubPanelBody({
     case 'ai-trash':
       return <AiFeaturePanel panelId={panelId} ctx={ctx} />
     case 'idp_roster':
-      return <IDPRosterPanel />
-    case 'idp_scoring':
-      return <IDPScoringPanel />
-    case 'idp_display':
-      return <IDPDisplayPanel />
+      return <IDPRosterPanel leagueId={ctx.league.id} canEdit={ctx.isCommissioner} />
     case 'idp_ai':
       return (
         <IDPAIPanel
@@ -1380,47 +1346,6 @@ function CommishGeneralPanel({
       {sleeperSettingsHref ? (
         <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.cg.openInSleeper')}</SleeperLink>
       ) : null}
-    </div>
-  )
-}
-
-function MembersCommishPanel({ ctx }: { ctx: SubPanelContext }) {
-  const sleeperSettingsHref = ctx.sleeperLeagueId
-    ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings`
-    : null
-
-  return (
-    <div className="space-y-4">
-      <p className="text-[12px] leading-relaxed text-white/55">
-        Assign members to different rosters. Unassigned members remain in the league. Member moves happen in your host
-        commissioner tools.
-      </p>
-      {sleeperSettingsHref ? (
-        <div className="-mx-0.5 rounded-xl border border-white/[0.06] bg-[#0a1228]/50 px-0.5">
-          <CommishLinkRow href={sleeperSettingsHref} label="Assign members to rosters" />
-          <CommishLinkRow href={sleeperSettingsHref} label="Remove members from league" />
-        </div>
-      ) : (
-        <p className="text-[12px] text-white/45">Connect a Sleeper league to open member management on the host.</p>
-      )}
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/38">Rosters</p>
-        <ul className="space-y-2">
-          {ctx.league.teams.map((t, i) => (
-            <li
-              key={t.id}
-              className="rounded-xl border border-white/[0.06] bg-[#0a1228]/80 px-3 py-2.5"
-              data-testid={`member-roster-preview-${i}`}
-            >
-              <p className="text-[13px] font-semibold text-white">
-                <span className="text-white/45">{i + 1}. </span>
-                {t.teamName}
-              </p>
-              <p className="text-[11px] text-white/40">{t.ownerName}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   )
 }

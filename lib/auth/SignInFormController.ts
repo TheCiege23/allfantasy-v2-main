@@ -1,4 +1,4 @@
-export interface SignInValidationInput {
+interface SignInValidationInput {
   login: string
   password: string
 }

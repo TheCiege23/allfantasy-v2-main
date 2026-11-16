@@ -82,7 +82,7 @@ import {
  * leagues can build an explicitly labelled shadow plan for their source app.
  */
 
-export type TradesTabProps = {
+type TradesTabProps = {
   league: UserLeague
   teams: LeagueTeamSlot[]
 }
@@ -114,7 +114,7 @@ type PanelResponse = {
   error?: string
 }
 
-export type BuilderOfferAsset = {
+type BuilderOfferAsset = {
   playerId: string | null
   name: string
   position: string | null
@@ -125,7 +125,7 @@ export type BuilderOfferAsset = {
   faabAmount: number | null
 }
 
-export type BuilderOffer = {
+type BuilderOffer = {
   provider: 'sleeper' | 'yahoo'
   transactionId: string
   direction: 'incoming' | 'outgoing'
@@ -625,7 +625,7 @@ export function toAnalyzeAssets(
   return { assets: out, dropped }
 }
 
-export type PendingVerdict =
+type PendingVerdict =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | { kind: 'skipped'; why: string }

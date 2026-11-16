@@ -446,6 +446,28 @@ model PlayerTeamHistory {
   @@map("player_team_history")
 }
 
+model SportsStatCoverage {
+  sport                String
+  source               String
+  periodId             String
+  kind                 String
+  identitySpace        String
+  season               Int
+  week                 Int?
+  startTime            DateTime @db.Timestamptz(6)
+  endTime              DateTime @db.Timestamptz(6)
+  teams                String[]
+  participantIds       String[]
+  gameKeys             String[]
+  recordedAt           DateTime @default(now()) @db.Timestamptz(6)
+  firstFinalObservedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([sport, source, periodId])
+  @@index([sport, startTime], map: "sports_stat_coverage_window_idx")
+  @@index([sport, season, week], map: "sports_stat_coverage_week_idx")
+  @@map("sports_stat_coverage")
+}
+
 model SportsGame {
   id         String    @id @default(uuid())
   sport      String
@@ -1809,6 +1831,12 @@ model ChimmyAdvice {
   slot          String?  @db.VarChar(16)
   confidencePct Int?     @map("confidence_pct")
   givenAt       DateTime @default(now()) @map("given_at")
+  /// What the advice knew (2026-11-14, the advice ledger): each player's projection when it was said.
+  recProjected  Float?   @map("rec_projected")
+  altProjected  Float?   @map("alt_projected")
+  /// Set when a surface stopped giving the advice BEFORE either player's kickoff (My Team's bench
+  /// check after projections flip). A withdrawn call is not graded: the user was not left with it.
+  withdrawnAt   DateTime? @map("withdrawn_at")
 
   @@unique([userId, leagueId, season, week, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_type_rec_alt_key")
   @@index([userId, givenAt(sort: Desc)], map: "chimmy_advice_user_id_given_at_idx")
@@ -3957,7 +3985,7 @@ model PlayerAnalyticsSnapshot {
 
 model AppUser {
   id                                       String                                 @id @default(uuid())
-  email                                    String                                 @unique
+  email                                    String?                                @unique
   emailVerified                            DateTime?
   username                                 String                                 @unique
   passwordHash                             String?
@@ -13491,6 +13519,40 @@ model RankingsBacktestResult {
   @@map("rankings_backtest_results")
 }
 
+/// Draft recommendation record (2026-11-14): what the ONE draft engine recommended at the moment
+/// advice was served, in BOTH replacement-value modes, with the projections each one saw. A
+/// forward test: FantasyProjection is upserted in place, so draft-day projections cannot be
+/// recovered later — these rows are the point-in-time record a backtest cannot rebuild. Written
+/// fire-and-forget by lib/shared-services/draft/recommendationRecorder.ts; scored by
+/// scripts/draft-backtest.ts --recorded. One row per pick moment per surface (dedupeKey).
+model DraftRecommendationRecord {
+  id              String   @id @default(cuid())
+  dedupeKey       String   @unique @map("dedupe_key") @db.VarChar(191)
+  surface         String   @db.VarChar(32)
+  sport           String   @db.VarChar(16)
+  leagueId        String?  @map("league_id")
+  sessionKey      String   @map("session_key") @db.VarChar(191)
+  rosterKey       String   @map("roster_key") @db.VarChar(191)
+  overallPick     Int      @map("overall_pick")
+  round           Int
+  servedMode      String   @map("served_mode") @db.VarChar(16)
+  observeName     String?  @map("observe_name")
+  observePosition String?  @map("observe_position") @db.VarChar(8)
+  activeName      String?  @map("active_name")
+  activePosition  String?  @map("active_position") @db.VarChar(8)
+  agree           Boolean
+  projectionCount Int      @map("projection_count")
+  poolSize        Int      @map("pool_size")
+  detail          Json
+  engineVersion   String   @map("engine_version") @db.VarChar(32)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([leagueId])
+  @@index([sport, agree])
+  @@map("draft_recommendation_records")
+}
+
 model DraftPredictionSnapshot {
   id             String               @id @default(uuid())
   leagueId       String
@@ -15941,6 +16003,30 @@ model PlayerWeeklyScore {
   @@unique([playerId, week, season, sport])
   @@index([sport, week, season])
   @@map("player_weekly_scores")
+}
+
+/// A player's position for one scoring week, recorded when that week's weekly score is written and
+/// FROZEN when the week finalizes (lib/bestball/weekPositions.ts). There was no position history
+/// anywhere: `SportsPlayer.position` and the roster rows hold the CURRENT position only, so rescoring
+/// a past best ball week seated a re-listed player at today's position. Best ball reads this before
+/// falling back to the current position. Same ids and sport keys as `PlayerWeeklyScore`.
+model PlayerWeekPosition {
+  playerId   String
+  sport      String
+  season     Int
+  week       Int
+  /// The position the weekly score was computed with; null when the roster row had none.
+  position   String?
+  /// What recorded it, e.g. `weekly_score_sync`.
+  source     String
+  /// Set when the week's weekly scores finalize; a frozen row is never rewritten.
+  frozen     Boolean  @default(false)
+  recordedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@id([playerId, sport, season, week])
+  @@index([sport, season, week])
+  @@map("player_week_positions")
 }
 
 model RedraftPlayoffBracket {
@@ -20379,4 +20465,36 @@ model SleeperCareerSurvival {
 
   @@id([userId, platformLeagueId, season])
   @@map("sleeper_career_survival")
+}
+
+/// Phase 0: immutable Gmail captures. No transaction/body-template parsing.
+enum LeagueSafeEmailProcessingStatus {
+  captured
+  parsed
+  unparseable
+  rejected
+}
+
+model LeagueSafeRawEmail {
+  id                 String                         @id @default(cuid())
+  /// Gmail immutable message id, from the single confirmed bot inbox.
+  messageId          String                         @unique
+  /// Sender-supplied RFC Message-ID, preserved for inspection, not deduplication.
+  rfcMessageId       String?
+  /// Gmail internalDate (actual receipt), not the sender's Date header.
+  receivedAt         DateTime
+  from               String
+  to                 String
+  subject            String
+  rawBody            String                         @db.Text
+  authResults        Json
+  processingStatus   LeagueSafeEmailProcessingStatus @default(captured)
+  /// Reserved nullable scalar; the connection model belongs to Phase 1.
+  leagueConnectionId String?
+  rejectionReason    String?
+  createdAt          DateTime                       @default(now())
+
+  @@index([createdAt, id])
+  @@index([processingStatus, createdAt, id])
+  @@index([leagueConnectionId])
 }

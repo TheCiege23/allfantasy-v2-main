@@ -6,11 +6,7 @@ import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { AutomationCatalogCard } from './AutomationCatalogCard'
 import { StackedBarChart, DistributionBarChart, InfoCard } from '@/components/commissioner-os/cards'
-import {
-  automationRunOutcomes,
-  automationStaleness,
-  AUTOMATION_OUTCOME_SERIES,
-} from '@/lib/commissioner-ui/charts/deriveChartSeries'
+import { automationRunOutcomes, automationStaleness } from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { AutomationHistoryDialog } from './AutomationHistoryDialog'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { AutomationCatalogEntry, AutomationExecutionEntry } from '@/lib/commissioner-ui/automations/decision-os-client'
@@ -18,7 +14,7 @@ import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { automationChartLabelText, outcomeSeriesText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
-export interface AutomationCenterViewProps {
+interface AutomationCenterViewProps {
   catalog: AutomationCatalogEntry[]
   /** Fetched server-side for every catalog entry up front — this client component never fetches on its own, matching every other module's drawer/dialog in this program. */
   historyByAutomationId: Record<string, AutomationExecutionEntry[]>

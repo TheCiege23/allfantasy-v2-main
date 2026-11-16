@@ -4,11 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { LockedFeatureCard } from '@/components/subscription/LockedFeatureCard'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import { useAccessTier } from '@/hooks/useAccessTier'
-import {
-  getDisplayPlanName,
-  getDisplayPlanNameWithPrice,
-  getRequiredPlanForFeature,
-} from '@/lib/subscription/feature-access'
+import { getDisplayPlanNameWithPrice, getRequiredPlanForFeature } from '@/lib/subscription/feature-access'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import {
   getFeatureGateMatrixEntry,

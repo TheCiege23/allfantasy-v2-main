@@ -295,7 +295,9 @@ describe('getRecentTrades', () => {
         picksOut: [],
         currentSeason: 2026,
         // Which trade on which row, so the letter is its frozen original (`frozenCompletedGrade.ts`).
-        original: { afLeagueId: 'af-1', tradeId: 'fresh-9', now: expect.any(Date) },
+        // `fresh-9` is not a Sleeper snowflake, so the trade carries its own accepted date (a real Sleeper id
+        // still reads its time from the id — `provider-trade-original-dates.test.ts`).
+        original: { afLeagueId: 'af-1', tradeId: 'fresh-9', now: expect.any(Date), tradeAt: expect.any(String) },
       })
       const [you, them] = out[0].sides
       expect(you).toMatchObject({ grade: 'A', gradeBasis: 'League' })

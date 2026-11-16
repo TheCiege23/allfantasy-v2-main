@@ -1,9 +1,9 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { isAdminEmailAllowed, isAdminRole } from '@/lib/adminAuth'
 import {
   canManageClassExceptions,
@@ -122,11 +122,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({
     where: { id: params.leagueId },
@@ -177,11 +174,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     )
   }
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({
     where: { id: params.leagueId },

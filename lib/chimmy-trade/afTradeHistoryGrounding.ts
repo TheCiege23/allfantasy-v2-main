@@ -3,6 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { isShadowLeague, sourcePlatformLabel } from '@/lib/league/write-authority'
 import { playerIdSpaceFor, resolveTradePlayers } from '@/lib/decision-os/trade/tradePlayers'
+import type { NativeCompletedGrade } from '@/lib/decision-os/trade/nativeCompletedGrades'
+import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 
 /**
  * TRADES MADE IN ALLFANTASY → CHIMMY, for a league whose history is not synced from Sleeper.
@@ -27,6 +29,26 @@ export type AfHistoryQuery = {
   manager?: string | null
   player?: string | null
   maxShown: number
+  /**
+   * The asker. With it, each trade shown carries its FROZEN ORIGINAL grade (`nativeCompletedGrades.ts`) — the
+   * first read that can grade a trade freezes it, as for Sleeper. Without it, the trades are listed ungraded.
+   */
+  userId?: string | null
+  /** Told each letter printed, so the chat route can hold the answer to them (`tradeGradeCheck.ts`). */
+  onGrade?: (grade: ChimmyTradeGrade) => void
+}
+
+export type AfHistoryDeps = {
+  grade: (args: {
+    leagueId: string
+    userId: string
+    tradeIds: string[]
+    teamsOf: (tradeId: string) => readonly string[] | null
+  }) => Promise<Map<string, NativeCompletedGrade>>
+}
+
+const defaultHistoryDeps: AfHistoryDeps = {
+  grade: async (args) => (await import('@/lib/decision-os/trade/nativeCompletedGrades')).gradeNativeCompletedTrades(args),
 }
 
 export type AfHistoryResult =
@@ -53,7 +75,9 @@ export async function buildAfTradeHistoryOutcome(
   leagueId: string,
   league: { platform: string; sport: string; season: number | null },
   query: AfHistoryQuery,
+  deps: Partial<AfHistoryDeps> = {},
 ): Promise<AfHistoryResult> {
+  const d: AfHistoryDeps = { ...defaultHistoryDeps, ...deps }
   // Native leagues, and providers whose writes AllFantasy makes for real, hold real trades here.
   const real = !isShadowLeague(league.platform)
   const platformLabel = sourcePlatformLabel(league.platform) ?? 'the source platform'
@@ -144,6 +168,20 @@ export async function buildAfTradeHistoryOutcome(
     lines.push(`Filtered${managerFilter ? ` to manager "${query.manager!.trim()}"` : ''}${playerFilter ? ` to player "${query.player!.trim()}"` : ''}: ${matching.length}.`)
   }
   lines.push(shown.length === 0 ? 'No trade matches that filter.' : shown.length < matching.length ? `Most recent ${shown.length} of ${matching.length}:` : `All ${shown.length}, most recent first:`)
+  // The frozen original for each trade shown. A failed read lists them ungraded, never with a guessed letter.
+  const grades = query.userId && shown.length > 0
+    ? await d
+        .grade({
+          leagueId,
+          userId: query.userId,
+          tradeIds: shown.map((t) => t.id),
+          teamsOf: (id) => {
+            const t = shown.find((x) => x.id === id)
+            return t ? [t.proposerRosterId, t.receiverRosterId] : null
+          },
+        })
+        .catch(() => new Map<string, NativeCompletedGrade>())
+    : new Map<string, NativeCompletedGrade>()
   for (const t of shown) {
     const when = t.processedAt ? t.processedAt.toISOString().slice(0, 10) : 'date not recorded'
     const a = labelOf(t.proposerRosterId)
@@ -151,8 +189,25 @@ export async function buildAfTradeHistoryOutcome(
     const got = describe(t.items.filter((i) => i.toRosterId === t.proposerRosterId))
     const gave = describe(t.items.filter((i) => i.fromRosterId === t.proposerRosterId))
     lines.push(`- ${when}: ${a} got [${got}] from ${b} for [${gave}].`)
+    const g = grades.get(t.id)
+    const mine = g?.graded ? g.lettersByRoster[t.proposerRosterId] : undefined
+    const theirs = g?.graded ? g.lettersByRoster[t.receiverRosterId] : undefined
+    if (g?.graded && mine && theirs) {
+      const letters = `${mine} for ${a}, ${theirs} for ${b}`
+      lines.push(`  AllFantasy grade (the frozen original, on this league's values ${g.moment}): ${letters}.`)
+      query.onGrade?.({
+        letters: [...new Set([mine, theirs])],
+        summary: `AllFantasy's grade for the ${when} trade between ${a} and ${b}, on this league's values ${g.moment}: ${letters}.`,
+      })
+    } else if (g && !g.graded) {
+      lines.push(`  Not graded: ${g.reason}`)
+    }
   }
-  lines.push('LIMITS: no values or grades are listed here — do NOT state what any of these was worth, who won, or assign a grade.')
+  lines.push(
+    grades.size > 0
+      ? 'LIMITS: no trade values are stored for these — do NOT state what any of them was worth. A trade with an "AllFantasy grade" line was graded by AllFantasy\'s trade engine and that letter is FROZEN: quote it exactly, say when it was priced, and never swap in a fresh grade of your own. A trade with no "AllFantasy grade" line has no grade on file — do NOT grade it or say who won.'
+      : 'LIMITS: no values or grades are listed here — do NOT state what any of these was worth, who won, or assign a grade.',
+  )
   if (unresolved > 0) lines.push(`${unresolved} traded player(s) could not be named. Say so if it matters; never guess who they were.`)
   return { kind: 'ok', text: lines.join('\n'), uniqueTrades: trades.length, shown: shown.length, unresolvedPlayers: unresolved }
 }

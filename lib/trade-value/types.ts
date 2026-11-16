@@ -7,10 +7,10 @@
 
 export const TRADE_VALUE_SNAPSHOT_VERSION = '1.0' as const
 
-export type TradeAssetKind = 'player' | 'draft_pick' | 'faab' | 'future_consideration'
+type TradeAssetKind = 'player' | 'draft_pick' | 'faab' | 'future_consideration'
 
 /** Raw value sources captured for a single asset. `null` = source not available at capture time. */
-export interface AssetValueSources {
+interface AssetValueSources {
   marketObservation?: import('@/lib/decision-os/value-v2/market').MarketObservationV2 | null
   projectionValue: number | null
   /**
@@ -186,7 +186,7 @@ export interface TradeValueSnapshot {
   coverage?: TradeAssetCoverage
 }
 
-export type TradeAssetCoverageStatus = 'complete' | 'partial' | 'blocked'
+type TradeAssetCoverageStatus = 'complete' | 'partial' | 'blocked'
 
 export interface TradeAssetCoverageItem {
   key: string

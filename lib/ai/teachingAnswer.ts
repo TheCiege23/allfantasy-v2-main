@@ -29,7 +29,7 @@
 
 // ─── Type ─────────────────────────────────────────────────────────────────────
 
-export type TeachingAnswer = {
+type TeachingAnswer = {
   /** The direct answer in 1-2 sentences. Always present. */
   quickAnswer: string
   /** Why this answer matters for the user's pool/league position. */

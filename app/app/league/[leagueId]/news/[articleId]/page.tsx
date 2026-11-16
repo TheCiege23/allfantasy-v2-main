@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Share2 } from 'lucide-react'
-import type { ArticleGenerationType } from '@/lib/sports-media-engine/types'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 
 const ARTICLE_TYPE_LABELS: Record<string, string> = {

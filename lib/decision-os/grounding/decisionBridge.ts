@@ -17,7 +17,7 @@ import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
-import type { GroundedSlice, GroundingGap } from './packet'
+import type { GroundedSlice } from './packet'
 
 /**
  * R2.3–R2.5 — producers that RUN a live engine and hand the packet its decision.
@@ -244,7 +244,7 @@ export async function loadCommissionerHealthDecisionSlice(
   }
 
   try {
-    const access = await assertLeagueCommissioner(leagueId, userId)
+    const access = await assertLeagueCommissioner(leagueId, userId, 'view')
     if (!access?.ok) return notEntitled()
 
     // Safe to assert: the line above verified it. The loader filters on this flag.

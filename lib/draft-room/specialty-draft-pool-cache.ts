@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export type SpecialtyDraftKind = 'dispersal' | 'supplemental' | 'rookie' | 'specialty'
 
-export type SpecialtyDraftPoolRequest = {
+type SpecialtyDraftPoolRequest = {
   kind: SpecialtyDraftKind
   leagueId: string
   draftId?: string | null
@@ -20,7 +20,7 @@ export type SpecialtyDraftPoolRequest = {
   forceRefresh?: boolean
 }
 
-export type SpecialtyDraftPoolMeta = {
+type SpecialtyDraftPoolMeta = {
   source: 'db-cache' | 'rebuilt'
   cacheKey: string
   cachedAt: string | null
@@ -91,7 +91,7 @@ function buildSourceFingerprint(params: SpecialtyDraftPoolRequest): string {
   ].join('|')
 }
 
-export function buildSpecialtyDraftPoolCacheKey(params: SpecialtyDraftPoolRequest): string {
+function buildSpecialtyDraftPoolCacheKey(params: SpecialtyDraftPoolRequest): string {
   const baseKind = params.kind === 'rookie' ? 'rookie' : params.kind === 'supplemental' ? 'supplemental' : params.kind === 'dispersal' ? 'dispersal' : 'specialty'
   const draftSegment = normalizeText(params.draftId) || 'preview'
   const sportSegment = normalizeText(params.sport) || 'unknown'

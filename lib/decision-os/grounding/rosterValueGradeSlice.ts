@@ -161,3 +161,68 @@ export async function loadRosterValueGradeSlice(
     })
   }
 }
+
+/*
+ * ── CACHE-ONLY READ FOR CHIMMY (2026-11-16, re-score item 8) ────────────────────────────────────────────────
+ *
+ * 🛑 THIS SLICE WAS SWITCHED OFF BECAUSE IT IS THE PACKET'S CRITICAL PATH: ~4.6 s against the chat route's 3 s
+ * ceiling, and the ceiling discards the WHOLE packet (intentToWant.ts, 2026-09-07). A plain cache does not fix
+ * that — the first ask in a league still waits on the cold compute and still loses every slice in the turn.
+ *
+ * So the packet never waits on it: a fresh cached grade is served at once; otherwise the compute is started in the
+ * background (one per league + user at a time) and the slice says it is being computed. The next question about
+ * player value in that league gets the grade. Bounded: entries live 15 minutes and at most 500 are kept.
+ */
+const GRADE_TTL_MS = 15 * 60 * 1000
+const GRADE_MAX_ENTRIES = 500
+const gradeCache = new Map<string, { slice: GroundedSlice<RosterValueGradeFact>; at: number }>()
+const gradeInFlight = new Map<string, Promise<void>>()
+
+/** For tests: forget every cached grade. */
+export function clearRosterValueGradeCache(): void {
+  gradeCache.clear()
+  gradeInFlight.clear()
+}
+
+export async function loadRosterValueGradeSliceCached(
+  args: RosterValueGradeSliceArgs,
+  deps: { compute?: (a: RosterValueGradeSliceArgs) => Promise<GroundedSlice<RosterValueGradeFact>>; now?: () => number } = {},
+): Promise<GroundedSlice<RosterValueGradeFact>> {
+  const userId = args.userId ?? null
+  const leagueId = args.leagueId ?? null
+  if (!userId || !leagueId) return loadRosterValueGradeSlice(args)
+  const now = deps.now ?? Date.now
+  const key = `${leagueId}:${userId}`
+  const hit = gradeCache.get(key)
+  if (hit && now() - hit.at < GRADE_TTL_MS) return hit.slice
+
+  if (!gradeInFlight.has(key)) {
+    const compute = deps.compute ?? loadRosterValueGradeSlice
+    const run = compute(args)
+      .then((slice) => {
+        // Only a real grade is cached: a failure or a withheld grade is asked again next time.
+        if (slice.present) {
+          if (gradeCache.size >= GRADE_MAX_ENTRIES) {
+            const oldest = gradeCache.keys().next().value
+            if (oldest !== undefined) gradeCache.delete(oldest)
+          }
+          gradeCache.set(key, { slice, at: now() })
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => gradeInFlight.delete(key))
+    gradeInFlight.set(key, run)
+  }
+  // A stale grade still beats none while the fresh one computes — and says when it was taken (`asOf`).
+  if (hit) return hit.slice
+  return absent({
+    reason: 'not_computed',
+    detail: 'The roster value grade for this league is being computed now; it is included from the next question.',
+    remedy: 'Ask again in a moment.',
+  })
+}
+
+/** For tests: wait for any background grade computes to settle. */
+export async function settleRosterValueGradeComputes(): Promise<void> {
+  await Promise.all([...gradeInFlight.values()])
+}

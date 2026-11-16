@@ -57,7 +57,7 @@ export type SettingsHomeRow = {
 
 export type SettingsHomeSection = { id: string; title: string; rows: SettingsHomeRow[] }
 
-export type SettingsHomeLeague = {
+type SettingsHomeLeague = {
   id: string
   name?: string | null
   sport?: string | null
@@ -76,7 +76,7 @@ export type SettingsHomeLeague = {
   settings?: unknown
 }
 
-export type SettingsHomeTeam = {
+type SettingsHomeTeam = {
   claimedByUserId?: string | null
   isCoCommissioner?: boolean | null
   ownerName?: string | null
@@ -133,7 +133,7 @@ const LOADING = '…'
  * `data-layout="stacked"`; league-settings-home.css applies it below 480px). Short values stay
  * right-aligned like Sleeper. Nothing is ever truncated: a long value wraps.
  */
-export const LONG_SETTINGS_VALUE_CHARS = 24
+const LONG_SETTINGS_VALUE_CHARS = 24
 
 export function isLongSettingsValue(value: string | null | undefined): boolean {
   return String(value ?? '').length > LONG_SETTINGS_VALUE_CHARS
@@ -209,7 +209,7 @@ export function formatDraftDateTime(iso: string | null | undefined, timeZone?: s
   return `${get('weekday')} ${get('month')} ${get('day')}, ${get('hour')}:${get('minute')} ${get('dayPeriod')} ${ZONE_SHORT[zone] ?? zone}`.replace(/\s+/g, ' ').trim()
 }
 
-export function formatPickTimer(seconds: number | null | undefined): string {
+function formatPickTimer(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'No timer'
   if (seconds < 120) return `${seconds}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`
@@ -217,14 +217,14 @@ export function formatPickTimer(seconds: number | null | undefined): string {
   return `${Number.isInteger(h) ? h : h.toFixed(1)}h`
 }
 
-export function formatDraftShape(draft: SettingsHomeDraft | null): string {
+function formatDraftShape(draft: SettingsHomeDraft | null): string {
   if (!draft) return LOADING
   const type = draft.type ? titleCase(draft.type) : 'Snake'
   const rounds = draft.rounds ? `${draft.rounds} rounds` : null
   return [type, rounds, formatPickTimer(draft.timerSeconds)].filter(Boolean).join(' · ')
 }
 
-export function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'waiverBudget'>): string {
+function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'waiverBudget'>): string {
   const type = String(league.waiverType ?? 'rolling').toLowerCase()
   if (type === 'faab') {
     const budget = Number(league.waiverBudget ?? 100)
@@ -242,7 +242,7 @@ const TRADE_REVIEW_LABELS: Record<string, string> = {
   none: 'Trades off',
 }
 
-export function formatTrades(league: Pick<SettingsHomeLeague, 'settings' | 'tradeDeadlineWeek'>): string {
+function formatTrades(league: Pick<SettingsHomeLeague, 'settings' | 'tradeDeadlineWeek'>): string {
   const s = settingsRecord(league.settings)
   const json = settingsRecord(s.settingsJson)
   const mode = String(s.trade_review_mode ?? s.tradeReviewMode ?? json.tradeReviewMode ?? 'commissioner').toLowerCase()

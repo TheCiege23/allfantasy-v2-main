@@ -2,7 +2,7 @@ import 'server-only'
 
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import type { TradeGradeView } from './tradeGrade'
-import { loadGuillotineContext, type GuillotineContextResult } from './guillotineContext'
+import { loadGuillotineContext, type GuillotineContextResult, type GuillotineLeague } from './guillotineContext'
 import { gradeGuillotineDeal, isGuillotineTradeLeague } from './guillotineValue'
 
 /**
@@ -28,7 +28,7 @@ export function createGuillotineGrader(
     sport: string | null | undefined
     leagueType: string | null | undefined
     leagueVariant?: string | null
-    league: { id: string; settings: unknown; leagueSize: number | null }
+    league: GuillotineLeague
   },
   deps: GuillotineGraderDeps = { loadContext: loadGuillotineContext },
 ): GuillotineGrader | null {

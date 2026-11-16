@@ -311,6 +311,25 @@ function extrapolatedLateRound(
   return Math.max(1, Math.round(lastValue * ratio ** (round - last)))
 }
 
+/** Canton prospect proxy for a combined draft, using only rounds present on the stored chart. */
+export function storedRookieSlotValues(chart: LeagueTradeChart, year: number): number[] {
+  const { fcPlayers } = chart
+  const teams = chart.nflCtx.largeLeagueRookiePicks ? REFERENCE_TEAMS : chart.leagueSize
+  if (!Number.isInteger(teams) || teams < 2) return []
+  const rounds = new Set(chartRounds(fcPlayers, year))
+  const board: number[] = []
+  for (let round = 1; rounds.has(round); round++) {
+    for (let slot = 1; slot <= teams; slot++) {
+      const share = (slot - 0.5) / teams
+      const tier = share < 1 / 3 ? 'early' : share < 2 / 3 ? 'mid' : 'late'
+      const quote = chartSlotValue(fcPlayers, year, round, slot) ?? chartRoundValue(fcPlayers, year, round, tier)
+      if (quote == null || !Number.isFinite(quote) || quote <= 0) return board
+      board.push(quote)
+    }
+  }
+  return board
+}
+
 /** The chart's own price for exactly this season and round, or null when it carries no such row. */
 function chartRoundValue(
   fcPlayers: ReadonlyArray<Pick<FantasyCalcPlayer, 'player' | 'value'>>,
@@ -665,6 +684,7 @@ export async function resolveAssets(
     onAnotherChart?: ReadonlySet<string>
     /** Where each team's next-draft picks are projected to land — see `loadPickSlotProjection`. */
     pickSlots?: PickSlotProjection | null
+    combinedPickQuote?: (pick: Extract<TradeAssetInput, { kind: 'pick' }>) => Promise<number | null>
   },
 ): Promise<{
   /** One line per pick priced by its original owner's projected finish ("2027 1st projected early (62%)"). */
@@ -711,7 +731,17 @@ export async function resolveAssets(
       continue
     }
     if (raw.kind === 'pick') {
-      const { priced: p, dataSource, projection } = await priceLeagueTradePick(raw, args)
+      const combined = raw.draftSide === 'combined'
+      const quote = combined ? await args.combinedPickQuote?.(raw) : null
+      const combinedName = `Combined ${raw.year} ${ordinalRound(raw.round)}`
+      const { priced: p, dataSource, projection } = combined
+        ? {
+            priced: quote != null && Number.isFinite(quote) && quote > 0
+              ? { ...repricedAsset(await pricePick({ year: raw.year, round: raw.round, tier: raw.tier ?? null }, args.nflCtx), quote, 'curve'), name: combinedName }
+              : unpricedAsset({ name: combinedName, type: 'pick', reason: noPickMarketUnpricedReason(raw.year, raw.round) }),
+            dataSource: quote != null ? 'c2c_combined_pick' : 'no_pick_market', projection: undefined,
+          }
+        : await priceLeagueTradePick(raw, args)
       if (projection) pickProjections.push(projection)
       priced.push(p)
       lines.push(
@@ -955,11 +985,17 @@ export type LeagueTradeChart = {
  * Resolve the chart for a league and fetch it. Moved verbatim from the console; the console's
  * request overrides (`leagueSize`, `tePremium`, `isSuperFlex`, `waiverBudget`) ride in `overrides`.
  */
+/** Read the league chart from the current stored market without refreshing a provider. */
+export function readStoredLeagueTradeChart(profile: ReturnType<typeof fantasyCalcSettingsForChart>) {
+  return readFantasyCalcValuesFromDb(profile, { allowStale: false })
+}
+
 export async function resolveLeagueTradeChart(args: {
   leagueRow: LoadedTradeLeague | null
   leagueSnapshot: TradeConsoleLeagueSnapshot | null
   leagueNormCtx: NormalizedLeagueContext | null
-  overrides?: { leagueSize?: number; tePremium?: boolean; isSuperFlex?: boolean; waiverBudget?: number }
+  /** `isDynasty` applies only with no league (the open analyzer's format picker); a league uses its own book. */
+  overrides?: { leagueSize?: number; tePremium?: boolean; isSuperFlex?: boolean; waiverBudget?: number; isDynasty?: boolean }
   mark?: (name: string) => void
   /**
    * Resolve the league's chart SETTINGS without loading today's market or this league's defender
@@ -989,7 +1025,7 @@ export async function resolveLeagueTradeChart(args: {
    * those surfaces show. Global mode (no league) keeps the old dynasty default, and says so.
    */
   const marketCtx = leagueRow ? marketContextFor(leagueRow.settings, leagueRow.leagueType, leagueSize) : null
-  const chartIsDynasty = marketCtx ? pricesOnDynastyChart(marketCtx.variant) : true
+  const chartIsDynasty = marketCtx ? pricesOnDynastyChart(marketCtx.variant) : input.isDynasty ?? true
   const tePremium =
     input.tePremium ??
     leagueSnapshot?.tePremiumHint ??
@@ -1045,7 +1081,7 @@ export async function resolveLeagueTradeChart(args: {
   const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless || !readsNflChart
     ? { players: [] as FantasyCalcPlayer[], syncedAt: null }
     : largeLeagueRookiePicks
-      ? await readFantasyCalcValuesFromDb(marketProfile, { allowStale: false })
+      ? await readStoredLeagueTradeChart(marketProfile)
       : await getFantasyCalcChartDbFirst(marketProfile, { maxStaleMs: 1000 * 60 * 60 * 2 })
   args.mark?.('fantasycalc')
 

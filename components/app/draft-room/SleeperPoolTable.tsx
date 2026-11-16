@@ -56,7 +56,7 @@ export {
   SLEEPER_POOL_TABLE_ROW_HEIGHT,
 } from './SleeperPoolTable.constants'
 
-export interface SleeperPoolTableProps {
+interface SleeperPoolTableProps {
   filtered: PlayerEntry[]
   draftedNames: Set<string>
   draftedPlayerIds?: ReadonlySet<string> | null
@@ -94,10 +94,10 @@ function rowKey(p: PlayerEntry): string {
   return `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
 }
 
-/** D.7 — scannable position badge, filled in the board's position colour (Sleeper palette). */
-function PositionChip({ pos }: { pos: string | null }) {
+/** D.7 — scannable position badge, filled in the board's position colour (same sport-aware palette). */
+function PositionChip({ pos, sport }: { pos: string | null; sport?: string | null }) {
   const p = (pos ?? '').trim().slice(0, 4).toUpperCase() || '—'
-  const tint = positionTintHex(p)
+  const tint = positionTintHex(p, sport)
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded px-1 py-px text-[11px] font-bold uppercase leading-none"
@@ -282,7 +282,7 @@ function SleeperRow(props: SleeperRowProps) {
                 ) : null}
               </div>
               <div className="flex min-w-0 items-center gap-1">
-                <PositionChip pos={p.position} />
+                <PositionChip pos={p.position} sport={draftSport} />
                 {p.team ? (
                   <span className="truncate text-[11px] text-white/38">{p.team}</span>
                 ) : isProspect ? (
@@ -507,48 +507,7 @@ function SleeperRow(props: SleeperRowProps) {
         )
       case 'actions':
         return (
-          <Cell key={col.key} width={col.width} align="right" className="gap-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCompareTap()
-              }}
-              aria-label={isCompareAnchor ? 'Clear compare selection' : `Compare ${p.name}`}
-              data-testid={`${testIdBase}-compare`}
-              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
-                isCompareAnchor
-                  ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
-                  : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
-              }`}
-            >
-              <GitCompare className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                if (drafted) return
-                onAddToQueue()
-              }}
-              disabled={drafted}
-              aria-pressed={queued}
-              // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
-              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
-              data-testid={`${testIdBase}-queue`}
-              data-queued={queued ? 'true' : 'false'}
-              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
-                drafted
-                  ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
-                  : queued
-                    ? 'border-transparent bg-white text-[#14172a]'
-                    : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
-              }`}
-              title={aiOverlaySignal ? 'AI quick action: queue candidate' : undefined}
-            >
-              {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
-              {queued && !drafted ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
-            </button>
+          <Cell key={col.key} width={col.width} align={col.align} className="gap-1">
             {canNominate && onNominateRequest ? (
               <button
                 type="button"
@@ -583,6 +542,47 @@ function SleeperRow(props: SleeperRowProps) {
                 {drafted ? 'Drafted' : 'Draft'}
               </button>
             )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (drafted) return
+                onAddToQueue()
+              }}
+              disabled={drafted}
+              aria-pressed={queued}
+              // The name stays the same queued or not (e2e and screen readers find it by name); aria-pressed carries the state.
+              aria-label={t('draftRoom.queue.queuePlayer').replace('{{name}}', p.name)}
+              data-testid={`${testIdBase}-queue`}
+              data-queued={queued ? 'true' : 'false'}
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
+                drafted
+                  ? 'cursor-not-allowed border-transparent bg-[#1d2236] text-white/25'
+                  : queued
+                    ? 'border-transparent bg-white text-[#14172a]'
+                    : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
+              }`}
+              title={aiOverlaySignal ? 'AI quick action: queue candidate' : undefined}
+            >
+              {/* Colour alone used to be the only "queued" signal; the glyph changes too now. */}
+              {queued && !drafted ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCompareTap()
+              }}
+              aria-label={isCompareAnchor ? 'Clear compare selection' : `Compare ${p.name}`}
+              data-testid={`${testIdBase}-compare`}
+              className={`draft-live-action-btn inline-flex h-[40px] w-[32px] items-center justify-center rounded-md border transition ${
+                isCompareAnchor
+                  ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
+                  : 'border-transparent bg-[#1d2236] text-white/60 hover:bg-[#2a2f45] hover:text-white'
+              }`}
+            >
+              <GitCompare className="h-3.5 w-3.5" />
+            </button>
           </Cell>
         )
       default: {

@@ -588,15 +588,12 @@ describe('Waivers Competitive Edge — Spanish', () => {
     expectSpanish(out, 'faab')
     expect(out).toContain('Ventaja competitiva · los reclamos de los demás mánagers')
     expect(container.querySelector('[data-testid="waiver-edge-waiver.outbid_by"]')?.textContent).toBe('1 de los 3 otros mánagers tiene más FAAB que tus $40.')
-    expect(out).toContain('A Tasha le quedan $72 de FAAB, más que tus $40.')
-    expect(out).toContain('A Dee le quedan $40 de FAAB, lo mismo que a ti.')
-    expect(out).toContain('A Mike le quedan $12 de FAAB, menos que tus $40.')
-    expect(out).toContain('Tasha ganó 3 reclamos esta temporada y gastó $22 en total.')
-    expect(out).toContain('Su oferta ganadora más alta fue de $18 (RB).')
-    expect(out).toContain('1 de sus 3 reclamos fue una oferta de $0.')
-    expect(out).toContain('3 de sus 3 reclamos fueron ofertas de $0.')
-    expect(out).toContain('2 de sus 3 reclamos fueron de RB.')
-    expect(out).toContain('Mike no ganó ningún reclamo esta temporada.')
+    // One line per manager (2026-11-14); "más que tus $40" is said once, in the league line above.
+    const line = (team: string) => container.querySelector(`[data-testid="waiver-edge-rival-${team}"] [data-testid="waiver-edge-rival-line"]`)?.textContent
+    expect(line('2')).toBe('$72 restantes · 3 reclamos, $22 gastados, 1 a $0 · oferta más alta $18 (RB) · 2 RB')
+    expect(line('3')).toBe('$40 restantes · 3 reclamos, todos a $0')
+    expect(line('4')).toBe('$12 restantes · ningún reclamo ganado')
+    expect(out).not.toContain('le quedan')
     expect(out).toContain('Esta liga lleva 6 reclamos ganados esta temporada.')
     expect(container.querySelector('[data-testid="waiver-competitive-edge-basis"]')?.textContent).toBe(
       'Datos de los reclamos ganados en el historial de Sleeper de esta liga en la temporada 2026, a 25 sept, 8:44 ET (puede estar desactualizado). Sleeper no publica las ofertas perdidas, así que solo cuenta las ganadas. Muestra lo que hicieron, no lo que ofertarán.',
@@ -611,7 +608,8 @@ describe('Waivers Competitive Edge — Spanish', () => {
       const { container, unmount } = render(<WaiverCompetitiveEdge access={null} edge={{ available: true, data: edge }} />)
       const out = ownText(container)
       expectSpanish(out, label)
-      if (label === 'rolling') expect(out).toContain('Tasha ganó 3 reclamos esta temporada.')
+      if (label === 'rolling')
+        expect(container.querySelector('[data-testid="waiver-edge-rival-2"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe('3 reclamos · 2 RB')
       else expect(out).toContain('Todavía no hay reclamos ganados registrados en esta liga esta temporada.')
       unmount()
     }
@@ -638,8 +636,11 @@ describe('Waivers Competitive Edge — English is unchanged', () => {
     const { container } = render(<WaiverCompetitiveEdge access={edgeAccess(true)} edge={{ available: true, data: edgeOf(true) }} />)
     const out = container.textContent ?? ''
     expect(out).toContain("Competitive Edge · other managers' waiver activity")
-    expect(out).toContain('Tasha has $72 of FAAB left — more than your $40.')
-    expect(out).toContain('Dee has $40 of FAAB left — the same as yours.')
+    expect(container.querySelector('[data-testid="waiver-edge-rival-2"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe(
+      '$72 left · 3 claims, $22 spent, 1 at $0 · biggest bid $18 (RB) · 2 RBs',
+    )
+    expect(container.querySelector('[data-testid="waiver-edge-rival-3"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe('$40 left · 3 claims, all at $0')
+    expect(container.querySelector('[data-testid="waiver-edge-rival-4"] [data-testid="waiver-edge-rival-line"]')?.textContent).toBe('$12 left · no claims won')
     expect(container.querySelector('[data-testid="waiver-competitive-edge-basis"]')?.textContent).toBe(
       "Counted from winning waiver claims in this league's Sleeper history for the 2026 season, as of Sep 25, 8:44 AM ET — may be out of date. Sleeper doesn't publish losing bids, so these are wins only. It shows what they did, not what they'll bid.",
     )

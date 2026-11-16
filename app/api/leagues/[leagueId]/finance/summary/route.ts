@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { isLeagueEntryFeeProcessingEnabled } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 import { getServerSession } from 'next-auth'
@@ -36,7 +37,7 @@ export async function GET(
     },
   })
 
-  const isCommish = role === 'commissioner' || role === 'co_commissioner'
+  const isCommish = (await canCommissionerAct(leagueId, userId, 'view'))
 
   const allDues = isCommish
     ? await prisma.leagueDues.findMany({

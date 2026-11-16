@@ -7,7 +7,7 @@
 
 export type RestrictionLevel = "full_block" | "paid_block"
 
-export interface RestrictedState {
+interface RestrictedState {
   code: string
   name: string
   level: RestrictionLevel
@@ -64,11 +64,11 @@ export const RESTRICTED_STATES: RestrictedState[] = [
   },
 ]
 
-export const FULL_BLOCK_STATES = new Set(RESTRICTED_STATES.filter((s) => s.level === "full_block").map((s) => s.code))
+const FULL_BLOCK_STATES = new Set(RESTRICTED_STATES.filter((s) => s.level === "full_block").map((s) => s.code))
 
-export const PAID_BLOCK_STATES = new Set(RESTRICTED_STATES.filter((s) => s.level === "paid_block").map((s) => s.code))
+const PAID_BLOCK_STATES = new Set(RESTRICTED_STATES.filter((s) => s.level === "paid_block").map((s) => s.code))
 
-export const ALL_RESTRICTED_STATE_CODES = new Set(RESTRICTED_STATES.map((s) => s.code))
+const ALL_RESTRICTED_STATE_CODES = new Set(RESTRICTED_STATES.map((s) => s.code))
 
 export function getRestrictionLevel(stateCode: string | null | undefined): RestrictionLevel | null {
   if (!stateCode) return null

@@ -1,19 +1,14 @@
 export {
   PIPELINE_ID,
   SPORTS_DATA_NORMALIZATION_SCHEMA_VERSION,
-  SOURCE_PRIORITY,
 } from '@/lib/sports-data-normalization/constants'
 export type { UpstreamSourceTag } from '@/lib/sports-data-normalization/constants'
 
 export type {
   NormalizedActualPerformance,
   NormalizedFantasyProjection,
-  NormalizedFantasyScoringSnapshot,
-  NormalizedGameRef,
-  NormalizedInjuryNewsProjectionSlice,
   NormalizedInjuryStatus,
   NormalizedPlayerSportsProfile,
-  NormalizedPosition,
   NormalizedSportsDataBatch,
   NormalizedTeamRef,
   NormalizedTrendUsage,

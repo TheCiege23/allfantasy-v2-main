@@ -3,11 +3,14 @@
  * Routes: /fantasy-football/leagues, /fantasy-basketball/leagues, /fantasy-baseball/leagues
  */
 
-const BASE = 'https://allfantasy.ai'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
-export type DiscoveryLeaguesSlug = 'fantasy-football' | 'fantasy-basketball' | 'fantasy-baseball'
+// www via the shared helper: the apex 301s to www, so an apex canonical names a redirect.
+const BASE = getPublicSiteOrigin()
 
-export interface DiscoveryLeaguesFaqItem {
+type DiscoveryLeaguesSlug = 'fantasy-football' | 'fantasy-basketball' | 'fantasy-baseball'
+
+interface DiscoveryLeaguesFaqItem {
   question: string
   answer: string
 }

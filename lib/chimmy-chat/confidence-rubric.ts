@@ -24,7 +24,7 @@ export function confidenceLevelFor(score: number): ChimmyConfidenceLevel {
 }
 
 /** How past calls shown at one band turned out (`lib/chimmy-outcomes/adviceLearning.ts`). */
-export type ChimmyTrackRecordBand = {
+type ChimmyTrackRecordBand = {
   /** Share of resolved calls that were right, shrunk toward `shownRate` — 0–1. */
   observedRate: number
   /** The mean confidence those calls were shown with — 0–1. */
@@ -75,7 +75,7 @@ export type ChimmyConfidenceSignals = {
 // Rubric output
 // ---------------------------------------------------------------------------
 
-export type ChimmyConfidenceRubricResult = {
+type ChimmyConfidenceRubricResult = {
   /** Final bounded score 0–100. */
   score: number
   /** Derived level band. */

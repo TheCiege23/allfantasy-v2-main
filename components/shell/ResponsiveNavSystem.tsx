@@ -46,7 +46,7 @@ function isAiNotificationType(value: string | null | undefined): boolean {
   )
 }
 
-export interface ResponsiveNavSystemProps {
+interface ResponsiveNavSystemProps {
   isAuthenticated: boolean
   isAdmin: boolean
   userLabel: string | null

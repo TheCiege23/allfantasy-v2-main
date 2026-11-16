@@ -1,8 +1,6 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
 
-import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 
@@ -20,7 +18,7 @@ export async function PATCH(
   if (!leagueId || !flagId) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch (e) {
     const st = (e as Error & { status?: number }).status ?? 403
     return NextResponse.json({ error: "Forbidden" }, { status: st })

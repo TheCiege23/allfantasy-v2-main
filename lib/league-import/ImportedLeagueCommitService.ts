@@ -17,6 +17,7 @@ import { persistProviderTransactionFacts, type ProviderTransactionFactInput } fr
 import type { ImportWarningRecord } from '@/lib/league-import/types'
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 import { hasIdpRosterSlot } from './idpRosterSlots'
+import { isYahooSnapshotYahooSettings } from './yahoo/snapshot/yahooSnapshotModel'
 import type {
   CanonicalImportBundle,
   ImportProvider,
@@ -503,6 +504,11 @@ async function runHistoricalBackfill(args: {
   }
 
   if (args.provider === 'yahoo') {
+    /* A pasted league has no Yahoo access behind it: the backfill reads past seasons through the
+       Yahoo API and could only fail. Skipped, and said so, rather than attempted. */
+    if (isYahooSnapshotYahooSettings(args.normalized.league.yahoo_settings)) {
+      return { attempted: false, skipped: true, reason: 'Pasted Yahoo league: no Yahoo API access to backfill past seasons from.' }
+    }
     const { syncYahooHistoricalBackfillAfterImport } = await import(
       '@/lib/league-import/yahoo/YahooHistoricalBackfillService'
     )
@@ -1090,6 +1096,12 @@ export async function persistImportedLeagueFromNormalization(
     await runBootstrapStep('BOOTSTRAP_PLAYER_IDENTITIES_FAILED', 'Baseball player identities need review before native conversion', 'error', incompleteSteps, async () => {
       const { ingestMlbEspnImportIdentities } = await import('@/lib/player-identity/ingestMlbEspnImportIdentities')
       await ingestMlbEspnImportIdentities(normalized.player_map ?? {})
+    })
+  }
+  if (provider === 'espn' && normalized.league.sport === 'NCAAF') {
+    await runBootstrapStep('BOOTSTRAP_PLAYER_IDENTITIES_FAILED', 'College football player identities need review before grading', 'error', incompleteSteps, async () => {
+      const { ingestNcaafEspnImportIdentities } = await import('@/lib/player-identity/ingestNcaafEspnImportIdentities')
+      await ingestNcaafEspnImportIdentities(normalized.player_map ?? {})
     })
   }
 

@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { findPlayerByName } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
@@ -30,7 +30,7 @@ function getOpenAIClient(): OpenAI | null {
   return openai;
 }
 
-export interface UserTradingProfile {
+interface UserTradingProfile {
   userId: string;
   sleeperUsername: string;
   totalTrades: number;
@@ -61,7 +61,7 @@ export interface UserTradingProfile {
   };
 }
 
-export interface SmartTradeRecommendation {
+interface SmartTradeRecommendation {
   id: string;
   tradeType: 'acquire' | 'sell' | 'swap';
   confidence: number;
@@ -90,7 +90,7 @@ export interface SmartTradeRecommendation {
   suggestedTargetManagers?: string[];
 }
 
-export interface SmartRecommendationsResult {
+interface SmartRecommendationsResult {
   recommendations: SmartTradeRecommendation[];
   userProfile: UserTradingProfile;
   marketInsights: {

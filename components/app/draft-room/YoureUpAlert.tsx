@@ -17,7 +17,7 @@
 import React from 'react'
 import { Bell, X } from 'lucide-react'
 
-export type YoureUpAlertProps = {
+type YoureUpAlertProps = {
   pickLabel: string
   /** True when this pick has a running clock (the header shows the live countdown). */
   timed: boolean

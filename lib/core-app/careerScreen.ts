@@ -32,7 +32,8 @@ import { loadCareerHistory, type CareerHistory } from '@/lib/core-app/careerHist
 import { buildCareerTimeline, parseTimelineKind, type CareerTimeline } from '@/lib/core-app/careerTimeline'
 import { getCareerPeers, type CareerPeers } from '@/lib/core-app/careerPeers'
 import { prisma } from '@/lib/prisma'
-import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
+import { isEnabled } from '@/lib/sports-os/rollout'
+import { resolveRollouts } from '@/lib/sports-os/rolloutConfig'
 
 /**
  * `/core/career` — what each tab needs, and nothing else.
@@ -43,7 +44,7 @@ import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
  * nine-season career on every visit is the cost item 9 exists to remove.
  */
 
-export const CAREER_VIEWS = [
+const CAREER_VIEWS = [
   'overview',
   'timeline',
   'seasons',
@@ -56,7 +57,7 @@ export const CAREER_VIEWS = [
   'hall',
   'share',
 ] as const
-export type CareerView = (typeof CAREER_VIEWS)[number]
+type CareerView = (typeof CAREER_VIEWS)[number]
 
 export function parseCareerView(raw: unknown): CareerView {
   return typeof raw === 'string' && (CAREER_VIEWS as readonly string[]).includes(raw) ? (raw as CareerView) : 'overview'
@@ -103,7 +104,7 @@ export type CareerScreenData = {
 }
 
 /** Trade counts narrowed the way the rows are. Trades are Sleeper-only. */
-export function filterTradeCounts(trades: CareerTradeCount[], f: CareerFilter, rows: CareerRow[]): CareerTradeCount[] {
+function filterTradeCounts(trades: CareerTradeCount[], f: CareerFilter, rows: CareerRow[]): CareerTradeCount[] {
   if (f.platform && f.platform !== 'sleeper') return []
   const sportByKey = new Map(rows.map((r) => [r.leagueKey, r.sport]))
   return trades.filter((t) => {
@@ -161,7 +162,7 @@ async function weeklyFor(userId: string, filter: CareerFilter): Promise<CareerRe
    * one is read live, because every filter combination is its own answer and a
    * cache keyed on all of them would mostly hold one-off entries.
    */
-  if (isUnfiltered(filter) && isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)) {
+  if (isUnfiltered(filter) && isEnabled('sports-os.screen-summaries', userId, resolveRollouts())) {
     const fresh = await readCareerRecordsSummary(userId).catch(() => null)
     if (fresh?.data) return fresh.data
   }
@@ -260,7 +261,7 @@ export async function getCareerScreen(
   const hallLayout = view === 'hall' ? parseHallLayout(sp.layout) : null
 
   const rivals =
-    view === 'overview' && isUnfiltered(filter) && isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+    view === 'overview' && isUnfiltered(filter) && isEnabled('sports-os.screen-summaries', userId, resolveRollouts())
       ? ((await readCareerRecordsSummary(userId).catch(() => null))?.data?.rivals ?? null)
       : null
 

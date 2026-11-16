@@ -4,7 +4,7 @@ export const SPORTS_DATA_NORMALIZATION_SCHEMA_VERSION = 1 as const
 export const PIPELINE_ID = 'allfantasy-sports-data-normalization' as const
 
 /** Priority order for merging real upstream rows (first wins for identity; projections merge by field). */
-export const SOURCE_PRIORITY = [
+const SOURCE_PRIORITY = [
   'rolling_insights',
   'sports_db',
   'clear_sports',

@@ -16,7 +16,7 @@ import { IMPORT_PROVIDER_UI_OPTIONS, getImportPlatforms } from '@/lib/league-imp
 import type { ImportProvider } from '@/lib/league-import/types'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
-export type LandingConnectPlatform = {
+type LandingConnectPlatform = {
   provider: ImportProvider
   name: string
   state: 'live' | 'soon'

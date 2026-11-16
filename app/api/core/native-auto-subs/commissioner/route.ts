@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 export const dynamic='force-dynamic'
 async function handle(req:Request){
@@ -10,7 +10,7 @@ async function handle(req:Request){
   if(!userId)return NextResponse.json({error:'Unauthorized'},{status:401})
   const leagueId=new URL(req.url).searchParams.get('league')??''
   let league
-  try{league=(await assertCommissioner(leagueId,userId)).league}catch{return NextResponse.json({error:'Commissioner only'},{status:403})}
+  try{league=(await assertCommissionerAccess(leagueId,userId,req.method==='GET'?'view':'league')).league}catch{return NextResponse.json({error:'Commissioner only'},{status:403})}
   if(resolveWriteAuthority(league.platform)!=='NATIVE')return NextResponse.json({error:'Native leagues only'},{status:409})
   const enabled=(league.settings as Record<string,unknown>|null)?.nativeAutoSubsEnabled===true
   if(req.method==='GET')return NextResponse.json({enabled},{headers:{'Cache-Control':'private, no-store'}})

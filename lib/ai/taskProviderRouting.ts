@@ -33,7 +33,7 @@
 import type { FeatureKey } from '@/lib/ai/engine/types'
 import type { ProviderName } from '@/lib/ai/providerRouter'
 
-export type TaskRoute = {
+type TaskRoute = {
   provider: ProviderName
   /** Why this task routes here. Surfaced in admin logs, never to end users. */
   rationale: string
@@ -131,7 +131,3 @@ export function resolveProviderForFeature(
   return TASK_ROUTES[key as FeatureKey] ?? null
 }
 
-/** Read-only view of the built-in map, for admin/diagnostic surfaces. */
-export function getTaskRouteTable(): Readonly<Partial<Record<FeatureKey, TaskRoute>>> {
-  return TASK_ROUTES
-}

@@ -2087,3 +2087,206 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ── Yahoo by copy-paste (YahooSnapshotImport.tsx) ─────────────────────
+ *
+ * Reuses the Fantrax panel's card, heading, button and note classes; only the
+ * checklist and the paste box are new. Theme tokens only, so light and dark
+ * follow the rest of the sheet. Every control meets the 44px touch floor.
+ */
+.af-im-ys { margin: 0; }
+/* Reads as the foot links beside it (Fantrax CSV, college + pro) until opened. */
+.af-im-ys > summary.af-im-ys-toggle {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.af-im-ys > summary.af-im-ys-toggle::-webkit-details-marker { display: none; }
+.af-im-ys > summary.af-im-ys-toggle:hover { color: var(--accent); }
+.af-im-ys[open] > summary.af-im-ys-toggle { color: var(--text); text-decoration: none; }
+.af-im-ys > .af-im-fx { margin-top: 4px; }
+.af-im-ys-input,
+.af-im-ys-paste {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line2);
+  background: var(--bg, transparent);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+.af-im-ys-paste { min-height: 120px; resize: vertical; margin-top: 8px; }
+.af-im-ys-input:focus-visible,
+.af-im-ys-paste:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.af-im-ys-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 2px; }
+.af-im-ys-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.af-im-ys-list a {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-im-ys-list a:hover { text-decoration: underline; }
+.af-im-ys-item { flex: 1 1 auto; font-size: 14px; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+/* Only the rosters row wraps (its team list takes the full width); the others keep the link on the
+   label's line at 375px, where "Draft results · optional" used to push it onto a row of its own. */
+.af-im-ys-list > li:not(.af-im-ys-rosters) { flex-wrap: nowrap; }
+.af-im-ys-list a, .af-im-ys-hint { flex: 0 0 auto; white-space: nowrap; }
+.af-im-ys-item i { font-style: normal; font-size: 12px; color: var(--faint); margin-left: 4px; }
+.af-im-ys-hint { margin-left: auto; font-size: 12px; color: var(--faint); }
+
+.af-im-ys-mark {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line2);
+  font: 800 12px/1 system-ui, sans-serif;
+  color: transparent;
+}
+.af-im-ys-mark--done { border-color: var(--good); background: var(--good-soft); color: var(--good); }
+
+.af-im-ys-teams { flex: 1 1 100%; margin: 0 0 6px 32px; }
+.af-im-ys-teams > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-im-ys-teams ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.af-im-ys-teams li { display: flex; align-items: center; gap: 10px; }
+
+.af-im-ys-paste-label { display: block; margin-top: 18px; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.af-im-ys-paste-label kbd {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  padding: 3px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--chip-line, var(--line2));
+  background: var(--chip, transparent);
+  color: var(--text);
+}
+
+.af-im-ys-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.af-im-ys-row--end { justify-content: flex-end; }
+.af-im-ys-row .af-im-fx-go { min-height: 44px; }
+.af-im-fx-go:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.af-im-ys-file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text2);
+  cursor: pointer;
+}
+.af-im-ys-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.af-im-ys-file span { text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+
+.af-im-ys-quiet {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.af-im-ys-quiet:hover { color: var(--text); }
+
+.af-im-ys-ok { margin: 12px 0 0; font-size: 13px; font-weight: 700; color: var(--good); }
+
+.af-im-ys-summary { margin: 16px 0 0; display: grid; gap: 0; }
+.af-im-ys-summary > div {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.af-im-ys-summary dt { flex: 0 0 72px; color: var(--faint); font-size: 12.5px; }
+.af-im-ys-summary dd { margin: 0; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.af-im-ys-attest { margin-top: 14px; min-height: 44px; }
+/* The intro shows only on the first step; whatever leads the card after that sits flush. */
+.af-im-ys .af-im-fx > :first-child { margin-top: 0; }
+
+/* ── "Send to AllFantasy" bookmark (yahooSnapshotBookmarklet.ts) ───────── */
+.af-im-ys-bm {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px dashed var(--accent-line, var(--line2));
+  border-radius: 12px;
+  background: var(--accent-soft, transparent);
+}
+.af-im-ys-bm-h { margin: 0; font-size: 13.5px; font-weight: 800; color: var(--text); }
+.af-im-ys-bm .af-im-fx-note { margin-top: 6px; }
+.af-im-ys-bm-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 0 16px;
+  border-radius: 11px;
+  border: 1px solid var(--accent-line, var(--line2));
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: grab;
+}
+.af-im-ys-bm-btn:active { cursor: grabbing; }
+/* A phone has no bookmarks bar to drag to; screenshots are the way in there. */
+@media (hover: none), (max-width: 700px) {
+  .af-im-ys-bm { display: none; }
+}
+
+/* The small window the bookmark opens (/import/yahoo-receive). */
+.af-im-ys-recv {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+.af-im-ys-recv > .af-im-fx { max-width: 520px; margin: 0 auto; }
+.af-im-ys-recv-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.af-im-ys-recv-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
+.af-im-ys-recv-go { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; margin-top: 8px; }
+
+/* Yahoo tile, allowlisted account: the copy-paste way in instead of "coming soon". */
+.af-im-ys-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.af-im-ys-cta .af-im-fx-go { min-height: 44px; }

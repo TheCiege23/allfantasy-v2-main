@@ -31,7 +31,7 @@ export interface DraftTeamStripTeamMeta {
   aiArchetypeLabel?: string | null
 }
 
-export interface DraftTeamStripProps {
+interface DraftTeamStripProps {
   teamCount: number
   slotOrder: SlotOrderEntry[]
   /** Map of rosterId → LeagueTeam metadata for richer display. Optional. */

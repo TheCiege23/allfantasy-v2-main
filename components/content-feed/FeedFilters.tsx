@@ -28,7 +28,7 @@ const CONTENT_TYPE_LABELS: Record<FeedItemType, string> = {
   community_highlight: "Community",
 }
 
-export interface FeedFiltersProps {
+interface FeedFiltersProps {
   sport: string | null
   contentType: FeedItemType | null
   onSportChange: (sport: string | null) => void

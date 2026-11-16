@@ -2,7 +2,7 @@ import { prisma } from '../prisma'
 import { matchInjuryRowsToPlayers, type InjuryPlayerLookup } from '@/lib/injuries/matchInjuryRows'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 
-export type TradeInjuryEntry = {
+type TradeInjuryEntry = {
   status: string
   type: string | null
   description: string | null

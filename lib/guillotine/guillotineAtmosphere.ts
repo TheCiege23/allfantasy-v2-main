@@ -8,7 +8,7 @@
  * from the league row alone.
  */
 
-export type GuillotineAtmosphereMood = 'default' | 'chop_week' | 'final' | 'eliminated'
+type GuillotineAtmosphereMood = 'default' | 'chop_week' | 'final' | 'eliminated'
 
 /** The parts of the summary payload this reads (a subset of `GuillotineWeeklySummary` + route extras). */
 export type GuillotineAtmosphereSummary = {

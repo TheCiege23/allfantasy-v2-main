@@ -1,6 +1,6 @@
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
-import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
+import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
@@ -16,21 +16,12 @@ import { updateSessionWithArchive, recordArchiveEvent } from '@/lib/draft-archiv
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { logAction } from '@/server/services/auditService'
-import {
-  type ApplyPostDraftLifecycleResult,
-  applyDraftingLifecycleOnDraftResetInTransaction,
-  applyPostDraftLifecycleInTransaction,
-  ensureDraftingLifecycleForActiveSession,
-} from '@/server/services/leagueLifecycleService'
+import { applyDraftingLifecycleOnDraftResetInTransaction, applyPostDraftLifecycleInTransaction, ensureDraftingLifecycleForActiveSession } from '@/server/services/leagueLifecycleService'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
 import { applyTradedOwnerToCurrentPick } from './PickOwnershipResolver'
-import {
-  computeTimerState,
-  computeTimerStateWithPauseWindow,
-  isInsidePauseWindow,
-} from './DraftTimerService'
+import { computeTimerStateWithPauseWindow, isInsidePauseWindow } from './DraftTimerService'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getViewerAutopickPreference } from './LiveDraftAutopickPreferenceService'
 import { getCurrentUserRosterIdForLeague } from './auth'
@@ -1005,6 +996,17 @@ export async function setTimerSeconds(
  * `DraftPickAuditLog`. The reason is commissioner-visible only (read endpoint hides it for non-commissioners).
  * Optional args keep the function backward-compatible for legacy callers; routes always pass them.
  */
+/**
+ * An auction budget map with `amount` given back to `rosterId` — the inverse of the winner's deduction in
+ * auction/AuctionEngine.ts. A missing or unreadable map is left alone rather than invented (null).
+ */
+export function refundAuctionBudget(budgets: unknown, rosterId: string, amount: number): Record<string, number> | null {
+  if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) return null
+  const current = (budgets as Record<string, unknown>)[rosterId]
+  if (typeof current !== 'number' || !Number.isFinite(current)) return null
+  return { ...(budgets as Record<string, number>), [rosterId]: current + amount }
+}
+
 export async function undoLastPick(
   leagueId: string,
   options?: { reason?: string; actorUserId?: string | null },
@@ -1031,6 +1033,16 @@ export async function undoLastPick(
       : null
 
   await prisma.$transaction(async (tx) => {
+    /*
+     * 🛑 UNDO LEFT TWO THINGS BEHIND (2026-11-15). An NBA devy / C2C college pick creates a draft right; undo deleted
+     * the pick and kept the right, so the player stayed owned and could not be drafted again. An auction pick spent
+     * the winner's budget; undo deleted the pick and kept the money spent. Both are reversed with the pick — the
+     * pick editor and draft reset already did the first.
+     */
+    const { removeDraftCollegeRight } = await import('@/lib/devy/nbaDraftRights')
+    await removeDraftCollegeRight(tx, leagueId, last)
+    const refund = session.draftType === 'auction' && last.rosterId && typeof last.amount === 'number' && last.amount > 0 ? last.amount : 0
+    const refundedBudgets = refund ? refundAuctionBudget(session.auctionBudgets, last.rosterId!, refund) : null
     await tx.draftPick.delete({ where: { id: last.id } })
     let updatedSession: Parameters<typeof recordArchiveEvent>[1] = session
     if (freshTimerEndAt !== null) {
@@ -1042,12 +1054,13 @@ export async function undoLastPick(
           timerEndAt: freshTimerEndAt,
           pausedRemainingSeconds: null,
           overnightFrozenPickSeconds: null,
+          ...(refundedBudgets ? { auctionBudgets: refundedBudgets } : {}),
         },
       })
     } else {
       updatedSession = await tx.draftSession.update({
         where: { id: session.id },
-        data: { version: { increment: 1 }, updatedAt: new Date() },
+        data: { version: { increment: 1 }, updatedAt: new Date(), ...(refundedBudgets ? { auctionBudgets: refundedBudgets } : {}) },
       })
     }
     await recordArchiveEvent(tx, updatedSession, 'reset_timer', { actorUserId, correction: 'undo_pick' })
@@ -1069,6 +1082,7 @@ export async function undoLastPick(
             position: last.position,
             team: last.team,
             source: last.source,
+            ...(refund ? { refundedAuctionAmount: refund } : {}),
           },
         },
       })
@@ -1210,12 +1224,24 @@ export async function swapDraftManagers(
   return { ok: true, fromRosterId: fromEntry.rosterId, toRosterId: toEntry.rosterId }
 }
 
+/**
+ * Finish the current draft. Safe to call from every completer at once — the last pick, draft-tick,
+ * auto-draft fill, import commit, the self-heal — and EXACTLY ONE of them announces it.
+ *
+ * 🛑 THE TRANSITION IS A COMPARE-AND-SET, NOT A READ FOLLOWED BY A WRITE. This used to read the status,
+ * then `update` by id with no condition. Two callers could both read `in_progress`; the second's
+ * update waited on the first's row lock and then wrote anyway, so both returned `transitioned` and
+ * the league got two `draft_ended` notifications, two lifecycle log rows, two achievements. The
+ * season-tournament branch had the same race one level up: it compared a status read BEFORE the call
+ * with the result after it. Now the write is `updateMany … status <> 'completed'` and only the caller
+ * whose write changed the row (count 1) runs the once-only side effects. Under Postgres READ COMMITTED
+ * the blocked second update re-checks its WHERE against the committed row and matches nothing.
+ */
 export async function completeDraftSession(leagueId: string): Promise<boolean> {
-  const beforeCompletion = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, status: true } })
-  const seasonCompleted = await completeSeasonDraft(leagueId)
-  if (seasonCompleted !== null) {
-    if (seasonCompleted && beforeCompletion?.status !== 'completed') await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', beforeCompletion?.id)).catch(err => console.error('[draft] completion notification failed', err))
-    return seasonCompleted
+  const season = await completeSeasonDraftWithOutcome(leagueId)
+  if (season !== null) {
+    if (season.transitioned) await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', season.sessionId ?? undefined)).catch(err => console.error('[draft] completion notification failed', err))
+    return season.completed
   }
   const outcome = await prisma.$transaction(async (tx) => {
     const session = await tx.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
@@ -1237,8 +1263,8 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     }
 
     const completedAt = session.completedAt ?? new Date()
-    await tx.draftSession.update({
-      where: { id: session.id },
+    const claimed = await tx.draftSession.updateMany({
+      where: { id: session.id, status: { not: COMPLETED_DRAFT_SESSION_STATUS } },
       data: {
         status: 'completed',
         timerEndAt: null,
@@ -1248,6 +1274,14 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
         version: { increment: 1 },
       },
     })
+    if (claimed.count !== 1) {
+      // Another completer won the race. Re-read: completed means it is done (idempotent, no announce);
+      // anything else (the row vanished under a reset) is not a completion.
+      const now = await tx.draftSession.findUnique({ where: { id: session.id }, select: { status: true } })
+      return now?.status === COMPLETED_DRAFT_SESSION_STATUS
+        ? { ok: true as const, transitioned: false as const, lifecycle: null, sessionId: session.id }
+        : { ok: false as const, transitioned: false as const, lifecycle: null }
+    }
 
     await recordArchiveEvent(tx, {...session, status:'completed'}, 'complete', {}, completedAt)
     const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)

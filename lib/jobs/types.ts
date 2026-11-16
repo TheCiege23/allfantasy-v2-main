@@ -13,8 +13,6 @@ export const QUEUE_NAMES = {
   LEAGUE_ENGINE: "league_engine",
 } as const
 
-export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
-
 /** Payload for notification jobs: dispatch in-app + optional email/SMS/push. */
 export interface NotificationJobPayload {
   userIds: string[]
@@ -30,7 +28,7 @@ export interface NotificationJobPayload {
 }
 
 /** AI job types; payload is type-specific. */
-export type AiJobType =
+type AiJobType =
   | "trade_analysis"
   | "waiver_analysis"
   | "draft_insight"
@@ -55,7 +53,7 @@ export interface SimulationJobPayload {
 }
 
 /** Devy Dynasty / C2C background job types (NCAA sync, graduation, pools, snapshots, rankings, C2C). */
-export type DevyJobType =
+type DevyJobType =
   | "ncaa_player_sync"
   | "declare_status_refresh"
   | "auto_graduation_after_draft"
@@ -80,7 +78,7 @@ export interface DevyJobPayload {
 }
 
 /** Integrity / collusion / tanking background jobs (BullMQ). */
-export type IntegrityJobType =
+type IntegrityJobType =
   | "collusion_scan_trade"
   | "collusion_scan_league"
   | "tanking_scan_week"

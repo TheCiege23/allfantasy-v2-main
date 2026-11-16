@@ -121,9 +121,6 @@ export function waiverBasisSentence(basis: WaiverValueBasis, sport: string): str
   return "Weekly projections, re-scored under each league's own scoring_settings."
 }
 
-/** The short unit a per-game figure is printed with. */
-export const PER_GAME_UNIT = 'pts/g'
-
 /** True for the two season-rate bases. */
 export function isPerGameBasis(basis: WaiverValueBasis | null | undefined): boolean {
   return basis === 'season_per_game_league' || basis === 'season_per_game_af_default'

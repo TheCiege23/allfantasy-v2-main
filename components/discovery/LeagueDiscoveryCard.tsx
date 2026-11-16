@@ -6,7 +6,7 @@ import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { DiscoveryCard } from "@/lib/public-discovery/types"
 
-export interface LeagueDiscoveryCardProps {
+interface LeagueDiscoveryCardProps {
   league: DiscoveryCard
 }
 

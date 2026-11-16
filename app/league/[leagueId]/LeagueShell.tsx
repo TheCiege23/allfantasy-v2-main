@@ -17,7 +17,7 @@ import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQu
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
-import { isBestBallGuillotine } from '@/lib/guillotine/guillotineBestBall'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
@@ -33,6 +33,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
 import type { LucideIcon } from 'lucide-react'
 import {
   Anchor,
@@ -102,12 +103,12 @@ import { LeagueSettingsHomeContainer } from '@/components/league-settings/home/L
 import { resolveLegacySettingsPanel } from '@/lib/league-settings-home/settingsEntryRouting'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
+import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
 import { NativeTradesScreen } from '@/components/league/native/screens/NativeTradesScreen'
 import { NativeStandingsScreen } from '@/components/league/native/screens/NativeStandingsScreen'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
 import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
@@ -162,7 +163,7 @@ import { CommissionerSettingsModal } from './components/CommissionerSettingsModa
 import { ErrorBoundary } from '@/components/error-handling/ErrorBoundary'
 import { toast } from 'sonner'
 import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
-import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
+import { LeagueSettingsHubTab } from './tabs/LeagueSettingsHubTab'
 import { RedraftTab } from './tabs/RedraftTab'
 import { RedraftStandingsPlayoffsView } from './tabs/redraft/RedraftStandingsPlayoffsView'
 import { CanonicalRedraftScheduleTab } from './tabs/redraft/CanonicalRedraftScheduleTab'
@@ -378,32 +379,45 @@ export function LeagueShell({
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
     let pendingSave = false
+    let alive = true
+    void primeDeployBaseline()
     const refresh = () => {
       if (document.visibilityState === 'hidden') return
       clearTimeout(timer)
       timer = setTimeout(() => {
         if (document.querySelector('input:focus, textarea:focus, select:focus')) return
-        pendingSave = false
-        router.refresh()
+        // A save the reader just made refreshes unconditionally; focus, visibility and the
+        // timer go through the deploy guard, because after a deploy a refresh is a full
+        // page reload landing on the reader's next tap (lib/core-app/deployGuard).
+        if (pendingSave) {
+          pendingSave = false
+          router.refresh()
+          return
+        }
+        void refreshInBackground(() => {
+          if (alive) router.refresh()
+        })
       }, 600)
     }
+    const backgroundRefresh = () => refresh()
     const saved = (event: Event) => {
       if ((event as CustomEvent<{ leagueId?: string }>).detail?.leagueId === league.id) { pendingSave = true; refresh() }
     }
     const onBlur = () => { if (pendingSave) refresh() }
     document.addEventListener('focusout', onBlur)
     window.addEventListener('af:league-settings-saved', saved)
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', backgroundRefresh)
+    document.addEventListener('visibilitychange', backgroundRefresh)
     const interval = setInterval(() => {
       if (isNativePlatform(league.platform) && !document.querySelector('input:focus, textarea:focus, select:focus')) refresh()
     }, 30000)
     return () => {
+      alive = false
       clearTimeout(timer)
       clearInterval(interval)
       window.removeEventListener('af:league-settings-saved', saved)
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', backgroundRefresh)
+      document.removeEventListener('visibilitychange', backgroundRefresh)
       document.removeEventListener('focusout', onBlur)
     }
   }, [league.id, league.platform, router])
@@ -427,7 +441,7 @@ export function LeagueShell({
   const { rosterId: capRosterId } = useRedraftRosterId(league.id)
   const { summary: capSummary } = useIdpCapSummary(league.id, capRosterId)
   const idpCapEnabled = Boolean(capSummary)
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const shouldUseMatchupPrimary = shouldUseMatchupInsteadOfDraft(league)
   const isPredraftLifecycle = useMemo(() => {
     const state = String(league.lifecycleState ?? '').trim().toLowerCase()
@@ -992,6 +1006,29 @@ export function LeagueShell({
     subPage: null,
     nonce: 0,
   })
+  /*
+   * Native leagues' Settings tab opens the four-tab hub (LeagueSettingsHubTab). The existing settings
+   * container still owns every EDITOR: a sub-page request (a hub Edit button, an old `?settingsPanel=`
+   * link, the header gear) opens it on that editor, and closing the editor comes back to the hub.
+   * "Advanced settings" opens the container's full list (`settingsCenterOpen`). Leaving the tab resets
+   * both, so the next visit lands on the hub again.
+   */
+  const [settingsCenterOpen, setSettingsCenterOpen] = useState(false)
+  useEffect(() => {
+    if (activeTab === 'settings') return
+    setSettingsCenterOpen(false)
+    if (activeTab !== 'commissioner') {
+      setSettingsHomeRequest((prev) => (prev.subPage ? { subPage: null, nonce: prev.nonce + 1 } : prev))
+    }
+  }, [activeTab])
+  const backToSettingsHub = useCallback(() => {
+    setSettingsCenterOpen(false)
+    setSettingsHomeRequest((prev) => ({ subPage: null, nonce: prev.nonce + 1 }))
+  }, [])
+  const openSettingsCenter = useCallback(() => {
+    setSettingsHomeRequest((prev) => ({ subPage: null, nonce: prev.nonce + 1 }))
+    setSettingsCenterOpen(true)
+  }, [])
   /*
    * The settings modal mounts on FIRST open and then stays mounted, so its code is fetched only
    * when someone asks for settings and its close animation still plays afterwards. Set during
@@ -1837,6 +1874,32 @@ export function LeagueShell({
               </Suspense>
             ) : null}
 
+            {/*
+              What's next? for an imported league, on its first tab only: the provider's status in
+              plain English, and a button that opens the host — AllFantasy is read-only here, so the
+              lineup, the draft and renewal all happen there.
+            */}
+            {!nativeWorkspace && activeTab === tabDefs[0]?.id ? (
+              <div className="mb-4">
+                <WhatsNextPanel
+                  league={selectedLeague}
+                  userId={userId}
+                  isCommissioner={isCommissioner}
+                  hasTeam={userTeam != null}
+                  draftDateIso={draftDateIso}
+                  availableTabIds={tabDefs.map((item) => item.id)}
+                  onSelectTab={setActiveTab}
+                  imported={{
+                    platform: String(league.platform ?? ''),
+                    sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null,
+                    season: selectedLeague.season ?? null,
+                    name: league.name ?? null,
+                    status: selectedLeague.status ?? null,
+                  }}
+                />
+              </div>
+            ) : null}
+
             {/* Live scores strip */}
             {!nativeWorkspace && <LeagueLiveStrip sport={String(league.sport)} />}
 
@@ -1869,10 +1932,12 @@ export function LeagueShell({
               platform={league.platform}
             />
 
-            {nativeWorkspace && (activeTab === 'settings' || activeTab === 'commissioner') ? (
+            {nativeWorkspace && (activeTab === 'commissioner' || (activeTab === 'settings' && (settingsHomeRequest.subPage !== null || settingsCenterOpen))) ? (
               <LeagueSettingsHomeContainer
                 key={`settings-home-${settingsHomeRequest.nonce}`}
                 initialSubPage={settingsHomeRequest.subPage}
+                // Opened from the Settings hub straight onto an editor: closing it returns to the hub.
+                onSubPageReturn={activeTab === 'settings' && !settingsCenterOpen ? backToSettingsHub : undefined}
                 ctx={{
                   league,
                   displayLeague: selectedLeague,
@@ -1885,7 +1950,12 @@ export function LeagueShell({
                   sleeperMemberMap: sleeperUsersByPlatformId,
                   onGoToDraftTab: () => setActiveTab('draft'),
                 }}
-                onExit={() => handleUserTabChange(tabDefs.some((tab) => tab.id === 'native_home') ? 'native_home' : tabDefs[0]?.id ?? 'home')}
+                onExit={
+                  activeTab === 'settings'
+                    ? backToSettingsHub
+                    : () => handleUserTabChange(tabDefs.some((tab) => tab.id === 'native_home') ? 'native_home' : tabDefs[0]?.id ?? 'home')
+                }
+                exitTo={activeTab === 'settings' ? 'settings' : 'home'}
               />
             ) : (
             <LeagueTabRouter
@@ -1915,6 +1985,11 @@ export function LeagueShell({
               draftDateIso={draftDateIso}
               draftSetupSession={draftSetupSession}
               hasActiveRedraftSeason={hasActiveRedraftSeason}
+              viewerUserId={userId}
+              onLeaveLeague={() => setLeaveLeagueHintOpen(true)}
+              onOpenSettingsCenter={nativeWorkspace ? openSettingsCenter : undefined}
+              // After the welcome sheet and any format intro, so the walkthrough never stacks on them.
+              autoOpenFormatWalkthrough={isCommissioner && createdFromLeagueCreate && welcomeStage === 'done'}
             />
             )}
           </div>
@@ -2234,6 +2309,10 @@ function LeagueTabRouter({
   hasActiveRedraftSeason,
   importedLeagueCount,
   leagueRail,
+  viewerUserId,
+  autoOpenFormatWalkthrough,
+  onLeaveLeague,
+  onOpenSettingsCenter,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -2264,6 +2343,14 @@ function LeagueTabRouter({
   importedLeagueCount: number
   /** The rail's saved matchup summaries — the chat's pinned score card reads this league's entry. */
   leagueRail?: LeagueRailData | null
+  /** The signed-in viewer, for the format walkthrough's per-user "seen" flag. */
+  viewerUserId: string
+  /** The commissioner just created this league and the post-create welcome has finished. */
+  autoOpenFormatWalkthrough: boolean
+  /** Opens the shell's leave-league dialog (Settings › My Settings › Leave League). */
+  onLeaveLeague?: () => void
+  /** Native leagues: opens the full settings list (the container) from the hub's "Advanced settings". */
+  onOpenSettingsCenter?: () => void
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -2440,8 +2527,10 @@ function LeagueTabRouter({
             : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
               : id,
       )
-    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself.
-    const bestBall = isBestBallLeague(selectedLeague.leagueVariant ?? null, selectedLeague.bestBallMode ?? null) || isBestBallGuillotine(selectedLeague)
+    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself. The same
+    // test the lineup saves refuse by (guillotineBestBall.ts `lineupSetsItself`), so no editor is shown for a
+    // save that would be refused.
+    const bestBall = lineupSetsItself(selectedLeague)
     switch (activeTab) {
       case 'matchups':
       case 'matchup':
@@ -2464,11 +2553,28 @@ function LeagueTabRouter({
   }
 
   switch (activeTab) {
-    case 'native_home':
+    case 'native_home': {
+      /*
+       * "What's next?" leads League Home for every format: the phase in plain English, act-or-wait,
+       * who the league is waiting on and the deadline (components/league/whats-next/WhatsNextPanel).
+       */
+      const whatsNext = (
+        <WhatsNextPanel
+          league={selectedLeague}
+          userId={viewerUserId}
+          isCommissioner={isCommissioner}
+          hasTeam={userTeam != null}
+          draftDateIso={draftDateIso}
+          availableTabIds={tabDefs.map((item) => item.id)}
+          onSelectTab={onSelectTab}
+          autoOpenWalkthrough={autoOpenFormatWalkthrough}
+        />
+      )
       if (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor') {
-        return <SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} />
+        return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }
-      return <NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} />
+      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} /></div>
+    }
     case 'home':
       return (
         <NflRedraftLeagueHomeDashboard
@@ -2737,10 +2843,14 @@ function LeagueTabRouter({
       return <HistoryTab league={selectedLeague} />
     case 'settings':
       return (
-        <LeagueSettingsContentTab
-          leagueId={leagueId}
+        <LeagueSettingsHubTab
+          league={selectedLeague}
+          viewerUserId={viewerUserId}
           isCommissioner={isCommissioner}
           isHeadCommissioner={isHeadCommissioner}
+          onOpenEditor={(panelId) => onOpenLeagueSettingsModal(panelId)}
+          onLeaveLeague={onLeaveLeague}
+          onAdvanced={onOpenSettingsCenter}
         />
       )
     case 'standings':

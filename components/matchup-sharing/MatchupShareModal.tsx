@@ -5,7 +5,7 @@ import { MatchupShareCard, MATCHUP_SHARE_CARD_ID } from './MatchupShareCard'
 import { MatchupShareBar } from './MatchupShareBar'
 import type { MatchupSharePayload } from '@/lib/matchup-sharing/types'
 
-export interface MatchupShareModalProps {
+interface MatchupShareModalProps {
   team1Name: string
   team2Name: string
   projectedScore1: number

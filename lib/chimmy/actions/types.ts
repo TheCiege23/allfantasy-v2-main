@@ -9,7 +9,10 @@
  * Client-safe: no server imports, so the card component can import the display types.
  */
 
-export type ChimmyActionKind = 'lineup' | 'trade' | 'automation'
+type ChimmyActionKind = 'lineup' | 'trade' | 'automation' | 'queue'
+
+/** A player a queue card adds — resolved from the draft room's own pool, never from the model. */
+export type QueueAddSpec = { playerName: string; position: string; team: string | null; playerId: string | null }
 
 /** A league automation change a commissioner asked Chimmy for (phase 12, 2026-10-29). */
 export type AutomationChangeSpec =
@@ -65,6 +68,18 @@ export type ChimmyActionSpec =
        */
       expectedKeys: string[]
     }
+  | {
+      /** The user's own draft queue (stage 2 of drafts, 2026-11-16). Never a pick. */
+      kind: 'queue'
+      /** The draft session the card was made for; the confirm refuses if another draft is now current. */
+      sessionId: string
+      add: QueueAddSpec[]
+      addAt: 'top' | 'bottom'
+      /** `queueNameKey`s of players to take out. */
+      removeKeys: string[]
+      /** `queueFingerprint` of the queue the card was built against. */
+      baseFingerprint: string
+    }
 
 /** The signed payload. `exp` is epoch seconds. */
 export type ChimmyActionTokenPayload = {
@@ -112,6 +127,13 @@ export type ChimmyActionCard = {
   automation?: {
     /** Each setting that will change, in plain words. */
     changes: string[]
+  }
+  queue?: {
+    add: ActionCardPlayer[]
+    addAt: 'top' | 'bottom'
+    remove: ActionCardPlayer[]
+    /** The first few names of the queue as it will be after Confirm. */
+    resultingTop: string[]
   }
   /** Plain-language caveats. Always rendered; never hidden behind a toggle. */
   warnings: string[]

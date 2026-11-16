@@ -24,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('@/lib/auth-guard', () => ({
-  requireVerifiedUser: requireVerifiedUserMock,
+  requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock,
 }))
 
 vi.mock('@/lib/sleeper/user-lookup', () => ({

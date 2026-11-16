@@ -8,7 +8,7 @@ import { isOffensiveDisplayName } from "@/lib/moderation/offensiveName"
 /** Long enough for "The Mahomes Supremacy Clause", short enough to fit a standings row. */
 export const MAX_TEAM_NAME_LENGTH = 40
 
-export type TeamNameCheck = { ok: true; teamName: string } | { ok: false; message: string }
+type TeamNameCheck = { ok: true; teamName: string } | { ok: false; message: string }
 
 /**
  * Trim and validate a team name.

@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import type { DraftIntelQueueEntry } from '@/lib/draft-intelligence'
 import { DraftRoomAccordion } from '@/components/app/draft-room/DraftRoomAccordion'
 
-export interface DraftIntelQueuePanelProps {
+interface DraftIntelQueuePanelProps {
   loading: boolean
   headline: string | null
   picksUntilUser: number | null

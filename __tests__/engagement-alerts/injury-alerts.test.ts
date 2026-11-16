@@ -140,7 +140,10 @@ describe('only lineup changes are pushed and emailed (owner, 2026-10-25)', () =>
   const out = h.dispatch.mock.calls[0][0]
   expect(out.skipChannels).toEqual({ sms: true })
   expect(out.body).toBe('Dynasty: start Backup Guy in place of Player.')
-  expect(out.actionHref).toBe('/fix')
+  // Owner's rule (2026-11-13): the alert opens the Player Finder on HIM — every league he is in; the fix link rides in meta.
+  expect(out.actionHref).toBe('/core/players?q=Player&player=NFL~sleeper%3A1')
+  expect(out.actionLabel).toBe('See his leagues')
+  expect(out.meta.lineupFixHref).toBe('/fix')
   expect(out.meta.playerNews).toMatchObject({ delivery: 'instant', digest: false })
   h.dispatch.mockClear(); h.native.mockResolvedValue([])
   h.injuries.mockResolvedValue([{ playerName: 'Bench Guy', team: 'Team', status: 'Out', source: 'espn', date: new Date() }])

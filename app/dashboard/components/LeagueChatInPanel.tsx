@@ -6,7 +6,6 @@ import type { UserLeague } from '../types'
 import { ChatComposer, type LeagueComposerPayload } from './chat/ChatComposer'
 import { ChatSenderAvatar } from './chat/ChatSenderAvatar'
 import { isLeagueMessageThreaded } from './chat/chat-timestamps'
-import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
@@ -14,7 +13,7 @@ import { RecapShareButton } from '@/components/core-app/comms/RecapShareButton'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { survivorIdolArt } from '@/lib/survivor/survivorIdolTypes'
 
-export type LeagueChatMessage = {
+type LeagueChatMessage = {
   id: string
   authorId: string
   author_display_name: string
@@ -63,7 +62,7 @@ function readBbChannelFromMessage(meta: Record<string, unknown> | null | undefin
   return 'main'
 }
 
-export function formatChatTime(d: Date | string): string {
+function formatChatTime(d: Date | string): string {
   const date = typeof d === 'string' ? new Date(d) : d
   const diff = Date.now() - date.getTime()
   if (diff < 60_000) return 'just now'

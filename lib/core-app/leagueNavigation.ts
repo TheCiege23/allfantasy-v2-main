@@ -2,6 +2,8 @@
 const SCREEN_ALIASES: Record<string, string> = {
   roster: 'my-team', team: 'my-team', 'my-roster': 'my-team',
   scores: 'live', 'live-scores': 'live', draft: 'draft-hq',
+  /* 2026-11-14: the page is called Player Finder everywhere it is named, so the name is a link that works. */
+  'player-finder': 'players', playerfinder: 'players', 'find-player': 'players',
 }
 export function canonicalCoreScreen(segment: string): string {
   const key = segment.toLowerCase()

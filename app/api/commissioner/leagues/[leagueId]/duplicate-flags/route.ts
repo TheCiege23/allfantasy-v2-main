@@ -1,7 +1,7 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { listDuplicateManagerFlags } from '@/lib/identity/DuplicateManagerFlagService'
 
 type SessionWithUser = { user?: { id?: string } } | null
@@ -16,10 +16,8 @@ export async function GET(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
 
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, 'view')
+  if (refused) return refused
 
   const flags = await listDuplicateManagerFlags(leagueId)
   return NextResponse.json({ flags })

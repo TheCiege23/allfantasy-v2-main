@@ -17,6 +17,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveDraftRosterShape } from '@/lib/shared-services/draft/DraftContextAssembler'
 import {
   dedupeQueueEntries,
   normalizeDraftedNameSet,
@@ -116,9 +117,14 @@ export async function POST(
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true },
+    select: { sport: true, settings: true, starters: true },
   })
   const sport = (league?.sport as string) ?? 'NFL'
+  // The league's real roster slots and superflex/2QB flags, so "reorder by need" agrees with the
+  // draft engine's own recommendation (lib/draft-queue-engine/reorder-by-need.ts).
+  const rosterShape = league
+    ? await resolveDraftRosterShape(leagueId, { sport, settings: league.settings, starters: league.starters })
+    : { rosterSlots: [], isSF: false, is2QB: false }
 
   const entitlementResolver = new EntitlementResolver()
   const { hasAccess: hasProDraftAi } = await entitlementResolver.resolveForUser(
@@ -136,6 +142,7 @@ export async function POST(
     queue,
     rosterPositions,
     sport,
+    ...rosterShape,
     hasProDraftAiAccess: hasProDraftAi,
     aiManageDraftQueueEnabled,
   })

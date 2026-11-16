@@ -15,7 +15,7 @@ import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import type { TokenLedgerEntryView, TokenSpendPreview } from '@/lib/tokens/TokenSpendService'
 
-export const BIG_BROTHER_AI_VALID_TYPES: readonly BigBrotherAIPromptType[] = [
+const BIG_BROTHER_AI_VALID_TYPES: readonly BigBrotherAIPromptType[] = [
   'chimmy_host',
   'challenge_generator_hoh',
   'challenge_generator_veto',
@@ -26,7 +26,7 @@ export const BIG_BROTHER_AI_VALID_TYPES: readonly BigBrotherAIPromptType[] = [
   'rule_explain',
 ]
 
-export const BIG_BROTHER_AI_UNGATED_TYPES: readonly BigBrotherAIPromptType[] = ['rule_explain']
+const BIG_BROTHER_AI_UNGATED_TYPES: readonly BigBrotherAIPromptType[] = ['rule_explain']
 
 const HOST_TYPES: readonly BigBrotherAIPromptType[] = [
   'chimmy_host',
@@ -38,7 +38,7 @@ const HOST_TYPES: readonly BigBrotherAIPromptType[] = [
 const PLAYER_TYPES: readonly BigBrotherAIPromptType[] = ['recap', 'game_theory', 'social_strategy']
 
 /** Token rule per gated type — must exist in `TOKEN_SPEND_RULE_MATRIX`. */
-export const BIG_BROTHER_AI_TYPE_RULE_CODE: Record<
+const BIG_BROTHER_AI_TYPE_RULE_CODE: Record<
   Exclude<BigBrotherAIPromptType, (typeof BIG_BROTHER_AI_UNGATED_TYPES)[number]>,
   TokenSpendRuleCode
 > = {
@@ -64,7 +64,7 @@ function mustMeterSubscribedUsers(ruleCode: TokenSpendRuleCode): boolean {
   return tokenCostForRule(ruleCode) >= 2
 }
 
-export type BigBrotherAiAccessResult =
+type BigBrotherAiAccessResult =
   | {
       ok: true
       featureDecision: FeatureGateDecision

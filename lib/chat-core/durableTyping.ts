@@ -30,7 +30,7 @@ const PREFIX = 'chat:typing:'
  */
 export const TYPING_WINDOW_MS = 10_000
 
-export type TypingPerson = { userId: string; name: string }
+type TypingPerson = { userId: string; name: string }
 
 type TypingRow = { name: string; at: string }
 

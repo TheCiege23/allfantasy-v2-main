@@ -7,10 +7,6 @@ import { getLeagueMemberAppUserIds } from '@/lib/draft-notifications/DraftNotifi
 import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 import { leagueRealtimeStore } from '@/lib/league-events/realtime-store'
 import { invokeLeagueFanoutHandlers } from '@/lib/league-events/subscribers'
-import {
-  leagueFanoutNotificationsAllowed,
-  parseLeagueNotificationPrefs,
-} from '@/lib/league/league-notification-prefs'
 import type { LeagueEventVisibility, LeagueFanoutEventType } from '@/lib/league-events/types'
 
 async function getAllLeagueMemberUserIds(leagueId: string): Promise<string[]> {

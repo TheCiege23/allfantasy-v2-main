@@ -5,7 +5,7 @@ import type { MutableRefObject } from 'react'
 import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { mergeDraftSessionSnapshot } from '@/lib/draft-room/mergeDraftSessionSnapshot'
 
-export type CommissionerControlApiResult =
+type CommissionerControlApiResult =
   | ({ ok: true } & Record<string, unknown>)
   | { ok: false; error: string; cancelled?: boolean }
 
@@ -39,7 +39,7 @@ function commissionerActionSuccessCopy(action: string): string {
   }
 }
 
-export type UseCommissionerActionsProps = {
+type UseCommissionerActionsProps = {
   leagueId: string
   controlActionInflightRef: MutableRefObject<number>
   setSession: React.Dispatch<React.SetStateAction<DraftSessionSnapshot | null>>
@@ -53,7 +53,7 @@ export type UseCommissionerActionsProps = {
   fetchDraftSettings: () => Promise<unknown>
 }
 
-export type UseCommissionerActionsReturn = {
+type UseCommissionerActionsReturn = {
   handleCommissionerAction: (action: string, payload?: Record<string, unknown>) => Promise<CommissionerControlApiResult>
   handleCommissionerUndoPick: () => Promise<CommissionerControlApiResult>
   handleCommissionerResetTimer: () => Promise<CommissionerControlApiResult>

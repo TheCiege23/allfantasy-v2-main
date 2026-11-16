@@ -22,6 +22,8 @@ vi.mock('@/lib/prisma', () => {
     keeperRecord: { upsert: m.recordUpsert, deleteMany: m.recordDeleteMany },
     keeperSelectionSession: { updateMany: m.sessionUpdateMany, findFirst: m.sessionFindFirst },
     leagueAuditLog: { create: m.auditCreate },
+    // No season before this one: the ids already hold the roster (lib/keeper/keeperSourceRoster.ts).
+    redraftSeason: { findFirst: vi.fn(async () => null) },
     $executeRaw: m.executeRaw,
   }
   return { prisma: { ...db, $transaction: vi.fn(async (action) => action(db)) } }

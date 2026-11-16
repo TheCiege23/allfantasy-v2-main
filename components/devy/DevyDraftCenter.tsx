@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 
-export type DevyDraftTab = 'startup' | 'rookie' | 'devy'
+type DevyDraftTab = 'startup' | 'rookie' | 'devy'
 
 type NflClassDepth = { qb: number; rb: number; wr: number; te: number }
 type NbaClassDepth = { g: number; f: number; c: number }

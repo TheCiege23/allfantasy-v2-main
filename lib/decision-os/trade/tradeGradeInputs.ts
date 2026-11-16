@@ -13,7 +13,7 @@
  * round has no price; leaving it out would grade the deal as though it were not in it.
  */
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
-import { parsePickLabel } from '@/lib/parsePickLabel'
+import { c2cDraftSide, parsePickLabel } from '@/lib/parsePickLabel'
 import type { PlayerIdSpace, ResolvedTradePlayer } from './tradePlayers'
 
 export type GradeInputs = { assets: TradeAssetInput[]; unpriceable: string[]; valuationGap?: 'unresolved_player' }
@@ -142,7 +142,8 @@ export function gradeInputsFromNativeItems(
       const ref = SELF_DESCRIBING_PICK.exec(item.itemReference ?? '')
       const year = num(meta.pickSeason ?? meta.season) ?? (ref ? Number(ref[1]) : null)
       const round = num(meta.pickRound ?? meta.round) ?? (ref ? Number(ref[2]) : null)
-      if (year && round) out.assets.push({ kind: 'pick', year, round })
+      const draftSide = item.itemReference?.startsWith('fdp:') && ref ? 'canton' : c2cDraftSide(meta.pickSide) ?? parsePickLabel(str(meta.pickLabel ?? meta.label) ?? '')?.draftSide
+      if (year && round) out.assets.push({ kind: 'pick', year, round, ...(draftSide ? { draftSide } : {}) })
       // Named by its label, never by its id: a row id in a sentence tells a manager nothing.
       else out.unpriceable.push(str(meta.pickLabel ?? meta.label) ?? 'a draft pick with no season or round on file')
       continue
@@ -250,7 +251,7 @@ export function gradeInputsFromAssetLabels(
     }
     if (l.type === 'pick' || (l.type !== 'player' && LOOKS_LIKE_PICK.test(label))) {
       const pick = parsePickLabel(label)
-      if (pick) out.assets.push({ kind: 'pick', year: pick.year, round: pick.round, ...(pick.bucket ? { tier: pick.bucket } : {}), label })
+      if (pick) out.assets.push({ kind: 'pick', year: pick.year, round: pick.round, ...(pick.bucket ? { tier: pick.bucket } : {}), ...(pick.draftSide ? { draftSide: pick.draftSide } : {}), label })
       else out.unpriceable.push(`"${label}"`)
       continue
     }

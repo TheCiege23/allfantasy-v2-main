@@ -33,7 +33,7 @@ export interface RosterSlotEntry {
   kind: 'starter' | 'bench' | 'custom'
 }
 
-export interface RosterSlotOrderInput {
+interface RosterSlotOrderInput {
   starterSlots: Record<string, number> | null | undefined
   benchSlots?: number | null
   idpEnabled?: boolean

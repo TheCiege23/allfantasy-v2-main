@@ -16,4 +16,3 @@ export {
 } from './GrokShareCopyService';
 export type { GrokShareCopyOutput } from './GrokShareCopyService';
 export { resolveSharePreview } from './SharePreviewResolver';
-export type { SharePreviewPayload } from './SharePreviewResolver';

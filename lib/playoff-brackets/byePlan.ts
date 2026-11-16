@@ -18,7 +18,7 @@
 export const MAX_PLAYOFF_TEAMS = 16
 const MAX_ROUNDS_OFF = 4
 
-export function nextPowerOfTwo(n: number): number {
+function nextPowerOfTwo(n: number): number {
   let p = 1
   while (p < n) p *= 2
   return p
@@ -29,7 +29,7 @@ export function naturalByePlan(teamCount: number): number[] {
   return Array.from({ length: teamCount }, (_, i) => (i < byes ? 1 : 0))
 }
 
-export type ByePlanRound = {
+type ByePlanRound = {
   round: number
   /** Seeds whose first game is this round. */
   entering: number[]
@@ -38,7 +38,7 @@ export type ByePlanRound = {
   games: number
 }
 
-export type ByePlanCheck =
+type ByePlanCheck =
   | { ok: true; rounds: ByePlanRound[]; roundCount: number; byeSeeds: number[] }
   | { ok: false; error: string }
 

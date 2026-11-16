@@ -7,7 +7,7 @@ import { SimulationConfidenceIndicator } from './SimulationConfidenceIndicator'
 import type { TeamSeasonForecastDisplay } from './TeamForecastCard'
 import { getToolToAIChatHref } from '@/lib/chimmy-chat'
 
-export type LeagueForecastDashboardProps = {
+type LeagueForecastDashboardProps = {
   teamForecasts: TeamSeasonForecastDisplay[]
   playoffSpots?: number
   leagueId?: string

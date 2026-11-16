@@ -6,36 +6,12 @@ export type BonusFlags = {
   insuranceEnabled?: boolean
 }
 
-export type ScoringRules = {
-  mode: ScoringMode
-  maxEntriesPerUser?: number
-  isPaidLeague?: boolean
-  insuranceEnabled?: boolean
-  insurancePerEntry?: number
-  upsetDeltaEnabled?: boolean
-  leverageBonusEnabled?: boolean
-  allowCopyBracket?: boolean
-  pickVisibility?: "visible" | "hidden_until_lock"
-}
-
 export function scoringConfigKey(mode: ScoringMode, flags: BonusFlags): string {
   const parts: string[] = [mode]
   if (flags.upsetDeltaEnabled) parts.push("upset")
   if (flags.leverageBonusEnabled) parts.push("leverage")
   if (flags.insuranceEnabled) parts.push("insurance")
   return parts.join("+")
-}
-
-export function parseScoringConfigKey(key: string): { mode: ScoringMode; flags: BonusFlags } {
-  const parts = key.split("+")
-  return {
-    mode: parts[0] as ScoringMode,
-    flags: {
-      upsetDeltaEnabled: parts.includes("upset"),
-      leverageBonusEnabled: parts.includes("leverage"),
-      insuranceEnabled: parts.includes("insurance"),
-    },
-  }
 }
 
 export function bonusFlagsFromRules(rules: any): BonusFlags {
@@ -75,7 +51,7 @@ export function pointsForRound(round: number, roundPoints?: Record<number, numbe
   }
 }
 
-export function edgePointsForRound(round: number, roundPoints?: Record<number, number>): number {
+function edgePointsForRound(round: number, roundPoints?: Record<number, number>): number {
   if (roundPoints && Number.isFinite(roundPoints[round])) {
     return Math.max(0, Number(roundPoints[round]))
   }
@@ -190,7 +166,7 @@ export function scoreFanCredEdge(
   return { total, breakdown }
 }
 
-export function scoreMomentum(
+function scoreMomentum(
   picks: PickResult[],
   roundPoints?: Record<number, number>
 ): {
@@ -226,7 +202,7 @@ export function scoreMomentum(
   return { total, breakdown }
 }
 
-export function scoreAccuracyBoldness(
+function scoreAccuracyBoldness(
   picks: PickResult[],
   leagueDistribution: LeaguePickDistribution,
   roundPoints?: Record<number, number>
@@ -270,7 +246,7 @@ export function scoreAccuracyBoldness(
   return { total, breakdown }
 }
 
-export function scoreStreakSurvival(
+function scoreStreakSurvival(
   picks: PickResult[],
   roundPoints?: Record<number, number>
 ): {

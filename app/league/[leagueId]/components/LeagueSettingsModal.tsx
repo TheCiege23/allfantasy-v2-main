@@ -116,8 +116,6 @@ const AI_CARDS: CardDef[] = [
 /** Shown when this league has `IdpLeagueConfig` (same detection as league shell). */
 const IDP_CARDS: CardDef[] = [
   { id: 'idp_roster', titleKey: 'lsModal.card.idpRoster', descKey: 'lsModal.card.idpRosterDesc', icon: Shield },
-  { id: 'idp_scoring', titleKey: 'lsModal.card.idpScoring', descKey: 'lsModal.card.idpScoringDesc', icon: BarChart2 },
-  { id: 'idp_display', titleKey: 'lsModal.card.idpDisplay', descKey: 'lsModal.card.idpDisplayDesc', icon: Palette },
   { id: 'idp_ai', titleKey: 'lsModal.card.idpAi', descKey: 'lsModal.card.idpAiDesc', icon: Bot, ai: true },
 ]
 

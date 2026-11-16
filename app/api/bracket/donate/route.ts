@@ -8,7 +8,6 @@ import {
   isMonetizationComplianceError,
 } from "@/lib/monetization/compliance-guardrails"
 
-const PRESET_AMOUNTS = [300, 500, 1000]
 const MIN_AMOUNT = 100
 const MAX_AMOUNT = 50000
 

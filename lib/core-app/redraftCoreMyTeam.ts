@@ -24,7 +24,7 @@ import { redraftSportTheme, type RedraftSportTheme } from '@/lib/league-media/re
  * defender (soccer). The football-only `posGroup` in MyTeam.tsx reads soccer's `DEF` as a team defence
  * and every NBA / NHL / MLB label as "other" — which is why the redraft chip carries its own attribute.
  */
-export type RedraftPosTone = 'red' | 'green' | 'blue' | 'amber' | 'violet' | 'slate' | 'flex' | 'bench' | 'ir'
+type RedraftPosTone = 'red' | 'green' | 'blue' | 'amber' | 'violet' | 'slate' | 'flex' | 'bench' | 'ir'
 
 const COMMON: Record<string, RedraftPosTone> = { BN: 'bench', BENCH: 'bench', TX: 'bench', TAXI: 'bench', IR: 'ir', IL: 'ir', RES: 'ir' }
 
@@ -52,7 +52,7 @@ export function redraftCorePosTone(sport: string | null | undefined, label: stri
 
 /* ── The lineup's period: daily vs weekly ───────────────────────────────────────────────────────── */
 
-export type LineupPeriod = { kind: 'day' | 'week'; day: string | null; week: number | null }
+type LineupPeriod = { kind: 'day' | 'week'; day: string | null; week: number | null }
 
 /**
  * The chip naming the lineup's period — "Today · Thu, Oct 30" for a daily-lineup league, "Week 5 slate"
@@ -89,7 +89,7 @@ export function noGameBadge(kind: 'day' | 'week' | null | undefined): 'offday' |
 
 /* ── Your week: the season race ─────────────────────────────────────────────────────────────────── */
 
-export type SeasonRaceRank = { rank: number; of: number; tied: boolean }
+type SeasonRaceRank = { rank: number; of: number; tied: boolean }
 
 /**
  * Your place in the league BY RECORD this season, from the week board's own scored records.

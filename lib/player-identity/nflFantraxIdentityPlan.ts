@@ -6,7 +6,7 @@ import { deriveFantasyEligibility, normalizeProviderPosition, REFERENCE_NFL_BUCK
  * Fantrax NFL player id -> our `PlayerIdentityMap` row.
  *
  * 🛑 NFL WAS THE ONE FANTRAX SPORT WITH NO WRITER. `fantraxId` is filled for CFB
- * (`lib/devy/ingestFantraxPlayerIdentities.ts`) and MLB/NBA/NHL (`ingestProFantraxIdentities.ts`),
+ * (`lib/player-identity/ingestNcaafFantraxIdentities.ts`) and MLB/NBA/NHL (`ingestProFantraxIdentities.ts`),
  * and every Fantrax roster reader resolves through it — so an NFL Fantrax roster resolved nobody.
  *
  * Same rule as the pro planner (`proFantraxIdentityPlan.ts`), keyed on the row id because NFL rows
@@ -25,7 +25,7 @@ import { deriveFantasyEligibility, normalizeProviderPosition, REFERENCE_NFL_BUCK
  * Pure: the registry read and the guarded write live in `linkNflFantraxIdentities.ts`.
  */
 
-export type NflIdentityRow = {
+type NflIdentityRow = {
   id: string
   canonicalName: string
   currentTeam: string | null

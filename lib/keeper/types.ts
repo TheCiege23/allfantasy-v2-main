@@ -30,8 +30,3 @@ export type CarryoverResult = {
   byTeam: { teamName: string | null; keptPlayers: string[]; forfeited: string[] }[]
 }
 
-export type AuctionKeeperSlot = {
-  rosterId: string
-  playerId: string
-  minimumBid: number
-}

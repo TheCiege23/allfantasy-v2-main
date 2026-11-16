@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
-import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
 
@@ -136,10 +136,6 @@ const PHASES: Array<{ key: PhaseKey; label: string; icon: string }> = [
   { key: 'ai', label: 'AI', icon: '🧠' },
   { key: 'check', label: 'Check', icon: '✅' },
 ]
-
-function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-}
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null

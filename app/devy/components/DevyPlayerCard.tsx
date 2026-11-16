@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 
-export type DevyPlayerCardVariant = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
+type DevyPlayerCardVariant = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
 
-export type DevyPlayerCardProps = {
+type DevyPlayerCardProps = {
   variant: DevyPlayerCardVariant
   playerId: string
   name: string

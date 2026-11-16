@@ -70,7 +70,7 @@ describe('the platform is named, not given as its id', () => {
   it('reads "Fix in Sleeper" on an empty slot, and "Lineup from Sleeper" above the starters', () => {
     const { container } = render(<MyTeam data={data()} />)
     expect(container.querySelector('.af-mt-fix')?.textContent?.trim()).toBe('Fix in Sleeper')
-    expect(container.textContent).toContain('Lineup from Sleeper.')
+    expect(container.textContent).toContain('Lineup from Sleeper — change it there.')
     expect(container.textContent).not.toMatch(/\bsleeper\b/)
   })
 })
@@ -83,27 +83,25 @@ describe('the empty-slot fix button', () => {
   })
 })
 
-describe('the lineup-lock banner', () => {
-  it('🛑 "Fix it in Sleeper" is a real link to the lineup screen, opened like every provider hand-off', () => {
+describe('the empty slot, without the countdown banner (2026-11-14)', () => {
+  it('🛑 "Fix in Sleeper" is a real link to the lineup screen, opened like every provider hand-off', () => {
     const { container } = render(<MyTeam data={data()} />)
-    const fix = container.querySelector('.af-mt-lock-fix')!
-    expect(fix.tagName).toBe('A')
+    const fix = container.querySelector('a.af-mt-check-fix')!
     expect(fix.getAttribute('href')).toBe(LINEUP_URL)
     expect(fix.getAttribute('target')).toBe('_blank')
     expect(fix.getAttribute('rel')).toContain('noopener')
   })
 
-  it('stays plain text when no provider screen was resolved — never a link to nowhere', () => {
+  it('draws no link when no provider screen was resolved — never a link to nowhere', () => {
     const { container } = render(<MyTeam data={data({ link: false })} />)
-    expect(container.querySelector('.af-mt-lock-fix')?.tagName).toBe('SPAN')
+    expect(container.querySelector('a.af-mt-check-fix')).toBeNull()
   })
 
-  it('prints the lock time in the reader’s own clock after mount, not a UTC timestamp', () => {
-    render(<MyTeam data={data()} />)
-    const note = document.querySelector('.af-mt-lock-note')!.textContent ?? ''
-    // `toUTCString()` reads "Fri, 02 Oct 2026 00:15 UTC"; the local form reads "Thu, Oct 1, 8:15 PM EDT".
-    expect(note).not.toMatch(/\d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} UTC/)
-    expect(note).toMatch(/\d{1,2}:\d{2}/)
-    expect(screen.getByText(/confirm individual locks/)).toBeTruthy()
+  it('prints the next kickoff in the reader’s own clock after mount, not a UTC timestamp', () => {
+    const { container } = render(<MyTeam data={data()} />)
+    const when = container.querySelector('[data-chip=kickoff] b')!.textContent ?? ''
+    expect(when).not.toMatch(/UTC/)
+    expect(when).toMatch(/\d{1,2}:\d{2}/)
+    expect(container.querySelector('.af-mt-lock')).toBeNull()
   })
 })

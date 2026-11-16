@@ -12,7 +12,7 @@ import { DAILY_SPORT_SEASON_SHAPE } from '@/lib/sportConfig/dailySportSeasonShap
 // Types
 // ---------------------------------------------------------------------------
 
-export type SupportedSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAAF' | 'NCAAB' | 'SOCCER'
+type SupportedSport = 'NFL' | 'NBA' | 'MLB' | 'NHL' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 
 export interface PositionScarcity {
   position: string
@@ -42,7 +42,7 @@ export interface VolatilityProfile {
   consistencyWeight: number
 }
 
-export interface ScoringNormalization {
+interface ScoringNormalization {
   /** Name of the scoring format */
   format: string
   /** Position multipliers applied to base values */
@@ -51,7 +51,7 @@ export interface ScoringNormalization {
   scaleFactor: number
 }
 
-export interface SportTuning {
+interface SportTuning {
   sport: SupportedSport
   /** Display name */
   displayName: string
@@ -426,46 +426,14 @@ const SPORT_REGISTRY: Record<SupportedSport, SportTuning> = {
 /**
  * Get tuning config for a sport. Falls back to NFL if unknown.
  */
-export function getSportTuning(sport: string): SportTuning {
+function getSportTuning(sport: string): SportTuning {
   const key = sport.toUpperCase() as SupportedSport
   return SPORT_REGISTRY[key] ?? SPORT_REGISTRY.NFL
-}
-
-/**
- * Get all supported sports.
- */
-export function getSupportedSports(): SupportedSport[] {
-  return Object.keys(SPORT_REGISTRY) as SupportedSport[]
 }
 
 // ---------------------------------------------------------------------------
 // Sport-Aware Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Get the scarcity multiplier for a position in a given sport.
- * Handles SF/TEP variants for NFL.
- */
-export function getScarcityMultiplier(
-  sport: string,
-  position: string,
-  options?: { isSF?: boolean; isTEP?: boolean },
-): number {
-  const tuning = getSportTuning(sport)
-
-  // NFL special cases
-  if (tuning.sport === 'NFL') {
-    if (position === 'QB' && options?.isSF) {
-      return tuning.scarcity.find(s => s.position === 'QB_SF')?.multiplier ?? 1.3
-    }
-    if (position === 'TE' && options?.isTEP) {
-      return tuning.scarcity.find(s => s.position === 'TE_TEP')?.multiplier ?? 1.2
-    }
-  }
-
-  const entry = tuning.scarcity.find(s => s.position === position.toUpperCase())
-  return entry?.multiplier ?? 0.9
-}
 
 /**
  * Get the age curve for a position in a given sport.
@@ -512,48 +480,3 @@ export function getVolatilityProfile(sport: string, position: string): Volatilit
   )
 }
 
-/**
- * Get scoring format normalization for a sport + format combo.
- */
-export function getScoringNormalization(
-  sport: string,
-  format: string,
-): ScoringNormalization | null {
-  const tuning = getSportTuning(sport)
-  return (
-    tuning.scoringFormats.find(
-      f => f.format.toLowerCase() === format.toLowerCase(),
-    ) ?? tuning.scoringFormats[0] ?? null
-  )
-}
-
-/**
- * Normalize a player value to the unified 0-10000 scale.
- * Applies sport-specific scale factor and scoring format multipliers.
- */
-export function normalizeValueForSport(
-  rawValue: number,
-  sport: string,
-  position: string,
-  scoringFormat?: string,
-): number {
-  const tuning = getSportTuning(sport)
-  const norm = scoringFormat
-    ? getScoringNormalization(sport, scoringFormat)
-    : tuning.scoringFormats[0]
-
-  if (!norm) return rawValue
-
-  const posMult = norm.positionMultipliers[position.toUpperCase()] ?? 1.0
-  const scaled = rawValue * posMult * norm.scaleFactor
-
-  // Apply consistency boost for low-scoring sports (soccer)
-  if (tuning.consistencyBoost) {
-    // Consistency boost: reduce volatility penalty, reward floor players
-    const volProfile = getVolatilityProfile(sport, position)
-    const consistencyFactor = 1 + volProfile.consistencyWeight * 0.1
-    return Math.round(scaled * consistencyFactor)
-  }
-
-  return Math.round(scaled)
-}

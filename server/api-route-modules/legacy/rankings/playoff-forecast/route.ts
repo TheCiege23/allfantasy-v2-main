@@ -234,7 +234,6 @@ function determineStatus(
   }
 
   if (prob.makePlayoffs <= 2 && gamesPlayed > 3) {
-    const gamesBack = losses - (playoffSpots > 0 ? Math.floor(totalWeeks * (playoffSpots / totalTeams) * 0.6) : 0)
     return { status: 'eliminated', reason: `${prob.makePlayoffs}% chance — too far behind with ${remainingWeeks} weeks left` }
   }
 

@@ -2,7 +2,8 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
@@ -32,8 +33,8 @@ import { gradeLegacyCounters } from '@/lib/legacy/legacyPackageGrade'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
-import { buildRuntimeConstraints, formatConstraintsForPrompt, DEFAULT_TRADE_CONSTRAINTS, getPickValueWithRange, getPickRange } from '@/lib/trade-constraints'
-import { buildHistoricalTradeContext, getDataInfo } from '@/lib/historical-values'
+import { buildRuntimeConstraints, formatConstraintsForPrompt } from '@/lib/trade-constraints'
+import { buildHistoricalTradeContext } from '@/lib/historical-values'
 import { autoLogDecision } from '@/lib/decision-log'
 import { computeNewsValueAdjustments, applyNewsAdjustmentsToValueMap, formatNewsAdjustmentsForPrompt, type PlayerNewsData, type NewsValueAdjustment } from '@/lib/news-value-adjustment'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
@@ -47,7 +48,7 @@ import type { Asset } from '@/lib/trade-engine/types'
 import { computeDraftProjectionScore, devyAcceptanceAdjustment, applyTeamDirectionAdjustment } from '@/lib/devy-model'
 import { extractAcceptanceFeatures, acceptanceProbabilityWithLiquidity } from '@/lib/acceptance-model'
 import { computeLiquidity, liquidityTier, type LiquidityMetrics } from '@/lib/liquidity-model'
-import { simulateMatchup, computeChampionshipDelta, type TeamProjection } from '@/lib/monte-carlo'
+import { computeChampionshipDelta, type TeamProjection } from '@/lib/monte-carlo'
 import { simulatePortfolio, type PortfolioAsset } from '@/lib/portfolio-simulator'
 import { generateOptimalCounters, buildAvailableSweeteners, type TradeShape } from '@/lib/counter-builder'
 import { prisma } from '@/lib/prisma'
@@ -139,7 +140,7 @@ const LeagueContextSchema = z.object({
     idp: z.boolean().optional(),
   }).optional(),
   roster: z.object({
-    slots: z.record(z.number()).optional(),
+    slots: z.record(z.string(), z.number()).optional(),
     limits: z.object({ maxRoster: z.number().optional() }).optional(),
   }).optional(),
   trade: z.object({
@@ -150,13 +151,13 @@ const LeagueContextSchema = z.object({
 }).optional()
 
 const MarketContextSchema = z.object({
-  ldi: z.record(z.number()).optional(),
-  partnerTendencies: z.record(z.any()).optional(),
+  ldi: z.record(z.string(), z.number()).optional(),
+  partnerTendencies: z.record(z.string(), z.any()).optional(),
 }).optional()
 
 const NflContextSchema = z.object({
   asOf: z.string().optional(),
-  players: z.record(z.any()).optional(),
+  players: z.record(z.string(), z.any()).optional(),
 }).optional()
 
 const TradeAnalyzeRequestSchema = z.object({
@@ -946,7 +947,6 @@ function getScarcityMultiplier(numTeams: number): number {
   return 1.0
 }
 
-
 function buildPickContext(assets: TradeAsset[], numTeams: number) {
   return assets
     .filter(a => a.type === 'pick')
@@ -1227,7 +1227,6 @@ The grade and verdict are FIXED by the engine (see TRADE GRADE). Explain them; d
   )
 }
 
-
 type TradeProviderAudit = {
   providers: {
     openai: string
@@ -1262,16 +1261,14 @@ function buildTradeIntelReconciliationDirective(audit: TradeProviderAudit): stri
 }
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: "LegacyTradeAnalyze" })(async (request: NextRequest) => {
   try {
-    const auth = requireAuthOrOrigin(request)
-    if (!auth.authenticated) {
-      return forbiddenResponse(auth.error || 'Unauthorized')
-    }
+    // CSRF protection only. This was `requireAuthOrOrigin`, which authenticates nobody.
+    if (!validateRequestOrigin(request)) return forbiddenResponse('Invalid request origin')
 
     const body = await request.json()
     const parsedReq = TradeAnalyzeRequestSchema.safeParse(body)
     if (!parsedReq.success) {
       return NextResponse.json(
-        { error: 'Invalid request format', details: parsedReq.error.errors },
+        { error: 'Invalid request format', details: parsedReq.error.issues },
         { status: 400 }
       )
     }
@@ -1294,8 +1291,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     const sleeperB = String(reqData.sleeper_username_b || '').trim()
 
     const clientLeagueContext = reqData.leagueContext
-    const clientMarketContext = reqData.marketContext
-    const clientNflContext = reqData.nflContext
 
     console.log('[TradeAnalyze] incoming roster ids', {
       leagueId,
@@ -1376,6 +1371,27 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     if (errA) return NextResponse.json({ error: errA }, { status: 400 })
     const errB = validateSideAssets(assetsBRaw, 'Side B')
     if (errB) return NextResponse.json({ error: errB }, { status: 400 })
+
+    /*
+     * 🛑 A PAID MODEL CALL (OpenAI + Grok news) THAT ANY ANONYMOUS CALLER COULD RUN, AS ANYONE.
+     *
+     * Identity is now the caller's own linked Sleeper account (no guests: model spend). It is
+     * resolved here -- after the cheap request-shape validation above, before any provider,
+     * roster or model work below.
+     *
+     * `sleeper_username_a` is deliberately NOT compared against it. The analyzer legitimately
+     * grades any two teams in a league -- the trade hub sends DISPLAY names, and the analyzer
+     * page lets you put any manager on either side -- so a mismatch is not an attack and a 403
+     * would break the screen. What Side A must not do is select someone ELSE's private data.
+     * So every read and write that is keyed on Side A's identity (manager DNA, historical hit
+     * rate, confidence-risk history, the decision log, the private coaching DM, the trade-offer
+     * event) runs only when Side A resolves to the caller -- see `ownSideA` below.
+     */
+    const gate = await requireLegacySleeperIdentity(request, {
+      rateLimit: { action: 'trade_analyze', maxRequests: 20, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const viewerSleeperUsername = gate.identity.sleeperUsername
 
     // Client-provided rosters (already prepared by frontend)
     const clientRosterA = (reqData.rosterA || []) as RosteredPlayer[]
@@ -1637,6 +1653,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         rosterIds: { userRosterId: resolvedUserRosterId, partnerRosterId: resolvedPartnerRosterId },
       })
     }
+
+    // Side A's identity, but ONLY when Side A is the caller. Everything that reads or writes
+    // per-user private state keys on this, never on the caller-chosen `canonicalA`.
+    const ownSideA =
+      canonicalA && canonicalA.trim().toLowerCase() === viewerSleeperUsername.trim().toLowerCase()
+        ? canonicalA
+        : ''
 
     // Prefer client-provided rosters, fallback to API-fetched rosters
     const finalRosterA = clientRosterA.length > 0 ? clientRosterA : sideARoster
@@ -1961,9 +1984,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     }
 
     let managerDnaContext = '';
-    if (canonicalA) {
+    if (ownSideA) {
       try {
-        const dna = await getCachedDNA(canonicalA);
+        const dna = await getCachedDNA(ownSideA);
         if (dna) {
           managerDnaContext = formatDNAForPrompt(dna);
         }
@@ -2203,6 +2226,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       leagueId: leagueId || null,
       userId: sleeperA || null,
       partnerId: sleeperB || null,
+      // Results built with the caller's own manager DNA must never be served to someone
+      // naming that caller as Side A, so the owner and non-owner views cache apart.
+      viewerOwnsSideA: Boolean(ownSideA),
       sport,
       format,
       leagueType,
@@ -2352,7 +2378,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       }
     })
 
-    const hitRate = await getHistoricalHitRate(canonicalA, 'trade', leagueId || undefined).catch(() => null)
+    const hitRate = ownSideA
+      ? await getHistoricalHitRate(ownSideA, 'trade', leagueId || undefined).catch(() => null)
+      : null
 
     // Honesty (Task 2): classify every valuation that entered the balance math. Since the one engine
     // (2026-09-26) a balance exists only when EVERY asset was priced on league values, so nothing
@@ -2376,7 +2404,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     const crResult = computeConfidenceRisk({
       category: 'trade',
-      userId: canonicalA || undefined,
+      userId: ownSideA || undefined,
       leagueId: leagueId || undefined,
       assets: tradeAssets,
       dataCompleteness: {
@@ -2395,9 +2423,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       historicalHitRate: hitRate,
     })
 
-    if (canonicalA && leagueId) {
+    if (ownSideA && leagueId) {
       autoLogDecision({
-        userId: canonicalA,
+        userId: ownSideA,
         leagueId: leagueId || 'unknown',
         decisionType: 'trade',
         aiRecommendation: {
@@ -2631,9 +2659,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     })
 
     const notifications = {
-      private_dm: canonicalA
+      private_dm: ownSideA
         ? buildPrivateTradeCoachingNotification({
-            userId: canonicalA,
+            userId: ownSideA,
             recommendation: recommendationLabel,
             summary:
               recommendationLabel === 'accept'
@@ -2663,7 +2691,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     logTradeOfferEvent({
       leagueId: leagueId || null,
-      senderUserId: canonicalA || null,
+      senderUserId: ownSideA || null,
       // The sender is Team A, which GIVES `assetsB` and RECEIVES `assetsA`.
       assetsGiven: assetsB.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
       assetsReceived: assetsA.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
@@ -2887,5 +2915,4 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     )
   }
 })
-
 

@@ -3,7 +3,7 @@ import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import { getRequiredPlanForFeature } from '@/lib/subscription/feature-access'
 import { getPremiumMonetizationForFeature } from '@/lib/monetization/feature-monetization-matrix'
 
-export type FeatureGateFamily = 'pro' | 'commissioner' | 'war_room'
+type FeatureGateFamily = 'pro' | 'commissioner' | 'war_room'
 
 export type FeatureGateMatrixEntry = {
   featureId: SubscriptionFeatureId

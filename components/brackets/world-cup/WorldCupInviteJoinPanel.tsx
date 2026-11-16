@@ -161,7 +161,7 @@ const WorldCupInviteJoinPanel = forwardRef<
           data-testid="world-cup-join-lookup"
           disabled={loadingPreview}
           onClick={() => void lookup()}
-          className="inline-flex min-h-11 touch-manipulation items-center justify-center gap-2 rounded-lg bg-white/[0.08] px-4 py-2.5 text-xs font-bold text-white sm:min-h-0 sm:py-2"
+          className="af-wc-secondary-btn inline-flex min-h-11 touch-manipulation items-center justify-center gap-2 rounded-lg bg-white/[0.08] px-4 py-2.5 text-xs font-bold text-white sm:min-h-0 sm:py-2"
         >
           {loadingPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
           {t("wc.join.previewBtn")}

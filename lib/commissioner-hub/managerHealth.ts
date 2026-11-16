@@ -50,6 +50,8 @@ export type ManagerHealthRow = {
   expectedStarters: number | null
   moves: number
   trades: number
+  /** FAAB left to bid, when the league runs FAAB and the team has a balance. */
+  faabRemaining: number | null
   lastActionAt: string | null
   status: ManagerHealthStatus
 }
@@ -151,14 +153,15 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
   const rosters = await prisma.roster
     .findMany({
       where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true, updatedAt: true },
+      select: { id: true, platformUserId: true, playerData: true, updatedAt: true, redraftRosterId: true, faabRemaining: true },
     })
-    .catch(() => [] as Array<{ id: string; platformUserId: string; playerData: unknown; updatedAt: Date }>)
+    .catch(() => [] as Array<{ id: string; platformUserId: string; playerData: unknown; updatedAt: Date; redraftRosterId: string | null; faabRemaining: number | null }>)
 
   if (rosters.length === 0) return empty
 
   const rosterIds = rosters.map((r) => r.id)
-  const platformUserIds = rosters.map((r) => r.platformUserId).filter(Boolean)
+  // NFL-redraft claims and trades are keyed on the season's RedraftRoster, linked from the generic roster.
+  const redraftIds = rosters.map((r) => r.redraftRosterId).filter((id): id is string => Boolean(id))
 
   /*
    * Identity comes from LeagueTeam, joined on platformUserId — the same join the
@@ -166,18 +169,20 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
    * `LeagueTeam.platformUserId` is nullable and an unclaimed/orphan team legally
    * has none, so a missing row means "no display name", not "no manager".
    */
-  const [teams, waiverClaims, waiverTx, tradesProposed, tradesReceived] = await Promise.all([
+  const [teams, waiverClaims, waiverTx, tradesProposed, tradesReceived, redraftClaims, redraftProposed, redraftReceived] = await Promise.all([
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
-        select: { platformUserId: true, ownerName: true, teamName: true, avatarUrl: true, legacyRosterId: true },
+        select: { platformUserId: true, ownerName: true, teamName: true, avatarUrl: true, externalId: true },
       })
-      .catch(() => [] as Array<{ platformUserId: string | null; ownerName: string; teamName: string; avatarUrl: string | null; legacyRosterId: string | null }>),
+      .catch(() => [] as Array<{ platformUserId: string | null; ownerName: string; teamName: string; avatarUrl: string | null; externalId: string }>),
     prisma.waiverClaim
       .groupBy({ by: ['rosterId'], where: { rosterId: { in: rosterIds } }, _count: { _all: true } })
       .catch(() => [] as Array<{ rosterId: string; _count: { _all: number } }>),
+    // A processed claim also writes a transaction; count only the transactions no claim produced (free-agent adds),
+    // so one claim is one move, not two.
     prisma.waiverTransaction
-      .groupBy({ by: ['rosterId'], where: { rosterId: { in: rosterIds } }, _count: { _all: true } })
+      .groupBy({ by: ['rosterId'], where: { rosterId: { in: rosterIds }, claimId: null }, _count: { _all: true } })
       .catch(() => [] as Array<{ rosterId: string; _count: { _all: number } }>),
     prisma.afLeagueTrade
       .groupBy({ by: ['proposerRosterId'], where: { proposerRosterId: { in: rosterIds } }, _count: { _all: true } })
@@ -185,13 +190,27 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
     prisma.afLeagueTrade
       .groupBy({ by: ['receiverRosterId'], where: { receiverRosterId: { in: rosterIds } }, _count: { _all: true } })
       .catch(() => [] as Array<{ receiverRosterId: string; _count: { _all: number } }>),
+    prisma.redraftWaiverClaim
+      .groupBy({ by: ['rosterId'], where: { rosterId: { in: redraftIds } }, _count: { _all: true } })
+      .catch(() => [] as Array<{ rosterId: string; _count: { _all: number } }>),
+    prisma.redraftTradeProposal
+      .groupBy({ by: ['proposerRosterId'], where: { proposerRosterId: { in: redraftIds } }, _count: { _all: true } })
+      .catch(() => [] as Array<{ proposerRosterId: string; _count: { _all: number } }>),
+    prisma.redraftTradeProposal
+      .groupBy({ by: ['receiverRosterId'], where: { receiverRosterId: { in: redraftIds } }, _count: { _all: true } })
+      .catch(() => [] as Array<{ receiverRosterId: string; _count: { _all: number } }>),
   ])
 
+  /*
+   * 🛑 THE FALLBACK JOIN COULD NEVER MATCH (2026-11-15). It joined `LeagueTeam.legacyRosterId` to `Roster.id`, but
+   * `legacyRosterId` points at the LegacyRoster table, so an unclaimed team showed no name. A team's roster is
+   * `LeagueTeam.externalId`, the join every other commissioner surface uses.
+   */
   const teamByPlatformId = new Map<string, (typeof teams)[number]>()
-  const teamByLegacyRosterId = new Map<string, (typeof teams)[number]>()
+  const teamByRosterId = new Map<string, (typeof teams)[number]>()
   for (const t of teams) {
     if (t.platformUserId) teamByPlatformId.set(t.platformUserId, t)
-    if (t.legacyRosterId) teamByLegacyRosterId.set(t.legacyRosterId, t)
+    if (t.externalId) teamByRosterId.set(t.externalId, t)
   }
 
   const countBy = <K extends string>(rows: Array<Record<string, unknown>>, key: K): Map<string, number> => {
@@ -209,6 +228,9 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
   const txCounts = countBy(waiverTx as unknown as Array<Record<string, unknown>>, 'rosterId')
   const proposedCounts = countBy(tradesProposed as unknown as Array<Record<string, unknown>>, 'proposerRosterId')
   const receivedCounts = countBy(tradesReceived as unknown as Array<Record<string, unknown>>, 'receiverRosterId')
+  const redraftClaimCounts = countBy(redraftClaims as unknown as Array<Record<string, unknown>>, 'rosterId')
+  const redraftProposedCounts = countBy(redraftProposed as unknown as Array<Record<string, unknown>>, 'proposerRosterId')
+  const redraftReceivedCounts = countBy(redraftReceived as unknown as Array<Record<string, unknown>>, 'receiverRosterId')
 
   const starterShapes = rosters.map((r) => countStarters(r.playerData))
   const expectedStarters = resolveExpectedStarters(
@@ -219,9 +241,12 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
   const now = Date.now()
   const rows: ManagerHealthRow[] = rosters.map((roster, i) => {
     const shape = starterShapes[i]
-    const team = teamByPlatformId.get(roster.platformUserId) ?? teamByLegacyRosterId.get(roster.id) ?? null
-    const moves = (claimCounts.get(roster.id) ?? 0) + (txCounts.get(roster.id) ?? 0)
-    const trades = (proposedCounts.get(roster.id) ?? 0) + (receivedCounts.get(roster.id) ?? 0)
+    const team = teamByPlatformId.get(roster.platformUserId) ?? teamByRosterId.get(roster.id) ?? null
+    const rr = roster.redraftRosterId ?? ''
+    const moves = (claimCounts.get(roster.id) ?? 0) + (txCounts.get(roster.id) ?? 0) + (rr ? redraftClaimCounts.get(rr) ?? 0 : 0)
+    const trades =
+      (proposedCounts.get(roster.id) ?? 0) + (receivedCounts.get(roster.id) ?? 0) +
+      (rr ? (redraftProposedCounts.get(rr) ?? 0) + (redraftReceivedCounts.get(rr) ?? 0) : 0)
     const denominator = expectedStarters ?? shape?.slots ?? null
     const lineupRatio = shape && denominator && denominator > 0 ? shape.filled / denominator : null
 
@@ -234,6 +259,7 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
       expectedStarters: denominator,
       moves,
       trades,
+      faabRemaining: typeof roster.faabRemaining === 'number' ? roster.faabRemaining : null,
       lastActionAt: roster.updatedAt ? roster.updatedAt.toISOString() : null,
       status: resolveStatus({ lastActionAt: roster.updatedAt ?? null, lineupRatio, moves, now }),
     }

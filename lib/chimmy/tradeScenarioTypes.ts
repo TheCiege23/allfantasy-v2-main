@@ -11,6 +11,7 @@
  */
 
 // Client-safe: this module imports types and one string constant, nothing else.
+import type { TradeDivisionImpact } from '@/lib/decision-os/trade/tradeGrade'
 import { LEAGUE_WEEK_UNIT } from '@/lib/decision-os/trade/rosterImpactSummary'
 
 export type ScenarioPlayer = { playerId: string; name: string; position: string | null }
@@ -99,6 +100,7 @@ export type ReadyTradeScenario = {
     basis?: string | null
     /** Why there is no grade, when there is none. */
     withheld?: string | null
+    divisionImpacts?: readonly TradeDivisionImpact[]
     /** The other team's letter for the same deal, on league value — the mirror of the market letter. */
     partnerGrade?: string | null
     /**

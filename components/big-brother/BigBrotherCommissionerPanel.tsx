@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 
-export interface BigBrotherCommissionerPanelProps {
+interface BigBrotherCommissionerPanelProps {
   leagueId: string
   onAction?: () => void
   nominees?: { id: string; name: string }[]
@@ -207,7 +207,10 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
         )}
       </div>
 
-      <p className="text-xs text-white/40">Schedule controls and inactivity overrides are in Settings → Big Brother Settings. Emergency timing extensions can be added as config overrides.</p>
+      {/* This pointed to "Settings → Big Brother Settings", a tab that does not exist. */}
+      <p className="text-xs text-white/40">
+        Your league&apos;s rules (eviction tie-break, HOH challenge, finale and jury start) are the ones chosen when the league was created. Pause and resume above to hold the week.
+      </p>
     </div>
   )
 }

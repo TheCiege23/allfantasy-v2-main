@@ -15,7 +15,7 @@
 
 import type { DynastyFuturePick, DynastyTeamSummary, DynastyWarRoomContext } from './types'
 
-export interface DynastyPickLine {
+interface DynastyPickLine {
   id: string
   season: number
   round: number
@@ -25,7 +25,7 @@ export interface DynastyPickLine {
   note: string
 }
 
-export interface DynastyPickValueResult {
+interface DynastyPickValueResult {
   rosterId: string
   picks: DynastyPickLine[]
   /** Sum of structural pick tiers (null when no priced picks, or when the list is partial). */

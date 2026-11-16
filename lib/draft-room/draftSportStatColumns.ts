@@ -16,7 +16,7 @@ import {
   type SupportedSport,
 } from '@/lib/sport-scope'
 
-export type DraftStatColumnCategory =
+type DraftStatColumnCategory =
   | 'offense'
   | 'defense'
   | 'pitcher'
@@ -30,7 +30,7 @@ export type DraftStatColumnCategory =
   | 'wrestler'
   | 'cricket'
 
-export type DraftStatColumnType = 'number' | 'percent' | 'text'
+type DraftStatColumnType = 'number' | 'percent' | 'text'
 
 export type DraftStatColumnDef = {
   key: string
@@ -96,12 +96,12 @@ export function isLikelyGoaliePosition(position: string | undefined): boolean {
   return normPos(position) === 'G'
 }
 
-export function isLikelyKickerPosition(position: string | undefined): boolean {
+function isLikelyKickerPosition(position: string | undefined): boolean {
   const p = normPos(position)
   return p === 'PK' || p === 'K' || p === 'K/P' || p === 'KICKER'
 }
 
-export function isLikelyPunterPosition(position: string | undefined): boolean {
+function isLikelyPunterPosition(position: string | undefined): boolean {
   return normPos(position) === 'P'
 }
 
@@ -351,7 +351,6 @@ const NBA_LIKE: DraftStatColumnDef[] = [
   col('nba_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points', 'season_projection']),
 ]
 
-
 const NBA_OBSERVED: DraftStatColumnDef[] = [
   col('pts', 'PPG', 'number', 'offense', ['pointsPerGame', 'points_per_game', 'ppg', 'points', 'pts', 'nba_points']),
   col('reb', 'RPG', 'number', 'offense', ['reboundsPerGame', 'rebounds_per_game', 'rpg', 'rebounds', 'reb', 'total_rebounds']),
@@ -542,8 +541,6 @@ export function getDraftStatColumnsForSport(
 export function sportUsesColumnKeys(sport: SupportedSport): Set<string> {
   return new Set(getDraftStatColumnsForSport(sport).map((c) => c.key))
 }
-
-export type StatColumnFilterOp = 'gt' | 'lt' | 'between' | 'eq' | 'exists'
 
 export type StatColumnFilter =
   | { op: 'gt'; value: number }

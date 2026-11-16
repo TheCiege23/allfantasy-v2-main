@@ -27,15 +27,12 @@
 
 import type { MissionControlSnapshot } from '@/lib/decision-os/missionControl'
 import type { LeagueAnalyticsSnapshot } from '@/lib/decision-os/leagueAnalytics'
-import type { DecisionOsAttentionSignal } from '@/lib/decision-os/attentionSignals'
 import type { PowerRankingsOutput } from '@/lib/league-power-rankings/types'
 import type { LineupAttentionItem } from '@/lib/shared-services/game-day/types'
 import type { ManagerBehaviorProfile } from '@/lib/shared-services/knowledge-graph/types'
 import type { LeagueRole } from '@/lib/league/permissions'
 
-export type { MissionControlSnapshot, LeagueAnalyticsSnapshot, DecisionOsAttentionSignal, PowerRankingsOutput }
-
-export interface SourceAttribution {
+interface SourceAttribution {
   source: string
   fetchedAt: string
   providerTimestamp: string | null
@@ -45,7 +42,7 @@ export interface SourceAttribution {
 }
 
 /** Formats with a confirmed real, live ranking engine vs a confirmed stub — never silently produce misleading output for the latter. */
-export type SpecialtyFormatSupport = 'supported' | 'specialty_adapter_required'
+type SpecialtyFormatSupport = 'supported' | 'specialty_adapter_required'
 
 export interface FormatAwareness {
   leagueVariant: string | null
@@ -73,29 +70,6 @@ export interface ManagerTendencyContext {
   profile: ManagerBehaviorProfile | null
 }
 
-export type PulseDimensionState = 'good' | 'watch' | 'attention_required' | 'unavailable'
-
-export interface PulseDimension {
-  dimension: 'competition' | 'participation' | 'activity' | 'lineup_health' | 'transaction_activity' | 'commissioner_attention' | 'data_quality'
-  state: PulseDimensionState
-  explanation: string
-  evidence: string[]
-  confidence: number
-  freshness: SourceAttribution['freshness']
-  sourceAttribution: SourceAttribution
-  risk: 'low' | 'medium' | 'high'
-  uncertainty: string[]
-}
-
-export interface LeaguePulse {
-  leagueId: string
-  generatedAt: string
-  dimensions: PulseDimension[]
-  /** Explainable composite — never a single unexplained number; always paired with `dimensions`. */
-  compositeScore: number
-  compositeExplanation: string
-}
-
 export type LeagueHealthCategory = 'healthy' | 'watch' | 'attention_required' | 'critical' | 'unavailable'
 
 export interface LeagueHealthAssessment {
@@ -110,7 +84,7 @@ export interface LeagueHealthAssessment {
   sourceAttribution: SourceAttribution
 }
 
-export type CommissionerAttentionReasonCode =
+type CommissionerAttentionReasonCode =
   | 'legacy_signal'
   | 'lineup_attention_carryover'
   | 'stale_import_data'
@@ -167,42 +141,3 @@ export interface CommissionerBrief {
   confidence: number
 }
 
-export type NarrativeTone = 'neutral_professional' | 'playful'
-export type NarrativeFormat = 'concise_chat' | 'full_brief' | 'discord' | 'sleeper' | 'espn_yahoo_copy'
-
-export interface CommissionerNarrativeOutput {
-  format: NarrativeFormat
-  tone: NarrativeTone
-  text: string
-  /** True only when an AI call actually ran and succeeded; false means the deterministic fallback text is shown — never silently upgraded. */
-  aiGenerated: boolean
-  characterCount: number
-  characterLimit: number | null
-}
-
-export type CommissionerDivergenceCategory =
-  | 'missing_signal'
-  | 'severity_mismatch'
-  | 'league_health_status_mismatch'
-  | 'stale_data_handling_mismatch'
-
-export interface CommissionerDivergenceItem {
-  category: CommissionerDivergenceCategory
-  leagueId: string
-  primaryValue: string | null
-  legacyValue: string | null
-  notes: string[]
-}
-
-export interface CommissionerShadowEvaluation {
-  evaluationId: string
-  leagueId: string
-  generatedAt: string
-  context: CommissionerContext
-  pulse: LeaguePulse
-  health: LeagueHealthAssessment
-  attentionItems: CommissionerAttentionItem[]
-  ranking: CommissionerPowerRanking | null
-  brief: CommissionerBrief
-  divergence: CommissionerDivergenceItem[]
-}

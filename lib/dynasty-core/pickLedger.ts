@@ -8,7 +8,7 @@
 import type { BoardTeam, LeaguePickBoard } from './leaguePickBoard'
 
 /** The ledger shows the next three drafts, as the mockup and the dynasty owner's planning horizon do. */
-export const PICK_LEDGER_DRAFTS = 3
+const PICK_LEDGER_DRAFTS = 3
 
 /** The earliest `limit` upcoming seasons on the board. */
 export function pickLedgerSeasons(board: Pick<LeaguePickBoard, 'seasons'>, limit = PICK_LEDGER_DRAFTS): number[] {
@@ -28,7 +28,7 @@ export function pickLedgerTotals(team: Pick<BoardTeam, 'bySeason'>, seasons: rea
   return { held, firsts }
 }
 
-export type PickLedgerInsight = { team: string; firsts: number; drafts: number }
+type PickLedgerInsight = { team: string; firsts: number; drafts: number }
 
 /**
  * The team holding the most first-round picks across the ledger's drafts — said only when it is a

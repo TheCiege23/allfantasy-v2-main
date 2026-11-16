@@ -16,6 +16,30 @@ vi.mock('@/lib/share/guillotineEscape', () => ({ getGuillotineEscapesForUser: h.
 // The route now resolves the current week and the viewer's roster (2026-10-13); never reach a real DB.
 vi.mock('@/lib/league-specialty/guillotineHome', () => ({ buildGuillotineHomeExtras: h.home }))
 vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: h.week, findViewerRosterId: h.roster }))
+/*
+ * 🛑 EVERY OTHER MODULE THE ROUTE IMPORTS THAT TOUCHES THE DB IS MOCKED TOO (2026-11-07). The route grew
+ * the advanced chop rules, Chop Watch, the commissioner check, "Who's next?" and the PATCH/POST helpers
+ * after this file was written, and none of them were mocked. Each reached Prisma, which the vitest DB
+ * guard pins to 127.0.0.1:1, and the Prisma retry wrapper retried every refused connection — so every
+ * test ran out its timeout waiting on a database that cannot exist (measured: 8 of 9 timed out). The
+ * rules-explainer snapshot also pulled ~30 modules into the import graph for a GET that never uses it.
+ */
+const extra = vi.hoisted(() => ({ advanced: vi.fn(), watch: vi.fn(), isCommish: vi.fn(), pick: vi.fn(), canEditPaid: vi.fn() }))
+vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: vi.fn(), isCommissioner: extra.isCommish }))
+vi.mock('@/lib/guillotine/guillotineFirstChopWeek', () => ({ updateGuillotineFirstChopWeek: vi.fn() }))
+vi.mock('@/lib/guillotine/guillotineAdvancedSettings', () => ({ readGuillotineAdvanced: extra.advanced, saveGuillotineAdvanced: vi.fn() }))
+vi.mock('@/lib/guillotine/guillotineRulesSave', () => ({ readGuillotineRules: vi.fn(), saveGuillotineRules: vi.fn(), viewerCanEditPaidGuillotineRules: extra.canEditPaid }))
+vi.mock('@/lib/guillotine/chopPreviewLoad', () => ({ loadChopPreview: vi.fn() }))
+vi.mock('@/lib/guillotine/chopWatchLoad', () => ({ loadChopWatch: extra.watch }))
+vi.mock('@/lib/guillotine/nextChopPickStore', () => ({ loadNextChopPickState: extra.pick, saveNextChopPick: vi.fn() }))
+vi.mock('@/lib/league-rules-explainer/snapshot', () => ({ guillotineAdvancedSnapshot: vi.fn(), guillotineRulesSnapshot: vi.fn() }))
+vi.mock('@/lib/league-rules-explainer/changeKeys', () => ({ diffRuleSnapshots: vi.fn() }))
+vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: vi.fn() }))
+vi.mock('@/lib/guillotine/importedLeagueGuard', () => ({ providerLabel: vi.fn() }))
+// Backstop: anything that still reaches Prisma fails at once and names itself, instead of hanging.
+vi.mock('@/lib/prisma', () => ({
+  prisma: new Proxy({}, { get: (_t, model) => { throw new Error(`unmocked prisma.${String(model)} in the guillotine summary test`) } }),
+}))
 
 import { NextRequest } from 'next/server'
 import { GET } from '@/app/api/leagues/[leagueId]/guillotine/summary/route'
@@ -24,7 +48,12 @@ const call = (query = '?week=5') =>
   GET(new NextRequest(`https://allfantasy.test/api/leagues/lg1/guillotine/summary${query}`), { params: Promise.resolve({ leagueId: 'lg1' }) })
 
 beforeEach(() => {
-  for (const f of Object.values(h)) f.mockReset()
+  for (const f of [...Object.values(h), ...Object.values(extra)]) f.mockReset()
+  extra.advanced.mockResolvedValue(null)
+  extra.watch.mockResolvedValue(null)
+  extra.isCommish.mockResolvedValue(false)
+  extra.pick.mockResolvedValue(null)
+  extra.canEditPaid.mockResolvedValue(false)
   h.session.mockResolvedValue({ user: { id: 'u1' } })
   h.access.mockResolvedValue(true)
   h.isG.mockResolvedValue(true)

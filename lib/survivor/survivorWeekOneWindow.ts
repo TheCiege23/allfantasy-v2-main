@@ -16,7 +16,7 @@ const DAY_INDEX: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, We
 const easternDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
 
 /** 'YYYY-MM-DD' of an instant in US Eastern. */
-export function easternDateKey(instant: Date): string {
+function easternDateKey(instant: Date): string {
   return easternDate.format(instant)
 }
 

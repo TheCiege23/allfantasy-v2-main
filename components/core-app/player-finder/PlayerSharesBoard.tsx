@@ -84,8 +84,8 @@ export function PlayerSharesBoard({
           <TopicTip topic="playerShares" />
         </div>
         <span className="af-pf-shares-sub af-num">
+          {/* 2026-11-14: the count alone. The two caveats moved to the board's foot, said once. */}
           {t.sharesSub(playersHeld, leaguesRead)}
-          {unsupportedLeagues > 0 ? t.sharesUnsupported(unsupportedLeagues) : ''}
         </span>
       </header>
 
@@ -189,8 +189,12 @@ export function PlayerSharesBoard({
       <p className="af-pf-shares-foot">
         {league ? t.sharesFootLeague(league.leagueName) : t.sharesFootAll}
       </p>
+      {unsupportedLeagues > 0 || (state.data.unidentifiedPlayers ?? 0) > 0 ? (
+        <p className="af-pf-shares-foot" data-testid="pf-shares-not-counted">
+          {t.sharesNotCounted(unsupportedLeagues, state.data.unidentifiedPlayers ?? 0)}
+        </p>
+      ) : null}
     </section>
   )
 }
 
-export default PlayerSharesBoard

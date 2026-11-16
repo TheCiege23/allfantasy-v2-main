@@ -12,7 +12,7 @@
  * rather than describing a limit that cannot bite.
  */
 
-export type TaxiRuleLine = { key: string; vars?: Record<string, string | number> }
+type TaxiRuleLine = { key: string; vars?: Record<string, string | number> }
 
 export function taxiRulesInPlainWords(input: {
   slots: number

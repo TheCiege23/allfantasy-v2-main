@@ -41,25 +41,13 @@ import { type Result, err, ok } from './result'
  * already have in scope.
  */
 declare const SECRET_REF_BRAND: unique symbol
-export type SecretRef = string & { readonly [SECRET_REF_BRAND]: true }
+type SecretRef = string & { readonly [SECRET_REF_BRAND]: true }
 
 export function secretRef(handle: string): SecretRef {
   return handle as SecretRef
 }
 
-export type SecretStore = {
-  /**
-   * Resolve a handle to credential material.
-   *
-   * ⚠ THE RETURN IS DELIBERATELY NOT `string`. A caller that wants the value
-   * has to call `use()`, which scopes it to a callback — so there is no
-   * variable holding a token for the rest of a function body, and nothing for a
-   * later `JSON.stringify(this)` to find.
-   */
-  resolve(ref: SecretRef): Promise<ResolvedSecret | null>
-}
-
-export type ResolvedSecret = {
+type ResolvedSecret = {
   /** Run `fn` with the credential. The value must not escape the callback. */
   use<T>(fn: (value: string) => Promise<T>): Promise<T>
 }
@@ -104,7 +92,7 @@ export type ProviderPage<T> = {
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
-export type ProviderErrorKind =
+type ProviderErrorKind =
   | 'NOT_FOUND'
   | 'UNAUTHORIZED'
   | 'RATE_LIMITED'
@@ -179,7 +167,7 @@ export type Provider = {
   ): Promise<Result<ProviderPage<ExternalManager>, ProviderError>>
 }
 
-export type ProviderCapabilities = {
+type ProviderCapabilities = {
   /** Can we page, or does every sync pull everything? */
   readonly incremental: boolean
   /** Does connecting need a credential at all? Sleeper's read API does not. */
@@ -212,7 +200,7 @@ export function createProviderRegistry(providers: readonly Provider[]) {
 
 // ─── The stub ────────────────────────────────────────────────────────────────
 
-export type StubProviderOptions = {
+type StubProviderOptions = {
   readonly key?: string
   readonly league?: ExternalLeague
   readonly teams?: readonly ExternalTeam[]

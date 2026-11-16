@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -47,7 +48,7 @@ export async function GET(
     return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   }
 
-  if (roster.platformUserId !== session.user.id && league.userId !== session.user.id) {
+  if (roster.platformUserId !== session.user.id && !(await canCommissionerAct(leagueId, session.user.id, 'rosters'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

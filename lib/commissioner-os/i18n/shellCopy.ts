@@ -24,8 +24,6 @@ import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
  * PURE and client-safe.
  */
 
-export type ShellLang = 'en' | 'es'
-
 const isEs = (language: string | null | undefined) => language === 'es'
 
 /** Spanish plural for a counted noun: `n(3, 'informe', 'informes')` → "3 informes". */

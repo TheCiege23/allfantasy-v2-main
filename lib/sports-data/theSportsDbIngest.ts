@@ -554,7 +554,7 @@ export async function ingestSchedule(
 }
 
 /** Backfill a bounded number of final EPL matches on the existing schedule ingestion tick. */
-async function ingestEplGoalReceipts(season: number | null, now: Date): Promise<void> {
+export async function ingestEplGoalReceipts(season: number | null, now: Date): Promise<void> {
   if (season == null) return
   const [games, cached] = await Promise.all([
     prisma.sportsGame.findMany({

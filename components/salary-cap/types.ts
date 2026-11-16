@@ -2,7 +2,7 @@
  * Frontend types for Salary Cap summary and UI state. PROMPT 340.
  */
 
-export interface SalaryCapSummaryConfig {
+interface SalaryCapSummaryConfig {
   mode: string
   startupCap: number
   capGrowthPercent: number
@@ -25,7 +25,7 @@ export interface SalaryCapSummaryConfig {
   offseasonPhase: string | null
 }
 
-export interface SalaryCapSummaryLedger {
+interface SalaryCapSummaryLedger {
   rosterId: string
   capYear: number
   totalCapHit: number
@@ -34,7 +34,7 @@ export interface SalaryCapSummaryLedger {
   capSpace: number
 }
 
-export interface FutureCapYearUI {
+interface FutureCapYearUI {
   capYear: number
   capCeiling: number
   totalCapHit: number
@@ -43,7 +43,7 @@ export interface FutureCapYearUI {
   contractCount: number
 }
 
-export interface ContractRowUI {
+interface ContractRowUI {
   id: string
   playerId: string
   playerName: string | null

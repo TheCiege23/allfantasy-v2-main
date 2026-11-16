@@ -1,4 +1,4 @@
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -27,6 +27,7 @@ import CoreLeagueContextBar from '@/components/core-app/CoreLeagueContextBar'
 import {
   LEAGUE_DESTINATION_GATES,
   NAV_SECTION_ORDER,
+  NAV_SECTION_ORDER_NO_LEAGUE,
   leagueDestinationHidden,
   navSectionFor,
 } from '@/lib/core-app/leagueDestinations'
@@ -35,9 +36,14 @@ afterEach(cleanup)
 
 const LEAGUES = [{ id: 'l1', name: 'Sunday Night Redraft', platform: 'sleeper', mark: 'S' }]
 
+/*
+ * `hrefs` is the desktop rail; `reachable` adds the phone and tablet More sheet. Inside a league the rail
+ * leaves the account-wide groups to the More sheet and one "All leagues" row (2026-11-15,
+ * LEAGUE_RAIL_OMITTED_SECTIONS), so "can you get there" is the union of the two.
+ */
 function shell(props: Record<string, unknown> = {}) {
   cleanup()
-  const { container } = render(
+  const { container, getByRole } = render(
     <AfCoreShell active="home" leagues={LEAGUES as never} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} selectedLeagueId="l1" {...props}>
       <div>screen</div>
     </AfCoreShell>,
@@ -47,7 +53,10 @@ function shell(props: Record<string, unknown> = {}) {
     heading: g.querySelector('.af-nav-heading')?.textContent ?? null,
     hrefs: Array.from(g.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? ''),
   }))
-  return { container, groups, hrefs: groups.flatMap((g) => g.hrefs) }
+  fireEvent.click(getByRole('button', { name: 'More' }))
+  const more = Array.from(document.querySelectorAll('.af-mobile-more a')).map((a) => a.getAttribute('href') ?? '')
+  const hrefs = groups.flatMap((g) => g.hrefs)
+  return { container, groups, hrefs, more, reachable: [...hrefs, ...more] }
 }
 
 /** The /core path a tab-row key opens; '' is the league's own home. */
@@ -92,17 +101,26 @@ describe('the league gates, shared by the rail and the tab row', () => {
 })
 
 describe('the rail, grouped by job', () => {
-  it('draws the groups in order: This week · League · Plan ahead · All leagues · Manage', () => {
+  it('inside a league: This week · League · Plan ahead, then one All leagues row', () => {
     const { groups } = shell()
     const headings = groups.map((g) => g.heading).filter(Boolean)
-    expect(headings).toEqual(['This week', 'League', 'Plan ahead', 'All leagues', 'Manage'])
+    expect(headings).toEqual(['This week', 'League', 'Plan ahead'])
+    expect(groups.at(-1)!.hrefs).toEqual(['/core?view=all&scope=all'])
+  })
+
+  it('with no league: … All leagues · Manage, and no exit row', () => {
+    const { groups } = shell({ selectedLeagueId: null })
+    const headings = groups.map((g) => g.heading).filter(Boolean)
+    expect(headings.slice(-2)).toEqual(['All leagues', 'Manage'])
+    expect(groups.flatMap((g) => g.hrefs)).not.toContain('/core?view=all&scope=all')
   })
 
   it('puts each league view in its group, carrying the league', () => {
     const { groups } = shell()
     const group = (h: string) => groups.find((g) => g.heading === h)!.hrefs
     expect(group('This week')).toEqual(['/core/my-team?league=l1', '/core/matchup?league=l1', '/core/live?league=l1', '/core/waivers?league=l1'])
-    expect(group('League')).toEqual(['/core/standings?league=l1', '/core/schedule?league=l1', '/core/trades?league=l1', '/core/moves?league=l1'])
+    // No Moves (2026-11-14): it folded into Trades.
+    expect(group('League')).toEqual(['/core/standings?league=l1', '/core/schedule?league=l1', '/core/trades?league=l1', '/core/league-settings?league=l1'])
     expect(group('Plan ahead')).toContain('/core/season-outlook?league=l1')
     expect(group('Plan ahead')).toContain('/core/draft-hq?league=l1')
   })
@@ -130,22 +148,82 @@ describe('the rail, grouped by job', () => {
     const { hrefs } = shell({ selectedLeagueId: null })
     expect(hrefs.some((h) => h.startsWith('/core/schedule') || h.startsWith('/core/moves'))).toBe(false)
   })
+
+  /* 2026-11-12: each no-league board repeated Your week or Season Outlook, so these need a league. */
+  it('offers My team, Waivers, Matchup, Standings and War Room only with a league held', () => {
+    const { hrefs } = shell({ selectedLeagueId: null })
+    for (const key of ['my-team', 'waivers', 'matchup', 'standings', 'war-room']) {
+      expect(hrefs.some((h) => h.startsWith(`/core/${key}`))).toBe(false)
+    }
+    expect(hrefs).toContain('/core/week')
+    expect(hrefs).toContain('/core/season-outlook')
+    // ...and every one of them is back once a league is held.
+    const held = shell().hrefs
+    for (const key of ['my-team', 'waivers', 'matchup', 'standings', 'war-room']) {
+      expect(held).toContain(`/core/${key}?league=l1`)
+    }
+  })
+
+  /* 2026-11-12: Portfolio is the second view behind My Leagues, not an entry of its own. */
+  it('has one My Leagues entry and no Portfolio entry, with or without a league', () => {
+    // Inside a league My Leagues is in the More sheet, not the rail (2026-11-15).
+    for (const selectedLeagueId of ['l1', null]) {
+      const { hrefs, more } = shell({ selectedLeagueId })
+      const where = selectedLeagueId ? more : hrefs
+      expect(where.filter((h) => h.startsWith('/core/leagues'))).toEqual(['/core/leagues'])
+      expect([...hrefs, ...more].some((h) => h.startsWith('/core/portfolio'))).toBe(false)
+    }
+    expect(shell().hrefs.some((h) => h.startsWith('/core/leagues'))).toBe(false)
+  })
+
+  /* 2026-11-12: Tools' links moved to the screens they belong to (lib/core-app/moreTools.ts). */
+  it('has no Tools entry, with or without a league', () => {
+    for (const selectedLeagueId of ['l1', null]) {
+      const { hrefs } = shell({ selectedLeagueId, isAdmin: true })
+      expect(hrefs.some((h) => h.startsWith('/core/tools'))).toBe(false)
+    }
+  })
+
+  it('lights My Leagues on the Portfolio screen', () => {
+    const { container } = shell({ selectedLeagueId: null, active: 'portfolio' })
+    const lit = Array.from(container.querySelectorAll('#af-nav a[aria-current="page"]')).map((a) => a.getAttribute('href'))
+    expect(lit).toEqual(['/core/leagues'])
+  })
+
+  it('regroups the rail with no league: Your week leads This week, and there is no League group', () => {
+    const { groups } = shell({ selectedLeagueId: null })
+    expect(groups.map((g) => g.heading).filter(Boolean)).toEqual(['This week', 'Plan ahead', 'All leagues', 'Manage'])
+    const group = (h: string) => groups.find((g) => g.heading === h)!.hrefs
+    expect(group('This week')).toEqual(['/core/week', '/core/live', '/core/trades'])
+    expect(group('Plan ahead')).toEqual(['/core/season-outlook', '/core/players', '/core/draft-hq'])
+  })
+
+  it('every key named in a no-league rail group renders with no league, and none lands in a trailing group', () => {
+    const { groups } = shell({ selectedLeagueId: null, commissionerCount: 1, isAdmin: true })
+    const rendered = new Set(groups.flatMap((g) => g.hrefs).map((h) => h.replace(/^\/core\/?/, '').replace(/\?.*$/, '')))
+    const conditional = new Set(['devy', 'brackets', 'find-league', 'my-leagues', 'settings', 'plans', 'admin', 'home'])
+    for (const section of NAV_SECTION_ORDER_NO_LEAGUE) {
+      for (const key of section.keys) if (!conditional.has(key)) expect(rendered.has(key)).toBe(true)
+    }
+    // A trailing unheaded group after Manage means some key was placed in neither list.
+    expect(groups[groups.length - 1]!.heading).not.toBeNull()
+  })
 })
 
 describe('nothing the tab row carried became unreachable', () => {
   it('every tab-row view is a rail link — and so a tablet and phone More sheet link too', () => {
     const keys = tabRowKeys()
     expect(keys.length).toBeGreaterThan(10)
-    const { hrefs } = shell()
+    const { reachable } = shell()
     for (const key of keys) {
       // The tab row's Overview is the league's home; the rail's Home carries the league the same way.
-      expect(hrefs).toContain(pathOf(key))
+      expect(reachable).toContain(pathOf(key))
     }
   })
 
   it('every key named in a rail group is one the shell actually renders somewhere', () => {
-    const { hrefs } = shell({ hasIdpDefense: true, commissionerCount: 1, isAdmin: true })
-    const rendered = new Set(hrefs.map((h) => h.replace(/^\/core\/?/, '').replace(/\?.*$/, '')))
+    const { reachable } = shell({ hasIdpDefense: true, commissionerCount: 1, isAdmin: true })
+    const rendered = new Set(reachable.map((h) => h.replace(/^\/core\/?/, '').replace(/\?.*$/, '')))
     const conditional = new Set(['devy', 'devy-league', 'brackets', 'find-league', 'my-leagues', 'settings', 'plans', 'admin', 'home'])
     for (const section of NAV_SECTION_ORDER) {
       for (const key of section.keys) if (!conditional.has(key)) expect(rendered.has(key)).toBe(true)

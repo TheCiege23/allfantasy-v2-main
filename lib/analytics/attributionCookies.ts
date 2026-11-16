@@ -63,7 +63,7 @@ function newAnonId(): string {
   }
 }
 
-export type AttributionState = {
+type AttributionState = {
   anonId: string | null
   firstTouch: AttributionTouch | null
   latestTouch: AttributionTouch | null

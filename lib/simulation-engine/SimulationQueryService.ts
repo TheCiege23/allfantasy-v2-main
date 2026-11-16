@@ -4,7 +4,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { normalizeSportForSimulation } from './types'
 
 export async function getMatchupSimulation(
   leagueId: string,
@@ -76,7 +75,6 @@ export async function getSimulationSummaryForAI(
   matchupResults: Awaited<ReturnType<typeof getLatestMatchupSimulationsForLeague>>
   seasonResults: Awaited<ReturnType<typeof getSeasonSimulationForLeague>>
 }> {
-  const sportNorm = normalizeSportForSimulation(sport)
   const [matchupResults, seasonResults] = await Promise.all([
     getLatestMatchupSimulationsForLeague(leagueId, weekOrPeriod, 10),
     getSeasonSimulationForLeague(leagueId, season, weekOrPeriod),

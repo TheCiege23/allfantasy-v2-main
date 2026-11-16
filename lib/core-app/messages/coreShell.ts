@@ -11,7 +11,7 @@ import { ageText } from '@/lib/core-app/shellCopy'
 export const coreShellMessages = defineMessages({
   en: {
     // TopSearch
-    searchPlaceholder: 'Find a player or jump to a league',
+    searchPlaceholder: 'Search players or leagues',
     searchAria: 'Search any player or league',
     searchResultsAria: 'Player and league results',
     searchSearching: 'Searching…',
@@ -83,7 +83,7 @@ export const coreShellMessages = defineMessages({
     closeMenu: 'Close more menu',
   },
   es: {
-    searchPlaceholder: 'Busca un jugador o ve a una liga',
+    searchPlaceholder: 'Busca jugadores o ligas',
     searchAria: 'Busca cualquier jugador o liga',
     searchResultsAria: 'Resultados de jugadores y ligas',
     searchSearching: 'Buscando…',

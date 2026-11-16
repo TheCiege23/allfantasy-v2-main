@@ -170,13 +170,18 @@ describe('the stage editor never writes a sport-default week over the chosen wee
     expect(settingsInDb.playoffStartWeek).toBe(14)
   })
 
-  it('PUT through the route: the save keeps the chosen week', async () => {
+  it('PUT through the route: a stage change is refused (postseason stages are coming soon), and the chosen week stands', async () => {
+    const before = settingsInDb.playoffStartWeek
     const res = await PUT(req({ includedStages: ['wild_card'] }), params)
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('PLAYOFF_STAGES_COMING_SOON')
+    expect(settingsInDb.playoffStartWeek).toBe(before)
+  })
+
+  it('PUT preview through the route still keeps the chosen week', async () => {
+    const res = await PUT(req({ includedStages: ['wild_card'], preview: true }), params)
     expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.adjustment.newPlayoffStartWeek).toBe(13)
-    expect(body.config.adjustedPlayoffStartWeek).toBe(13)
-    expect(settingsInDb.playoffStartWeek).toBe(13)
+    expect((await res.json()).adjustment.newPlayoffStartWeek).toBe(13)
   })
 })
 

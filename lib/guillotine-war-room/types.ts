@@ -31,13 +31,13 @@ export interface GuillotineDataAvailability {
   droppedPlayerPool: DataState
 }
 
-export interface GuillotineFreshness {
+interface GuillotineFreshness {
   generatedAt: string
   scoresAsOf: string | null
   injuriesAsOf: string | null
 }
 
-export interface GuillotineScoringSettings {
+interface GuillotineScoringSettings {
   sport: string
   scoringPreset: string
 }
@@ -48,7 +48,7 @@ export interface GuillotineRosterSettings {
   requiredByPosition: Record<string, number>
 }
 
-export interface GuillotineSettings {
+interface GuillotineSettings {
   eliminationStartWeek: number
   eliminationEndWeek: number | null
   teamsPerChop: number
@@ -148,13 +148,3 @@ export interface GuillotineWarRoomContext {
   }
 }
 
-export type GuillotineWarRoomAction =
-  | 'survival-risk'
-  | 'roster-risk'
-  | 'lineup-safety'
-  | 'waivers'
-  | 'faab-plan'
-  | 'dropped-players'
-  | 'trade-analyze'
-  | 'weekly-plan'
-  | 'ask'

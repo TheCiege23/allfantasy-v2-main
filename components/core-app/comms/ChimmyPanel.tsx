@@ -58,10 +58,11 @@ import {
   readAnswerPolish,
   readChimmyFaabCard,
   readChimmyVerdict,
+  readProUpsell,
   type ChimmyFaabCard,
   type ChimmyVerdict,
 } from '@/lib/chimmy/answerPolish'
-import { ChimmyFaabBidCard, ChimmyNewerAnswerTag, ChimmyVerdictChip } from './ChimmyAnswerPolish'
+import { ChimmyFaabBidCard, ChimmyNewerAnswerTag, ChimmyPastChatsChip, ChimmyProUpsell, ChimmyVerdictChip } from './ChimmyAnswerPolish'
 
 /**
  * Chimmy's private chat — ONE component, shown in two places:
@@ -228,6 +229,10 @@ type ChatTurn = {
    * sessionStorage) so an earlier answer can be marked "Newer answer below" by a later one.
    */
   answerKeys?: string[] | null
+  /** AF Pro tools a free answer needed and was refused — the "Get AF Pro" button. Re-read at render. */
+  proUpsell?: string[] | null
+  /** The answer quoted the user's earlier chats (`recall_past_chats`) — the "From your past chats" chip. */
+  recalledPastChats?: boolean | null
 }
 
 function scenarioFollowUps(scenario: ReadyChimmyScenario | null): string[] | null {
@@ -528,7 +533,7 @@ function newAnswerId(): string {
  * children "may be duplicated and/or omitted", and the report was exactly that: the question
  * appeared twice (owner, 2026-09-25).
  */
-export function newTurnId(role: 'you' | 'chimmy'): string {
+function newTurnId(role: 'you' | 'chimmy'): string {
   return `${role}-${newAnswerId()}`
 }
 
@@ -1056,6 +1061,8 @@ export function ChimmyPanel({
             verdict: polish.verdict,
             faabPlan: polish.faabPlan,
             answerKeys: polish.answerKeys.length ? polish.answerKeys : null,
+            proUpsell: polish.proUpsell.length ? polish.proUpsell : null,
+            recalledPastChats: polish.recalledPastChats || null,
             gif: payload.meta?.gif ?? null,
           },
         ])
@@ -1281,6 +1288,7 @@ export function ChimmyPanel({
               ) : null}
               {/* Re-read at render: a turn restored from sessionStorage is not re-validated on the way in. */}
               {t.role === 'chimmy' && readChimmyVerdict(t.verdict) ? <ChimmyVerdictChip verdict={readChimmyVerdict(t.verdict)!} /> : null}
+              {t.role === 'chimmy' && t.recalledPastChats === true ? <ChimmyPastChatsChip /> : null}
               {t.role === 'chimmy' && readChimmyFaabCard(t.faabPlan) ? <ChimmyFaabBidCard card={readChimmyFaabCard(t.faabPlan)!} /> : null}
 
               {t.role === 'chimmy' && readPortfolioEvidence(t.portfolio) ? <ChimmyPortfolioCard evidence={readPortfolioEvidence(t.portfolio)!} onEvidenceChange={portfolio => setTurns(all => all.map(x => x.id === t.id ? { ...x, portfolio } : x))} onAsk={(prompt, state) => {
@@ -1300,6 +1308,7 @@ export function ChimmyPanel({
                 <>
                   <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
                   {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
+                  {readProUpsell(t.proUpsell).length > 0 ? <ChimmyProUpsell tools={readProUpsell(t.proUpsell)} /> : null}
                   <ChimmyCopyActions text={t.text} />
                 </>
               ) : (

@@ -1,4 +1,5 @@
 import 'server-only'
+import { finderPlayerHref, finderTeamHref } from '@/lib/core-app/finderGuide'
 import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -60,7 +61,7 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
   const batches = new Map<string, {
     userId: string; team: string; leagueIds: string[]; lineup: boolean; starter: boolean;
     impact: { title: string; body: string; kind: LineupImpactKind; fixHref: string | null } | null;
-    changes: Array<{ playerName: string; status: string; key: string; receiptKey: string; subject: PlayerNewsSubject }>;
+    changes: Array<{ playerName: string; status: string; key: string; receiptKey: string; subject: PlayerNewsSubject; href: string }>;
   }>()
   const observations: Array<{ stateKey: string; status: string }> = []
   let delivered = 0
@@ -137,7 +138,8 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
         // Keep league override scopes separate so muted leagues cannot leak player updates.
         const batchKey = JSON.stringify([userId, sport, team.toUpperCase(), lineup, starter, scopedLeagues, lineup ? identity.identityId : null])
         const batch = batches.get(batchKey) ?? { userId, team, leagueIds: scopedLeagues, lineup, starter, impact: impactCopy, changes: [] }
-        batch.changes.push({ playerName: row.playerName, status, key, receiptKey, subject })
+        batch.changes.push({ playerName: row.playerName, status, key, receiptKey, subject,
+          href: finderPlayerHref({ sport, sleeperId: identity.sleeperId, name: row.playerName }) })
         batches.set(batchKey, batch)
       }
       if (!audience.degraded) observations.push({ stateKey, status })
@@ -155,13 +157,18 @@ export async function notifySyncedInjuries(sport: string, now = new Date()): Pro
         type: impact ? (impact.kind === 'starter_out' ? 'injured_starter' : impact.kind) : 'injury_update',
         title: impact ? impact.title : batch.team + ': injury update',
         body: impact ? impact.body : changes.map(c => c.playerName + ': ' + c.status).join('\n'),
-        actionHref: impact?.fixHref ?? '/league/' + encodeURIComponent(batch.leagueIds[0]) + '?tab=team',
-        actionLabel: impact ? 'Review lineup' : 'View team',
+        /*
+         * Owner's rule (2026-11-13): an injury alert opens the Player Finder on THAT player — every league
+         * and platform you have him in, starting or benched, with each league's lineup one tap away. A
+         * several-player team update opens the finder on the team. The lineup fix link rides in meta.
+         */
+        actionHref: changes.length === 1 ? changes[0]!.href : finderTeamHref(batch.team, sport),
+        actionLabel: changes.length === 1 ? 'See his leagues' : 'See these players',
         severity: changes.some(c => isUnavailableStatus(c.status)) ? 'high' : 'medium',
         dedupePrefix: sourceKey,
         // A lineup alert is push + email now; anything else is the bell only. Neither is in the daily digest.
         skipChannels: impact ? { sms: true } : { sms: true, email: true },
-        meta: { sport, team: batch.team, playerCount: changes.length, eventKey: digest, pushTag: sourceKey,
+        meta: { sport, team: batch.team, playerCount: changes.length, ...(impact?.fixHref ? { lineupFixHref: impact.fixHref } : {}), eventKey: digest, pushTag: sourceKey,
           ...(impact ? { lineupImpact: impact.kind } : {}),
           playerNews: { playerName: changes.map(c => c.playerName).join(', '), team: batch.team, status: changes.map(c => c.status).join(', '), starter: batch.starter, delivery: impact ? 'instant' : 'bell', digest: false } },
       })

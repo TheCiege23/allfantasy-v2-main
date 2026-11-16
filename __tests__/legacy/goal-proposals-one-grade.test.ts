@@ -16,10 +16,18 @@ const mockSessionUser = vi.hoisted(() => vi.fn())
 const mockGenerate = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/telemetry/usage', () => ({ withApiUsage: () => (handler: unknown) => handler }))
+// Origin is CSRF protection only. Identity comes from the shared legacy gate: the caller is signed
+// in as the account linked to Sleeper user `me`, the username the request body names.
 vi.mock('@/lib/api-auth', () => ({
-  requireAuthOrOrigin: vi.fn(() => ({ authenticated: true, user: null })),
-  forbiddenResponse: vi.fn(),
+  validateRequestOrigin: vi.fn(() => true),
+  forbiddenResponse: vi.fn((msg: string) => new Response(JSON.stringify({ error: msg }), { status: 403 })),
 }))
+const mockGate = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/legacy/requireLegacySleeperIdentity', () => ({
+  requireLegacySleeperIdentity: (...args: unknown[]) => mockGate(...args),
+}))
+const SIGNED_IN_AS_ME = { ok: true, identity: { sleeperUsername: 'me', actorId: 'af-user-1', source: 'session' } }
+const refused = (status: number) => ({ ok: false, response: new Response(JSON.stringify({ error: 'refused' }), { status }) })
 vi.mock('@/lib/rate-limit', () => ({
   consumeRateLimit: vi.fn(() => ({ success: true, remaining: 7, retryAfterSec: 0 })),
   getClientIp: vi.fn(() => '127.0.0.1'),
@@ -92,6 +100,8 @@ const BODY = { leagueId: 'sleeper-league-1', username: 'me', goal: 'wr_depth' }
 
 beforeEach(() => {
   for (const m of [mockCreateGrader, mockGradeOf, mockSessionUser, mockGenerate]) m.mockReset()
+  mockGate.mockReset()
+  mockGate.mockResolvedValue(SIGNED_IN_AS_ME)
   mockSessionUser.mockResolvedValue('af-user-1')
   mockCreateGrader.mockResolvedValue(mockGradeOf)
   mockGradeOf.mockResolvedValue(GRADED)
@@ -145,5 +155,40 @@ describe('/api/legacy/trade/goal-proposals — each package carries the one grad
     mockGradeOf.mockResolvedValue({ graded: false, reason: 'This league is not one of yours on AllFantasy.' })
     const data = await (await post(BODY)).json()
     expect(data.partners[0].proposals[0].grade).toEqual({ graded: false, reason: 'This league is not one of yours on AllFantasy.' })
+  })
+})
+
+describe('/api/legacy/trade/goal-proposals — "your roster" is the caller\u2019s own', () => {
+  it('refuses an anonymous caller (Origin alone is not authentication) before building anything', async () => {
+    mockGate.mockResolvedValueOnce(refused(401))
+    const { buildLeagueDecisionContext } = await import('@/lib/trade-engine/league-context-assembler')
+    vi.mocked(buildLeagueDecisionContext).mockClear()
+    const res = await post(BODY)
+    expect(res.status).toBe(401)
+    expect(buildLeagueDecisionContext).not.toHaveBeenCalled()
+    expect(mockGenerate).not.toHaveBeenCalled()
+  })
+
+  it('the body username is only COMPARED: a mismatch the gate refuses is a 403', async () => {
+    mockGate.mockResolvedValueOnce(refused(403))
+    const res = await post({ ...BODY, username: 'victim' })
+    expect(res.status).toBe(403)
+    expect(mockGate).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ requestedUsername: 'victim' }))
+    expect(mockGenerate).not.toHaveBeenCalled()
+  })
+
+  it('builds the league context for the VERIFIED username, not the body string', async () => {
+    mockGate.mockResolvedValueOnce({ ok: true, identity: { sleeperUsername: 'me', actorId: 'af-user-1', source: 'session' } })
+    const { buildLeagueDecisionContext } = await import('@/lib/trade-engine/league-context-assembler')
+    vi.mocked(buildLeagueDecisionContext).mockClear()
+    expect((await post({ ...BODY, username: 'ME' })).status).toBe(200)
+    expect(buildLeagueDecisionContext).toHaveBeenCalledWith({ leagueId: 'sleeper-league-1', username: 'me' })
+  })
+
+  it('keeps the CSRF origin check', async () => {
+    const { validateRequestOrigin } = await import('@/lib/api-auth')
+    vi.mocked(validateRequestOrigin).mockReturnValueOnce(false)
+    expect((await post(BODY)).status).toBe(403)
+    expect(mockGenerate).not.toHaveBeenCalled()
   })
 })

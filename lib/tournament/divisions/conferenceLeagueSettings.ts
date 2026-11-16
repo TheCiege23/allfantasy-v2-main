@@ -38,11 +38,11 @@ export type ConferenceLeaguePlan = {
  * Written onto the created league's scoring store. A preset override names the preset (rules are
  * built from it); a custom override carries the exact rule map to store.
  */
-export type ScoringOverride =
+type ScoringOverride =
   | { sport: 'NFL'; presetKey: NflPresetKey; tePremiumPoints: number | null; rules?: undefined }
   | { sport: LabelSport; presetKey: 'custom'; tePremiumPoints: null; rules: Record<string, number> }
 
-export class ConferenceLeagueRulesError extends Error {
+class ConferenceLeagueRulesError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ConferenceLeagueRulesError'

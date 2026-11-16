@@ -25,7 +25,7 @@ export function shouldOfferMlbFantraxProspects(input: {
   return pool === 'rookies_only' || String(input.draftModeLabel ?? '').trim().toLowerCase() === 'rookie'
 }
 
-export type MlbProspectRawRow = {
+type MlbProspectRawRow = {
   name: string
   position: string
   team: string | null

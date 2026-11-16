@@ -32,7 +32,7 @@ import { leagueTypeBasis, type LeagueTypeBasis } from '@/lib/league/leagueTypeGr
 
 const KEY = 'leagueTypeConfirmation'
 
-export type LeagueTypeConfirmation = {
+type LeagueTypeConfirmation = {
   type: SuggestedType
   confirmedByUserId: string
   confirmedAt: string
@@ -52,7 +52,7 @@ export type LeagueTypeConfirmation = {
   baseFormat: PirateBaseFormat | null
 }
 
-export type LeagueTypeState = {
+type LeagueTypeState = {
   leagueId: string
   leagueName: string | null
   /** What the column says. Possibly a guess from a name. */
@@ -74,7 +74,7 @@ export type LeagueTypeState = {
   gradedAs: LeagueTypeBasis
 }
 
-export function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirmation | null {
+function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirmation | null {
   if (!settings || typeof settings !== 'object') return null
   const raw = (settings as Record<string, unknown>)[KEY]
   if (!raw || typeof raw !== 'object') return null
@@ -115,7 +115,7 @@ export function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirm
  * A Pirate call without an answer cannot reach here (`confirmLeagueType`
  * refuses it); the `dynasty` fallback matches the value book's default.
  */
-export function leagueTypeColumnFor(
+function leagueTypeColumnFor(
   type: SuggestedType,
   baseFormat: PirateBaseFormat | null,
 ): string {
@@ -158,7 +158,7 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
   }
 }
 
-export type ConfirmResult =
+type ConfirmResult =
   | { ok: true; state: LeagueTypeState }
   | {
       ok: false

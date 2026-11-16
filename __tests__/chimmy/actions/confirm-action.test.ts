@@ -25,6 +25,7 @@ const h = vi.hoisted(() => {
     lineup: vi.fn(),
     trade: vi.fn(),
     automation: vi.fn(),
+    queue: vi.fn(),
     audit: vi.fn(async () => ({ id: 'audit-1' })),
   }
 })
@@ -36,6 +37,7 @@ vi.mock('@/server/services/auditService', () => ({ logAction: h.audit }))
 vi.mock('@/lib/chimmy/actions/lineupAction', () => ({ executeLineupAction: h.lineup }))
 vi.mock('@/lib/chimmy/actions/tradeAction', () => ({ executeTradeAction: h.trade }))
 vi.mock('@/lib/chimmy/actions/automationAction', () => ({ executeAutomationAction: h.automation }))
+vi.mock('@/lib/chimmy/actions/queueAction', () => ({ executeQueueAction: h.queue }))
 
 import { confirmChimmyAction } from '@/lib/chimmy/actions/confirmAction'
 import { signChimmyActionToken } from '@/lib/chimmy/actions/actionToken'
@@ -166,5 +168,38 @@ describe('confirmChimmyAction', () => {
     const r = await confirmChimmyAction({ token: lineupToken(), userId: 'u1', now: NOW })
     expect(r).toMatchObject({ ok: false, status: 'refused' })
     expect(h.lineup).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * A draft-queue card (2026-11-16). ⚠ The trade branch is the FALLTHROUGH for any kind without its own,
+ * so this pins that a queue card reaches the queue executor — and never the trade one.
+ */
+describe('a queue card', () => {
+  const queueToken = () =>
+    signChimmyActionToken({
+      userId: 'u1',
+      leagueId: 'L1',
+      now: NOW,
+      spec: { kind: 'queue', sessionId: 's1', add: [{ playerName: 'Jaylen Waddle', position: 'WR', team: 'MIA', playerId: 'p' }], addAt: 'top', removeKeys: [], baseFingerprint: '2:abc' },
+    })!.token
+
+  it('runs once through the queue executor, never the trade one, and writes no league audit row', async () => {
+    h.queue.mockResolvedValue({ ok: true, message: 'Queue saved — Jaylen Waddle at the top.' })
+    const token = queueToken()
+    const first = await confirmChimmyAction({ token, userId: 'u1', now: NOW })
+    expect(first).toEqual({ ok: true, status: 'executed', kind: 'queue', message: 'Queue saved — Jaylen Waddle at the top.' })
+    const again = await confirmChimmyAction({ token, userId: 'u1', now: NOW })
+    expect(again.status).toBe('already_executed')
+    expect(h.queue).toHaveBeenCalledTimes(1)
+    expect(h.trade).not.toHaveBeenCalled()
+    expect(h.audit).not.toHaveBeenCalled()
+  })
+
+  it("a refused queue card is final, with the executor's reason", async () => {
+    h.queue.mockResolvedValue({ ok: false, message: 'Your queue changed since this card was made, so nothing was saved. Ask Chimmy again for a fresh card.' })
+    const r = await confirmChimmyAction({ token: queueToken(), userId: 'u1', now: NOW })
+    expect(r).toMatchObject({ ok: false, status: 'refused', kind: 'queue', message: expect.stringMatching(/queue changed/) })
+    expect(h.trade).not.toHaveBeenCalled()
   })
 })

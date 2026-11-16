@@ -1,4 +1,4 @@
-export type GuillotinePlayerValue = {
+type GuillotinePlayerValue = {
   guillotineValue: number
   normalFantasyValue: number
   floorScore: number

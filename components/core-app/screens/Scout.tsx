@@ -9,6 +9,7 @@ import '@/components/core-app/af-scout.css'
 import '@/components/core-app/af-core-redraft-trades.css'
 import '@/components/core-app/af-scout-room.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { ManagerRecordButton } from '@/components/core-app/manager-record/ManagerRecordSheet'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -74,6 +75,38 @@ export type ScoutProps = {
    * stays a reader of standings and the page decides what Game Plan shows.
    */
   leaguePlan?: ReactNode
+  /**
+   * War Room phase 2: trades that move your odds in THIS league (warRoomTrades.ts), after the plan —
+   * what to fix this week, then what to trade for, then the rivals. A node for the same reason as
+   * `leaguePlan`: Scout stays a reader of standings; the page decides what the strategist shows.
+   */
+  tradeIdeas?: ReactNode
+  /**
+   * War Room phase 5: the road ahead (WarCampaign) — every game you have left priced both ways, and the
+   * tiebreak picture. After the plan and before the trade ideas: what this week decides, then what to
+   * trade for. A node for the same reason as `leaguePlan`.
+   */
+  road?: ReactNode
+  /**
+   * War Room phase 6: the war chest (WarChest) — FAAB left, yours against every team's. After the trade
+   * ideas. A node for the same reason as `leaguePlan`.
+   */
+  chest?: ReactNode
+  /**
+   * War Room phase 7: playoff readiness (WarPlayoffReady) — byes, injuries and depth for your playoff
+   * weeks. After the road ahead: the season's games, then whether the lineup will be there for the title.
+   */
+  ready?: ReactNode
+  /**
+   * War Room phase 8: the race (WarRace) — the teams around the playoff cut, their odds and the schedule
+   * each has left. Right after the road ahead: your games, then the teams you are racing.
+   */
+  race?: ReactNode
+  /**
+   * War Room phase 3: how this league is won and the plan for next season (WarStrategyBrief), after
+   * the trade ideas. A node for the same reason as `leaguePlan`.
+   */
+  brief?: ReactNode
   /**
    * Elimination formats: your place against the cut this week — the rail's own read (getRailMatchups
    * `standing`), handed down so this banner and the rail cannot disagree. Null outside an elimination
@@ -253,11 +286,14 @@ function Facts({ s }: { s: ScoutStanding }) {
 
 function ManagerCard({
   m,
+  leagueId,
   tradesHref,
   edge,
   elimination = null,
 }: {
   m: ScoutedManager
+  /** For the manager card ("Full record"). */
+  leagueId: string
   tradesHref: string
   edge: ScoutEdgeManager | null
   /** Set in an elimination league: the card shows Safe / On the bubble / Eliminated, never a playoff zone. */
@@ -337,15 +373,22 @@ function ManagerCard({
         {edge ? <EdgeLine m={edge} /> : null}
 
         {/* No trade with yourself, and none with a chopped team — its roster has gone to waivers. */}
-        {m.isYou || m.eliminated ? null : (
+        {m.isYou ? null : (
           <footer className="af-sc-card-foot">
+            {/*
+              Their whole record as facts — trades by position, waivers, past drafts (2026-11-16). The
+              card checks the plan on the server and draws the lock without it.
+            */}
+            <ManagerRecordButton leagueId={leagueId} teamExternalId={m.managerId} managerName={m.ownerName ?? m.teamName} />
             {/*
               The Trade Center grades a deal with them, and its Competitive Edge section binds their
               trade record to the positions in that deal — more than the counts above can say.
             */}
-            <Link className="af-sc-cta" href={tradesHref}>
-              {msg.buildTrade} &rarr;
-            </Link>
+            {m.eliminated ? null : (
+              <Link className="af-sc-cta" href={tradesHref}>
+                {msg.buildTrade} &rarr;
+              </Link>
+            )}
           </footer>
         )}
       </article>
@@ -589,12 +632,35 @@ export function Scout({
   edge = null,
   edgeAccess = null,
   leaguePlan = null,
+  tradeIdeas = null,
+  road = null,
+  chest = null,
+  ready = null,
+  race = null,
+  brief = null,
   eliminationStanding = null,
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
   const { language, m, copy } = useScoutCopy()
   const [showAllManagers, setShowAllManagers] = useState(false)
   const roomGrid = data.managers.available ? buildRoomGrid(data.managers.data) : null
+  /*
+   * 2026-11-14: the h1 says who you play and where you both stand. "Scout · ‹league›" said only where
+   * you were. A league with no game this week says where you stand; one with no table keeps the old title.
+   */
+  const placed = data.managers.available ? data.managers.data.filter((x) => x.standing).length : 0
+  const youSeed = data.you?.standing?.seed ?? null
+  const oppStanding =
+    data.opponent && data.managers.available
+      ? (data.managers.data.find((x) => x.managerId === data.opponent!.managerId)?.standing ?? null)
+      : null
+  const title = data.opponent
+    ? m.headVs(data.opponent.teamName, oppStanding?.seed ?? null, oppStanding ? recordText(oppStanding.record) : null, youSeed, placed)
+    : youSeed != null && placed > 0
+      ? m.headStanding(data.league.name, youSeed, placed)
+      : `Scout · ${data.league.name}`
+  /* The information that is not a move this week, folded under one summary. */
+  const hasMore = Boolean(roomGrid || road || race || ready || chest || brief)
   return (
     <div className="af-sc">
       <PageHeader
@@ -603,8 +669,8 @@ export function Scout({
         eyebrowClassName="af-sc-eyebrow"
         titleClassName="af-sc-title"
         subClassName="af-sc-blurb"
-        eyebrow={m.eyebrow}
-        title={<>Scout · {data.league.name}</>}
+        eyebrow={m.eyebrowLeague(data.league.name)}
+        title={title}
         sub={
           <>
             {m.blurb}
@@ -632,9 +698,37 @@ export function Scout({
 
       <FormatNote format={data.format} />
 
-      {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
-
+      {/*
+        2026-11-14: your three moves first — who you play (above), what to fix before it locks, who to trade
+        with — and everything else under one fold. Eleven sections ran in a row before, and the two you act
+        on sat fourth and seventh.
+      */}
       {leaguePlan}
+
+      {tradeIdeas}
+
+      {hasMore ? (
+        <details className="af-frame af-sc-more" data-testid="war-room-more">
+          <summary>
+            <span className="af-sc-more-title">{m.moreTitle}</span>
+            <span className="af-sc-more-hint">{m.moreHint}</span>
+          </summary>
+          <div className="af-sc-more-body">
+            {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
+            {road}
+            {race}
+            {ready}
+            {chest}
+            {brief}
+          </div>
+        </details>
+      ) : null}
+
+      {data.managers.available ? (
+        <h2 className="af-sc-managers-title" data-testid="war-room-managers-title">
+          {m.managersTitle}
+        </h2>
+      ) : null}
 
       {/*
         ⚠ BEFORE THE CARDS, ALWAYS. What the records are measured over changes how every one of them
@@ -681,6 +775,7 @@ export function Scout({
             <ManagerCard
               key={manager.managerId}
               m={manager}
+              leagueId={data.league.id}
               tradesHref={tradesHref}
               edge={manager.isYou ? null : (edgeBy?.[manager.managerId] ?? null)}
               elimination={data.format.elimination ? { status: elimStatusOf(manager, eliminationStanding) } : null}
@@ -690,7 +785,7 @@ export function Scout({
         {data.managers.data.length > SCOUT_CARDS_PREVIEW ? (
           <button
             type="button"
-            className="af-sc-more"
+            className="af-sc-cards-toggle"
             aria-expanded={showAllManagers}
             aria-controls="af-sc-list"
             onClick={() => setShowAllManagers((open) => !open)}

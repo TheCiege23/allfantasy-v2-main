@@ -1,8 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { createPlatformThreadTypedMessage } from '@/lib/platform/chat-service'
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from '@/lib/chat-core'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { isLeagueOwnChatThread } from '@/lib/league/leagueChatThreadLink'
 import { prisma } from '@/lib/prisma'
 
@@ -32,7 +32,6 @@ import { prisma } from '@/lib/prisma'
  * A thread with neither (a DM, an unlinked huddle) has no league, so there is nobody who is its
  * commissioner, and the broadcast is refused rather than guessed at.
  */
-const BROADCAST_ROLES = new Set(['commissioner', 'co_commissioner'])
 
 async function leaguesOwningThread(threadId: string): Promise<string[]> {
   if (isLeagueVirtualRoom(threadId)) {
@@ -58,8 +57,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
 
   const threadId = decodeURIComponent(params.threadId)
   const leagueIds = await leaguesOwningThread(threadId)
-  const roles = await Promise.all(leagueIds.map((leagueId) => getLeagueRole(leagueId, userId)))
-  if (!roles.some((role) => BROADCAST_ROLES.has(role ?? ''))) {
+  // An announcement is the chat area: the head commissioner, or a co-commissioner granted chat
+  // (lib/league/commissionerAccess.ts). Any co-commissioner could post one here (2026-11-16).
+  const allowed = await Promise.all(leagueIds.map((leagueId) => canCommissionerAct(leagueId, userId, 'chat')))
+  if (!allowed.some(Boolean)) {
     return NextResponse.json(
       { error: "Only this league's commissioner can send an announcement here." },
       { status: 403 },

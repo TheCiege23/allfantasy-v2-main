@@ -16,7 +16,7 @@ import { computeActivityScore } from '@/lib/league-health/activityScore'
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SettingChange {
+interface SettingChange {
   area: string
   currentIssue: string
   suggestedChange: string
@@ -24,7 +24,7 @@ export interface SettingChange {
   urgency: 'low' | 'medium' | 'high'
 }
 
-export const CommissionerInputSchema = z.object({
+const CommissionerInputSchema = z.object({
   sport: z.string().default('NFL'),
   leagueType: z.string().default('dynasty'),
   leagueFormat: z.string().optional(),
@@ -49,9 +49,9 @@ export const CommissionerInputSchema = z.object({
   conceptType: z.string().optional(),
   commissionerQuestion: z.string().optional(),
 })
-export type CommissionerInput = z.infer<typeof CommissionerInputSchema>
+type CommissionerInput = z.infer<typeof CommissionerInputSchema>
 
-export interface CommissionerResult {
+interface CommissionerResult {
   leagueHealthScore: number
   /**
    * ⚠ A THIRD FORMULA UNDER THE SAME NAME, unrelated to the other two (6.1).

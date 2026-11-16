@@ -32,7 +32,7 @@ export interface CommissionerPickEditorPlayerOption {
   imageUrl?: string | null
 }
 
-export interface CommissionerPickEditorPanelProps {
+interface CommissionerPickEditorPanelProps {
   leagueId: string
   session: DraftSessionSnapshot | null
   /** Players selectable for replace/assign. Caller filters to undrafted entries. */
@@ -560,4 +560,3 @@ export function CommissionerPickEditorPanel(props: CommissionerPickEditorPanelPr
   )
 }
 
-export default CommissionerPickEditorPanel

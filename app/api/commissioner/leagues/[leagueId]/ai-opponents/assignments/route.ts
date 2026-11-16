@@ -1,7 +1,7 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { prisma } from "@/lib/prisma"
 import { getAiOpponentsSettings } from "@/lib/ai/opponents/leagueSettings"
 import { ensureBotProfilesSeeded } from "@/lib/ai/opponents/seedProfiles"
@@ -15,11 +15,8 @@ export async function GET(_req: Request, props: { params: Promise<{ leagueId: st
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const rows = await prisma.aiOpponentTeamAssignment.findMany({
     where: { leagueId: params.leagueId },
@@ -33,11 +30,8 @@ export async function POST(req: Request, props: { params: Promise<{ leagueId: st
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({
     where: { id: params.leagueId },

@@ -22,20 +22,37 @@ const FOOTER_SECTIONS = [
   {
     heading: 'Sports',
     links: [
-      { href: '/fantasy-football', label: 'Fantasy Football' },
+      // /sports/* is the one sport lander; the bare /fantasy-* paths 308 to it
+      // (next.config.js), so linking there would make every footer link a redirect.
+      { href: '/sports/fantasy-football', label: 'Fantasy Football' },
       // /fantasy-football/dynasty was never a route — this 404'd on five
       // indexable landers. The live dynasty lander is the legacy-dynasty tool.
       { href: '/tools/legacy-dynasty', label: 'Dynasty Football' },
-      { href: '/fantasy-basketball', label: 'Fantasy Basketball' },
-      { href: '/fantasy-baseball', label: 'Fantasy Baseball' },
-      { href: '/fantasy-hockey', label: 'Fantasy Hockey' },
+      { href: '/sports/fantasy-basketball', label: 'Fantasy Basketball' },
+      { href: '/sports/fantasy-baseball', label: 'Fantasy Baseball' },
+      { href: '/sports/fantasy-hockey', label: 'Fantasy Hockey' },
       { href: '/brackets', label: 'World Cup Pools' },
+    ],
+  },
+  {
+    // Internal links to the format landers (lib/seo-landing/league-type-pages.ts). This footer
+    // sits on every SEO lander, so it is how a crawler finds them besides the sitemap.
+    heading: 'League types',
+    links: [
+      { href: '/league-types/best-ball', label: 'Best Ball' },
+      { href: '/league-types/guillotine', label: 'Guillotine' },
+      { href: '/league-types/survivor', label: 'Survivor' },
+      { href: '/league-types/dynasty', label: 'Dynasty' },
+      { href: '/league-types/devy', label: 'Devy' },
+      { href: '/league-types', label: 'All league types' },
     ],
   },
   {
     heading: 'Company',
     links: [
       { href: '/mission', label: 'Mission' },
+      // The blog's only internal links used to be /blog itself and the sitemap.
+      { href: '/blog', label: 'Blog' },
       { href: '/no-gambling-policy', label: 'No Gambling Policy' },
       { href: '/ai-transparency', label: 'AI Transparency' },
       { href: '/privacy', label: 'Privacy' },
@@ -57,9 +74,9 @@ export default function SeoLandingFooter() {
       className="border-t"
       style={{ borderColor: 'var(--border)', color: 'var(--muted2)' }}
     >
-      {/* 3-column link grid */}
+      {/* 4-column link grid (2 x 2 on a phone) */}
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {FOOTER_SECTIONS.map((section) => (
             <div key={section.heading}>
               <h3

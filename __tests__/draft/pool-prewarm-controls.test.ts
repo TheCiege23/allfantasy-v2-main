@@ -422,12 +422,13 @@ vi.mock('@/lib/sport-teams/SportPlayerPoolResolver', () => ({
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    draftSession: { findUnique: vi.fn(async () => null) },
+    draftSession: { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => null) },
     roster: { findUnique: vi.fn(async () => null) },
     league: { findUnique: vi.fn(async () => null) },
     draftPickAuditLog: { create: vi.fn(async () => ({})) },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromOwner(() => 'commissioner-1'))
 
 import { NextRequest } from 'next/server'
 

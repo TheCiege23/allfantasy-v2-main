@@ -50,7 +50,7 @@ function statColumnWidth(def: DraftStatColumnDef, sport: ReturnType<typeof norma
   return Math.min(78, Math.max(44, 36 + def.label.length * 5))
 }
 
-export type SleeperPoolTableLayoutExtras = {
+type SleeperPoolTableLayoutExtras = {
   /**
    * Pick label (e.g. "4.16") for the viewer's next pick. When set, a LEFT @ column follows
    * AF ADP with each player's estimated chance of still being on the board there.
@@ -141,14 +141,19 @@ export function buildSleeperPoolTableLayout(
       : def.label,
   }))
 
+  /*
+   * Room v2 (2026-11): the actions come FIRST. At the end of a row they sat past every stat column,
+   * so on a laptop or tablet Draft was scrolled off the right edge; the left edge is always on
+   * screen, and the stat columns are what scroll.
+   */
   const actions: SleeperColumnSpec = {
     key: 'actions',
     label: '',
     width: 160,
-    align: 'right',
+    align: 'left',
   }
 
-  const columns = [...base, ...statCols, actions]
+  const columns = [actions, ...base, ...statCols]
   const minWidth = columns.reduce((sum, c) => sum + c.width, 0)
 
   return { columns, statDefs, minWidth, showBye }

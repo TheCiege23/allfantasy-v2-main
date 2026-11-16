@@ -17,7 +17,7 @@
  * is a week you did not play, and it is skipped rather than ranked last.
  */
 
-export type WeeklyCareerFormat = 'elimination' | 'scores'
+type WeeklyCareerFormat = 'elimination' | 'scores'
 
 export type WeeklyScoreRow = {
   /** `LeagueTeam.externalId` — the same slot key `MatchupFact` uses. */
@@ -27,7 +27,7 @@ export type WeeklyScoreRow = {
   points: number
 }
 
-export type WeeklySeasonLine = {
+type WeeklySeasonLine = {
   season: number
   /** Weeks you scored in and that are final. */
   weeks: number

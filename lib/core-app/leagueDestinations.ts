@@ -13,7 +13,7 @@
  */
 
 /** Rail section ids. `now` and `league` keep their ids so the Survivor theme's renames still apply. */
-export type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'manage'
+type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'manage'
 
 /**
  * The rail's sections, in order. The league-scoped groups come first: with a league held — which
@@ -24,7 +24,9 @@ export type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all'
 export const NAV_SECTION_ORDER: ReadonlyArray<{ id: NavSectionId; heading: string | null; keys: readonly string[] }> = [
   { id: 'top', heading: null, keys: ['home'] },
   { id: 'now', heading: 'This week', keys: ['my-team', 'matchup', 'live', 'waivers'] },
-  { id: 'league', heading: 'League', keys: ['standings', 'schedule', 'trades', 'moves'] },
+  /* No Moves (2026-11-14): it folded into Trades; /core/moves redirects there (next.config.js). */
+  /* League settings (2026-11-15): the league's rules, read-only for an imported league. */
+  { id: 'league', heading: 'League', keys: ['standings', 'schedule', 'trades', 'league-settings'] },
   {
     id: 'plan',
     heading: 'Plan ahead',
@@ -34,10 +36,50 @@ export const NAV_SECTION_ORDER: ReadonlyArray<{ id: NavSectionId; heading: strin
   {
     id: 'all',
     heading: 'All leagues',
-    keys: ['week', 'my-leagues', 'portfolio', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
+    // No 'portfolio' (2026-11-12): it is the second view behind My Leagues — see AfCoreShell `navItems`.
+    keys: ['week', 'my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
   },
-  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'tools', 'admin'] },
+  // No 'tools' (2026-11-12): its links moved to their screens — see AfCoreShell `navItems`.
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
 ]
+
+/**
+ * The rail's sections with NO league held (2026-11-12).
+ *
+ * My team, Waivers, Matchup, Standings and War Room are league-only now, so "This week" and
+ * "League" would otherwise be headings over cross-league leftovers — Live alone under one, Trades
+ * alone under the other — while Your week, which took over the cross-league week, sat down under
+ * "All leagues". Same ids, so the shell treats them like the league-held groups.
+ *
+ * ⚠ KEEP THE TWO LISTS' KEYS IN STEP. A key in one but not the other still renders (the shell
+ * appends unplaced keys in a trailing group), but in the wrong place.
+ */
+export const NAV_SECTION_ORDER_NO_LEAGUE: ReadonlyArray<{ id: NavSectionId; heading: string | null; keys: readonly string[] }> = [
+  { id: 'top', heading: null, keys: ['home'] },
+  { id: 'now', heading: 'This week', keys: ['week', 'live', 'trades'] },
+  { id: 'plan', heading: 'Plan ahead', keys: ['season-outlook', 'players', 'draft-hq'] },
+  { id: 'commish', heading: 'Commish', keys: ['commissioner'] },
+  {
+    id: 'all',
+    heading: 'All leagues',
+    keys: ['my-leagues', 'rankings', 'career', 'devy', 'brackets', 'find-league'],
+  },
+  { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
+]
+
+/**
+ * The sections the DESKTOP AND TABLET RAIL leaves out while a league is held (2026-11-15).
+ *
+ * "All leagues" and "Manage" are about the account, not the league on screen: eleven rows under a
+ * league's own tabs that read as part of it. Inside a league the rail ends with one "All leagues"
+ * row instead (AfCoreShell), Notifications moves to the top bar with its count, and Settings and
+ * Plans are in the account menu.
+ *
+ * ⚠ THE PHONE'S MORE SHEET KEEPS THEM. A phone hides the account menu, so More is the only way to
+ * Settings, Plans and the inbox there — which is why this is a rail filter and not a change to
+ * NAV_SECTION_ORDER, which the More sheet reads too.
+ */
+export const LEAGUE_RAIL_OMITTED_SECTIONS: ReadonlySet<string> = new Set(['all', 'manage'])
 
 /** The section the rail names the selected league above — the first league-scoped one. */
 export const LEAGUE_CHIP_SECTION: NavSectionId = 'now'
@@ -48,7 +90,7 @@ export const LEAGUE_CHIP_SECTION: NavSectionId = 'now'
  * ⚠ ONLY A MEASURED `false` HIDES. `undefined` and `null` mean "not determined" — no coverage block
  * on file, or a read that failed — and hiding on an unknown would take a working league's views away.
  */
-export type LeagueCapabilities = {
+type LeagueCapabilities = {
   hasScoredWeek?: boolean | null
   trades?: boolean
   draft?: boolean

@@ -8,8 +8,7 @@
  *   - LeagueDescriptor / CommissionerPreferences: inputs.
  *   - LeagueFitBreakdown / LeagueFitScore: scoring outputs.
  *   - LeagueRecommendation / UserRecommendation / CommissionerSuggestion: DTOs.
- *   - DiscoveryRailKind / DiscoveryRail: rail catalogue.
- *   - MatchmakingTelemetryEvent: tracking contract.
+ *   - DiscoveryRailKind: rail catalogue.
  *
  * Hard rules:
  *   - Types only. No I/O. No serialization. No UI.
@@ -20,11 +19,6 @@
  */
 
 import type { RankingSport } from "@/lib/ranking/types"
-import type {
-  ResumeMatchmakingProfile,
-  ResumePublicCard,
-  ResumeLeagueApplicationCard,
-} from "@/lib/resume/types"
 
 /* -------------------------------------------------------------------------- */
 /* League descriptor                                                          */
@@ -77,7 +71,7 @@ export interface LeagueDescriptor {
  * Every field is optional — unspecified = "no preference" and the
  * compatibility engine skips it.
  */
-export interface CommissionerPreferences {
+interface CommissionerPreferences {
   /** Minimum competitiveness 0..1. */
   competitivenessMin?: number | null
   /** Minimum desired activity 0..1. */
@@ -140,27 +134,11 @@ export interface LeagueRecommendation {
   railKind?: DiscoveryRailKind | null
 }
 
-/** Recommended user shown to a commissioner. */
-export interface UserRecommendation {
-  /** Public-safe card; never includes private resume fields. */
-  card: ResumeLeagueApplicationCard
-  score: LeagueFitScore
-}
-
-/** Commissioner suggestion shown to a candidate. */
-export interface CommissionerSuggestion {
-  card: ResumePublicCard
-  /** Aggregate trust 0..1 — credibility + commissioner reputation blend. */
-  trust: number
-  /** Concise reason, e.g. "Verified commissioner, 12 leagues, 0 disputes". */
-  rationale: string
-}
-
 /* -------------------------------------------------------------------------- */
 /* Discovery rails                                                            */
 /* -------------------------------------------------------------------------- */
 
-export type DiscoveryRailKind =
+type DiscoveryRailKind =
   | "best_fit_for_you"
   | "high_competition"
   | "commissioner_verified"
@@ -168,63 +146,11 @@ export type DiscoveryRailKind =
   | "dynasty_experts"
   | "tournament_specialists"
 
-/** A single rail of recommendations. */
-export interface DiscoveryRail {
-  kind: DiscoveryRailKind
-  title: string
-  description: string
-  /** Recommendations in display order. Server caps `<= 10` per rail. */
-  items: LeagueRecommendation[]
-}
-
 /* -------------------------------------------------------------------------- */
 /* Telemetry                                                                  */
 /* -------------------------------------------------------------------------- */
-
-export type MatchmakingTelemetryKind =
-  | "recommendation_viewed"
-  | "recommendation_ignored"
-  | "league_join_accepted"
-  | "commissioner_invite_sent"
-  | "commissioner_invite_accepted"
-  | "compatibility_success"
-
-/** Tracking-friendly event. No PII. */
-export interface MatchmakingTelemetryEvent {
-  kind: MatchmakingTelemetryKind
-  /** Hashed user id / opaque correlation id. Never raw email. */
-  actorId: string
-  leagueId?: string | null
-  /** Hashed target user id (for commissioner-side events). */
-  targetUserId?: string | null
-  railKind?: DiscoveryRailKind | null
-  /** Fit score at the time of the event, if applicable. */
-  fitScore?: number | null
-  /** UTC ms epoch. */
-  occurredAt: number
-}
-
-/** Recorder contract — implementations live in app/edge code. */
-export interface MatchmakingTelemetryRecorder {
-  record(event: MatchmakingTelemetryEvent): Promise<void> | void
-}
 
 /* -------------------------------------------------------------------------- */
 /* Candidate input                                                            */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Minimal candidate shape required by the league-fit engine. Built from
- * `lib/resume/snapshot/matchmaking-lookup.MatchmakingCandidate` upstream.
- */
-export interface LeagueFitCandidate {
-  userId: string
-  overallRating: number | null
-  topSport: RankingSport | string | null
-  archetypeLabel: string | null
-  credibilityScore: number
-  /** May be null when the resume composer has not attached one yet. */
-  profile: ResumeMatchmakingProfile | null
-  /** Verified resume? Mirrors `ResumePublicCard.verified`. */
-  verified: boolean
-}

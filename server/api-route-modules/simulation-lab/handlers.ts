@@ -24,14 +24,14 @@ import {
 import type { TeamProjectionInput } from '@/lib/simulation-lab'
 
 /** Largest league the lab accepts. Dynasty work grows with teams², so this bounds CPU per request. */
-export const SIM_LAB_MAX_TEAMS = 32
+const SIM_LAB_MAX_TEAMS = 32
 /** Bracket size cap for the playoff simulator. */
-export const SIM_LAB_MAX_PLAYOFF_TEAMS = 64
+const SIM_LAB_MAX_PLAYOFF_TEAMS = 64
 const MAX_ABS_SCORE = 10_000
 const MAX_NAME_LENGTH = 60
 const MAX_SPORT_LENGTH = 16
 
-export const SIM_LAB_RATE_LIMIT = { maxRequests: 20, windowMs: 60_000 }
+const SIM_LAB_RATE_LIMIT = { maxRequests: 20, windowMs: 60_000 }
 
 type Mode = 'season' | 'playoffs' | 'dynasty'
 

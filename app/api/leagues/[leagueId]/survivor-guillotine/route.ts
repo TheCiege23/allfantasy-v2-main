@@ -111,7 +111,7 @@ export async function PUT(req: NextRequest, context: Context) {
   const userId = await actor()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await context.params
-  const access = await assertLeagueCommissioner(leagueId, userId)
+  const access = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })

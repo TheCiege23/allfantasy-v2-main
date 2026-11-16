@@ -28,7 +28,7 @@ export async function recordEngagementEvent(
   }
 }
 
-export interface ActivitySummary {
+interface ActivitySummary {
   leagueViews: number
   bracketViews: number
   aiUses: number
@@ -78,28 +78,7 @@ export async function getActivitySummary(
   return { leagueViews, bracketViews, aiUses, lastActiveAt }
 }
 
-/**
- * Count distinct days with any activity in the last N days.
- */
-export async function getActiveDaysCount(userId: string, lastDays: number): Promise<number> {
-  const since = new Date()
-  since.setDate(since.getDate() - lastDays)
-  const events = await (prisma as any).engagementEvent.findMany({
-    where: { userId, createdAt: { gte: since } },
-    select: { createdAt: true },
-  }).catch(() => [])
-
-  const days = new Set<string>()
-  for (const e of events) {
-    if (e.createdAt) {
-      const d = new Date(e.createdAt)
-      days.add(toDateKey(d))
-    }
-  }
-  return days.size
-}
-
-export interface EngagementStreakData {
+interface EngagementStreakData {
   currentStreak: number
   longestStreak: number
   activeDaysCount: number

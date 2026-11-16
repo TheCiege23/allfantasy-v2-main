@@ -1,21 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import {
-  X,
-  ThumbsUp,
-  Bug,
-  Lightbulb,
-  HelpCircle,
-  AlertTriangle,
-  MessageSquare,
-  Star,
-  Send,
-  Check,
-  Upload,
-  Image as ImageIcon,
-  Trash2,
-} from "lucide-react";
+import { X, ThumbsUp, Bug, Lightbulb, HelpCircle, AlertTriangle, MessageSquare, Star, Send, Check, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { logFeedbackOpened, logFeedbackSubmitted } from "@/lib/analytics/insight-events";
 import EarlyAccessUpsell from "./EarlyAccessUpsell";

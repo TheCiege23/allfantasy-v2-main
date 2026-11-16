@@ -30,7 +30,7 @@ export type TokenBuyer =
   /** The manager of a World Cup pool. */
   | 'pool_manager'
 
-export type TokenPurchasableRule = {
+type TokenPurchasableRule = {
   code: string
   /** What the page calls it — plain words, not the rule's internal label. */
   label: string

@@ -209,7 +209,7 @@ export function pickTeamLeaders(categories: EspnLeaderCategory[] | undefined): G
 export type EspnTeamStatistic = { name?: string; abbreviation?: string; displayValue?: string }
 
 /** Made, attempted, and ESPN's own percentage text ("38.6"), never recomputed. */
-export type ShootingLine = { made: number; attempted: number; pct: string | null }
+type ShootingLine = { made: number; attempted: number; pct: string | null }
 
 export type TeamShooting = {
   fieldGoals: ShootingLine | null
@@ -253,7 +253,7 @@ export function teamShooting(statistics: EspnTeamStatistic[] | undefined): TeamS
 }
 
 /** The basketball sports Live Scores shows: the pros in quarters, college in halves. */
-export const BASKETBALL_SPORTS: readonly string[] = ['NBA', 'WNBA', 'NCAAB']
+const BASKETBALL_SPORTS: readonly string[] = ['NBA', 'WNBA', 'NCAAB']
 
 export function isBasketballSport(sport: string | null | undefined): boolean {
   return typeof sport === 'string' && BASKETBALL_SPORTS.includes(sport)
@@ -352,7 +352,7 @@ function mapBaseballPlayer(p: EspnSituationAthlete | undefined): BaseballPlayer 
  * diamond on an NFL card. The bases are booleans only once ESPN typed them so;
  * the count is null — not 0 — when absent, because "0-0, no outs" is a real count.
  */
-export function mapBaseballSituation(situation: EspnSituation | undefined | null): BaseballSituation | null {
+function mapBaseballSituation(situation: EspnSituation | undefined | null): BaseballSituation | null {
   if (!situation) return null
   const hasBases =
     typeof situation.onFirst === 'boolean' ||

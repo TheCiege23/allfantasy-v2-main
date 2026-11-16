@@ -35,7 +35,7 @@ export function C2CRosterClient({
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [cfg, setCfg] = useState<C2CConfigClient | null>(null)
-  const [rosterId, setRosterId] = useState<string | null>(null)
+  const [, setRosterId] = useState<string | null>(null)
   const [buckets, setBuckets] = useState<RosterBuckets | null>(null)
   const [seasonId, setSeasonId] = useState<string | null>(null)
   const [week, setWeek] = useState(1)

@@ -18,7 +18,7 @@ import type { WorldCupBracketGradeInsight } from "./worldCupAiSubscriptionInsigh
 import type { RootingRecommendation } from "./worldCupRootingGuide"
 import type { UniquenessInsight } from "./worldCupUniquenessInsights"
 
-export type WorldCupAiShareCardStatus =
+type WorldCupAiShareCardStatus =
   | "ready"
   | "no_entry"
   | "incomplete"

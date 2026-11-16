@@ -3,6 +3,4 @@ export {
   parseSettingsSnapshot,
   buildPresetKey,
   type SettingsSnapshot,
-  type ConceptSetupSlice,
-  type ConceptRulesSlice,
 } from './types'

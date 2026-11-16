@@ -47,7 +47,7 @@ export async function listingAccountId(league: { id: string; userId: string | nu
  * One query for any number of leagues. Listing account only (listingAccountIds above): the owner,
  * or the proven commissioner of a system-owned league. Never any other member.
  */
-export async function leaguesWhoseOwnerCommissions(
+async function leaguesWhoseOwnerCommissions(
   leagues: Array<{ id: string; userId: string }>
 ): Promise<Set<string>> {
   if (leagues.length === 0) return new Set<string>()

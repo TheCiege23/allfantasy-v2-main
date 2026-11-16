@@ -202,7 +202,28 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/waiver/analyze", tool:
     if (!gate.ok) return gate.response
 
     const resolvedUsername = gate.identity.sleeperUsername
-    const resolvedUserId = sleeperUserIdentity?.userId || undefined
+    /*
+     * `sleeperUser.userId` is caller-supplied too. It picks the roster to analyse AND keys the
+     * decision log, the private coaching DM and the confidence-risk history -- so a signed-in
+     * caller could attribute writes to anyone's Sleeper id. It is accepted only when it is the
+     * Sleeper id linked to the caller's own account; a different id is a visible 403. When no
+     * link row can be read, it is dropped and the id is looked up from the verified username.
+     */
+    const suppliedUserId = String(sleeperUserIdentity?.userId || '').trim()
+    let resolvedUserId: string | undefined
+    if (suppliedUserId) {
+      const linked = await prisma.legacyUser
+        .findUnique({ where: { sleeperUsername: resolvedUsername }, select: { sleeperUserId: true } })
+        .catch(() => null)
+      const linkedId = linked?.sleeperUserId?.trim() || ''
+      if (linkedId && linkedId !== suppliedUserId) {
+        return NextResponse.json(
+          { error: 'You can only act on your own linked Sleeper account.', code: 'SLEEPER_USER_ID_MISMATCH' },
+          { status: 403 },
+        )
+      }
+      resolvedUserId = linkedId || undefined
+    }
     const normalizedLeagueId = String(league_id || '').trim()
 
     if (!resolvedUsername || !normalizedLeagueId) {

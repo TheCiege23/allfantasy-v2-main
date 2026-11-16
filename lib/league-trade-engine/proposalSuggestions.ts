@@ -1,6 +1,6 @@
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
 
-export type SuggestionPlayer = {
+type SuggestionPlayer = {
   id: string
   name: string
   position: string | null
@@ -8,7 +8,7 @@ export type SuggestionPlayer = {
   weeklyProjection?: number | null
 }
 
-export type SuggestionPick = {
+type SuggestionPick = {
   pickId: string
   label: string
   itemType: 'rookie_pick' | 'future_pick'

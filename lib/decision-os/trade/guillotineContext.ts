@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { reduceCrosswalk } from '@/lib/core-app/crosswalkRules'
 import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
 import { isTeamEliminated } from '@/lib/core-app/teamElimination'
@@ -92,6 +93,7 @@ export type GuillotineContextResult = { ok: true; ctx: GuillotineContext } | { o
 
 export type GuillotineLeague = {
   id: string
+  platform?: string | null
   settings: unknown
   leagueSize: number | null
   /** NFL when absent. */
@@ -114,9 +116,30 @@ export async function loadZombiePlayerContext(league: GuillotineLeague): Promise
   return loadNflGuillotineContext(league, 'zombie')
 }
 
+const ESPN_NFL_SEAT_NAMES = new Map([
+  ['BE', 'BN'], ['D/ST', 'DEF'], ['RB/WR', 'WRRB_FLEX'], ['WR/TE', 'REC_FLEX'], ['DP', 'IDP_FLEX'],
+])
+
+/** ESPN imports persist counts (for example RB:2) instead of one entry per slot. */
+function espnNflLineupSettings(settings: unknown): unknown {
+  const saved = (settings as { roster_positions?: unknown } | null)?.roster_positions
+  if (!Array.isArray(saved)) return settings
+  const slots: string[] = []
+  for (const raw of saved) {
+    const slot = /^([A-Z/_]+)(?::(\d+))?$/.exec(String(raw).trim().toUpperCase())
+    const count = Number(slot?.[2] ?? 1)
+    if (!slot || !Number.isInteger(count) || count > 100) return null
+    const label = slot[1]!
+    slots.push(...Array<string>(count).fill(ESPN_NFL_SEAT_NAMES.get(label) ?? label))
+  }
+  return { roster_positions: slots }
+}
+
 async function loadNflGuillotineContext(league: GuillotineLeague, mode: 'guillotine' | 'zombie' = 'guillotine'): Promise<GuillotineContextResult> {
   const format = mode === 'zombie' ? 'Zombie' : 'Guilly'
-  const seatsRaw = lineupSeatsFromSettings(league.settings)
+  const platform = league.platform?.trim().toLowerCase() ?? ''
+  const espn = platform === 'espn'
+  const seatsRaw = lineupSeatsFromSettings(espn ? espnNflLineupSettings(league.settings) : league.settings)
   if (!seatsRaw) return { ok: false, reason: `This league’s starting lineup could not be read, so a ${format} grade cannot be priced.` }
   const seats: GuillotineSeat[] = seatsRaw.map((s) => ({ slot: s.slot, eligible: s.eligible }))
   const rules = scoringRulesFrom(league.settings)
@@ -128,30 +151,43 @@ async function loadNflGuillotineContext(league: GuillotineLeague, mode: 'guillot
     .catch(() => null)
   if (!latest) return { ok: false, reason: `No NFL projections are on file, so this ${format} trade cannot be graded yet.` }
 
-  const [rows, rosterRows] = await Promise.all([
+  const [rows, savedRosters] = await Promise.all([
     prisma.aFProjectionSnapshot
       .findMany({
         where: { sport: 'NFL', season: latest.season, week: null },
         select: { playerId: true, playerName: true, position: true, adjustmentFactors: true, rosWeeksRemaining: true },
       })
       .catch(() => null),
-    prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true, faabRemaining: true } }).catch(() => null),
+    prisma.roster.findMany({ where: { leagueId: league.id }, select: { playerData: true, faabRemaining: true, redraftRosterId: true } }).catch(() => null),
   ])
   if (!rows) return { ok: false, reason: 'The NFL projections could not be read just now.' }
-  if (!rosterRows) return { ok: false, reason: 'This league’s rosters could not be read just now.' }
+  if (!savedRosters) return { ok: false, reason: 'This league’s rosters could not be read just now.' }
+  let rosterRows = savedRosters
+  if (espn && league.leagueSize && savedRosters.length > league.leagueSize) {
+    const linkedRosters = savedRosters.filter((row) => row.redraftRosterId)
+    if (linkedRosters.length !== league.leagueSize) {
+      return { ok: false, reason: 'The imported ESPN league has more saved rosters than teams, and the active season roster links are incomplete.' }
+    }
+    rosterRows = linkedRosters
+  }
 
   /*
-   * 🛑 SLEEPER IDS ONLY. Rolling Insights' bare numbers share Sleeper's range, and the board index drops
+   * 🛑 NATIVE AND SLEEPER ROSTERS USE SLEEPER IDS. Rolling Insights' bare numbers share Sleeper's range, and the board index drops
    * an id two players answer to: with both on the board, Bijan Robinson (Sleeper 9509, RI 7408) lost his
    * own Sleeper id to that clash, his roster spot matched nothing, and he became the "best free agent"
    * for every slot (production, 2026-10-11) — zeroing every value in the league. These rosters and the
-   * deals graded here carry Sleeper ids; a league rostered in another id space falls below the mapping
-   * floor and is refused, never priced against a wire it cannot see.
+   * deals graded there carry Sleeper ids. ESPN rosters use only verified ESPN aliases, so a
+   * coincident Sleeper number cannot select a different player or pollute the waiver wire.
    */
+  const rosterIds = espn ? [...new Set(rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))] : []
   const identities = await prisma.playerIdentityMap
-    .findMany({ where: { id: { in: rows.map((r) => r.playerId) } }, select: { id: true, sleeperId: true } })
-    .catch(() => [] as Array<{ id: string; sleeperId: string | null }>)
+    .findMany({
+      where: espn ? { sport: 'NFL', espnId: { in: rosterIds } } : { id: { in: rows.map((r) => r.playerId) } },
+      select: { id: true, sleeperId: true, espnId: true },
+    }).catch(() => [])
   const aliasesById = new Map(identities.map((i) => [i.id, i.sleeperId ? [i.sleeperId] : []]))
+  const espnById = espn ? new Map([...reduceCrosswalk(identities.map((i) => ({ from: i.espnId, to: i.id })))]
+    .map(([providerId, id]) => [id, providerId])) : null
 
   const board: BoardPlayer[] = []
   const weeksLeft: number[] = []
@@ -166,7 +202,8 @@ async function loadNflGuillotineContext(league: GuillotineLeague, mode: 'guillot
       position,
       perGame,
       sampleGames: sampleGamesFromReasons(f.confidenceReasons),
-      aliases: aliasesById.get(r.playerId) ?? [],
+      aliases: espn ? [] : aliasesById.get(r.playerId) ?? [],
+      ...(espn ? { rosterAlias: espnById?.get(r.playerId) } : {}),
       sourceSeason: num(f.sourceSeason),
     })
     if (typeof r.rosWeeksRemaining === 'number') weeksLeft.push(r.rosWeeksRemaining)
@@ -175,7 +212,7 @@ async function loadNflGuillotineContext(league: GuillotineLeague, mode: 'guillot
   weeksLeft.sort((a, b) => a - b)
   const nflWeeksLeft = weeksLeft.length ? weeksLeft[Math.floor(weeksLeft.length / 2)]! : 0
 
-  return assembleGuillotineContext({ sport: 'NFL', board, seats, rosterRows, leagueSize: league.leagueSize, weeksLeft: nflWeeksLeft, gamesPerWeek: null, mode })
+  return assembleGuillotineContext({ sport: 'NFL', board, seats, rosterRows, leagueSize: league.leagueSize, weeksLeft: nflWeeksLeft, gamesPerWeek: null, mode, espn })
 }
 
 /**
@@ -291,10 +328,11 @@ function assembleGuillotineContext(args: {
   weeksLeft: number
   gamesPerWeek: number | null
   mode?: 'guillotine' | 'zombie'
+  espn?: boolean
 }): GuillotineContextResult {
   const { sport, board, seats, rosterRows, weeksLeft } = args
   const minGames = minReplacementGamesFor(sport)
-  const index = indexBoard(board)
+  const index = indexBoard(board, args.espn ? 'provider' : false)
   const live: GuillotineRoster[] = []
   const rostered = new Set<string>()
   let ids = 0
@@ -305,7 +343,7 @@ function assembleGuillotineContext(args: {
     for (const id of rosteredIdsOf(r.playerData)) {
       ids += 1
       const bare = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id
-      const hit = index.get(id) ?? index.get(bare)
+      const hit = index.get(id) ?? (args.espn ? undefined : index.get(bare))
       if (!hit) continue
       mapped += 1
       players.push(hit.id)
@@ -327,6 +365,7 @@ function assembleGuillotineContext(args: {
     ctx: {
       sport,
       board,
+      ...(args.espn ? { espnRosterIndex: index } : {}),
       seats,
       replacementBySlot,
       teamsAlive: live.length,

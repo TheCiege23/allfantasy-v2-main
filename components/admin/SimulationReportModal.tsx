@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Trophy, Skull, Shield, Swords, Zap } from 'lucide-react'
+import { X, Trophy, Skull, Shield, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface SimulatedWeek {

@@ -29,7 +29,7 @@ import {
 } from '@/lib/player-match/verifiedNameMatch'
 import { getTeamInfo, normalizePlayerName, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
-export interface SleeperCandidate extends NameMatchCandidate {
+interface SleeperCandidate extends NameMatchCandidate {
   /** Bare Sleeper id, e.g. `4984`. */
   sleeperId: string
   name: string

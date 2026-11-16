@@ -338,10 +338,6 @@ export function resetWorldCupProjectedMatchStatus<T extends WorldCupProjectedMat
 const BEST_THIRD_SLOT_KEYS = ["C3", "D3", "G3", "H3", "K3", "L3", "TBD1", "TBD2"] as const
 const BEST_THIRD_SLOT_KEY_SET = new Set<string>(BEST_THIRD_SLOT_KEYS)
 
-function isGroupRankSlot(slotKey: string) {
-  return /^([A-L])([12])$/.test(slotKey)
-}
-
 function isBestThirdSlot(slotKey: string) {
   return BEST_THIRD_SLOT_KEY_SET.has(slotKey)
 }

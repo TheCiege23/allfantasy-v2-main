@@ -19,7 +19,7 @@
  * SubscriptionFeatureId would have looked tidier and matched nothing.
  */
 
-export type LockedFeature = {
+type LockedFeature = {
   /** What the user was trying to do, in their words. */
   label: string
   /**
@@ -36,7 +36,7 @@ export type LockedFeature = {
  * Every `?feature=` value in use, verified by grep against the callers rather than
  * imagined. Each href is where that lock actually lives.
  */
-export const LOCKED_FEATURES: Record<string, LockedFeature> = {
+const LOCKED_FEATURES: Record<string, LockedFeature> = {
   player_comparison_explanations: {
     label: 'player comparison explanations',
     href: '/core/players',

@@ -9,8 +9,6 @@ import {
   SIGNUP_TIMEZONES,
 } from "@/lib/signup/timezones"
 
-export type TimezoneIana = string
-
 export const DEFAULT_TIMEZONE = DEFAULT_SIGNUP_TIMEZONE
 
 const ALLOWED_TIMEZONES = new Set(

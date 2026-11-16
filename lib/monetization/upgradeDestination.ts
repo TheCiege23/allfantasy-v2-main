@@ -19,7 +19,7 @@ import { HIGHLIGHT_TO_PLAN_FAMILY } from "@/lib/monetization/entitlements"
  */
 
 /** The `?plan=` value `/upgrade` reads for each family. */
-export const PLAN_QUERY_VALUE: Record<SubscriptionPlanFamily, string> = {
+const PLAN_QUERY_VALUE: Record<SubscriptionPlanFamily, string> = {
   af_pro: "pro",
   af_commissioner: "commissioner",
   af_war_room: "war_room",
