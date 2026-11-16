@@ -235,6 +235,22 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'PLoTk8DCHxmcLG1alb-B278ws1xPpUxvsv' },
   },
   {
+    /*
+     * Lacrosse Classified: a weekly lacrosse talk and interview podcast, about two
+     * hours an episode. NOT a fantasy show — chosen with the owner's OK (2026-11-16)
+     * because no fantasy lacrosse podcast on YouTube is still posting: Pro Lacrosse
+     * Talk stopped in September 2022, Bet On Lacrosse (betting picks) in January
+     * 2025, and fantasy lacrosse otherwise appears only as one-off videos.
+     *
+     * Long uploads, newest first — checked by playing the list in the embed; newest
+     * upload 2026-11-11 ("LAX CLASS 416"), the one before 2026-11-04.
+     */
+    id: 'lacrosse-podcast',
+    label: 'Lacrosse podcast',
+    channel: 'Lacrosse Classified',
+    source: { kind: 'playlist', listId: 'UULFHwTFcC1Woi1orNgZYv-VhA' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
