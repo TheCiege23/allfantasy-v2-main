@@ -34,7 +34,15 @@ export type ManagersAhead = {
   history: 'shown' | 'locked' | 'unavailable'
 }
 
-export async function loadManagersAhead(input: { leagueId: string; userId: string }): Promise<ManagersAhead | null> {
+export async function loadManagersAhead(input: {
+  leagueId: string
+  userId: string
+  /**
+   * The viewer's slot when the caller already resolved it (`resolveViewerDraftIdentity`). Without it
+   * this matches on the AF `Roster.id`, which never matches a Sleeper-mirrored draft's slot order.
+   */
+  viewerSlot?: number
+}): Promise<ManagersAhead | null> {
   const session = await prisma.draftSession.findFirst({
     where: { leagueId: input.leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -53,8 +61,12 @@ export async function loadManagersAhead(input: { leagueId: string; userId: strin
   const slotOrder = parseSlotOrder(session.slotOrder)
   if (slotOrder.length === 0) return null
 
-  const viewerRosterId = await getCurrentUserRosterIdForLeague(input.leagueId, input.userId).catch(() => null)
-  const mine = slotOrder.find((e) => e.rosterId === viewerRosterId)
+  const mine = input.viewerSlot != null
+    ? slotOrder.find((e) => e.slot === input.viewerSlot)
+    : await (async () => {
+        const viewerRosterId = await getCurrentUserRosterIdForLeague(input.leagueId, input.userId).catch(() => null)
+        return slotOrder.find((e) => e.rosterId === viewerRosterId)
+      })()
   if (!mine) return null
 
   const teamCount = Math.max(1, session.teamCount)

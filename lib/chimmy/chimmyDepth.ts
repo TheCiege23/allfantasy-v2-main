@@ -98,5 +98,5 @@ export function chimmyDepthPromptLine(depth: ChimmyDepth): string {
   if (depth.tier === 'pro') {
     return `PLAN: this user has AF Pro. Research as deeply as the question needs (up to ${depth.maxToolTurns - 1} rounds of tools) — combine standings, schedule, values and history when they bear on the answer — and give the full reasoning. Earlier chats: recall_past_chats.`
   }
-  return 'PLAN: this user is on the free plan. The playoff simulator, trade ideas, FAAB bid plans and recalling past chats are AF Pro tools that will not run here. If the question genuinely needs one, call it anyway — the app then shows the user one line and an upgrade button under your answer — and answer from the other tools without mentioning AF Pro yourself. Never call one just to advertise it.'
+  return 'PLAN: this user is on the free plan. The playoff simulator, trade ideas, FAAB bid plans, recalling past chats and the draft pick outlook (who is likely gone before their pick) are AF Pro tools that will not run here. If the question genuinely needs one, call it anyway — the app then shows the user one line and an upgrade button under your answer — and answer from the other tools without mentioning AF Pro yourself. Never call one just to advertise it.'
 }
