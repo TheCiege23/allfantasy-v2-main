@@ -129,6 +129,24 @@ describe('searchYouTubeMusic — limits', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(counters.get('app')).toBe(1)
     expect(counters.get(userBudgetKey('u2'))).toBeUndefined()
+    // …but BOTH searches are tallied for the usage readout, so it can show the cache saving.
+    expect(counters.get('searches')).toBe(2)
+  })
+
+  it('tallies searches turned away, by which limit', async () => {
+    counters.set(userBudgetKey('u7'), PER_USER_DAILY)
+    expect((await searchYouTubeMusic('over my limit', 'u7')).status).toBe('limit')
+    counters.set('app', APP_DAILY)
+    expect((await searchYouTubeMusic('over the app limit', 'u8')).status).toBe('limit')
+    expect(counters.get('refused-user')).toBe(1)
+    expect(counters.get('refused-app')).toBe(1)
+  })
+
+  it('never fails a search because the usage tally could not be written', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    // The first upsert is the tally; make only that one fail.
+    vi.mocked(prisma.apiRateLimitRecord.upsert).mockRejectedValueOnce(new Error('db blip'))
+    expect((await searchYouTubeMusic('still works', 'u1')).status).toBe('ok')
   })
 
   it(`stops one person after ${PER_USER_DAILY} fresh searches, without touching the app budget`, async () => {
@@ -166,9 +184,17 @@ describe('searchYouTubeMusic — limits', () => {
 
   it('fails closed when the budget cannot be read', async () => {
     const { prisma } = await import('@/lib/prisma')
-    vi.mocked(prisma.apiRateLimitRecord.upsert).mockRejectedValueOnce(new Error('db down'))
-    expect(await searchYouTubeMusic('db down', 'u1')).toEqual({ status: 'unavailable' })
-    expect(fetchMock).not.toHaveBeenCalled()
+    const upsert = vi.mocked(prisma.apiRateLimitRecord.upsert)
+    const real = upsert.getMockImplementation()
+    // EVERY write fails, as when the database is down. (Failing only the first would hit the
+    // usage tally, which is designed to fail harmlessly, and the budget would still be read.)
+    upsert.mockRejectedValue(new Error('db down'))
+    try {
+      expect(await searchYouTubeMusic('db down', 'u1')).toEqual({ status: 'unavailable' })
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      upsert.mockImplementation(real!)
+    }
   })
 
   it('says unavailable, spending nothing, when no key is configured', async () => {
