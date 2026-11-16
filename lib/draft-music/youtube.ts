@@ -130,6 +130,20 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'PLQ_voP4Q3cfeBnNKaN2WDgzaoHRiaji7E' },
   },
   {
+    /*
+     * Talk, not music. "Fantasy Golf Degenerates" on Pat Mayo's Mayo Media
+     * Network — one episode per PGA Tour event (picks, DFS, bets).
+     * Newest-first checked by real upload dates on 2026-11-15: Nov 9 (Austin
+     * Championship), Nov 2, Oct 26, Oct 19 — weekly, "Updated 5 days ago".
+     * Golf's off-season (roughly December) means a few quiet weeks where the
+     * station opens on the season's last event; expected, not a fault.
+     */
+    id: 'golf-podcast',
+    label: 'Golf podcast',
+    channel: 'Mayo Media',
+    source: { kind: 'playlist', listId: 'PLAudWD2O3TTEk_vSF8VEnZc8QvcDTWoBh' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
