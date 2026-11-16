@@ -25,7 +25,8 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        setError(err.error ?? 'Failed to generate')
+        // The route's `detail` is the readable reason ("No week has been scored yet…"); `error` is a code.
+        setError(err.detail ?? err.error ?? 'Failed to generate')
         return
       }
       const data = await res.json()
