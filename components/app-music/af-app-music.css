@@ -395,3 +395,35 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ── Search results ─────────────────────────────────────────────────────── */
+
+/* YouTube thumbnails are 16:9, not square. */
+.af-amp-result--yt img { width: 64px; height: 36px; }
+.af-amp-result[data-active='true'] {
+  background: var(--surface, var(--amp-surface));
+  box-shadow: inset 2px 0 0 var(--accent, var(--amp-accent));
+}
+/* Video titles are long: two lines, then an ellipsis. */
+.af-amp-result .af-amp-nowtext b {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.af-amp-found { display: grid; gap: 6px; }
+.af-amp-found-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text2, var(--amp-text2));
+}
+.af-amp-found-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-amp-found-head b { color: var(--text, var(--amp-text)); font-weight: 700; }
+.af-amp-found-head .af-amp-linkbtn { flex: none; }
