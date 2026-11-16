@@ -1,5 +1,43 @@
 import { describe, expect, it } from 'vitest'
-import { YOUTUBE_STATIONS, parseYouTubeLink, youTubeEmbedUrl } from '@/lib/draft-music/youtube'
+import {
+  YOUTUBE_STATIONS,
+  describeYouTubeLinkProblem,
+  isYouTubeMix,
+  parseYouTubeLink,
+  youTubeEmbedUrl,
+} from '@/lib/draft-music/youtube'
+
+describe('YouTube Mix links', () => {
+  // The exact link a user pasted on 2026-11-15; with the Mix kept it played as
+  // "This video is unavailable" (YouTube error 150).
+  const pasted = 'https://www.youtube.com/watch?v=gHKgJ8zjwkY&list=RDMMgHKgJ8zjwkY&start_radio=1'
+
+  it('plays the song and drops the Mix', () => {
+    expect(parseYouTubeLink(pasted)).toEqual({ kind: 'video', videoId: 'gHKgJ8zjwkY' })
+    expect(parseYouTubeLink('https://www.youtube.com/watch?v=gHKgJ8zjwkY&list=RDgHKgJ8zjwkY')).toEqual({
+      kind: 'video',
+      videoId: 'gHKgJ8zjwkY',
+    })
+    expect(parseYouTubeLink('https://youtu.be/gHKgJ8zjwkY?list=RDAMVMgHKgJ8zjwkY')).toEqual({
+      kind: 'video',
+      videoId: 'gHKgJ8zjwkY',
+    })
+  })
+
+  it('keeps YouTube Music editorial lists, which also start with RD', () => {
+    expect(isYouTubeMix('RDCLAK5uy_lJ8xZWiZj2GCw7MArjakb6b0zfvqwldps')).toBe(false)
+    expect(
+      parseYouTubeLink('https://music.youtube.com/playlist?list=RDCLAK5uy_lJ8xZWiZj2GCw7MArjakb6b0zfvqwldps'),
+    ).toEqual({ kind: 'playlist', listId: 'RDCLAK5uy_lJ8xZWiZj2GCw7MArjakb6b0zfvqwldps' })
+  })
+
+  it('a Mix with no song is refused with a message that says why', () => {
+    const mixOnly = 'https://www.youtube.com/playlist?list=RDMMgHKgJ8zjwkY'
+    expect(parseYouTubeLink(mixOnly)).toBeNull()
+    expect(describeYouTubeLinkProblem(mixOnly)).toMatch(/YouTube Mix/)
+    expect(describeYouTubeLinkProblem('https://vimeo.com/1')).toMatch(/isn’t a YouTube/)
+  })
+})
 
 describe('parseYouTubeLink', () => {
   it.each([

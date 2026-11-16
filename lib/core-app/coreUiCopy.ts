@@ -102,6 +102,7 @@ const spanish: Record<string, string> = {
   Communications: 'Mensajes',
   'Everyone in one league': 'Todos en una liga',
   'Just you': 'Solo tú',
+  Music: 'Música',
   'Only this Huddle’s members': 'Solo miembros de este grupo',
   'One person': 'Una persona',
   "Everyone in one league's server": 'Todos en el servidor de la liga',

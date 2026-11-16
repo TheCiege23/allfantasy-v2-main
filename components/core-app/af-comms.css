@@ -4762,3 +4762,39 @@ html[data-mode='light'] .af-cm .af-cm-act { box-shadow: 0 1px 2px rgba(11, 16, 3
     .af-cm .af-cm-brandmark { display: none; }
   }
 }
+
+/*
+ * Music (2026-11-15): the sixth tab, and the only icon-only one.
+ *
+ * ⚠ THE TAB ROW IS A FIVE-COLUMN GRID, written twice above — `repeat(5, minmax(0, 1fr))` for
+ * every width and `repeat(5, auto)` inside the ≤520px container query. A sixth tab therefore
+ * wrapped onto a row of its own (measured in the preview). These two rules add a sixth,
+ * content-sized column; they sit last and match the narrow rule's specificity so both win.
+ * If a seventh tab is ever added, both `repeat(5` rules need the same treatment.
+ *
+ * ⚠ AND TAB ICONS ARE HIDDEN at most widths (only Chimmy's shows), which left this tab blank.
+ * Its ♫ is shown always; its label stays in the DOM, so screen readers and the tooltip still
+ * say "Music" — only the text is visually hidden.
+ */
+.af-cm .af-cm-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)) auto; }
+@container af-cm (width <= 520px) {
+  .af-cm .af-cm-tabs { grid-template-columns: repeat(5, auto) auto; }
+}
+.af-cm .af-cm-tab[data-tab='music'] {
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.af-cm .af-cm-tab[data-tab='music'] > svg {
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.af-cm-tab[data-tab='music'] > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
