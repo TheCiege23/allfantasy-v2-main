@@ -49,6 +49,8 @@ type DraftRoomShellProps = {
   modeBanner?: ReactNode
   /** Keeper roll call. Same placement and reason as `modeBanner`: outside the board's scroll zone. */
   keeperStrip?: ReactNode
+  /** Long-pick-clock / quiet-hours planning cards. Same placement and reason as `modeBanner`. */
+  pickClockStrip?: ReactNode
   draftBoard: ReactNode
   playerPanel: ReactNode
   queuePanel: ReactNode
@@ -116,6 +118,7 @@ export function DraftRoomShell({
   auctionStrip,
   modeBanner,
   keeperStrip,
+  pickClockStrip,
   mobileTab,
   onMobileTabChange,
   layout = 'classic',
@@ -302,6 +305,9 @@ export function DraftRoomShell({
           </div>
           {modeBanner ? (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
+          ) : null}
+          {pickClockStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-pick-clock-slot">{pickClockStrip}</div>
           ) : null}
           {keeperStrip ? (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-keeper-strip-slot">{keeperStrip}</div>
@@ -497,6 +503,9 @@ export function DraftRoomShell({
           {modeBanner ? (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
           ) : null}
+          {pickClockStrip ? (
+            <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-pick-clock-slot">{pickClockStrip}</div>
+          ) : null}
           {keeperStrip ? (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-keeper-strip-slot">{keeperStrip}</div>
           ) : null}
@@ -543,6 +552,7 @@ export function DraftRoomShell({
             <div className="shrink-0 border-b border-white/10 bg-[#050c1d]">{auctionStrip}</div>
           )}
           {modeBanner ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{modeBanner}</div> : null}
+          {pickClockStrip ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{pickClockStrip}</div> : null}
           {keeperStrip ? <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">{keeperStrip}</div> : null}
           <div
             className="min-w-0 overflow-x-auto overscroll-x-contain scroll-smooth p-2 sm:p-3"
