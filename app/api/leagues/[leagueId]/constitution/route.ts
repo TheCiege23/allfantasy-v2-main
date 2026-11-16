@@ -15,6 +15,7 @@
  *           approve   { id }                              → open the league vote on a member's proposal
  *           decline   { id, reason? }                     → decline a member's proposal
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -48,7 +49,7 @@ async function gate(ctx: Ctx) {
     return { error: NextResponse.json({ error: membership.status === 404 ? 'Not found' : 'Forbidden' }, { status: membership.status }) } as const
   }
   const role = await getLeagueRole(leagueId, userId)
-  return { leagueId, userId, isCommissioner: role === 'commissioner' || role === 'co_commissioner' } as const
+  return { leagueId, userId, isCommissioner: (await canCommissionerAct(leagueId, userId, 'league')) } as const
 }
 
 const STATUS: Record<string, number> = {

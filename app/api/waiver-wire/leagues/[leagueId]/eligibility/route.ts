@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       !Array.isArray(body.commissionerOverrides)
     ) {
       const role = await getLeagueRole(leagueId, userId)
-      if (role === "commissioner" || role === "co_commissioner") {
+      if ((await canCommissionerAct(leagueId, userId, 'league'))) {
         const co = body.commissionerOverrides as Record<string, unknown>
         const patch: Parameters<typeof mergeCommissionerOverrides>[1] = { setByUserId: userId }
         if (typeof co.bypassInsufficientFaab === "boolean") patch.bypassInsufficientFaab = co.bypassInsufficientFaab

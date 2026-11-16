@@ -4,6 +4,7 @@
  *        Transitions phase from VETO_CHALLENGE_OPEN → VETO_DECISION_OPEN and sets vetoWinnerRosterId.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -78,7 +79,7 @@ export async function POST(
 
   // Commissioner-only
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
-  if (!league || league.userId !== userId) {
+  if (!league || !(await canCommissionerAct(leagueId, userId, 'league'))) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
 

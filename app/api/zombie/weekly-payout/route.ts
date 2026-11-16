@@ -1,20 +1,19 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { buildWeeklyUpdate, composeWeeklyUpdateBody } from '@/lib/zombie/weeklyUpdateEngine'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * The weekly payout ledger is money: the head commissioner, or a co-commissioner granted money
+ * (lib/league/commissionerAccess.ts). It was head-only, so a co-commissioner the head had given money could not
+ * record a payout (2026-11-16).
+ */
 async function commissioner(leagueId: string, userId: string): Promise<Response | null> {
-  try {
-    await requireCommissionerOnly(leagueId, userId)
-    return null
-  } catch (denied) {
-    if (denied instanceof Response) return denied
-    throw denied
-  }
+  return commissionerAccessResponse(leagueId, userId, 'money')
 }
 
 export async function GET(req: Request) {

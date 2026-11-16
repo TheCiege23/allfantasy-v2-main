@@ -116,3 +116,28 @@ export async function commissionerAccessResponse(
 export async function canCommissionerAct(leagueId: string, userId: string | null | undefined, need: CommissionerNeed): Promise<boolean> {
   return (await commissionerAccess(leagueId, userId, need)).ok
 }
+
+/**
+ * Drop-in for `assertCommissioner` (lib/commissioner/permissions) at a call site that now names its area: throws the
+ * same `Error` with `status`, so the caller's existing catch keeps working, and returns the league row as it did.
+ */
+export async function assertCommissionerAccess(
+  leagueId: string,
+  userId: string | null | undefined,
+  need: CommissionerNeed,
+): Promise<{ league: NonNullable<Awaited<ReturnType<typeof prisma.league.findFirst>>> }> {
+  const access = await commissionerAccess(leagueId, userId, need)
+  if (!access.ok) {
+    const err = new Error(access.error) as Error & { status?: number; missingScopes?: CoCommissionerScope[] }
+    err.status = access.status
+    if (access.missingScopes) err.missingScopes = access.missingScopes
+    throw err
+  }
+  const league = await prisma.league.findFirst({ where: { id: leagueId } })
+  if (!league) {
+    const err = new Error('League not found') as Error & { status?: number }
+    err.status = 404
+    throw err
+  }
+  return { league }
+}

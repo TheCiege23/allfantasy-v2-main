@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { analyzeLeagueKeeperValues } from '@/lib/keeper/ai/keeperValueAnalyzer'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   const role = await getLeagueRole(body.leagueId, gate)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
+  if (!(await canCommissionerAct(body.leagueId, gate, 'rosters'))) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
 

@@ -1,3 +1,4 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * PATCH: Set keeper config (maxKeepers, deadline, maxKeepersPerPosition). Commissioner only.
@@ -6,7 +7,6 @@ import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/to
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import type { KeeperConfig } from '@/lib/live-draft-engine/keeper/types'
@@ -26,7 +26,7 @@ export async function PATCH(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'rosters')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

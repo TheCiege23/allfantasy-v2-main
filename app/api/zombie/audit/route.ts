@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { requireCommissionerRole } from '@/lib/league/permissions'
 import { getFullAuditTrail } from '@/lib/zombie/auditService'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const leagueId = searchParams?.get('leagueId')
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerOnly(leagueId, session.user.id)
+  await requireCommissionerRole(leagueId, session.user.id)
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { NextRequest, NextResponse } from 'next/server'
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
     select: { id: true },
   })
   const coOwnerRosterId = memberRoster ? null : await acceptedCoOwnerRosterId(leagueId, userId)
-  const canActAsCommissioner = league.userId === userId
+  const canActAsCommissioner = (await canCommissionerAct(leagueId, userId, 'rosters'))
   if (!memberRoster && !coOwnerRosterId && !canActAsCommissioner) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import { listingAccountId, ownerCommissions } from "@/lib/public-discovery/ownerCommissionerTeams"
 import { getServerSession } from "next-auth"
@@ -271,7 +272,7 @@ async function loadCommissionedNativeLeague(leagueId: string) {
     return { error: NextResponse.json({ error: "League not found." }, { status: 404 }) }
   }
   const role = await getLeagueRole(leagueId, userId)
-  if (role !== "commissioner" && role !== "co_commissioner") {
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
     return { error: NextResponse.json({ error: "League not found." }, { status: 404 }) }
   }
   return { league, userId }

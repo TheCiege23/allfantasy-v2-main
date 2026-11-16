@@ -204,7 +204,7 @@ export const defaultLoadTradeDeps: LoadTradeDeps = {
     }
   },
   isCommissioner: async (leagueId, userId) =>
-    Boolean((await assertLeagueCommissioner(leagueId, userId).catch(() => null))?.ok),
+    Boolean((await assertLeagueCommissioner(leagueId, userId, 'view').catch(() => null))?.ok),
 }
 
 const refuse = (code: TradeRefusal['code'], reason: string, missingAssets: string[] = []): LoadTradeResult => ({

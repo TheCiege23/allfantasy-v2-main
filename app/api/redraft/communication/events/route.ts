@@ -1,6 +1,6 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { persistNflRedraftCommunicationForEvent } from '@/lib/league-notifications/nflRedraftCommunicationPersistence'
 
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await assertCommissioner(leagueId, user.appUserId)
+    await assertCommissionerAccess(leagueId, user.appUserId, 'chat')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

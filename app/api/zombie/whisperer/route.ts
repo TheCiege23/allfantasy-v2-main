@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { requireCommissionerRole } from '@/lib/league/permissions'
 import { selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { canViewerSeeWhisperer } from '@/lib/zombie/whispererVisibility'
 import { resolveLeagueAccess } from '@/lib/league-access'
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
 
   if (action === 'select') {
-    await requireCommissionerOnly(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
     if (z.sport === 'NFL') {
       try { return NextResponse.json(await startBetaWhispererOffers(leagueId)) }
       catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'The draw could not be started.' }, { status: 409 }) }

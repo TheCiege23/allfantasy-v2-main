@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -86,7 +87,7 @@ export async function DELETE(req: NextRequest) {
 
   const roster = await prisma.redraftRoster.findFirst({ where: { id: rec.rosterId } })
   const role = await getLeagueRole(rec.leagueId, userId)
-  const isComm = role === 'commissioner' || role === 'co_commissioner'
+  const isComm = (await canCommissionerAct(rec.leagueId, userId, 'rosters'))
   if (!roster || (roster.ownerId !== userId && !isComm)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

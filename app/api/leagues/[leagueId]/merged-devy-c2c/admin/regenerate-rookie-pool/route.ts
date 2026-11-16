@@ -2,10 +2,10 @@
  * PROMPT 3: Commissioner — regenerate C2C rookie pool (audit; actual pool built on draft load).
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isC2CLeague } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { appendC2CLifecycleEvent } from '@/lib/merged-devy-c2c/lifecycle/C2CAuditLog'
 
@@ -22,7 +22,7 @@ export async function POST(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const isC2C = await isC2CLeague(leagueId)

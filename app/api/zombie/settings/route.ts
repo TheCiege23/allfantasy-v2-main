@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { requireCommissionerRole } from '@/lib/league/permissions'
 import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
 import { isZombieExperienceMode, zombieExperienceDefaults } from '@/lib/zombie/zombieExperience'
 
@@ -22,7 +22,7 @@ export async function PATCH(req: Request) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   try {
-    await requireCommissionerOnly(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (denied) {
     if (denied instanceof Response) return denied
     throw denied

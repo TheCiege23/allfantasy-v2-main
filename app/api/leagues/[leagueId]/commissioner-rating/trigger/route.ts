@@ -3,6 +3,7 @@
  * Triggers the commissioner rating prompt for a league (idempotent).
  * Called at season end or manually by system/commissioner.
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -21,7 +22,7 @@ export async function POST(
   // Posts to the league's chat, so only the league's commissioners may set it off.
   const role = await getLeagueRole(leagueId, session.user.id)
   if (role === null) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, session.user.id, 'league'))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   try {
     await checkAndTriggerRatingIfOffseason(leagueId)

@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createZombieLeague } from '@/lib/zombie/setupEngine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { getLeagueRole, requireCommissionerOnly } from '@/lib/league/permissions'
+import { getLeagueRole, requireCommissionerRole } from '@/lib/league/permissions'
 import { isZombieEligibleLeagueSport } from '@/lib/zombie/zombie-sport-eligibility'
 import { getRandomZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
    * throws, so an uncaught Response becomes a 500 — return it as the 403 it is.
    */
   try {
-    await requireCommissionerOnly(leagueId, session.user.id)
+    await requireCommissionerRole(leagueId, session.user.id, 'league')
   } catch (denied) {
     if (denied instanceof Response) return denied
     throw denied

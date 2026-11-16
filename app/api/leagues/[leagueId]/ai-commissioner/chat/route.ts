@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -25,7 +26,7 @@ async function paidToolPost(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
+  if (!(await canCommissionerAct(leagueId, userId, 'chat'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

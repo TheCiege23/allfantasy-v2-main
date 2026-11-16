@@ -4,6 +4,7 @@
  * Gated by zombie_ai or ai_chat when subscription is enforced.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -96,7 +97,7 @@ export async function POST(
   // Collusion and dangerous-drop flags are accusations for the commissioners to review. A member
   // gets neither the commissioner summary nor the raw flags, in the response or the model context.
   const role = await getLeagueRole(leagueId, userId).catch(() => null)
-  const isCommissioner = role === 'commissioner' || role === 'co_commissioner'
+  const isCommissioner = (await canCommissionerAct(leagueId, userId, 'league'))
   if (type === 'commissioner_review_summary' && !isCommissioner) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }

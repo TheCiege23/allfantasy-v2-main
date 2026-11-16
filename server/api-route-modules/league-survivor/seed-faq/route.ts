@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const role = await getLeagueRole(leagueId, userId)
-  if (!isCommissionerRole(role)) {
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
     return NextResponse.json({ error: 'Only a commissioner or co-commissioner can post the FAQ.' }, { status: 403 })
   }
 

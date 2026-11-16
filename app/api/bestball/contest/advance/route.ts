@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { advancePodWinners } from '@/lib/bestball/contestEngine'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { requireCommissionerRole } from '@/lib/league/permissions'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await requireCommissionerOnly(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (err) {
     if (err instanceof Response) return err
     throw err
