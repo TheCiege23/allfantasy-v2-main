@@ -201,6 +201,24 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'UULFmZti-Lfi8x2eNYjmUG2I0Q' },
   },
   {
+    /*
+     * HLTV Confirmed: HLTV.org's weekly Counter-Strike 2 podcast, about two hours an
+     * episode. NOT a fantasy show — chosen with the owner's OK (2026-11-16) because
+     * no fantasy esports podcast on YouTube is still posting: Infamy Fantasy Esports
+     * stopped in 2022, League of (fantasy) Legends in January 2024, Lunker LCS in
+     * October 2024, and what is current under "fantasy esports" is betting-prop
+     * clips. HLTV also runs a CS2 fantasy game, so the audience overlaps.
+     *
+     * ⚠ THE SHOW'S OWN PLAYLIST, NOT THE CHANNEL'S UPLOADS. HLTV's long-uploads list
+     * mixes in 5–12 minute player interviews; this playlist is episodes only. Checked
+     * by playing it in the embed: newest first, S7E83 (2026-11-10) at the top.
+     */
+    id: 'esports-podcast',
+    label: 'Esports podcast',
+    channel: 'HLTV Confirmed',
+    source: { kind: 'playlist', listId: 'PLoTk8DCHxmcLG1alb-B278ws1xPpUxvsv' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
