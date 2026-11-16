@@ -49,7 +49,7 @@ describe('DraftBoardCell — room v2 rectangle tiles', () => {
 // 8. Current-pick amber glow class
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — current-pick amber glow (Commit 21)', () => {
+describe('DraftBoardCell — current-pick glow (Commit 21; cyan since room v2)', () => {
   it('cells carry draft-live-current-pick class when isCurrentPick', () => {
     expect(cellSrc).toMatch(/draft-live-current-pick/)
   })
@@ -58,7 +58,9 @@ describe('DraftBoardCell — current-pick amber glow (Commit 21)', () => {
     expect(cellSrc).toMatch(/data-current=\{isCurrentPick \? 'true' : 'false'\}/)
   })
 
-  it('amber shadow is applied on the current pick cell', () => {
-    expect(cellSrc).toMatch(/shadow-\[0_0_4[06]px_rgba\(246,196,69/)
+  it('the current pick is the v2 cyan clock tile with an "On the clock" label, not a gold fill', () => {
+    expect(cellSrc).toMatch(/ring-2 ring-cyan-300/)
+    expect(cellSrc).toMatch(/draft-board-cell-on-clock-\$\{pick\.overall\}/)
+    expect(cellSrc).not.toMatch(/ring-\[#f6c445\]/)
   })
 })

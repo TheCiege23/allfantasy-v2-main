@@ -11,6 +11,8 @@ import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 
 export type DraftBoardCellPick = {
   overall: number
@@ -118,6 +120,9 @@ type DraftBoardCellProps = {
 }
 
 /**
+ * Room v2 (2026-11): the on-the-clock tile is a dark tile with a cyan border, glow and an "On the
+ * clock" label, not a solid fill; your picks keep a thin cyan ring. Before v2:
+ *
  * ⚠ GOLD BELONGS TO "ON THE CLOCK" AND NOTHING ELSE ON THIS BOARD.
  *
  * The user tone used to be amber — the same family as the `#f6c445` on-the-clock cell. On a
@@ -170,6 +175,7 @@ function DraftBoardCellInner({
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
   const { tInterpolate, t } = useOptionalLanguage()
+  const headerCopy = useMessages(draftRoomHeaderMessages)
   const sportNorm = normalizeToSupportedSport(pick.sport ?? sport ?? DEFAULT_SPORT)
 
   const normalized = React.useMemo(() => {
@@ -277,7 +283,7 @@ function DraftBoardCellInner({
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
       } ${
         isCurrentPick
-          ? 'bg-[#4a5378] ring-2 ring-[#f6c445] shadow-[0_0_40px_rgba(246,196,69,0.35)]'
+          ? 'bg-[radial-gradient(120%_140%_at_0%_0%,rgba(34,211,238,0.28),#0d1020_62%)] ring-2 ring-cyan-300'
           : isEmpty
             ? 'bg-[#2a2f45]'
             : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300' : ''} ${highlightClass(pickHighlight)}`
@@ -382,6 +388,14 @@ function DraftBoardCellInner({
         </div>
       ) : null}
 
+      {isEmpty && isCurrentPick ? (
+        <span
+          className="pointer-events-none mt-auto self-center text-[11px] font-black uppercase tracking-[0.04em] text-cyan-300"
+          data-testid={`draft-board-cell-on-clock-${pick.overall}`}
+        >
+          {headerCopy.onTheClock}
+        </span>
+      ) : null}
       {isEmpty ? (
         <div className="mt-auto flex min-w-0 items-center justify-between gap-1 text-white/45">
           {emptyCellDirection === 'reverse' ? (
