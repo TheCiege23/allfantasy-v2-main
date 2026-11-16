@@ -29,6 +29,7 @@ import {
   computeOpponentAdjustment,
 } from '@/lib/projections/opponentAdjustment'
 import { extractSeasonAggregate, perGameRatesFor, toWeeklyObservation } from './core'
+import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats } from './seasonBlend'
 import { soccerSeasonLines } from './soccerSeasonLines'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
@@ -92,6 +93,11 @@ export interface WriteSnapshotsResult {
    * `players` counts the prior-season lines in the plan. Null when no blend happened.
    */
   priorSeasonBasis: { season: number; minCurrentSeasonGames: number; players: number } | null
+  /**
+   * Set when this season's and last season's lines were BLENDED per player (./seasonBlend.ts, NBA first):
+   * `players` lines carry w = g / (g + blendGames) of this season. Null when no blend happened.
+   */
+  seasonBlend: { season: number; blendGames: number; players: number } | null
   errors: string[]
 }
 
@@ -355,8 +361,27 @@ export async function writeAfProjectionSnapshotsForSeason(
   const priorByPlayer = new Map(priorLines.map((l) => [l.playerId, l]))
   const plan: Array<{ line: (typeof statLines)[number]; season: number }> = []
   const planned = new Set<string>()
+  /*
+   * 🛑 NBA BLENDS INSTEAD OF SWITCHING (owner's decision, 2026-11-16 — ./seasonBlend.ts). A player with a
+   * line in both seasons gets ONE line whose per-game rates are w × this season + (1 − w) × last, w =
+   * g / (g + 20), and whose games are both seasons' — so his projection moves gradually, and the value
+   * board's sample bar reads the games it really rests on. Everyone else, and every other sport, keeps
+   * the switch below. The blended line is filed under this season, with this season's weekly evidence.
+   */
+  const blendSport = blend && BLEND_SPORTS.has(String(sport).toUpperCase())
+  let blendedPlanned = 0
   for (const line of statLines) {
-    const prior = blend && gamesPlayedOf(line.stats) < MIN_CURRENT_SEASON_GAMES ? priorByPlayer.get(line.playerId) : undefined
+    const priorLine = blend ? priorByPlayer.get(line.playerId) : undefined
+    if (blendSport && priorLine) {
+      const mixed = blendSeasonStats(line.stats, priorLine.stats)
+      if (mixed) {
+        plan.push({ line: { playerId: line.playerId, stats: mixed.stats }, season: sourceSeason })
+        planned.add(line.playerId)
+        blendedPlanned += 1
+        continue
+      }
+    }
+    const prior = blend && gamesPlayedOf(line.stats) < MIN_CURRENT_SEASON_GAMES ? priorLine : undefined
     plan.push(prior ? { line: prior, season: priorSeason as number } : { line, season: sourceSeason })
     planned.add(line.playerId)
   }
@@ -583,6 +608,7 @@ export async function writeAfProjectionSnapshotsForSeason(
     priorSeasonBasis: blend
       ? { season: priorSeason as number, minCurrentSeasonGames: MIN_CURRENT_SEASON_GAMES, players: priorPlanned }
       : null,
+    seasonBlend: blendedPlanned > 0 ? { season: priorSeason as number, blendGames: BLEND_GAMES, players: blendedPlanned } : null,
     errors,
   }
 

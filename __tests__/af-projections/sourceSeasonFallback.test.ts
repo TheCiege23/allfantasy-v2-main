@@ -542,3 +542,46 @@ describe('E — a blended player\'s weekly evidence comes from his basis season'
     }
   })
 })
+
+describe('E — NBA blends this season with last instead of switching (2026-11-16, ./seasonBlend.ts)', () => {
+  beforeEach(async () => {
+    const { prisma } = (await import('@/lib/prisma')) as any
+    ;(prisma.aFProjectionSnapshot.upsert as any).mockClear()
+  })
+
+  const nba = (playerId: string, gp: number, ppg: number) => ({
+    playerId,
+    source: 'rolling_insights',
+    stats: { position: 'PG', riPlayerName: playerId, regular_season: { games_played: gp, points: ppg * gp, assists: 5 * gp } },
+  })
+
+  it('a player with both seasons gets ONE blended line under this season, resting on both seasons’ games', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [nba('star', 5, 30), nba('rookie', 4, 18)]
+    state.linesBySeason[2025] = [nba('star', 70, 20), nba('vet', 70, 15)]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NBA', targetSeason: 2026 })
+
+    expect(r.seasonBlend).toEqual({ season: 2025, blendGames: 20, players: 1 })
+    const rows = await upsertedSeasonRows()
+    const star = rows.find((d: any) => d.playerId === 'star')
+    expect(star.adjustmentFactors.sourceSeason).toBe(2026)
+    expect(JSON.stringify(star.reasons ?? star.adjustmentFactors)).toContain('75 games in the season sample')
+    // Everyone else keeps the existing rule: the rookie on this season, the vet on last season.
+    expect(rows.find((d: any) => d.playerId === 'rookie')?.adjustmentFactors.sourceSeason).toBe(2026)
+    expect(rows.find((d: any) => d.playerId === 'vet')?.adjustmentFactors.sourceSeason).toBe(2025)
+  })
+
+  it('🛑 NFL is untouched: the same shapes still switch at 3 games and report no blend', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [linePlayed('two', 2), linePlayed('five', 5)]
+    state.linesBySeason[2025] = [linePlayed('two', 17), linePlayed('five', 17)]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    expect(r.seasonBlend).toBeNull()
+    const rows = await upsertedSeasonRows()
+    expect(rows.find((d: any) => d.playerId === 'two')?.adjustmentFactors.sourceSeason).toBe(2025)
+    expect(rows.find((d: any) => d.playerId === 'five')?.adjustmentFactors.sourceSeason).toBe(2026)
+  })
+})
