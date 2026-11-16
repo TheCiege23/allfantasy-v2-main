@@ -130,20 +130,12 @@ const UI_ES: Record<string, string> = {
   'No active risks.': 'No hay riesgos activos.',
   'The league is in good shape.': 'La liga está en buena forma.',
 
-  // ManagerIntelligenceView
-  'Manager profiles are retired.': 'Los perfiles de mánagers se retiraron.',
-  'AllFantasy no longer builds behavior profiles of the managers in your league. League Health still shows the risks in your league.':
-    'AllFantasy ya no crea perfiles de comportamiento de los mánagers de tu liga. Salud de la liga sigue mostrando los riesgos de tu liga.',
-  'No manager history yet.': 'Aún no hay historial de mánagers.',
-  'Behavioral profiles build over time as the season progresses.':
-    'Los perfiles de comportamiento se van formando a medida que avanza la temporada.',
-  Rising: 'En alza',
-  Steady: 'Estable',
-  Declining: 'En descenso',
-  Consistent: 'Constante',
-  'Some gaps': 'Algunas ausencias',
-  'Major gaps': 'Muchas ausencias',
-  'Reliability:': 'Fiabilidad:',
+  // ManagerIntelligenceView — every manager's record as facts (2026-11-16)
+  'No managers in this league yet.': 'Todavía no hay mánagers en esta liga.',
+  'Each manager’s record appears here once their team is imported.': 'El historial de cada mánager aparece aquí cuando se importa su equipo.',
+  'What each manager has done, as counts you can check — never a label, never a prediction.':
+    'Lo que ha hecho cada mánager, en números que puedes comprobar: nunca una etiqueta ni una predicción.',
+  'Full record': 'Historial completo',
 
   // CommissionerNetworks
   // The page heading reads the sidebar link's word: one source, in shellCopy.
@@ -246,12 +238,6 @@ const LOADER_ES: Record<string, string> = {
   Retention: 'Retención',
   'Commissioner load': 'Carga del comisionado',
   Participation: 'Participación',
-  // Manager directory risk flags. The live directory is retired (2026-11-16) and no longer writes these;
-  // kept so a row that still carries one (demo, a test) renders in Spanish rather than half-translated.
-  'Major inactivity detected — may benefit from a personal check-in':
-    'Inactividad importante detectada: podría venirle bien un contacto personal',
-  'Engagement declining over recent periods — may benefit from a personal check-in':
-    'Su participación baja en los últimos periodos: podría venirle bien un contacto personal',
   // deriveChartSeries.ts — recommendationsBySeverity and participationSlices labels. The tiers are the
   // badge vocabulary; "Positive" is the chart's own word (the badge says "Healthy").
   Critical: SEVERITY_ES.critical,

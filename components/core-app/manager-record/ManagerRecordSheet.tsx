@@ -61,6 +61,21 @@ const COPY = {
   },
 } as const
 
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * The trade record writes its dates US-style ("Oct 28, 2026" — tradeEdge.ts `day`). In Spanish, rewrite
+ * them in the reader's form. Display only: the sentence the builders wrote is not changed.
+ */
+export function localizeRecordDates(text: string, language: string): string {
+  if (language !== 'es') return text
+  return text.replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{4})\b/g, (_, mon: string, d: string, y: string) =>
+    new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
+      new Date(Date.UTC(Number(y), EN_MONTHS.indexOf(mon), Number(d))),
+    ),
+  )
+}
+
 function Section({ title, reason, children }: { title: string; reason: string | null; children?: React.ReactNode }) {
   return (
     <section className="af-mr-section">
@@ -82,7 +97,7 @@ export function ManagerRecordView({ record, language }: { record: ManagerRecord;
           <>
             <ul>
               {trades.data.facts.map((f) => (
-                <li key={f.key}>{tradeVisualCopy(f.text, language)}</li>
+                <li key={f.key}>{localizeRecordDates(tradeVisualCopy(f.text, language), language)}</li>
               ))}
             </ul>
             {trades.data.coverage.shortfall ? <p className="af-mr-note">{tradeVisualCopy(trades.data.coverage.shortfall, language)}</p> : null}

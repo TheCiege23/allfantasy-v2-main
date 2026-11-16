@@ -1,91 +1,74 @@
 /**
- * Manager Intelligence, live mode: the directory is retired, and the screen says so (2026-11-16,
- * re-score item 10).
+ * The commissioner's Managers screen, live (2026-11-16, re-score item 11).
  *
- * ⚠ THIS SUITE HAS FLIPPED TWICE, AND EACH TIME THE OLD ASSERTIONS WERE RIGHT FOR THEIR DAY. First it
- * asserted an honest "backend does not classify archetypes" error. Then it asserted a real directory
- * from `/api/v1/intelligence/league/manager-dna`. The Milestone 32 privacy pass (`dcaaa6946`) then
- * retired that route to a constant 410. This suite kept passing because it mocked the transport, so
- * it described a call the server would refuse. Meanwhile the real screen showed paying commissioners
- * "No manager history yet."
- *
- * What it asserts now: the live client never calls the retired route, never reads the session, the
- * database or the transport, and returns the one recognisable retired error. The view turns that
- * error into the truth instead of an empty state that says wait.
+ * ⚠ THIS SUITE HAS FLIPPED THREE TIMES, AND EACH TIME THE OLD ASSERTIONS WERE RIGHT FOR THEIR DAY: an
+ * honest "backend does not classify archetypes" error; then a directory from
+ * `/api/v1/intelligence/league/manager-dna`; then (item 10) the notice that the Milestone 32 privacy
+ * pass had retired that route to a constant 410. Now the screen reads every manager's Competitive Edge
+ * record IN-PROCESS — facts, never a profile — and the retired route stays retired.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const callDecisionOSMock = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: callDecisionOSMock }))
-const isLiveReadyMock = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
-const prismaMock = vi.hoisted(() => ({}))
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
+const h = vi.hoisted(() => ({ session: vi.fn(), league: vi.fn(), load: vi.fn(), transport: vi.fn() }))
+vi.mock("next-auth", () => ({ getServerSession: h.session }))
+vi.mock("@/lib/auth", () => ({ authOptions: {} }))
+vi.mock("@/lib/commissioner-ui/resolveActiveLeagueId", () => ({ resolveActiveLeagueId: h.league }))
+vi.mock("@/lib/competitive-edge/managerRecordLoader", () => ({ loadLeagueManagerRecords: h.load }))
+vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: h.transport }))
 
 import { liveManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/live"
-import { MANAGER_PROFILES_RETIRED_MESSAGE } from "@/lib/commissioner-ui/managers/decision-os-client/retired"
-import { ManagerIntelligenceView } from "@/components/commissioner-os/managers/ManagerIntelligenceView"
-import { cardsCopy } from "@/lib/commissioner-os/i18n/cardsCopy"
-import { cosErrorText } from "@/lib/commissioner-os/i18n/analyticsCopy"
+import { demoManagerDirectory } from "@/lib/commissioner-ui/managers/decision-os-client/demo"
 
-describe("Manager Intelligence live client — retired", () => {
-  it("returns the retired error: no data, not retryable, attributed to managers", async () => {
-    const response = await liveManagerIntelligenceClient.getManagerDirectory()
-    expect(response.data).toBeNull()
-    expect(response.source).toBe("live")
-    expect(response.error).toMatchObject({ message: MANAGER_PROFILES_RETIRED_MESSAGE, moduleId: "managers", retryable: false })
-    expect(Number.isNaN(Date.parse(response.timestamp))).toBe(false)
-  })
+const RECORDS = demoManagerDirectory().map((e) => e.record)
 
-  it("never calls the transport or the readiness flag — the retired route answers 410 to everyone", async () => {
-    await liveManagerIntelligenceClient.getManagerDirectory()
-    expect(callDecisionOSMock).not.toHaveBeenCalled()
-    expect(isLiveReadyMock).not.toHaveBeenCalled()
-  })
-
-  it("the route it used to read really is retired (the premise of this whole change)", () => {
-    const route = readFileSync(resolve(process.cwd(), "app/api/v1/intelligence/league/manager-dna/route.ts"), "utf8")
-    expect(route).toMatch(/^export const GET = retiredProfileRoute$/m)
-    const live = readFileSync(resolve(process.cwd(), "lib/commissioner-ui/managers/decision-os-client/live.ts"), "utf8")
-    expect(live).not.toMatch(/^\s*[^*\s/].*manager-dna/m)
-  })
+beforeEach(() => {
+  vi.clearAllMocks()
+  h.session.mockResolvedValue({ user: { id: "u1" } })
+  h.league.mockResolvedValue("L1")
+  h.load.mockResolvedValue({ available: true, data: { league: { id: "L1", name: "X", platform: "sleeper" }, viewerTeamExternalId: "demo-mgr-1", records: RECORDS } })
 })
 
-describe("Manager Intelligence view — the error is never an empty league", () => {
-  it("🛑 the retired error says retired, NOT 'No manager history yet.'", () => {
-    render(<ManagerIntelligenceView managers={[]} dataMode="live" errorMessage={MANAGER_PROFILES_RETIRED_MESSAGE} />)
-    expect(screen.getByText("Manager profiles are retired.")).toBeInTheDocument()
-    expect(screen.getByText(/no longer builds behavior profiles/)).toBeInTheDocument()
-    expect(screen.queryByText("No manager history yet.")).not.toBeInTheDocument()
+describe("Managers live client", () => {
+  it("every manager's record for the active league — the commissioner's own team included", async () => {
+    const r = await liveManagerIntelligenceClient.getManagerDirectory()
+    expect(r.error).toBeNull()
+    expect(r.source).toBe("live")
+    expect(r.data!.map((m) => m.managerName)).toEqual(["Priya Natarajan", "Sam Rivera", "Marcus Webb", "Devon Okafor"])
+    expect(r.data![0]!.id).toBe("demo-mgr-1")
+    expect(h.load).toHaveBeenCalledWith({ leagueId: "L1", userId: "u1", includeViewer: true })
   })
 
-  it("any other error is an error, not an empty state", () => {
-    render(<ManagerIntelligenceView managers={[]} dataMode="live" errorMessage="Decision OS response failed contract validation." />)
-    expect(screen.getByRole("alert")).toHaveTextContent("Decision OS response failed contract validation.")
-    expect(screen.queryByText("No manager history yet.")).not.toBeInTheDocument()
+  it("never calls the retired Decision OS route", async () => {
+    await liveManagerIntelligenceClient.getManagerDirectory()
+    expect(h.transport).not.toHaveBeenCalled()
+    const route = readFileSync(resolve(process.cwd(), "app/api/v1/intelligence/league/manager-dna/route.ts"), "utf8")
+    expect(route).toMatch(/^export const GET = retiredProfileRoute$/m)
   })
 
-  it("positive control: with no error, an empty directory is still the empty state", () => {
-    render(<ManagerIntelligenceView managers={[]} dataMode="demo" />)
-    expect(screen.getByText("No manager history yet.")).toBeInTheDocument()
+  it("no session or no active league: an error naming it, no read", async () => {
+    h.session.mockResolvedValueOnce(null)
+    const a = await liveManagerIntelligenceClient.getManagerDirectory()
+    expect(a.data).toBeNull()
+    expect(a.error?.message).toBe("No active league could be resolved for this session.")
+    h.league.mockResolvedValueOnce(null)
+    const b = await liveManagerIntelligenceClient.getManagerDirectory()
+    expect(b.error?.message).toBe("No active league could be resolved for this session.")
+    expect(h.load).not.toHaveBeenCalled()
   })
 
-  it("the page hands the adapter's error to the view (it used to drop it)", () => {
+  it("a refused league passes the loader's reason through; a throw is retryable", async () => {
+    h.load.mockResolvedValueOnce({ available: false, reason: "Manager records are read only for a league you are in." })
+    const refused = await liveManagerIntelligenceClient.getManagerDirectory()
+    expect(refused.error).toMatchObject({ message: "Manager records are read only for a league you are in.", retryable: false })
+    h.load.mockRejectedValueOnce(new Error("db down"))
+    const thrown = await liveManagerIntelligenceClient.getManagerDirectory()
+    expect(thrown.error).toMatchObject({ message: "Manager records could not be read right now.", retryable: true })
+  })
+
+  it("the page hands the adapter's error to the view", () => {
     const page = readFileSync(resolve(process.cwd(), "app/commissioner-os/managers/page.tsx"), "utf8")
     expect(page).toContain("errorMessage={response.error?.message}")
-  })
-
-  it("Spanish: the retired notice and the error both translate", () => {
-    expect(cardsCopy("Manager profiles are retired.", "es")).toBe("Los perfiles de mánagers se retiraron.")
-    expect(
-      cardsCopy(
-        "AllFantasy no longer builds behavior profiles of the managers in your league. League Health still shows the risks in your league.",
-        "es",
-      ),
-    ).toContain("Salud de la liga")
-    expect(cosErrorText(MANAGER_PROFILES_RETIRED_MESSAGE, "es")).toContain("ya no crea perfiles")
   })
 })

@@ -81,8 +81,7 @@ const ERROR_ES: Record<string, string> = {
   'The live Decision OS backend is not yet integrated in this environment.':
     'El backend en vivo de Decision OS aún no está integrado en este entorno.',
   'No active league could be resolved for this session.': 'No se pudo determinar una liga activa para esta sesión.',
-  'AllFantasy no longer builds behavior profiles of the managers in your league.':
-    'AllFantasy ya no crea perfiles de comportamiento de los mánagers de tu liga.',
+  'Manager records could not be read right now.': 'No se pudieron leer los historiales de los mánagers ahora.',
   'Decision OS response failed contract validation.': 'La respuesta de Decision OS no pasó la validación del contrato.',
   'This league has not been scanned yet. The workspace task scan runs daily; an empty list here would claim a clean bill of health nothing has checked.':
     'Esta liga todavía no se ha analizado. El análisis de tareas del espacio de trabajo se ejecuta a diario; una lista vacía aquí afirmaría que todo está en orden sin que nada lo haya comprobado.',

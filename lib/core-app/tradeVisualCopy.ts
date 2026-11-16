@@ -251,6 +251,10 @@ const templates: Array<[string,string]> = [
   ["{0} sent away a {1} in {2} of their {3} trades and took one on in none.","{0} cedió un {1} en {2} de sus {3} intercambios y no adquirió ninguno."],
   ["{0} took on a {1} in {2} of their {3} trades and sent one away in {4}.","{0} adquirió un {1} en {2} de sus {3} intercambios y cedió uno en {4}."],
   ["{0} took on draft picks in {1} of their {2} trades and gave picks up in {3}.","{0} adquirió selecciones en {1} de sus {2} intercambios y cedió selecciones en {3}."],
+  // The trade record's coverage shortfall (tradeEdge.ts) — shown on the manager card and Commissioner Managers.
+  ["Only {0} completed trades on file — fewer than {1}, so no pattern is shown.","Solo hay {0} intercambios completados registrados (menos de {1}), así que no se muestra ningún patrón."],
+  ["Only {0} completed trade on file — fewer than {1}, so no pattern is shown.","Solo hay {0} intercambio completado registrado (menos de {1}), así que no se muestra ningún patrón."],
+  ["No completed trades by {0} on file, so there is nothing to read yet.","No hay intercambios completados de {0} registrados, así que todavía no hay nada que leer."],
   // Plain-language trade copy (2026-11-11).
   ["You send {0} player and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugador y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],
   ["You send {0} players and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugadores y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],

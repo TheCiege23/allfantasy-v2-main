@@ -40,6 +40,8 @@ export async function loadLeagueManagerRecords(input: {
   userId: string
   /** Only this team's record. Without it: every manager but the viewer. */
   teamExternalId?: string
+  /** Every manager INCLUDING the viewer — the commissioner's directory of the whole league. */
+  includeViewer?: boolean
   now?: Date
 }): Promise<SectionState<LeagueManagerRecords>> {
   const now = input.now ?? new Date()
@@ -63,7 +65,7 @@ export async function loadLeagueManagerRecords(input: {
 
   const targets = input.teamExternalId
     ? teams.filter((t) => t.externalId === input.teamExternalId)
-    : teams.filter((t) => t.externalId !== viewer?.externalId)
+    : teams.filter((t) => input.includeViewer || t.externalId !== viewer?.externalId)
   if (input.teamExternalId && targets.length === 0) {
     return { available: false, reason: 'That team is not in this league.' }
   }

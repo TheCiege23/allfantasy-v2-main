@@ -1,77 +1,63 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
-import { ManagerIntelligenceView } from "@/components/commissioner-os/managers/ManagerIntelligenceView"
+import { ManagerIntelligenceView, summaryLine } from "@/components/commissioner-os/managers/ManagerIntelligenceView"
 import { stubManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/stub"
 import { demoManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/demo"
 import { liveManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/live"
 
-describe("commissioner-os — Manager Intelligence client parity", () => {
+/**
+ * The commissioner's Managers screen is every manager's record as FACTS (2026-11-16, re-score item 11).
+ * It used to show Manager DNA profiles (archetype, reliability score, engagement trend), retired in
+ * Milestone 32. These pin the replacement: counts, no label, no score.
+ */
+describe("commissioner-os — Manager directory client parity", () => {
   it("stub, demo, and live all satisfy the same method surface", () => {
     expect(typeof stubManagerIntelligenceClient.getManagerDirectory).toBe("function")
     expect(typeof demoManagerIntelligenceClient.getManagerDirectory).toBe("function")
     expect(typeof liveManagerIntelligenceClient.getManagerDirectory).toBe("function")
   })
 
-  it("live returns the retired error, never fixture data (Milestone 32 retired the directory)", async () => {
-    const response = await liveManagerIntelligenceClient.getManagerDirectory()
-    expect(response.data).toBeNull()
-    expect(response.error?.category).toBe("not_found")
-    expect(response.error?.retryable).toBe(false)
-  })
-
-  it("demo data includes both recognition and risk — never all-negative or all-positive", async () => {
-    const response = await demoManagerIntelligenceClient.getManagerDirectory()
-    const managers = response.data!
-    expect(managers.some((m) => m.recognition)).toBe(true)
-    expect(managers.some((m) => m.riskFlag)).toBe(true)
-  })
-})
-
-describe("commissioner-os — Manager Intelligence view", () => {
-  it("renders every manager's name from demo data", async () => {
-    const response = await demoManagerIntelligenceClient.getManagerDirectory()
-    render(<ManagerIntelligenceView managers={response.data!} dataMode="demo" />)
-    for (const manager of response.data!) {
-      expect(screen.getByText(manager.managerName)).toBeInTheDocument()
-    }
-  })
-
-  /*
-   * Milestone 32: a characterisation label of a named manager is shown to NOBODY, commissioners
-   * included. The card used to render `manager.archetype` as a badge ("Active Trader", "Quiet
-   * Participant"…). Fixtures and the live client no longer carry one; this pins the VIEW too, by
-   * handing it a profile that still does (an older payload) and checking it is not drawn.
-   */
-  it("never renders a manager archetype label, even when a payload still carries one", async () => {
-    const response = await demoManagerIntelligenceClient.getManagerDirectory()
-    const withLegacyLabels = response.data!.map((m, i) => ({
-      ...m,
-      archetype: ["Active Trader", "Quiet Participant", "Steady Operator", "Connector"][i % 4],
-    }))
-    const { container } = render(<ManagerIntelligenceView managers={withLegacyLabels as never} dataMode="demo" />)
-    // Positive control: the cards rendered, with their facts.
-    expect(screen.getByText(response.data![0].managerName)).toBeInTheDocument()
-    expect(screen.getAllByText(/Reliability:/).length).toBeGreaterThan(0)
-    expect(container.textContent).not.toMatch(/Active Trader|Quiet Participant|Steady Operator|Connector/)
-  })
-
-  it("the demo and stub fixtures carry no archetype", async () => {
+  it("the preview is built by the real record builder — facts, never a profile", async () => {
     for (const client of [demoManagerIntelligenceClient, stubManagerIntelligenceClient]) {
       const response = await client.getManagerDirectory()
       expect(response.data!.length).toBeGreaterThan(0)
-      for (const m of response.data!) expect(m).not.toHaveProperty("archetype")
+      for (const m of response.data!) {
+        expect(m.record.manager.teamExternalId).toBe(m.id)
+        for (const legacy of ["archetype", "reliabilityScore", "engagementTrend", "engagementReliability", "riskFlag", "recognition", "tenureSeasons"]) {
+          expect(m).not.toHaveProperty(legacy)
+        }
+      }
     }
   })
+})
 
-  it("never renders a single collapsed overall score — reliability is shown as one specific, labeled trait", async () => {
+describe("commissioner-os — Managers view", () => {
+  it("draws every manager with a counts summary and their full record", async () => {
     const response = await demoManagerIntelligenceClient.getManagerDirectory()
-    render(<ManagerIntelligenceView managers={response.data!} dataMode="demo" />)
-    expect(screen.queryByText(/^Score:/)).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Reliability:/).length).toBeGreaterThan(0)
+    const { container } = render(<ManagerIntelligenceView managers={response.data!} dataMode="demo" />)
+    for (const m of response.data!) expect(screen.getByText(m.managerName)).toBeInTheDocument()
+    expect(container.textContent).toContain("4 trades · 3 waiver claims won this season · $41 FAAB left · 2 drafts on file")
+    expect(container.textContent).toContain("Priya Natarajan took on a WR in 3 of their 4 trades and sent one away in 1.")
+    expect(screen.getAllByText("Full record").length).toBe(response.data!.length)
   })
 
-  it("shows an empty state, not an error, when there is no manager history yet", () => {
-    render(<ManagerIntelligenceView managers={[]} dataMode="demo" />)
-    expect(screen.getByText('No manager history yet.')).toBeInTheDocument()
+  it("never draws a label, a score or a prediction", async () => {
+    const response = await demoManagerIntelligenceClient.getManagerDirectory()
+    const { container } = render(<ManagerIntelligenceView managers={response.data!} dataMode="demo" />)
+    expect(container.textContent).not.toMatch(/Reliability|Score:|Active Trader|Quiet Participant|will likely|tends to|aggressive|shark/i)
+  })
+
+  it("an error is an error, and only a real empty league is the empty state", () => {
+    const { container, rerender } = render(<ManagerIntelligenceView managers={[]} dataMode="live" errorMessage="Manager records could not be read right now." />)
+    expect(screen.getByRole("alert")).toHaveTextContent("Manager records could not be read right now.")
+    expect(container.textContent).not.toContain("No managers in this league yet.")
+    rerender(<ManagerIntelligenceView managers={[]} dataMode="live" />)
+    expect(screen.getByText("No managers in this league yet.")).toBeInTheDocument()
+  })
+
+  it("summaryLine leaves out a section that could not be read rather than printing a zero", async () => {
+    const [first] = (await demoManagerIntelligenceClient.getManagerDirectory()).data!
+    const r = { ...first!.record, waivers: { available: false as const, reason: "x" } }
+    expect(summaryLine(r, "en")).toBe("4 trades · 2 drafts on file")
   })
 })
