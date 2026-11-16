@@ -266,6 +266,33 @@ async function findStoredPendingOffers(leagueId: string, userId: string, limit: 
   return [...native, ...provider].slice(0, limit)
 }
 
+/**
+ * Every two-team offer awaiting this user's answer, by reference — the set the counter-offer tool accepts an id
+ * from (`lib/chimmy-trade/pendingCounterOffers.ts`). A multi-team proposal is left out: it is not graded, so it
+ * has no counter either. Throws when the redraft table cannot be read; unreadable is not "none".
+ */
+export async function listPendingOfferRefs(leagueId: string, userId: string): Promise<TradeRef[]> {
+  const proposals = await defaultDeps.findProposals(leagueId, userId)
+  const stored = await findStoredPendingOffers(leagueId, userId, 10)
+  return [
+    ...proposals.filter((p) => !isMultiTeamTrade(p)).map((p): TradeRef => ({ kind: 'redraft', proposalId: p.id })),
+    ...stored.map((o) => o.ref),
+  ]
+}
+
+/** The id printed beside an offer, and the one the counter tool takes. */
+export function pendingOfferId(ref: TradeRef): string {
+  return ref.kind === 'af' ? ref.tradeId : ref.kind === 'redraft' ? ref.proposalId : ref.providerTradeId
+}
+
+/** When the user gets less than they give, point Chimmy at the counter engine rather than letting it invent one. */
+function counterHint(r: EvaluatedTrade, id: string): string[] {
+  const g = r.receipt.grade
+  return g.graded && g.getValue < g.giveValue
+    ? [`  This offer has the user receiving less than they send. For counter-offers call suggest_counter_offer with offer_id "${id}"; never make one up.`]
+    : []
+}
+
 function loadedAssetLabel(a: LoadedTradeAsset): string {
   if (a.kind === 'player') return a.name
   if (a.kind === 'pick') return a.label
@@ -392,6 +419,7 @@ export async function buildPendingTradeDecisionContext(
         continue
       }
       lines.push(...gradeLines(r, from, describeAssets(p), d))
+      lines.push(...counterHint(r, p.id))
     } catch {
       // Never let the evaluator take down the whole grounding block.
       lines.push('  Grade: evaluation failed. Do not substitute your own grade.')
@@ -409,8 +437,9 @@ export async function buildPendingTradeDecisionContext(
         continue
       }
       const assetsText = describeLoadedTrade(r.trade, r.perspectiveTeamId)
-      lines.push(`- ${source} ${r.trade.id} from ${o.from}: ${assetsText}.${expires} ${WHERE_TO_ANSWER[o.ref.kind]}`)
+      lines.push(`- ${source} ${pendingOfferId(o.ref)} from ${o.from}: ${assetsText}.${expires} ${WHERE_TO_ANSWER[o.ref.kind]}`)
       lines.push(...gradeLines(r, o.from, assetsText, d))
+      lines.push(...counterHint(r, pendingOfferId(o.ref)))
     } catch {
       lines.push(`- ${source} from ${o.from}.${expires}`)
       lines.push('  Grade: evaluation failed. Do not substitute your own grade.')

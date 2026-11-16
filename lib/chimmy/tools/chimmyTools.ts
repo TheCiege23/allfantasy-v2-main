@@ -630,6 +630,24 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'suggest_counter_offer',
+      description:
+        "Finds counter-offers for ONE trade offer waiting on the user's answer, in the league in scope: each asks the other team for one more player, re-graded as a whole package by the league's own grader (the Trade Center's counters). Use for 'what should I counter with', 'how do I make this fair', 'what else should I ask for'. offer_id is the id printed beside the offer in the pending trades. Never make up a counter yourself; if this returns none, say so.",
+      parameters: {
+        type: 'object',
+        properties: {
+          offer_id: {
+            type: 'string',
+            description: 'The id shown beside the offer in the pending incoming trades.',
+          },
+        },
+        required: ['offer_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'find_trade_ideas',
       description:
         "Searches EVERY roster in the league in scope for trades that make sense for both sides, and returns up to three concrete offers: the partner, what the user gives, what they get, AllFantasy market value each way with a fairness read, and why the partner would say yes (their needs, your depth, team direction, trade-block listings). Use for 'find me a trade', 'who should I trade with', 'I need a running back — who has one', 'what can I get for X', 'shop X'. Set goal and include_picks whenever the user says so — 'win now', 'contend', 'using my picks', 'a 2nd instead of my 1st' are search terms, not flavour. NFL leagues only. Not for grading a trade the user already described (evaluate_trade).",
@@ -1287,6 +1305,16 @@ export async function executeChimmyTool(
           leagueId: ctx.leagueId,
           userId: ctx.userId,
           ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
+        })
+      }
+
+      case 'suggest_counter_offer': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildPendingCounterOffers } = await import('@/lib/chimmy-trade/pendingCounterOffers')
+        return await buildPendingCounterOffers({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          offerId: typeof args.offer_id === 'string' ? args.offer_id.slice(0, 120) : '',
         })
       }
 

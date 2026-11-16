@@ -150,6 +150,20 @@ describe('Chimmy sees native and Sleeper offers', () => {
     expect(out).toContain('Grade: NOT AVAILABLE — Trade gone. Do not grade it yourself.')
   })
 
+  it('points Chimmy at the counter tool only for an offer where the user receives less', async () => {
+    let out = (await buildPendingTradeDecisionContext('L', 'me'))!
+    expect(out).not.toContain('suggest_counter_offer')
+
+    m.evaluate.mockImplementation(async ({ ref }: { ref: { kind: string; tradeId?: string; providerTradeId?: string } }) => {
+      const r = ref.kind === 'af' ? graded(ref.tradeId!, 'R-me', 'R-rival') : graded(ref.providerTradeId!, '3', '5')
+      if (ref.kind === 'provider') r.receipt.grade = { ...r.receipt.grade, letter: 'D', giveValue: 5000, getValue: 3000 }
+      return r
+    })
+    out = (await buildPendingTradeDecisionContext('L', 'me'))!
+    expect(out).toContain('call suggest_counter_offer with offer_id "sl-needs-me"')
+    expect(out).not.toContain('offer_id "af-1"')
+  })
+
   it('never shows more than three offers, redraft proposals first', async () => {
     m.afTrades.mockImplementation(async ({ take }: { take: number }) =>
       Array.from({ length: take }, (_, i) => ({ id: `af-${i}`, expiresAt: null, proposerRoster: { platformUserId: 'u-rival' } })),
