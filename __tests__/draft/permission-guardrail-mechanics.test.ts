@@ -239,6 +239,7 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
     }
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => mocks.assertCommissioner))
 
 import { POST as postDraftControls } from '@/app/api/leagues/[leagueId]/draft/controls/route'
 import { POST as postDraftPick } from '@/app/api/leagues/[leagueId]/draft/pick/route'

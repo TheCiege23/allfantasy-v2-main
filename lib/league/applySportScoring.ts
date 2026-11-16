@@ -14,7 +14,7 @@
 import { prisma } from '@/lib/prisma'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
+import { commissionerAccess } from '@/lib/league/commissionerAccess'
 import { MID_SEASON_CONFIRMATION_CODE } from '@/lib/league/midSeasonConfirmation'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
@@ -152,8 +152,15 @@ export async function applySportScoringToLeague(input: ApplySportScoringInput): 
   const adapter = ADAPTERS[sport]
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, settings: true } })
   if (!league) return { ok: false, outcome: 'not_found', status: 404, body: { error: 'Not found' } }
-  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, userId))) {
-    return { ok: false, outcome: 'forbidden', status: 403, body: { error: 'Commissioner only' } }
+  // The head commissioner, or a co-commissioner granted scoring (lib/league/commissionerAccess.ts).
+  const access = await commissionerAccess(leagueId, userId, 'scoring')
+  if (!access.ok) {
+    return {
+      ok: false,
+      outcome: 'forbidden',
+      status: 403,
+      body: { error: access.error, ...(access.missingScopes ? { code: 'co_commissioner_scope', missingScopes: access.missingScopes } : {}) },
+    }
   }
   const locked = await settingsLockedResponse(leagueId, 'scoring')
   if (locked) {

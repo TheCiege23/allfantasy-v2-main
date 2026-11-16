@@ -10,11 +10,11 @@
  *
  * See lib/playoff-brackets/byePlan.ts and docs/AF_COMMISSIONER_SETTINGS_SPEC.md §1.3.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import {
@@ -69,7 +69,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
-  if (!(await isCommissioner(leagueId, userId))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, userId, 'view')
+  if (refused) return refused
   const league = await load(leagueId)
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -131,7 +132,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
-  if (!(await isCommissioner(leagueId, userId))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, userId, 'league')
+  if (refused) return refused
   const league = await load(leagueId)
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (await bracketLocked(league.id, league.season)) {

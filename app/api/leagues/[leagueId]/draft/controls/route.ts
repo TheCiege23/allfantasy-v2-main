@@ -2,6 +2,7 @@
  * POST: Commissioner controls — start, pause, resume, reset_timer, undo_pick, force_autopick, complete, etc.
  */
 
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -206,6 +207,11 @@ async function handleDraftControl(
   if (!gate.ok) {
     return NextResponse.json({ error: gate.err.error, code: gate.err.code }, { status: gate.err.status })
   }
+  // The gate above passes ANY co-commissioner. Running the draft is league setup; wiping it is the head
+  // commissioner's alone — the reset on the settings screen already was, and this one was open to every
+  // co-commissioner (2026-11-16).
+  const refused = await commissionerAccessResponse(leagueId, userId, action === 'reset_draft' ? 'head' : 'league')
+  if (refused) return refused
 
   if (!ALLOWED_ACTIONS.includes(action)) {
     return NextResponse.json(

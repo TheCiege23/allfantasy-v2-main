@@ -22,7 +22,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { readScoringType } from '@/lib/category-scoring/leagueScoringType'
 import { isDevyFormatLeague } from '@/lib/core-app/dynastyRosterMarkers'
 import { lockedGroups } from '@/lib/league/settingsLockService'
@@ -122,8 +122,9 @@ async function commissionerLeagues(userId: string, sport: string): Promise<Leagu
   const others = otherIds.length
     ? await prisma.league.findMany({ where: { id: { in: otherIds }, sport: sport as never }, select: LEAGUE_SELECT })
     : []
-  // The same commissioner check the scoring save makes, so nothing is listed that the save would then refuse for it.
-  const allowed = await Promise.all(others.map((l) => isOwnerOrLeagueCommissioner(l, l.id, userId)))
+  // The same check the scoring save makes — head commissioner, or co-commissioner granted scoring — so nothing is
+  // listed that the save would then refuse for it.
+  const allowed = await Promise.all(others.map((l) => canCommissionerAct(l.id, userId, 'scoring')))
   return [...owned, ...others.filter((_, i) => allowed[i])] as LeagueRow[]
 }
 
@@ -154,7 +155,7 @@ export type SharedScoringView =
 async function loadSource(userId: string, sourceLeagueId: string) {
   const league = (await prisma.league.findUnique({ where: { id: sourceLeagueId }, select: LEAGUE_SELECT })) as LeagueRow | null
   if (!league) return { ok: false as const, status: 404, error: 'League not found' }
-  if (!(await isOwnerOrLeagueCommissioner(league, league.id, userId))) return { ok: false as const, status: 403, error: 'Commissioner only' }
+  if (!(await canCommissionerAct(league.id, userId, 'scoring'))) return { ok: false as const, status: 403, error: 'Only a commissioner with scoring permission can share this league’s scoring.' }
   if (!isPointsScoringSport(league.sport)) return { ok: false as const, status: 400, error: 'This sport has no shared scoring.' }
   const incompatible = sharedScoringIncompatibility(league)
   if (incompatible) return { ok: false as const, status: 409, error: SHARED_SCORING_INCOMPATIBILITY_MESSAGE[incompatible] }
