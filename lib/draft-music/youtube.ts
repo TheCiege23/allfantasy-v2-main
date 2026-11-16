@@ -38,6 +38,20 @@ export type YouTubeStation = {
  */
 export const YOUTUBE_STATIONS: YouTubeStation[] = [
   {
+    /*
+     * American stadium game day: Saliva "Ladies and Gentlemen", "Sirius",
+     * "Welcome to the Jungle", "Kernkraft 400", "Enter Sandman", "Eye of the
+     * Tiger", "Jump Around", "Still D.R.E.", "Song 2", "Pump Up the Jam" — read
+     * off the playlist page 2026-11-15, 76+ tracks, and played in the embed.
+     * ⚠ NOT Redlist's "Best Football Anthems": despite the name it is soccer —
+     * FIFA World Cup songs from "Waka Waka" down — which is the wrong game day.
+     */
+    id: 'game-day',
+    label: 'Game day hype',
+    channel: 'Stadium anthems',
+    source: { kind: 'playlist', listId: 'PLzLL4DfilFdyUvq2CKE0IZVHjmMM0k_fa' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
