@@ -15,6 +15,12 @@ import { lineupSeatsFromSettings } from '@/lib/core-app/slotEligibility'
 import { leagueContextFor } from '@/lib/core-app/leagueContext'
 import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { startingSlots } from '@/lib/core-app/slotEligibility'
+import { prisma } from '@/lib/prisma'
+import { boardUnit, isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
+import { loadSeasonRateWaiverBoard } from '@/lib/waivers/seasonRateWaiverBoard'
+import { waiverSportLabel, waiverSportPlan } from '@/lib/waivers/waiverSportBasis'
+import type { FaabCandidate } from '@/lib/trade-intel/faabBid'
 import {
   callerTradeSeat,
   faabPoolFor,
@@ -54,6 +60,13 @@ import {
  *
  * ⚠ THE BID IS AGAINST WHAT THE USER HAS LEFT (`rosters.faabRemaining`), never the league's season
  * budget. With no remaining figure on file it gives shares, and refuses the dollars.
+ *
+ * 🛑 THE MARKET CHART IS NFL-ONLY, AND IT IS KEYED BY SLEEPER ID — WHICH SLEEPER REUSES ACROSS SPORTS.
+ * Before 2026-11-16 an NBA Sleeper league fell through to the NFL chart: its pool was NFL players nobody
+ * in the league could roster, and any NBA id that happened to equal an NFL one was priced as him. A
+ * league of another sport now never reads the chart. A sport on a league value board (NBA first) is
+ * planned from that board — the Waivers board's own per-game lineup gain, times the games left, under
+ * the league's own scoring — and any other sport is refused in words.
  */
 
 /** Enough to act on; a longer list is noise the model will pad an answer with. */
@@ -86,6 +99,11 @@ export type FaabBidPlan =
   | {
       status: 'ok'
       /**
+       * What every value in the plan measures: the NFL market chart's units, or — on a league value
+       * board — this league's rest-of-season fantasy points (or category score) added to the lineup.
+       */
+      valueUnit: 'market' | 'fantasy points' | 'category score'
+      /**
        * `no_pool`: nothing valued is unrostered. `no_calc`: the allocator refused the inputs.
        * `save`: nobody improves the lineup. `rank`: upgrades, no dollars (ordinary league).
        * `bid`: upgrades with a dollar ceiling or a share each (elimination league).
@@ -116,14 +134,25 @@ export type FaabBidPlan =
 /** How many bids the model's text lists. */
 export const FAAB_TEXT_MAX_BIDS = MAX_BIDS
 
-export async function computeFaabBidPlan(leagueId: string, userId: string): Promise<FaabBidPlan> {
-  const refuse = (line: string): FaabBidPlan => ({ status: 'refused', line })
+/** Test seams for the league-value-board path. */
+export type FaabPlanDeps = {
+  valueBoard?: (leagueId: string) => Promise<LeagueValueBoard>
+  waiverBoard?: typeof loadSeasonRateWaiverBoard
+  now?: Date
+}
+
+const refuse = (line: string): FaabBidPlan => ({ status: 'refused', line })
+
+export async function computeFaabBidPlan(leagueId: string, userId: string, deps: FaabPlanDeps = {}): Promise<FaabBidPlan> {
   const league = await leagueContextFor(leagueId, userId).league().catch(() => null)
   if (!league) return refuse('FAAB BID PLAN: the league in scope could not be read. Do not estimate bids.')
   // A native league of another sport holds Rolling Insights ids, and these values are NFL Sleeper ids.
   if (isForeignIdSpace(league.platform, league.sport)) {
     return refuse('FAAB BID PLAN: this platform\'s player ids are not readable here, so available players cannot be priced. Say so; do not estimate bids.')
   }
+  // 🛑 Any sport but the NFL leaves here, before the NFL chart is read (see the header).
+  const sport = String(league.sport ?? '').trim().toUpperCase() || 'NFL'
+  if (sport !== 'NFL') return computeBoardFaabPlan(league, userId, sport, deps)
 
   const rows = await readLeagueTradeRows(leagueId).catch(() => null)
   if (!rows) return refuse('FAAB BID PLAN: the league\'s rosters could not be read. Do not estimate bids.')
@@ -151,8 +180,9 @@ export async function computeFaabBidPlan(leagueId: string, userId: string): Prom
   const budgetRaw = Number(settings.faab_budget)
   const remaining = typeof myRoster.faabRemaining === 'number' && Number.isFinite(myRoster.faabRemaining) ? myRoster.faabRemaining : null
 
-  const base = {
+  const base: PlanBase = {
     status: 'ok' as const,
+    valueUnit: 'market',
     leagueName: String(league.name ?? ''),
     platform: String(league.platform ?? ''),
     platformLeagueId: league.platformLeagueId ?? null,
@@ -165,9 +195,32 @@ export async function computeFaabBidPlan(leagueId: string, userId: string): Prom
     seatsLabel: seats ? describeSeats(seats) : null,
     rosteredCount: rostered.size,
   }
+  return finishPlan({ base, pool, rows, league, displacedById, seatsKnown: Boolean(seats) })
+}
+
+type PlanBase = Omit<Extract<FaabBidPlan, { status: 'ok' }>, 'outcome' | 'horizonBasis' | 'allocReason' | 'pricedCount' | 'upgrades' | 'nonUpgrades'>
+
+/** The pool, paced and allocated — one path for the NFL chart and a league value board. */
+async function finishPlan(args: {
+  base: PlanBase
+  pool: FaabCandidate[]
+  rows: NonNullable<Awaited<ReturnType<typeof readLeagueTradeRows>>>
+  league: { platformLeagueId: string | null }
+  displacedById: ReadonlyMap<string, string | null>
+  seatsKnown: boolean
+  /**
+   * What an empty pool means. On the NFL chart, nothing VALUED is unrostered (`no_pool`, a statement
+   * about the chart). A league value board's pool holds only lineup upgrades, so there an empty pool
+   * means nobody on the wire would start: save the FAAB.
+   */
+  emptyPool?: 'no_pool' | 'save'
+}): Promise<FaabBidPlan> {
+  const { base, pool, rows, league, displacedById } = args
+  const { elimination, concept, remaining } = base
+  const seats = args.seatsKnown
   const empty = { horizonBasis: null, allocReason: null, pricedCount: 0, upgrades: [], nonUpgrades: 0 }
 
-  if (pool.length === 0) return { ...base, ...empty, outcome: 'no_pool' }
+  if (pool.length === 0) return { ...base, ...empty, outcome: args.emptyPool ?? 'no_pool' }
 
   /*
    * Paced against a PUBLISHED elimination schedule where one exists. A plain guillotine without one
@@ -215,6 +268,94 @@ export async function computeFaabBidPlan(leagueId: string, userId: string): Prom
   }
 }
 
+/** "PG, SG, G ×2, UTIL ×3" — a lineup's starting slots, counted. */
+function slotsLabel(slots: readonly string[]): string {
+  const counts = new Map<string, number>()
+  for (const slot of slots) counts.set(slot, (counts.get(slot) ?? 0) + 1)
+  return [...counts].map(([slot, n]) => (n > 1 ? `${slot} ×${n}` : slot)).join(', ')
+}
+
+/**
+ * The plan for a league of another sport. A league-value-board sport (NBA first) is planned from the
+ * Waivers board's own answer — each free agent's per-game gain to the user's best legal lineup under the
+ * league's own scoring — times the games left, so the bid and the "worth adding" row cannot disagree.
+ * Any other sport has no value to bid with, and says so.
+ */
+async function computeBoardFaabPlan(
+  league: NonNullable<Awaited<ReturnType<ReturnType<typeof leagueContextFor>['league']>>>,
+  userId: string,
+  sport: string,
+  deps: FaabPlanDeps,
+): Promise<FaabBidPlan> {
+  const label = waiverSportLabel(sport)
+  if (!isBoardValueSport(sport)) {
+    return refuse(`FAAB BID PLAN: AllFantasy has no ${label} player values to bid with yet, so bids cannot be priced in this league. Say so; do not estimate bids, and never use NFL values.`)
+  }
+  const board = await (deps.valueBoard ?? loadLeagueValueBoard)(league.id).catch((): LeagueValueBoard => ({ kind: 'not_board_sport' }))
+  if (board.kind !== 'ok') {
+    const why = board.kind === 'unavailable' ? board.reason : 'it could not be read just now.'
+    return refuse(`FAAB BID PLAN: this league's ${label} value board is not available — ${why} Say so; do not estimate bids.`)
+  }
+  const games = board.ctx.window.gamesRemaining
+  if (!(games > 0)) {
+    return refuse(`FAAB BID PLAN: the ${board.ctx.window.seasonLabel} ${label} regular season has no games left, so no pickup adds anything. Say so; do not estimate bids.`)
+  }
+
+  const rows = await readLeagueTradeRows(league.id).catch(() => null)
+  if (!rows) return refuse('FAAB BID PLAN: the league\'s rosters could not be read. Do not estimate bids.')
+  const { myRoster } = callerTradeSeat(rows, userId)
+  if (!myRoster) return refuse('FAAB BID PLAN: the user has no claimed team in this league, so there is no lineup to bid for. Say so.')
+
+  const wire = await (deps.waiverBoard ?? loadSeasonRateWaiverBoard)({
+    prisma,
+    league: { id: league.id, settings: league.settings, platform: league.platform },
+    plan: waiverSportPlan(sport),
+    userId,
+    limit: 100,
+    valueBoard: async () => board,
+  }).catch(() => null)
+  if (!wire) return refuse('FAAB BID PLAN: the waiver wire could not be read just now. Do not estimate bids.')
+  if (wire.state !== 'ok') {
+    const why = wire.notes[0] ?? `the waiver board could not be built (${wire.state.replace(/_/g, ' ')}).`
+    return refuse(`FAAB BID PLAN: ${why} Say so; do not estimate bids.`)
+  }
+
+  /*
+   * Rest-of-season gain: the per-game lift to the user's best lineup, times the games left. The board
+   * already dropped every free agent who would not start, so each one here is an upgrade.
+   */
+  const pool: FaabCandidate[] = wire.candidates.map((c) => ({
+    id: c.playerKey ?? c.name,
+    name: c.name,
+    position: c.position,
+    playerValue: Math.round(c.gain * games),
+    replacedValue: 0,
+    displacedName: c.displaces?.name ?? null,
+  }))
+
+  const concept = readFormatRules({ leagueType: league.leagueType, isDynasty: Boolean(league.isDynasty), settings: league.settings }).concept
+  const settings = (league.settings ?? {}) as Record<string, unknown>
+  const budgetRaw = Number(settings.faab_budget)
+  const remaining = typeof myRoster.faabRemaining === 'number' && Number.isFinite(myRoster.faabRemaining) ? myRoster.faabRemaining : null
+  const slots = startingSlots(league.settings)
+  const base: PlanBase = {
+    status: 'ok' as const,
+    valueUnit: boardUnit(board.ctx),
+    leagueName: String(league.name ?? ''),
+    platform: String(league.platform ?? ''),
+    platformLeagueId: league.platformLeagueId ?? null,
+    concept,
+    elimination: concept === 'guillotine' || concept === 'survivor',
+    valuesSource: `this league's own ${label} value board (${board.ctx.window.seasonLabel}, ${games} games left)`,
+    valuesAsOf: (deps.now ?? new Date()).toISOString().slice(0, 10),
+    remaining,
+    seasonBudget: Number.isFinite(budgetRaw) && budgetRaw > 0 ? budgetRaw : null,
+    seatsLabel: slots ? slotsLabel(slots) : null,
+    rosteredCount: new Set(rows.rosters.flatMap((r) => tradeRosterPlayerIds(r))).size,
+  }
+  return finishPlan({ base, pool, rows, league, displacedById: new Map(pool.map((c) => [c.id, c.displacedName ?? null])), seatsKnown: true, emptyPool: 'save' })
+}
+
 /** The model's text for a plan. Pure; the wording is what the tool has always returned. */
 export function renderFaabBidText(plan: FaabBidPlan): string {
   if (plan.status === 'refused') return plan.line
@@ -228,6 +369,7 @@ export function renderFaabBidText(plan: FaabBidPlan): string {
       ? `Upgrades are measured against the user's best legal starting lineup under this league's slots (${plan.seatsLabel}).`
       : 'This league\'s starting slots are NOT on file, so a standard 1 QB / 2 RB / 2 WR / 1 TE lineup is ASSUMED. Say so: in a FLEX or SUPER_FLEX league the real upgrades can be very different.',
   ]
+  const onBoard = plan.valueUnit !== 'market'
 
   if (plan.outcome === 'no_pool') {
     lines.push(
@@ -240,7 +382,9 @@ export function renderFaabBidText(plan: FaabBidPlan): string {
 
   if (plan.outcome === 'save') {
     lines.push(
-      `None of the ${plan.pricedCount} valued unrostered players would improve the user's starting lineup. The answer is: do not spend FAAB this week; save it.`,
+      plan.pricedCount === 0
+        ? 'No free agent would improve the user\'s starting lineup. The answer is: do not spend FAAB this week; save it.'
+        : `None of the ${plan.pricedCount} valued unrostered players would improve the user's starting lineup. The answer is: do not spend FAAB this week; save it.`,
     )
     return lines.join('\n')
   }
@@ -270,7 +414,9 @@ export function renderFaabBidText(plan: FaabBidPlan): string {
   if (plan.upgrades.length > MAX_BIDS) lines.push(`(${plan.upgrades.length - MAX_BIDS} smaller upgrades not listed.)`)
   if (plan.nonUpgrades > 0) lines.push(`${plan.nonUpgrades} other valued unrostered players would not improve the lineup: bid nothing on them.`)
   lines.push(
-    'Unrostered is not the same as claimable: we cannot see waiver periods or pending claims, so confirm on the platform. Values are long-term market-value units under this league\'s scoring — not fantasy points and not this week\'s projection; never call them points.',
+    onBoard
+      ? `Unrostered is not the same as claimable: we cannot see waiver periods or pending claims, so confirm on the platform. Values are rest-of-season ${plan.valueUnit} added to the user's best lineup (per-game gain × games left) under this league's own scoring — not the NFL market chart, and not this week's projection.`
+      : 'Unrostered is not the same as claimable: we cannot see waiver periods or pending claims, so confirm on the platform. Values are long-term market-value units under this league\'s scoring — not fantasy points and not this week\'s projection; never call them points.',
   )
   return lines.join('\n')
 }

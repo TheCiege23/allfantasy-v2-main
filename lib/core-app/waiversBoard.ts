@@ -139,6 +139,11 @@ export type WaiverBoardRow = {
   afNetGain?: number
   add: WaiverPlayer
   drop: WaiverPlayer | null
+  /**
+   * What THIS row's numbers were priced on, when it differs from its section's `basis` — a points league
+   * priced on its own value board (`league_value_board`) in a section otherwise on the season rate.
+   */
+  basis?: WaiverValueBasis
   /** FAAB left, when the league runs FAAB and a budget was read. */
   faabRemaining: number | null
   /** "Wednesday 09:00 UTC", when the league publishes a processing time. */

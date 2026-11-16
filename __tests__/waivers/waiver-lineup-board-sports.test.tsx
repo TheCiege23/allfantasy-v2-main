@@ -77,4 +77,20 @@ describe('WaiverLineupBoard — a season-rate league', () => {
     await waitFor(() => expect(screen.getByText(/nothing projects this sport’s players yet/)).toBeTruthy())
     expect(screen.getByText(/No projection exists for soccer players/)).toBeTruthy()
   })
+
+  it('a league-value-board add shows the games behind it, and calls under 20 thin (2026-11-16)', async () => {
+    const add = NHL_PAYLOAD.candidates[0]!
+    mockFetch({
+      ...NHL_PAYLOAD,
+      sport: 'NBA',
+      basis: 'league_value_board',
+      candidates: [{ ...add, name: 'Steady Vet', sampleGames: 41 }, { ...add, playerKey: 'pim-3', name: 'New Guy', sampleGames: 12 }],
+    })
+    render(<WaiverLineupBoard leagueId="lg1" />)
+    await waitFor(() => expect(screen.getByText('Steady Vet')).toBeTruthy())
+    const text = screen.getByTestId('waiver-lineup-board').textContent ?? ''
+    expect(text).toContain('41 games')
+    expect(text).toContain('12 games · thin sample')
+    expect(text).not.toContain('41 games · thin')
+  })
 })

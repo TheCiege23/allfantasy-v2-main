@@ -35,11 +35,17 @@
  * changed role, and every surface that shows it labels it "per game" — never "this week".
  */
 
-export type WaiverValueBasis = 'weekly_projection' | 'season_per_game_league' | 'season_per_game_af_default'
+/**
+ * `league_value_board` (2026-11-16): a sport valued on its league's own value board — the trade grade's
+ * board, scored under the league's points or categories (lib/sport-values/leagueValueBoard.ts). The
+ * season-rate loaders use it for a sport in `BOARD_VALUE_SPORTS` whenever that board can be built, and
+ * fall back to the default basis below, saying why, when it cannot.
+ */
+export type WaiverValueBasis = 'weekly_projection' | 'season_per_game_league' | 'season_per_game_af_default' | 'league_value_board'
 
 export type WaiverSportPlan =
   | { sport: string; kind: 'weekly'; basis: 'weekly_projection' }
-  | { sport: string; kind: 'per_game'; basis: 'season_per_game_league' | 'season_per_game_af_default' }
+  | { sport: string; kind: 'per_game'; basis: 'season_per_game_league' | 'season_per_game_af_default' | 'league_value_board' }
   | { sport: string; kind: 'none'; reason: string }
 
 /** A league's `sport`, as the loaders compare it. A missing sport has always meant NFL here. */
@@ -103,8 +109,22 @@ export function noSeasonProjectionsReason(sport: string): string {
 }
 
 /** One sentence naming the basis every number in a section was priced on. */
-export function waiverBasisSentence(basis: WaiverValueBasis, sport: string): string {
+export function waiverBasisSentence(
+  basis: WaiverValueBasis,
+  sport: string,
+  /** `league_value_board` only: the categories a category league is valued on ("PTS, REB, … and TO"). */
+  board?: { categoryList: string | null } | null,
+): string {
   const label = inSentence(sport)
+  if (basis === 'league_value_board') {
+    const scoring = board?.categoryList
+      ? `per-game category score under this league's categories (${board.categoryList})`
+      : "per-game fantasy points under this league's own scoring"
+    return (
+      `Values from this league's own ${label} value board — the one its trade grades use — as ${scoring}. ` +
+      `A season rate, not a projection for this week.`
+    )
+  }
   if (basis === 'season_per_game_league') {
     return (
       `Per-game rates from AllFantasy's ${label} season projection, re-scored under each league's own scoring_settings. ` +
@@ -121,7 +141,7 @@ export function waiverBasisSentence(basis: WaiverValueBasis, sport: string): str
   return "Weekly projections, re-scored under each league's own scoring_settings."
 }
 
-/** True for the two season-rate bases. */
+/** True for the season-rate bases. */
 export function isPerGameBasis(basis: WaiverValueBasis | null | undefined): boolean {
-  return basis === 'season_per_game_league' || basis === 'season_per_game_af_default'
+  return basis === 'season_per_game_league' || basis === 'season_per_game_af_default' || basis === 'league_value_board'
 }

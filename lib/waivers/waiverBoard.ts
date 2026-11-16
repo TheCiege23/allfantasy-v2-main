@@ -72,6 +72,11 @@ export interface WaiverCandidate {
   basis: 'projection' | 'form' | 'season_rate'
   /** Games behind a 'form' number, so a two-game estimate can be weighed as one. */
   formGames?: number
+  /**
+   * Games behind a league-value-board number (`basis: 'league_value_board'` on the board): this season's,
+   * plus last season's while this one is young. Shown on the row so a thin sample reads as one.
+   */
+  sampleGames?: number
 }
 
 export type WaiverBoardState =

@@ -83,6 +83,21 @@ export type PlayerCardCopy = {
   // tiles
   leaguePrice: string
   leaguePriceSub: (mode: string, numQbs: number, teams: number) => string
+  /** A league-value-board sport (NBA first): his value on the league's own board. */
+  leagueValue: string
+  leagueValueSub: (perGame: string, unit: 'fantasy points' | 'category score', gamesLeft: number) => string
+  dynastyValue: string
+  dynastyValueSub: (age: number | null) => string
+  boardBasis: (b: {
+    sport: string
+    perGame: string
+    unit: 'fantasy points' | 'category score'
+    replacement: string
+    replacementName: string
+    gamesLeft: number
+    sampleGames: number | null
+    baseline: string | null
+  }) => string
   notPriced: string
   slot: string
   tradePrice: string
@@ -200,6 +215,12 @@ const REASON_ES: Record<string, string> = {
   'FantasyCalc publishes no value for kickers or defenders, so this player has no market price.':
     'FantasyCalc no publica valores para pateadores ni defensas, así que este jugador no tiene precio de mercado.',
   'No market snapshot on file for this player.': 'No hay ningún registro de mercado de este jugador.',
+  // NFL-only reads (2026-11-16): another sport's card never reads the NFL chart or ownership board.
+  'Market prices are published for NFL players only.': 'Los precios de mercado solo se publican para jugadores de la NFL.',
+  'Ownership rates are counted across NFL leagues only.': 'Los porcentajes en plantilla solo se cuentan en ligas de la NFL.',
+  'This league values its players on its own value board, not on the NFL market chart.':
+    'Esta liga valora a sus jugadores en su propia tabla de valor, no en la tabla de mercado de la NFL.',
+  'This league’s value board could not be read just now.': 'No se pudo leer ahora la tabla de valor de esta liga.',
   'No other players priced in this capture.': 'No hay otros jugadores valorados en este registro.',
   'No comparable prices found.': 'No se encontraron precios comparables.',
   'No price for this player, so there is nothing to compare against.': 'Este jugador no tiene precio, así que no hay con qué compararlo.',

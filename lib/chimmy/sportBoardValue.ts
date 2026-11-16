@@ -1,9 +1,8 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
-import { loadSportPointsBase, type SportPointsBaseResult, type SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
-import { priceBoardPlayer, type PointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
+import { priceBoardPlayer } from '@/lib/decision-os/trade/sportPointsValue'
 import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
+import { BOARD_VALUE_SPORTS, boardUnit, loadLeagueValueBoard, type LeagueValueBoardDeps } from '@/lib/sport-values/leagueValueBoard'
 
 /**
  * What a player is worth IN AN NBA LEAGUE, for Chimmy (2026-11-16, re-score item 12: player values for
@@ -22,27 +21,16 @@ import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trad
  * set one against the other or against another league's numbers.
  *
  * Owner's order is NBA first, then MLB, then NHL and soccer. The board already covers those sports; each
- * joins `BOARD_VALUE_SPORTS` when it is turned on, deliberately, one at a time.
+ * joins `BOARD_VALUE_SPORTS` (lib/sport-values/leagueValueBoard.ts — one list for every surface) when it
+ * is turned on, deliberately, one at a time.
  */
-export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA'])
+export { BOARD_VALUE_SPORTS }
 
 const DYNASTY_SEASONS_SHOWN = 5
 
 const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-US')
 
-export type SportBoardValueDeps = {
-  league: (leagueId: string) => Promise<(SportPointsLeague & { sport: string }) | null>
-  base: (sport: PointsGradedSport, league: SportPointsLeague) => Promise<SportPointsBaseResult>
-}
-
-const defaultDeps: SportBoardValueDeps = {
-  league: (leagueId) =>
-    prisma.league.findUnique({
-      where: { id: leagueId },
-      select: { id: true, sport: true, platform: true, platformLeagueId: true, settings: true, leagueType: true, leagueSize: true, season: true, status: true },
-    }) as Promise<(SportPointsLeague & { sport: string }) | null>,
-  base: (sport, league) => loadSportPointsBase({ sport, league }),
-}
+export type SportBoardValueDeps = LeagueValueBoardDeps
 
 /**
  * The value block for one named player in the league in scope, or NULL when that league's sport is not
@@ -52,18 +40,15 @@ export async function buildSportBoardValueContext(
   args: { leagueId: string; playerName: string },
   deps: Partial<SportBoardValueDeps> = {},
 ): Promise<string | null> {
-  const d = { ...defaultDeps, ...deps }
-  const league = await d.league(args.leagueId).catch(() => null)
-  const sport = String(league?.sport ?? '').toUpperCase() as PointsGradedSport
-  if (!league || !BOARD_VALUE_SPORTS.has(sport)) return null
+  const board = await loadLeagueValueBoard(args.leagueId, deps)
+  if (board.kind === 'not_board_sport') return null
+  const sport = board.sport
 
   const asked = args.playerName.trim()
   if (!asked) return 'No player name was given, so nothing was looked up. Ask the user which player they mean.'
 
-  const base = await d.base(sport, league).catch(() => null)
-  if (!base) return `${sport} VALUE: the league's value board could not be read just now. Do NOT give a value from general knowledge.`
-  if (!base.ok) return `${sport} VALUE: not available in this league — ${base.reason} Do NOT give a value from general knowledge.`
-  const ctx = base.ctx
+  if (board.kind === 'unavailable') return `${sport} VALUE: not available in this league — ${board.reason} Do NOT give a value from general knowledge.`
+  const ctx = board.ctx
 
   if (ctx.window.gamesRemaining <= 0) {
     return `${sport} VALUE: the ${ctx.window.seasonLabel} regular season has no games left, so there is no rest-of-season value. Do NOT give one from general knowledge.`
@@ -74,7 +59,7 @@ export async function buildSportBoardValueContext(
 
   const { player, replacementPerGame, replacementName, value } = price
   const categories = ctx.valueKind === 'categories'
-  const unit = categories ? 'category score' : 'fantasy points'
+  const unit = boardUnit(ctx)
   const scoring =
     ctx.scoringBasis === 'league'
       ? categories ? `this league's categories (${ctx.categoryList ?? 'as configured'})` : "this league's own scoring"
