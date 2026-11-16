@@ -1,4 +1,5 @@
 import 'server-only'
+import { sleeperTransactionTime } from '@/lib/decision-os/trade/tradeTimeCapture'
 import { recentTradesTiming } from '@/lib/observability/recentTradesTiming'
 import { persistedRecentTrades } from './persistedRecentTrades'
 
@@ -554,6 +555,8 @@ async function gradeFromAssets(
   /** The trade's id (any form ending in Sleeper's transaction id), so its frozen original is read. */
   tradeId: string,
   now: Date,
+  /** When it was accepted — used only for a trade whose id is not a Sleeper snowflake (a provider trade). */
+  acceptedAt?: string | null,
 ): Promise<TradeGradeView> {
   const split = (side: RecentTradeSide) => {
     const players: ArchivedPlayer[] = []
@@ -577,7 +580,13 @@ async function gradeFromAssets(
     picksOut: gave.picks,
     currentSeason,
     // The same frozen original the email and history show for this trade (`frozenCompletedGrade.ts`).
-    original: { afLeagueId: leagueId, tradeId, now },
+    original: {
+      afLeagueId: leagueId,
+      tradeId,
+      now,
+      // A Sleeper id carries its own time; an ESPN/Yahoo/MFL/Fleaflicker id does not, so it is priced on its date.
+      ...(acceptedAt && !sleeperTransactionTime(tradeId) ? { tradeAt: acceptedAt } : {}),
+    },
   })
 }
 
@@ -590,7 +599,7 @@ async function gradeFromAssets(
 export async function gradeProviderRecentTrade(t: RecentTrade, now: Date = new Date()): Promise<void> {
   if (t.status || t.sides.length !== 2) return
   const [a, b] = t.sides as [RecentTradeSide, RecentTradeSide]
-  const g = await gradeFromAssets(t.leagueId, a, b, now.getUTCFullYear(), t.id, now).catch(() => null)
+  const g = await gradeFromAssets(t.leagueId, a, b, now.getUTCFullYear(), t.id, now, t.acceptedAt).catch(() => null)
   if (g?.graded) {
     applyOneGrade(t, g, a.rosterId)
     t.verdict = verdictFromGrade(g, a.rosterId, b.rosterId)

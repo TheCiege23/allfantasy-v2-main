@@ -50,6 +50,7 @@ import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/Dr
 import { DraftDayShow } from '@/components/draft-day/DraftDayShow'
 import { DraftIntroGate } from '@/components/draft/DraftIntroGate'
 import type { DraftAiOverlaySignal, PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
+import type { AuctionSpotlightPanelProps } from '@/components/app/draft-room/AuctionSpotlightPanel'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
@@ -68,6 +69,8 @@ const CommissionerControlCenterModal = dynamic(
 )
 const PostDraftView = dynamic(() => import('@/components/app/draft-room/PostDraftView'), { ssr: false })
 const AuctionSpotlightPanel = dynamic(() => import('@/components/app/draft-room/AuctionSpotlightPanel'), { ssr: false })
+const AuctionTeamsPanel = dynamic(() => import('@/components/app/draft-room/AuctionSpotlightPanel').then((mod) => mod.AuctionTeamsPanel), { ssr: false })
+const AuctionBidDock = dynamic(() => import('@/components/app/draft-room/AuctionSpotlightPanel').then((mod) => mod.AuctionBidDock), { ssr: false })
 const PreDraftWizard = dynamic(
   () => import('@/components/commissioner/PreDraftWizard').then((m) => m.PreDraftWizard),
   { ssr: false },
@@ -4290,6 +4293,29 @@ export function DraftRoomPageClient({
 
   const auctionSnapshot = (session as any).auction
   const isDraftCompleted = draftRoomState.isDraftCompleted
+  // One props object for the auction stage, its Teams tab and the phone bid dock, so the three can
+  // never disagree about budgets, max bid or whether the viewer may bid.
+  const auctionPanelProps: AuctionSpotlightPanelProps | null =
+    draftRoomState.isAuction && auctionSnapshot
+      ? {
+          auction: auctionSnapshot,
+          currentUserRosterId: currentUserRosterId ?? null,
+          isCommissioner,
+          onNominate: (player) => handleAuctionNominate({ name: player.playerName, position: player.position, team: player.team ?? null } as PlayerEntry),
+          onBid: handleAuctionBid,
+          onResolve: handleAuctionResolve,
+          timerRemainingSeconds: draftRoomState.timerMode === 'blocked' ? null : (session.timer?.remainingSeconds ?? null),
+          timerStatus: draftRoomState.timerMode === 'blocked' ? 'none' : (session.timer?.status ?? 'none'),
+          nominateLoading: auctionNominateLoading,
+          bidLoading: auctionBidLoading,
+          resolveLoading: auctionResolveLoading,
+          rosterGateBlocksAuctionActions: draftRoomState.rosterConfigurationIncomplete,
+          rosterSize: session.rounds ?? null,
+          picks: session.picks ?? null,
+          leagueId,
+          queue: queue.map((q) => ({ playerName: q.playerName, position: q.position, team: q.team ?? null })),
+        }
+      : null
   const postDraftViewNode = isDraftCompleted ? (
     <PostDraftView
       leagueId={leagueId}
@@ -4804,6 +4830,8 @@ export function DraftRoomPageClient({
                     {helperPanelNode}
                   </div>
                 }
+                teamsBody={auctionPanelProps ? <AuctionTeamsPanel {...auctionPanelProps} /> : undefined}
+                teamsLabel={draftRoomCopy.teamsTab}
                 openTabRequest={rightDockOpenRequest}
                 chatBody={<div className="flex h-full min-h-0 flex-col overflow-hidden">{chatPanelNode}</div>}
                 queueCount={queueFiltered.length}
@@ -5406,29 +5434,8 @@ export function DraftRoomPageClient({
           />
         ) : null
       }
-      auctionStrip={
-        draftRoomState.isAuction && auctionSnapshot ? (
-          <AuctionSpotlightPanel
-            auction={auctionSnapshot}
-            currentUserRosterId={currentUserRosterId ?? null}
-            isCommissioner={isCommissioner}
-            onNominate={(player) => handleAuctionNominate({ name: player.playerName, position: player.position, team: player.team ?? null })}
-            onBid={handleAuctionBid}
-            onResolve={handleAuctionResolve}
-            timerRemainingSeconds={
-              draftRoomState.timerMode === 'blocked' ? null : (session.timer?.remainingSeconds ?? null)
-            }
-            timerStatus={draftRoomState.timerMode === 'blocked' ? 'none' : (session.timer?.status ?? 'none')}
-            nominateLoading={auctionNominateLoading}
-            bidLoading={auctionBidLoading}
-            resolveLoading={auctionResolveLoading}
-            rosterGateBlocksAuctionActions={draftRoomState.rosterConfigurationIncomplete}
-            rosterSize={session.rounds ?? null}
-            picks={session.picks ?? null}
-            leagueId={leagueId}
-          />
-        ) : undefined
-      }
+      auctionStrip={auctionPanelProps ? <AuctionSpotlightPanel {...auctionPanelProps} /> : undefined}
+      mobileBidDock={auctionPanelProps ? <AuctionBidDock {...auctionPanelProps} /> : undefined}
       // A finished draft has no pool to pick from; the phone Players tab (and the
       // non-premium desktop layout) shows the recap, report card and share instead.
       playerPanel={isDraftCompleted ? <div className="min-h-[70vh]">{postDraftViewNode}</div> : playerPoolNode}

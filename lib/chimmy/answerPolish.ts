@@ -160,12 +160,65 @@ export function readChimmyFaabCard(value: unknown): ChimmyFaabCard | null {
  * level; a decision-engine answer carries them inside `meta.decision` (`decisionAnswerMeta`), which
  * is also what a private @chimmy reply stores on its message — so one reader serves every surface.
  */
-export function readAnswerPolish(meta: unknown): { verdict: ChimmyVerdict | null; faabPlan: ChimmyFaabCard | null; answerKeys: string[] } {
-  if (!isRecord(meta)) return { verdict: null, faabPlan: null, answerKeys: [] }
+export function readAnswerPolish(meta: unknown): {
+  verdict: ChimmyVerdict | null
+  faabPlan: ChimmyFaabCard | null
+  answerKeys: string[]
+  proUpsell: ChimmyProOnlyTool[]
+  recalledPastChats: boolean
+} {
+  if (!isRecord(meta)) return { verdict: null, faabPlan: null, answerKeys: [], proUpsell: [], recalledPastChats: false }
   const decision = isRecord(meta.decision) ? meta.decision : null
   const verdict = readChimmyVerdict(meta.verdict) ?? (decision && decision.status === 'ready' ? readChimmyVerdict(decision.verdict) : null)
   const keys = [...readAnswerKeys(meta.answerKeys), ...(decision && decision.status === 'ready' ? readAnswerKeys(decision.answerKeys) : [])]
-  return { verdict, faabPlan: readChimmyFaabCard(meta.faabPlan), answerKeys: readAnswerKeys(keys) }
+  return {
+    verdict,
+    faabPlan: readChimmyFaabCard(meta.faabPlan),
+    answerKeys: readAnswerKeys(keys),
+    proUpsell: readProUpsell(meta.proUpsell),
+    recalledPastChats: meta.recalledPastChats === true,
+  }
+}
+
+/* ── AF Pro depth: the upgrade button and the past-chats chip ───────────────────────────────── */
+
+/**
+ * The AF Pro analyst tools and what each is called on screen (`lib/chimmy/chimmyDepth.ts` gates them).
+ * Defined HERE, not there, because the drawer renders the labels and this module is the client-safe one.
+ */
+export const PRO_ONLY_TOOL_LABEL = {
+  get_playoff_outlook: 'the playoff simulator',
+  find_trade_ideas: 'trade ideas',
+  get_faab_bid_plan: 'FAAB bid plans',
+  recall_past_chats: 'recalling your past chats',
+} as const
+
+export type ChimmyProOnlyTool = keyof typeof PRO_ONLY_TOOL_LABEL
+
+/** AF Pro on the purchase surface, tagged so the plans page can tell this button's buyers apart. */
+export const CHIMMY_PRO_TOOL_UPGRADE_HREF = '/upgrade?plan=af_pro&from=chimmy-pro-tool'
+
+/**
+ * `meta.proUpsell`: the AF Pro tools a free user's answer reached for and the EXECUTOR refused.
+ * 🛑 Like the verdict chip, never read out of the answer's text — only a refusal the code made puts
+ * the upgrade button under an answer. Unknown names are dropped; at most one of each.
+ */
+export function readProUpsell(value: unknown): ChimmyProOnlyTool[] {
+  if (!Array.isArray(value)) return []
+  const out: ChimmyProOnlyTool[] = []
+  for (const v of value) {
+    if (typeof v !== 'string' || !Object.prototype.hasOwnProperty.call(PRO_ONLY_TOOL_LABEL, v)) continue
+    if (!out.includes(v as ChimmyProOnlyTool)) out.push(v as ChimmyProOnlyTool)
+  }
+  return out
+}
+
+/** "AF Pro adds the playoff simulator and trade ideas." — the line beside the upgrade button. */
+export function proUpsellLine(tools: readonly ChimmyProOnlyTool[]): string {
+  const labels = tools.map((t) => PRO_ONLY_TOOL_LABEL[t])
+  const list = labels.length <= 1 ? (labels[0] ?? 'deeper answers')
+    : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+  return `AF Pro adds ${list}.`
 }
 
 /* ── "Newer answer below" ───────────────────────────────────────────────────────────────────── */

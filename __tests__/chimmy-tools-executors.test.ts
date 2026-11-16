@@ -170,6 +170,12 @@ describe('tool specs', () => {
       'compare_start_options',
       'evaluate_trade',
       /*
+       * Counters for ONE offer already waiting on the user (lib/chimmy-trade/pendingCounterOffers.ts): the
+       * Trade Center's own counter engine, AF Pro depth. Returns prose; sends nothing — the user counters
+       * themselves in the Trade Center or on Sleeper.
+       */
+      'suggest_counter_offer',
+      /*
        * Trade IDEAS across the league in scope (lib/chimmy/tradeFinderGrounding.ts): every roster
        * priced as the player card prices it, partners and packages from the deterministic finder.
        * Proposes nothing to anyone — it returns prose, like evaluate_trade.
@@ -199,6 +205,8 @@ describe('tool specs', () => {
       'propose_lineup_change',
       'propose_trade',
       'propose_automation_change',
+      // AF Pro: reads the user's OWN earlier Chimmy messages; writes nothing.
+      'recall_past_chats',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })
