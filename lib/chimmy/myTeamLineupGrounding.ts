@@ -1,0 +1,226 @@
+import 'server-only'
+
+import { getMyTeamData, type LineupPlayer, type LineupSlot, type MyTeamData } from '@/lib/core-app/myTeam'
+import type { LineupOptimization } from '@/lib/decision-os/lineup/bestLineup'
+import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import type { ChatStartCall } from './tools/chimmyTools'
+
+/**
+ * ONE START/SIT ANSWER: Chimmy reads My Team's (Lineup OS, 2026-11-16 re-score item 6).
+ *
+ * 🛑 CHIMMY COULD DISAGREE WITH THE MY TEAM SCREEN. My Team's "best lineup" is `optimizeLineup`
+ * (`lib/decision-os/lineup/bestLineup.ts`): the exact optimizer on `afProjectedPoints` — AllFantasy's projection
+ * under this league's scoring — with a bye or ruled-out player a guaranteed 0 and a kicked-off player locked.
+ * Chimmy's lineup tools priced the vendor's weekly line and filled the lineup greedily, so the same roster on the
+ * same Sunday could get one answer on the screen and another in chat. Both tools now read My Team's own result.
+ *
+ * ⚠ NFL ONLY, ON PURPOSE. My Team's optimizer is what the screen shows for an NFL lineup; the other sports keep
+ * Chimmy's game-log comparison (`otherSportStartSit.ts`), which answers category leagues the optimizer does not.
+ *
+ * ⚠ A FALLBACK IS SAID OUT LOUD. When My Team cannot load at all (no claimed team, a failed read), the caller
+ * uses the weekly-feed tool and the block says the answer did not come from My Team.
+ *
+ * AllFantasy never sets a lineup: this explains My Team's recommendation; the user makes the move.
+ */
+
+export type MyTeamLineupDeps = { load: (leagueId: string, userId: string) => Promise<MyTeamData | null> }
+
+const defaultDeps: MyTeamLineupDeps = { load: (leagueId, userId) => getMyTeamData(leagueId, userId) }
+
+const BENCH_SHOWN = 6
+
+/** The value My Team prices a player at: 0 for a bye or a ruled-out player, else AllFantasy's league projection. */
+function valueOf(p: LineupPlayer): number | null {
+  if (p.onBye || p.ruledOut) return 0
+  return p.afProjectedPoints
+}
+
+const pts = (n: number | null) => (n == null ? 'no projection' : `${Math.round(n * 10) / 10} pts`)
+
+function flags(p: LineupPlayer, now: number): string {
+  const out: string[] = []
+  if (p.onBye) out.push('BYE')
+  if (p.ruledOut) out.push('OUT')
+  else if (p.injuryStatus) out.push(p.injuryStatus)
+  if (p.kickoff instanceof Date && p.kickoff.getTime() <= now) out.push('game started — locked')
+  return out.length ? ` [${out.join(', ')}]` : ''
+}
+
+/**
+ * Why the My Team answer stepped aside: `not_nfl` is by design (other sports keep their own tool); `no_my_team`
+ * means My Team could not load this lineup, which the caller must say out loud.
+ */
+export type MyTeamFallback = { fallback: 'not_nfl' | 'no_my_team' }
+
+/** The NFL My Team payload, or why there is none. */
+async function loadNfl(args: { leagueId: string; userId: string }, d: MyTeamLineupDeps): Promise<MyTeamData | MyTeamFallback> {
+  const data = await d.load(args.leagueId, args.userId).catch(() => null)
+  if (!data) return { fallback: 'no_my_team' }
+  const sport = String(data.league.sport ?? 'NFL').toUpperCase()
+  return sport === 'NFL' ? data : { fallback: 'not_nfl' }
+}
+
+const isFallback = (x: MyTeamData | MyTeamFallback): x is MyTeamFallback => 'fallback' in x
+
+function weekOf(data: MyTeamData): string {
+  const p = data.projections
+  return p && p.available ? `week ${p.data.week}, ${p.data.season}` : 'this week'
+}
+
+/** Why My Team has no best lineup to give, in its own words where it has them. */
+function noAnswerReason(data: MyTeamData): string {
+  if (data.bestBall || data.league.bestBall) return 'this is a best-ball league: the lineup is set automatically each week, so there is nothing to set'
+  if (!data.starters.available) return data.starters.reason
+  if (data.projections && !data.projections.available) return data.projections.reason
+  return 'a starter has no projection this week or could not be identified, so no honest total exists'
+}
+
+/** The best lineup after My Team's changes: slot index → player id. */
+function bestSeats(starters: readonly LineupSlot[], bench: readonly LineupPlayer[], opt: LineupOptimization): Set<string> {
+  const ids = new Set(starters.flatMap((s) => (s.player ? [s.player.sleeperId] : [])))
+  if (opt.state === 'improve') {
+    const byName = new Map([...starters.flatMap((s) => (s.player ? [s.player] : [])), ...bench].map((p) => [p.name, p.sleeperId]))
+    for (const c of opt.changes) {
+      const outId = c.outName ? byName.get(c.outName) : undefined
+      if (outId) ids.delete(outId)
+      const inId = byName.get(c.inName)
+      if (inId) ids.add(inId)
+    }
+  }
+  return ids
+}
+
+/**
+ * "Is my lineup right?" — My Team's whole-lineup answer as a prompt block, or why it stepped aside.
+ */
+export async function buildMyTeamLineupContext(
+  args: {
+    leagueId: string
+    userId: string
+    now?: Date
+    /** Told the call when the answer is exactly one swap — the same rule as the weekly-feed tool. */
+    onStartCall?: (call: ChatStartCall) => void
+  },
+  deps: Partial<MyTeamLineupDeps> = {},
+): Promise<string | MyTeamFallback> {
+  const d: MyTeamLineupDeps = { ...defaultDeps, ...deps }
+  const data = await loadNfl(args, d)
+  if (isFallback(data)) return data
+  const now = (args.now ?? new Date()).getTime()
+  const starters = data.starters.available ? data.starters.data : []
+  const bench = data.bench.available ? data.bench.data : []
+  const opt = data.lineupOptimizer ?? null
+
+  const lines = [
+    `BEST LINEUP for ${data.league.name} (${weekOf(data)}) — THE SAME ANSWER THE MY TEAM SCREEN SHOWS: the exact lineup optimizer on AllFantasy projections under this league's scoring. A bye or ruled-out player counts 0; a player whose game has started is locked.`,
+  ]
+  if (!opt) {
+    lines.push(`My Team has no best lineup to give right now: ${noAnswerReason(data)}. Say so; do not build a lineup of your own.`)
+  } else if (opt.state === 'optimal') {
+    lines.push(
+      `Verdict: the current lineup is already the best one — ${pts(opt.currentTotal)} projected.` +
+        (opt.lockedSeats ? ` ${opt.lockedSeats} seat(s) are locked (game started) and were left as they are.` : ''),
+    )
+  } else {
+    lines.push(
+      `Verdict: ${opt.verdict === 'swap' ? 'CHANGE THE LINEUP' : `CLOSE CALL — the gain is under ${BENCH_SWAP_POINTS} points, inside projection noise; say it is close`}. ` +
+        `Current ${pts(opt.currentTotal)}, best ${pts(opt.bestTotal)} (+${opt.gain}).` +
+        (opt.lockedSeats ? ` ${opt.lockedSeats} locked seat(s) left as they are.` : ''),
+    )
+    for (const c of opt.changes) {
+      lines.push(`- ${c.slotLabel}: start ${c.inName} (${pts(c.inProjected)}) instead of ${c.outName ? `${c.outName} (${pts(c.outProjected)})` : 'the empty seat'}.`)
+    }
+    // One clear swap is a start/sit call worth grading later (the advice ledger); a reshuffle or a close call is not.
+    const p = data.projections
+    const only = opt.changes.length === 1 ? opt.changes[0]! : null
+    if (args.onStartCall && opt.verdict === 'swap' && only?.outName && p && p.available) {
+      const idOf = (name: string) => [...starters.flatMap((s) => (s.player ? [s.player] : [])), ...bench].find((x) => x.name === name)?.sleeperId
+      const recId = idOf(only.inName)
+      const altId = idOf(only.outName)
+      const season = Number(p.data.season)
+      if (recId && altId && Number.isInteger(season)) {
+        args.onStartCall({ leagueId: args.leagueId, season, week: p.data.week, rec: { key: recId, name: only.inName }, alt: { key: altId, name: only.outName }, slot: only.slotLabel })
+      }
+    }
+  }
+  if (starters.length) {
+    lines.push('Starters now:')
+    for (const s of starters) {
+      lines.push(s.player ? `  ${s.slotLabel}: ${s.player.name} (${s.player.position ?? '?'}) ${pts(valueOf(s.player))}${flags(s.player, now)}` : `  ${s.slotLabel}: EMPTY`)
+    }
+  }
+  const benchShown = [...bench].sort((a, b) => (valueOf(b) ?? -1) - (valueOf(a) ?? -1)).slice(0, BENCH_SHOWN)
+  if (benchShown.length) {
+    lines.push(`Bench (top ${benchShown.length} by projection): ` + benchShown.map((p) => `${p.name} (${p.position ?? '?'}) ${pts(valueOf(p))}${flags(p, now)}`).join('; ') + '.')
+  }
+  lines.push(
+    'RULES: this is the My Team recommendation; never recommend a different lineup or quote different numbers. AllFantasy never sets the lineup — the user makes the change (a confirm card may offer it).',
+  )
+  return lines.join('\n')
+}
+
+/**
+ * "Start A or B?" — answered from My Team's best lineup, so it can never contradict the lineup screen. Steps aside
+ * when My Team has no NFL lineup, or a name is not on this roster (the caller then uses the scenario tool).
+ */
+export async function buildMyTeamStartSitContext(
+  args: { leagueId: string; userId: string; players: [string, string]; now?: Date; onStartCall?: (call: ChatStartCall) => void },
+  deps: Partial<MyTeamLineupDeps> = {},
+): Promise<string | MyTeamFallback> {
+  const d: MyTeamLineupDeps = { ...defaultDeps, ...deps }
+  const data = await loadNfl(args, d)
+  if (isFallback(data)) return data
+  const starters = data.starters.available ? data.starters.data : []
+  const bench = data.bench.available ? data.bench.data : []
+  const everyone = [...starters.flatMap((s) => (s.player ? [s.player] : [])), ...bench]
+  const find = (name: string) => {
+    const key = normalizePlayerName(name)
+    const hits = everyone.filter((p) => normalizePlayerName(p.name) === key)
+    return hits.length === 1 ? hits[0]! : null
+  }
+  const a = find(args.players[0])
+  const b = find(args.players[1])
+  // A name not on this roster is the scenario tool's question to answer (it says so); not a My Team failure.
+  if (!a || !b || a.sleeperId === b.sleeperId) return { fallback: 'not_nfl' }
+
+  const opt = data.lineupOptimizer ?? null
+  const head = `START/SIT: ${a.name} or ${b.name} (${weekOf(data)}) — FROM MY TEAM'S BEST LINEUP, the same answer the My Team screen shows (AllFantasy projections under this league's scoring).`
+  const line = (p: LineupPlayer) => `${p.name} (${p.position ?? '?'}): ${pts(valueOf(p))}${flags(p, (args.now ?? new Date()).getTime())}`
+  if (!opt) {
+    return [head, line(a), line(b), `My Team cannot decide this right now: ${noAnswerReason(data)}. Say so; do not pick one yourself.`].join('\n')
+  }
+  const best = bestSeats(starters, bench, opt)
+  const inA = best.has(a.sleeperId)
+  const inB = best.has(b.sleeperId)
+  const va = valueOf(a)
+  const vb = valueOf(b)
+  let verdict: string
+  let pick: LineupPlayer | null = null
+  if (inA && inB) verdict = 'BOTH START — both are in the best lineup; this is not an either/or this week.'
+  else if (!inA && !inB) verdict = 'NEITHER STARTS — neither is in the best lineup; other players outscore both for these seats.'
+  else {
+    pick = inA ? a : b
+    const other = pick === a ? b : a
+    const gap = va != null && vb != null ? Math.abs(va - vb) : null
+    verdict =
+      `START ${pick.name} over ${other.name}` +
+      (gap != null ? ` (${Math.round(gap * 10) / 10} pts${gap < BENCH_SWAP_POINTS ? ` — CLOSE CALL, under ${BENCH_SWAP_POINTS} points; say it is close` : ''})` : '') +
+      '.'
+  }
+  const p = data.projections
+  if (pick && args.onStartCall && p && p.available) {
+    const season = Number(p.data.season)
+    const other = pick === a ? b : a
+    if (Number.isInteger(season)) {
+      args.onStartCall({ leagueId: args.leagueId, season, week: p.data.week, rec: { key: pick.sleeperId, name: pick.name }, alt: { key: other.sleeperId, name: other.name }, slot: null })
+    }
+  }
+  return [
+    head,
+    line(a),
+    line(b),
+    `Verdict: ${verdict}`,
+    'RULES: this is My Team\'s call; never recommend the other player or quote different numbers. AllFantasy never sets the lineup.',
+  ].join('\n')
+}
