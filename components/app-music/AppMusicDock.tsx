@@ -184,7 +184,16 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       // Apple's error code only — never the error object, which can carry token material.
       const code = (err as { errorCode?: string; name?: string } | null)?.errorCode ?? (err as Error | null)?.name
       console.warn('[apple-music] sign-in did not finish:', code ?? 'unknown')
-      if (mountedRef.current) setAppleMsg('Apple Music sign-in didn’t finish. Try again.')
+      // ⚠ THE COMMON CAUSE IS NOT A FAILED SIGN-IN. An Apple ID with no Apple Music
+      // subscription signs in fine, then Apple opens its own upsell page
+      // (music.apple.com/deeplink?p=subscribe&source=webPlayerUpsell) and authorize()
+      // rejects. "Try again" sent people round that loop (reported 2026-11-15), so
+      // name the real reason and point at what works without a subscription.
+      if (mountedRef.current) {
+        setAppleMsg(
+          'Apple Music didn’t connect. If Apple showed you a “subscribe” page, this Apple ID doesn’t have an Apple Music subscription, so it can’t play here. YouTube works without one.',
+        )
+      }
     }
     if (mountedRef.current) setAppleStatus(music.isAuthorized ? 'ready' : 'signed-out')
   }, [])
@@ -224,8 +233,14 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
   const playApple = useCallback(async (item: AppleSearchResult) => {
     const music = musicRef.current
     if (!music) return
-    setYt(null) // one source at a time
     setAppleMsg(null)
+    // Search works signed out; playing does not. Ask for the sign-in at the moment
+    // it is needed, and play the chosen item as soon as it succeeds.
+    if (!music.isAuthorized) {
+      await connectApple()
+      if (!music.isAuthorized) return // connectApple has already said why
+    }
+    setYt(null) // one source at a time
     try {
       await music.setQueue(
         item.kind === 'song' ? { song: item.id, startPlaying: true } : { playlist: item.id, startPlaying: true },
@@ -233,7 +248,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     } catch {
       if (mountedRef.current) setAppleMsg(`That didn’t play. ${SUBSCRIPTION_NOTE}`)
     }
-  }, [])
+  }, [connectApple])
 
   const appleToggle = useCallback(() => {
     const music = musicRef.current

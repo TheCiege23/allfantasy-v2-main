@@ -28,6 +28,46 @@ type Source = 'youtube' | 'apple'
 const SOURCE_KEY = 'af:draft-music:source'
 const APPLE_QUICK_SEARCHES = ['Game day', 'Hip-hop hits', 'Rock anthems', 'Lo-fi']
 
+type YtHit = { videoId: string; title: string; channel: string; thumb: string | null }
+type YtSearch = { query: string; hits: YtHit[]; note: string | null }
+
+/*
+ * The chat panel is remounted on every /core screen change, so the last YouTube
+ * search lives at module level — going from the lineup to a trade keeps the list.
+ */
+let lastYtSearch: YtSearch | null = null
+
+const STILL_WORKS = 'Stations and pasted links still work.'
+
+/** Ask our server, which caches every search and holds the daily limits. */
+async function fetchYouTubeSearch(query: string): Promise<{ hits: YtHit[]; note: string | null }> {
+  try {
+    const res = await fetch(`/api/music/youtube-search?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+    if (res.status === 401) return { hits: [], note: 'Sign in to search YouTube.' }
+    const body = (await res.json()) as
+      | { status: 'ok'; results: YtHit[] }
+      | { status: 'limit'; scope: 'user' | 'app' }
+      | { status: 'unavailable' }
+    if (body.status === 'ok') {
+      return body.results.length
+        ? { hits: body.results, note: null }
+        : { hits: [], note: `Nothing found for “${query}”.` }
+    }
+    if (body.status === 'limit') {
+      return {
+        hits: [],
+        note:
+          body.scope === 'user'
+            ? `You’ve used today’s YouTube searches. ${STILL_WORKS}`
+            : `YouTube search is resting until tomorrow. ${STILL_WORKS}`,
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  return { hits: [], note: `YouTube search isn’t working right now. ${STILL_WORKS}` }
+}
+
 export function MusicPanel() {
   const snap = useSyncExternalStore(musicBus.subscribe, musicBus.getSnapshot, musicBus.getServerSnapshot)
   const act = musicBus.actions()
@@ -36,7 +76,28 @@ export function MusicPanel() {
   const [link, setLink] = useState('')
   const [linkError, setLinkError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [ytQuery, setYtQuery] = useState(() => lastYtSearch?.query ?? '')
+  const [ytSearch, setYtSearch] = useState<YtSearch | null>(() => lastYtSearch)
+  const [ytSearching, setYtSearching] = useState(false)
   const screenRef = useRef<HTMLDivElement | null>(null)
+
+  const searchYouTube = async (e: FormEvent) => {
+    e.preventDefault()
+    const q = ytQuery.trim()
+    if (q.length < 2 || ytSearching) return
+    setYtSearching(true)
+    const found = await fetchYouTubeSearch(q)
+    const next = { query: q, ...found }
+    lastYtSearch = next
+    setYtSearch(next)
+    setYtSearching(false)
+  }
+
+  const clearYouTubeSearch = () => {
+    lastYtSearch = null
+    setYtSearch(null)
+    setYtQuery('')
+  }
 
   useEffect(() => {
     try {
@@ -190,6 +251,71 @@ export function MusicPanel() {
 
         {source === 'youtube' ? (
           <div role="tabpanel" aria-label="YouTube" className="af-amp-section">
+            <form className="af-amp-row" role="search" onSubmit={searchYouTube}>
+              <input
+                className="af-amp-input"
+                type="search"
+                aria-label="Search YouTube"
+                placeholder="Search YouTube"
+                maxLength={80}
+                value={ytQuery}
+                onChange={(e) => setYtQuery(e.target.value)}
+              />
+              <button type="submit" className="af-amp-btn" disabled={ytQuery.trim().length < 2 || ytSearching}>
+                {ytSearching ? 'Searching…' : 'Search'}
+              </button>
+            </form>
+
+            {ytSearch ? (
+              <div className="af-amp-found">
+                <div className="af-amp-found-head">
+                  <span>
+                    Results for <b>“{ytSearch.query}”</b>
+                  </span>
+                  <button type="button" className="af-amp-linkbtn" onClick={clearYouTubeSearch}>
+                    Clear
+                  </button>
+                </div>
+                {ytSearch.note ? (
+                  <p className="af-amp-msg" role="status">
+                    {ytSearch.note}
+                  </p>
+                ) : (
+                  <ul className="af-amp-results">
+                    {ytSearch.hits.map((hit) => (
+                      <li key={hit.videoId}>
+                        <button
+                          type="button"
+                          className="af-amp-result af-amp-result--yt"
+                          data-active={snap.yt?.key === `search:${hit.videoId}` ? 'true' : undefined}
+                          onClick={() =>
+                            act.playYouTube({
+                              key: `search:${hit.videoId}`,
+                              label: hit.title,
+                              source: { kind: 'video', videoId: hit.videoId },
+                            })
+                          }
+                        >
+                          {hit.thumb ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={hit.thumb} alt="" width={64} height={36} loading="lazy" />
+                          ) : (
+                            <span className="af-amp-art af-amp-art--sm" aria-hidden="true">
+                              ▶
+                            </span>
+                          )}
+                          <span className="af-amp-nowtext">
+                            <b>{hit.title}</b>
+                            <span>{hit.channel}</span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
             <div className="af-amp-stations">
               {YOUTUBE_STATIONS.map((station) => (
                 <button
@@ -252,24 +378,12 @@ export function MusicPanel() {
               </div>
             ) : null}
 
-            {snap.appleStatus === 'signed-out' || snap.appleStatus === 'connecting' ? (
-              <div className="af-amp-connect">
-                {/* Never disabled while connecting: Apple's window can be closed half-way, and a
-                    second press re-opens it (observed 2026-11-15). */}
-                <button type="button" className="af-amp-btn af-amp-btn--apple" onClick={act.connectApple}>
-                  {snap.appleStatus === 'connecting' ? 'Open Apple sign-in again' : 'Connect Apple Music'}
-                </button>
-                <p className="af-amp-msg">
-                  {snap.appleStatus === 'connecting'
-                    ? 'Finish signing in on Apple’s window, including any “Allow” step. Closed it? Press the button again.'
-                    : SUBSCRIPTION_NOTE}
-                </p>
-              </div>
-            ) : null}
-
-            {snap.appleStatus === 'ready' ? (
+            {/* Search works BEFORE connecting: Apple's catalog only needs the app's own
+                key. Signing in is needed to PLAY, so tapping a result asks for it then. */}
+            {snap.appleStatus === 'signed-out' || snap.appleStatus === 'connecting' || snap.appleStatus === 'ready' ? (
               <>
                 <form
+                  role="search"
                   className="af-amp-row"
                   onSubmit={(e) => {
                     e.preventDefault()
@@ -280,7 +394,8 @@ export function MusicPanel() {
                     className="af-amp-input"
                     type="search"
                     aria-label="Search Apple Music"
-                    placeholder="Search songs or playlists"
+                    placeholder="Search Apple Music"
+                    maxLength={80}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
@@ -331,9 +446,24 @@ export function MusicPanel() {
                   </ul>
                 )}
 
-                <button type="button" className="af-amp-linkbtn" onClick={act.disconnectApple}>
-                  Disconnect Apple Music
-                </button>
+                {snap.appleStatus === 'ready' ? (
+                  <button type="button" className="af-amp-linkbtn" onClick={act.disconnectApple}>
+                    Disconnect Apple Music
+                  </button>
+                ) : (
+                  <div className="af-amp-connect">
+                    {/* Never disabled while connecting: Apple's window can be closed half-way, and a
+                        second press re-opens it (observed 2026-11-15). */}
+                    <button type="button" className="af-amp-btn af-amp-btn--apple" onClick={act.connectApple}>
+                      {snap.appleStatus === 'connecting' ? 'Open Apple sign-in again' : 'Connect Apple Music'}
+                    </button>
+                    <p className="af-amp-msg">
+                      {snap.appleStatus === 'connecting'
+                        ? 'Finish signing in on Apple’s window, including any “Allow” step. Closed it? Press the button again.'
+                        : `Search anytime. To play, connect Apple Music. ${SUBSCRIPTION_NOTE}`}
+                    </p>
+                  </div>
+                )}
               </>
             ) : null}
 

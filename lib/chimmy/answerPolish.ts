@@ -191,6 +191,7 @@ export const PRO_ONLY_TOOL_LABEL = {
   find_trade_ideas: 'trade ideas',
   get_faab_bid_plan: 'FAAB bid plans',
   recall_past_chats: 'recalling your past chats',
+  get_draft_pick_outlook: "who's likely gone before your pick",
 } as const
 
 export type ChimmyProOnlyTool = keyof typeof PRO_ONLY_TOOL_LABEL

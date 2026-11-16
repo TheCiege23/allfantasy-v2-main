@@ -167,6 +167,40 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'UULFjY9gBwUdTYjtJ8bH63qLLg' },
   },
   {
+    /*
+     * F1 Fantasy Pole Position (@f1fantasypoleposition): race-by-race F1 Fantasy
+     * team selections, chips and transfers. Long uploads, newest first — checked
+     * 2026-11-15 by playing the list in the embed: first item was that week's Las
+     * Vegas GP team selection.
+     *
+     * ⚠ DO NOT JUDGE A CHANNEL BY youtube.com/feeds/videos.xml. That endpoint
+     * returned 404 for EVERY channel that day, including stations that play fine,
+     * and an earlier F1 attempt was dropped as "wrong channel id" on exactly that
+     * false negative. Play the UULF list through the IFrame API instead.
+     */
+    id: 'f1-podcast',
+    label: 'F1 podcast',
+    channel: 'F1 Fantasy Pole Position',
+    source: { kind: 'playlist', listId: 'UULF-dkzX3W0_-EyX9zFoWec-w' },
+  },
+  {
+    /*
+     * The Cricket Draft: gameweek review-and-preview shows for fantasy County
+     * Championship cricket ("TCD Show GW 14 Review & GW 15 Preview"). Long uploads,
+     * newest first — checked 2026-11-16 by playing the list in the embed; newest
+     * upload 2026-09-22, the end of the English season.
+     *
+     * Chosen over "The Fantasy Cricket Podcast", which has the better name and
+     * stopped posting in January 2022. The rest of what YouTube offers for
+     * "fantasy cricket" is short Dream11 match-prediction clips, mostly in Hindi.
+     * Like NASCAR, it goes quiet in the off-season (October–March).
+     */
+    id: 'cricket-podcast',
+    label: 'Cricket podcast',
+    channel: 'The Cricket Draft',
+    source: { kind: 'playlist', listId: 'UULFmZti-Lfi8x2eNYjmUG2I0Q' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',

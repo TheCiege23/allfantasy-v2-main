@@ -1,12 +1,20 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, AlertTriangle, CheckCircle2, Loader2, Settings2, X } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, AlertTriangle, CheckCircle2, ListMinus, ListPlus, Loader2, Settings2, X } from 'lucide-react'
 import {
   confirmChimmyActionCard,
   type ChimmyActionCard as Card,
   type ChimmyActionConfirmResult,
 } from '@/lib/chimmy-chat/actionCards'
+import { emitDraftQueueChanged } from '@/lib/draft-room/draftQueueChangedEvent'
+
+const CONFIRM_LABEL: Record<Card['kind'], string> = {
+  trade: 'Confirm — send offer',
+  automation: 'Confirm — save settings',
+  lineup: 'Confirm — set lineup',
+  queue: 'Confirm — save queue',
+}
 
 /**
  * A move Chimmy PREPARED — shown with exactly what will change, where, and every warning — that
@@ -62,6 +70,8 @@ export default function ChimmyActionCard({ card, onDismiss, confirm = (c) => con
     const result = await confirm(card)
     if (result.ok) {
       setPhase({ kind: 'done', result })
+      // An open draft room reloads its queue, or its next drag would save the old list over this one.
+      if (card.kind === 'queue') emitDraftQueueChanged(card.league.id)
       return
     }
     /* A server verdict is final; a transport failure (no verdict arrived) is retryable. */
@@ -147,6 +157,32 @@ export default function ChimmyActionCard({ card, onDismiss, confirm = (c) => con
         </ul>
       ) : null}
 
+      {card.queue ? (
+        <div className="space-y-2" data-testid="chimmy-action-queue">
+          {card.queue.add.map((p) => (
+            <div key={`add-${p.name}`} className="flex items-center gap-2">
+              <ListPlus className="h-4 w-4 shrink-0 text-emerald-300" aria-hidden />
+              <span>
+                {card.queue!.addAt === 'top' ? 'Queue first' : 'Queue'} <strong>{who(p)}</strong>
+              </span>
+            </div>
+          ))}
+          {card.queue.remove.map((p) => (
+            <div key={`rm-${p.name}`} className="flex items-center gap-2">
+              <ListMinus className="h-4 w-4 shrink-0 text-amber-300" aria-hidden />
+              <span>
+                Take off <strong>{who(p)}</strong>
+              </span>
+            </div>
+          ))}
+          {card.queue.resultingTop.length > 0 ? (
+            <p className="text-xs text-white/60">
+              Your queue will start: {card.queue.resultingTop.map((n, i) => `${i + 1}. ${n}`).join(' · ')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {card.warnings.length > 0 ? (
         <ul className="mt-3 space-y-1" data-testid="chimmy-action-warnings">
           {card.warnings.map((w) => (
@@ -173,7 +209,7 @@ export default function ChimmyActionCard({ card, onDismiss, confirm = (c) => con
               className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {phase.kind === 'sending' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              {card.kind === 'trade' ? 'Confirm — send offer' : card.kind === 'automation' ? 'Confirm — save settings' : 'Confirm — set lineup'}
+              {CONFIRM_LABEL[card.kind]}
             </button>
             {expired && phase.kind === 'idle' ? (
               <span className="text-xs text-white/60">This card expired. Ask Chimmy again for a fresh one.</span>

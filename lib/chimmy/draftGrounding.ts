@@ -3,17 +3,31 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import {
   formatPickLabel,
-  getSlotInRoundForOverall,
   getUpcomingPickOwners,
 } from '@/lib/live-draft-engine/DraftOrderService'
-import type { DraftType } from '@/lib/live-draft-engine/types'
-import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import type { DraftType, QueueEntry } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import type { RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
 import { decideDraftPickForRoster, type PickDecisionDeps } from '@/lib/shared-services/draft/pickDecision'
 import type { DraftDecisionContext } from '@/lib/shared-services/draft/DraftContextAssembler'
-import type { AuctionAdvice, AuctionPrice } from '@/lib/draft-helper/auctionAdvice'
 import { parseSlotOrder } from '@/lib/competitive-edge/liveDraftManagersFacts'
+import { resolveViewerDraftIdentity, type ViewerDraftIdentity } from '@/lib/draft-room/viewerDraftIdentity'
+import {
+  dedupeQueueEntries,
+  normalizeDraftedNameSet,
+  removeDraftedPlayersFromQueue,
+} from '@/lib/draft-queue-engine/queue-utils'
+import { getAuctionStateFromSession, getBudgetsFromSession } from '@/lib/live-draft-engine/auction/AuctionEngine'
+import {
+  auctionAdviceLines,
+  auctionRoomLines,
+  pickClockLines,
+  secondsLeftOnPick,
+  viewerNextOverall,
+  viewerPicksLine,
+  viewerQueueLine,
+  type QueuedPlayer,
+} from '@/lib/chimmy/draftViewerFacts'
 
 /**
  * THE DRAFT — live, scheduled, or finished.
@@ -124,55 +138,6 @@ export async function buildDraftOsRecommendationLines(
   return lines
 }
 
-/**
- * The auction card's advice as prompt lines: the price for the player up for bid, the best value targets, what to
- * nominate, and the user's legal maximum. Null on timeout or error — an absent block is the honest answer.
- */
-export async function buildAuctionAdviceLines(
-  leagueId: string,
-  rosterId: string,
-  deps: {
-    decide?: (args: { leagueId: string; rosterId: string }) => Promise<{ advice: AuctionAdvice; scoringWindowInsight: string | null }>
-    budgetMs?: number
-  } = {},
-): Promise<string[] | null> {
-  const decide =
-    deps.decide ??
-    (async (args: { leagueId: string; rosterId: string }) => (await import('@/lib/shared-services/draft/auctionDecision')).buildAuctionDecision(args))
-  let out: { advice: AuctionAdvice; scoringWindowInsight: string | null } | null
-  try {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), deps.budgetMs ?? DRAFT_OS_BUDGET_MS)
-    })
-    out = await Promise.race([decide({ leagueId, rosterId }), timeout])
-    if (timer) clearTimeout(timer)
-  } catch {
-    return null
-  }
-  if (!out) return null
-  const { advice } = out
-  const usd = (n: number) => '$' + String(n)
-  const price = (p: AuctionPrice) =>
-    `${p.playerName} (${p.position}${p.team ? `, ${p.team}` : ''}): market ${usd(p.marketPrice)}, worth ${usd(p.yourPrice)} to this user — ${p.reason}`
-  const lines = [
-    `AUCTION ADVICE for THIS USER — the same prices their draft room's card shows. Their legal maximum bid right now: ${usd(advice.maxLegalBid)}.`,
-    advice.summary,
-  ]
-  const n = advice.nominated
-  if (n) {
-    const verdict =
-      n.verdict === 'bid' ? `BID, up to ${usd(n.bidUpTo)}` : n.verdict === 'cannot_afford' ? 'CANNOT AFFORD — let it go' : 'LET IT GO'
-    lines.push(`Up for bid now: ${price(n)}. Current bid ${n.currentBid != null ? usd(n.currentBid) : 'none yet'}. Verdict: ${verdict}.`)
-  }
-  if (advice.targets.length) lines.push(`Best value targets: ${advice.targets.slice(0, ALTERNATIVES).map(price).join('; ')}.`)
-  if (advice.nominate) lines.push(`Nominate: ${price(advice.nominate)} (others spend on him, this user does not need him).`)
-  if (out.scoringWindowInsight) lines.push(out.scoringWindowInsight)
-  if (advice.caveats.length) lines.push(`Caveats: ${advice.caveats.join(' ')}`)
-  lines.push('Quote ONLY these dollar figures; never invent a price. AllFantasy never bids for the user.')
-  return lines
-}
-
 /** Enough to establish where the board is without flooding the prompt. */
 const RECENT_PICKS = 8
 const UPCOMING = 4
@@ -188,6 +153,72 @@ type SessionRow = {
   timerSeconds: number | null
   timerEndAt: Date | null
   slotOrder: unknown
+  sleeperDraftId?: string | null
+  pausedRemainingSeconds?: number | null
+  overnightFrozenPickSeconds?: number | null
+  auctionState?: unknown
+  auctionBudgets?: unknown
+  auctionBudgetPerTeam?: number | null
+}
+
+/**
+ * The viewer's queue for this draft — the `DraftQueue` row the draft room saves — with drafted players
+ * removed IN MEMORY. ⚠ READ ONLY: `loadDraftQueueForUser` prunes by UPDATING the row, and a question
+ * to Chimmy must never change draft state (same rule as `loadPreparedQueue` in lib/core-app/draftHq.ts,
+ * through the same queue-utils). Null when the read fails, so a broken read is never "empty queue".
+ */
+export async function readViewerDraftQueue(
+  sessionId: string,
+  userId: string,
+  draftedNames: ReadonlyArray<{ playerName: string }>,
+): Promise<QueuedPlayer[] | null> {
+  try {
+    const row = await prisma.draftQueue.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+      select: { order: true },
+    })
+    const raw = Array.isArray(row?.order) ? (row!.order as unknown as QueueEntry[]) : []
+    const named = raw.filter((e) => typeof e?.playerName === 'string' && e.playerName.trim().length > 0)
+    const { queue } = removeDraftedPlayersFromQueue(dedupeQueueEntries(named), normalizeDraftedNameSet([...draftedNames]))
+    return queue.map((e) => ({ playerName: e.playerName.trim(), position: e.position?.trim() || null, team: e.team ?? null }))
+  } catch {
+    return null
+  }
+}
+
+/** Every pick in the session, the few columns the viewer's side needs. Empty on a failed read. */
+async function readAllPicks(sessionId: string): Promise<Array<{ overall: number; rosterId: string; playerName: string; position: string | null }>> {
+  try {
+    const rows = await prisma.draftPick.findMany({
+      where: { sessionId },
+      select: { overall: true, rosterId: true, playerName: true, position: true },
+    })
+    return Array.isArray(rows) ? rows : []
+  } catch {
+    return []
+  }
+}
+
+const AUCTION_BUDGET_MS = 2500
+
+/** Draft OS's auction read for the viewer's roster, inside a chat-sized budget. Null on timeout or error. */
+async function auctionAdviceWithin(leagueId: string, rosterId: string): Promise<string[] | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), AUCTION_BUDGET_MS)
+    })
+    const work = (async () => {
+      const { buildAuctionDecision } = await import('@/lib/shared-services/draft/auctionDecision')
+      return (await buildAuctionDecision({ leagueId, rosterId })).advice
+    })()
+    const advice = await Promise.race([work, timeout])
+    return advice ? auctionAdviceLines(advice) : null
+  } catch {
+    return null
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 
@@ -214,6 +245,12 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
         timerSeconds: true,
         timerEndAt: true,
         slotOrder: true,
+        sleeperDraftId: true,
+        pausedRemainingSeconds: true,
+        overnightFrozenPickSeconds: true,
+        auctionState: true,
+        auctionBudgets: true,
+        auctionBudgetPerTeam: true,
       },
     })) as unknown as SessionRow | null
   } catch {
@@ -264,6 +301,21 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
 
   const lines: string[] = []
 
+  /*
+   * Who the viewer is in THIS draft, resolved once — native and Sleeper-mirrored alike (see
+   * lib/draft-room/viewerDraftIdentity.ts for why a roster-id match alone failed every Sleeper draft).
+   */
+  const identity: ViewerDraftIdentity = await resolveViewerDraftIdentity({
+    leagueId,
+    userId,
+    slotOrder,
+    isSleeperMirror: Boolean(session.sleeperDraftId),
+  }).catch(() => ({ rosterId: null, slotEntry: null, pickIds: [] }))
+  const mine = identity.slotEntry
+  const ownIds = new Set(identity.pickIds)
+  const allPicks = await readAllPicks(session.id)
+  const myPicks = allPicks.filter((p) => ownIds.has(p.rosterId))
+
   // ── Scheduled but not started ──────────────────────────────────────────────
   if (session.status === 'pre_draft') {
     lines.push('DRAFT: scheduled, NOT STARTED. No pick has been made.')
@@ -283,6 +335,9 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
     } else {
       lines.push('Draft order has not been set yet — do not state anyone\'s pick position.')
     }
+    if (mine) lines.push(`THIS USER drafts from slot ${mine.slot}.`)
+    const queue = await readViewerDraftQueue(session.id, userId, allPicks)
+    if (queue && queue.length > 0) lines.push(viewerQueueLine(queue))
     lines.push(
       'Answer questions about settings, order and scheduling. Do NOT recommend specific picks as though the draft were underway.',
     )
@@ -301,6 +356,7 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
           .join('; ')}.`,
       )
     }
+    if (myPicks.length > 0) lines.push(viewerPicksLine(myPicks, session.teamCount))
     lines.push('This draft is over. Do NOT suggest who to draft next.')
     return lines.join('\n')
   }
@@ -323,6 +379,7 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
     )
   }
 
+  let viewerOnClock = false
   if (isAuction) {
     /*
      * A serpentine board does not describe an auction, and guessing a clock here
@@ -330,6 +387,37 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
      */
     lines.push(
       'This is an AUCTION: there is no pick order and nobody is "on the clock" in the snake sense. Do not state whose turn it is or predict the next pick slot.',
+    )
+    /*
+     * The room itself (owner's spec, 2026-11-16): who is on the block, the bid, everyone's money and
+     * open spots — read from the session the auction engine writes, through its own parsers.
+     */
+    const state = getAuctionStateFromSession(session)
+    const budgets = getBudgetsFromSession(session)
+    const rawBudgets = session.auctionBudgets
+    const picksBy = new Map<string, number>()
+    for (const p of allPicks) picksBy.set(p.rosterId, (picksBy.get(p.rosterId) ?? 0) + 1)
+    const nameOf = (rosterId: string | null) => (rosterId ? slotOrder.find((e) => e.rosterId === rosterId)?.displayName || null : null)
+    const bidEnd = state?.bidTimerEndAt ? Date.parse(state.bidTimerEndAt) : NaN
+    lines.push(
+      ...auctionRoomLines({
+        nomination: state?.currentNomination
+          ? { playerName: state.currentNomination.playerName, position: state.currentNomination.position, team: state.currentNomination.team ?? null }
+          : null,
+        currentBid: state?.currentBid ?? 0,
+        highBidderName: nameOf(state?.currentBidderRosterId ?? null),
+        minNextBid: state?.minNextBid ?? 0,
+        bidSecondsLeft: Number.isFinite(bidEnd) && !paused ? Math.max(0, Math.ceil((bidEnd - Date.now()) / 1000)) : null,
+        teams: slotOrder
+          .map((e) => ({
+            name: e.displayName,
+            budget: Number(budgets[e.rosterId] ?? session.auctionBudgetPerTeam ?? 0),
+            openSlots: Math.max(0, session.rounds - (picksBy.get(e.rosterId) ?? 0)),
+            isViewer: ownIds.has(e.rosterId),
+          }))
+          .sort((a, b) => b.budget - a.budget),
+        budgetsAssumed: !rawBudgets || typeof rawBudgets !== 'object' || Array.isArray(rawBudgets),
+      }),
     )
   } else if (!paused && slotOrder.length > 0 && nextOverall <= totalPicks) {
     const upcoming = getUpcomingPickOwners(
@@ -343,8 +431,9 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
     )
     if (upcoming.length > 0) {
       const [onClock, ...onDeck] = upcoming
+      viewerOnClock = Boolean(mine && onClock.slot === mine.slot)
       lines.push(
-        `ON THE CLOCK: ${onClock.displayName} at ${formatPickLabel(nextOverall, session.teamCount)}.`,
+        `ON THE CLOCK: ${viewerOnClock ? 'THIS USER' : onClock.displayName} at ${formatPickLabel(nextOverall, session.teamCount)}.`,
       )
       if (onDeck.length > 0) {
         lines.push(
@@ -358,28 +447,32 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
     lines.push('Draft order is not on file, so do NOT say who is on the clock.')
   }
 
-  // ── The viewer's own next turn ─────────────────────────────────────────────
-  let viewerRosterId: string | null = null
-  try {
-    viewerRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  } catch {
-    // Keep league context usable without guessing ownership when lookup fails.
+  // ── The pick clock: time left, slow-draft and overnight states, and the short-answer rule ────
+  if (!isAuction) {
+    lines.push(
+      ...pickClockLines({
+        status: session.status,
+        timerSeconds: session.timerSeconds,
+        timerEndAt: session.timerEndAt ? new Date(session.timerEndAt) : null,
+        pausedRemainingSeconds: session.pausedRemainingSeconds ?? null,
+        overnightFrozenPickSeconds: session.overnightFrozenPickSeconds ?? null,
+        now: new Date(),
+        viewerOnClock,
+      }),
+    )
   }
-  const mine = slotOrder.find((e) => e.rosterId === viewerRosterId)
+
+  // ── The viewer's own next turn ─────────────────────────────────────────────
+  const viewerRosterId = identity.rosterId
   if (mine && !isAuction && nextOverall <= totalPicks) {
-    let theirNext: number | null = null
-    for (let o = nextOverall; o <= totalPicks; o += 1) {
-      const slot = getSlotInRoundForOverall({
-        overall: o,
-        teamCount: session.teamCount,
-        draftType: session.draftType as DraftType,
-        thirdRoundReversal: session.thirdRoundReversal,
-      })
-      if (slot === mine.slot) {
-        theirNext = o
-        break
-      }
-    }
+    const theirNext = viewerNextOverall({
+      fromOverall: nextOverall,
+      totalPicks,
+      slot: mine.slot,
+      teamCount: session.teamCount,
+      draftType: session.draftType,
+      thirdRoundReversal: session.thirdRoundReversal,
+    })
     if (theirNext != null) {
       lines.push(
         `THIS USER drafts at slot ${mine.slot}; their next pick is ${formatPickLabel(theirNext, session.teamCount)} (${theirNext - nextOverall} picks away).`,
@@ -393,6 +486,17 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
     lines.push('This user could not be matched to a draft slot, so do not tell them when they pick.')
   }
 
+  // ── The viewer's side: their picks and their queue (owner's spec, 2026-11-16) ───────────────
+  if (mine || myPicks.length > 0) lines.push(viewerPicksLine(myPicks, session.teamCount))
+  const queue = await readViewerDraftQueue(session.id, userId, allPicks)
+  if (queue) lines.push(viewerQueueLine(queue))
+
+  /* The auction engine's read for this user: max legal bid, the call on the player up, targets. */
+  if (isAuction && !paused && viewerRosterId && (mine || myPicks.length > 0)) {
+    const advice = await auctionAdviceWithin(leagueId, viewerRosterId)
+    if (advice) lines.push(...advice)
+  }
+
   /*
    * Who to take. Only for a running snake/linear draft and a matched roster: an auction needs
    * budget logic this engine does not apply, a paused draft has no pick to make, and an unmatched
@@ -404,22 +508,13 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
   }
 
   /*
-   * An AUCTION: the prices the draft card shows (`buildAuctionDecision`, the same call as the card's route), so
-   * Chimmy can say what to bid. It used to say nothing — an auction draft got the board and no advice at all.
-   */
-  if (isAuction && viewerRosterId && !paused && nextOverall <= totalPicks) {
-    const auctionLines = await buildAuctionAdviceLines(leagueId, viewerRosterId)
-    if (auctionLines) lines.push(...auctionLines)
-  }
-
-  /*
    * The managers on the clock before this user's next pick: what each has taken in THIS draft, and —
    * only for a plan with Competitive Edge — their history in this league's past drafts. Facts the
    * user can check, under the Competitive Edge contract (lib/competitive-edge/liveDraftManagersFacts.ts).
    */
   if (mine && !isAuction && !paused && nextOverall <= totalPicks) {
     const { loadManagersAhead } = await import('@/lib/competitive-edge/liveDraftManagers')
-    const ahead = await loadManagersAhead({ leagueId, userId }).catch(() => null)
+    const ahead = await loadManagersAhead({ leagueId, userId, viewerSlot: mine.slot }).catch(() => null)
     if (ahead && ahead.managers.length > 0) {
       lines.push(
         `MANAGERS PICKING BEFORE THIS USER'S NEXT TURN (facts only — never label a manager's style or say what they will pick; state the facts and let the user decide): ${ahead.managers

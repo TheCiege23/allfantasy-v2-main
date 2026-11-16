@@ -9,19 +9,9 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
-import { normalizeDraftQueueSizeLimit } from '@/lib/draft-defaults/DraftQueueLimitResolver'
-import {
-  dedupeQueueEntries,
-  normalizeDraftedNameSet,
-  normalizeQueueEntries,
-  removeDraftedPlayersFromQueue,
-} from '@/lib/draft-queue-engine'
-import {
-  mergeAiManageDraftQueuePreference,
-  stripAiQueueMetadata,
-} from '@/lib/live-draft-engine/draftQueueAiPreferences'
+import { mergeAiManageDraftQueuePreference } from '@/lib/live-draft-engine/draftQueueAiPreferences'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
-import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { persistDraftQueue, prepareDraftQueueSave } from '@/lib/draft-room/saveDraftQueue'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,26 +57,13 @@ export async function PUT(
     return NextResponse.json({ error: 'queue (array) required' }, { status: 400 })
   }
 
-  const draftSession = await prisma.draftSession.findFirst({
-    where: { leagueId },
-    orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: {
-      id: true,
-      picks: {
-        select: { playerName: true },
-      },
-    },
-  })
-  if (!draftSession) {
-    return NextResponse.json({ error: 'No draft session' }, { status: 404 })
-  }
-
-  const { getDraftConfigForLeague } = await import('@/lib/draft-defaults/DraftRoomConfigResolver')
-  const draftConfig = await getDraftConfigForLeague(leagueId)
-  const queueSizeLimit = normalizeDraftQueueSizeLimit(draftConfig?.queue_size_limit)
-
-  let normalized = dedupeQueueEntries(normalizeQueueEntries(queue, queueSizeLimit))
-  normalized = stripAiQueueMetadata(normalized)
+  /*
+   * The whole hygiene chain — size limit, dedupe, eligible positions, drafted players — lives in
+   * lib/draft-room/saveDraftQueue.ts, shared with a confirmed Chimmy queue card. Checked BEFORE the
+   * AF Pro preference write below, so a refused queue changes nothing at all.
+   */
+  const prepared = await prepareDraftQueueSave(leagueId, queue)
+  if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: prepared.status })
 
   if (typeof body.aiManageDraftQueueEnabled === 'boolean') {
     const entitlementResolver = new EntitlementResolver()
@@ -114,38 +91,12 @@ export async function PUT(
     }
   }
 
-  const { draftPoolRowMatchesEligiblePositions } = await import('@/lib/draft-room/draft-pool-eligible-positions')
-  const { getAllowedPositionsAndRosterSize } = await import('@/lib/live-draft-engine/RosterFitValidation')
-  const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
-  if (rosterRules?.draftEligiblePositions?.size) {
-    const invalid = normalized.filter((e: { position: string }) => {
-      const pos = (e.position ?? '').trim()
-      return pos && !draftPoolRowMatchesEligiblePositions(pos, rosterRules!.draftEligiblePositions)
-    })
-    if (invalid.length > 0) {
-      const positions = [...new Set(invalid.map((e: { position: string }) => (e.position || '').trim() || '?'))]
-      return NextResponse.json(
-        {
-          error: `Queue contains players with positions not starter-eligible for this draft: ${positions.join(', ')}. Allowed positions: ${[...rosterRules.draftEligiblePositions].sort().join(', ')}.`,
-        },
-        { status: 400 }
-      )
-    }
-  }
-
-  const draftedNames = normalizeDraftedNameSet(draftSession.picks)
-  const cleaned = removeDraftedPlayersFromQueue(normalized, draftedNames)
-
-  await prisma.draftQueue.upsert({
-    where: { sessionId_userId: { sessionId: draftSession.id, userId } },
-    create: { sessionId: draftSession.id, userId, order: cleaned.queue as any },
-    update: { order: cleaned.queue as any, updatedAt: new Date() },
-  })
+  await persistDraftQueue(userId, prepared.prepared)
 
   return NextResponse.json({
     ok: true,
     leagueId,
-    queue: cleaned.queue,
-    removedUnavailable: cleaned.removedCount,
+    queue: prepared.prepared.queue,
+    removedUnavailable: prepared.prepared.removedCount,
   })
 }

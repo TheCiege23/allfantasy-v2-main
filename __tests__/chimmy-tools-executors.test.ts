@@ -131,6 +131,13 @@ describe('tool specs', () => {
        */
       'get_league_trade_history',
       'get_current_draft_board',
+      // AF Pro: reads the board and the room's rankings; writes nothing.
+      'get_draft_pick_outlook',
+      /*
+       * 🛑 ON THIS LIST ONLY BECAUSE IT WRITES NOTHING, like the other propose tools: it returns prose and
+       * a confirm card; the queue is saved only by /api/chimmy/actions/confirm after the user's tap.
+       */
+      'propose_draft_queue_change',
       'get_selected_league_rules',
       'get_real_game_results',
       'get_upcoming_games',

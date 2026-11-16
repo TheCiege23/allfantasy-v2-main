@@ -3191,6 +3191,15 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
     const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean }
+    /*
+     * ASKED FROM INSIDE THE DRAFT ROOM (stage 2 of drafts, 2026-11-16): the board is read up front and
+     * handed to the loop, instead of costing the model a tool round trip first — which is several
+     * seconds the user does not have when they are on the clock. Only for the membership-proven league
+     * (`leagueSnapshot`), and a failed read just leaves the tool to do it as before.
+     */
+    const draftRoomBoard = insightType === 'draft' && leagueSnapshot && userId
+      ? await buildDraftContext(leagueSnapshot.id, userId).catch(() => null)
+      : null
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
@@ -3210,6 +3219,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
       groundingLine: [selectedLeagueRules, decisionOsGrounding && leagueSnapshot
         ? `DECISION OS EVIDENCE for ${leagueSnapshot.name ?? leagueSnapshot.id} (${leagueSnapshot.id}). Respect its missing-data and authority limits. This snapshot applies only to this league; if you select another league, read that league's tools instead.\n${decisionOsGrounding}`
+        : null, draftRoomBoard
+        ? `THE USER IS ASKING FROM INSIDE THEIR DRAFT ROOM. This is the current board (the same read as get_current_draft_board, so do not call it again unless they ask to refresh). To queue, unqueue or reorder players use propose_draft_queue_change — a confirm card; never say a player was queued or drafted.\n${draftRoomBoard}`
         : null].filter(Boolean).join('\n\n') || null,
       clockLine: userTemporalContext.promptLine,
       /*

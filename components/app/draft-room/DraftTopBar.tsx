@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, Menu, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
 import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
@@ -14,6 +14,7 @@ import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
 import { effectiveDueAt, formatClockTime, isLongPickClock, type QuietWindow } from '@/lib/draft-room/pickClockPlanning'
 import { useMessages } from '@/components/i18n/useMessages'
 import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlanner'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 
 type DraftTopBarProps = {
   leagueName: string
@@ -124,6 +125,10 @@ type DraftTopBarProps = {
   dynastyDraftKindLabel?: string | null
   /** One line on how a rookie auction converted traded rookie picks; null hides it. */
   rookieAuctionNote?: string | null
+  /** Opens whichever Chimmy surface is on screen (the page's `openChimmy`). Hidden when absent. */
+  onOpenChimmy?: () => void
+  /** Picks until the viewer's next turn; adds "You're up in N" to the pick pill when > 0. */
+  picksUntilUser?: number | null
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -265,9 +270,12 @@ export function DraftTopBar({
   dynastySkin = false,
   dynastyDraftKindLabel = null,
   rookieAuctionNote = null,
+  onOpenChimmy,
+  picksUntilUser = null,
 }: DraftTopBarProps) {
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
+  const headerCopy = useMessages(draftRoomHeaderMessages)
   const liveRemaining = useDraftCountdownSeconds(
     timerStatus,
     timerEndAtIso ?? undefined,
@@ -814,18 +822,18 @@ export function DraftTopBar({
           one question this header answers ("whose pick, how long") reads as a single unit.
           These chips used to sit under the league name, away from the timer.
         */}
+        {/*
+          Room v2 (2026-11): pick, who is on the clock, the clock and "you're up in N" read as ONE
+          pill, the answer to "whose pick, how long, when am I up". The pieces keep their own
+          meaning (gold only when it is you, the clock's urgency colours) inside one shape.
+        */}
         <div
-          className="order-3 col-span-2 flex min-h-[36px] w-full flex-nowrap items-center justify-center gap-1.5 md:flex-wrap lg:order-none lg:col-span-1 lg:w-auto lg:min-w-[9.5rem] lg:flex-nowrap"
+          className="order-3 col-span-2 flex min-h-[36px] w-full flex-nowrap items-center justify-center gap-1 md:w-auto md:justify-self-center md:rounded-full md:border md:border-white/12 md:bg-[#0d1020]/85 md:p-1 md:shadow-[0_8px_28px_rgba(0,0,0,0.35)] lg:order-none lg:col-span-1 lg:min-w-[9.5rem]"
           data-testid="draft-topbar-center-slot"
+          data-room-v2-pill="true"
         >
           {pickLabel ? (
-            <div
-              className={`hidden items-center gap-2 rounded-lg border px-2 py-1 shadow-[0_4px_24px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/15 md:inline-flex ${
-                rs
-                  ? 'border-cyan-400/35 bg-gradient-to-br from-cyan-500/18 via-[#0c1828]/95 to-[#081018]/98 shadow-[0_8px_36px_rgba(34,211,238,0.18)]'
-                  : 'border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.12] to-[#0a1528]/90'
-              }`}
-            >
+            <div className="hidden items-center gap-1.5 px-2 py-1 md:inline-flex">
               <Hash className="h-4 w-4 shrink-0 text-cyan-300" />
               <span className="text-[13px] font-bold tracking-tight text-white">{pickLabel}</span>
               {overallPickNumber != null ? (
@@ -854,12 +862,10 @@ export function DraftTopBar({
               half-done.
             */
             <div
-              className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 ring-1 ${
+              className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 ${
                 isCurrentUserOnClock
-                  ? 'animate-pulse border-amber-400/60 bg-[radial-gradient(ellipse_at_30%_0%,rgba(251,191,36,0.30),transparent),linear-gradient(145deg,rgba(180,83,9,0.28),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(251,191,36,0.28)] ring-amber-400/35'
-                  : rs
-                    ? 'border-violet-400/40 bg-[radial-gradient(ellipse_at_30%_0%,rgba(139,92,246,0.28),transparent),linear-gradient(145deg,rgba(109,40,217,0.22),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(139,92,246,0.22)] ring-violet-400/25'
-                    : 'border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-[#0a1228]/95 shadow-[0_6px_28px_rgba(139,92,246,0.15)] ring-violet-400/10'
+                  ? 'animate-pulse bg-amber-500/18 ring-1 ring-amber-400/45'
+                  : 'md:bg-transparent max-md:border max-md:border-violet-400/25 max-md:bg-violet-500/[0.12]'
               }`}
               data-on-clock-self={isCurrentUserOnClock ? 'true' : undefined}
             >
@@ -908,6 +914,14 @@ export function DraftTopBar({
             </div>
           ) : null}
           {centerCta}
+          {picksUntilUser != null && picksUntilUser > 0 && !isCurrentUserOnClock && draftStatus === 'in_progress' ? (
+            <span
+              className="hidden shrink-0 items-center rounded-full bg-cyan-400/14 px-3 py-1 text-[12px] font-extrabold text-cyan-200 md:inline-flex"
+              data-testid="draft-topbar-up-in"
+            >
+              {headerCopy.upIn(picksUntilUser)}
+            </span>
+          ) : null}
         </div>
 
         <div className="order-2 flex flex-wrap items-center justify-end gap-1 lg:order-none">
@@ -949,20 +963,17 @@ export function DraftTopBar({
             {autoPickEnabled ? t('draftRoom.topBarHint.autoPickOn') : t('draftRoom.topBarHint.autoPickOff')}
           </button>
 
-          <button
-            type="button"
-            onClick={handleToggleTimerMute}
-            data-testid="draft-topbar-timer-mute-toggle"
-            aria-pressed={timerMuted}
-            title={timerMuted ? t('draftRoom.topBarHint.beepsMuted') : t('draftRoom.topBarHint.muteBeeps')}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition duration-150 cursor-pointer ${
-              timerMuted
-                ? 'border-white/14 bg-white/6 text-white/55 hover:border-white/25 hover:bg-white/10'
-                : 'border-cyan-400/30 bg-cyan-500/12 text-cyan-100 shadow-[0_0_10px_rgba(34,211,238,0.12)] hover:bg-cyan-500/18'
-            }`}
-          >
-            {timerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </button>
+          {onOpenChimmy ? (
+            <button
+              type="button"
+              onClick={onOpenChimmy}
+              data-testid="draft-topbar-ask-chimmy"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 text-[12px] font-bold text-cyan-200 transition duration-150 hover:bg-cyan-500/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              <span className="max-sm:sr-only">{headerCopy.askChimmy}</span>
+            </button>
+          ) : null}
 
           <div className="relative" ref={menuRef}>
             <button
@@ -979,8 +990,9 @@ export function DraftTopBar({
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/12 bg-[#7180a8]/20 text-white/85 transition duration-150 hover:bg-[#7b89af]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
               aria-expanded={menuOpen}
               aria-label={t('draftRoom.topBarHint.draftOptions')}
+              title={headerCopy.roomMenu}
             >
-              <Menu className="h-4 w-4" />
+              <MoreHorizontal className="h-4 w-4" />
             </button>
 
             {menuOpen && menuPos
@@ -991,6 +1003,23 @@ export function DraftTopBar({
                   style={{ top: menuPos.top, right: Math.max(8, menuPos.right), maxHeight: `calc(100dvh - ${menuPos.top + 16}px - env(safe-area-inset-bottom, 0px))`, maxWidth: 'calc(100vw - 16px)' }}
                   data-testid="draft-topbar-menu"
                 >
+                <button
+                  type="button"
+                  onClick={handleToggleTimerMute}
+                  data-testid="draft-topbar-timer-mute-toggle"
+                  aria-pressed={!timerMuted}
+                  title={timerMuted ? t('draftRoom.topBarHint.beepsMuted') : t('draftRoom.topBarHint.muteBeeps')}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8"
+                >
+                  {timerMuted ? <VolumeX className="h-4 w-4 shrink-0 text-white/55" /> : <Volume2 className="h-4 w-4 shrink-0 text-cyan-200" />}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-sm font-semibold text-white">{headerCopy.sound}</span>
+                    <span className="text-[11px] text-white/55">{headerCopy.soundHint}</span>
+                  </span>
+                  <span className={`text-xs font-bold ${timerMuted ? 'text-white/55' : 'text-cyan-200'}`}>
+                    {timerMuted ? headerCopy.soundOff : headerCopy.soundOn}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {

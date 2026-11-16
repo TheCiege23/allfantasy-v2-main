@@ -471,7 +471,7 @@ function DraftBoardInner({
               data-testid="draft-board-legend"
             >
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-[2px] bg-[#f6c445]" aria-hidden />
+                <span className="h-2 w-2 rounded-[2px] border border-cyan-300 bg-[#0d1020] shadow-[0_0_6px_rgba(34,211,238,0.8)]" aria-hidden />
                 on the clock
               </span>
               <span className="inline-flex items-center gap-1">
@@ -573,7 +573,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : 'max-md:hidden'} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : `max-md:hidden ${viewMode === 'all' ? 'md:hidden' : ''}`} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'
@@ -687,7 +687,7 @@ function DraftBoardInner({
           */}
           <div className="min-w-max sm:min-w-full max-md:[--af-board-col-max:84px]" data-testid="draft-board-grid">
             <div
-              className={`sticky top-0 z-10 grid gap-[2px] border-b pb-0.5 backdrop-blur-md ${
+              className={`sticky top-0 z-10 grid gap-[4px] border-b pb-0.5 backdrop-blur-md ${
                 rs
                   ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
                   : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
@@ -777,7 +777,7 @@ function DraftBoardInner({
               {visibleRounds.map((round) => (
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div
-                      className="grid gap-[2px]"
+                      className="grid gap-[4px]"
                       style={{ gridTemplateColumns: `${ROUND_COLUMN} repeat(${teamCount}, ${BOARD_COLUMN})` }}
                     >
                     {(() => {
@@ -812,7 +812,7 @@ function DraftBoardInner({
                         return (
                           <div
                             key={`${round}-${slotEntry.slot}-missing`}
-                            className="aspect-square w-full max-w-[144px] rounded-[4px] bg-red-500/15"
+                            className="h-[68px] w-full rounded-lg bg-red-500/15"
                             title="Missing cell data for this slot"
                           />
                         )
