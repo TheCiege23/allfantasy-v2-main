@@ -8,6 +8,8 @@ import {
 import type { DraftType, QueueEntry } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import type { RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
+import { decideDraftPickForRoster, type PickDecisionDeps } from '@/lib/shared-services/draft/pickDecision'
+import type { DraftDecisionContext } from '@/lib/shared-services/draft/DraftContextAssembler'
 import { parseSlotOrder } from '@/lib/competitive-edge/liveDraftManagersFacts'
 import { resolveViewerDraftIdentity, type ViewerDraftIdentity } from '@/lib/draft-room/viewerDraftIdentity'
 import {
@@ -56,73 +58,80 @@ const DRAFT_OS_BUDGET_MS = 2500
 const ALTERNATIVES = 3
 
 /**
- * Draft OS's recommendation for one roster, as prompt lines.
+ * The draft room's DECISION for one roster, as prompt lines — the same decision the draft card shows.
  *
- * Draft OS (`lib/shared-services/draft`) rebuilds the engine input server-side from the draft
- * session, AF ADP and roster template, then runs the same `computeDraftRecommendation` the draft
- * room's /api/draft/recommend uses — so Chimmy and the board recommend the same player. It is
- * deliberately not `evaluateDraftShadow`, which also runs the legacy grader and writes to the
- * shadow store. Null on timeout, error, or no recommendation: an absent block is the honest answer.
+ * 🛑 THIS USED TO READ THE RECOMMENDER'S TOP CHOICE DIRECTLY, AND THE CARD DID NOT. The card runs the recommender
+ * through `runDraftPickDecision`, which gates the top choice through the live pick rules (roster fit, the clock, a
+ * completed roster): a player the room would refuse becomes "Skip X; consider Y". Chimmy said "take X" regardless.
+ * Both now go through `decideDraftPickForRoster` (lib/shared-services/draft/pickDecision.ts), and Chimmy relays the
+ * decision's own "what to do".
+ *
+ * Null on timeout, error, or no recommendation: an absent block is the honest answer.
  */
 export async function buildDraftOsRecommendationLines(
   leagueId: string,
   rosterId: string,
   deps: {
-    buildContext?: (input: { leagueId: string; rosterId: string }) => Promise<{ engineInput: unknown }>
+    /** The asker — recorded on the decision. */
+    userId?: string
+    buildContext?: (input: { leagueId: string; rosterId: string }) => Promise<DraftDecisionContext>
     recommend?: (input: unknown) => RecommendationResult
+    snapshot?: PickDecisionDeps['snapshot']
+    validateRosterFit?: PickDecisionDeps['validateRosterFit']
     budgetMs?: number
   } = {},
 ): Promise<string[] | null> {
-  const buildContext =
-    deps.buildContext ??
-    (async (input: { leagueId: string; rosterId: string }) => {
-      const { buildDraftDecisionContext } = await import('@/lib/shared-services/draft/DraftContextAssembler')
-      return buildDraftDecisionContext(input)
-    })
-  let result: RecommendationResult | null
+  let outcome: Awaited<ReturnType<typeof decideDraftPickForRoster>> | null
   try {
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), deps.budgetMs ?? DRAFT_OS_BUDGET_MS)
     })
-    const work = (async () => {
-      const ctx = await buildContext({ leagueId, rosterId })
-      const recommend =
-        deps.recommend ??
-        (await import('@/lib/draft-helper/RecommendationEngine')).computeDraftRecommendation as (
-          input: unknown,
-        ) => RecommendationResult
-      return recommend(ctx.engineInput)
-    })()
-    result = await Promise.race([work, timeout])
+    const work = decideDraftPickForRoster(
+      { leagueId, userId: deps.userId ?? '', rosterId },
+      {
+        ...(deps.buildContext ? { context: deps.buildContext } : {}),
+        ...(deps.recommend ? { recommend: deps.recommend as PickDecisionDeps['recommend'] } : {}),
+        ...(deps.snapshot ? { snapshot: deps.snapshot } : {}),
+        ...(deps.validateRosterFit ? { validateRosterFit: deps.validateRosterFit } : {}),
+      },
+    )
+    outcome = await Promise.race([work, timeout])
     if (timer) clearTimeout(timer)
   } catch {
     return null
   }
-  const top = result?.recommendation
-  if (!result || !top) return null
+  if (!outcome || !outcome.ok) return null
+  const { decision, engineResult: result } = outcome
+  const top = decision.recommended_actions[0]
+  if (!top) return null
 
-  const describe = (p: { name: string; position: string; team?: string | null; adp?: number | null }) =>
-    `${p.name} (${p.position}${p.team ? `, ${p.team}` : ''}${p.adp != null ? `, ADP ${Math.round(p.adp * 10) / 10}` : ''})`
+  const describe = (p: { playerName: string; position: string; team?: string | null; adp?: number | null }) =>
+    `${p.playerName} (${p.position}${p.team ? `, ${p.team}` : ''}${p.adp != null ? `, ADP ${Math.round(p.adp * 10) / 10}` : ''})`
+  const a = decision.four_answers
   const lines = [
-    `DRAFT OS RECOMMENDATION for THIS USER's pick (the same engine as their draft room): ${describe(top.player)} — ${top.reason}`,
+    `DRAFT DECISION for THIS USER's pick — the same decision their draft room's card shows (ranked by the draft engine, then checked against the live pick rules).`,
+    `What to do: ${a.what_to_do}`,
+    `Why: ${a.why_it_matters}`,
+    `Ranked: ${decision.recommended_actions.slice(0, 1 + ALTERNATIVES).map((x) => `${x.rank}. ${describe(x)} — ${x.reason}`).join('; ')}.`,
   ]
-  const alternatives = result.alternatives.slice(0, ALTERNATIVES)
-  if (alternatives.length > 0) {
-    lines.push(`Alternatives: ${alternatives.map((a) => `${describe(a.player)} — ${a.reason}`).join('; ')}.`)
+  const refused = decision.rule_verdicts.filter((v) => v.verdict === 'illegal')
+  if (refused.length > 0) {
+    lines.push(`🛑 The room would REFUSE ${top.playerName} for this user right now: ${refused[0]!.message} Do NOT tell them to take ${top.playerName}; relay "What to do" above.`)
   }
+  lines.push(`Confidence: ${a.how_confident}`)
   // This draft's specifics (2026-11-14): the scoring window, a live position run, the teams ahead.
-  for (const line of [result.scoringWindowInsight, result.runInsight, result.teamsAheadInsight]) {
+  for (const line of [result?.scoringWindowInsight, result?.runInsight, result?.teamsAheadInsight]) {
     if (line) lines.push(line)
   }
-  if (result.teamsAheadInsight) {
+  if (result?.teamsAheadInsight) {
     lines.push('The teams-ahead line counts open roster slots only; do not describe any manager\'s personality or predict a specific manager\'s pick.')
   }
-  const notes = [result.scarcityInsight, result.reachWarning, result.valueWarning, result.byeNote].filter(
+  const notes = [result?.scarcityInsight, result?.reachWarning, result?.valueWarning, result?.byeNote].filter(
     (n): n is string => Boolean(n && n.trim()),
   )
   if (notes.length > 0) lines.push(`Draft OS notes: ${notes.join(' ')}`)
-  if (!top.adpIsReal) {
+  if (top.adpIsReal === false) {
     lines.push('Market ADP is missing for this player, so do not describe the pick as a reach or a value against ADP.')
   }
   lines.push('Present this as a recommendation the user can take or leave; they make the pick.')
@@ -494,7 +503,7 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
    * viewer would be advised from someone else's roster.
    */
   if (mine && viewerRosterId && !isAuction && !paused && nextOverall <= totalPicks) {
-    const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId)
+    const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId, { userId })
     if (draftOsLines) lines.push(...draftOsLines)
   }
 

@@ -132,6 +132,17 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     expect(text).toContain('14.8')
   })
 
+  it('🛑 says which week each projection is for, and never lets a season baseline pass as this week', () => {
+    const weekly = serializeDecisionOsGroundingForPrompt(packet({ projections: present([projection('Malik Nabers', 14.8)]) }), NOW)
+    expect(weekly).toContain('Malik Nabers (WR) 14.8 pts, week 3 2026')
+    const baseline = serializeDecisionOsGroundingForPrompt(
+      packet({ projections: present([{ ...projection('Malik Nabers', 13.1), week: null } as ProjectionFact]) }),
+      NOW,
+    )
+    expect(baseline).toContain('13.1 pts, season baseline per game (no weekly projection on file — NOT a projection for this week)')
+    expect(baseline).not.toMatch(/13\.1 pts, week/)
+  })
+
   it('emits the four prose slices VERBATIM — they are already prompt-ready', () => {
     // These are GroundedSlice<string>. `sliceLine` reduced each to the word "available", which is
     // what silenced three-brain's saved conclusion — the entire substance of plan item 6.2.

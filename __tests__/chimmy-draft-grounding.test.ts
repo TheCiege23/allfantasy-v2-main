@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   buildDraftDecisionContext: vi.fn(),
   computeDraftRecommendation: vi.fn(),
   managersAhead: vi.fn(async () => null),
+  snapshot: vi.fn(),
+  fit: vi.fn(),
+  auction: vi.fn(),
   // The viewer's side (2026-11-16): claimed team, saved queue, Sleeper user id. Null by default.
   teamFindFirst: vi.fn(async () => null),
   queueFindUnique: vi.fn(async () => null),
@@ -33,6 +36,10 @@ vi.mock('@/lib/draft-helper/RecommendationEngine', () => ({
 }))
 
 vi.mock('@/lib/competitive-edge/liveDraftManagers', () => ({ loadManagersAhead: mocks.managersAhead }))
+// The draft card's sequence (lib/shared-services/draft/pickDecision.ts): the session snapshot and the live roster-fit rule.
+vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ buildSessionSnapshot: mocks.snapshot }))
+vi.mock('@/lib/live-draft-engine/RosterFitValidation', () => ({ validateRosterFitForDraftPick: mocks.fit }))
+vi.mock('@/lib/shared-services/draft/auctionDecision', () => ({ buildAuctionDecision: mocks.auction }))
 
 import { buildDraftContext, buildDraftOsRecommendationLines } from '@/lib/chimmy/draftGrounding'
 
@@ -99,6 +106,20 @@ function pick(overall: number, name: string, manager: string) {
   }
 }
 
+/** The live session snapshot the draft card's decision reads: this user is on the clock at 1.03. */
+function liveSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'sess-1',
+    status: 'in_progress',
+    draftType: 'snake',
+    rounds: 3,
+    teamCount: 4,
+    picks: [],
+    currentPick: { overall: 3, round: 1, slot: 1, rosterId: 'roster-1', displayName: 'Manager 1', pickLabel: '1.03' },
+    ...overrides,
+  }
+}
+
 describe('buildDraftContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -106,7 +127,13 @@ describe('buildDraftContext', () => {
     mocks.pickFindMany.mockResolvedValue([pick(2, 'Second Pick', 'Manager 2'), pick(1, 'First Pick', 'Manager 1')])
     mocks.pickCount.mockResolvedValue(2)
     mocks.viewerRoster.mockImplementation(async (_leagueId, userId) => userId === 'app-user-1' ? 'roster-1' : null)
-    mocks.buildDraftDecisionContext.mockResolvedValue({ engineInput: { marker: 'engine-input' } })
+    mocks.buildDraftDecisionContext.mockResolvedValue({
+      sport: 'NFL',
+      engineInput: { marker: 'engine-input' },
+      dataCompleteness: { availablePoolSize: 150, adpSampleTotal: 40, rosterPickCount: 0, unresolvedPlayerIdCount: 0 },
+    })
+    mocks.snapshot.mockResolvedValue(liveSnapshot())
+    mocks.fit.mockResolvedValue({ valid: true })
     mocks.computeDraftRecommendation.mockReturnValue(recommendation())
   })
 
@@ -213,7 +240,13 @@ describe('Draft OS recommendation in the draft context', () => {
     mocks.pickFindMany.mockResolvedValue([pick(2, 'Second Pick', 'Manager 2'), pick(1, 'First Pick', 'Manager 1')])
     mocks.pickCount.mockResolvedValue(2)
     mocks.viewerRoster.mockImplementation(async (_leagueId, userId) => userId === 'app-user-1' ? 'roster-1' : null)
-    mocks.buildDraftDecisionContext.mockResolvedValue({ engineInput: { marker: 'engine-input' } })
+    mocks.buildDraftDecisionContext.mockResolvedValue({
+      sport: 'NFL',
+      engineInput: { marker: 'engine-input' },
+      dataCompleteness: { availablePoolSize: 150, adpSampleTotal: 40, rosterPickCount: 0, unresolvedPlayerIdCount: 0 },
+    })
+    mocks.snapshot.mockResolvedValue(liveSnapshot())
+    mocks.fit.mockResolvedValue({ valid: true })
     mocks.computeDraftRecommendation.mockReturnValue(recommendation())
   })
 
@@ -221,23 +254,25 @@ describe('Draft OS recommendation in the draft context', () => {
     const out = await buildDraftContext('lg1', 'app-user-1')
     expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'roster-1' })
     expect(mocks.computeDraftRecommendation).toHaveBeenCalledWith({ marker: 'engine-input' })
-    expect(out).toContain('DRAFT OS RECOMMENDATION')
-    expect(out).toContain('Bijan Robinson (RB, ATL, ADP 2.4)')
-    expect(out).toContain('Alternatives: CeeDee Lamb')
+    expect(out).toContain('DRAFT DECISION for THIS USER')
+    expect(out).toContain('the same decision their draft room')
+    expect(out).toContain('What to do: Draft Bijan Robinson.')
+    expect(out).toContain('Ranked: 1. Bijan Robinson (RB, ATL, ADP 2.4)')
+    expect(out).toContain('2. CeeDee Lamb (WR, DAL, ADP 3.1)')
     expect(out).toContain('Only 2 RB1s remain')
   })
 
   it('does not ask Draft OS for a viewer with no draft slot', async () => {
     const out = await buildDraftContext('lg1', 'someone-else')
     expect(mocks.buildDraftDecisionContext).not.toHaveBeenCalled()
-    expect(out).not.toContain('DRAFT OS')
+    expect(out).not.toContain('DRAFT DECISION')
   })
 
   it('does not recommend in a paused draft, an auction, or one that has not started or has finished', async () => {
     for (const overrides of [{ status: 'paused' }, { status: 'pre_draft' }, { status: 'completed' }]) {
       mocks.sessionFindUnique.mockResolvedValue(session(overrides))
       const out = await buildDraftContext('lg1', 'app-user-1')
-      expect(out).not.toContain('DRAFT OS')
+      expect(out).not.toContain('DRAFT DECISION')
     }
     expect(mocks.buildDraftDecisionContext).not.toHaveBeenCalled()
     /*
@@ -245,14 +280,14 @@ describe('Draft OS recommendation in the draft context', () => {
      * (2026-11-16), which builds the same decision context — so that mock is not asserted here.
      */
     mocks.sessionFindUnique.mockResolvedValue(session({ draftType: 'auction' }))
-    expect(await buildDraftContext('lg1', 'app-user-1')).not.toContain('DRAFT OS RECOMMENDATION')
+    expect(await buildDraftContext('lg1', 'app-user-1')).not.toContain('DRAFT DECISION')
   })
 
   it('keeps the rest of the context when Draft OS fails', async () => {
     mocks.buildDraftDecisionContext.mockRejectedValue(new Error('No DraftSession exists'))
     const out = await buildDraftContext('lg1', 'app-user-1')
     expect(out).toContain('ON THE CLOCK: Manager 3')
-    expect(out).not.toContain('DRAFT OS')
+    expect(out).not.toContain('DRAFT DECISION')
   })
 
   it('gives up after its time budget instead of holding the chat turn', async () => {
@@ -264,8 +299,24 @@ describe('Draft OS recommendation in the draft context', () => {
   })
 
   it('says nothing when the engine has no recommendation', async () => {
-    mocks.computeDraftRecommendation.mockReturnValue(recommendation({ recommendation: null }))
+    // No top choice AND no alternatives: the card has nothing to recommend either.
+    mocks.computeDraftRecommendation.mockReturnValue(recommendation({ recommendation: null, alternatives: [] }))
     expect(await buildDraftOsRecommendationLines('lg1', 'roster-1')).toBeNull()
+  })
+
+  it('🛑 relays the room\'s refusal: a top choice the roster rules reject is "skip", never "take"', async () => {
+    mocks.fit.mockResolvedValue({ valid: false, error: 'No open RB slot remains on this roster.' })
+    const out = (await buildDraftOsRecommendationLines('lg1', 'roster-1', { userId: 'app-user-1' }))!.join('\n')
+    expect(out).toContain('What to do: Skip Bijan Robinson; consider CeeDee Lamb (WR, DAL) instead.')
+    expect(out).toContain('The room would REFUSE Bijan Robinson')
+    expect(out).toContain('Do NOT tell them to take Bijan Robinson')
+    expect(mocks.fit).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'lg1', rosterId: 'roster-1', newPickPosition: 'RB' }))
+  })
+
+  it('says "queue", not "draft", when it is not this user\'s turn', async () => {
+    mocks.snapshot.mockResolvedValue(liveSnapshot({ currentPick: { overall: 2, round: 1, slot: 2, rosterId: 'roster-2', displayName: 'Manager 2', pickLabel: '1.02' } }))
+    const out = (await buildDraftOsRecommendationLines('lg1', 'roster-1', { userId: 'app-user-1' }))!.join('\n')
+    expect(out).toContain('What to do: Queue Bijan Robinson')
   })
 
   it('forbids reach/value talk when the ADP behind the pick is not real market ADP', async () => {
@@ -284,7 +335,13 @@ describe('the managers before the user’s next pick (2026-11-14)', () => {
     mocks.pickFindMany.mockResolvedValue([pick(2, 'Second Pick', 'Manager 2'), pick(1, 'First Pick', 'Manager 1')])
     mocks.pickCount.mockResolvedValue(2)
     mocks.viewerRoster.mockImplementation(async (_leagueId, userId) => userId === 'app-user-1' ? 'roster-1' : null)
-    mocks.buildDraftDecisionContext.mockResolvedValue({ engineInput: { marker: 'engine-input' } })
+    mocks.buildDraftDecisionContext.mockResolvedValue({
+      sport: 'NFL',
+      engineInput: { marker: 'engine-input' },
+      dataCompleteness: { availablePoolSize: 150, adpSampleTotal: 40, rosterPickCount: 0, unresolvedPlayerIdCount: 0 },
+    })
+    mocks.snapshot.mockResolvedValue(liveSnapshot())
+    mocks.fit.mockResolvedValue({ valid: true })
     mocks.computeDraftRecommendation.mockReturnValue(recommendation())
   })
 
@@ -351,8 +408,15 @@ describe("the viewer's side of a live draft", () => {
       { playerName: 'Saquon Barkley', position: 'RB' },
       { playerName: 'Puka Nacua', position: 'WR', team: 'LAR' },
     ] } as never)
-    mocks.buildDraftDecisionContext.mockResolvedValue({ engineInput: { marker: 'engine-input' } })
+    mocks.buildDraftDecisionContext.mockResolvedValue({
+      sport: 'NFL',
+      engineInput: { marker: 'engine-input' },
+      dataCompleteness: { availablePoolSize: 150, adpSampleTotal: 40, rosterPickCount: 1, unresolvedPlayerIdCount: 0 },
+    })
     mocks.computeDraftRecommendation.mockReturnValue(recommendation())
+    // The draft card's sequence reads the session snapshot and the roster-fit rule.
+    mocks.snapshot.mockResolvedValue(liveSnapshot())
+    mocks.fit.mockResolvedValue({ valid: true })
   })
 
   it('finds the viewer in a Sleeper-mirrored draft by their claimed team, not by AF roster id', async () => {
@@ -388,7 +452,8 @@ describe("the viewer's side of a live draft", () => {
     const out = (await buildDraftContext('lg1', 'app-user-1'))!
     expect(out).toContain('ON THE CLOCK: THIS USER at 1.02.')
     expect(out).toMatch(/🛑 THIS USER IS ON THE CLOCK WITH \d+s LEFT\. Answer pick-first in ONE line/)
-    expect(out).toContain('DRAFT OS RECOMMENDATION')
+    // The pick decision — the draft card's own (lib/shared-services/draft/pickDecision.ts).
+    expect(out).toContain('DRAFT DECISION for THIS USER')
   })
 
   it('a native draft still matches on the AF roster id first', async () => {

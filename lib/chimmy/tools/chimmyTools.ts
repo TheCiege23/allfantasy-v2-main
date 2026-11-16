@@ -128,6 +128,10 @@ export type ChimmyToolRun = { tool: string; leagueId: string }
 /** More cards than this in one answer is a model looping, not a user deciding. */
 export const MAX_ACTION_CARDS_PER_ANSWER = 3
 
+/** Prefixed to a lineup answer the weekly-feed tool gave because My Team had no NFL lineup to read. */
+const FEED_FALLBACK_NOTE =
+  'NOTE: My Team could not load this lineup, so this answer uses the weekly projection feed instead. If the user compares it with the My Team screen, say the numbers come from a different source.\n'
+
 /** One engine-made start/sit call: the pick, the player it was picked over, and the week. */
 export type ChatStartCall = {
   leagueId: string
@@ -1358,8 +1362,20 @@ export async function executeChimmyTool(
 
       case 'optimize_my_lineup': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        /*
+         * ONE START/SIT ANSWER (2026-11-16): an NFL lineup is answered from My Team's own best lineup, so chat and
+         * the screen cannot disagree. Only when My Team has no NFL lineup to read does the weekly-feed tool answer,
+         * and it says so.
+         */
+        const { buildMyTeamLineupContext } = await import('@/lib/chimmy/myTeamLineupGrounding')
+        const fromMyTeam = await buildMyTeamLineupContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
+        }).catch(() => ({ fallback: 'no_my_team' as const }))
+        if (typeof fromMyTeam === 'string') return fromMyTeam
         const { buildLineupOptimizerContext } = await import('@/lib/chimmy/lineupOptimizerGrounding')
-        return await buildLineupOptimizerContext({
+        return (fromMyTeam.fallback === 'no_my_team' ? FEED_FALLBACK_NOTE : '') + await buildLineupOptimizerContext({
           leagueId: ctx.leagueId,
           userId: ctx.userId,
           ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
@@ -1368,8 +1384,21 @@ export async function executeChimmyTool(
 
       case 'compare_start_options': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const pair = Array.isArray(args.players) ? args.players.filter((x): x is string => typeof x === 'string' && x.trim().length > 0) : []
+        let startSitNote = ''
+        if (pair.length === 2) {
+          const { buildMyTeamStartSitContext } = await import('@/lib/chimmy/myTeamLineupGrounding')
+          const fromMyTeam = await buildMyTeamStartSitContext({
+            leagueId: ctx.leagueId,
+            userId: ctx.userId,
+            players: [pair[0]!.trim(), pair[1]!.trim()],
+            ...(ctx.startCalls ? { onStartCall: (call: ChatStartCall) => ctx.startCalls!.push(call) } : {}),
+          }).catch(() => ({ fallback: 'no_my_team' as const }))
+          if (typeof fromMyTeam === 'string') return fromMyTeam
+          if (fromMyTeam.fallback === 'no_my_team') startSitNote = FEED_FALLBACK_NOTE
+        }
         const { runStartSitScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runStartSitScenarioTool({
+        return startSitNote + await runStartSitScenarioTool({
           players: args.players,
           leagueId: ctx.leagueId,
           userId: ctx.userId,

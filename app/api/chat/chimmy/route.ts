@@ -2222,6 +2222,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           userId,
           sport: normalizeToSupportedSport(sport),
           season: effectiveSeason ?? new Date().getFullYear(),
+          /*
+           * The week the asker named, when the request carries one. Absent, the projection read takes the
+           * current projection week itself (`currentProjectionWeek`) — one week, printed on every row — rather
+           * than every week on file mixed together.
+           */
+          week: week ?? null,
           question: message,
           /*
            * ⚠ `values` WAS MISSING, AND THAT SILENTLY REMOVED THE WHOLE VALUATION LANE (R1.2).
