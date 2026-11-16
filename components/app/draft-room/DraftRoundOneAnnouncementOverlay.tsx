@@ -27,6 +27,12 @@ type DraftRoundOneAnnouncementOverlayProps = {
   onDismissFront: () => void
   /** Dynasty rooms: vault ground and trophy-gold accents instead of the default violet. */
   dynastySkin?: boolean
+  /**
+   * `modal` (live rooms): the dimmed full-screen card. `toast` (the mock room, 2026-11): a compact
+   * card that taps pass around. CPU managers pick a mock's round 1 seconds apart, and a modal per
+   * pick would take the board and the pool away from the one person drafting.
+   */
+  variant?: 'modal' | 'toast'
 }
 
 export function DraftRoundOneAnnouncementOverlay({
@@ -37,7 +43,9 @@ export function DraftRoundOneAnnouncementOverlay({
   queue,
   onDismissFront,
   dynastySkin = false,
+  variant = 'modal',
 }: DraftRoundOneAnnouncementOverlayProps) {
+  const toast = variant === 'toast'
   const rs = presentationVariant === 'redraft_snake'
   const dyn = dynastySkin && !rs
   const current = queue[0]
@@ -97,18 +105,26 @@ export function DraftRoundOneAnnouncementOverlay({
 
   return (
     <div
-      className={`fixed inset-0 z-[95] flex items-center justify-center bg-black/55 px-3 backdrop-blur-[2px] ${
+      className={`${
+        toast
+          ? 'pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] z-[95] flex justify-center px-3 md:inset-x-auto md:bottom-auto md:right-5 md:top-36 md:justify-end md:px-0'
+          : 'fixed inset-0 z-[95] flex items-center justify-center bg-black/55 px-3 backdrop-blur-[2px]'
+      } ${
         entered ? 'opacity-100' : 'opacity-0'
       } transition-opacity duration-300 ease-out motion-reduce:opacity-100 motion-reduce:transition-none`}
-      role="dialog"
-      aria-modal="true"
+      role={toast ? 'status' : 'dialog'}
+      aria-modal={toast ? undefined : 'true'}
+      aria-live={toast ? 'polite' : undefined}
       aria-label={tl('draftRoom.roundOne.dialogAria')}
       data-testid="draft-round-one-announcement"
+      data-variant={variant}
       data-dynasty-skin={dyn ? 'true' : undefined}
-      onClick={onDismissFront}
+      onClick={toast ? undefined : onDismissFront}
     >
       <div
-        className="pointer-events-auto relative w-[min(96vw,680px)] overflow-hidden rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.07] backdrop-blur-md"
+        className={`pointer-events-auto relative overflow-hidden rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.07] backdrop-blur-md ${
+          toast ? 'w-[min(96vw,520px)]' : 'w-[min(96vw,680px)]'
+        }`}
         onClick={(event) => event.stopPropagation()}
       >
         <div
@@ -125,8 +141,12 @@ export function DraftRoundOneAnnouncementOverlay({
             rs ? 'bg-cyan-400/25' : dyn ? 'bg-[rgba(212,162,76,0.22)]' : 'bg-violet-500/20'
           }`}
         />
-        <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-start">
-          <div className="relative h-[96px] w-[96px] shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-inner sm:h-[110px] sm:w-[110px]">
+        <div className={`relative flex gap-4 ${toast ? 'flex-row items-start p-3' : 'flex-col p-4 sm:flex-row sm:items-start'}`}>
+          <div
+            className={`relative shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-inner ${
+              toast ? 'h-[72px] w-[72px]' : 'h-[96px] w-[96px] sm:h-[110px] sm:w-[110px]'
+            }`}
+          >
             {headshotUrl ? (
               <FallbackImg
                 src={headshotUrl}
@@ -185,7 +205,7 @@ export function DraftRoundOneAnnouncementOverlay({
               {pick.position}
               {pick.team ? ` · ${pick.team}` : ''}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className={`mt-2 flex flex-wrap gap-1.5 ${toast ? 'max-sm:hidden' : ''}`}>
               {chips.slice(0, 4).map((chip) => (
                 <span
                   key={chip}
@@ -200,8 +220,8 @@ export function DraftRoundOneAnnouncementOverlay({
               <span className="text-white/40"> · </span>
               <span className="text-white/55">{subtitle}</span>
             </p>
-            <p className="mt-1 text-[12px] text-cyan-100/75">{hypeLine}</p>
-            {leagueName ? (
+            {toast ? null : <p className="mt-1 text-[12px] text-cyan-100/75">{hypeLine}</p>}
+            {leagueName && !toast ? (
               <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-wide text-white/35">{leagueName}</p>
             ) : null}
           </div>
