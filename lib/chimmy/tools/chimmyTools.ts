@@ -190,6 +190,21 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_manager_record',
+      description:
+        "A leaguemate's record in the league in scope, as facts: how many trades they have made and which positions they took on or sent away, their waiver claims and FAAB left this season, and what they took in this league's past drafts. Use for 'what does Mike usually do in trades', 'is Sam active on waivers', 'how much FAAB does everyone have', 'who trades the most here'. Name the manager (owner or team name) for one full record; leave it out for a one-line summary of every other manager. Part of Competitive Edge: without the plan it says so, and you must not describe anyone's habits yourself. Facts only — never label a manager or predict what they will do.",
+      parameters: {
+        type: 'object',
+        properties: {
+          manager: { type: 'string', description: "The manager's name or team name, as the user said it. Omit for every manager." },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'find_league_by_name',
       description:
         "Select one of the user's own leagues by the name they used, e.g. 'KBFL' or 'Dynasty for life'. Call this FIRST whenever the question names a league, before any other league tool — otherwise nothing is selected and the other tools have nothing to read. It takes a NAME, never an id.",
@@ -975,6 +990,20 @@ export async function executeChimmyTool(
         const { buildDraftAnalysisContext } = await import('@/lib/chimmy/tools/draftAnalysisTool')
         return await buildDraftAnalysisContext(ctx, args)
       }
+      case 'get_manager_record': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildManagerRecordContext } = await import('@/lib/chimmy/managerRecordGrounding')
+        const out = await buildManagerRecordContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          manager: typeof args.manager === 'string' ? args.manager.slice(0, 80) : null,
+        })
+        // Without Competitive Edge: the chat's own AF Pro line and button (lib/chimmy/answerPolish.ts), from
+        // this refusal — the same path every AF Pro tool's refusal takes.
+        if (out.locked && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
+        return out.text
+      }
+
       case 'get_league_trade_activity': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [{ buildTradeContextForChimmy }, { buildPendingTradeDecisionContext }, { buildLeagueTradeHistoryContext }] = await Promise.all([
