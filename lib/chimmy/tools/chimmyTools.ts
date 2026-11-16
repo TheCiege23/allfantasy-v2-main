@@ -370,7 +370,15 @@ export const CHIMMY_TOOL_SPECS = [
     type: 'function' as const,
     function: {
       name: 'get_current_draft_board',
-      description: 'Read the current draft board, pick order and this manager’s draft recommendation when available. Use for who to draft next, backup picks, and who is on the clock.',
+      description: 'Read the selected league’s draft — live, paused, scheduled or finished, native or mirrored from Sleeper: the board, who is on the clock and the time left on the pick, this manager’s picks so far and open positions, their queue, their next pick, and the Draft OS recommendation. In an auction: who is on the block, the bid, every team’s money left, and this manager’s max bid. Use for who to draft next, backup picks, "how long do I have", "what do I still need", and any auction question.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_draft_pick_outlook',
+      description: 'AF Pro. In a live snake or linear draft: which of this manager’s targets (their queue plus the Draft OS shortlist) are likely GONE before their next pick, which are a toss-up and which should still be there — judged by market ADP and the open starting slots of the teams picking first, plus those managers’ league draft history when the plan includes it. Use for "will X make it back to me", "who should I queue", "is my queue realistic".',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -1233,6 +1241,14 @@ export async function executeChimmyTool(
         if (!league.ok) return 'Access to the selected league could not be verified.'
         const { buildDraftContext } = await import('@/lib/chimmy/draftGrounding')
         return (await buildDraftContext(ctx.leagueId, ctx.userId)) ?? 'No current draft board could be read for the selected league.'
+      }
+
+      case 'get_draft_pick_outlook': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const league = await resolveNormalizedLeagueContext({ leagueId: ctx.leagueId, userId: ctx.userId })
+        if (!league.ok) return 'Access to the selected league could not be verified.'
+        const { buildDraftPickOutlook } = await import('@/lib/chimmy/tools/draftPickOutlook')
+        return await buildDraftPickOutlook(ctx.leagueId, ctx.userId)
       }
 
       case 'get_selected_league_rules': {

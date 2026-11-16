@@ -131,6 +131,8 @@ describe('tool specs', () => {
        */
       'get_league_trade_history',
       'get_current_draft_board',
+      // AF Pro: reads the board and the room's rankings; writes nothing.
+      'get_draft_pick_outlook',
       'get_selected_league_rules',
       'get_real_game_results',
       'get_upcoming_games',
