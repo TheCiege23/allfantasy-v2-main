@@ -110,11 +110,11 @@ describe('get_faab_bid_plan in an NBA league', () => {
 
 describe('get_faab_bid_plan in a sport with no value board', () => {
   it('🛑 refuses in words and never reads the NFL chart', async () => {
-    h.league.mockResolvedValue({ ...LEAGUE, sport: 'NHL' })
+    h.league.mockResolvedValue({ ...LEAGUE, sport: 'NCAAB' })
     const plan = await computeFaabBidPlan('N1', 'me')
     expect(plan).toEqual({
       status: 'refused',
-      line: 'FAAB BID PLAN: AllFantasy has no NHL player values to bid with yet, so bids cannot be priced in this league. Say so; do not estimate bids, and never use NFL values.',
+      line: 'FAAB BID PLAN: AllFantasy has no College basketball player values to bid with yet, so bids cannot be priced in this league. Say so; do not estimate bids, and never use NFL values.',
     })
     expect(h.values).not.toHaveBeenCalled()
   })

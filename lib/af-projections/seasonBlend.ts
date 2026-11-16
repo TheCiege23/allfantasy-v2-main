@@ -33,9 +33,10 @@
 export const BLEND_GAMES = 20
 
 /** Sports the writer blends. Owner's order: NBA first; each other sport is a deliberate addition. */
-export const BLEND_SPORTS: ReadonlySet<string> = new Set(['NBA', 'MLB'])
+export const BLEND_SPORTS: ReadonlySet<string> = new Set(['NBA', 'MLB', 'NHL'])
 
-const RATE_KEY = /per_game|percentage|_pct$|^pct_|_avg$|^avg_/i
+// `…average` covers hockey's goals_against_average; `…percentage` its save / shooting / faceoff percentages.
+const RATE_KEY = /per_game|percentage|average$|_pct$|^pct_|_avg$|^avg_/i
 /** Baseball's rate stats, by their vendor names (any case). */
 const BASEBALL_RATE_KEY = /^(era|avg|obp|slg|ops|whip|babip|fip|xfip|baa|k\/9|bb\/9|h\/9|hr\/9|k\/bb)$/i
 /** An identifier riding in a stat line: kept as it is, never blended. */

@@ -462,6 +462,33 @@ describe('loadSportPointsBase', () => {
     })
   })
 
+  describe('NHL (goalies on the team-game scale, 2026-11-16)', () => {
+    function nhlPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample: number) {
+      db.projections.push({
+        playerId: id, playerName: name, position, season: 2026,
+        adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason: 2025 },
+      })
+      db.identities.push({ id, canonicalName: name, rollingInsightsId: `ri-${id}`, sleeperId: null })
+    }
+    function nhlBoard() {
+      for (let i = 0; i < 14; i++) nhlPlayer(`s${i}`, `Skater ${i}`, ['C', 'LW', 'RW', 'D'][i % 4]!, { goals: 0.2 + i * 0.02, assists: 0.3, shots_on_goal: 2.5 }, 82)
+      // The same per-game line, over 62 games and over 24: a starter and a backup.
+      nhlPlayer('starter', 'Starter', 'G', { win: 0.55, saves: 26, goals_allowed: 2.5 }, 62)
+      nhlPlayer('backup', 'Backup', 'G', { win: 0.55, saves: 26, goals_allowed: 2.5 }, 24)
+      for (let i = 0; i < 4; i++) nhlPlayer(`g${i}`, `Goalie ${i}`, 'G', { win: 0.4, saves: 24, goals_allowed: 3 }, 50)
+    }
+
+    it('🛑 a backup counts for the games he plays — the same line over 24 games is worth 24/62 of the starter’s', async () => {
+      nhlBoard()
+      schedule(['Team A', 'Team B', 'Team C', 'Team D'], 30, null)
+      const out = await loadSportPointsBase({ sport: 'NHL', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      const value = (name: string) => out.ctx.board.find((p) => p.name === name)!.perGame
+      expect(value('Backup') / value('Starter')).toBeCloseTo(24 / 62, 6)
+      expect(sportPointsBasis(out.ctx)).toContain('Goalies count for the share of team games they played')
+    })
+  })
+
   describe('MLB', () => {
     // Stored the way `mlbPerGameRates` writes them: engine keys, per APPEARANCE, target 2027 from 2026.
     type Run = { season?: number; computedAt?: Date }

@@ -22,9 +22,10 @@ import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trad
  *
  * Owner's order: NBA first, then MLB, then NHL and soccer, one sport at a time. MLB joined 2026-11-16:
  * its board is per TEAM game (a starter's line scaled to his share of starts) and its sample is at-bats
- * or innings, which `boardSample` reports in those units.
+ * or innings, which `boardSample` reports in those units. NHL joined the same day: a goalie counts for
+ * his share of team games (`nhlTeamGame.ts`), a skater for every game, and the sample is games.
  */
-export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA', 'MLB'])
+export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA', 'MLB', 'NHL'])
 
 export function isBoardValueSport(sport: string | null | undefined): sport is PointsGradedSport {
   return BOARD_VALUE_SPORTS.has(String(sport ?? '').trim().toUpperCase() as PointsGradedSport)
