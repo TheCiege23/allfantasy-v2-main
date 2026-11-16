@@ -1,8 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 type Context = { params: Promise<{ leagueId: string }> }
@@ -13,7 +13,7 @@ async function actor() {
 async function mayManage(leagueId: string, rosterId: string, actorId: string) {
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { platformUserId: true } })
   if (!roster) return false
-  if (roster.platformUserId === actorId || await isCommissioner(leagueId, actorId)) return true
+  if (roster.platformUserId === actorId || await canCommissionerAct(leagueId, actorId, 'rosters')) return true
   return Boolean(await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: rosterId, claimedByUserId: actorId }, select: { id: true } }))
 }
 async function ownsTeam(leagueId: string, userId: string) {

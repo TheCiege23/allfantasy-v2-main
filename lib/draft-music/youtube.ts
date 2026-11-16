@@ -242,7 +242,27 @@ const YOUTUBE_HOSTS = new Set([
   'www.youtube-nocookie.com',
 ])
 
-/** Turns a pasted YouTube link (or bare video id) into something we can embed. */
+/**
+ * A YouTube Mix: the auto-generated "radio" behind `start_radio=1` links. Every
+ * Mix id starts with "RD" (RDMM…, RDAMVM…, RD<videoId>, RDEM…, RDCMUC…).
+ *
+ * ⚠ MIXES CANNOT BE EMBEDDED. Measured 2026-11-15 with YouTube's own player on
+ * allfantasy.ai: video gHKgJ8zjwkY + list RDMMgHKgJ8zjwkY -> error 150 ("This
+ * video is unavailable"); the same video alone -> plays. A user pasted exactly
+ * such a link and got a dead box.
+ *
+ * ⚠ EXCEPT `RDCLAK5uy_…`: those also start with "RD" but are YouTube Music's
+ * EDITORIAL playlists, real lists that embed fine — seven stations use them.
+ */
+export function isYouTubeMix(listId: string): boolean {
+  return listId.startsWith('RD') && !listId.startsWith('RDCLAK5uy')
+}
+
+/**
+ * Turns a pasted YouTube link (or bare video id) into something we can embed.
+ * A Mix is dropped: a link with a song in it plays that song; a Mix with no
+ * song returns null (the caller explains why — see `describeYouTubeLinkProblem`).
+ */
 export function parseYouTubeLink(input: string): YouTubeSource | null {
   const text = input.trim()
   if (!text) return null
@@ -257,7 +277,7 @@ export function parseYouTubeLink(input: string): YouTubeSource | null {
   if (!YOUTUBE_HOSTS.has(url.hostname.toLowerCase())) return null
 
   const listParam = url.searchParams.get('list')
-  const listId = listParam && LIST_ID.test(listParam) ? listParam : null
+  const listId = listParam && LIST_ID.test(listParam) && !isYouTubeMix(listParam) ? listParam : null
 
   let videoId: string | null = null
   if (url.hostname.toLowerCase().endsWith('youtu.be')) {
@@ -273,6 +293,22 @@ export function parseYouTubeLink(input: string): YouTubeSource | null {
   if (listId) return videoId ? { kind: 'playlist', listId, videoId } : { kind: 'playlist', listId }
   if (videoId) return { kind: 'video', videoId }
   return null
+}
+
+/** The message to show when `parseYouTubeLink` returns null. */
+export function describeYouTubeLinkProblem(input: string): string {
+  const list = (() => {
+    try {
+      const text = input.trim()
+      return new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`).searchParams.get('list')
+    } catch {
+      return null
+    }
+  })()
+  if (list && isYouTubeMix(list)) {
+    return 'That’s a YouTube Mix, which only plays on YouTube. Paste a song or a playlist link instead.'
+  }
+  return 'That isn’t a YouTube video or playlist link.'
 }
 
 /** The privacy-enhanced embed URL. Autoplay only ever follows a user's click. */

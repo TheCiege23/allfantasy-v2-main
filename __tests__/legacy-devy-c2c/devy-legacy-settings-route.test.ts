@@ -27,6 +27,8 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: m.db }))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueCommissioner: m.commissioner, assertLeagueMember: m.member }))
 vi.mock('@/lib/commissioner/CommissionerChangeNotifier', () => ({ notifyCommissionerChange: m.notify }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET, PATCH } from '@/app/api/devy/route'
 
@@ -90,7 +92,7 @@ describe('PATCH /api/devy — who may edit', () => {
     m.commissioner.mockResolvedValue({ ok: false, status: 403 })
     const res = await patch({ leagueId: 'L1', taxiSlots: 4 })
     expect(res.status).toBe(403)
-    expect(m.commissioner).toHaveBeenCalledWith('L1', 'comm')
+    expect(m.commissioner).toHaveBeenCalledWith('L1', 'comm', 'league')
     expect(m.db.devyLeague.update).not.toHaveBeenCalled()
     expect(m.notify).not.toHaveBeenCalled()
   })

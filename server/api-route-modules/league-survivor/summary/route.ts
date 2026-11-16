@@ -3,6 +3,7 @@
  * Returns 404 when league is not a survivor league.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { loadImmunitySealed } from '@/lib/survivor/survivorSealedImmunityState'
 import { redactImmunityList } from '@/lib/survivor/survivorSealedImmunity'
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,7 +27,6 @@ import { getCurrentlyEliminatedRosterIds } from '@/lib/survivor/SurvivorRosterSt
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
 import { prisma } from '@/lib/prisma'
-import { getLeagueRole } from '@/lib/league/permissions'
 import {
   parseSurvivorFairPlayFromLeagueSettings,
   redactSurvivorSummaryPayloadForFairPlay,
@@ -311,8 +311,7 @@ export async function GET(
       ? (leagueSettingsRow.settings as Record<string, unknown>)
       : {}
   const { fairPlayLimited } = parseSurvivorFairPlayFromLeagueSettings(leagueSettingsJson)
-  const leagueRole = await getLeagueRole(leagueId, userId)
-  const isComm = leagueRole === 'commissioner' || leagueRole === 'co_commissioner'
+  const isComm = (await canCommissionerAct(leagueId, userId, 'view'))
   const fairPlayRedact = shouldApplySurvivorFairPlayRedaction(fairPlayLimited, isComm, Boolean(myRosterId))
 
   const privacy = await resolveSurvivorAccessContext(leagueId, userId)

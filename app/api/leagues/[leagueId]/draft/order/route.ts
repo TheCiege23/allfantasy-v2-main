@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET: Current draft order (slotOrder from session).
@@ -8,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { SLEEPER_MIRRORED_DRAFT_CODE, SLEEPER_MIRRORED_DRAFT_ERROR, recordCommissionerDraftAction } from '@/lib/draft-room/commissionerDraftActions'
 import { prisma } from '@/lib/prisma'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
@@ -56,7 +56,7 @@ export async function PATCH(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })

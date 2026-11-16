@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : ''
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const hostDenied = await survivorHostGuard(leagueId, userId)

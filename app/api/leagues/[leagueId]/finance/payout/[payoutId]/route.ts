@@ -1,8 +1,8 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { leagueMoneyRefusal } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { decidePayout, setPayoutFrozen } from '@/lib/league-finance/leagueFinanceService'
 
 export const dynamic = 'force-dynamic'
@@ -21,10 +21,10 @@ export async function POST(
 
   const moneyOff = leagueMoneyRefusal('payout decisions')
   if (moneyOff) return NextResponse.json({ error: moneyOff.error, code: moneyOff.code }, { status: moneyOff.status })
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
-    return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
-  }
+  // Payouts are money: a co-commissioner needs that area (lib/league/commissionerAccess.ts). This let any
+  // co-commissioner approve or freeze a payout (2026-11-16).
+  const refused = await commissionerAccessResponse(leagueId, userId, 'money')
+  if (refused) return refused
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const action = typeof body.action === 'string' ? body.action : null

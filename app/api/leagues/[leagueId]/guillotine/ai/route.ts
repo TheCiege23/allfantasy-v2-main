@@ -4,6 +4,7 @@
  * Gated by entitlement (guillotine_ai or ai_chat when subscription is enforced).
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -12,7 +13,6 @@ import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { buildGuillotineAIContext } from '@/lib/guillotine/ai/GuillotineAIContext'
 import { generateGuillotineAI } from '@/lib/guillotine/ai/GuillotineAIService'
 import { hasGuillotineAiRecapPlan, postAiGuillotineRecap } from '@/lib/guillotine/weeklyRecap'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import type { GuillotineAIType } from '@/lib/guillotine/ai/GuillotineAIService'
 import {
   FeatureGateService,
@@ -70,7 +70,7 @@ export async function POST(
   // Commissioner-requested weekly recap, posted to league chat (lib/guillotine/weeklyRecap.ts).
   // User-initiated by design: AI generation is never cron-seeded here (scripts/cron-tier.mjs).
   if (type === 'recap' && body.postToChat === true) {
-    if (!(await isCommissioner(leagueId, userId).catch(() => false))) {
+    if (!(await canCommissionerAct(leagueId, userId, 'league').catch(() => false))) {
       return NextResponse.json({ error: 'Only the commissioner can post the league recap.' }, { status: 403 })
     }
     const requestedWeek = body.week == null ? null : parseInt(String(body.week), 10)

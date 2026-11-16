@@ -21,6 +21,7 @@
  * path is AllFantasy-owned (lib/league/afOwnedLeagueSettings.ts), so a re-sync keeps it.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
@@ -75,8 +76,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     prisma.leagueTeam.count({ where: { leagueId } }),
   ])
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (league.userId !== userId) {
-    return NextResponse.json({ error: "Only the league's owner can set its format template" }, { status: 403 })
+  // The league's format template is the head commissioner's choice (its tests pin that a co-commissioner is refused).
+  if (!(await canCommissionerAct(leagueId, userId, 'head'))) {
+    return NextResponse.json({ error: "Only the head commissioner can set the league's format template" }, { status: 403 })
   }
 
   let pin: { id: string; version: string } | null = null

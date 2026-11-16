@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
   const actor = await userId()
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
-  const gate = await assertLeagueCommissioner(leagueId, actor)
+  const gate = await assertLeagueCommissioner(leagueId, actor, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
   if (!isPirateLeague(gate.league)) return NextResponse.json({ error: 'Not a Pirate League' }, { status: 400 })
   const formatLocked = await formatRulesLockedResponse(leagueId)

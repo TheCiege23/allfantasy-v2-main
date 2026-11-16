@@ -39,6 +39,8 @@ vi.mock('@/lib/dynasty-core/applyDynastySportPreset', async (orig) => ({
   ...(await orig<typeof import('@/lib/dynasty-core/applyDynastySportPreset')>()),
   applyDynastySportPresetToLeague: m.apply,
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET, PUT } from '@/app/api/leagues/[leagueId]/dynasty-settings/handler'
 

@@ -56,6 +56,8 @@ import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFro
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { KeeperRollCall } from '@/components/app/draft-room/KeeperRollCall'
+import { PickClockPlanner } from '@/components/app/draft-room/PickClockPlanner'
+import { isLongPickClock, nextPickLabel, normalizeQuietWindow } from '@/lib/draft-room/pickClockPlanning'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 
@@ -938,6 +940,15 @@ export function DraftRoomPageClient({
       draftCore?.draftStarted &&
       draftCore.currentOverall > 0 &&
       draftCore.currentTeamId === currentUserRosterId,
+  )
+  // Commissioner quiet hours, if set — the same window the server freezes the clock for.
+  const pickClockQuietWindow = useMemo(
+    () => normalizeQuietWindow(draftUISettings?.slowDraftPauseWindow),
+    [draftUISettings?.slowDraftPauseWindow],
+  )
+  const pickTimesMs = useMemo(
+    () => (session?.picks ?? []).map((pick) => Date.parse(String(pick.createdAt ?? ''))).filter((t) => Number.isFinite(t)),
+    [session?.picks],
   )
   const overnightBlocksUserPicks = Boolean(
     session?.status === 'in_progress' &&
@@ -5163,6 +5174,7 @@ export function DraftRoomPageClient({
             timerSeconds={session.timerSeconds ?? null}
             timerPauseReason={session.timer?.pauseReason ?? null}
             overnightResumeAtIso={session.timer?.overnightResumeAt ?? null}
+            quietWindow={pickClockQuietWindow}
             timerMode={draftUISettings?.timerMode ?? 'per_pick'}
             autoPickEnabled={autoPickEnabled}
             isCommissioner={isCommissioner}
@@ -5345,6 +5357,31 @@ export function DraftRoomPageClient({
       }
       modeBanner={
         draftRoomMode ? <DraftModeBanner mode={draftRoomMode} isCommissioner={isCommissioner} /> : null
+      }
+      pickClockStrip={
+        // Gate here, not only inside the planner: the shell wraps any non-null node in a padded,
+        // bordered strip, so an element that renders nothing still costs ~17px of height — enough
+        // to push the player list off a 1280x720 screen (e2e draft-room-visual pool-height test).
+        !isDraftCompleted &&
+        (session.status === 'in_progress' || session.status === 'paused') &&
+        (isLongPickClock(session.timerSeconds) || pickClockQuietWindow) ? (
+          <PickClockPlanner
+            timerSeconds={session.timerSeconds ?? null}
+            timerEndAtIso={draftRoomState.timerEndAt}
+            isOnClock={isCurrentUserOnClock}
+            picksAway={ribbonPicksUntilUser}
+            nextLabel={
+              ribbonPicksUntilUser != null && session.currentPick
+                ? nextPickLabel(session.currentPick.overall, ribbonPicksUntilUser, safeBoardTeamCount)
+                : null
+            }
+            pickTimesMs={pickTimesMs}
+            quietWindow={pickClockQuietWindow}
+            allowPicksDuringPause={draftUISettings?.allowPicksDuringOvernightPause === true}
+            pausedForQuietHours={session.timer?.pauseReason === 'overnight_window'}
+            queueTop={queue[0] ? { name: queue[0].playerName, position: queue[0].position ?? null } : null}
+          />
+        ) : null
       }
       keeperStrip={
         !isDraftCompleted && (session as DraftSessionSnapshot).keeper?.locks?.length ? (

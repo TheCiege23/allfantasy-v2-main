@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
    * season, its rosters and its schedule with a fresh empty one. Creating a season is now the commissioner's, and a
    * year that already has a season is refused.
    */
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const league = await prisma.league.findFirst({

@@ -31,6 +31,8 @@ vi.mock('@/lib/survivor/survivorIdolConfigService', () => ({
   saveSurvivorIdolConfig: vi.fn(),
 }))
 vi.mock('@/lib/survivor/survivorSideGameService', () => ({ sideGameLockContext: vi.fn(async () => m.lockCtx) }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import SurvivorExilePage from '@/app/survivor/[leagueId]/exile/page'
 import { SurvivorSideGamesCard } from '@/components/survivor/SurvivorSideGamesCard'

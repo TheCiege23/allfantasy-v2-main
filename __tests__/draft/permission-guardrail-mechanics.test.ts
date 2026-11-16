@@ -239,7 +239,12 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
     }
   },
 }))
-vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => mocks.assertCommissioner))
+// Routes that called assertCommissioner ask commissionerAccessResponse; routes that called isCommissioner ask
+// canCommissionerAct (lib/league/commissionerAccess.ts, 2026-11-16) — each still answered by the mock it used to call.
+vi.mock('@/lib/league/commissionerAccess', async () => {
+  const base = (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => mocks.assertCommissioner)
+  return { ...base, canCommissionerAct: async (l: string, u: string) => Boolean(await mocks.isCommissioner(l, u)) }
+})
 
 import { POST as postDraftControls } from '@/app/api/leagues/[leagueId]/draft/controls/route'
 import { POST as postDraftPick } from '@/app/api/leagues/[leagueId]/draft/pick/route'

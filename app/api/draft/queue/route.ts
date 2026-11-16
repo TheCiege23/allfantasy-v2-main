@@ -1,9 +1,9 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessLeague } from '@/lib/draft/access'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
   // A queue is a manager's private draft plan. League access alone let any member
   // read a rival's with ?userId=; only the commissioner may look at someone else's.
-  if (uid !== userId && !(await isCommissioner(ds.leagueId, userId))) {
+  if (uid !== userId && !(await canCommissionerAct(ds.leagueId, userId, 'view'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
