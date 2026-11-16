@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -129,6 +129,16 @@ type DraftTopBarProps = {
   onOpenChimmy?: () => void
   /** Picks until the viewer's next turn; adds "You're up in N" to the pick pill when > 0. */
   picksUntilUser?: number | null
+  /** The auto-pick pill. A mock room has no auto-pick to toggle, so it hides it. */
+  showAutoPickPill?: boolean
+  /**
+   * Controls the room supplies itself, at the start of the right-hand cluster. The mock room puts
+   * its own Pause / Resume here: the viewer runs the mock but is not a league commissioner, so the
+   * commissioner pause pill (and every commissioner menu row) stays off.
+   */
+  controlsSlot?: ReactNode
+  /** Extra rows at the end of the ⋯ menu's room section (the mock room's Reset and Export). */
+  extraMenuItems?: Array<{ id: string; label: string; description?: string; testId: string; onSelect: () => void }>
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -272,6 +282,9 @@ export function DraftTopBar({
   rookieAuctionNote = null,
   onOpenChimmy,
   picksUntilUser = null,
+  showAutoPickPill = true,
+  controlsSlot = null,
+  extraMenuItems = [],
 }: DraftTopBarProps) {
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
@@ -925,6 +938,7 @@ export function DraftTopBar({
         </div>
 
         <div className="order-2 flex flex-wrap items-center justify-end gap-1 lg:order-none">
+          {controlsSlot}
           {isCommissioner && (draftStatus === 'in_progress' || draftStatus === 'paused') && ((draftStatus === 'in_progress' && onPause) || (draftStatus === 'paused' && onResume)) ? (
             <button
               type="button"
@@ -942,6 +956,7 @@ export function DraftTopBar({
               {draftStatus === 'paused' ? t('draftRoom.topBar.resume') : t('draftRoom.topBar.pause')}
             </button>
           ) : null}
+          {showAutoPickPill ? (
           <button
             type="button"
             onClick={onToggleAutoPick}
@@ -962,6 +977,7 @@ export function DraftTopBar({
             <span className="sm:hidden">{`${t('draftRoom.topBarHint.autoPickShort')} `}</span>
             {autoPickEnabled ? t('draftRoom.topBarHint.autoPickOn') : t('draftRoom.topBarHint.autoPickOff')}
           </button>
+          ) : null}
 
           {onOpenChimmy ? (
             <button
@@ -1145,6 +1161,25 @@ export function DraftTopBar({
                     </span>
                   </Link>
                 ) : null}
+
+                {extraMenuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      item.onSelect()
+                      setMenuOpen(false)
+                    }}
+                    data-testid={item.testId}
+                    className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8"
+                  >
+                    <Settings2 className="mt-0.5 h-4 w-4 text-[#dbe1ff]" aria-hidden />
+                    <span>
+                      <span className="block text-sm font-semibold text-white">{item.label}</span>
+                      {item.description ? <span className="block text-xs text-white/55">{item.description}</span> : null}
+                    </span>
+                  </button>
+                ))}
 
                 {isCommissioner ? (
                   <button
