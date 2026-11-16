@@ -66,6 +66,13 @@ export type MockDraftBoard = {
   /** Undrafted players, best market ADP first. */
   available: MockBoardPlayer[]
   auction: MockBoardAuction | null
+  /**
+   * Set only by the server for a LEAGUE mock room (`lib/chimmy/leagueMockBoard.ts`); the parser never
+   * reads it from a posted board. That room can hold invited people as well as bots.
+   */
+  room?: 'league'
+  /** Other people drafting in a league mock room; every other team is a bot. */
+  otherHumans?: string[]
 }
 
 /* ── Building it from the room's state ─────────────────────────────────────────────────────────── */

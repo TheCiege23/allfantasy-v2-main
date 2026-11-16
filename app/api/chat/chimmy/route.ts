@@ -35,6 +35,7 @@ import { runPECR } from '@/lib/ai/pecr'
 import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
 import { chimmyDepthForPlan } from '@/lib/chimmy/chimmyDepth'
 import { mockDraftBoardText, parseMockDraftBoard } from '@/lib/chimmy/mockDraftGrounding'
+import { loadLeagueMockBoard, parseClientQueueIds } from '@/lib/chimmy/leagueMockBoard'
 import type { MockQueueProposal } from '@/lib/mock-draft/mockChimmyBoard'
 import { bracketFollowUps, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { runAiProtection } from '@/lib/ai-protection'
@@ -1358,8 +1359,19 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * ASKED FROM THE /mock-draft ROOM (stage 3 of drafts, 2026-11-16). That room runs in the browser, so
    * it sends its board with the question; nothing on the server holds a practice mock in progress.
    * Re-validated and capped here (lib/chimmy/mockDraftGrounding.ts) — it is a form field like any other.
+   * ASKED FROM A LEAGUE MOCK ROOM (/draft/mock/[id], stage 4): that room runs on the server, so its board
+   * is READ here from the room's own rows — only the user's own queue order comes from the browser.
    */
-  const mockDraftBoard = source === 'mock-draft' ? parseMockDraftBoard(formData.get('mockDraftBoard')) : null
+  const mockDraftBoard =
+    source === 'mock-draft'
+      ? parseMockDraftBoard(formData.get('mockDraftBoard'))
+      : source === 'mock-draft-room'
+        ? await loadLeagueMockBoard({
+            sessionId: formData.get('mockSessionId'),
+            userId,
+            clientQueueIds: parseClientQueueIds(formData.get('mockQueueIds')),
+          })
+        : null
   const mockDraftBoardBlock = mockDraftBoard ? mockDraftBoardText(mockDraftBoard) : null
   let message = submittedMessage
   if (requestedLeagueId && /^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {

@@ -10,6 +10,7 @@ import {
   type MockBoardAuction,
   type MockQueueProposal,
 } from '@/lib/mock-draft/mockChimmyBoard'
+import { MockQueueCard } from '@/components/chimmy/MockQueueCard'
 import { CHIMMY_PRO_TOOL_UPGRADE_HREF, proUpsellLine, readProUpsell, type ChimmyProOnlyTool } from '@/lib/chimmy/answerPolish'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
@@ -723,51 +724,9 @@ function aiMessageFrom(reply: ChimmyReply, pick?: number): ChatMessage {
  * A queue change Chimmy proposed, in the chat. Nothing changes until Confirm, and Confirm only edits this
  * room's queue — it never drafts. Stage 3 of drafts (2026-11-16).
  */
-function MockQueueCard({ message, onResolve }: { message: ChatMessage; onResolve: (action: 'confirm' | 'dismiss') => void }) {
-  const proposal = message.queueProposal
-  if (!proposal) return null
-  const label = (p: { name: string; position: string }) => `${p.name}${p.position ? ` (${p.position})` : ''}`
-  const state = message.queueProposalState ?? 'pending'
-  return (
-    <div className="mt-2 rounded-lg border border-cyan-300/25 bg-black/25 p-2 text-white/80" data-testid="mock-draft-queue-card">
-      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">Queue change</div>
-      {proposal.add.length > 0 ? <div className="mt-1">Add to the {proposal.addAt}: {proposal.add.map(label).join(', ')}</div> : null}
-      {proposal.remove.length > 0 ? <div className="mt-1">Take off: {proposal.remove.map(label).join(', ')}</div> : null}
-      {state === 'pending' ? (
-        <>
-          {proposal.resultingTop.length > 0 ? <div className="mt-1 text-white/45">Your queue will start: {proposal.resultingTop.join(', ')}</div> : null}
-          <div className="mt-1 text-white/45">Nothing changes until you tap Confirm. Chimmy never makes a pick.</div>
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              onClick={() => onResolve('confirm')}
-              className="min-h-[36px] rounded-lg bg-cyan-400 px-3 py-1 font-bold text-[#04121c] hover:bg-cyan-300"
-              data-testid="mock-draft-queue-confirm"
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              onClick={() => onResolve('dismiss')}
-              className="min-h-[36px] rounded-lg bg-white/10 px-3 py-1 text-white/70 hover:text-white"
-              data-testid="mock-draft-queue-dismiss"
-            >
-              Dismiss
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="mt-1 font-semibold" data-testid="mock-draft-queue-card-state">
-          {state === 'applied'
-            ? 'Done — your queue is updated.'
-            : state === 'stale'
-              ? 'Your queue changed after this card was made, so nothing was applied. Ask Chimmy again.'
-              : 'Dismissed — nothing changed.'}
-          {message.queueProposalNote ? <span className="ml-1 font-normal text-white/50">{message.queueProposalNote}</span> : null}
-        </div>
-      )}
-    </div>
-  )
+function MockQueueCardForMessage({ message, onResolve }: { message: ChatMessage; onResolve: (action: 'confirm' | 'dismiss') => void }) {
+  if (!message.queueProposal) return null
+  return <MockQueueCard proposal={message.queueProposal} state={message.queueProposalState ?? 'pending'} note={message.queueProposalNote} onResolve={onResolve} />
 }
 
 export default function MockDraftSleeperRoomClient({
@@ -2528,7 +2487,7 @@ export default function MockDraftSleeperRoomClient({
             >
               {message.content}
               {message.queueProposal ? (
-                <MockQueueCard message={message} onResolve={(action) => resolveQueueProposal(index, action)} />
+                <MockQueueCardForMessage message={message} onResolve={(action) => resolveQueueProposal(index, action)} />
               ) : null}
               {message.proUpsell && message.proUpsell.length > 0 ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/10 pt-2" data-testid="mock-draft-pro-upsell">

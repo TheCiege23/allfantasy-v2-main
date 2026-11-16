@@ -164,9 +164,20 @@ function userTurnOveralls(board: MockDraftBoard): number[] {
 
 export const BEST_AVAILABLE_SHOWN = 15
 
+/** Who else is in the room: all bots on /mock-draft; a league mock room can also hold invited people. */
+function otherTeamsPhrase(board: MockDraftBoard): string {
+  const others = board.teamCount - 1
+  const humans = (board.otherHumans ?? []).filter(Boolean)
+  if (humans.length === 0) return `the other ${others} teams are AI bots`
+  const bots = Math.max(0, others - humans.length)
+  return `${humans.join(', ')} ${humans.length === 1 ? 'is another person' : 'are other people'} practicing in this room${
+    bots > 0 ? `; the other ${bots} team${bots === 1 ? ' is an AI bot' : 's are AI bots'}` : ''
+  }`
+}
+
 export function mockDraftBoardLines(board: MockDraftBoard): string[] {
   const lines = [
-    `THE USER IS ASKING FROM INSIDE A PRACTICE MOCK DRAFT ON ALLFANTASY — not a league draft; nothing here counts and the other ${board.teamCount - 1} teams are AI bots. This board is the whole truth about the mock: answer from it, not from a league's tools, and never call get_current_draft_board for it.`,
+    `THE USER IS ASKING FROM INSIDE A PRACTICE MOCK DRAFT ON ALLFANTASY — not a league draft; nothing here counts and ${otherTeamsPhrase(board)}. This board is the whole truth about the mock: answer from it, not from a league's tools, and never call get_current_draft_board for it.`,
     `SETUP: ${board.teamCount} teams, ${board.rounds} rounds, ${[board.sport, board.scoring, board.superflex ? 'superflex' : null, board.draftType].filter(Boolean).join(' ')}.`,
   ]
 
@@ -182,7 +193,7 @@ export function mockDraftBoardLines(board: MockDraftBoard): string[] {
     lines.push(
       `STATUS: pick ${formatPickLabel(board.currentPick, board.teamCount)} (#${board.currentPick}) is on the clock — ${
         onClockSlot == null ? 'nobody' : userOnClock ? 'THIS USER' : teamName(board, onClockSlot)
-      }.${board.status === 'paused' ? ' The mock is PAUSED.' : ''}`,
+      }.${board.status === 'paused' ? ' The mock is PAUSED.' : board.status === 'waiting' ? ' The mock has NOT STARTED yet.' : ''}`,
     )
   } else if (board.status === 'paused') {
     lines.push('STATUS: the mock auction is PAUSED.')
