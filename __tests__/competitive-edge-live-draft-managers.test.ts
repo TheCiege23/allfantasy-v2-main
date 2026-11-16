@@ -10,6 +10,9 @@ const db = vi.hoisted(() => ({
   draftSession: { findFirst: vi.fn() },
   draftPick: { findMany: vi.fn() },
   roster: { findMany: vi.fn() },
+  // The claimed team (2026-11-16): what places the viewer in a Sleeper-mirrored draft. Null by default.
+  leagueTeam: { findFirst: vi.fn(async () => null) },
+  userProfile: { findUnique: vi.fn(async () => null) },
 }))
 const viewerRoster = vi.hoisted(() => vi.fn())
 const coreDepth = vi.hoisted(() => vi.fn())
@@ -127,6 +130,27 @@ describe('loadManagersAhead', () => {
     db.roster.findMany.mockResolvedValue([{ id: 'r3', platformUserId: 'su2' }])
     const out = await loadManagersAhead({ leagueId: 'lg', userId: 'u1' })
     expect(out!.managers.find((m) => m.name === 'Cal')!.history.length).toBeGreaterThan(0)
+  })
+
+  /*
+   * 🛑 THE DRAFT ROOM'S PANEL WAS EMPTY ON EVERY SLEEPER DRAFT. A mirrored slot order holds Sleeper's
+   * roster NUMBER, never the AF Roster.id, and the room calls this with no slot of its own
+   * (/api/leagues/[leagueId]/draft/decision). The claimed team's externalId is that number.
+   */
+  it('places the viewer in a Sleeper-mirrored draft by their claimed team, with no slot passed in', async () => {
+    coreDepth.mockResolvedValue({ unlocked: false })
+    db.draftSession.findFirst.mockResolvedValue({
+      ...SESSION,
+      sleeperDraftId: 'sleeper-1',
+      slotOrder: SESSION.slotOrder.map((e) => ({ ...e, rosterId: String(e.slot) })),
+    })
+    viewerRoster.mockResolvedValue('af-roster-not-in-slot-order')
+    expect(await loadManagersAhead({ leagueId: 'lg', userId: 'u1' })).toBeNull()
+
+    db.leagueTeam.findFirst.mockResolvedValueOnce({ externalId: '1', platformUserId: 'sleeper-me' } as never)
+    const out = await loadManagersAhead({ leagueId: 'lg', userId: 'u1' })
+    expect(out?.managers.map((m) => m.name)).toEqual(['Cal', 'Bea'])
+    expect(db.leagueTeam.findFirst).toHaveBeenCalledWith({ where: { leagueId: 'lg', claimedByUserId: 'u1' }, select: { externalId: true, platformUserId: true } })
   })
 
   it('nothing for an auction, a finished draft, or a viewer with no slot', async () => {
