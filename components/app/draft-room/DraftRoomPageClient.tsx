@@ -54,6 +54,7 @@ import type { AuctionSpotlightPanelProps } from '@/components/app/draft-room/Auc
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
+import { tileSignatureChipsByOverall } from '@/lib/draft-room/leagueSignature'
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { KeeperRollCall } from '@/components/app/draft-room/KeeperRollCall'
@@ -743,6 +744,16 @@ export function DraftRoomPageClient({
   const boardPicks = useMemo(
     () => fillPickHeadshotsFromPool(session?.picks ?? [], players),
     [session?.picks, players],
+  )
+  /** League signature (room v2): age, or a college pick's class, for the concepts that draft on it. */
+  const boardSignatureByOverall = useMemo(
+    () =>
+      tileSignatureChipsByOverall(
+        leagueAccent.concept,
+        session?.picks ?? [],
+        Array.isArray(draftPool?.entries) ? (draftPool.entries as NormalizedDraftEntry[]) : [],
+      ),
+    [leagueAccent.concept, session?.picks, draftPool?.entries],
   )
 
   const playerAuditFingerprintRef = useRef('')
@@ -5409,6 +5420,7 @@ export function DraftRoomPageClient({
                   }
                   onCommissionerEditPick={commissionerCanEditBoard ? openCommissionerPickEditor : undefined}
                   adpDeltaByOverall={boardAdpDeltaByOverall}
+                  signatureByOverall={boardSignatureByOverall}
                   teamMetaByRoster={teamMetaByRoster}
                 />
               </div>

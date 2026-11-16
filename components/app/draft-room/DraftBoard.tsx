@@ -14,6 +14,7 @@ import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
 import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
+import type { TileSignatureChip } from '@/lib/draft-room/leagueSignature'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
@@ -23,6 +24,16 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 const BOARD_COLUMN = 'minmax(84px, var(--af-board-col-max, 1fr))'
 /** Narrow round-label column: Sleeper shows the snake direction on the tiles themselves. */
 const ROUND_COLUMN = '28px'
+
+/**
+ * Survivor signature: a seat's tribe colour, or null. Tribes reach the board on `slotOrder[].tribe`
+ * only once the commissioner locks the pre-draft tribe plan (`attachSurvivorTribeBadges`), so a
+ * room without locked tribes draws nothing.
+ */
+function tribeColorHex(tribe: SlotOrderEntry['tribe'] | null | undefined): string | null {
+  const hex = tribe?.colorHex?.trim()
+  return hex && /^#[0-9a-f]{6}$/i.test(hex) ? hex : null
+}
 
 type DraftBoardProps = {
   picks: DraftPickSnapshot[]
@@ -67,6 +78,8 @@ type DraftBoardProps = {
   poolPlayerById?: Record<string, DraftRoomDisplayPlayerLike>
   /** overall → (overall − market ADP), only for picks worth a steal/reach badge. See lib/draft-room/draftPulse. */
   adpDeltaByOverall?: Record<number, number>
+  /** League signature chip per made pick (`tileSignatureChipsByOverall`): age or class year. */
+  signatureByOverall?: Record<number, TileSignatureChip>
   /**
    * Team avatars / orphan / bot-personality for the sticky column header. Snake and linear
    * boards have no separate team strip, so the header is where this lives.
@@ -175,6 +188,7 @@ function DraftBoardInner({
   presentationVariant = 'default',
   poolPlayerById,
   adpDeltaByOverall,
+  signatureByOverall,
   teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
@@ -333,6 +347,7 @@ function DraftBoardInner({
         source: source || undefined,
         ownerRosterId,
         adpDelta: existing?.playerName ? adpDeltaByOverall?.[overall] ?? null : null,
+        signatureChip: existing?.playerName ? signatureByOverall?.[overall] ?? null : null,
       }
       const pid = existing?.playerId ? String(existing.playerId).trim() : ''
       const poolEntry = pid && poolPlayerById ? poolPlayerById[pid] : undefined
@@ -365,6 +380,7 @@ function DraftBoardInner({
     sport,
     poolPlayerById,
     adpDeltaByOverall,
+    signatureByOverall,
   ])
 
   const auctionColumns = useMemo(() => {
@@ -402,6 +418,17 @@ function DraftBoardInner({
     () => slotOrder.slice().sort((a, b) => a.slot - b.slot),
     [slotOrder],
   )
+  /** One legend entry per tribe on the board, in seat order. */
+  const tribeLegend = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; color: string }>()
+    for (const entry of orderedSlots) {
+      const color = tribeColorHex(entry.tribe)
+      if (entry.tribe && color && !seen.has(entry.tribe.id)) {
+        seen.set(entry.tribe.id, { id: entry.tribe.id, name: entry.tribe.name, color })
+      }
+    }
+    return [...seen.values()]
+  }, [orderedSlots])
   const visibleRounds =
     viewMode === 'single'
       ? [navigation.round]
@@ -484,6 +511,16 @@ function DraftBoardInner({
                   your picks
                 </span>
               ) : null}
+              {tribeLegend.map((tribe) => (
+                <span
+                  key={tribe.id}
+                  className="inline-flex items-center gap-1 normal-case tracking-normal"
+                  data-testid={`draft-board-legend-tribe-${tribe.id}`}
+                >
+                  <span className="h-[3px] w-3 rounded-full" style={{ backgroundColor: tribe.color }} aria-hidden />
+                  <span className="font-semibold" style={{ color: tribe.color }}>{tribe.name}</span>
+                </span>
+              ))}
             </span>
             {tradedPicks.length > 0 ? (
               onOpenTradeHistory ? (
@@ -637,6 +674,7 @@ function DraftBoardInner({
                         key={pick.overall}
                         pick={pick}
                         isEmpty={false}
+                        tribeColor={tribeColorHex(column.tribe)}
                         presentationVariant={presentationVariant}
                         sport={sport}
                         isRecentPick={Boolean(pick.playerName?.trim() && pick.overall === lastFilledPickOverall)}
@@ -755,6 +793,14 @@ function DraftBoardInner({
                   >
                     {headerName}
                   </span>
+                  {tribeColorHex(entry.tribe) ? (
+                    <span
+                      className="absolute inset-x-1 top-0 h-[3px] rounded-full"
+                      style={{ backgroundColor: tribeColorHex(entry.tribe) ?? undefined }}
+                      aria-hidden
+                      data-testid={`draft-board-team-header-tribe-bar-${entry.slot}`}
+                    />
+                  ) : null}
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
                   ) : null}
@@ -845,6 +891,7 @@ function DraftBoardInner({
                             pick={pick}
                             isEmpty={isPickDisplayEmpty}
                             isCurrentPick={isCurrentPick}
+                            tribeColor={tribeColorHex(slotEntry.tribe)}
                             presentationVariant={presentationVariant}
                             sport={sport}
                             isRecentPick={Boolean(!isPickDisplayEmpty && overall === lastFilledPickOverall)}

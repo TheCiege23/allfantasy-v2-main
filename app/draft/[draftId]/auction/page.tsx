@@ -42,6 +42,7 @@ export default async function AuctionDraftPage({
         isDynasty={context.isDynasty}
         isCommissioner={context.isCommissioner}
         formatType={context.formatType}
+        leagueType={context.leagueType}
       />
     </div>
   )
