@@ -27,7 +27,6 @@ import { getCurrentlyEliminatedRosterIds } from '@/lib/survivor/SurvivorRosterSt
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
 import { prisma } from '@/lib/prisma'
-import { getLeagueRole } from '@/lib/league/permissions'
 import {
   parseSurvivorFairPlayFromLeagueSettings,
   redactSurvivorSummaryPayloadForFairPlay,
@@ -312,7 +311,6 @@ export async function GET(
       ? (leagueSettingsRow.settings as Record<string, unknown>)
       : {}
   const { fairPlayLimited } = parseSurvivorFairPlayFromLeagueSettings(leagueSettingsJson)
-  const leagueRole = await getLeagueRole(leagueId, userId)
   const isComm = (await canCommissionerAct(leagueId, userId, 'view'))
   const fairPlayRedact = shouldApplySurvivorFairPlayRedaction(fairPlayLimited, isComm, Boolean(myRosterId))
 

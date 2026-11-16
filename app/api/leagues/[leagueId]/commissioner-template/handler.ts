@@ -76,8 +76,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     prisma.leagueTeam.count({ where: { leagueId } }),
   ])
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
-    return NextResponse.json({ error: "Only a commissioner with league setup permission can set its format template" }, { status: 403 })
+  // The league's format template is the head commissioner's choice (its tests pin that a co-commissioner is refused).
+  if (!(await canCommissionerAct(leagueId, userId, 'head'))) {
+    return NextResponse.json({ error: "Only the head commissioner can set the league's format template" }, { status: 403 })
   }
 
   let pin: { id: string; version: string } | null = null

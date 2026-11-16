@@ -30,7 +30,6 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
 
-  const role = await getLeagueRole(leagueId, userId)
   if (!(await canCommissionerAct(leagueId, userId, 'view'))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

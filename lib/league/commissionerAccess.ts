@@ -141,3 +141,17 @@ export async function assertCommissionerAccess(
   }
   return { league }
 }
+
+/**
+ * Drop-in for `requireCommissionerOnly` / `requireCommissionerRole` (lib/league/permissions) at a call site that now
+ * names its area: throws the JSON `Response` those threw, so the caller's `catch (e) { if (e instanceof Response) … }`
+ * keeps working.
+ */
+export async function requireCommissionerAccess(
+  leagueId: string,
+  userId: string | null | undefined,
+  need: CommissionerNeed,
+): Promise<void> {
+  const refused = await commissionerAccessResponse(leagueId, userId, need)
+  if (refused) throw refused
+}

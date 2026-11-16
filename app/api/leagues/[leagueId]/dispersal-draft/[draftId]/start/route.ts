@@ -1,7 +1,6 @@
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { requireDispersalDraftForLeague } from '@/lib/league/dispersal-draft-route-helpers'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { DispersalDraftEngine } from '@/lib/dispersal-draft/DispersalDraftEngine'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
@@ -20,7 +19,6 @@ export async function POST(_req: Request, ctx: { params: Promise<{ leagueId: str
     if (!gate.ok) return gate.response
     if (!leagueId || !draftId) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
 
-    const role = await getLeagueRole(leagueId, userId)
     if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
       return NextResponse.json({ error: 'Only the commissioner or co-commissioner can start the draft.' }, { status: 403 })
     }

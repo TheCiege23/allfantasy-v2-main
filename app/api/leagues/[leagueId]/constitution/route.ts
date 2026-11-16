@@ -20,7 +20,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { resolveLeagueMembership } from '@/lib/league-access'
-import { getLeagueRole } from '@/lib/league/permissions'
 import {
   applyAmendment,
   approveAmendment,
@@ -48,7 +47,6 @@ async function gate(ctx: Ctx) {
   if (!membership.ok) {
     return { error: NextResponse.json({ error: membership.status === 404 ? 'Not found' : 'Forbidden' }, { status: membership.status }) } as const
   }
-  const role = await getLeagueRole(leagueId, userId)
   return { leagueId, userId, isCommissioner: (await canCommissionerAct(leagueId, userId, 'league')) } as const
 }
 

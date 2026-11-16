@@ -85,7 +85,6 @@ export async function GET(req: Request) {
   )
 
   const entries = mergeTrackerWithRosters({ saved, rows })
-  const role = await getLeagueRole(leagueId, userId)
   const isStaff = (await canCommissionerAct(leagueId, userId, 'view'))
 
   return NextResponse.json({

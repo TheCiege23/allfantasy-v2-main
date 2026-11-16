@@ -1,3 +1,4 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -5,7 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createZombieLeague } from '@/lib/zombie/setupEngine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { getLeagueRole, requireCommissionerRole } from '@/lib/league/permissions'
+import { getLeagueRole } from '@/lib/league/permissions'
 import { isZombieEligibleLeagueSport } from '@/lib/zombie/zombie-sport-eligibility'
 import { getRandomZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
@@ -36,11 +37,12 @@ export async function POST(req: Request) {
    * ⚠ The helper THROWS a Response. Next 14 route handlers convert only redirect() and notFound()
    * throws, so an uncaught Response becomes a 500 — return it as the 403 it is.
    */
-  try {
-    await requireCommissionerRole(leagueId, session.user.id, 'league')
-  } catch (denied) {
-    if (denied instanceof Response) return denied
-    throw denied
+  // Reconfiguring a league as Zombie is the head commissioner's (its tests pin that a co-commissioner is refused),
+  // and a league that does not exist answers like a refusal, so the route is not an existence oracle.
+  {
+    const refused = await commissionerAccessResponse(leagueId, session.user.id, 'head')
+    // The same answer for every refusal, as before: who is asking is not told why.
+    if (refused) return NextResponse.json({ error: 'Only the head commissioner can perform this action.' }, { status: 403 })
   }
 
   const sportRaw = typeof body.sport === 'string' ? body.sport : 'NFL'

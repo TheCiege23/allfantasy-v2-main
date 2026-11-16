@@ -1,9 +1,9 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
-import { requireCommissionerRole } from '@/lib/league/permissions'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import { redactZombieTeam } from '@/lib/zombie/whispererRedaction'
 import { resolveLeagueAccess } from '@/lib/league-access'
@@ -69,7 +69,7 @@ export async function PATCH(req: Request) {
   if (!leagueId || !targetUserId || !newStatus)
     return NextResponse.json({ error: 'leagueId, userId, newStatus required' }, { status: 400 })
 
-  await requireCommissionerRole(leagueId, userId, 'league')
+  await requireCommissionerAccess(leagueId, userId, 'league')
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })

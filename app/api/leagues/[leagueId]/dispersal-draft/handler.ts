@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { getOrphanRosterIdsForLeague, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { prisma } from '@/lib/prisma'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
@@ -69,7 +68,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-    const role = await getLeagueRole(leagueId, commissionerUserId)
     if (!(await canCommissionerAct(leagueId, commissionerUserId, 'league'))) {
       return NextResponse.json({ error: 'Only the commissioner or co-commissioner can create a dispersal draft.' }, { status: 403 })
     }

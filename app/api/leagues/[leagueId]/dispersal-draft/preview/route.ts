@@ -4,7 +4,6 @@
 
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
-import { getLeagueRole } from '@/lib/league/permissions'
 import {
   buildAssetPoolFromRosters,
   computeSuggestedDraftShape,
@@ -29,7 +28,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     const gate = await requireLeagueApiAccess(leagueId)
     if (!gate.ok) return gate.response
 
-    const role = await getLeagueRole(leagueId, userId)
     if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

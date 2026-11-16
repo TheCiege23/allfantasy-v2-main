@@ -46,7 +46,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       typeof body.commissionerOverrides === "object" &&
       !Array.isArray(body.commissionerOverrides)
     ) {
-      const role = await getLeagueRole(leagueId, userId)
       if ((await canCommissionerAct(leagueId, userId, 'league'))) {
         const co = body.commissionerOverrides as Record<string, unknown>
         const patch: Parameters<typeof mergeCommissionerOverrides>[1] = { setByUserId: userId }

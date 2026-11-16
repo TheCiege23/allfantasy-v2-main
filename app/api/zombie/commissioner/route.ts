@@ -1,8 +1,8 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerRole } from '@/lib/league/permissions'
 import { logAuditEntry, getFullAuditTrail } from '@/lib/zombie/auditService'
 import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
 
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const type = searchParams?.get('type')
   if (!leagueId || type !== 'audit') return NextResponse.json({ error: 'leagueId and type=audit required' }, { status: 400 })
 
-  await requireCommissionerRole(leagueId, session.user.id)
+  await requireCommissionerAccess(leagueId, session.user.id, 'view')
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   if (!leagueId || !action) return NextResponse.json({ error: 'leagueId and action required' }, { status: 400 })
 
-  await requireCommissionerRole(leagueId, session.user.id, 'league')
+  await requireCommissionerAccess(leagueId, session.user.id, 'league')
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

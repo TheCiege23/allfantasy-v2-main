@@ -43,6 +43,8 @@ vi.mock('@/lib/ai-result-cache', () => ({
 }))
 vi.mock('@/lib/zombie/whispererViewer', () => ({ resolveWhispererViewer: hm.resolveWhispererViewer }))
 vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: hm.getLeagueRole }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 const IDENTITY = { rosterIds: new Set([W_ROSTER]), userIds: new Set([W_USER]) }
 

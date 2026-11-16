@@ -25,6 +25,8 @@ vi.mock('@/lib/league-rules-explainer/variantConfigChange', () => ({
   mirrorRookieDraftToDynasty: h.mirror,
   publishVariantConfigChange: h.publish,
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { PUT as devyPut } from '@/app/api/leagues/[leagueId]/devy/config/route'
 import { PATCH as c2cPatch } from '@/app/api/leagues/[leagueId]/merged-devy-c2c/config/route'

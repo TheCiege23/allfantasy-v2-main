@@ -18,7 +18,6 @@ import {
 } from '@/lib/zombie/ai/ZombieAIService'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { redactZombieAIContext, withWhispererRoster } from '@/lib/zombie/whispererRedaction'
 import {
   FeatureGateService,
@@ -96,7 +95,6 @@ export async function POST(
 
   // Collusion and dangerous-drop flags are accusations for the commissioners to review. A member
   // gets neither the commissioner summary nor the raw flags, in the response or the model context.
-  const role = await getLeagueRole(leagueId, userId).catch(() => null)
   const isCommissioner = (await canCommissionerAct(leagueId, userId, 'league'))
   if (type === 'commissioner_review_summary' && !isCommissioner) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })

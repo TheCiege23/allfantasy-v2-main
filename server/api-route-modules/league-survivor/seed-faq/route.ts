@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { getLeagueRole, isCommissionerRole } from '@/lib/league/permissions'
+import { isCommissionerRole } from '@/lib/league/permissions'
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { seedSurvivorFaqToLeagueChat } from '@/lib/survivor/survivorFaq'
 
@@ -32,7 +32,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const role = await getLeagueRole(leagueId, userId)
   if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
     return NextResponse.json({ error: 'Only a commissioner or co-commissioner can post the FAQ.' }, { status: 403 })
   }

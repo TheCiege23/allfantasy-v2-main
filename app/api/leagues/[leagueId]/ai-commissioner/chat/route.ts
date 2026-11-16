@@ -3,7 +3,6 @@ import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidTool
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { prisma } from '@/lib/prisma'
 import { answerAICommissionerQuestion } from '@/lib/ai-commissioner'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
@@ -25,7 +24,6 @@ async function paidToolPost(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const role = await getLeagueRole(leagueId, userId)
   if (!(await canCommissionerAct(leagueId, userId, 'chat'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

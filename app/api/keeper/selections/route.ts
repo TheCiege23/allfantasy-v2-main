@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { getLeagueRole, requireCommissionerRole } from '@/lib/league/permissions'
+import { requireCommissionerRole } from '@/lib/league/permissions'
 import { submitKeeperSelections } from '@/lib/keeper/selectionEngine'
 
 export const dynamic = 'force-dynamic'
@@ -86,7 +86,6 @@ export async function DELETE(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const roster = await prisma.redraftRoster.findFirst({ where: { id: rec.rosterId } })
-  const role = await getLeagueRole(rec.leagueId, userId)
   const isComm = (await canCommissionerAct(rec.leagueId, userId, 'rosters'))
   if (!roster || (roster.ownerId !== userId && !isComm)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

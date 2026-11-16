@@ -1,8 +1,8 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerRole } from '@/lib/league/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const leagueId = searchParams?.get('leagueId')
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerRole(leagueId, session.user.id)
+  await requireCommissionerAccess(leagueId, session.user.id, 'view')
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId },
     select: { commissionerUiPrefs: true },
@@ -41,7 +41,7 @@ export async function PATCH(req: Request) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerRole(leagueId, session.user.id, 'league')
+  await requireCommissionerAccess(leagueId, session.user.id, 'league')
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true, commissionerUiPrefs: true } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
