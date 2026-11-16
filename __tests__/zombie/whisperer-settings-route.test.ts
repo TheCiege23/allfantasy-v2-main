@@ -12,7 +12,9 @@ const h = vi.hoisted(() => ({
   zombieLeagueConfigFindUnique: vi.fn(),
   zombiePaidConfigFindUnique: vi.fn(),
   zombieFreeRewardConfigFindUnique: vi.fn(),
+  locked: vi.fn(async () => [] as string[]),
 }))
+vi.mock('@/lib/league/settingsLockService', () => ({ lockedGroups: h.locked, lockedGroupsForPatch: vi.fn(async () => []) }))
 
 vi.mock('@/lib/zombie/rulesDocGenerator', () => ({ generateRulesDocument: h.generateRulesDocument }))
 vi.mock('next-auth', () => ({ getServerSession: h.getServerSession }))
@@ -189,6 +191,17 @@ describe('fixed 2025 NFL item rules', () => {
   it.each([{ serumReviveCount: 3 }, { autoSerumRevive: false }, { weaponTopTwoActive: false }, { bombOneTimeOverride: false }, { serumUseBeforeLastStarter: false }])('rejects incompatible rules without writes: %j', async change => {
     const { PATCH } = await import('@/app/api/zombie/settings/route')
     expect((await PATCH(patch(change))).status).toBe(400)
+    expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
+  })
+})
+
+describe('PATCH /api/zombie/settings honours the settings lock (2026-11-15)', () => {
+  it('a league with format rules locked refuses a Zombie rule change, and nothing is written', async () => {
+    h.locked.mockResolvedValueOnce(['format'])
+    const { PATCH } = await import('@/app/api/zombie/settings/route')
+    const response = await PATCH(patch({ whispererSelectionMode: 'veteran_priority' }))
+    expect(response.status).toBe(423)
+    expect(h.zombieLeagueUpdate).not.toHaveBeenCalled()
     expect(h.zombieLeagueConfigUpsert).not.toHaveBeenCalled()
   })
 })

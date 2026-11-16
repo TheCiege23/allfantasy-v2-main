@@ -28,7 +28,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { listSendableLeagueIds } from '@/lib/commissioner/broadcastAccess'
-import { buildCommissionerHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
+import { buildCommissionerHealthSnapshot, loadCommissionerHealthCounts } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getRivalryBoard } from '@/lib/rivalry-engine/rivalryBoard'
 import { CommissionerIntelligenceHub } from '@/components/commissioner-intelligence/CommissionerIntelligenceHub'
@@ -91,6 +91,7 @@ export default async function LeagueIntelligencePage({ params }: PageProps) {
           playoffTeams: true,
           lockAllMoves: true,
           lastSyncedAt: true,
+          platform: true,
           rosters: { select: { id: true, platformUserId: true, playerData: true, updatedAt: true, settings: true } },
         },
       })
@@ -127,7 +128,12 @@ export default async function LeagueIntelligencePage({ params }: PageProps) {
           .catch(() => [] as Array<{ id: string }>),
       ])
 
-      const snapshot = buildCommissionerHealthSnapshot({ league, source: 'database' })
+      // 🛑 This built the snapshot with no activity counts, so every trade, claim, chat and alert read 0 (2026-11-15).
+      // The same counts the commissioner hub uses (lib/commissioner-hub/commissionerHubHealth.ts).
+      const counts = await loadCommissionerHealthCounts([leagueId], new Date(Date.now() - 7 * 86_400_000))
+        .then((m) => m.get(leagueId))
+        .catch(() => undefined)
+      const snapshot = buildCommissionerHealthSnapshot({ league, source: 'database', ...(counts ? { counts } : {}) })
 
       /*
        * ⚠ A LOW-CONFIDENCE SNAPSHOT PUBLISHES NO SCORE. `dataConfidence: 'low'`

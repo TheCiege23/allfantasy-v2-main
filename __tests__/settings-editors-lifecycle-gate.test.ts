@@ -438,3 +438,13 @@ describe('best ball player-pool check on the commissioner saves', () => {
     expect(h.leagueUpdate).not.toHaveBeenCalled()
   })
 })
+
+describe('roster-settings PUT keeps League.irSlots on the IR count it saved (2026-11-15)', () => {
+  beforeEach(() => vi.clearAllMocks())
+  it('writes the IR seats of the saved layout to the column the trade and AI context read', async () => {
+    setLeague('NFL', 'pre_draft')
+    const res = await call(rosterPut as Handler, { slots: { QB: 1, BN: 6, IR: 3 }, templateKey: 'custom' })
+    expect(res.status).toBe(200)
+    expect(h.leagueUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'L1' }, data: { irSlots: 3 } }))
+  })
+})

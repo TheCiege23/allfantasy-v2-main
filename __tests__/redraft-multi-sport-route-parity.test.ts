@@ -65,6 +65,7 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/league/league-access', () => ({
   assertLeagueMember: assertLeagueMemberMock,
+  assertLeagueCommissioner: assertLeagueMemberMock,
 }))
 
 vi.mock('@/lib/redraft/scheduleEngine', () => ({

@@ -37,7 +37,15 @@ export type DemoMatchup = {
   status: 'final' | 'live' | 'upcoming'
 }
 
-export type DemoWeekScores = { week: number; scores: Array<{ slot: number; points: number }> }
+/**
+ * `matchupId` is the provider's per-week game number (1…n), which pairs two seats into one game —
+ * the same public schedule fact a scoreboard shows. The real standings board needs it to tell wins
+ * from losses. Optional: a source with no pairing (a points-only league) leaves it out.
+ */
+export type DemoWeekScores = { week: number; scores: Array<{ slot: number; points: number; matchupId?: number | null }> }
+
+/** A week's games nobody has scored in yet, as seat pairs — the published schedule, nothing more. Used by `DemoLeagueView.upcoming`. */
+export type DemoUpcomingWeek = { week: number; pairs: Array<[number, number]> }
 
 export type DemoPlayer = {
   name: string
@@ -103,6 +111,12 @@ export type DemoLeagueView = {
    * record), so "who is the best team and why" can be answered on the first try.
    */
   weeklyScores: DemoWeekScores[]
+  /**
+   * The rest of the regular-season schedule (unplayed games, by seat), so the standings board can say
+   * who has clinched — without it every team "clinches" or is "eliminated" with weeks still to play.
+   * Optional so a hand-built view (tests, sample formats with no future rows) can leave it out.
+   */
+  upcoming?: DemoUpcomingWeek[]
   rosters: DemoRoster[]
   trades: DemoTrade[]
   health: DemoHealth | null

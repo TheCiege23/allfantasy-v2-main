@@ -51,7 +51,7 @@ vi.mock('@/lib/season-week/seasonWeekService', () => ({
 }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'user-1' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn().mockResolvedValue({ ok: true, status: 200 }) }))
+vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn().mockResolvedValue({ ok: true, status: 200 }), assertLeagueCommissioner: vi.fn().mockResolvedValue({ ok: true, status: 200 }) }))
 vi.mock('@/lib/post-draft', () => ({ ensurePostDraftFinalized: vi.fn() }))
 vi.mock('@/lib/redraft/fantraxNativePresentation', () => ({ loadFantraxNativePresentation: vi.fn(async () => null) }))
 vi.mock('@/lib/adp/computeAllFantasyAdp', () => ({ buildPlayerKey: vi.fn(() => 'k'), normalizeStoredPlayerKey: vi.fn((k: string) => k) }))

@@ -11,6 +11,7 @@ import { DefaultJsonLd } from '@/components/seo/JsonLd';
 import { SafeGlobalChrome } from '@/components/shell/SafeGlobalChrome';
 import { IosAppPushRegistrar } from '@/components/notifications/IosAppPushRegistrar';
 import { SignInPushSheet } from '@/components/notifications/SignInPushSheet';
+import { AppMusicDock } from '@/components/app-music/AppMusicDock';
 import { IosAppLinkHandler } from '@/components/platform/IosAppLinkHandler';
 import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTracker';
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
@@ -564,6 +565,15 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;var n=d.currentSc
                 again later (up to three times). Rules in lib/push-notifications/signInPushAsk.ts.
               */}
               <SignInPushSheet />
+              {/*
+                App-wide music (YouTube + Apple Music). Here, in the ROOT layout,
+                because this is the one place that survives every client-side
+                navigation — music started in the draft room keeps playing on
+                lineups and trades. Renders nothing until the visitor is signed in.
+                Inside this crash-safe boundary so a music failure can never
+                blank a page.
+              */}
+              <AppMusicDock />
             </Suspense>
           </ErrorBoundaryClient>
 

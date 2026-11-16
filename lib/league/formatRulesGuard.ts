@@ -21,7 +21,7 @@ import { settingsLockedResponse } from './settingsLockGuard'
  * succeeded. Both fail open / best-effort, like the guards they sit beside: a database blip must not brick a
  * settings screen, and a failed log line must not fail a save that already landed.
  */
-export type FormatName = 'guillotine' | 'pirate' | 'big_brother' | 'devy' | 'c2c' | 'idp' | 'zombie'
+export type FormatName = 'guillotine' | 'pirate' | 'big_brother' | 'devy' | 'c2c' | 'idp' | 'zombie' | 'survivor'
 
 export function formatRulesLockedResponse(leagueId: string): Promise<NextResponse | null> {
   return settingsLockedResponse(leagueId, 'format')

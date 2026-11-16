@@ -12,6 +12,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { demoHrefFor } from '@/lib/demo-league/demoLinks'
 
 // Every access is RECORDED as well as thrown: some demo code catches errors (the source-config
 // read returns null on failure), so a throw alone could be swallowed and the test still pass.
@@ -30,6 +31,9 @@ vi.mock('next/link', () => ({
 let pathname = '/demo/formats'
 vi.mock('next/navigation', () => ({
   usePathname: () => pathname,
+  // The demo frame and the app's own League Home (rendered on every format page) read these.
+  useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {}, back: () => {}, refresh: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND')
   },
@@ -51,7 +55,9 @@ describe('format demos', () => {
     const conceptBlock = catalog.slice(catalog.indexOf('concepts: ['), catalog.indexOf('sports: ALL_SPORTS'))
     const catalogIds = [...conceptBlock.matchAll(/id: '([a-z0-9_]+)'/g)].map((m) => m[1]).filter((id) => id !== 'tournament')
     expect([...new Set(catalogIds)].sort()).toEqual([...CATALOG_IDS].sort())
-  })
+    // First in the file, so it pays the cold transform of the registry and the real format screens it
+    // now reaches — 30s+ on a loaded machine (measured 2026-11-15), for a check that itself is instant.
+  }, 60_000)
 
   it('are deterministic: the same sample on every build', async () => {
     const { FORMAT_DEMO_META } = await import('@/lib/demo-league/formats/registry')
@@ -67,6 +73,7 @@ describe('format demos', () => {
     const Layout = (await import('@/app/demo/layout')).default
     const Gallery = (await import('@/app/demo/formats/page')).default
     const FormatPage = (await import('@/app/demo/formats/[format]/page')).default
+    const StandingsPage = (await import('@/app/demo/formats/[format]/standings/page')).default
     const { FORMAT_DEMO_META } = await import('@/lib/demo-league/formats/registry')
 
     pathname = '/demo/formats'
@@ -84,8 +91,45 @@ describe('format demos', () => {
       expect(html, f.id).not.toMatch(/sample (owner|team) \d/i)
       // A sample has no team pages behind it.
       expect(html, f.id).not.toContain('/demo/teams/')
+
+      // Its standings, on the app's own Standings screen.
+      pathname = `/demo/formats/${f.id}/standings`
+      const st = renderToStaticMarkup(React.createElement(Layout, null, await StandingsPage({ params: Promise.resolve({ format: f.id }) })))
+      expect(st, `${f.id} standings`).toContain('Demo league — example data')
+      expect(st, `${f.id} standings`).not.toMatch(/sample (owner|team) \d/i)
     }
     expect(dbTouches, 'prisma accessed while rendering format demos').toEqual([])
+    // 28 pages through the app's real screens; a cold first render takes well over the default 30s.
+  }, 120_000)
+
+  it('five types show their own app screen, and no type page links into a signed-in page', async () => {
+    const FormatPage = (await import('@/app/demo/formats/[format]/page')).default
+    const { FORMAT_DEMO_META } = await import('@/lib/demo-league/formats/registry')
+    const withReal: Record<string, string> = {
+      devy: 'devy', zombie: 'zombie', 'salary-cap': 'salary-cap', 'big-brother': 'big-brother', 'survivor-guilly': 'survivor-guilly',
+    }
+    for (const f of FORMAT_DEMO_META) {
+      pathname = `/demo/formats/${f.id}`
+      const html = renderToStaticMarkup(await FormatPage({ params: Promise.resolve({ format: f.id }) }))
+      if (withReal[f.id]) expect(html, f.id).toContain(`data-testid="format-real-screen-${withReal[f.id]}"`)
+      else expect(html, f.id).not.toContain('data-testid="format-real-screen-')
+      // An href into the signed-in app would send a visitor to a login wall for a league that does not
+      // exist. The real Home renders some (/core/standings?league=…); DemoCoreShell rewrites those in the
+      // browser via demoHrefFor — so every signed-in href on the page must be one it rewrites.
+      const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]!.replace(/&amp;/g, '&'))
+      const signedIn = hrefs.filter((h) => /^\/(league|core|api|settings|dashboard)(\/|\?|$)/.test(h))
+      expect(signedIn.filter((h) => demoHrefFor(h, `/demo/formats/${f.id}`) == null), f.id).toEqual([])
+    }
+  })
+
+  it('elimination formats draw Eliminated / On the bubble on the standings, never a playoff line', async () => {
+    const StandingsPage = (await import('@/app/demo/formats/[format]/standings/page')).default
+    for (const id of ['guillotine', 'survivor', 'survivor-guilly']) {
+      pathname = `/demo/formats/${id}/standings`
+      const html = renderToStaticMarkup(await StandingsPage({ params: Promise.resolve({ format: id }) }))
+      expect(html, id).toContain('Eliminated')
+      expect(html, id).not.toMatch(/PLAYOFF LINE|Playoff line/)
+    }
   })
 
   it('404s an unknown format', async () => {

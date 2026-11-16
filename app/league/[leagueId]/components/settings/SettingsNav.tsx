@@ -201,8 +201,8 @@ const ZOMBIE_NAV: NavEntry[] = [
 
 const IDP_NAV: NavEntry[] = [
   { id: 'idp_roster', label: 'IDP Roster', icon: Shield },
-  { id: 'idp_scoring', label: 'IDP Scoring', icon: BarChart3 },
-  { id: 'idp_display', label: 'IDP Display', icon: Palette },
+  // IDP Scoring and IDP Display were mock-ups that saved nothing (2026-11-15): IDP stat values are set in the Scoring
+  // tab, which edits the values the IDP scorer reads; display choices are each viewer's own.
   { id: 'idp_ai', label: 'IDP Intelligence', icon: Bot },
   { id: 'idp_cap', label: 'IDP Cap', icon: DollarSign },
 ]
