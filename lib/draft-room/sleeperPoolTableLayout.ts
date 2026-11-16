@@ -141,14 +141,19 @@ export function buildSleeperPoolTableLayout(
       : def.label,
   }))
 
+  /*
+   * Room v2 (2026-11): the actions come FIRST. At the end of a row they sat past every stat column,
+   * so on a laptop or tablet Draft was scrolled off the right edge; the left edge is always on
+   * screen, and the stat columns are what scroll.
+   */
   const actions: SleeperColumnSpec = {
     key: 'actions',
     label: '',
     width: 160,
-    align: 'right',
+    align: 'left',
   }
 
-  const columns = [...base, ...statCols, actions]
+  const columns = [actions, ...base, ...statCols]
   const minWidth = columns.reduce((sum, c) => sum + c.width, 0)
 
   return { columns, statDefs, minWidth, showBye }
