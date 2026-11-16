@@ -729,7 +729,7 @@ function MockQueueCard({ message, onResolve }: { message: ChatMessage; onResolve
   const state = message.queueProposalState ?? 'pending'
   return (
     <div className="mt-2 rounded-lg border border-cyan-300/25 bg-black/25 p-2 text-white/80" data-testid="mock-draft-queue-card">
-      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">Queue change</div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">Queue change</div>
       {proposal.add.length > 0 ? <div className="mt-1">Add to the {proposal.addAt}: {proposal.add.map(label).join(', ')}</div> : null}
       {proposal.remove.length > 0 ? <div className="mt-1">Take off: {proposal.remove.map(label).join(', ')}</div> : null}
       {state === 'pending' ? (
