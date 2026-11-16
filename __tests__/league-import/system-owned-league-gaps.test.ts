@@ -171,7 +171,10 @@ describe('source guards — the fixes cannot quietly come back', () => {
     // Positive control: the same instrument DOES see a pattern that is present in those files.
     const control = grep('isOwnerOrLeagueCommissioner\\(league, leagueId, session\\.user\\.id\\)')
     expect(control.status).toBe(0)
-    expect(control.stdout.split('\n').filter(Boolean).length).toBeGreaterThanOrEqual(40)
+    // 33 since the seven sport scoring saves moved into lib/league/applySportScoring.ts (2026-11-16), which makes
+    // the same check — asserted below so the count dropping is not the check disappearing.
+    expect(control.stdout.split('\n').filter(Boolean).length).toBeGreaterThanOrEqual(30)
+    expect(read('lib/league/applySportScoring.ts')).toContain('await isOwnerOrLeagueCommissioner(league, leagueId, userId)')
   }, 30_000)
 
   it('…and the shared check is what replaced it (positive control: the routes are real)', () => {
