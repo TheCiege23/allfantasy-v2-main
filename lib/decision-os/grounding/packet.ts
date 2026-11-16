@@ -28,7 +28,7 @@ import {
   type WaiverDecisionBridgeArgs,
 } from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
-import { loadRosterValueGradeSlice, type RosterValueGradeFact } from './rosterValueGradeSlice'
+import { loadRosterValueGradeSliceCached, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { loadPsychologyConsistencySlice, type PsychologyConsistencyFact } from './psychologyConsistencySlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
@@ -655,6 +655,35 @@ export interface GroundingPacketArgs {
  * `Promise.allSettled` semantics via per-slice catch, the same reason `ChimmyContextEngine` runs
  * its providers that way. A failed slice becomes an honest gap, not an exception.
  */
+/**
+ * When the serialized IDP/kicker hop must be done by, measured from the packet's start: under the chat route's
+ * 3,000 ms ceiling with room for serialization.
+ */
+export const IDP_KICKER_DEADLINE_MS = 2700
+
+/** The slice, or a stated gap when it cannot finish in the time left. Never throws. */
+export function withSliceDeadline(
+  remainingMs: number,
+  work: Promise<GroundedSlice<ValueLookup[]>>,
+): Promise<GroundedSlice<ValueLookup[]>> {
+  const late = absent<ValueLookup[]>({
+    reason: 'not_computed',
+    detail: 'IDP and kicker values did not finish in time for this answer.',
+    remedy: 'They are priced per request; asking again usually includes them.',
+  })
+  if (remainingMs <= 0) {
+    work.catch(() => undefined)
+    return Promise.resolve(late)
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<GroundedSlice<ValueLookup[]>>((resolve) => {
+    timer = setTimeout(() => resolve(late), remainingMs)
+  })
+  return Promise.race([work.catch(() => late), timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
 export async function buildDecisionOsGroundingPacket(
   args: GroundingPacketArgs,
 ): Promise<DecisionOsGroundingPacket> {
@@ -833,7 +862,7 @@ export async function buildDecisionOsGroundingPacket(
    */
   const pRosterValueGrade =
     want.rosterValueGrade && !rosterValueGradeKill
-      ? kick('rosterValueGrade', loadRosterValueGradeSlice({ userId: args.userId, leagueId }))
+      ? kick('rosterValueGrade', loadRosterValueGradeSliceCached({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   /*
@@ -1474,9 +1503,16 @@ export async function buildDecisionOsGroundingPacket(
     const rulesValue = leagueRules.present ? leagueRules.value : null
     const fmt = deriveValueFormat(rulesValue)
     const size = deriveLeagueSizeAndPpr(rulesValue)
+    /*
+     * 🛑 BOUNDED BY THE PACKET'S OWN CLOCK (2026-11-16, re-score item 8). This hop starts only after the context
+     * engine returns, and the chat route discards the WHOLE packet past its 3s ceiling — so an IDP league's
+     * values could cost every other slice in the turn. The slice gets what is left before
+     * `IDP_KICKER_DEADLINE_MS` from the packet's start; past that it reports a gap and the packet still lands.
+     */
+    const remainingMs = IDP_KICKER_DEADLINE_MS - (Date.now() - startedAt)
     idpKickerValues = await kick(
       'idpKickerValues',
-      loadIdpKickerValueSlice({
+      withSliceDeadline(remainingMs, loadIdpKickerValueSlice({
         sport: args.sport,
         leagueId,
         // Optional-chained rather than relying on narrowing: the guard above tests a COMPOUND
@@ -1493,7 +1529,7 @@ export async function buildDecisionOsGroundingPacket(
          */
         numTeams: size.numTeams ?? 12,
         isDynasty: fmt?.format === 'DYNASTY',
-      }),
+      })),
     )
   }
 

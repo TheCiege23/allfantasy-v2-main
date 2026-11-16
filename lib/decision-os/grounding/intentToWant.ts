@@ -28,9 +28,9 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  * always-on "no waiver decision" line would teach a reader to skim the gap block — the failure
  * R1.6 spent a commit removing.
  *
- * `idpKicker` remains excluded: its own doc comment names it "the one slice that cannot join the
- * concurrent wave" — a serialized second hop with its own cost profile — and turning it on for
- * every player_value question is a real latency decision that deserves its own measurement.
+ * `idpKicker` is not mapped HERE: since 2026-11-16 the chat route requests it on every turn, because its
+ * own exit stops before any query in a league that rosters no IDP or kicker, and it is bounded by the
+ * packet's clock (`IDP_KICKER_DEADLINE_MS` in packet.ts) so the serialized hop can cost only itself.
  *
  * ⚠ REUSES `chimmy-orchestration`'s classifier, not `chimmy-context`'s. Two intent classifiers
  * share the name `classifyChimmyIntent` in this codebase (`lib/chimmy-context/intent/
@@ -132,8 +132,13 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * already DB-first, so it wants indexing or warming rather than caching) and breaking the
      * `pRules -> pValueFormat -> pMarket` chain. Until that lands, restoring this mapping only
      * re-buys the drop.
+     *
+     * ✅ BACK ON FOR player_value — 2026-11-16 (re-score item 8), BECAUSE THE PACKET NO LONGER WAITS ON IT. The
+     * packet now reads `loadRosterValueGradeSliceCached`: a cached grade (15 min) is served at once, and a miss
+     * starts the compute in the background and returns a "being computed" gap. The 4.6 s above is never on the
+     * critical path again, so the trade described above no longer exists.
      */
-    rosterValueGrade: false,
+    rosterValueGrade: intent === 'player_value',
     /*
      * ✅ STAYS ON, AND THIS LINE IS THE MEASUREMENT — 2026-09-12.
      *
