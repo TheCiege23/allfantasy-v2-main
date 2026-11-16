@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, ArrowLeftRight, Clock, Copy, Grid2x2, Hash, LayoutGrid, MoreHorizontal, Pause, RefreshCw, Settings2, Sparkles, Tv, User, Volume2, VolumeX } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -129,6 +129,23 @@ type DraftTopBarProps = {
   onOpenChimmy?: () => void
   /** Picks until the viewer's next turn; adds "You're up in N" to the pick pill when > 0. */
   picksUntilUser?: number | null
+  /** The auto-pick pill. A mock room has no auto-pick to toggle, so it hides it. */
+  showAutoPickPill?: boolean
+  /**
+   * Controls the room supplies itself, at the start of the right-hand cluster. The mock room puts
+   * its own Pause / Resume here: the viewer runs the mock but is not a league commissioner, so the
+   * commissioner pause pill (and every commissioner menu row) stays off.
+   */
+  controlsSlot?: ReactNode
+  /** Extra rows at the end of the ⋯ menu's room section (the mock room's Reset and Export). */
+  extraMenuItems?: Array<{ id: string; label: string; description?: string; testId: string; onSelect: () => void }>
+  /**
+   * What the clock pill says when no clock is running, in place of the draft status and an empty
+   * timer ("in progress –"). The mock room: "CPU picking" while a CPU manager is on the clock.
+   */
+  idleClockLabel?: string | null
+  /** "Invite leaguemates" and the menu's Copy Invite Link. A solo mock has nobody to invite. */
+  showInvite?: boolean
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -272,6 +289,11 @@ export function DraftTopBar({
   rookieAuctionNote = null,
   onOpenChimmy,
   picksUntilUser = null,
+  showAutoPickPill = true,
+  controlsSlot = null,
+  extraMenuItems = [],
+  idleClockLabel = null,
+  showInvite = true,
 }: DraftTopBarProps) {
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
@@ -576,10 +598,16 @@ export function DraftTopBar({
     return (
       <div className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-sm text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
         <Clock className="h-4 w-4 shrink-0 text-cyan-300/90" />
-        <span className="font-medium">{statusLabel}</span>
-        <span className="font-mono text-xs text-white/55" data-testid="draft-topbar-timer-value">
-          {timerDisplay}
-        </span>
+        {idleClockLabel ? (
+          <span className="font-medium" data-testid="draft-topbar-idle-clock">{idleClockLabel}</span>
+        ) : (
+          <>
+            <span className="font-medium">{statusLabel}</span>
+            <span className="font-mono text-xs text-white/55" data-testid="draft-topbar-timer-value">
+              {timerDisplay}
+            </span>
+          </>
+        )}
       </div>
     )
   })()
@@ -752,6 +780,8 @@ export function DraftTopBar({
                     </span>
                   </>
                 ) : null}
+                {showInvite ? (
+                  <>
                 <span className="text-white/24">·</span>
                 <button
                   type="button"
@@ -765,6 +795,8 @@ export function DraftTopBar({
                   <Copy className="h-3.5 w-3.5" />
                 </button>
                 {copyFeedback === 'copied' ? <span className="text-cyan-300">{t('draftRoom.topBar.copied')}</span> : null}
+                  </>
+                ) : null}
               </div>
               {dyn && rookieAuctionNote ? (
                 <p
@@ -925,6 +957,7 @@ export function DraftTopBar({
         </div>
 
         <div className="order-2 flex flex-wrap items-center justify-end gap-1 lg:order-none">
+          {controlsSlot}
           {isCommissioner && (draftStatus === 'in_progress' || draftStatus === 'paused') && ((draftStatus === 'in_progress' && onPause) || (draftStatus === 'paused' && onResume)) ? (
             <button
               type="button"
@@ -942,6 +975,7 @@ export function DraftTopBar({
               {draftStatus === 'paused' ? t('draftRoom.topBar.resume') : t('draftRoom.topBar.pause')}
             </button>
           ) : null}
+          {showAutoPickPill ? (
           <button
             type="button"
             onClick={onToggleAutoPick}
@@ -962,6 +996,7 @@ export function DraftTopBar({
             <span className="sm:hidden">{`${t('draftRoom.topBarHint.autoPickShort')} `}</span>
             {autoPickEnabled ? t('draftRoom.topBarHint.autoPickOn') : t('draftRoom.topBarHint.autoPickOff')}
           </button>
+          ) : null}
 
           {onOpenChimmy ? (
             <button
@@ -1020,6 +1055,7 @@ export function DraftTopBar({
                     {timerMuted ? headerCopy.soundOff : headerCopy.soundOn}
                   </span>
                 </button>
+                {showInvite ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -1036,6 +1072,7 @@ export function DraftTopBar({
                     </span>
                   </span>
                 </button>
+                ) : null}
 
                 {bigScreenHref ? (
                   <Link
@@ -1145,6 +1182,25 @@ export function DraftTopBar({
                     </span>
                   </Link>
                 ) : null}
+
+                {extraMenuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      item.onSelect()
+                      setMenuOpen(false)
+                    }}
+                    data-testid={item.testId}
+                    className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8"
+                  >
+                    <Settings2 className="mt-0.5 h-4 w-4 text-[#dbe1ff]" aria-hidden />
+                    <span>
+                      <span className="block text-sm font-semibold text-white">{item.label}</span>
+                      {item.description ? <span className="block text-xs text-white/55">{item.description}</span> : null}
+                    </span>
+                  </button>
+                ))}
 
                 {isCommissioner ? (
                   <button

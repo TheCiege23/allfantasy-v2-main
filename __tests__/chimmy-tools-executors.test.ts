@@ -63,6 +63,12 @@ describe('tool specs', () => {
       'get_draft_analysis',
       'get_league_trade_activity',
       /*
+       * A leaguemate's record as FACTS (lib/chimmy/managerRecordGrounding.ts, 2026-11-16): the same
+       * Competitive Edge record the manager card and the commissioner's screen read. SELECT-only over the
+       * membership-proven league; without the plan it returns a lock note and no history at all.
+       */
+      'get_manager_record',
+      /*
        * ⚠ ADDED WHEN THE TOOL WAS. This list is hardcoded and ordered, so
        * shipping `find_league_by_name` turned it red — the assertion's job is to
        * make a new tool a deliberate edit, and that worked exactly as intended.

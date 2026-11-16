@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { mockTurnDurationMs, remainingMockSeconds } from '@/lib/mock-draft/turn-clock'
 import { postChimmyRequest } from '@/lib/chimmy/postRequest'
 import {
@@ -14,9 +14,16 @@ import { CHIMMY_PRO_TOOL_UPGRADE_HREF, proUpsellLine, readProUpsell, type Chimmy
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getMockDraftTeamCountOptions } from '@/lib/mock-draft/mockTeamCount'
-import { LayoutGrid, MessageCircle, User, Users } from 'lucide-react'
 import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
-import { DraftMobileTray } from '@/components/app/draft-room/DraftMobileTray'
+import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
+import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
+import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/DraftRoundOneAnnouncementOverlay'
+import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
+import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
+import { LanguageFallbackBoundary } from '@/components/i18n/LanguageProviderClient'
+import { mockDraftRoomMessages } from '@/lib/core-app/messages/mockDraftRoom'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
 import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
@@ -49,15 +56,67 @@ type DraftType = 'snake' | 'auction' | 'linear'
 type DraftScoring = 'PPR' | 'Half PPR' | 'Standard' | 'Points' | 'Categories'
 type DraftSpeed = 30 | 15 | 5 | 0
 type DraftStatus = 'setup' | 'drafting' | 'paused' | 'complete'
-type MobilePanel = 'players' | 'roster' | 'chat' | null
+/** The mock room's dock: what sits beside the pool on a laptop, and behind its own tab on a tablet. */
+type MockDockTab = 'queue' | 'roster' | 'chat'
 
-/** Tray tabs. 'board' is not a panel: it collapses the tray so the whole board shows. */
-const MOCK_MOBILE_TABS = [
-  { id: 'board' as const, label: 'Board', icon: LayoutGrid },
-  { id: 'players' as const, label: 'Players', icon: User },
-  { id: 'roster' as const, label: 'Roster', icon: Users },
-  { id: 'chat' as const, label: 'Chat', icon: MessageCircle },
-]
+/**
+ * Room v2, phase 5: the mock room's dock tabs, styled like the live room's `DraftCenterDockTabBar`
+ * (whose tab set is the live room's own). `role="tab"`, so a phone's tray buttons stay the only
+ * "Players" / "Chat" buttons on the page.
+ */
+function MockDockTabBar<T extends string>({
+  tabs,
+  active,
+  onSelect,
+  testIdBase,
+}: {
+  tabs: Array<{ id: T; label: string }>
+  active: T
+  onSelect: (id: T) => void
+  testIdBase: string
+}) {
+  return (
+    <div
+      role="tablist"
+      data-testid={`${testIdBase}-tabbar`}
+      className="flex gap-1 overflow-x-auto border-b border-white/8 bg-[#0a1228] px-2 py-1.5 [scrollbar-width:none]"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.id}
+          onClick={() => onSelect(tab.id)}
+          data-testid={`${testIdBase}-tab-${tab.id}`}
+          className={`min-h-[40px] flex-1 shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+            active === tab.id ? 'bg-white/12 text-cyan-100' : 'text-white/60 hover:bg-white/5'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** "1.03": round and pick-in-round, the live room's pick label. */
+export function mockPickLabel(overall: number, teamCount: number): string {
+  const size = Math.max(1, teamCount)
+  const round = Math.ceil(overall / size)
+  const inRound = ((overall - 1) % size) + 1
+  return `${round}.${String(inRound).padStart(2, '0')}`
+}
+
+/** A mock pick in the live room's snapshot shape (the auction panel and the round-1 card). */
+function toPickSnapshot(pick: DraftPick, teamCount: number): DraftPickSnapshot {
+  return {
+    id: `mock-${pick.overall}`, overall: pick.overall, round: pick.round, slot: pick.slot, rosterId: String(pick.slot),
+    displayName: pick.managerName, playerName: pick.playerName, position: pick.position, team: pick.team || null,
+    byeWeek: null, playerId: pick.playerId, playerImageUrl: pick.headshotUrl ?? null, tradedPickMeta: null,
+    source: 'mock', pickLabel: mockPickLabel(pick.overall, teamCount), amount: pick.price ?? null, createdAt: '',
+  }
+}
 
 interface LeagueListItem {
   id: string
@@ -287,48 +346,12 @@ function isFootballScoring(settings: DraftSettings): DraftScoring[] {
   return isFootballSport(settings.sport) ? FOOTBALL_SCORING_OPTIONS : GENERIC_SCORING_OPTIONS
 }
 
-function positionLabelColor(position: string): string {
-  switch (position.toUpperCase()) {
-    case 'QB':
-      return 'bg-red-500/20 text-red-300'
-    case 'RB':
-      return 'bg-green-500/20 text-green-300'
-    case 'WR':
-      return 'bg-blue-500/20 text-blue-300'
-    case 'TE':
-      return 'bg-orange-500/20 text-orange-300'
-    case 'K':
-      return 'bg-gray-500/20 text-gray-300'
-    case 'DEF':
-    case 'DST':
-      return 'bg-purple-500/20 text-purple-300'
-    case 'PG':
-    case 'SG':
-    case 'G':
-      return 'bg-sky-500/20 text-sky-300'
-    case 'SF':
-    case 'PF':
-    case 'F':
-      return 'bg-emerald-500/20 text-emerald-300'
-    case 'C':
-      return 'bg-yellow-500/20 text-yellow-300'
-    case 'P':
-    case 'SP':
-    case 'RP':
-      return 'bg-rose-500/20 text-rose-300'
-    case 'MID':
-      return 'bg-cyan-500/20 text-cyan-300'
-    case 'FWD':
-    case 'OF':
-      return 'bg-indigo-500/20 text-indigo-300'
-    case 'GK':
-      return 'bg-amber-500/20 text-amber-300'
-    case 'FLEX':
-    case 'UTIL':
-      return 'bg-cyan-500/20 text-cyan-300'
-    default:
-      return 'bg-white/10 text-white/70'
-  }
+/** The AF position palette (room v2), the same chip colors the live pool and board use. */
+function positionChipStyle(position: string, sport?: string | null): CSSProperties {
+  const tint = positionTintHex(position, sport)
+  return tint
+    ? { backgroundColor: tint, color: SKIN_ON_FILL }
+    : { backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)' }
 }
 
 function getRosterSlots(settings: DraftSettings): string[] {
@@ -777,13 +800,28 @@ export default function MockDraftSleeperRoomClient({
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null)
-  /** The tray reopens on whichever panel was last showing; Players before anything was chosen. */
-  const lastMobilePanelRef = useRef<Exclude<MobilePanel, null>>('players')
-  useEffect(() => {
-    if (mobilePanel) lastMobilePanelRef.current = mobilePanel
-  }, [mobilePanel])
-  const mobileLayoutRef = useRef<HTMLDivElement | null>(null)
+  /** Phone tray tab ('board' = tray collapsed), the live room's contract with `DraftRoomShell`. */
+  const [mobileTab, setMobileTab] = useState<MobileDraftTab>('board')
+  /** Laptop dock tab; on a portrait tablet, also which dock panel shows when the dock has the screen. */
+  const [dockTab, setDockTab] = useState<MockDockTab>('queue')
+  /** Portrait tablet: the pool or the dock, one at a time. */
+  const [tabletPanel, setTabletPanel] = useState<'players' | 'dock'>('players')
+  const selectDockTab = useCallback((tab: MockDockTab) => {
+    setDockTab(tab)
+    setTabletPanel('dock')
+  }, [])
+  const mockCopy = useMessages(mockDraftRoomMessages)
+  const headerCopy = useMessages(draftRoomHeaderMessages)
+  /*
+   * Round-1 picks get the live room's announcement card, as a toast (`variant="toast"`). CPU
+   * managers pick seconds apart, so a newer pick replaces a CPU card at once instead of queueing
+   * behind it (a backlog would still be playing in round 3); the viewer's own card keeps its full
+   * time, with the newest pick waiting behind it. Picks already on the board when the room mounts
+   * (a restored mock) are not announced again.
+   */
+  const [roundOneQueue, setRoundOneQueue] = useState<RoundOneAnnouncementQueueItem[]>([])
+  const announcedThroughRef = useRef<number | null>(null)
+  const dismissRoundOne = useCallback(() => setRoundOneQueue((queue) => queue.slice(1)), [])
   const [draftId, setDraftId] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [teamGrade, setTeamGrade] = useState<string | null>(null)
@@ -972,7 +1010,7 @@ export default function MockDraftSleeperRoomClient({
     document.querySelectorAll<HTMLElement>('[data-mock-chat-log]').forEach((el) => {
       el.scrollTop = el.scrollHeight
     })
-  }, [chatMessageCount, mobilePanel])
+  }, [chatMessageCount, dockTab, mobileTab])
 
   const queuePlayers = useMemo(() => {
     if (!draftState) return []
@@ -1302,12 +1340,7 @@ export default function MockDraftSleeperRoomClient({
     const order = [...draftState.teams].sort((a, b) => a.slot - b.slot)
     const budgets: Record<string, number> = {}
     for (const team of order) budgets[String(team.slot)] = auction.budgets[team.slot] ?? auction.budgetPerTeam
-    const picks: DraftPickSnapshot[] = draftState.picks.map((pick) => ({
-      id: `mock-${pick.overall}`, overall: pick.overall, round: pick.round, slot: pick.slot, rosterId: String(pick.slot),
-      displayName: pick.managerName, playerName: pick.playerName, position: pick.position, team: pick.team || null,
-      byeWeek: null, playerId: pick.playerId, playerImageUrl: pick.headshotUrl ?? null, tradedPickMeta: null,
-      source: 'mock', pickLabel: `${pick.round}.${pick.slot}`, amount: pick.price ?? null, createdAt: '',
-    }))
+    const picks: DraftPickSnapshot[] = draftState.picks.map((pick) => toPickSnapshot(pick, draftState.settings.teamCount))
     const deadline = lot?.endsAtMs ?? auction.nominationDeadlineMs
     const paused = draftState.status === 'paused'
     return {
@@ -1751,6 +1784,60 @@ export default function MockDraftSleeperRoomClient({
     copyShareUrl(shareId)
   }, [copyShareUrl, draftState, persistDraft, shareId])
 
+  /* The mock's own controls, in the shared header (room v2 phase 5). Same logic as before the move. */
+  const pauseMock = useCallback(() => {
+    setDraftState((current) => current ? {
+      ...current, status: 'paused', pausedRemainingMs: Math.max(0, (current.turnDeadlineMs ?? Date.now()) - Date.now()), turnDeadlineMs: null,
+      pausedAtMs: Date.now(),
+    } : current)
+  }, [])
+  const resumeMock = useCallback(() => {
+    setDraftState((current) =>
+      current && current.status !== 'complete' && current.auction
+        ? { ...current, status: 'drafting', pausedRemainingMs: undefined, pausedAtMs: undefined,
+            auction: resumeMockAuction(current.auction, {
+              pausedForMs: Date.now() - (current.pausedAtMs ?? Date.now()),
+              now: Date.now(),
+              timing: mockAuctionTiming(current.settings.speed),
+            }) }
+        : current && current.status !== 'complete'
+        ? { ...current, status: 'drafting',
+            turnDeadlineMs: Date.now() + (current.pausedRemainingMs ?? mockTurnDurationMs(current.settings.speed, Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser))),
+            timerSeconds: Math.ceil((current.pausedRemainingMs ?? current.settings.speed * 1000) / 1000), pausedRemainingMs: undefined }
+        : current,
+    )
+  }, [])
+  /** The header's Ask Chimmy: show the chat (tray on a phone, dock on a laptop or tablet) and ask. */
+  const openChimmy = useCallback(() => {
+    setMobileTab('chat')
+    selectDockTab('chat')
+    void askAi()
+  }, [askAi, selectDockTab])
+
+  useEffect(() => {
+    if (!draftState) {
+      announcedThroughRef.current = null
+      setRoundOneQueue([])
+      return
+    }
+    const picks = draftState.picks
+    const through = announcedThroughRef.current
+    announcedThroughRef.current = picks.length
+    if (through == null || picks.length <= through || draftState.auction) {
+      if (through != null && picks.length < through) setRoundOneQueue([])
+      return
+    }
+    const newest = picks.slice(through).filter((pick) => pick.round === 1).pop()
+    if (!newest) return
+    const item: RoundOneAnnouncementQueueItem = {
+      id: `mock-r1-${newest.isUser ? 'you' : 'cpu'}-${newest.overall}`,
+      pick: toPickSnapshot(newest, draftState.settings.teamCount),
+      headshotUrl: newest.headshotUrl ?? null,
+      teamLogoUrl: newest.teamLogoUrl ?? null,
+    }
+    setRoundOneQueue((queue) => (queue[0]?.id.startsWith('mock-r1-you-') ? [queue[0], item] : [item]))
+  }, [draftState])
+
   const currentRosterSlots = useMemo(
     () => (draftState && onTheClockTeam ? assignRosterSlots(onTheClockTeam.picks, draftState.settings) : []),
     [draftState, onTheClockTeam],
@@ -2179,100 +2266,109 @@ export default function MockDraftSleeperRoomClient({
       currentOverall={draftState.status === 'drafting' ? draftState.currentPick : null}
     />
 
-    const playerPanel = (
-      <div className="flex h-full flex-col bg-[#0c0c1e]">
+    const sport = draftState.settings.sport
+    const pickOrNominate = (player: AvailablePlayer) => {
+      if (draftedIds.has(player.id) || !isUserTurn) return
+      // Auction: your turn is a nomination.
+      if (draftState.auction) auctionNominate(player.id)
+      else handlePick(player, false, draftState.currentPick)
+    }
+    const addToQueue = (playerId: string) =>
+      setQueue((current) => (current.includes(playerId) ? current : [...current, playerId]))
+
+    const queueList = (
+      <div className="flex h-full min-h-0 flex-col bg-[#0c0c1e]" data-testid="mock-draft-queue-panel">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+          {queuePlayers.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-xs text-white/45">{mockCopy.queueEmpty}</div>
+          ) : (
+            queuePlayers.map((player, index) => (
+              <div key={player.id} data-testid={`mock-draft-queue-entry-${player.id}`} className="rounded-xl border border-orange-400/20 bg-orange-500/10 p-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[11px] font-black text-orange-200">#{index + 1}</span>
+                  <span className="rounded px-1.5 py-0.5 text-[11px] font-black" style={positionChipStyle(player.position, sport)}>
+                    {player.position}
+                  </span>
+                  <PlayerAvatar
+                    headshotUrl={player.headshotUrl}
+                    displayName={player.name}
+                    teamLogoUrl={player.teamLogoUrl}
+                    teamAbbr={player.team}
+                    position={player.position}
+                    size={24}
+                  />
+                  <span className="truncate font-semibold text-white">{player.name}</span>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setQueue((current) => {
+                        if (index === 0) return current
+                        const next = [...current]
+                        const [entry] = next.splice(index, 1)
+                        next.splice(index - 1, 0, entry)
+                        return next
+                      })
+                    }
+                    className="min-h-[36px] rounded-lg border border-white/10 px-3 text-[11px] text-white/65 hover:text-white"
+                  >
+                    {mockCopy.up}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setQueue((current) => {
+                        if (index === current.length - 1) return current
+                        const next = [...current]
+                        const [entry] = next.splice(index, 1)
+                        next.splice(index + 1, 0, entry)
+                        return next
+                      })
+                    }
+                    className="min-h-[36px] rounded-lg border border-white/10 px-3 text-[11px] text-white/65 hover:text-white"
+                  >
+                    {mockCopy.down}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQueue((current) => current.filter((id) => id !== player.id))}
+                    className="min-h-[36px] rounded-lg border border-white/10 px-3 text-[11px] text-red-300/80 hover:text-red-200"
+                  >
+                    {mockCopy.remove}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    )
+
+    /*
+     * Room v2 pool (phase 4's order, in the mock): Draft — or Nominate in an auction — leads every
+     * row, then Queue, then the player. Both are 44px touch targets. Tapping the player row still
+     * drafts on your turn, as it always has.
+     */
+    const poolPanel = (
+      <div className="flex h-full min-h-0 flex-col bg-[#0c0c1e]" data-testid="mock-draft-pool-panel">
         {isUserTurn && draftState.settings.speed > 0 ? (
-          <div className="h-1.5 w-full bg-white/5">
+          <div className="h-1.5 w-full shrink-0 bg-white/5">
             <div
               className={`h-full ${draftState.timerSeconds <= 5 ? 'bg-red-500' : 'bg-cyan-500'}`}
-              style={{
-                width: `${Math.max(0, Math.min(100, (draftState.timerSeconds / draftState.settings.speed) * 100))}%`,
-              }}
+              style={{ width: `${Math.max(0, Math.min(100, (draftState.timerSeconds / draftState.settings.speed) * 100))}%` }}
             />
           </div>
         ) : null}
-
-        <div className="border-b border-white/8 p-3">
-          <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">Queue</div>
-          <div className="mt-3 space-y-2">
-            {queuePlayers.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-xs text-white/30">
-                Tap Queue beside a player to add them.
-              </div>
-            ) : (
-              queuePlayers.map((player, index) => (
-                <div key={player.id} data-testid={`mock-draft-queue-entry-${player.id}`} className="rounded-xl border border-orange-400/20 bg-orange-500/10 p-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[11px] font-black text-orange-200">
-                      #{index + 1}
-                    </span>
-                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(player.position)}`}>
-                      {player.position}
-                    </span>
-                    <PlayerAvatar
-                      headshotUrl={player.headshotUrl}
-                      displayName={player.name}
-                      teamLogoUrl={player.teamLogoUrl}
-                      teamAbbr={player.team}
-                      position={player.position}
-                      size={24}
-                    />
-                    <span className="truncate font-semibold text-white">{player.name}</span>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setQueue((current) => {
-                          if (index === 0) return current
-                          const next = [...current]
-                          const [entry] = next.splice(index, 1)
-                          next.splice(index - 1, 0, entry)
-                          return next
-                        })
-                      }
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/55 hover:text-white"
-                    >
-                      Up
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setQueue((current) => {
-                          if (index === current.length - 1) return current
-                          const next = [...current]
-                          const [entry] = next.splice(index, 1)
-                          next.splice(index + 1, 0, entry)
-                          return next
-                        })
-                      }
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/55 hover:text-white"
-                    >
-                      Down
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQueue((current) => current.filter((id) => id !== player.id))}
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-red-300/75 hover:text-red-200"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="border-b border-white/8 p-3">
+        <div className="shrink-0 border-b border-white/8 p-3">
           <div className="flex flex-wrap items-center gap-1">
             {availableFilters.map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => setFilter(option)}
-                className={`rounded-lg px-2 py-1 text-[11px] font-black ${
-                  filter === option ? 'bg-cyan-500 text-black' : 'bg-white/8 text-white/50'
+                className={`min-h-[32px] rounded-lg px-2.5 py-1 text-[11px] font-black ${
+                  filter === option ? 'bg-cyan-400 text-[#06101f]' : 'bg-white/8 text-white/60'
                 }`}
                 data-testid={`mock-draft-filter-${option}`}
               >
@@ -2283,18 +2379,18 @@ export default function MockDraftSleeperRoomClient({
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search players..."
-            className="mt-3 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/20 focus:outline-none"
+            placeholder={mockCopy.searchPlaceholder}
+            className="mt-3 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none"
             data-testid="mock-draft-player-search"
           />
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-white/45">
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-white/55">
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" checked={showDrafted} onChange={(event) => setShowDrafted(event.target.checked)} />
-              Show Drafted
+              {mockCopy.showDrafted}
             </label>
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" checked={rookiesOnly} onChange={(event) => setRookiesOnly(event.target.checked)} />
-              Rookies Only
+              {mockCopy.rookiesOnly}
             </label>
             <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
               <input
@@ -2303,93 +2399,92 @@ export default function MockDraftSleeperRoomClient({
                 onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
                 data-testid="mock-draft-sort-af-adp"
               />
-              Sort by <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
+              {mockCopy.sortBy} <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
             </label>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1" data-testid="mock-draft-pool-list">
           {filteredPlayers.map((player, index) => {
             const drafted = draftedIds.has(player.id)
             const queued = queue.includes(player.id) && !drafted
+            const auction = Boolean(draftState.auction)
             return (
-              <div key={player.id} className="mb-1 flex items-center gap-1">
-              <button
-                type="button"
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  if (drafted) return
-                  setQueue((current) => (current.includes(player.id) ? current : [...current, player.id]))
-                }}
-                onClick={() => {
-                  if (drafted || !isUserTurn) return
-                  // Auction: tapping a player on your turn nominates them.
-                  if (draftState.auction) auctionNominate(player.id)
-                  else handlePick(player, false, draftState.currentPick)
-                }}
-                className={`min-w-0 flex flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
-                  isUserTurn && !drafted ? 'hover:bg-white/8' : 'cursor-default'
-                } ${drafted ? 'opacity-45' : ''} ${player.injuryStatus === 'OUT' ? 'opacity-50' : ''}`}
-                data-testid={`mock-draft-player-row-${player.id}`}
-              >
-                <div className="w-4 text-xs text-white/25">{index + 1}</div>
-                <div className={`w-8 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(player.position)}`}>
-                  {player.position}
-                </div>
-                <PlayerAvatar
-                  headshotUrl={player.headshotUrl}
-                  displayName={player.name}
-                  teamLogoUrl={player.teamLogoUrl}
-                  teamAbbr={player.team}
-                  position={player.position}
-                  size={32}
-                  testIdBase={`mock-draft-player-avatar-${player.id}`}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-semibold text-white/85">{player.name}</div>
-                  <div className="text-[11px] text-white/30">
-                    {player.team || 'FA'} · {player.posRank}
+              <div key={player.id} className="flex items-center gap-1.5 border-b border-white/[0.04] py-1" data-testid={`mock-draft-pool-row-${player.id}`}>
+                <button
+                  type="button"
+                  disabled={drafted || !isUserTurn}
+                  onClick={() => pickOrNominate(player)}
+                  aria-label={auction ? mockCopy.nominateAria(player.name) : mockCopy.draftAria(player.name)}
+                  className="h-11 min-w-[72px] shrink-0 touch-manipulation rounded-lg bg-cyan-400 px-3 text-xs font-bold text-[#06101f] transition hover:bg-cyan-300 disabled:bg-white/[0.06] disabled:text-white/35"
+                  data-testid={`mock-draft-player-draft-${player.id}`}
+                >
+                  {auction ? mockCopy.nominate : mockCopy.draft}
+                </button>
+                <button
+                  type="button"
+                  disabled={drafted || queued}
+                  aria-label={mockCopy.queueAria(player.name)}
+                  onClick={() => addToQueue(player.id)}
+                  className="h-11 shrink-0 touch-manipulation rounded-lg border border-white/15 px-3 text-xs text-cyan-200 disabled:opacity-40"
+                  data-testid={`mock-draft-queue-add-${player.id}`}
+                >
+                  {queued ? mockCopy.queued : mockCopy.queueAdd}
+                </button>
+                <button
+                  type="button"
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    if (!drafted) addToQueue(player.id)
+                  }}
+                  onClick={() => pickOrNominate(player)}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-all ${
+                    isUserTurn && !drafted ? 'hover:bg-white/8' : 'cursor-default'
+                  } ${drafted ? 'opacity-45' : ''} ${player.injuryStatus === 'OUT' ? 'opacity-50' : ''}`}
+                  data-testid={`mock-draft-player-row-${player.id}`}
+                >
+                  <div className="w-5 shrink-0 text-right text-[11px] text-white/35">{index + 1}</div>
+                  <div className="w-9 shrink-0 rounded px-1 py-0.5 text-center text-[11px] font-black" style={positionChipStyle(player.position, sport)}>
+                    {player.position}
                   </div>
-                </div>
-                {queued ? (
-                  <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-black text-orange-200">
-                    QUEUED
-                  </span>
-                ) : null}
-                {player.injuryStatus ? (
-                  <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
-                ) : null}
-                <div className="flex shrink-0 flex-col items-end leading-tight">
-                  <span
-                    className="text-[11px] font-mono text-white/40"
-                    title={systemAdpCellTitle(player.adp != null)}
-                    data-testid={`mock-draft-player-adp-${player.id}`}
-                  >
-                    {player.adp?.toFixed(1) ?? '\u2014'}
-                  </span>
-                  <span
-                    className="text-[11px] font-mono font-semibold"
-                    style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
-                    title={afAdpCellTitle({
-                      hasValue: player.afAdp != null,
-                      contributions: player.afAdpContributions ?? null,
-                      importedSampleSize: player.afAdpImportedSampleSize ?? null,
-                      ownSampleSize: player.afAdpOwnSampleSize ?? null,
-                    })}
-                    data-testid={`mock-draft-player-af-adp-${player.id}`}
-                  >
-                    AF {player.afAdp != null ? player.afAdp.toFixed(1) : '\u2014'}
-                  </span>
-                </div>
-              </button>
-              <button
-                type="button"
-                disabled={drafted || queued}
-                aria-label={`Queue ${player.name}`}
-                onClick={() => setQueue((current) => current.includes(player.id) ? current : [...current, player.id])}
-                className="min-h-[44px] shrink-0 touch-manipulation rounded-lg border border-white/15 px-3 text-xs text-cyan-200 disabled:opacity-40"
-                data-testid={`mock-draft-queue-add-${player.id}`}
-              >{queued ? 'Queued' : 'Queue'}</button>
+                  <PlayerAvatar
+                    headshotUrl={player.headshotUrl}
+                    displayName={player.name}
+                    teamLogoUrl={player.teamLogoUrl}
+                    teamAbbr={player.team}
+                    position={player.position}
+                    size={32}
+                    testIdBase={`mock-draft-player-avatar-${player.id}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-semibold text-white/90">{player.name}</div>
+                    <div className="text-[11px] text-white/45">
+                      {player.team || 'FA'} · {player.posRank}
+                    </div>
+                  </div>
+                  {queued ? (
+                    <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-black text-orange-200">{mockCopy.queued}</span>
+                  ) : null}
+                  {player.injuryStatus ? <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span> : null}
+                  <div className="flex shrink-0 flex-col items-end leading-tight">
+                    <span className="font-mono text-[11px] text-white/45" title={systemAdpCellTitle(player.adp != null)} data-testid={`mock-draft-player-adp-${player.id}`}>
+                      {player.adp?.toFixed(1) ?? '—'}
+                    </span>
+                    <span
+                      className="font-mono text-[11px] font-semibold"
+                      style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
+                      title={afAdpCellTitle({
+                        hasValue: player.afAdp != null,
+                        contributions: player.afAdpContributions ?? null,
+                        importedSampleSize: player.afAdpImportedSampleSize ?? null,
+                        ownSampleSize: player.afAdpOwnSampleSize ?? null,
+                      })}
+                      data-testid={`mock-draft-player-af-adp-${player.id}`}
+                    >
+                      AF {player.afAdp != null ? player.afAdp.toFixed(1) : '—'}
+                    </span>
+                  </div>
+                </button>
               </div>
             )
           })}
@@ -2397,29 +2492,24 @@ export default function MockDraftSleeperRoomClient({
       </div>
     )
 
-    /*
-     * Roster and chat are separate pieces so the phone tray can show one per tab — before this the Chat
-     * tab stacked the whole roster above a chat a few lines tall, which hid a Chimmy queue card's Confirm
-     * button. On desktop the roster is capped at under half the column so the chat always has room.
-     */
-    const rosterSection = (
-      <div className="shrink-0 border-b border-white/8 p-3 lg:max-h-[45%] lg:overflow-y-auto">
-        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">
-          {onTheClockTeam?.isUser ? 'Your Roster' : `${onTheClockTeam?.managerName ?? 'Current Team'} Roster`}
+    const rosterList = (
+      <div className="h-full min-h-0 overflow-y-auto bg-[#0c0c1e] p-3" data-testid="mock-draft-roster-panel">
+        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/45">
+          {onTheClockTeam?.isUser || !onTheClockTeam ? mockCopy.yourRoster : mockCopy.teamRoster(onTheClockTeam.managerName)}
         </div>
         <div className="mt-3 space-y-1">
           {getRosterSlots(draftState.settings).map((slot, index) => (
             <div key={`${slot}-${index}`} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2 py-1.5">
-              <span className={`w-12 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(slot)}`}>
+              <span className="w-12 rounded px-1 py-0.5 text-center text-[11px] font-black" style={positionChipStyle(slot, sport)}>
                 {slot}
               </span>
               {currentRosterSlots[index] ? (
                 <>
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-white/75">{currentRosterSlots[index]?.playerName}</span>
-                  <span className="text-[11px] text-white/30">{currentRosterSlots[index]?.team}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-white/80">{currentRosterSlots[index]?.playerName}</span>
+                  <span className="text-[11px] text-white/40">{currentRosterSlots[index]?.team}</span>
                 </>
               ) : (
-                <span className="text-[11px] italic text-white/20">Empty</span>
+                <span className="text-[11px] italic text-white/30">{mockCopy.empty}</span>
               )}
             </div>
           ))}
@@ -2427,18 +2517,13 @@ export default function MockDraftSleeperRoomClient({
       </div>
     )
 
-    const chatSection = (
-      <div className="flex min-h-0 flex-1 flex-col p-3">
-        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">Chat</div>
-        <div className="mt-3 min-h-[120px] flex-1 space-y-2 overflow-y-auto" data-mock-chat-log="">
+    const chatBox = (
+      <div className="flex h-full min-h-0 flex-col bg-[#0c0c1e] p-3" data-testid="mock-draft-chat-box">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto" data-mock-chat-log="">
           {draftState.chatMessages.map((message, index) => (
             <div
               key={`${message.role}-${index}`}
-              className={`rounded-lg px-2 py-1.5 text-[11px] ${
-                message.role === 'ai'
-                  ? 'bg-cyan-500/10 text-cyan-100'
-                  : 'bg-white/5 text-white/65'
-              }`}
+              className={`rounded-lg px-2 py-1.5 text-[11px] ${message.role === 'ai' ? 'bg-cyan-500/10 text-cyan-100' : 'bg-white/5 text-white/70'}`}
             >
               {message.content}
               {message.queueProposal ? (
@@ -2458,275 +2543,216 @@ export default function MockDraftSleeperRoomClient({
             </div>
           ))}
         </div>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex shrink-0 gap-2">
           <input
             value={chatInput}
             onChange={(event) => setChatInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') void sendChat()
             }}
-            placeholder="Type a message..."
-            className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/20 focus:outline-none"
+            placeholder={mockCopy.chatPlaceholder}
+            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:outline-none"
             data-testid="mock-draft-chat-input"
           />
           <button
             type="button"
             onClick={() => void sendChat()}
-            className="rounded-xl bg-white/10 px-3 py-2 text-xs text-white/70 hover:text-white"
+            className="min-h-[40px] rounded-xl bg-white/10 px-3 text-xs text-white/75 hover:text-white"
             data-testid="mock-draft-chat-send"
           >
-            Send
+            {mockCopy.send}
           </button>
           <button
             type="button"
             onClick={() => void askAi()}
-            className="rounded-xl bg-[linear-gradient(135deg,#7c3aed,#0891b2)] px-3 py-2 text-xs font-bold text-white"
+            className="min-h-[40px] rounded-xl bg-[linear-gradient(135deg,#7c3aed,#0891b2)] px-3 text-xs font-bold text-white"
             data-testid="mock-draft-ask-ai"
           >
-            Ask Chimmy
+            {headerCopy.askChimmy}
           </button>
         </div>
       </div>
     )
 
-    const rosterAndChatPanel = (
-      <div className="flex h-full flex-col bg-[#0c0c1e]">
-        {rosterSection}
-        {chatSection}
+    const dockPanels: Record<MockDockTab, ReactNode> = { queue: queueList, roster: rosterList, chat: chatBox }
+    const dockTabs: Array<{ id: MockDockTab; label: string }> = [
+      { id: 'queue', label: mockCopy.queue },
+      { id: 'roster', label: mockCopy.roster },
+      { id: 'chat', label: mockCopy.chat },
+    ]
+
+    /*
+     * Desktop and tablet (768px up), the live room's phase-3 arrangement: on a laptop the pool and
+     * a Queue / Roster / Chat dock sit side by side; on a portrait tablet one tab bar (Players plus
+     * the dock tabs) sits over both and they take turns at full width.
+     */
+    const centerColumn = (
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="mock-draft-desktop-layout">
+        <div className="shrink-0 lg:hidden">
+          <MockDockTabBar
+            testIdBase="mock-draft-tablet"
+            tabs={[{ id: 'players', label: mockCopy.players }, ...dockTabs]}
+            active={tabletPanel === 'players' ? 'players' : dockTab}
+            onSelect={(id) => {
+              if (id === 'players') setTabletPanel('players')
+              else selectDockTab(id)
+            }}
+          />
+        </div>
+        <div className="flex min-h-0 flex-1">
+          <div
+            className={`min-h-0 min-w-0 flex-1 overflow-hidden border-r border-white/[0.06] ${
+              tabletPanel === 'players' ? 'max-lg:border-r-0' : 'max-lg:hidden'
+            }`}
+          >
+            {poolPanel}
+          </div>
+          <div
+            className={`flex min-h-0 w-[min(380px,34vw)] shrink-0 flex-col max-lg:w-auto max-lg:flex-1 ${tabletPanel === 'dock' ? '' : 'max-lg:hidden'}`}
+            data-testid="mock-draft-dock"
+          >
+            <div className="shrink-0 max-lg:hidden">
+              <MockDockTabBar testIdBase="mock-draft-dock" tabs={dockTabs} active={dockTab} onSelect={(id) => selectDockTab(id as MockDockTab)} />
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">{dockPanels[dockTab]}</div>
+          </div>
+        </div>
+      </div>
+    )
+
+    /** Phone tray panels: a named region with Close, as the mock's tray always had. */
+    const trayPanel = (title: string, body: ReactNode) => (
+      <div role="region" aria-label={title} className="flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-2 py-2">
+          <div className="text-sm font-bold text-white">{title}</div>
+          <button type="button" onClick={() => setMobileTab('board')} className="min-h-[36px] px-2 text-white/65">
+            {mockCopy.close}
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
+      </div>
+    )
+
+    const status = draftState.status
+    const pausePill =
+      status === 'complete' ? null : status === 'drafting' ? (
+        <button
+          type="button"
+          onClick={pauseMock}
+          className="inline-flex h-8 items-center rounded-full border border-amber-400/40 bg-amber-500/12 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-100 hover:bg-amber-500/20"
+          data-testid="mock-draft-pause"
+        >
+          {mockCopy.pause}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={resumeMock}
+          className="inline-flex h-8 items-center rounded-full border border-emerald-400/40 bg-emerald-500/14 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-100 hover:bg-emerald-500/20"
+          data-testid="mock-draft-resume"
+        >
+          {mockCopy.resume}
+        </button>
+      )
+
+    const topBar = (
+      <>
+        <DraftTopBar
+          leagueName={leaguePayload?.leagueName ?? mockCopy.openMock}
+          sport={sport}
+          draftType={draftState.settings.draftType}
+          teamCount={draftState.settings.teamCount}
+          rounds={draftState.settings.rounds}
+          currentManagerOnClock={status === 'complete' ? null : onTheClockTeam?.managerName ?? null}
+          currentManagerAvatarUrl={onTheClockTeam?.avatarUrl ?? null}
+          isCurrentUserOnClock={isUserTurn}
+          pickLabel={status === 'complete' || draftState.auction ? null : mockPickLabel(draftState.currentPick, draftState.settings.teamCount)}
+          overallPickNumber={status === 'complete' || draftState.auction ? null : draftState.currentPick}
+          timerStatus={
+            status === 'paused' ? 'paused' : status === 'drafting' && isUserTurn && !draftState.auction && draftState.settings.speed > 0 ? 'running' : 'none'
+          }
+          timerRemainingSeconds={draftState.settings.speed > 0 && !draftState.auction ? draftState.timerSeconds : null}
+          timerSeconds={draftState.settings.speed > 0 && !draftState.auction ? draftState.settings.speed : null}
+          isCommissioner={false}
+          draftStatus={status === 'drafting' ? 'in_progress' : status === 'complete' ? 'completed' : 'paused'}
+          showAutoPickPill={false}
+          showInvite={false}
+          controlsSlot={pausePill}
+          extraMenuItems={[
+            { id: 'reset', label: mockCopy.reset, description: mockCopy.resetDesc, testId: 'mock-draft-reset', onSelect: resetToSetup },
+            { id: 'export', label: mockCopy.exportLabel, description: mockCopy.exportDesc, testId: 'mock-draft-export', onSelect: exportDraft },
+          ]}
+          onOpenDraftRoomSettings={() => setSettingsOpen(true)}
+          onOpenChimmy={openChimmy}
+          picksUntilUser={picksUntilUser}
+          idleClockLabel={
+            status !== 'drafting' ? null : draftState.auction ? mockCopy.auctionLive : isUserTurn ? (draftState.settings.speed > 0 ? null : mockCopy.yourPick) : mockCopy.cpuPicking
+          }
+        />
+        {recoveredDraft && status === 'paused' ? (
+          <p role="status" className="shrink-0 border-b border-white/8 bg-[#060d1f] px-3 py-2 text-sm text-cyan-200">
+            {mockCopy.recovered}
+          </p>
+        ) : null}
+      </>
+    )
+
+    /* The live room's dark phone clock bar, under the header. */
+    const clockBar = (
+      <div className="af-core af-dr af-dr-clockbar" role="region" aria-label={roomCopy.clockBarAria} data-testid="mock-draft-clockbar">
+        <div className="af-dr-clockbar-top">
+          <span className="af-dr-clockbar-pick" data-testid="mock-draft-current-pick">
+            {roomCopy.mockPickLabel(draftState.currentPick)}
+            <small>{onTheClockTeam?.managerName ?? ''}</small>
+          </span>
+          {clockProgress != null ? (
+            <span className="af-dr-clockbar-time" data-urgent={clockUrgent ? 'true' : undefined} data-testid="mock-draft-clock">
+              {roomCopy.mockSecondsLeft(draftState.timerSeconds)}
+            </span>
+          ) : null}
+        </div>
+        {clockStatus ? (
+          <span className="af-dr-clockbar-status" data-on-clock={isUserTurn ? 'true' : undefined} data-testid="mock-draft-clock-status">
+            {clockStatus}
+          </span>
+        ) : null}
+        {clockProgress != null ? (
+          <span className="af-dr-clockbar-progress" aria-hidden>
+            <span style={{ width: `${clockProgress}%` }} />
+          </span>
+        ) : null}
       </div>
     )
 
     return (
-      /*
-       * Below lg the room is a fixed-height column — header, board, tray — so the Sleeper-style tray
-       * (DraftMobileTray, shared with the live room) can sit over an always-visible board. Desktop
-       * keeps the scrolling page it always had.
-       */
-      <div className="af-draft-dark min-h-screen bg-[#0a0a18] text-white max-lg:flex max-lg:h-[100dvh] max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden">
-        <div className="shrink-0 border-b border-white/6 bg-[#070b16]/95 backdrop-blur-xl">
-          <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
-                  {leaguePayload?.leagueName ?? 'Open Mock'}
-                </div>
-                <h1 className="mt-1 text-2xl font-black">Sleeper-style draft room</h1>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white/60">
-                {draftState.settings.scoring} · {draftState.settings.teamCount} teams · {draftState.settings.rounds} rounds · {draftState.settings.draftType}
-              </div>
-              <div className="af-core af-dr af-dr-hclock max-lg:hidden" role="status" aria-label={roomCopy.clockBarAria} data-testid="mock-draft-header-clock">
-                <span className="af-dr-hclock-pick">{roomCopy.mockPickLabel(draftState.currentPick)}</span>
-                <span className="af-dr-hclock-team">{onTheClockTeam?.managerName ?? ''}</span>
-                {clockStatus ? <span className="af-dr-hclock-status" data-on-clock={isUserTurn ? 'true' : undefined}>{clockStatus}</span> : null}
-                {clockProgress != null ? (
-                  <>
-                    <span className="af-dr-hclock-time" data-urgent={clockUrgent ? 'true' : undefined}>{roomCopy.mockSecondsLeft(draftState.timerSeconds)}</span>
-                    <span className="af-dr-clock-progress" aria-hidden><span style={{ width: `${clockProgress}%` }} /></span>
-                  </>
-                ) : null}
-              </div>
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                {draftState.status === 'drafting' ? (
-                  <button
-                    type="button"
-                    onClick={() => setDraftState((current) => current ? {
-                      ...current, status: 'paused', pausedRemainingMs: Math.max(0, (current.turnDeadlineMs ?? Date.now()) - Date.now()), turnDeadlineMs: null,
-                      pausedAtMs: Date.now(),
-                    } : current)}
-                    className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
-                    data-testid="mock-draft-pause"
-                  >
-                    Pause
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDraftState((current) =>
-                        current && current.status !== 'complete' && current.auction
-                          ? { ...current, status: 'drafting', pausedRemainingMs: undefined, pausedAtMs: undefined,
-                              auction: resumeMockAuction(current.auction, {
-                                pausedForMs: Date.now() - (current.pausedAtMs ?? Date.now()),
-                                now: Date.now(),
-                                timing: mockAuctionTiming(current.settings.speed),
-                              }) }
-                          : current && current.status !== 'complete'
-                          ? { ...current, status: 'drafting',
-                              turnDeadlineMs: Date.now() + (current.pausedRemainingMs ?? mockTurnDurationMs(current.settings.speed, Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser))),
-                              timerSeconds: Math.ceil((current.pausedRemainingMs ?? current.settings.speed * 1000) / 1000), pausedRemainingMs: undefined }
-                          : current,
-                      )
-                    }
-                    className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
-                    data-testid="mock-draft-resume"
-                  >
-                    Resume
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={resetToSetup}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
-                  data-testid="mock-draft-reset"
-                >
-                  Reset
-                </button>
-                <button
-                  type="button"
-                  onClick={exportDraft}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
-                  data-testid="mock-draft-export"
-                >
-                  Export
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettingsOpen(true)}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
-                  data-testid="mock-draft-settings-open"
-                >
-                  Settings
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      <LanguageFallbackBoundary>
+        <DraftRoomShell
+          layout="premium"
+          topBar={topBar}
+          managerStrip={null}
+          modeBanner={<DraftModeBanner mode="mock" />}
+          auctionStrip={auctionPanelProps ? <div data-testid="mock-draft-auction-stage"><AuctionSpotlightPanel {...auctionPanelProps} /></div> : undefined}
+          mobileBidDock={auctionPanelProps ? <AuctionBidDock {...auctionPanelProps} /> : undefined}
+          mobileStickyBar={clockBar}
+          draftBoard={boardNode}
+          centerColumn={centerColumn}
+          playerPanel={trayPanel(mockCopy.players, poolPanel)}
+          queuePanel={trayPanel(mockCopy.queue, queueList)}
+          rosterPanel={trayPanel(mockCopy.currentRoster, rosterList)}
+          chatPanel={trayPanel(mockCopy.draftChat, chatBox)}
+          mobileTab={mobileTab}
+          onMobileTabChange={setMobileTab}
+        />
 
-        <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 max-lg:flex max-lg:min-h-0 max-lg:w-full max-lg:flex-1 max-lg:flex-col max-lg:px-0 max-lg:pb-0 max-lg:pt-2">
-          {recoveredDraft && draftState.status === 'paused' ? <p role="status" className="mb-3 text-sm text-cyan-200 max-lg:px-3">Recovered your mock draft. Review your picks and queue, then tap Resume.</p> : null}
-          {/* Desktop only: on a phone the header's "Open Mock" line names the mode, and the board needs the rows. */}
-          <div className="mb-3 hidden lg:block">
-            <DraftModeBanner mode="mock" />
-          </div>
-          <div className="hidden min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-[#0d1424] lg:flex lg:flex-col" data-testid="mock-draft-desktop-layout">
-            {auctionPanelProps ? (
-              <div className="shrink-0 border-b border-white/[0.06]" data-testid="mock-draft-auction-stage">
-                <AuctionSpotlightPanel {...auctionPanelProps} />
-              </div>
-            ) : null}
-            <div className="max-h-[min(50vh,600px)] min-h-[240px] min-w-0 overflow-auto">{boardNode}</div>
-            <div className="grid h-[min(50vh,560px)] min-h-[320px] grid-cols-[minmax(0,1fr)_minmax(320px,35%)] border-t border-white/[0.06]">
-              <div className="min-h-0 min-w-0 overflow-hidden border-r border-white/[0.06]">{playerPanel}</div>
-              <div className="min-h-0 min-w-0 overflow-hidden">{rosterAndChatPanel}</div>
-            </div>
-          </div>
-
-          <div
-            ref={mobileLayoutRef}
-            className="relative flex min-h-0 flex-1 flex-col lg:hidden"
-            data-testid="mock-draft-mobile-layout"
-          >
-            {/*
-              The live room's dark phone clock bar. Its Search / Queue / Roster / Chat buttons are not
-              repeated here: this room's tab bar under the board already carries Players, Roster and
-              Chat, two rows below, and the queue lives in the Players panel.
-            */}
-            <div className="af-core af-dr af-dr-clockbar shrink-0" role="region" aria-label={roomCopy.clockBarAria} data-testid="mock-draft-clockbar">
-              <div className="af-dr-clockbar-top">
-                <span className="af-dr-clockbar-pick" data-testid="mock-draft-current-pick">
-                  {roomCopy.mockPickLabel(draftState.currentPick)}
-                  <small>{onTheClockTeam?.managerName ?? ''}</small>
-                </span>
-                {clockProgress != null ? (
-                  <span className="af-dr-clockbar-time" data-urgent={clockUrgent ? 'true' : undefined} data-testid="mock-draft-clock">
-                    {roomCopy.mockSecondsLeft(draftState.timerSeconds)}
-                  </span>
-                ) : null}
-              </div>
-              {clockStatus ? (
-                <span className="af-dr-clockbar-status" data-on-clock={isUserTurn ? 'true' : undefined} data-testid="mock-draft-clock-status">
-                  {clockStatus}
-                </span>
-              ) : null}
-              {clockProgress != null ? (
-                <span className="af-dr-clockbar-progress" aria-hidden>
-                  <span style={{ width: `${clockProgress}%` }} />
-                </span>
-              ) : null}
-            </div>
-            <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-2 ${auctionPanelProps && mobilePanel == null ? 'pb-24' : 'pb-3'}`}>
-            {auctionPanelProps ? (
-              <div className="mb-2 overflow-hidden rounded-2xl border border-white/8 bg-[#0d1424]" data-testid="mock-draft-auction-stage-mobile">
-                <AuctionSpotlightPanel {...auctionPanelProps} />
-              </div>
-            ) : null}
-            <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-4">
-              {boardNode}
-            </div>
-            </div>
-
-            <DraftMobileTray
-              open={mobilePanel != null}
-              onRequestCollapse={() => setMobilePanel(null)}
-              onRequestExpand={() => setMobilePanel(lastMobilePanelRef.current)}
-              layoutRef={mobileLayoutRef}
-              fullOnInputFocus={mobilePanel === 'chat'}
-              dock={auctionPanelProps && mobilePanel == null ? <AuctionBidDock {...auctionPanelProps} /> : null}
-              testIdPrefix="mock-draft-mobile"
-              ariaLabel="Draft tray"
-              chrome={
-                <nav
-                  className="safe-area-bottom flex shrink-0 border-t border-white/10 bg-[#070f21]/95"
-                  aria-label="Draft sections"
-                  data-testid="mock-draft-mobile-nav"
-                >
-                  {MOCK_MOBILE_TABS.map(({ id, label, icon: Icon }) => {
-                    const active = id === 'board' ? mobilePanel == null : mobilePanel === id
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setMobilePanel(id === 'board' ? null : id)}
-                        data-testid={`mock-draft-mobile-tab-${id}`}
-                        aria-pressed={active}
-                        aria-label={label}
-                        className={`flex min-h-[48px] flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 py-2 text-[11px] active:scale-[0.98] ${
-                          active
-                            ? 'bg-cyan-500/12 text-cyan-100 shadow-[inset_0_1px_0_rgba(34,211,238,0.2)]'
-                            : 'text-white/65 hover:text-white/85'
-                        }`}
-                      >
-                        <Icon className="h-5 w-5 shrink-0" aria-hidden />
-                        <span>{label}</span>
-                      </button>
-                    )
-                  })}
-                </nav>
-              }
-            >
-              {mobilePanel ? (
-                <div
-                  key={mobilePanel}
-                  role="region"
-                  aria-label={mobilePanel === 'players' ? 'Players' : mobilePanel === 'roster' ? 'Current Roster' : 'Draft Chat'}
-                  className="flex h-full min-h-0 flex-col"
-                  data-testid="mock-draft-mobile-content"
-                  data-active-tab={mobilePanel}
-                >
-                  <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-4 py-2">
-                    <div className="text-sm font-bold text-white">
-                      {mobilePanel === 'players' ? 'Players' : mobilePanel === 'roster' ? 'Current Roster' : 'Draft Chat'}
-                    </div>
-                    <button type="button" onClick={() => setMobilePanel(null)} className="text-white/60">
-                      Close
-                    </button>
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                    {mobilePanel === 'players' ? (
-                      playerPanel
-                    ) : mobilePanel === 'roster' ? (
-                      <div className="bg-[#0c0c1e]">{rosterSection}</div>
-                    ) : (
-                      <div className="flex h-full flex-col bg-[#0c0c1e]">{chatSection}</div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </DraftMobileTray>
-          </div>
-        </div>
-
+        {!draftState.auction ? (
+          <DraftRoundOneAnnouncementOverlay
+            variant="toast"
+            leagueName={leaguePayload?.leagueName ?? undefined}
+            sportLabel={sport}
+            queue={roundOneQueue}
+            onDismissFront={dismissRoundOne}
+          />
+        ) : null}
         {settingsOpen && draftState ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="w-full max-w-xl rounded-3xl border border-white/8 bg-[#0c1224] p-6">
@@ -2801,7 +2827,7 @@ export default function MockDraftSleeperRoomClient({
             </div>
           </div>
         ) : null}
-      </div>
+      </LanguageFallbackBoundary>
     )
   }
 
@@ -2844,7 +2870,7 @@ export default function MockDraftSleeperRoomClient({
                         position={pick.position}
                         size={36}
                       />
-                      <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
+                      <span className="rounded px-1.5 py-0.5 text-[11px] font-black" style={positionChipStyle(pick.position, draftState?.settings.sport)}>
                         {pick.position}
                       </span>
                       <span className="truncate text-sm font-semibold text-white">{pick.playerName}</span>

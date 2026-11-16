@@ -192,6 +192,12 @@ export const PRO_ONLY_TOOL_LABEL = {
   get_faab_bid_plan: 'FAAB bid plans',
   recall_past_chats: 'recalling your past chats',
   get_draft_pick_outlook: "who's likely gone before your pick",
+  /*
+   * A leaguemate's record (2026-11-16) is gated on Competitive Edge, not on the Chimmy plan — so it is
+   * on this label map for the button line, and OFF the executor's pre-gate (`chimmyDepth.ts`): a War
+   * Room member has Competitive Edge without AF Pro's Chimmy depth.
+   */
+  get_manager_record: "a leaguemate's full record",
 } as const
 
 export type ChimmyProOnlyTool = keyof typeof PRO_ONLY_TOOL_LABEL

@@ -2259,6 +2259,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
             devy: normalizeToSupportedSport(sport) === 'NCAAF',
             projections: true,
             leagueRules: true,
+            /*
+             * IDP and kicker values under THIS league's scoring (re-score item 8, 2026-11-16). The slice's own exit
+             * returns before any query in a league that rosters neither, and it is bounded by the packet's clock
+             * (`IDP_KICKER_DEADLINE_MS`), so a slow read costs this slice, never the packet.
+             */
+            idpKicker: true,
             // The intent router's four low-risk mappings — see the comment above this block.
             ...earlyWant,
           },

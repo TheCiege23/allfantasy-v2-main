@@ -197,6 +197,21 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_manager_record',
+      description:
+        "A leaguemate's record in the league in scope, as facts: how many trades they have made and which positions they took on or sent away, their waiver claims and FAAB left this season, and what they took in this league's past drafts. Use for 'what does Mike usually do in trades', 'is Sam active on waivers', 'how much FAAB does everyone have', 'who trades the most here'. Name the manager (owner or team name) for one full record; leave it out for a one-line summary of every other manager. Part of Competitive Edge: without the plan it says so, and you must not describe anyone's habits yourself. Facts only — never label a manager or predict what they will do.",
+      parameters: {
+        type: 'object',
+        properties: {
+          manager: { type: 'string', description: "The manager's name or team name, as the user said it. Omit for every manager." },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'find_league_by_name',
       description:
         "Select one of the user's own leagues by the name they used, e.g. 'KBFL' or 'Dynasty for life'. Call this FIRST whenever the question names a league, before any other league tool — otherwise nothing is selected and the other tools have nothing to read. It takes a NAME, never an id.",
@@ -276,7 +291,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_value',
       description:
-        "What ONE named player is worth on the AllFantasy 0-10000 value scale — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. Returns long-term asset value for TRADING, not a weekly points projection and not a start/sit ranking. Only a few hundred players carry a published value; it says so plainly when there is no row, and a miss is NOT evidence the player is worthless.",
+        "What ONE named player is worth — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. In an NBA league in scope it returns that league's own value: fantasy points (or category score) over the best free agent, rest of season, plus a dynasty value in a dynasty league — the same pricing the Trade Center grades with. Otherwise it returns the AllFantasy 0-10000 NFL value scale, long-term asset value for TRADING; only a few hundred players carry a published NFL value, and a miss is NOT evidence the player is worthless. Never a weekly points projection or a start/sit ranking.",
       parameters: {
         type: 'object',
         properties: {
@@ -322,7 +337,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'explain_value',
       description:
-        "WHY a player is worth what he is worth — the step-by-step derivation: projection, the conversion to the value scale, positional scarcity, draft capital, and any compression at the top. Use when the user challenges or asks about a number ('why is he only worth that', 'how did you get that', 'that seems low'). Different from get_player_value, which reports the stored published number; this runs the engine over current inputs and can legitimately disagree with it, in which case it says so. Uses DEFAULT positional scarcity because it takes no league.",
+        "WHY a player is worth what he is worth — the step-by-step derivation: projection, the conversion to the value scale, positional scarcity, draft capital, and any compression at the top. Use when the user challenges or asks about a number ('why is he only worth that', 'how did you get that', 'that seems low'). Different from get_player_value, which reports the stored published number; this runs the engine over current inputs and can legitimately disagree with it, in which case it says so. Uses DEFAULT positional scarcity because it takes no league. Football only on that engine: in an NBA league in scope it explains that league's own value instead (per game against the best free agent, times games left).",
       parameters: {
         type: 'object',
         properties: {
@@ -999,6 +1014,20 @@ export async function executeChimmyTool(
         const { buildDraftAnalysisContext } = await import('@/lib/chimmy/tools/draftAnalysisTool')
         return await buildDraftAnalysisContext(ctx, args)
       }
+      case 'get_manager_record': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { buildManagerRecordContext } = await import('@/lib/chimmy/managerRecordGrounding')
+        const out = await buildManagerRecordContext({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          manager: typeof args.manager === 'string' ? args.manager.slice(0, 80) : null,
+        })
+        // Without Competitive Edge: the chat's own AF Pro line and button (lib/chimmy/answerPolish.ts), from
+        // this refusal — the same path every AF Pro tool's refusal takes.
+        if (out.locked && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
+        return out.text
+      }
+
       case 'get_league_trade_activity': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [{ buildTradeContextForChimmy }, { buildPendingTradeDecisionContext }, { buildLeagueTradeHistoryContext }] = await Promise.all([
@@ -1230,6 +1259,16 @@ export async function executeChimmyTool(
        */
       case 'get_player_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
+        /*
+         * An NBA league in scope (2026-11-16): the league's own value board — the same pricing the trade
+         * grade uses (lib/chimmy/sportBoardValue.ts). Null for any other sport, which keeps the NFL
+         * market values below.
+         */
+        if (ctx.leagueId) {
+          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
+          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
+          if (board != null) return board
+        }
         return await buildPlayerValueContext({ playerName: asked })
       }
 
@@ -1252,6 +1291,16 @@ export async function executeChimmyTool(
       case 'explain_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
+        /*
+         * In an NBA league in scope, "why is he worth that" is answered from the league's own value board —
+         * per game against the best free agent, times games left (lib/chimmy/sportBoardValue.ts). Null for
+         * any other league sport, or when the model asked about another sport.
+         */
+        if (ctx.leagueId && (!sport || sport.trim().toUpperCase() === 'NBA')) {
+          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
+          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
+          if (board != null) return `WHY (the league's own value, step by step):\n${board}`
+        }
         return await buildExplainValueContext({ playerName: asked, sport })
       }
 

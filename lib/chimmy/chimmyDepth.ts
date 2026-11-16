@@ -42,7 +42,12 @@ export type ChimmyDepth = {
  * Tools only a plan that includes Chimmy may run. The heavy analyst work (a season simulation, a
  * league-wide trade search, a FAAB bid model) and the cross-conversation memory read.
  */
-export const PRO_ONLY_CHIMMY_TOOLS = Object.keys(PRO_ONLY_TOOL_LABEL) as readonly ChimmyProOnlyTool[]
+/** Gated by their own entitlement inside the tool, not by the Chimmy plan — on the label map for the button only. */
+export const OWN_GATE_CHIMMY_TOOLS: readonly ChimmyProOnlyTool[] = ['get_manager_record']
+
+export const PRO_ONLY_CHIMMY_TOOLS = (Object.keys(PRO_ONLY_TOOL_LABEL) as ChimmyProOnlyTool[]).filter(
+  (t) => !OWN_GATE_CHIMMY_TOOLS.includes(t),
+) as readonly ChimmyProOnlyTool[]
 
 export const CHIMMY_DEPTH: Record<ChimmyDepthTier, ChimmyDepth> = {
   // Byte-for-byte what every user got before this package.

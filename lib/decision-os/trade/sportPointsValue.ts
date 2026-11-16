@@ -401,6 +401,56 @@ export function replacementFromLineups(
 
 type Priced = { name: string; value: number }
 
+/** One player's price on the board, or why not — what a value lookup and the trade grade both read. */
+export type BoardPlayerPrice =
+  | {
+      ok: true
+      player: BoardPlayer
+      /** The best free agent at his position, per game, under the league's rules. */
+      replacementPerGame: number
+      replacementName: string
+      /** Rest-of-season value over replacement: max(0, perGame − replacement) × games left. */
+      value: number
+    }
+  | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' }
+
+/**
+ * ONE player, priced the way the trade grade prices him (2026-11-16): the same resolution, sample bar,
+ * replacement level and rest-of-season multiplier. `priceSide` below calls this, so a player's value and
+ * a deal's grade cannot disagree about him. The refusal reasons are the grade's own, minus its
+ * "This deal is not graded." tail.
+ */
+export function priceBoardPlayer(
+  asset: { playerId?: string | null; rosterPlayerId?: string | null; name?: string | null },
+  ctx: SportPointsContext,
+  index: ReadonlyMap<string, BoardPlayer> = indexBoard(ctx.board),
+): BoardPlayerPrice {
+  const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
+  if (!found.ok) return { ok: false, reason: found.reason, valuationGap: found.valuationGap }
+  const { player } = found
+  if (!meetsSampleBar(player)) {
+    const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
+    const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
+    return { ok: false, reason: `${player.name}’s projection rests on ${has}, too few to price — values start at ${needs}.` }
+  }
+  const pos = player.position.trim().toUpperCase()
+  const replacement = ctx.replacementByPosition.get(pos)
+  if (!replacement) {
+    return {
+      ok: false,
+      reason: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level.`,
+    }
+  }
+  // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
+  return {
+    ok: true,
+    player,
+    replacementPerGame: replacement.perGame,
+    replacementName: replacement.name,
+    value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining,
+  }
+}
+
 function priceSide(
   assets: readonly TradeAssetInput[],
   ctx: SportPointsContext,
@@ -410,23 +460,12 @@ function priceSide(
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: SPORT_PICKS_REASON(ctx.sport) }
     if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
-    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
-    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
-    const { player } = found
-    if (!meetsSampleBar(player)) {
-      const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
-      const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
-      return { withheld: `${player.name}’s projection rests on ${has}, too few to price — grades start at ${needs}. This deal is not graded.` }
+    const price = priceBoardPlayer(asset, ctx, index)
+    if (!price.ok) {
+      const reason = price.reason.replace(/ — values start at /, ' — grades start at ')
+      return { withheld: `${reason} This deal is not graded.`, ...(price.valuationGap ? { valuationGap: price.valuationGap } : {}) }
     }
-    const pos = player.position.trim().toUpperCase()
-    const replacement = ctx.replacementByPosition.get(pos)
-    if (!replacement) {
-      return {
-        withheld: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level. This deal is not graded.`,
-      }
-    }
-    // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
-    priced.push({ name: player.name, value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining })
+    priced.push({ name: price.player.name, value: price.value })
   }
   return { priced }
 }

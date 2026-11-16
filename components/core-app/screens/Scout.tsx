@@ -9,6 +9,7 @@ import '@/components/core-app/af-scout.css'
 import '@/components/core-app/af-core-redraft-trades.css'
 import '@/components/core-app/af-scout-room.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { ManagerRecordButton } from '@/components/core-app/manager-record/ManagerRecordSheet'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -285,11 +286,14 @@ function Facts({ s }: { s: ScoutStanding }) {
 
 function ManagerCard({
   m,
+  leagueId,
   tradesHref,
   edge,
   elimination = null,
 }: {
   m: ScoutedManager
+  /** For the manager card ("Full record"). */
+  leagueId: string
   tradesHref: string
   edge: ScoutEdgeManager | null
   /** Set in an elimination league: the card shows Safe / On the bubble / Eliminated, never a playoff zone. */
@@ -369,15 +373,22 @@ function ManagerCard({
         {edge ? <EdgeLine m={edge} /> : null}
 
         {/* No trade with yourself, and none with a chopped team — its roster has gone to waivers. */}
-        {m.isYou || m.eliminated ? null : (
+        {m.isYou ? null : (
           <footer className="af-sc-card-foot">
+            {/*
+              Their whole record as facts — trades by position, waivers, past drafts (2026-11-16). The
+              card checks the plan on the server and draws the lock without it.
+            */}
+            <ManagerRecordButton leagueId={leagueId} teamExternalId={m.managerId} managerName={m.ownerName ?? m.teamName} />
             {/*
               The Trade Center grades a deal with them, and its Competitive Edge section binds their
               trade record to the positions in that deal — more than the counts above can say.
             */}
-            <Link className="af-sc-cta" href={tradesHref}>
-              {msg.buildTrade} &rarr;
-            </Link>
+            {m.eliminated ? null : (
+              <Link className="af-sc-cta" href={tradesHref}>
+                {msg.buildTrade} &rarr;
+              </Link>
+            )}
           </footer>
         )}
       </article>
@@ -755,6 +766,7 @@ export function Scout({
             <ManagerCard
               key={m.managerId}
               m={m}
+              leagueId={data.league.id}
               tradesHref={tradesHref}
               edge={m.isYou ? null : (edgeBy?.[m.managerId] ?? null)}
               elimination={data.format.elimination ? { status: elimStatusOf(m, eliminationStanding) } : null}

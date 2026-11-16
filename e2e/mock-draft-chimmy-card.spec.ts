@@ -64,6 +64,7 @@ test.describe('@mock-draft-room Chimmy queue card', () => {
     const boards = await openRoom(page, proposalFor)
     await page.getByRole('button', { name: 'Queue Bravo', exact: true }).first().click()
 
+    await page.getByTestId('mock-draft-dock-tab-chat').click()
     await page.getByTestId('mock-draft-chat-input').fill('Queue Charlie at the top')
     await page.getByTestId('mock-draft-chat-send').click()
     const card = page.getByTestId('mock-draft-queue-card').last()
@@ -78,7 +79,7 @@ test.describe('@mock-draft-room Chimmy queue card', () => {
     // The chat follows the newest message: Confirm is in view without scrolling the chat log by hand.
     await page.getByTestId('mock-draft-chat-input').scrollIntoViewIfNeeded()
     await expect(card.getByTestId('mock-draft-queue-confirm')).toBeInViewport()
-    const column = page.locator('[data-mock-chat-log]').locator('xpath=../..')
+    const column = page.getByTestId('mock-draft-dock')
     await column.screenshot({ path: testInfo.outputPath('desktop-queue-card.png') })
     await page.screenshot({ path: testInfo.outputPath('desktop-room.png') })
 
@@ -103,6 +104,7 @@ test.describe('@mock-draft-room Chimmy queue card', () => {
   test('a card made against an older queue is refused, not applied', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
     await openRoom(page, proposalFor)
+    await page.getByTestId('mock-draft-dock-tab-chat').click()
     await page.getByTestId('mock-draft-chat-input').fill('Queue Charlie')
     await page.getByTestId('mock-draft-chat-send').click()
     const card = page.getByTestId('mock-draft-queue-card').last()
@@ -123,16 +125,12 @@ test.describe('@mock-draft-room Chimmy queue card', () => {
     await panel.getByTestId('mock-draft-chat-send').click()
     await expect(panel.getByTestId('mock-draft-queue-card')).toBeVisible()
     await expect(panel.getByTestId('mock-draft-pro-upsell')).toContainText("AF Pro adds who's likely gone before your pick.")
-    // The Chat tab is the chat alone now (Roster has its own tab), and Confirm is in view.
-    await expect(panel.getByText('Your Roster', { exact: true })).toHaveCount(0)
+    // The chat follows the newest message, so Confirm is in view.
     await expect(panel.getByTestId('mock-draft-queue-confirm')).toBeInViewport()
     await page.screenshot({ path: testInfo.outputPath('phone-queue-card.png') })
     await panel.getByTestId('mock-draft-queue-confirm').click()
     await expect(panel.getByTestId('mock-draft-queue-card-state')).toContainText('Done — your queue is updated.')
     await page.screenshot({ path: testInfo.outputPath('phone-queue-card-confirmed.png') })
-    await panel.getByRole('button', { name: 'Close', exact: true }).click()
-    await page.getByRole('button', { name: 'Roster', exact: true }).click()
-    await expect(page.getByRole('region', { name: 'Current Roster', exact: true }).getByTestId('mock-draft-chat-input')).toHaveCount(0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
