@@ -63,7 +63,18 @@ describe('mock room v2 — the live room\'s shell and header', () => {
     expect(menu.contains(screen.getByTestId('mock-draft-reset'))).toBe(true)
     expect(menu.contains(screen.getByTestId('mock-draft-export'))).toBe(true)
     expect(screen.queryByTestId('draft-topbar-set-order')).toBeNull()
+    // A solo mock has nobody to invite.
+    expect(screen.queryByTestId('draft-copy-invite-inline')).toBeNull()
+    expect(screen.queryByTestId('draft-topbar-copy-invite')).toBeNull()
     expect(screen.queryByTestId('draft-topbar-open-settings')).toBeNull()
+  })
+
+  it('a CPU turn reads "CPU picking" in the clock pill, never an empty "in progress –"', async () => {
+    await renderRoom({ onTheClock: 2, currentPick: 2, picks: [{ overall: 1, round: 1, pick: 1, slot: 1, playerId: 'Alpha', playerName: 'Alpha', position: 'PG', team: 'LAL', adp: 1, projectedPts: 80, isUser: true, managerName: 'Manager 1' }] })
+    expect(screen.queryByTestId('draft-topbar-idle-clock')).toBeNull()
+    fireEvent.click(screen.getByTestId('mock-draft-resume'))
+    expect((await screen.findByTestId('draft-topbar-idle-clock')).textContent).toBe('CPU picking')
+    expect(screen.queryByTestId('draft-topbar-timer-value')).toBeNull()
   })
 
   it('on a tablet one tab bar leads with Players, and a dock tab takes the screen from the pool', async () => {
@@ -127,6 +138,18 @@ describe('mock room v2 — round-1 announcement', () => {
     expect(card.className).toContain('pointer-events-none')
     expect(card.textContent).toContain('Alpha')
   })
+
+  it('your own card keeps its time when a CPU manager picks right after you', async () => {
+    await renderRoom()
+    fireEvent.click(screen.getByTestId('mock-draft-resume'))
+    await waitFor(() => expect((screen.getAllByTestId('mock-draft-player-draft-Alpha')[0] as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getAllByTestId('mock-draft-player-draft-Alpha')[0])
+    await screen.findByTestId('draft-round-one-announcement')
+    // Manager 2 (CPU) picks next, still in round 1.
+    await waitFor(() => expect(saved().state.picks).toHaveLength(2), { timeout: 8_000 })
+    await waitFor(() => expect(screen.getByTestId('draft-round-one-announcement').textContent).toContain('Alpha'))
+    expect(screen.getByTestId('draft-round-one-announcement').textContent).toContain('1.01')
+  }, 15_000)
 
   it('picks already on the board when a mock is restored are not announced again', async () => {
     const pick = { overall: 1, round: 1, pick: 1, slot: 1, playerId: 'Alpha', playerName: 'Alpha', position: 'PG', team: 'LAL', adp: 1, projectedPts: 80, isUser: true, managerName: 'Manager 1' }

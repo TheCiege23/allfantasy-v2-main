@@ -107,7 +107,7 @@ export function DraftRoundOneAnnouncementOverlay({
     <div
       className={`${
         toast
-          ? 'pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] z-[95] flex justify-center px-3 md:bottom-6'
+          ? 'pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+7.5rem)] z-[95] flex justify-center px-3 md:inset-x-auto md:bottom-auto md:right-5 md:top-36 md:justify-end md:px-0'
           : 'fixed inset-0 z-[95] flex items-center justify-center bg-black/55 px-3 backdrop-blur-[2px]'
       } ${
         entered ? 'opacity-100' : 'opacity-0'

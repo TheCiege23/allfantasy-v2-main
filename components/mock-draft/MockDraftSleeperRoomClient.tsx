@@ -101,12 +101,12 @@ export function mockPickLabel(overall: number, teamCount: number): string {
 }
 
 /** A mock pick in the live room's snapshot shape (the auction panel and the round-1 card). */
-function toPickSnapshot(pick: DraftPick): DraftPickSnapshot {
+function toPickSnapshot(pick: DraftPick, teamCount: number): DraftPickSnapshot {
   return {
     id: `mock-${pick.overall}`, overall: pick.overall, round: pick.round, slot: pick.slot, rosterId: String(pick.slot),
     displayName: pick.managerName, playerName: pick.playerName, position: pick.position, team: pick.team || null,
     byeWeek: null, playerId: pick.playerId, playerImageUrl: pick.headshotUrl ?? null, tradedPickMeta: null,
-    source: 'mock', pickLabel: `${pick.round}.${pick.slot}`, amount: pick.price ?? null, createdAt: '',
+    source: 'mock', pickLabel: mockPickLabel(pick.overall, teamCount), amount: pick.price ?? null, createdAt: '',
   }
 }
 
@@ -745,10 +745,11 @@ export default function MockDraftSleeperRoomClient({
   const mockCopy = useMessages(mockDraftRoomMessages)
   const headerCopy = useMessages(draftRoomHeaderMessages)
   /*
-   * Round-1 picks get the live room's announcement card, as a toast (`variant="toast"`): CPU
-   * managers pick seconds apart, so the queue keeps only the card on screen and the newest pick
-   * rather than a backlog still playing in round 3. Picks already on the board when the room
-   * mounts (a restored mock) are not announced again.
+   * Round-1 picks get the live room's announcement card, as a toast (`variant="toast"`). CPU
+   * managers pick seconds apart, so a newer pick replaces a CPU card at once instead of queueing
+   * behind it (a backlog would still be playing in round 3); the viewer's own card keeps its full
+   * time, with the newest pick waiting behind it. Picks already on the board when the room mounts
+   * (a restored mock) are not announced again.
    */
   const [roundOneQueue, setRoundOneQueue] = useState<RoundOneAnnouncementQueueItem[]>([])
   const announcedThroughRef = useRef<number | null>(null)
@@ -1230,7 +1231,7 @@ export default function MockDraftSleeperRoomClient({
     const order = [...draftState.teams].sort((a, b) => a.slot - b.slot)
     const budgets: Record<string, number> = {}
     for (const team of order) budgets[String(team.slot)] = auction.budgets[team.slot] ?? auction.budgetPerTeam
-    const picks: DraftPickSnapshot[] = draftState.picks.map(toPickSnapshot)
+    const picks: DraftPickSnapshot[] = draftState.picks.map((pick) => toPickSnapshot(pick, draftState.settings.teamCount))
     const deadline = lot?.endsAtMs ?? auction.nominationDeadlineMs
     const paused = draftState.status === 'paused'
     return {
@@ -1692,12 +1693,12 @@ export default function MockDraftSleeperRoomClient({
     const newest = picks.slice(through).filter((pick) => pick.round === 1).pop()
     if (!newest) return
     const item: RoundOneAnnouncementQueueItem = {
-      id: `mock-r1-${newest.overall}`,
-      pick: toPickSnapshot(newest),
+      id: `mock-r1-${newest.isUser ? 'you' : 'cpu'}-${newest.overall}`,
+      pick: toPickSnapshot(newest, draftState.settings.teamCount),
       headshotUrl: newest.headshotUrl ?? null,
       teamLogoUrl: newest.teamLogoUrl ?? null,
     }
-    setRoundOneQueue((queue) => (queue.length ? [queue[0], item] : [item]))
+    setRoundOneQueue((queue) => (queue[0]?.id.startsWith('mock-r1-you-') ? [queue[0], item] : [item]))
   }, [draftState])
 
   const currentRosterSlots = useMemo(
@@ -2514,8 +2515,8 @@ export default function MockDraftSleeperRoomClient({
           currentManagerOnClock={status === 'complete' ? null : onTheClockTeam?.managerName ?? null}
           currentManagerAvatarUrl={onTheClockTeam?.avatarUrl ?? null}
           isCurrentUserOnClock={isUserTurn}
-          pickLabel={status === 'complete' ? null : mockPickLabel(draftState.currentPick, draftState.settings.teamCount)}
-          overallPickNumber={status === 'complete' ? null : draftState.currentPick}
+          pickLabel={status === 'complete' || draftState.auction ? null : mockPickLabel(draftState.currentPick, draftState.settings.teamCount)}
+          overallPickNumber={status === 'complete' || draftState.auction ? null : draftState.currentPick}
           timerStatus={
             status === 'paused' ? 'paused' : status === 'drafting' && isUserTurn && !draftState.auction && draftState.settings.speed > 0 ? 'running' : 'none'
           }
@@ -2524,6 +2525,7 @@ export default function MockDraftSleeperRoomClient({
           isCommissioner={false}
           draftStatus={status === 'drafting' ? 'in_progress' : status === 'complete' ? 'completed' : 'paused'}
           showAutoPickPill={false}
+          showInvite={false}
           controlsSlot={pausePill}
           extraMenuItems={[
             { id: 'reset', label: mockCopy.reset, description: mockCopy.resetDesc, testId: 'mock-draft-reset', onSelect: resetToSetup },
@@ -2532,6 +2534,9 @@ export default function MockDraftSleeperRoomClient({
           onOpenDraftRoomSettings={() => setSettingsOpen(true)}
           onOpenChimmy={openChimmy}
           picksUntilUser={picksUntilUser}
+          idleClockLabel={
+            status !== 'drafting' ? null : draftState.auction ? mockCopy.auctionLive : isUserTurn ? (draftState.settings.speed > 0 ? null : mockCopy.yourPick) : mockCopy.cpuPicking
+          }
         />
         {recoveredDraft && status === 'paused' ? (
           <p role="status" className="shrink-0 border-b border-white/8 bg-[#060d1f] px-3 py-2 text-sm text-cyan-200">

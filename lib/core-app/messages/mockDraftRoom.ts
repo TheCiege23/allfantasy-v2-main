@@ -43,6 +43,9 @@ export const mockDraftRoomMessages = defineMessages({
     sortBy: 'Sort by',
     chatPlaceholder: 'Type a message...',
     send: 'Send',
+    cpuPicking: 'CPU picking',
+    yourPick: 'Your pick',
+    auctionLive: 'Auction live',
   },
   es: {
     openMock: 'Simulacro abierto',
@@ -80,5 +83,8 @@ export const mockDraftRoomMessages = defineMessages({
     sortBy: 'Ordenar por',
     chatPlaceholder: 'Escribe un mensaje...',
     send: 'Enviar',
+    cpuPicking: 'Elige la CPU',
+    yourPick: 'Te toca',
+    auctionLive: 'Subasta en vivo',
   },
 })

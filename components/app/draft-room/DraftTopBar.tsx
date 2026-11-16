@@ -139,6 +139,13 @@ type DraftTopBarProps = {
   controlsSlot?: ReactNode
   /** Extra rows at the end of the ⋯ menu's room section (the mock room's Reset and Export). */
   extraMenuItems?: Array<{ id: string; label: string; description?: string; testId: string; onSelect: () => void }>
+  /**
+   * What the clock pill says when no clock is running, in place of the draft status and an empty
+   * timer ("in progress –"). The mock room: "CPU picking" while a CPU manager is on the clock.
+   */
+  idleClockLabel?: string | null
+  /** "Invite leaguemates" and the menu's Copy Invite Link. A solo mock has nobody to invite. */
+  showInvite?: boolean
 }
 
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
@@ -285,6 +292,8 @@ export function DraftTopBar({
   showAutoPickPill = true,
   controlsSlot = null,
   extraMenuItems = [],
+  idleClockLabel = null,
+  showInvite = true,
 }: DraftTopBarProps) {
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
@@ -589,10 +598,16 @@ export function DraftTopBar({
     return (
       <div className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-sm text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
         <Clock className="h-4 w-4 shrink-0 text-cyan-300/90" />
-        <span className="font-medium">{statusLabel}</span>
-        <span className="font-mono text-xs text-white/55" data-testid="draft-topbar-timer-value">
-          {timerDisplay}
-        </span>
+        {idleClockLabel ? (
+          <span className="font-medium" data-testid="draft-topbar-idle-clock">{idleClockLabel}</span>
+        ) : (
+          <>
+            <span className="font-medium">{statusLabel}</span>
+            <span className="font-mono text-xs text-white/55" data-testid="draft-topbar-timer-value">
+              {timerDisplay}
+            </span>
+          </>
+        )}
       </div>
     )
   })()
@@ -765,6 +780,8 @@ export function DraftTopBar({
                     </span>
                   </>
                 ) : null}
+                {showInvite ? (
+                  <>
                 <span className="text-white/24">·</span>
                 <button
                   type="button"
@@ -778,6 +795,8 @@ export function DraftTopBar({
                   <Copy className="h-3.5 w-3.5" />
                 </button>
                 {copyFeedback === 'copied' ? <span className="text-cyan-300">{t('draftRoom.topBar.copied')}</span> : null}
+                  </>
+                ) : null}
               </div>
               {dyn && rookieAuctionNote ? (
                 <p
@@ -1036,6 +1055,7 @@ export function DraftTopBar({
                     {timerMuted ? headerCopy.soundOff : headerCopy.soundOn}
                   </span>
                 </button>
+                {showInvite ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -1052,6 +1072,7 @@ export function DraftTopBar({
                     </span>
                   </span>
                 </button>
+                ) : null}
 
                 {bigScreenHref ? (
                   <Link
