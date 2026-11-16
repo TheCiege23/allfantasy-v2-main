@@ -584,4 +584,25 @@ describe('E — NBA blends this season with last instead of switching (2026-11-1
     expect(rows.find((d: any) => d.playerId === 'two')?.adjustmentFactors.sourceSeason).toBe(2025)
     expect(rows.find((d: any) => d.playerId === 'five')?.adjustmentFactors.sourceSeason).toBe(2026)
   })
+
+  it('MLB blends too, and a blended row records its two seasons’ games — unblended rows stay byte-identical', async () => {
+    const mlb = (playerId: string, gp: number, ip: string) => ({
+      playerId,
+      source: 'rolling_insights',
+      stats: { position: 'P', riPlayerName: playerId, regular_season: { games_played: gp, batting: null, pitching: { IP: ip, K: gp * 6, ER: gp * 2, ERA: '3.00', player_id: 77 } } },
+    })
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [mlb('ace', 4, '24.1'), mlb('callup', 3, '15.0')]
+    state.linesBySeason[2025] = [mlb('ace', 32, '187.2')]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'MLB', targetSeason: 2026 })
+
+    expect(r.seasonBlend).toEqual({ season: 2025, blendGames: 20, players: 1 })
+    const rows = await upsertedSeasonRows()
+    const ace = rows.find((d: any) => d.playerId === 'ace')
+    expect(ace.adjustmentFactors.seasonBlend).toEqual({ currentGames: 4, previousGames: 32, currentWeight: 0.167 })
+    expect(JSON.stringify(ace.adjustmentFactors)).toContain('36 games in the season sample')
+    expect(rows.find((d: any) => d.playerId === 'callup')?.adjustmentFactors).not.toHaveProperty('seasonBlend')
+  })
 })
+

@@ -35,9 +35,6 @@ import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
  * marginal gain, which also makes flex handling fall out instead of needing a rule.
  */
 
-/** Below this many games behind a value, its chip says "thin sample" (the season blend's own horizon). */
-const THIN_SAMPLE_GAMES = 20
-
 const REASON: Record<Exclude<WaiverBoardState, 'ok'>, string> = {
   no_team_claimed: 'we cannot tell which roster in this league is yours',
   no_roster: 'no roster rows imported for your team yet',
@@ -269,10 +266,10 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                       {m.seasonRateChip}
                     </span>
                   ) : null}
-                  {/* A league-value-board add carries the games behind it; under 20 is called thin. */}
-                  {c.sampleGames != null ? (
-                    <span className="af-wlb-chip" title={m.gamesTitle} data-thin={c.sampleGames < THIN_SAMPLE_GAMES ? 'true' : undefined}>
-                      {c.sampleGames < THIN_SAMPLE_GAMES ? m.thinGamesChip(c.sampleGames) : m.gamesChip(c.sampleGames)}
+                  {/* A league-value-board add carries what it rests on (games, or at-bats / innings); thin is flagged. */}
+                  {c.sample ? (
+                    <span className="af-wlb-chip" title={m.gamesTitle} data-thin={c.sample.thin ? 'true' : undefined}>
+                      {m.sampleChip(c.sample.kind, c.sample.count, c.sample.thin)}
                     </span>
                   ) : null}
                   {/*

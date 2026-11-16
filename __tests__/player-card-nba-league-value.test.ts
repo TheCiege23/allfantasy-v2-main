@@ -127,7 +127,7 @@ describe('getPlayerCard — an NBA card never reads the NFL chart', () => {
       available: true,
       data: {
         sport: 'NBA', unit: 'fantasy points', perGame: 40, replacementPerGame: 28, replacementName: 'Wire Guard',
-        value: (40 - 28) * 60, gamesRemaining: 60, seasonLabel: '2026-27', sampleGames: 26, baselineSeasonLabel: '2025-26',
+        value: (40 - 28) * 60, gamesRemaining: 60, scheduleKnown: true, seasonLabel: '2026-27', sample: { kind: 'games', count: 26, thin: false }, baselineSeasonLabel: '2025-26',
         dynastyValue: null, age: null,
       },
     })

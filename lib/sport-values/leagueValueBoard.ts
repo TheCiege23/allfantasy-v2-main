@@ -2,7 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { loadSportPointsBase, type SportPointsBaseResult, type SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
-import { meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
+import { MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
+import { MIN_AT_BATS, MIN_INNINGS } from '@/lib/decision-os/trade/mlbTeamGame'
 import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
 
 /**
@@ -19,9 +20,11 @@ import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trad
  * The board already bridges them (`getDailySportNormalizer`), so a points league is scored by its own
  * rules and a category league by its own categories.
  *
- * Owner's order: NBA first, then MLB, then NHL and soccer, one sport at a time.
+ * Owner's order: NBA first, then MLB, then NHL and soccer, one sport at a time. MLB joined 2026-11-16:
+ * its board is per TEAM game (a starter's line scaled to his share of starts) and its sample is at-bats
+ * or innings, which `boardSample` reports in those units.
  */
-export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA'])
+export const BOARD_VALUE_SPORTS: ReadonlySet<PointsGradedSport> = new Set(['NBA', 'MLB'])
 
 export function isBoardValueSport(sport: string | null | undefined): sport is PointsGradedSport {
   return BOARD_VALUE_SPORTS.has(String(sport ?? '').trim().toUpperCase() as PointsGradedSport)
@@ -83,6 +86,44 @@ export function boardPerGame(board: Extract<LeagueValueBoard, { kind: 'ok' }>, k
   return p.perGame
 }
 
+/**
+ * What a board value rests on, in the unit its sport's sample bar counts: games — or, in baseball,
+ * at-bats or innings, because ten games of baseball is a hot weekend (`mlbTeamGame.ts`). `thin` is
+ * under twice the bar the board prices from: 20 games, 200 at-bats, 60 innings.
+ */
+export type BoardSampleKind = 'games' | 'at_bats' | 'innings'
+export type BoardSample = { kind: BoardSampleKind; count: number; thin: boolean }
+
+const THIN_BELOW: Record<BoardSampleKind, number> = { games: 2 * MIN_SAMPLE_GAMES, at_bats: 2 * MIN_AT_BATS, innings: 2 * MIN_INNINGS }
+
+export function boardSample(p: Pick<BoardPlayer, 'sampleGames' | 'sampleBar'>): BoardSample | null {
+  const bar = p.sampleBar
+  if (bar?.unit && bar.count != null && Number.isFinite(bar.count)) {
+    return { kind: bar.unit, count: bar.count, thin: bar.count < THIN_BELOW[bar.unit] }
+  }
+  if (p.sampleGames != null && Number.isFinite(p.sampleGames)) {
+    return { kind: 'games', count: p.sampleGames, thin: p.sampleGames < THIN_BELOW.games }
+  }
+  return null
+}
+
+/** "412 at-bats", "26 games" — English, for text the model reads. Surfaces build their own words. */
+export function boardSampleText(s: BoardSample): string {
+  const n = s.kind === 'innings' ? String(s.count) : String(Math.round(s.count))
+  const unit = s.kind === 'games' ? 'game' : s.kind === 'at_bats' ? 'at-bat' : 'inning'
+  return `${n} ${unit}${s.count === 1 ? '' : 's'}`
+}
+
+/**
+ * "50 games left" — or, before a season's schedule is posted (MLB's offseason), "a full 162-game season,
+ * schedule not posted yet": the board then prices the sport's standard season, and must not say it counted.
+ */
+export function boardGamesText(window: Pick<SportPointsContext['window'], 'gamesRemaining' | 'scheduleKnown'>): string {
+  return window.scheduleKnown === false
+    ? `a full ${window.gamesRemaining}-game season, schedule not posted yet`
+    : `${window.gamesRemaining} games left`
+}
+
 /** One player on a league's board, as a surface shows him: the trade grade's own price, plus dynasty. */
 export type BoardPlayerValue = {
   sport: string
@@ -92,8 +133,10 @@ export type BoardPlayerValue = {
   replacementName: string
   value: number
   gamesRemaining: number
+  /** False when `gamesRemaining` is the sport's standard season because the schedule is not posted yet. */
+  scheduleKnown: boolean
   seasonLabel: string
-  sampleGames: number | null
+  sample: BoardSample | null
   baselineSeasonLabel: string | null
   dynastyValue: number | null
   age: number | null
@@ -130,8 +173,9 @@ export function boardPlayerValue(
       replacementName: price.replacementName,
       value: price.value,
       gamesRemaining: ctx.window.gamesRemaining,
+      scheduleKnown: ctx.window.scheduleKnown !== false,
       seasonLabel: ctx.window.seasonLabel,
-      sampleGames: price.player.sampleGames,
+      sample: boardSample(price.player),
       baselineSeasonLabel: ctx.window.baselineSeasonLabel ?? null,
       dynastyValue: dynastyValue != null && Number.isFinite(dynastyValue) ? dynastyValue : null,
       age,

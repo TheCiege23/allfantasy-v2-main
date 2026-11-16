@@ -132,9 +132,9 @@ describe('Waivers "Worth adding" notes, in Spanish', () => {
       'value board is not available (',
     ],
     [
-      'Values still lean on the 2025-26 season while this one has few games; each add shows the games behind it.',
+      'Values still lean on the 2025-26 season while this one has few games; each add shows what its value rests on.',
       RATE_BOARD,
-      'season while this one has few games; each add shows the games behind it.',
+      'season while this one has few games; each add shows what its value rests on.',
     ],
   ]
 

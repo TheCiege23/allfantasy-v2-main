@@ -297,11 +297,13 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       // A player with no id in this league's space cannot be looked for on its rosters: not provably free.
       const leagueId = leagueIdOf(identity.get(row.key), column)
       if (!leagueId || taken.has(leagueId)) continue
-      if (!isStartableInSport(sport, slots, row.position)) continue
+      // On a board, the board's position (a pitcher filed SP or RP, not `P` — see seasonRateWaiverBoard.ts).
+      const position = onBoard?.byId.get(row.key)?.position ?? row.position
+      if (!isStartableInSport(sport, slots, position)) continue
       if (ruledOut.has(row.key)) continue
       const pts = onBoard ? boardPerGame(onBoard, row.key, 'wire') : priceSeasonRate(row, basis, scoring)
       if (pts == null) continue
-      wire.push({ id: row.key, position: row.position, points: pts })
+      wire.push({ id: row.key, position, points: pts })
       rowByKey.set(row.key, row)
       pointsByKey.set(row.key, pts)
     }
@@ -329,7 +331,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       const pts = row && !ruledOut.has(key) ? (onBoard ? boardPerGame(onBoard, key, 'roster') : priceSeasonRate(row, basis, scoring)) : null
       if (row) rowByKey.set(key, row)
       if (pts != null) pointsByKey.set(key, pts)
-      roster.push({ id: key, position: row?.position ?? null, points: pts })
+      roster.push({ id: key, position: onBoard?.byId.get(key)?.position ?? row?.position ?? null, points: pts })
     }
 
     const swap = pickLineupSwap({

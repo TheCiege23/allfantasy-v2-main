@@ -103,7 +103,42 @@ describe('get_player_value in an NBA league', () => {
 
   it('another sport returns null, so the NFL market values answer as before', async () => {
     expect(await buildSportBoardValueContext({ leagueId: 'L1', playerName: 'Josh Allen' }, deps(ctx(), { ...LEAGUE, sport: 'NFL' }))).toBeNull()
-    // NBA first, by the owner's order; the others join one at a time.
-    expect([...BOARD_VALUE_SPORTS]).toEqual(['NBA'])
+    // NBA first, then MLB, by the owner's order; the others join one at a time.
+    expect([...BOARD_VALUE_SPORTS]).toEqual(['NBA', 'MLB'])
+    expect(await buildSportBoardValueContext({ leagueId: 'L1', playerName: 'Connor McDavid' }, deps(ctx(), { ...LEAGUE, sport: 'NHL' }))).toBeNull()
   })
 })
+
+describe('MLB values in Chimmy (2026-11-16, second sport)', () => {
+  const JUDGE: BoardPlayer = {
+    id: 'm1', name: 'Aaron Judge', position: 'OF', perGame: 4.1, sampleGames: 152, aliases: [],
+    sampleBar: { ok: true, has: '541 at-bats', needs: '100 at-bats or 30 innings', unit: 'at_bats', count: 541 },
+  }
+  const CALLUP: BoardPlayer = {
+    id: 'm2', name: 'Call Up', position: 'SP', perGame: 1.4, sampleGames: 9, aliases: [],
+    sampleBar: { ok: true, has: '41.2 innings', needs: '100 at-bats or 30 innings', unit: 'innings', count: 41.2 },
+  }
+  const mlb = (): SportPointsContext => ({
+    sport: 'MLB',
+    board: [JUDGE, CALLUP],
+    replacementByPosition: new Map([['OF', { name: 'Wire Bat', perGame: 2.6 }], ['SP', { name: 'Wire Arm', perGame: 1.0 }]]),
+    window: { season: 2027, seasonLabel: '2027', gamesRemaining: 162, scheduleKnown: false },
+    scoringBasis: 'league',
+    teams: 12,
+  })
+
+  it('values a hitter on the league board, says the sample in at-bats, and that 162 games is a full season not yet scheduled', async () => {
+    const out = (await buildSportBoardValueContext({ leagueId: 'L1', playerName: 'Aaron Judge' }, deps(mlb(), { ...LEAGUE, sport: 'MLB' })))!
+    expect(out).toContain('MLB VALUE for Aaron Judge (OF)')
+    expect(out).toContain('a full 162-game season, schedule not posted yet')
+    expect(out).toContain('- The projection rests on 541 at-bats.')
+    expect(out).not.toMatch(/rests on \d+ games/)
+    expect(out).toContain('a full season — the schedule is not posted yet')
+  })
+
+  it('a pitcher’s sample is innings, and under 60 is called thin', async () => {
+    const out = (await buildSportBoardValueContext({ leagueId: 'L1', playerName: 'Call Up' }, deps(mlb(), { ...LEAGUE, sport: 'MLB' })))!
+    expect(out).toContain('- The projection rests on 41.2 innings — a thin sample, so say the value is less certain.')
+  })
+})
+

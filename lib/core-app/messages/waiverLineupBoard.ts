@@ -32,9 +32,10 @@ export const waiverLineupBoardMessages = defineMessages({
     formChip: (games: number | undefined) => `form · ${games}g`,
     seasonRateTitle: "A per-game rate from AllFantasy's season projection, not a projection for this week",
     seasonRateChip: 'per game · season',
-    gamesChip: (games: number) => `${games} games`,
-    thinGamesChip: (games: number) => `${games} games · thin sample`,
-    gamesTitle: "Games behind this value: this season's, plus last season's while this one is young",
+    /** What a league-value-board add rests on: games, or in baseball at-bats or innings. */
+    sampleChip: (kind: 'games' | 'at_bats' | 'innings', count: number, thin: boolean) =>
+      `${kind === 'innings' ? count : Math.round(count)} ${kind === 'games' ? 'games' : kind === 'at_bats' ? 'at-bats' : 'innings'}${thin ? ' · thin sample' : ''}`,
+    gamesTitle: "What this value rests on: this season's games, plus last season's while this one is young",
     rosteredChip: (pct: number) => `${pct}% rostered`,
     rosteredTitle: (leagues: number) => `Share of the ${leagues} Sleeper leagues synced to AllFantasy this season that roster him`,
     addedChip: (leagues: number) => `+${leagues} ${leagues === 1 ? 'add' : 'adds'}`,
@@ -83,9 +84,9 @@ export const waiverLineupBoardMessages = defineMessages({
     formChip: (games) => `forma · ${games} p`,
     seasonRateTitle: 'Un promedio por partido de la proyección de temporada de AllFantasy, no una proyección para esta semana',
     seasonRateChip: 'por partido · temporada',
-    gamesChip: (games) => `${games} partidos`,
-    thinGamesChip: (games) => `${games} partidos · muestra corta`,
-    gamesTitle: 'Partidos detrás de este valor: los de esta temporada, más los de la anterior mientras esta es joven',
+    sampleChip: (kind, count, thin) =>
+      `${kind === 'innings' ? count : Math.round(count)} ${kind === 'games' ? 'partidos' : kind === 'at_bats' ? 'turnos al bate' : 'entradas'}${thin ? ' · muestra corta' : ''}`,
+    gamesTitle: 'En qué se apoya este valor: los partidos de esta temporada, más los de la anterior mientras esta es joven',
     rosteredChip: (pct: number) => `${pct}% en plantillas`,
     rosteredTitle: (leagues: number) => `Proporción de las ${leagues} ligas de Sleeper sincronizadas con AllFantasy esta temporada que lo tienen en plantilla`,
     addedChip: (leagues: number) => `+${leagues} ${leagues === 1 ? 'alta' : 'altas'}`,

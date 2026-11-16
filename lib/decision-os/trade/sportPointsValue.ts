@@ -65,12 +65,21 @@ export type BoardPlayer = {
   rosterAlias?: string | null
   /** The season the projection's numbers come from (last season, until this one has games). */
   sourceSeason?: number | null
+  /** Set when the projection blends this season with last (`af-projections/seasonBlend.ts`): each season's games. */
+  seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null
   /**
    * A sport-specific sample bar, replacing the games bar when present. Baseball's: ten games is a weekend
    * hot streak (31 at-bats put a September call-up among the top five hitters, measured 2026-10-09), so an
    * MLB projection needs at-bats or innings behind it instead — `has` and `needs` are said in those terms.
    */
-  sampleBar?: { ok: boolean; has: string; needs: string }
+  sampleBar?: {
+    ok: boolean
+    has: string
+    needs: string
+    /** What `has` counts, as a number — so a surface can show "412 at-bats" in its own language. */
+    unit?: 'at_bats' | 'innings'
+    count?: number
+  }
 }
 
 /**

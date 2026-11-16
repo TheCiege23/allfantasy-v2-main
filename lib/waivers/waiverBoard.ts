@@ -73,10 +73,11 @@ export interface WaiverCandidate {
   /** Games behind a 'form' number, so a two-game estimate can be weighed as one. */
   formGames?: number
   /**
-   * Games behind a league-value-board number (`basis: 'league_value_board'` on the board): this season's,
-   * plus last season's while this one is young. Shown on the row so a thin sample reads as one.
+   * What a league-value-board number rests on (`basis: 'league_value_board'` on the board): games, or in
+   * baseball at-bats or innings — this season's, plus last season's while this one is young. Shown on
+   * the row so a thin sample reads as one.
    */
-  sampleGames?: number
+  sample?: import('@/lib/sport-values/leagueValueBoard').BoardSample
 }
 
 export type WaiverBoardState =

@@ -29,7 +29,7 @@ import {
   computeOpponentAdjustment,
 } from '@/lib/projections/opponentAdjustment'
 import { extractSeasonAggregate, perGameRatesFor, toWeeklyObservation } from './core'
-import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats } from './seasonBlend'
+import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats, readSeasonBlend } from './seasonBlend'
 import { soccerSeasonLines } from './soccerSeasonLines'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
@@ -699,6 +699,12 @@ export async function writeAfProjectionSnapshotsForSeason(
       perGameRates: aggregate ? perGameRatesFor(sport, aggregate) : null,
       idp: outcome.idp ?? null,
       accuracyCalibration: outcome.calibration ?? null,
+      /*
+       * A blended line's two seasons, so a reader can tell its games apart: baseball's board scales a
+       * pitcher by his share of TEAM games, and a blended line's games span two seasons (mlbTeamGame.ts).
+       * Absent on every unblended row, which therefore stays byte-identical.
+       */
+      ...(readSeasonBlend(stats) ? { seasonBlend: readSeasonBlend(stats) } : {}),
     }
     // Round-trip through JSON so Prisma's InputJsonValue is satisfied (a bare `null` inside
     // an object literal is not assignable) and so anything non-serializable fails here,
