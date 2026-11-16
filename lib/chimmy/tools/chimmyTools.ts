@@ -92,6 +92,13 @@ export type ChimmyToolContext = {
    */
   actionCards?: ChimmyActionCard[]
   /**
+   * The /mock-draft room's board, sent by the browser with the question (stage 3 of drafts). When set,
+   * the draft tools answer from it — a practice mock has no league and no draft row on the server.
+   */
+  mockDraftBoard?: import('@/lib/mock-draft/mockChimmyBoard').MockDraftBoard | null
+  /** Queue changes proposed for that mock; the room applies one only when the user taps Confirm. */
+  mockQueueProposals?: import('@/lib/mock-draft/mockChimmyBoard').MockQueueProposal[]
+  /**
    * Every trade letter the one trade engine gave during this answer, collected so the route can check
    * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
    */
@@ -397,7 +404,7 @@ export const CHIMMY_TOOL_SPECS = [
     type: 'function' as const,
     function: {
       name: 'get_draft_pick_outlook',
-      description: 'AF Pro. In a live snake or linear draft: which of this manager’s targets (their queue plus the Draft OS shortlist) are likely GONE before their next pick, which are a toss-up and which should still be there — judged by market ADP and the open starting slots of the teams picking first, plus those managers’ league draft history when the plan includes it. Use for "will X make it back to me", "who should I queue", "is my queue realistic".',
+      description: 'AF Pro. In a live or mock snake or linear draft: which of this manager’s targets (their queue plus the Draft OS shortlist) are likely GONE before their next pick, which are a toss-up and which should still be there — judged by market ADP and the open starting slots of the teams picking first, plus those managers’ league draft history when the plan includes it. Use for "will X make it back to me", "who should I queue", "is my queue realistic".',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -405,7 +412,7 @@ export const CHIMMY_TOOL_SPECS = [
     type: 'function' as const,
     function: {
       name: 'propose_draft_queue_change',
-      description: 'Prepare a CONFIRM CARD that changes this manager’s own draft queue in the selected league: add players (at the top or the bottom), move a queued player to the top (add them with position "top"), or take players off. It changes NOTHING until the user taps Confirm, and it NEVER makes a pick — say exactly that. Use only when the user asks to queue, unqueue or reorder players. Names are checked against the draft room’s player pool; already-drafted players are skipped.',
+      description: 'Prepare a CONFIRM CARD that changes this manager’s own draft queue in the selected league (or the mock draft they are asking from): add players (at the top or the bottom), move a queued player to the top (add them with position "top"), or take players off. It changes NOTHING until the user taps Confirm, and it NEVER makes a pick — say exactly that. Use only when the user asks to queue, unqueue or reorder players. Names are checked against the draft room’s player pool; already-drafted players are skipped.',
       parameters: {
         type: 'object',
         properties: {
@@ -956,6 +963,23 @@ export async function executeChimmyTool(
       ;(ctx.proToolsRefused ??= []).push(name)
       return proOnlyToolMessage(name)
     }
+  }
+
+  // A PRACTICE MOCK (stage 3 of drafts): the room sent its board, so the draft tools answer from it.
+  // After the AF Pro gate on purpose — the outlook stays AF Pro in a mock too.
+  if (ctx.mockDraftBoard && (name === 'get_current_draft_board' || name === 'get_draft_pick_outlook' || name === 'propose_draft_queue_change')) {
+    const mock = await import('@/lib/chimmy/mockDraftGrounding')
+    if (name === 'get_current_draft_board') return mock.mockDraftBoardText(ctx.mockDraftBoard)
+    if (name === 'get_draft_pick_outlook') return mock.mockPickOutlook(ctx.mockDraftBoard)
+    if (!ctx.mockQueueProposals) {
+      return 'This chat surface cannot show a confirm card, so nothing was prepared. Tell the user to change their queue in the mock room. Do not say it was changed.'
+    }
+    if (ctx.mockQueueProposals.length > 0) {
+      return 'There is already a queue card in this answer; no second one was made. Put every change in one card.'
+    }
+    const outcome = mock.proposeMockQueueChange(ctx.mockDraftBoard, args)
+    if (outcome.ok) ctx.mockQueueProposals.push(outcome.proposal)
+    return outcome.text
   }
 
   // Only with a league bound: without one these tools answer NO_LEAGUE and computed nothing.

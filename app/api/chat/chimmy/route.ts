@@ -34,6 +34,8 @@ import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalCon
 import { runPECR } from '@/lib/ai/pecr'
 import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
 import { chimmyDepthForPlan } from '@/lib/chimmy/chimmyDepth'
+import { mockDraftBoardText, parseMockDraftBoard } from '@/lib/chimmy/mockDraftGrounding'
+import type { MockQueueProposal } from '@/lib/mock-draft/mockChimmyBoard'
 import { bracketFollowUps, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { runAiProtection } from '@/lib/ai-protection'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration/orchestration-service'
@@ -1352,6 +1354,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
+  /*
+   * ASKED FROM THE /mock-draft ROOM (stage 3 of drafts, 2026-11-16). That room runs in the browser, so
+   * it sends its board with the question; nothing on the server holds a practice mock in progress.
+   * Re-validated and capped here (lib/chimmy/mockDraftGrounding.ts) — it is a form field like any other.
+   */
+  const mockDraftBoard = source === 'mock-draft' ? parseMockDraftBoard(formData.get('mockDraftBoard')) : null
+  const mockDraftBoardBlock = mockDraftBoard ? mockDraftBoardText(mockDraftBoard) : null
   let message = submittedMessage
   if (requestedLeagueId && /^@chimmy\s+(?:use|play)\s+(?:idol|token)\b/i.test(message)) {
     const access = await resolveLeagueAccess(requestedLeagueId, userId)
@@ -2502,6 +2511,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     : null
   const combinedMemorySection = [
     selectedLeagueRules,
+    mockDraftBoardBlock ? `## MOCK DRAFT BOARD\n${mockDraftBoardBlock}` : undefined,
     savedStrategyPrompt,
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
@@ -3196,7 +3206,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[] }
     /*
      * ASKED FROM INSIDE THE DRAFT ROOM (stage 2 of drafts, 2026-11-16): the board is read up front and
      * handed to the loop, instead of costing the model a tool round trip first — which is several
@@ -3225,7 +3235,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
       groundingLine: [selectedLeagueRules, decisionOsGrounding && leagueSnapshot
         ? `DECISION OS EVIDENCE for ${leagueSnapshot.name ?? leagueSnapshot.id} (${leagueSnapshot.id}). Respect its missing-data and authority limits. This snapshot applies only to this league; if you select another league, read that league's tools instead.\n${decisionOsGrounding}`
-        : null, draftRoomBoard
+        : null, mockDraftBoardBlock, draftRoomBoard
         ? `THE USER IS ASKING FROM INSIDE THEIR DRAFT ROOM. This is the current board (the same read as get_current_draft_board, so do not call it again unless they ask to refresh). To queue, unqueue or reorder players use propose_draft_queue_change — a confirm card; never say a player was queued or drafted.\n${draftRoomBoard}`
         : null].filter(Boolean).join('\n\n') || null,
       clockLine: userTemporalContext.promptLine,
@@ -3485,6 +3495,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
            * ten-minute token bound to this user, so a card cannot be edited or replayed.
            */
           ...(toolContext.actionCards.length > 0 ? { actionCards: toolContext.actionCards } : {}),
+          /* A mock draft's queue card: applied in the mock room, in the browser, only when they tap Confirm. */
+          ...(toolContext.mockQueueProposals.length > 0 ? { mockQueueProposals: toolContext.mockQueueProposals } : {}),
           /* Chip, bid card and supersede keys — see `lib/chimmy/answerPolish.ts`. */
           ...(loopVerdict ? { verdict: loopVerdict } : {}),
           ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
