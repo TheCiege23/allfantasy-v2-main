@@ -1,3 +1,6 @@
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { readSGProviderHealth } from '@/lib/survivor-guillotine/providerHealth'
+import { verifiedSGInactivePlayer } from '@/lib/survivor-guillotine/playerCatalog'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -35,7 +38,12 @@ export async function GET(_req: NextRequest, context: Context) {
   const chops = await prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: null },
     select: { id: true, leagueId: true, period: true, rosterId: true, score: true, tribeId: true, createdAt: true },
     orderBy: [{ period: 'desc' }, { score: 'asc' }] })
-  const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { season: true } })
+  const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { season: true, settings: true, sport: true } })
+  const layout = resolveRedraftRosterConfig(league.sport, league.settings)
+  const announced = await prisma.survivorGuillotinePower.findFirst({ where: { leagueId, source: 'gauntlet_retired', status: { in: ['held', 'sealed'] } }, select: { playerId: true, status: true } })
+  const idolProfile = announced?.playerId ? await verifiedSGInactivePlayer(prisma, league.sport, announced.playerId) : null
+  const idolPlayer = idolProfile && announced?.playerId ? { id: announced.playerId, name: idolProfile.name } : null
+  const providerHealth = await readSGProviderHealth(league.sport, league.season)
   const [teams, ownedTeam, scores] = await Promise.all([
     prisma.leagueTeam.findMany({ where: { leagueId }, select: { externalId: true, teamName: true,
       ownerName: true, eliminatedAt: true } }),
@@ -45,10 +53,10 @@ export async function GET(_req: NextRequest, context: Context) {
       select: { rosterId: true, totalPoints: true, status: true } }),
   ])
   const roster = ownedTeam?.externalId ? await prisma.roster.findUnique({ where: { id: ownedTeam.externalId },
-    select: { playerData: true, faabRemaining: true } }) : null
+    select: { playerData: true, faabRemaining: true, redraftRosterId: true } }) : null
   const playerIds = roster ? getRosterPlayerIds(roster.playerData) : []
-  const [players, dailyLineups, ownBid, ownTribeChoice] = await Promise.all([
-    prisma.player.findMany({ where: { id: { in: playerIds } }, select: { id: true, name: true, position: true, team: true } }),
+  const [playerRows, dailyLineups, ownBid, ownTribeChoice] = await Promise.all([
+    roster?.redraftRosterId ? prisma.redraftRosterPlayer.findMany({ where: { rosterId: roster.redraftRosterId, droppedAt: null }, select: { playerId: true, playerName: true, position: true, team: true } }) : [],
     ownedTeam?.externalId ? prisma.survivorGuillotineDailyLineup.findMany({ where: { leagueId,
       period: season.currentPeriod, rosterId: ownedTeam.externalId }, select: { gameDay: true, playerIds: true } }) : [],
     ownedTeam?.externalId ? prisma.survivorGuillotineAuctionBid.findUnique({ where: {
@@ -95,7 +103,9 @@ export async function GET(_req: NextRequest, context: Context) {
     players: new Map(releasedPlayerRows.map(p => [p.id, { name: p.name, position: p.position, team: p.team }])) })
   const reversals = reversalRows.filter(r => !hiddenPeriods.includes(r.period)).map(r => ({ period: r.period,
     rosterId: r.rosterId, score: r.score, reversedAt: r.reversedAt?.toISOString() ?? null, reason: r.reversalReason }))
-  return NextResponse.json({ releasedPlayers, reversals, season: { leagueId, config: season.config, tribes: readSGTribes(season.tribes),
+  const players = playerRows.map(player => ({ id: player.playerId, name: player.playerName, position: player.position, team: player.team }))
+  return NextResponse.json({ releasedPlayers, reversals, providerHealth, seasonYear: league.season, rosterLayout: { starters: Object.fromEntries(layout.starterCapacities), bench: layout.benchSlots, total: layout.maxRosterSize },
+    gauntletIdol: idolPlayer ? { ...idolPlayer, status: announced!.status } : null, season: { leagueId, config: season.config, tribes: readSGTribes(season.tribes),
     periodState, currentPeriod: season.currentPeriod,
     status: season.status, revision: season.revision, periodHistory: presentation.history,
     tribeDraftState: readSGTribeDraftState(season.tribeDraftState) }, powers,

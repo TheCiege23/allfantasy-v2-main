@@ -1,3 +1,4 @@
+import { currentSGNflPool, enforceCurrentSGNflEntries } from '@/lib/survivor-guillotine/currentNflPool'
 import { ffcObservationIsFresh } from '@/lib/adp/ffcObservation'
 import { buildObservedAdpIdentityIndex, observedAdpCanonicalId, observedAdpForPlayer } from './observedAdpIdentity'
 import { nflDraftSeasonLine } from './nflDraftSeasonLine'
@@ -1693,7 +1694,8 @@ async function buildResolvedDraftPoolForLeague(
     }
   }
 
-  let rawListFiltered = rawList
+  const sgCurrentNfl = sport === 'NFL' && league?.leagueVariant === 'survivor_guillotine' ? await currentSGNflPool(rawList) : null
+  let rawListFiltered = sgCurrentNfl ?? rawList
   // Type cast is widened to include `playerId` so keeper entries that carry an
   // external player-id (but no name) are also excluded from the pool.
   const keeperSelections = draftSession?.keeperSelections as Array<{ playerName?: string; playerId?: string | null }> | null
@@ -2896,7 +2898,7 @@ async function buildResolvedDraftPoolForLeague(
       sport,
       entries,
     })
-  entries = entriesWithProjectionFallbacks
+  entries = sgCurrentNfl ? enforceCurrentSGNflEntries(entriesWithProjectionFallbacks, sgCurrentNfl) : entriesWithProjectionFallbacks
   perfProjectionFallbacks()
 
   // Deterministic ranking: ADP-first when present, then AI ADP, then lexical tie-breakers.

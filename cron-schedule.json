@@ -77,6 +77,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/survivor-guillotine-ingest",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/notification-outbox-relay",
       "schedule": "* * * * *"
     },

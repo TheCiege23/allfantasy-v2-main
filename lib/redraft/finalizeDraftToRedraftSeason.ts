@@ -1,6 +1,7 @@
 import { resolveMissingNflPickPlayerId } from '@/lib/draft/resolveMissingPickPlayerId'
 import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
+import { sgDraftScoringCalendar } from '@/lib/survivor-guillotine/draftSeason'
 import { isBestBallNoPlayoffLeague } from '@/lib/bestball/noPlayoffSeason'
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
@@ -201,7 +202,10 @@ export async function ensureRedraftSeason(leagueId: string) {
     ? await getGuillotineConfig(leagueId).catch(() => null)
     : null
   const createdWeeks = resolveCreatedSeasonWeeks(league, cfg?.defaultSeasonWeeks ?? 17)
-  const totalWeeks = guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks
+  const combined = league.leagueVariant === 'survivor_guillotine'
+    ? sgDraftScoringCalendar((await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId }, select: { config: true } })).config)
+    : null
+  const totalWeeks = combined?.totalWeeks ?? (guillotine ? resolveGuillotineSeasonWeeks(guillotine.eliminationEndWeek, createdWeeks) : createdWeeks)
   // The commissioner's playoff start week, when it fits the season; the sport default otherwise.
   // A divisions-tournament conference league has no league playoffs: its bracket weeks are regular
   // weeks the tournament scores (lib/tournament/divisions/conferenceSeasonPlan.ts).
@@ -209,7 +213,7 @@ export async function ensureRedraftSeason(leagueId: string) {
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
   const playoffStartCap = maxPlayoffStartWeekFor(league)
-  const playoffStartWeek = guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(league) ? totalWeeks + 1 :
+  const playoffStartWeek = combined || guillotine || isZombieLeagueLike(league) || readSurvivorFullSeasonPlan(league.settings) || readConferenceSeasonPlan(league.settings) || isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' || isBestBallNoPlayoffLeague(league) ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks &&
     // A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts).
     (playoffStartCap == null || leaguePlayoffStart <= playoffStartCap)
