@@ -28,3 +28,27 @@
 
 /* The live demo league has no image; its rail tile shows the AF crest letters on the app's tile. */
 .af-core[data-demo-league] .af-rail-tile-art { overflow: hidden; }
+
+/*
+ * Phone top bar. The app's own rules (af-core-shell.css, ≤720px) make `.af-topbar-right` a sideways
+ * scroller sized for a row of status chips. The demo has ONE thing there — "Sign up free" — and the
+ * league name beside it took the room: measured at 390px, the right side got 56px for a 106px button,
+ * so the button was cut off at the screen edge. Here the name gives way instead (one line, ellipsis)
+ * and the button keeps its width.
+ */
+/* ⚠ `.af-core.af-shell[...]`, not `.af-core[...]`: the shell's own phone rule
+   `.af-core.af-shell:not([data-league-first="true"]) .af-topbar-right { flex: 1 1 0 }` is (0,4,0), and a
+   (0,3,0) selector here lost to it silently — measured, the button stayed cut off. Equal specificity
+   and a later sheet is what wins. */
+@media (max-width: 720px) {
+  .af-core.af-shell[data-demo-league] .af-topbar { flex-wrap: nowrap; }
+  .af-core.af-shell[data-demo-league] .af-scope { flex: 1 1 auto; min-width: 0; }
+  .af-core.af-shell[data-demo-league] .af-scope-btn {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core.af-shell[data-demo-league] .af-topbar-right { flex: 0 0 auto; overflow: visible; max-width: none; }
+}
