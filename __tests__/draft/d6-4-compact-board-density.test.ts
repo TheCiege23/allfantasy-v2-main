@@ -26,15 +26,16 @@ const boardSrc = read('components/app/draft-room/DraftBoard.tsx')
 // 6. DraftBoardCell shape
 // ---------------------------------------------------------------------------
 
-describe('DraftBoardCell — square AllFantasy tiles', () => {
-  it('uses square tiles with a cap for very wide columns', () => {
-    expect(cellSrc).toMatch(/flex aspect-square w-full max-w-\[144px\] flex-col/)
+describe('DraftBoardCell — room v2 rectangle tiles', () => {
+  it('uses full-width rectangle tiles of one fixed height (room v2, 2026-11)', () => {
+    expect(cellSrc).toMatch(/flex h-\[68px\] w-full flex-col/)
+    expect(cellSrc).not.toMatch(/aspect-square/)
   })
 
-  it('board columns fill the width with a 84px floor, and gaps are 2px', () => {
+  it('board columns fill the width with a 84px floor, and gaps are 4px', () => {
     // Phones cap the track via --af-board-col-max (2026-10-29); md+ leaves it unset, so 1fr fills.
     expect(boardSrc).toMatch(/const BOARD_COLUMN = 'minmax\(84px, var\(--af-board-col-max, 1fr\)\)'/)
-    expect(boardSrc).toMatch(/grid gap-\[2px\]/)
+    expect(boardSrc).toMatch(/grid gap-\[4px\]/)
   })
 
   it('filled tiles are solid position colours with dark text', () => {

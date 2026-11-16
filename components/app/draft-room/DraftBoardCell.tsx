@@ -262,7 +262,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex aspect-square w-full max-w-[144px] flex-col overflow-hidden rounded-[4px] px-1.5 py-1 text-[11px] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
+      className={`group relative flex h-[68px] w-full flex-col overflow-hidden rounded-lg px-1.5 py-1 text-[11px] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
       } ${
         isCurrentPick
@@ -397,8 +397,9 @@ function DraftBoardCellInner({
           className={`flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-center ${onFill ? 'text-[#14172a]' : 'text-white'}`}
           data-testid={`draft-board-cell-body-${pick.overall}`}
         >
-          {/* Only a real photo: with none, an initials circle read as a dark blob over the name. */}
-          {hasRealHeadshot ? (
+          {/* Only a real photo: with none, an initials circle read as a dark blob over the name. A tile
+              already carrying a badge row (keeper, devy, trade) gives the photo's height to the text. */}
+          {hasRealHeadshot && !hasStatusBadges ? (
             <div
               className={`shrink-0 overflow-hidden rounded-full ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}
               data-testid={`draft-board-cell-headshot-wrap-${pick.overall}`}
