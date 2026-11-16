@@ -17,6 +17,21 @@ import { clockProgressPercent } from '@/lib/draft-room/clockProgress'
 import { DraftModeBanner } from '@/components/app/draft-room/DraftModeBanner'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
+import { AuctionBidDock, AuctionSpotlightPanel, type AuctionSpotlightPanelProps } from '@/components/app/draft-room/AuctionSpotlightPanel'
+import {
+  auctionValues as computeAuctionValues,
+  createMockAuction,
+  mockAuctionTiming,
+  nominateForUser,
+  placeUserBid,
+  resumeMockAuction,
+  sellLot,
+  tickMockAuction,
+  type MockAuctionContext,
+  type MockAuctionSale,
+  type MockAuctionState,
+} from '@/lib/mock-draft/mockAuction'
+import type { DraftPickSnapshot } from '@/lib/live-draft-engine/types'
 import '@/components/core-app/af-core.css'
 import '@/components/app/draft-room/af-draft-room.css'
 
@@ -116,6 +131,8 @@ interface DraftPick {
   headshotUrl?: string | null
   teamLogoUrl?: string | null
   aiReason?: string
+  /** Auction only: the winning bid. */
+  price?: number
   isUser: boolean
   managerName: string
 }
@@ -176,6 +193,12 @@ interface DraftState {
   turnDeadlineMs: number | null
   pausedRemainingMs?: number
   chatMessages: ChatMessage[]
+  /** Auction drafts: budgets, the player on the block and the bids (see lib/mock-draft/mockAuction). */
+  auction?: MockAuctionState | null
+  /** Auction drafts: dollar value per player id, fixed when the draft starts. */
+  auctionValues?: Record<string, number>
+  /** When the draft was paused, so auction clocks can resume where they stopped. */
+  pausedAtMs?: number
 }
 
 interface SaveResponse {
@@ -473,6 +496,95 @@ export function mockPicksUntilSlot(teams: TeamSlot[], settings: DraftSettings, c
   return null
 }
 
+/** Every mock auction team starts with this budget, the common league default. */
+const MOCK_AUCTION_BUDGET = 200
+
+function auctionContextFor(state: DraftState, now: number, queue: string[]): MockAuctionContext | null {
+  const auction = state.auction
+  if (!auction) return null
+  const user = state.teams.find((team) => team.isUser)
+  if (!user) return null
+  const values = state.auctionValues ?? {}
+  const sold = new Set(state.picks.map((pick) => pick.playerId))
+  const spotsLeft: Record<number, number> = {}
+  const needs: Record<number, string[]> = {}
+  for (const team of state.teams) {
+    spotsLeft[team.slot] = Math.max(0, state.settings.rounds - team.picks.length)
+    needs[team.slot] = team.rosterNeeds
+  }
+  const available = state.availablePlayers
+    .filter((player) => !sold.has(player.id))
+    .sort((a, b) => (values[b.id] ?? 0) - (values[a.id] ?? 0))
+    .map((player) => ({ id: player.id, position: player.position }))
+  return {
+    now,
+    rand: Math.random,
+    userSlot: user.slot,
+    order: state.teams.map((team) => team.slot).sort((a, b) => a - b),
+    spotsLeft,
+    needs,
+    values,
+    available,
+    autoNominateId: queue.find((id) => !sold.has(id)) ?? null,
+    timing: mockAuctionTiming(state.settings.speed),
+  }
+}
+
+/** Applies an auction change, then records a sale (if any) on the board and the winner's roster. */
+function withAuctionResult(state: DraftState, next: MockAuctionState, sale: MockAuctionSale | null, complete: boolean, ctx: MockAuctionContext): DraftState {
+  const nominator = ctx.order[next.nominationIndex] ?? state.onTheClock
+  if (!sale) {
+    if (next === state.auction && !complete) return state
+    return { ...state, auction: next, onTheClock: nominator, status: complete ? 'complete' : state.status }
+  }
+  const player = state.availablePlayers.find((entry) => entry.id === sale.playerId)
+  const team = state.teams.find((entry) => entry.slot === sale.winnerSlot)
+  if (!player || !team) return { ...state, auction: next, onTheClock: nominator }
+  const overall = state.picks.length + 1
+  const round = team.picks.length + 1
+  const pick: DraftPick = {
+    overall,
+    round,
+    pick: round,
+    slot: team.slot,
+    playerId: player.id,
+    playerName: player.name,
+    position: player.position,
+    team: player.team,
+    adp: player.adp,
+    projectedPts: player.projectedPts,
+    headshotUrl: player.headshotUrl ?? null,
+    teamLogoUrl: player.teamLogoUrl ?? null,
+    price: sale.price,
+    isUser: team.isUser,
+    managerName: team.managerName,
+  }
+  const teams = state.teams.map((entry) => {
+    if (entry.slot !== team.slot) return entry
+    const nextTeam = { ...entry, picks: [...entry.picks, pick] }
+    return { ...nextTeam, rosterNeeds: computeTeamNeeds(nextTeam, state.settings) }
+  })
+  const allFull = teams.every((entry) => entry.picks.length >= state.settings.rounds)
+  const playersLeft = state.availablePlayers.length > state.picks.length + 1
+  return {
+    ...state,
+    auction: next,
+    teams,
+    picks: [...state.picks, pick],
+    currentPick: overall + 1,
+    onTheClock: nominator,
+    status: allFull || !playersLeft ? 'complete' : state.status,
+  }
+}
+
+function applyAuctionTick(state: DraftState, now: number, queue: string[]): DraftState {
+  if (state.status !== 'drafting' || !state.auction) return state
+  const ctx = auctionContextFor(state, now, queue)
+  if (!ctx) return state
+  const tick = tickMockAuction(state.auction, ctx)
+  return withAuctionResult(state, tick.state, tick.sale, tick.complete, ctx)
+}
+
 function createOpenMockTeams(settings: DraftSettings): TeamSlot[] {
   return Array.from({ length: settings.teamCount }, (_, index) => {
     const slot = index + 1
@@ -757,7 +869,8 @@ export default function MockDraftSleeperRoomClient({
     [draftState],
   )
 
-  const isUserTurn = Boolean(onTheClockTeam?.isUser && draftState?.status === 'drafting')
+  // Auction: the user's turn is their nomination, and it ends once their player is on the block.
+  const isUserTurn = Boolean(onTheClockTeam?.isUser && draftState?.status === 'drafting' && !draftState?.auction?.lot)
   /*
    * The live room's clock language, in the mock room (2026-11-05): the pick, who is on the clock,
    * how far away your turn is, and a bar for the time left. The timer only ticks on your own turn
@@ -766,12 +879,12 @@ export default function MockDraftSleeperRoomClient({
   const roomCopy = useMessages(draftRoomRedesignMessages)
   const userSlot = draftState?.teams.find((team) => team.isUser)?.slot ?? null
   const picksUntilUser =
-    draftState && userSlot != null && draftState.status !== 'complete'
+    draftState && userSlot != null && draftState.status !== 'complete' && !draftState.auction
       ? mockPicksUntilSlot(draftState.teams, draftState.settings, draftState.currentPick, userSlot)
       : null
   const clockProgress =
-    draftState && isUserTurn && draftState.settings.speed > 0 ? clockProgressPercent(draftState.timerSeconds, draftState.settings.speed) : null
-  const clockUrgent = Boolean(draftState && isUserTurn && draftState.settings.speed > 0 && draftState.timerSeconds <= 5)
+    draftState && isUserTurn && !draftState.auction && draftState.settings.speed > 0 ? clockProgressPercent(draftState.timerSeconds, draftState.settings.speed) : null
+  const clockUrgent = Boolean(draftState && isUserTurn && !draftState.auction && draftState.settings.speed > 0 && draftState.timerSeconds <= 5)
   const clockStatus = !draftState
     ? null
     : draftState.status === 'complete'
@@ -941,7 +1054,8 @@ export default function MockDraftSleeperRoomClient({
   )
 
   useEffect(() => {
-    if (!draftState || draftState.status !== 'drafting') return
+    // Auctions run on their own clock (the auction effect below), not one pick per turn.
+    if (!draftState || draftState.status !== 'drafting' || draftState.auction) return
 
     const clockTeam = draftState.teams.find((team) => team.slot === draftState.onTheClock)
     if (!clockTeam) return
@@ -1007,7 +1121,7 @@ export default function MockDraftSleeperRoomClient({
   }, [draftState, handlePick])
 
   useEffect(() => {
-    if (!draftState || draftState.status !== 'drafting' || !onTheClockTeam?.isUser) return
+    if (!draftState || draftState.status !== 'drafting' || draftState.auction || !onTheClockTeam?.isUser) return
     if (draftState.settings.speed === 0 || draftState.timerSeconds > 0) return
 
     const queuedPlayer = queue
@@ -1023,6 +1137,102 @@ export default function MockDraftSleeperRoomClient({
       handlePick(fallbackPlayer, false, draftState.currentPick)
     }
   }, [draftState, draftedIds, handlePick, onTheClockTeam?.isUser, queue])
+
+  /*
+   * The mock auction's clock. One short interval drives everything — AI bids, AI nominations, the
+   * bid clock running out — through the pure engine in lib/mock-draft/mockAuction, which is
+   * deadline-based, so a throttled background tab catches up rather than stretching the lot.
+   */
+  const queueRef = useRef(queue)
+  queueRef.current = queue
+  const auctionDrafting = draftState?.status === 'drafting' && draftState.auction != null
+  const [auctionNow, setAuctionNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!auctionDrafting) return
+    const step = () => {
+      const now = Date.now()
+      setAuctionNow(now)
+      setDraftState((current) => (current ? applyAuctionTick(current, now, queueRef.current) : current))
+    }
+    step()
+    const interval = window.setInterval(step, 200)
+    return () => window.clearInterval(interval)
+  }, [auctionDrafting])
+
+  const auctionAct = useCallback((act: (state: MockAuctionState, ctx: MockAuctionContext) => { state: MockAuctionState; sale: MockAuctionSale | null }) => {
+    setDraftState((current) => {
+      if (!current || current.status !== 'drafting' || !current.auction) return current
+      const ctx = auctionContextFor(current, Date.now(), queueRef.current)
+      if (!ctx) return current
+      const result = act(current.auction, ctx)
+      return withAuctionResult(current, result.state, result.sale, false, ctx)
+    })
+  }, [])
+  const auctionNominate = useCallback((playerId: string) => {
+    auctionAct((state, ctx) => ({ state: nominateForUser(state, ctx, playerId), sale: null }))
+  }, [auctionAct])
+  const auctionBid = useCallback((amount: number) => {
+    auctionAct((state, ctx) => {
+      const result = placeUserBid(state, ctx, amount)
+      return { state: result.ok ? result.state : state, sale: null }
+    })
+  }, [auctionAct])
+  const auctionSellNow = useCallback(() => {
+    auctionAct((state, ctx) => sellLot(state, ctx))
+  }, [auctionAct])
+
+  /*
+   * The live room's auction stage, fed by the mock engine. Slots stand in for roster ids, and the
+   * user is the commissioner of their own mock, so "Sell now" ends a lot early.
+   */
+  const auctionPanelProps = useMemo<AuctionSpotlightPanelProps | null>(() => {
+    const auction = draftState?.auction
+    if (!draftState || !auction) return null
+    const lot = auction.lot
+    const lotPlayer = lot ? draftState.availablePlayers.find((player) => player.id === lot.playerId) ?? null : null
+    const order = [...draftState.teams].sort((a, b) => a.slot - b.slot)
+    const budgets: Record<string, number> = {}
+    for (const team of order) budgets[String(team.slot)] = auction.budgets[team.slot] ?? auction.budgetPerTeam
+    const picks: DraftPickSnapshot[] = draftState.picks.map((pick) => ({
+      id: `mock-${pick.overall}`, overall: pick.overall, round: pick.round, slot: pick.slot, rosterId: String(pick.slot),
+      displayName: pick.managerName, playerName: pick.playerName, position: pick.position, team: pick.team || null,
+      byeWeek: null, playerId: pick.playerId, playerImageUrl: pick.headshotUrl ?? null, tradedPickMeta: null,
+      source: 'mock', pickLabel: `${pick.round}.${pick.slot}`, amount: pick.price ?? null, createdAt: '',
+    }))
+    const deadline = lot?.endsAtMs ?? auction.nominationDeadlineMs
+    const paused = draftState.status === 'paused'
+    return {
+      auction: {
+        draftType: 'auction',
+        budgetPerTeam: auction.budgetPerTeam,
+        budgets,
+        minBidIncrement: 1,
+        nominationOrder: order.map((team) => ({ slot: team.slot, rosterId: String(team.slot), displayName: team.managerName })),
+        auctionState: {
+          nominationOrderIndex: auction.nominationIndex,
+          currentNomination: lotPlayer
+            ? { playerName: lotPlayer.name, position: lotPlayer.position, team: lotPlayer.team || null, playerId: lotPlayer.id }
+            : null,
+          currentBid: lot?.bid ?? 0,
+          currentBidderRosterId: lot ? String(lot.leaderSlot) : null,
+          bidTimerEndAt: lot ? new Date(lot.endsAtMs).toISOString() : null,
+          minNextBid: lot ? lot.bid + 1 : auction.minBid,
+        },
+      },
+      currentUserRosterId: userSlot != null ? String(userSlot) : null,
+      isCommissioner: true,
+      onNominate: (player) => { if (player.playerId) auctionNominate(player.playerId) },
+      onBid: auctionBid,
+      onResolve: auctionSellNow,
+      timerRemainingSeconds: deadline != null && !paused ? remainingMockSeconds(deadline, auctionNow) : null,
+      timerStatus: paused ? 'paused' : deadline != null ? 'running' : 'none',
+      bidClockSeconds: lot ? Math.round(mockAuctionTiming(draftState.settings.speed).bidWindowMs / 1000) : null,
+      rosterSize: draftState.settings.rounds,
+      picks,
+      minimumBid: auction.minBid,
+      queue: queuePlayers.map((player) => ({ playerName: player.name, position: player.position, team: player.team || null, playerId: player.id })),
+    }
+  }, [draftState, userSlot, auctionNominate, auctionBid, auctionSellNow, auctionNow, queuePlayers])
 
   useEffect(() => {
     if (!draftState || draftState.status !== 'complete') return
@@ -1198,6 +1408,27 @@ export default function MockDraftSleeperRoomClient({
                 : 'Open mock is ready. AI will handle every non-user pick.',
           },
         ],
+      }
+      if (settings.draftType === 'auction') {
+        const now = Date.now()
+        const order = teams.map((team) => team.slot).sort((a, b) => a - b)
+        const userSlot = teams.find((team) => team.isUser)?.slot ?? order[0] ?? 1
+        initialState.auctionValues = computeAuctionValues(players, {
+          teamCount: settings.teamCount,
+          rosterSize: settings.rounds,
+          budgetPerTeam: MOCK_AUCTION_BUDGET,
+        })
+        initialState.auction = createMockAuction({
+          teamSlots: order,
+          order,
+          budgetPerTeam: MOCK_AUCTION_BUDGET,
+          rosterSize: settings.rounds,
+          userSlot,
+          now,
+          timing: mockAuctionTiming(settings.speed),
+        })
+        initialState.onTheClock = order[0] ?? initialState.onTheClock
+        initialState.turnDeadlineMs = null
       }
 
       setRecoveredDraft(false)
@@ -1805,7 +2036,7 @@ export default function MockDraftSleeperRoomClient({
         id: String(team.slot), slot: team.slot, name: team.managerName + (team.slotPredicted ? ' (predicted)' : ''),
         avatarUrl: team.avatarUrl, isUser: team.isUser, isCpu: team.isAI, isOrphan: team.isOrphan,
       }))}
-      picks={draftState.picks.map((pick) => ({ ...pick, rosterId: String(pick.slot) }))}
+      picks={draftState.picks.map((pick) => ({ ...pick, rosterId: String(pick.slot), amount: pick.price ?? null }))}
       teamCount={draftState.settings.teamCount} rounds={draftState.settings.rounds}
       draftType={draftState.settings.draftType} sport={draftState.settings.sport}
       currentOverall={draftState.status === 'drafting' ? draftState.currentPick : null}
@@ -1955,7 +2186,9 @@ export default function MockDraftSleeperRoomClient({
                 }}
                 onClick={() => {
                   if (drafted || !isUserTurn) return
-                  handlePick(player, false, draftState.currentPick)
+                  // Auction: tapping a player on your turn nominates them.
+                  if (draftState.auction) auctionNominate(player.id)
+                  else handlePick(player, false, draftState.currentPick)
                 }}
                 className={`min-w-0 flex flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left transition-all ${
                   isUserTurn && !drafted ? 'hover:bg-white/8' : 'cursor-default'
@@ -2136,6 +2369,7 @@ export default function MockDraftSleeperRoomClient({
                     type="button"
                     onClick={() => setDraftState((current) => current ? {
                       ...current, status: 'paused', pausedRemainingMs: Math.max(0, (current.turnDeadlineMs ?? Date.now()) - Date.now()), turnDeadlineMs: null,
+                      pausedAtMs: Date.now(),
                     } : current)}
                     className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
                     data-testid="mock-draft-pause"
@@ -2147,7 +2381,14 @@ export default function MockDraftSleeperRoomClient({
                     type="button"
                     onClick={() =>
                       setDraftState((current) =>
-                        current && current.status !== 'complete'
+                        current && current.status !== 'complete' && current.auction
+                          ? { ...current, status: 'drafting', pausedRemainingMs: undefined, pausedAtMs: undefined,
+                              auction: resumeMockAuction(current.auction, {
+                                pausedForMs: Date.now() - (current.pausedAtMs ?? Date.now()),
+                                now: Date.now(),
+                                timing: mockAuctionTiming(current.settings.speed),
+                              }) }
+                          : current && current.status !== 'complete'
                           ? { ...current, status: 'drafting',
                               turnDeadlineMs: Date.now() + (current.pausedRemainingMs ?? mockTurnDurationMs(current.settings.speed, Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser))),
                               timerSeconds: Math.ceil((current.pausedRemainingMs ?? current.settings.speed * 1000) / 1000), pausedRemainingMs: undefined }
@@ -2196,6 +2437,11 @@ export default function MockDraftSleeperRoomClient({
             <DraftModeBanner mode="mock" />
           </div>
           <div className="hidden min-w-0 overflow-hidden rounded-xl border border-white/[0.06] bg-[#0d1424] lg:flex lg:flex-col" data-testid="mock-draft-desktop-layout">
+            {auctionPanelProps ? (
+              <div className="shrink-0 border-b border-white/[0.06]" data-testid="mock-draft-auction-stage">
+                <AuctionSpotlightPanel {...auctionPanelProps} />
+              </div>
+            ) : null}
             <div className="max-h-[min(50vh,600px)] min-h-[240px] min-w-0 overflow-auto">{boardNode}</div>
             <div className="grid h-[min(50vh,560px)] min-h-[320px] grid-cols-[minmax(0,1fr)_minmax(320px,35%)] border-t border-white/[0.06]">
               <div className="min-h-0 min-w-0 overflow-hidden border-r border-white/[0.06]">{playerPanel}</div>
@@ -2236,7 +2482,12 @@ export default function MockDraftSleeperRoomClient({
                 </span>
               ) : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 pt-2">
+            <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-2 ${auctionPanelProps && mobilePanel == null ? 'pb-24' : 'pb-3'}`}>
+            {auctionPanelProps ? (
+              <div className="mb-2 overflow-hidden rounded-2xl border border-white/8 bg-[#0d1424]" data-testid="mock-draft-auction-stage-mobile">
+                <AuctionSpotlightPanel {...auctionPanelProps} />
+              </div>
+            ) : null}
             <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-4">
               {boardNode}
             </div>
@@ -2248,6 +2499,7 @@ export default function MockDraftSleeperRoomClient({
               onRequestExpand={() => setMobilePanel(lastMobilePanelRef.current)}
               layoutRef={mobileLayoutRef}
               fullOnInputFocus={mobilePanel === 'chat'}
+              dock={auctionPanelProps && mobilePanel == null ? <AuctionBidDock {...auctionPanelProps} /> : null}
               testIdPrefix="mock-draft-mobile"
               ariaLabel="Draft tray"
               chrome={
