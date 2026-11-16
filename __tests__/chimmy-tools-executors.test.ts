@@ -199,6 +199,8 @@ describe('tool specs', () => {
       'propose_lineup_change',
       'propose_trade',
       'propose_automation_change',
+      // AF Pro: reads the user's OWN earlier Chimmy messages; writes nothing.
+      'recall_past_chats',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

@@ -33,6 +33,7 @@ import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
 import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
+import { chimmyDepthForPlan } from '@/lib/chimmy/chimmyDepth'
 import { bracketFollowUps, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { runAiProtection } from '@/lib/ai-protection'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration/orchestration-service'
@@ -196,7 +197,7 @@ import { answerReadLeague } from '@/lib/chimmy/tools/answerReadLeague'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import { answerKeysFrom, eliminationSettleVerdict, faabCardFromPlan, faabPlanVerdict, tradeTargetVerdict } from '@/lib/chimmy/answerPolishBuild'
-import { readAnswerKeys, readChimmyFaabCard, readChimmyVerdict } from '@/lib/chimmy/answerPolish'
+import { readAnswerKeys, readChimmyFaabCard, readChimmyVerdict, readProUpsell } from '@/lib/chimmy/answerPolish'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
@@ -814,6 +815,8 @@ function buildUserMessage(input: {
   riskMode?: string
   privateMode: boolean
   targetUsername?: string
+  /** How much of the conversation this user's plan remembers (lib/chimmy/chimmyDepth.ts). Default 8. */
+  conversationTurns?: number
 }): string {
   const parts: string[] = []
   parts.push(CHIMMY_CURRENT_REQUEST_POLICY)
@@ -864,7 +867,7 @@ function buildUserMessage(input: {
 
   if (input.conversation.length > 0) {
     const convo = input.conversation
-      .slice(-8)
+      .slice(-(input.conversationTurns ?? 8))
       .map((turn) => `${turn.role === 'user' ? 'User' : 'Chimmy'}: ${turn.content}`)
       .join('\n')
     parts.push(`RECENT CONVERSATION (memory only; not additional requests):\n${convo}`)
@@ -1159,6 +1162,7 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
   if (faabPlan) out.faabPlan = faabPlan
   const answerKeys = readAnswerKeys(source.answerKeys)
   if (answerKeys.length > 0) out.answerKeys = answerKeys
+  if (source.recalledPastChats === true) out.recalledPastChats = true
   return out
 }
 
@@ -2564,9 +2568,17 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   if (staleness.warning) dataSources.push('stale_data_warning')
   dataSources.push('chimmy_orchestration')
 
+  /*
+   * AF Pro depth (lib/chimmy/chimmyDepth.ts): more research turns, longer answers, more memory, the
+   * Pro analyst tools and past-chat recall. Read through the same memoised plan read the spend gate
+   * uses below; a failed read is FREE depth here and still throws exactly where it always did.
+   */
+  const chimmyDepth = chimmyDepthForPlan(await readPlanAllowance().catch(() => null))
+
   const baseUserMessageBody = buildUserMessage({
     message,
     conversation,
+    conversationTurns: chimmyDepth.fallbackConversationTurns,
     screenshotSummary,
     insightSummary,
     memorySection: combinedMemorySection || undefined,
@@ -3172,7 +3184,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean }
     const loopArgs = {
       /*
        * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
@@ -3212,7 +3224,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       ]
         .filter(Boolean)
         .join('\n\n'),
-      conversation: conversation.slice(-6).map((turn) => ({
+      conversation: conversation.slice(-chimmyDepth.loopConversationTurns).map((turn) => ({
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,
       })),
@@ -3228,6 +3240,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        */
       context: toolContext,
       enabled: true,
+      depth: chimmyDepth,
     }
     let loop = await runChimmyToolLoop(loopArgs).catch(() => null)
     /*
@@ -3381,6 +3394,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       const loopSettleVerdict = lastSettle && boundLeague && lastSettle.leagueId === boundLeague.id ? eliminationSettleVerdict(lastSettle.settle) : null
       const loopVerdict = (lastFaabPlan ? faabPlanVerdict(lastFaabPlan.plan) : null) ?? loopSettleVerdict
       const loopAnswerKeys = loopDelivery.delivered ? answerKeysFrom(toolContext.toolRuns) : []
+      /*
+       * AF Pro depth (lib/chimmy/chimmyDepth.ts): the upgrade button under a free answer comes ONLY
+       * from the executor's refusals, and the "From your past chats" chip only from a recall that found
+       * something. Both read through the drawer's own reader, so the two can never disagree.
+       */
+      const loopProUpsell = loopDelivery.delivered && chimmyDepth.tier === 'free' ? readProUpsell(toolContext.proToolsRefused) : []
+      const loopRecalledPastChats = loopDelivery.delivered && toolContext.recalledPastChats === true
       const uniqueBracketReads = [...new Map(toolContext.bracketEvidence.map((entry) => [entry.href, entry])).values()]
       const singleBracketRead = uniqueBracketReads.length === 1 ? uniqueBracketReads[0] : null
       /* Stored like every other path's, so the history row can show the image the question came with. */
@@ -3446,6 +3466,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           ...(loopVerdict ? { verdict: loopVerdict } : {}),
           ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
           ...(loopAnswerKeys.length > 0 ? { answerKeys: loopAnswerKeys } : {}),
+          ...(loopProUpsell.length > 0 ? { proUpsell: loopProUpsell } : {}),
+          ...(loopRecalledPastChats ? { recalledPastChats: true } : {}),
           ...(loopScreenshot ? { screenshotAttachment: loopScreenshot } : {}),
           responseStructure: {
             shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
@@ -3486,6 +3508,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
                 ...(loopVerdict ? { verdict: loopVerdict } : {}),
                 ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
                 ...(loopAnswerKeys.length > 0 ? { answerKeys: loopAnswerKeys } : {}),
+                /*
+                 * The chip is kept — it says where THAT answer came from. The upgrade button is not:
+                 * replayed on a reload after the user subscribes, it would sell them what they bought.
+                 */
+                ...(loopRecalledPastChats ? { recalledPastChats: true } : {}),
               },
             } }),
         ])

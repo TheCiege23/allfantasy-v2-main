@@ -62,6 +62,20 @@ export type ChimmyToolContext = {
    */
   leagueId: string | null
   userId: string | null
+  /**
+   * The user's Chimmy depth (`lib/chimmy/chimmyDepth.ts`). 'free' refuses the AF Pro tools in the
+   * executor itself, so the gate never rests on the model choosing not to call one. Absent = 'free':
+   * a caller that does not say which plan the user holds gets the free toolset, never Pro on a guess.
+   */
+  depth?: import('@/lib/chimmy/chimmyDepth').ChimmyDepthTier
+  /**
+   * The AF Pro tools this answer reached for and the executor REFUSED (free plan). The route turns it
+   * into `meta.proUpsell` — the "AF Pro adds …" line and upgrade button under the answer — so the
+   * button rests on a refusal the code made, never on what the model wrote.
+   */
+  proToolsRefused?: string[]
+  /** Set when `recall_past_chats` found earlier messages, for the "From your past chats" chip. */
+  recalledPastChats?: boolean
   currentQuestion?: string
   portfolioBlocked?: boolean
   /**
@@ -818,6 +832,22 @@ export const CHIMMY_TOOL_SPECS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'recall_past_chats',
+      description: 'AF Pro. Search the signed-in user\'s OWN earlier Chimmy conversations (any league, any day) for what was discussed — e.g. "what did you tell me about Bijan last week", "did we talk about trading my WR", "remind me what you recommended". Returns dated excerpts of matching messages, newest first. Use only for questions about past conversations; the current conversation is already in context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Words to look for: player, team, topic or decision (e.g. "Bijan trade").' },
+          limit: { type: 'number', description: 'How many matching messages to return, 1-12. Default 6.' },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+    },
+  },
 ] as const
 
 /*
@@ -856,6 +886,16 @@ export async function executeChimmyTool(
 ): Promise<string> {
   const args = (rawArgs && typeof rawArgs === 'object' ? rawArgs : {}) as Record<string, unknown>
 
+  // AF Pro tools run only for a plan that includes Chimmy — refused here, before any work, whatever
+  // the model asked for (lib/chimmy/chimmyDepth.ts).
+  {
+    const { isProOnlyChimmyTool, proOnlyToolMessage } = await import('@/lib/chimmy/chimmyDepth')
+    if (isProOnlyChimmyTool(name) && ctx.depth !== 'pro') {
+      ;(ctx.proToolsRefused ??= []).push(name)
+      return proOnlyToolMessage(name)
+    }
+  }
+
   // Only with a league bound: without one these tools answer NO_LEAGUE and computed nothing.
   if (ctx.toolRuns && ctx.leagueId && ctx.userId && (SUPERSEDING_TOOLS as readonly string[]).includes(name)) {
     ctx.toolRuns.push({ tool: name, leagueId: ctx.leagueId })
@@ -863,6 +903,14 @@ export async function executeChimmyTool(
 
   try {
     switch (name) {
+      case 'recall_past_chats': {
+        if (!ctx.userId) return 'No signed-in user was verified, so no past conversations were read.'
+        const { recallPastChats } = await import('@/lib/chimmy/tools/recallPastChats')
+        const recalled = await recallPastChats({ userId: ctx.userId, query: String(args.query ?? ''), limit: Number(args.limit) })
+        if (recalled.hits > 0) ctx.recalledPastChats = true
+        return recalled.text
+      }
+
       case 'get_my_brackets': {
         if (!ctx.userId) return 'No signed-in user was verified, so no private bracket entries were read. Ask the user to sign in.'
         const { buildMyBracketsContext } = await import('@/lib/chimmy/tools/bracketTool')

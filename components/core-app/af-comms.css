@@ -786,6 +786,42 @@
 .af-cm-newer:hover { background: var(--accent-line); }
 
 /*
+ * AF Pro depth (lib/chimmy/chimmyDepth.ts): "From your past chats" when an answer quoted the user's
+ * earlier conversations, and the one-line "AF Pro adds …" + Get AF Pro under a free answer whose
+ * question needed a Pro tool. The button reuses the out-of-answers button so both upgrade paths look
+ * the same.
+ */
+.af-cm-pastchats {
+  display: inline-block;
+  margin: 2px 6px 4px 0;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.af-cm-proupsell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+}
+
+.af-cm-proupsell-line {
+  flex: 1 1 180px;
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/*
  * "Did it / Not doing it" under advice Chimmy put on file. Quiet by design: it asks once, it is
  * optional, and the answer above it matters more.
  */
