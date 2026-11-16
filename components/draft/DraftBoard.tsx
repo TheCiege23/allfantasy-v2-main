@@ -14,7 +14,7 @@ type LiveDraftBoardProps = {
   isDynasty: boolean
   isCommissioner: boolean
   formatType?: string
-  /** `League.leagueType`; picks the room's league-type accent. */
+  /** The league's concept (`draftRoomLeagueConceptRaw`); picks the room's league-type accent. */
   leagueType?: string | null
   /** Snake redraft live room — enables premium chrome from `/draft/[id]/snake`. */
   presentationVariant?: 'default' | 'redraft_snake'

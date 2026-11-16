@@ -7,6 +7,7 @@ import { isWeightedRookieLottery } from '@/lib/draft-lottery/rookieOrderMethod'
 import { checkDynastyLotteryEligibility } from '@/lib/draft-lottery/dynastyYearGuard'
 import { normalizeToSupportedSport, DEFAULT_SPORT } from '@/lib/sport-scope'
 import { isDynastyLeague } from '@/lib/league/isDynastyLeague'
+import { draftRoomLeagueConceptRaw } from '@/lib/draft-room/leagueAccent'
 
 export type WeightedLotterySlotEntry = { slot: number; rosterId: string; displayName: string }
 
@@ -57,7 +58,10 @@ export type LiveDraftRouteContext = {
   isDynasty: boolean
   isCommissioner: boolean
   formatType?: string
-  /** `League.leagueType` as stored (room v2 league accents normalize it). */
+  /**
+   * The league's concept for the room: the confirmed concept, then the pirate / survivor-guilly
+   * variant, then `League.leagueType` (`draftRoomLeagueConceptRaw`). Room v2 accents normalize it.
+   */
   leagueType: string | null
   routeType: DraftRouteType
   draftType: string
@@ -100,6 +104,7 @@ export async function resolveLiveDraftContextByDraftId(
           isDynasty: true,
           leagueType: true,
           leagueVariant: true,
+          settings: true,
         },
       },
     },
@@ -126,7 +131,7 @@ export async function resolveLiveDraftContextByDraftId(
     })
     resolvedLeague = await prisma.league.findUnique({
       where: { id: session.leagueId },
-      select: { id: true, name: true, sport: true, isDynasty: true, leagueType: true, leagueVariant: true },
+      select: { id: true, name: true, sport: true, isDynasty: true, leagueType: true, leagueVariant: true, settings: true },
     })
   }
 
@@ -159,7 +164,7 @@ export async function resolveLiveDraftContextByDraftId(
     isDynasty: isDynastyLeague(resolvedLeague),
     isCommissioner: userId ? await isCommissioner(resolvedLeague.id, userId).catch(() => false) : false,
     formatType,
-    leagueType: resolvedLeague.leagueType ?? null,
+    leagueType: draftRoomLeagueConceptRaw(resolvedLeague),
     routeType,
     draftType: String(session.draftType ?? 'snake'),
     status: String(session.status ?? 'pre_draft'),

@@ -9,7 +9,12 @@
  * The colors are not the position palette's (`positionTint.ts`): an accent marks the ROOM, and a
  * chip's text always names the type, so no meaning rides on the color alone.
  */
-import { isLeagueConceptType, leagueConceptLabel, type LeagueConceptType } from '@/lib/league/leagueConceptOptions'
+import {
+  isLeagueConceptType,
+  leagueConceptLabel,
+  readConfirmedLeagueConcept,
+  type LeagueConceptType,
+} from '@/lib/league/leagueConceptOptions'
 
 export type LeagueAccent = {
   concept: LeagueConceptType
@@ -44,6 +49,33 @@ const ALIASES: Record<string, LeagueConceptType> = {
   salarycap: 'salary_cap',
   bigbrother: 'big_brother',
   campus_to_canton: 'c2c',
+}
+
+/**
+ * The raw concept a draft room should show, before normalizing. `League.leagueType` alone cannot
+ * say it: a concept that is a label over another format stores its BASE in the column
+ * (`lib/career/leagueTypeConfirmation.ts` — pirate → dynasty/redraft, efl → dynasty,
+ * survivor_guillotine → guillotine). So, in order:
+ *
+ *   1. the concept a person confirmed (`settings.leagueTypeConfirmation.type`);
+ *   2. `leagueVariant`, but ONLY for the two specialties whose column holds a base. A variant is
+ *      not trusted in general — a redraft league with a guillotine modifier is not a Guillotine
+ *      league (`resolveLeagueConceptIntroKey` records that bug);
+ *   3. the column.
+ */
+const VARIANT_OVER_BASE = new Set(['pirate', 'survivor_guillotine'])
+
+export function draftRoomLeagueConceptRaw(league: {
+  leagueType?: string | null
+  leagueVariant?: string | null
+  settings?: unknown
+}): string | null {
+  const confirmed = readConfirmedLeagueConcept(league.settings)
+  if (confirmed) return confirmed
+  const variant = String(league.leagueVariant ?? '').trim().toLowerCase()
+  if (VARIANT_OVER_BASE.has(variant)) return variant
+  const column = String(league.leagueType ?? '').trim()
+  return column || null
 }
 
 /**

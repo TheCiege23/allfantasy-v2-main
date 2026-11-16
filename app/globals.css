@@ -1566,6 +1566,17 @@ html[data-mode="light"] .via-white\/10:where(:not(.af-draft-dark, .af-draft-dark
 }
 /* Room v2: the pick on the clock glows in the league-type accent (`--af-league-accent`, set by
    DraftRoomShell); cyan when no accent is set. */
+/*
+ * Room v2 league signatures: a board tile is an inline-size container (DraftBoardCell), and a
+ * tile carrying a signature chip drops its ADP gap below 120px, where the two no longer fit on the
+ * info line's single row. A top-level @container rule, never nested in a @media block.
+ */
+@container (max-width: 119px) {
+  .af-tile-squeezable {
+    display: none;
+  }
+}
+
 @keyframes draft-current-pick-pulse {
   0%,
   100% {

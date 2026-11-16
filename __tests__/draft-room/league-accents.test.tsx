@@ -112,9 +112,10 @@ describe('the accent in the room', () => {
     expect(pulse).not.toContain('rgba(34, 211, 238')
   })
 
-  it('the live draft route carries League.leagueType all the way to the room', () => {
+  it('the live draft route carries the league concept all the way to the room', () => {
     const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
-    expect(src('lib/draft/resolve-draft-context.ts')).toContain('leagueType: resolvedLeague.leagueType ?? null')
+    // The confirmed concept, then the pirate / survivor-guilly variant, then the column (league-signatures).
+    expect(src('lib/draft/resolve-draft-context.ts')).toContain('leagueType: draftRoomLeagueConceptRaw(resolvedLeague)')
     expect(src('app/drafts/[draftId]/page.tsx')).toContain('leagueType={context.leagueType}')
     expect(src('components/draft/DraftBoard.tsx')).toContain('leagueType={props.leagueType ?? null}')
     const room = src('components/app/draft-room/DraftRoomPageClient.tsx')

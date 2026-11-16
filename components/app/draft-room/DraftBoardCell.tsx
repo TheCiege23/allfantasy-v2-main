@@ -53,6 +53,8 @@ export type DraftBoardCellPick = {
   experienceBadge?: string | null
   /** overall − market ADP, rounded; set only when large enough to badge (+ steal, − reach). */
   adpDelta?: number | null
+  /** League signature (room v2): the player's age, or a college pick's class year. */
+  signatureChip?: { kind: 'age' | 'class'; text: string; title: string } | null
 }
 
 function TinyHeadshot({
@@ -117,6 +119,11 @@ type DraftBoardCellProps = {
   presentationVariant?: 'default' | 'redraft_snake'
   /** Commissioner-only: opens the Pick Editor panel prefilled with this overall. Caller gates by viewer + draft state. */
   onCommissionerEditPick?: () => void
+  /**
+   * Survivor signature: the column's tribe colour, drawn as a thin edge along the tile's top. The
+   * column header names the tribe, so the colour is never the only cue.
+   */
+  tribeColor?: string | null
 }
 
 /**
@@ -172,6 +179,7 @@ function DraftBoardCellInner({
   onTradeFromCell,
   onViewTradeHistory,
   onCommissionerEditPick,
+  tribeColor,
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
   const { tInterpolate, t } = useOptionalLanguage()
@@ -279,7 +287,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex h-[68px] w-full flex-col overflow-hidden rounded-lg px-1.5 py-1 text-[11px] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
+      className={`group relative flex h-[68px] w-full flex-col overflow-hidden rounded-lg px-1.5 py-1 text-[11px] [container-type:inline-size] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
       } ${
         isCurrentPick
@@ -298,7 +306,16 @@ function DraftBoardCellInner({
       data-current={isCurrentPick ? 'true' : 'false'}
       role="group"
       aria-label={ariaLabel}
+      data-tribe-color={tribeColor ?? undefined}
     >
+      {tribeColor ? (
+        <span
+          className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-1 shadow-[0_1px_0_rgba(0,0,0,0.35)]"
+          style={{ backgroundColor: tribeColor }}
+          aria-hidden
+          data-testid={`draft-board-cell-tribe-edge-${pick.overall}`}
+        />
+      ) : null}
       {onCommissionerEditPick ? (
         <button
           type="button"
@@ -456,13 +473,35 @@ function DraftBoardCellInner({
             </span>
             <span className="sr-only">{pick.playerName}</span>
           </span>
-          <span className="flex max-w-full min-w-0 flex-wrap items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80">
-            <span className="truncate">
+          {/*
+            With a league signature chip the line stays ONE row: wrapping it pushed the player's name
+            off an 84px tile (measured on phone and portrait tablet). The team truncates first — the
+            headshot already carries the team logo — and the ADP gap gives way below a 120px tile
+            (`af-tile-squeezable`, globals.css), where it no longer fits beside the chip.
+          */}
+          <span
+            className={`flex max-w-full min-w-0 items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 ${
+              pick.signatureChip ? 'flex-nowrap' : 'flex-wrap'
+            }`}
+            data-testid={`draft-board-cell-info-${pick.overall}`}
+          >
+            <span className="min-w-0 truncate">
               {(pick.position ?? '—').toString()} · {(pick.team ?? '—').toString()}
             </span>
             {pick.injuryStatus ? (
               <span className="shrink-0 font-bold text-red-700" title={pick.injuryStatus}>
                 {pick.injuryStatus.slice(0, 1).toUpperCase()}
+              </span>
+            ) : null}
+            {pick.signatureChip ? (
+              <span
+                className="shrink-0 rounded bg-black/20 px-0.5 font-bold tabular-nums"
+                title={pick.signatureChip.title}
+                aria-label={pick.signatureChip.title}
+                data-testid={`draft-board-cell-signature-${pick.overall}`}
+                data-kind={pick.signatureChip.kind}
+              >
+                {pick.signatureChip.text}
               </span>
             ) : null}
             {pick.experienceBadge ? (
@@ -477,7 +516,7 @@ function DraftBoardCellInner({
             ) : null}
             {pick.adpDelta != null && pick.adpDelta !== 0 ? (
               <span
-                className="shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums"
+                className={`shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums ${pick.signatureChip ? 'af-tile-squeezable' : ''}`}
                 title={
                   pick.adpDelta > 0
                     ? `Taken ${pick.adpDelta} picks after ADP`
