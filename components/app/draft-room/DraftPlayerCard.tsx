@@ -260,7 +260,7 @@ function DraftPlayerCardInner({
   const adpCellValue = adp === undefined && adpMetricLabel === 'ADP' ? modelMarketAdp : adp ?? null
 
   // Position tag filled in the board's colour for that position (null for a blank position).
-  const positionTint = positionTintHex(position)
+  const positionTint = positionTintHex(position, draftSport)
   const positionChipStyle = positionTint ? { backgroundColor: positionTint, color: SKIN_ON_FILL } : undefined
   const headshotUrl =
     getPlayerImage(normalized, draftSport) ??

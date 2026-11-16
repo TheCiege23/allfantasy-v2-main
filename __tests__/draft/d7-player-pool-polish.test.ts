@@ -44,7 +44,7 @@ describe('PositionChip — position-aware color badges (Commit 22)', () => {
 
   it('fills with the board position colour (positionTintHex), so pool and board agree', () => {
     expect(tableSrc).toMatch(/import \{ positionTintHex \} from '@\/lib\/draft-room\/positionTint'/)
-    expect(tableSrc).toMatch(/const tint = positionTintHex\(p\)/)
+    expect(tableSrc).toMatch(/const tint = positionTintHex\(p, sport\)/)
     expect(tableSrc).toMatch(/backgroundColor: tint/)
   })
 

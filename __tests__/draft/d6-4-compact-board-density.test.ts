@@ -38,7 +38,7 @@ describe('DraftBoardCell — square AllFantasy tiles', () => {
   })
 
   it('filled tiles are solid position colours with dark text', () => {
-    expect(cellSrc).toMatch(/positionTintHex\(pick\.position\)/)
+    expect(cellSrc).toMatch(/positionTintHex\(pick\.position, sportNorm\)/)
     expect(cellSrc).toMatch(/\{ backgroundColor: fillHex \}/)
     expect(cellSrc).toMatch(/text-\[#14172a\]/)
   })
