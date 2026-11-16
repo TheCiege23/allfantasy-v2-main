@@ -1684,7 +1684,14 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   })
 
   const domainInput = [message, ...conversation.map((turn) => turn.content)].join(' ')
-  if (!portfolioReport && !hasSportsContent(domainInput, hasImage)) {
+  /*
+   * ⚠ A QUESTION ASKED FROM INSIDE A MOCK DRAFT ROOM IS A FANTASY QUESTION. With a mock board in hand
+   * (a /mock-draft room or a league mock room), "Put Bijan Robinson at the top of my queue" was turned
+   * away (2026-11-16): no keyword matched, and only the /mock-draft room's opening line ("…every
+   * non-user pick") had been rescuing it there. The league mock room has no such line, so its first
+   * question failed every time.
+   */
+  if (!portfolioReport && !mockDraftBoard && !hasSportsContent(domainInput, hasImage)) {
     /*
      * ⚠ THIS DEFLECTION USED TO BE INDISTINGUISHABLE FROM AN ANSWER. It replied
      * "I'm Chimmy, your fantasy sports assistant. I can help with trades,
