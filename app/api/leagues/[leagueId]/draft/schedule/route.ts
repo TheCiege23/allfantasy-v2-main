@@ -8,11 +8,11 @@
  *           lock    { slotId }         make one the draft date (through the settings patch)
  *           cancel                     withdraw the open poll
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { resolveLeagueMembership } from '@/lib/league-access'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { cancelDraftSchedulePoll, createDraftSchedulePoll, lockDraftSlot, readDraftSchedule } from '@/lib/draft-schedule/draftScheduleService'
 
 export const dynamic = 'force-dynamic'
@@ -39,8 +39,7 @@ async function gate(ctx: Ctx) {
   const { leagueId } = await ctx.params
   const membership = await resolveLeagueMembership(leagueId, userId)
   if (!membership.ok) return { error: NextResponse.json({ error: membership.status === 404 ? 'Not found' : 'Forbidden' }, { status: membership.status }) } as const
-  const role = await getLeagueRole(leagueId, userId)
-  return { leagueId, userId, isCommissioner: role === 'commissioner' || role === 'co_commissioner' } as const
+  return { leagueId, userId, isCommissioner: (await canCommissionerAct(leagueId, userId, 'league')) } as const
 }
 
 export async function GET(_req: NextRequest, ctx: Ctx) {

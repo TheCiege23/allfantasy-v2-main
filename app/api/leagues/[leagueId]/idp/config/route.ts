@@ -3,10 +3,10 @@
  * PROMPT 2/6 + 5/6: scoringOverrides, settingsLockedAt, audit on change.
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getIdpLeagueConfig, isIdpLeague, upsertIdpLeagueConfig, getRosterDefaultsForIdpLeague } from '@/lib/idp'
 import { validateRosterSetup, validateScoringOutliers } from '@/lib/idp/IdpValidationService'
 import { writeIdpSettingsAudit } from '@/lib/idp/IdpSettingsAudit'
@@ -67,7 +67,7 @@ export async function PATCH(
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
-    await assertCommissioner(leagueId, session.user.id)
+    await assertCommissionerAccess(leagueId, session.user.id, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

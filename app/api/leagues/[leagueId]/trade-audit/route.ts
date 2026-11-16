@@ -9,6 +9,7 @@
  *
  * PRIVACY: trade records only; nothing here reads chat.
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -27,7 +28,7 @@ async function commissioner(leagueId: string): Promise<{ userId: string } | Next
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const role = await getLeagueRole(leagueId, userId)
   if (role === null) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, userId, 'chat'))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   return { userId }
 }
 

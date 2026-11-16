@@ -45,6 +45,8 @@ vi.mock("@/lib/league/leagueSeats", () => ({
 }))
 vi.mock("@/lib/league/permissions", () => ({ getLeagueRole: vi.fn(async () => role.value) }))
 vi.mock("@/lib/draft-room/currentDraftSession", () => ({ CURRENT_DRAFT_SESSION_ORDER: [] }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET as listRequests, PATCH as answer, POST as ask } from "@/app/api/find-league/leagues/[leagueId]/request/route"
 import { queryPrivateRequestableFantasyLeagueCards } from "@/lib/public-discovery/DiscoveryQueryLayer"

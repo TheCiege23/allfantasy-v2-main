@@ -91,7 +91,7 @@ async function rosterAccess(input: {
   })
   if (!roster) return { ok: false as const, status: 404 as const, error: 'Roster not found' }
   if (roster.ownerId === input.userId || await isAcceptedCoOwnerForRedraftRoster(input.leagueId, roster.id, input.userId)) return { ok: true as const, roster, isCommissioner: false }
-  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId)
+  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId, 'league')
   if (commissioner.ok) return { ok: true as const, roster, isCommissioner: true }
   return { ok: false as const, status: 403 as const, error: 'Forbidden' }
 }
@@ -139,7 +139,7 @@ export async function GET(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
-  const commissioner = await assertLeagueCommissioner(leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(leagueId, userId, 'view')
   const wantsLeagueScope = scope === 'league'
   if (wantsLeagueScope && !commissioner.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -179,7 +179,7 @@ export async function POST(request: Request) {
 
   try {
     if (action === 'process_waivers' || action === 'apply_commissioner_override') {
-      const commissioner = await assertLeagueCommissioner(leagueId, userId)
+      const commissioner = await assertLeagueCommissioner(leagueId, userId, 'league')
       if (!commissioner.ok) return NextResponse.json({ error: 'Forbidden' }, { status: commissioner.status })
       const result = await processNflRedraftWaiverWindow({
         seasonId: body.seasonId,

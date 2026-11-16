@@ -7,6 +7,8 @@ vi.mock('next-auth', () => ({ getServerSession: m.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/server/services/permissionService', () => ({ isElevatedCommissioner: m.elevated }))
 vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ readInactiveManagerView: m.view, setInactiveManagerMode: m.set }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET, POST } from '@/app/api/leagues/[leagueId]/inactive-managers/handler'
 import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'

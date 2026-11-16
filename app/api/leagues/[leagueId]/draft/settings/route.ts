@@ -1,3 +1,4 @@
+import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
@@ -10,7 +11,6 @@ import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
@@ -123,7 +123,7 @@ export async function GET(
   try {
     const [variant, commissioner, league, idpRosterSummary, orderModeAndLottery] = await Promise.all([
       getDraftVariantSettings(leagueId),
-      isCommissioner(leagueId, userId),
+      canCommissionerAct(leagueId, userId, 'view'),
       prisma.league.findUnique({
         where: { id: leagueId },
         select: {
@@ -286,7 +286,7 @@ export async function PATCH(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

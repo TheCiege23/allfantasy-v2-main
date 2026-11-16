@@ -2,11 +2,11 @@
  * GET: Current draft order mode + weighted lottery config (league members).
  * PUT: Update lottery config (commissioner only, year 2+ dynasty guard on mode changes).
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   getDraftOrderModeAndLotteryConfig,
   setDraftOrderModeAndLotteryConfig,
@@ -60,7 +60,7 @@ export async function PUT(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const lotteryEligibility = await checkDynastyLotteryEligibility(leagueId)

@@ -2,12 +2,12 @@
  * [NEW] POST: HOH submits nominations (or commissioner on behalf). PROMPT 6 QA.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
 import { getCurrentCycleForLeague } from '@/lib/big-brother/BigBrotherPhaseStateMachine'
 import { setNominations } from '@/lib/big-brother/BigBrotherNominationEngine'
@@ -61,7 +61,7 @@ export async function POST(
   const roster = ownedRoster ?? (coOwnerRosterId ? { id: coOwnerRosterId } : null)
   if (!roster) return NextResponse.json({ error: 'Not a league member' }, { status: 403 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (cycle.hohRosterId !== roster.id && !commissioner) {
     return NextResponse.json({ error: 'Only the HOH (or commissioner) can nominate' }, { status: 403 })
   }

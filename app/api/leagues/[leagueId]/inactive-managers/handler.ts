@@ -9,10 +9,10 @@
  *   POST  { draftAsMe: boolean } — draft as me for missed picks (AF Commissioner); on by default
  *   POST  { autoHandover: { days: 7|14|21, to: 'lineups'|'autopilot' } | null } — the opt-in auto-handover
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { readInactiveManagerView, setAutoHandover, setChimmyAutopilot, setDraftAsMe, setInactiveManagerMode } from '@/lib/inactive-manager/inactiveManagerService'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const { leagueId } = await ctx.params
   const userId = await sessionUserId()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!(await isElevatedCommissioner(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, userId, 'view'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   return NextResponse.json(await readInactiveManagerView(leagueId), { headers: { 'Cache-Control': 'private, no-store' } })
 }
 

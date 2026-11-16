@@ -13,6 +13,8 @@ vi.mock('@/lib/big-brother/BigBrotherChatAnnouncements', () => ({ announceHOHWin
 vi.mock('@/lib/big-brother/ai/getRosterDisplayNames', () => ({ getRosterDisplayNamesForLeague: vi.fn(async () => ({ r: 'Team R' })) }))
 vi.mock('@/lib/big-brother/sport-adapter', () => ({ getVetoChallengeThemeHints: vi.fn() }))
 vi.mock('@/lib/big-brother/BigBrotherAuditLog', () => ({ appendBigBrotherAudit: m.audit }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromBoolean(() => async (leagueId: string, userId: string) => (await m.league({ where: { id: leagueId } }))?.userId === userId))
 import { POST as hoh } from '@/app/api/leagues/[leagueId]/big-brother/hoh/route'
 import { POST as veto } from '@/app/api/leagues/[leagueId]/big-brother/veto-challenge/route'
 const call = (handler: typeof hoh, body = {}) => handler(new Request('https://allfantasy.ai/challenge', { method: 'POST', body: JSON.stringify(body) }) as never, { params: Promise.resolve({ leagueId: 'l' }) })

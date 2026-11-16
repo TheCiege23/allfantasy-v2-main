@@ -1,7 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole, isCommissionerRole } from '@/lib/league/permissions'
+import { isCommissionerRole } from '@/lib/league/permissions'
 import { rateLimit } from '@/lib/rate-limit'
 import { explainTrade } from '@/lib/decision-os/trade/explainTrade'
 import { receiptGradeFields } from '@/lib/decision-os/trade/receiptViews'
@@ -35,8 +36,7 @@ export async function GET(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { leagueId, tradeId } = await ctx.params
-  const role = await getLeagueRole(leagueId, userId).catch(() => null)
-  if (!isCommissionerRole(role)) {
+  if (!(await canCommissionerAct(leagueId, userId, 'trades'))) {
     return NextResponse.json({ error: 'Only the commissioner or a co-commissioner can review a trade.', code: 'not_commissioner' }, { status: 403 })
   }
   if (!rateLimit(`trade-review:${userId}`, 30, 60_000).success) {

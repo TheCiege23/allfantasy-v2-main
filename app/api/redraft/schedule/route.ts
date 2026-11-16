@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
   })
   if (!gate.ok) return gate.response
 
-  const commissionerGate = await assertLeagueCommissioner(gate.season.leagueId, userId)
+  const commissionerGate = await assertLeagueCommissioner(gate.season.leagueId, userId, 'league')
   if (!commissionerGate.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: commissionerGate.status })
   }

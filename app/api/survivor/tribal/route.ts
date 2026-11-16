@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'open') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const week = typeof body.week === 'number' ? body.week : 1
     const tribeId = typeof body.tribeId === 'string' ? body.tribeId : null
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'lock') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
   if (action === 'reveal_next') {
     // Verify commissioner on the request's leagueId BEFORE any DB lookup
     // so cross-league councilId probes leak nothing about council existence.
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'eliminate') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'rocks_draw') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'commissioner_resolve_tie') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     const eliminateRosterId = typeof body.eliminateRosterId === 'string' ? body.eliminateRosterId : ''

@@ -18,6 +18,8 @@ vi.mock('@/lib/prisma', () => ({
     redraftSeason: { findFirst: vi.fn(async () => m.nativeSeason) },
   },
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET } from '@/app/api/leagues/[leagueId]/integrity/handler'
 import { prisma } from '@/lib/prisma'

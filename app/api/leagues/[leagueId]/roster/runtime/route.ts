@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -5,7 +6,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime'
-import { canViewLeague, isElevatedCommissioner } from '@/server/services/permissionService'
+import { canViewLeague } from '@/server/services/permissionService'
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
 import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 
@@ -32,7 +33,7 @@ export async function GET(
 
   const [viewer, commissioner] = await Promise.all([
     canViewLeague(leagueId, userId),
-    isElevatedCommissioner(leagueId, userId),
+    canCommissionerAct(leagueId, userId, 'rosters'),
   ])
 
   if (!viewer && !commissioner) {

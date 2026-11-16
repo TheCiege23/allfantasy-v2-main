@@ -1,3 +1,4 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -5,7 +6,6 @@ import { randomUUID } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getRandomStrategy } from '@/lib/draft-strategies/strategyDefinitions'
 import { createStrategyLog, initializeDraftStrategyTracking } from '@/lib/draft-strategies/strategyTracker'
 import { getOrCreateDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
@@ -39,7 +39,7 @@ export async function POST(
   const { leagueId } = await params
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'rosters')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

@@ -3,11 +3,11 @@
  * Used by commissioner to force-sell or when client detects timer expiry.
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { resolveAuctionWin } from '@/lib/live-draft-engine/auction/AuctionEngine'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { appendPickToRosterDraftSnapshot } from '@/lib/live-draft-engine/RosterAssignmentService'
@@ -48,7 +48,7 @@ export async function POST(
   const requiresCommissioner = forceByCommissioner || !timerExpired
   if (requiresCommissioner) {
     try {
-      await assertCommissioner(leagueId, userId)
+      await assertCommissionerAccess(leagueId, userId, 'league')
     } catch {
       return NextResponse.json({ error: 'Only commissioners can resolve before timer expiry' }, { status: 403 })
     }

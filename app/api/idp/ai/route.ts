@@ -1,9 +1,9 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isIdpLeague } from '@/lib/idp'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   getDefenderStartSitRec,
   getIDPWaiverTargets,
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(data)
       }
       case 'power_rankings': {
-        if (!(await isCommissioner(leagueId, userId))) {
+        if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
           return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
         }
         const data = await generateIDPPowerRankings(leagueId, week)

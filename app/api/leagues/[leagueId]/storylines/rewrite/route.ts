@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -36,7 +37,7 @@ async function paidToolPost(req: Request, ctx: { params: Promise<{ leagueId: str
   const { leagueId } = await ctx.params
   const role = await getLeagueRole(leagueId, userId)
   if (role === null) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, userId, 'chat'))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (!(await storylineEntitled(userId))) return NextResponse.json({ error: 'not_entitled' }, { status: 402 })
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
