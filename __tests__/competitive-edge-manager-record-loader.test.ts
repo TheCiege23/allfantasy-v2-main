@@ -14,6 +14,8 @@ const m = vi.hoisted(() => ({
   waivers: vi.fn(),
   drafts: vi.fn(),
   rules: vi.fn(),
+  native: vi.fn(),
+  providerWaivers: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league }, leagueTeam: { findMany: m.teams } } }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: m.membership }))
@@ -21,6 +23,11 @@ vi.mock('@/lib/core-app/waivers', () => ({ resolveWaiverRules: m.rules }))
 vi.mock('@/lib/competitive-edge/tradeEdgeLoader', () => ({ readSleeperTradeHistory: m.trades }))
 vi.mock('@/lib/competitive-edge/waiverEdgeLoader', () => ({ readWaiverEdgeInput: m.waivers }))
 vi.mock('@/lib/competitive-edge/draftEdgeLoader', () => ({ readDraftEdgeInput: m.drafts }))
+vi.mock('@/lib/competitive-edge/nativeManagerHistory', () => ({ readNativeHistory: m.native }))
+vi.mock('@/lib/competitive-edge/providerManagerHistory', async (orig) => ({
+  ...(await orig<typeof import('@/lib/competitive-edge/providerManagerHistory')>()),
+  readProviderWaivers: m.providerWaivers,
+}))
 
 import { loadLeagueManagerRecords } from '@/lib/competitive-edge/managerRecordLoader'
 
@@ -33,7 +40,7 @@ const TEAMS = [
 beforeEach(() => {
   vi.clearAllMocks()
   m.membership.mockResolvedValue({ ok: true, access: { isMember: true } })
-  m.league.mockResolvedValue({ id: 'L1', name: 'Dynasty', platform: 'sleeper', platformLeagueId: 'sl-1' })
+  m.league.mockResolvedValue({ id: 'L1', name: 'Dynasty', platform: 'sleeper', platformLeagueId: 'sl-1', sport: 'NFL', season: 2026 })
   m.teams.mockResolvedValue(TEAMS)
   m.rules.mockResolvedValue({ waiverType: { available: true, data: { kind: 'faab' } } })
   m.trades.mockResolvedValue({
@@ -98,14 +105,54 @@ describe('loadLeagueManagerRecords', () => {
     expect(none).toEqual({ available: false, reason: 'That team is not in this league.' })
   })
 
-  it('a league with no Sleeper trade history says which platform, never "no trades"', async () => {
-    m.league.mockResolvedValue({ id: 'L2', name: 'Work', platform: 'espn', platformLeagueId: 'e-1' })
+  it('an ESPN league: waiver claims from its import, and trades and drafts each name the gap — never "no trades"', async () => {
+    m.league.mockResolvedValue({ id: 'L2', name: 'Work', platform: 'espn', platformLeagueId: 'e-1', sport: 'NFL', season: 2026 })
+    m.providerWaivers.mockResolvedValue({
+      available: true,
+      data: {
+        season: 2026, bidsKnown: true, asOf: '2026-11-10T00:00:00Z', stale: false,
+        claims: [{ teamExternalId: '3', position: 'RB', bid: 17, atIso: '2026-10-01T00:00:00Z' }],
+        faabByTeam: new Map([['3', 64]]),
+      },
+    })
     const r = await loadLeagueManagerRecords({ leagueId: 'L2', userId: 'u1' })
     if (!r.available) throw new Error(r.reason)
     expect(m.trades).not.toHaveBeenCalled()
-    const t = r.data.records[0]!.trades
-    expect(t.available).toBe(false)
-    if (!t.available) expect(t.reason).toMatch(/ESPN leagues aren't connected yet/)
+    expect(m.waivers).not.toHaveBeenCalled()
+    const mike = r.data.records[0]!
+    expect(!mike.trades.available && mike.trades.reason).toBe("ESPN trades aren't imported in a form that can be counted per manager yet.")
+    expect(!mike.drafts.available && mike.drafts.reason).toBe("ESPN draft picks aren't matched to the manager who made them yet.")
+    expect(mike.waivers.available && mike.waivers.data.facts.map((f) => f.text)).toContain('Mike has won 1 waiver claim this season, spending $17 in all.')
+    expect(mike.waivers.available && mike.waivers.data.faabRemaining).toBe(64)
+  })
+
+  it('🛑 an MFL league records no bids, so it draws claim counts and NO dollar figures — never "spent $0"', async () => {
+    m.league.mockResolvedValue({ id: 'L3', name: 'MFL', platform: 'mfl', platformLeagueId: 'm-1', sport: 'NFL', season: 2026 })
+    m.providerWaivers.mockResolvedValue({
+      available: true,
+      data: { season: 2026, bidsKnown: false, asOf: null, stale: false, claims: [{ teamExternalId: '3', position: 'WR', bid: null, atIso: '2026-10-01T00:00:00Z' }], faabByTeam: new Map([['3', 80]]) },
+    })
+    const r = await loadLeagueManagerRecords({ leagueId: 'L3', userId: 'u1' })
+    if (!r.available) throw new Error(r.reason)
+    const w = r.data.records[0]!.waivers
+    expect(w.available && w.data.facts.map((f) => f.text)).toEqual(['Mike has won 1 waiver claim this season.'])
+  })
+
+  it('a native league reads our own tables for all three sections', async () => {
+    m.league.mockResolvedValue({ id: 'L4', name: 'Native', platform: 'allfantasy', platformLeagueId: null, sport: 'NFL', season: 2026 })
+    m.native.mockResolvedValue({
+      trades: { available: true, data: { trades: [], seasonsScanned: ['2026'], historyGaps: [], asOf: '2026-11-15T00:00:00Z', stale: false } },
+      waivers: { available: true, data: { season: 2026, claims: [], faabByTeam: new Map([['3', 55]]), asOf: null, stale: false } },
+      drafts: { available: true, data: { picks: [], unattributedSeasons: [] } },
+    })
+    const r = await loadLeagueManagerRecords({ leagueId: 'L4', userId: 'u1' })
+    if (!r.available) throw new Error(r.reason)
+    expect(m.native).toHaveBeenCalled()
+    expect(m.trades).not.toHaveBeenCalled()
+    const mike = r.data.records[0]!
+    expect(mike.trades.available && mike.trades.data.coverage.trades).toBe(0)
+    expect(mike.waivers.available && mike.waivers.data.faabRemaining).toBe(55)
+    expect(mike.drafts.available).toBe(true)
   })
 
   it('a reader that throws becomes that section’s reason; the rest of the record still reads', async () => {

@@ -1460,6 +1460,13 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     (m) => `todavía no se anotó nada en ${m[1]}. El calendario completo ya está registrado, así que hay filas para cada semana, pero ordenarlas sería clasificar a doce equipos que no anotaron nada.`,
   ],
   // Scout — Competitive Edge, a league on a platform it does not read yet.
+  // A manager's record on a platform whose history is not counted per manager yet (2026-11-16,
+  // lib/competitive-edge/providerManagerHistory.ts).
+  [/^(.+) trades aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los intercambios de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
+  [/^(.+) waiver claims aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los reclamos de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
+  [/^(.+) draft picks aren't matched to the manager who made them yet\.$/, (m) => `Las selecciones del draft de ${m[1]} todavía no están asignadas al mánager que las hizo.`],
+  [/^(.+) doesn't give each team a person id, so there is no per-manager history to read\.$/, (m) => `${m[1]} no da un identificador de persona para cada equipo, así que no hay historial por mánager que leer.`],
+  [/^(Trade|Waiver|Draft) history could not be read right now\.$/, (m) => `No se pudo leer ahora el historial de ${m[1] === 'Trade' ? 'intercambios' : m[1] === 'Waiver' ? 'reclamos' : 'drafts'}.`],
   [
     /^Competitive Edge reads Sleeper trade and waiver history today, and (.+) leagues aren't connected yet$/,
     (m) => `Competitive Edge lee hoy el historial de intercambios y agentes libres de Sleeper, y las ligas de ${m[1]} todavía no están conectadas`,
