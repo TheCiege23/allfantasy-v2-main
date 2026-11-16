@@ -94,10 +94,10 @@ function rowKey(p: PlayerEntry): string {
   return `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
 }
 
-/** D.7 — scannable position badge, filled in the board's position colour (Sleeper palette). */
-function PositionChip({ pos }: { pos: string | null }) {
+/** D.7 — scannable position badge, filled in the board's position colour (same sport-aware palette). */
+function PositionChip({ pos, sport }: { pos: string | null; sport?: string | null }) {
   const p = (pos ?? '').trim().slice(0, 4).toUpperCase() || '—'
-  const tint = positionTintHex(p)
+  const tint = positionTintHex(p, sport)
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded px-1 py-px text-[11px] font-bold uppercase leading-none"
@@ -282,7 +282,7 @@ function SleeperRow(props: SleeperRowProps) {
                 ) : null}
               </div>
               <div className="flex min-w-0 items-center gap-1">
-                <PositionChip pos={p.position} />
+                <PositionChip pos={p.position} sport={draftSport} />
                 {p.team ? (
                   <span className="truncate text-[11px] text-white/38">{p.team}</span>
                 ) : isProspect ? (

@@ -931,7 +931,7 @@ function PlayerPanelInner({
             {positionPillCounts.map((opt) => {
               const isActive = positionFilter === opt.value
               const isAll = String(opt.value).toUpperCase() === 'ALL'
-              const tint = isAll ? null : positionTintHex(String(opt.value))
+              const tint = isAll ? null : positionTintHex(String(opt.value), sport)
               return (
                 <button
                   key={opt.value}

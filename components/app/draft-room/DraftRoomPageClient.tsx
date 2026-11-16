@@ -5253,6 +5253,8 @@ export function DraftRoomPageClient({
             dynastySkin={isDynasty}
             dynastyDraftKindLabel={dynastyDraftKindLabel}
             rookieAuctionNote={rookieAuctionNote}
+            onOpenChimmy={openChimmy}
+            picksUntilUser={ribbonPicksUntilUser}
           />
           <AutopickMeToggle
             viewerAutopick={session.viewerAutopick}
