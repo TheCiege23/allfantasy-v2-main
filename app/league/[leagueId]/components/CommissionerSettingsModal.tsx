@@ -39,8 +39,6 @@ import {
   isC2cSettingsTab,
 } from './settings/SettingsNav'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
-import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
-import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { IDPCapPanel } from '@/app/idp/components/settings/IDPCapPanel'
 import { KeeperCommissionerDashboard } from './KeeperCommissionerDashboard'
@@ -492,14 +490,16 @@ export function CommissionerSettingsModal({
               />
               <details className="border-t border-white/[0.06] bg-[#0a0f18]/40">
                 <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-[#ffb8d1]/80">
-                  League format, roster slots & advanced sport config
+                  League format & advanced sport config
                 </summary>
                 <SportConfigSettingsPanel
                   sport={String((initialData as Record<string, unknown>).sport ?? 'NFL')}
                   leagueSettings={initialData as Record<string, unknown>}
                   canEdit={canEdit}
                   onSportConfigChange={(next) => debouncedSave({ sportConfig: next })}
-                  omitSections={{ scoring: true }}
+                  // Roster slots here wrote `sportConfig.rosterSlotCounts`, which no lineup check reads; the Roster
+                  // tab's editor is where slots live (2026-11-15).
+                  omitSections={{ scoring: true, roster: true }}
                 />
               </details>
             </div>
@@ -657,11 +657,9 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'zombie_ai' ? (
             <ZombieAIPanel hasAfSub={hasSub} />
           ) : activeTab === 'idp_roster' ? (
-            <IDPRosterPanel />
-          ) : activeTab === 'idp_scoring' ? (
-            <IDPScoringPanel />
-          ) : activeTab === 'idp_display' ? (
-            <IDPDisplayPanel />
+            <div className="px-6 py-6">
+              <IDPRosterPanel leagueId={leagueId} canEdit={canEdit} />
+            </div>
           ) : activeTab === 'idp_ai' ? (
             <IDPAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={payload?.canEdit ?? false} />
           ) : activeTab === 'idp_cap' ? (

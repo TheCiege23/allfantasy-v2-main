@@ -3269,6 +3269,7 @@ export const translationsEsParity: Record<string, string> = {
   "lsEd.ro.saved": "Ajustes de plantilla guardados.",
   "lsEd.ro.draftSynced": "El draft se actualizó a {{n}} rondas para coincidir con la nueva plantilla (los puestos de IR no se draftean).",
   "lsEd.ro.draftKept": "Se mantuvo tu número de rondas personalizado. Cámbialo en Ajustes del draft si quieres que siga a la plantilla.",
+  "lsEd.ro.lineupsNeedFix": "{{n}} equipo(s) tienen una alineación guardada que ya no encaja en los nuevos puestos de la plantilla. Se avisó a sus mánagers para que la corrijan.",
   "lsEd.ro.draftStarted": "El draft ya comenzó, así que sus rondas no se cambiaron.",
   "lsEd.ro.resetLeague": "Restablecer al predeterminado de la liga",
   "lsEd.ro.reset": "Restablecer",

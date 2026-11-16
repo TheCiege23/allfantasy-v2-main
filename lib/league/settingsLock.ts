@@ -139,6 +139,12 @@ const KEY_RULES: Array<[RegExp, LockGroup | null]> = [
   [/trad(e|ing)|veto/i, 'trades'],
   [/keeper/i, 'keepers'],
   [/waiver|faab/i, 'waivers'],
+  // Rules no pattern below reached, so a locked league could still change them (2026-11-15): protected/conditional
+  // pick terms are a trade rule; the third-place game and the standings tiebreakers decide the playoffs; the games
+  // limit and the sport config's games-count rules decide what scores.
+  [/^pick_terms_rule$/, 'trades'],
+  [/^thirdPlaceGameEnabled$|^tiebreaker_order$|^tiebreakerOrder$/, 'playoffs'],
+  [/^gamesLimits$|^games_limits$|^sportConfig$/, 'scoring'],
   [/playoff|consolation|toilet|championship|seeding|bye/i, 'playoffs'],
   [/scor|median|ppr|points/i, 'scoring'],
   [/[sS]tat[A-Z_]|[sS]tats$/, 'scoring'],

@@ -25,6 +25,9 @@ import {
   setDraftOrderModeAndLotteryConfig,
 } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { prisma } from '@/lib/prisma'
+import { settingsKeysLockedResponse } from '@/lib/league/settingsLockGuard'
+import { logAction } from '@/server/services/auditService'
+import { syncTaxiSlotsToLeague } from '@/lib/taxi/taxiSlotsSync'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import {
   DYNASTY_ROSTER_PRESETS,
@@ -162,6 +165,10 @@ export async function PUT(
     league.isDynasty ||
     (league.leagueVariant && ['devy_dynasty', 'merged_devy_c2c'].includes(String(league.leagueVariant).toLowerCase()))
   if (!isDynasty) return NextResponse.json({ error: 'Not a dynasty league' }, { status: 400 })
+  // 🛑 This save had no settings-lock check (2026-11-15): a locked league's roster, scoring, playoff, trade and taxi
+  // rules could still change here. Each key is checked against the area it belongs to.
+  const locked = await settingsKeysLockedResponse(leagueId, Object.keys(body ?? {}))
+  if (locked) return locked
 
   const leagueSport = (league.sport as string) ?? (league.settings as Record<string, unknown> | null)?.sport_type ?? 'NFL'
   if (!isDynastyFootballSport(String(leagueSport))) {
@@ -316,6 +323,7 @@ export async function PUT(
   const taxiBefore = touchesTaxi ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
 
   const config = await upsertDynastyConfig(leagueId, dynastyPayload)
+  if (dynastyPayload.taxiSlots != null) await syncTaxiSlotsToLeague(leagueId, dynastyPayload.taxiSlots)
 
   const taxiAfter = taxiBefore ? await getEffectiveTaxiSettings(leagueId).catch(() => null) : null
   const taxiChange = taxiBefore && taxiAfter ? [taxiRulesFromEffective(taxiBefore), taxiRulesFromEffective(taxiAfter)] : [{}, {}]
@@ -332,5 +340,13 @@ export async function PUT(
     ),
   })
 
+  await logAction({
+    leagueId,
+    userId,
+    actionType: 'settings_patch',
+    entityType: 'league',
+    entityId: leagueId,
+    metadata: { section: 'dynasty', source: 'dynasty-settings', keys: Object.keys(body ?? {}).slice(0, 40) },
+  }).catch(() => {})
   return NextResponse.json({ ok: true, config })
 }
