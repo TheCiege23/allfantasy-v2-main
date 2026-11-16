@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { mockTurnDurationMs, remainingMockSeconds } from '@/lib/mock-draft/turn-clock'
 import { postChimmyRequest } from '@/lib/chimmy/postRequest'
+import {
+  applyMockQueueProposal,
+  buildMockDraftBoard,
+  readMockQueueProposal,
+  type MockBoardAuction,
+  type MockQueueProposal,
+} from '@/lib/mock-draft/mockChimmyBoard'
+import { CHIMMY_PRO_TOOL_UPGRADE_HREF, proUpsellLine, readProUpsell, type ChimmyProOnlyTool } from '@/lib/chimmy/answerPolish'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getMockDraftTeamCountOptions } from '@/lib/mock-draft/mockTeamCount'
@@ -179,6 +187,12 @@ interface ChatMessage {
   role: 'user' | 'ai'
   content: string
   pick?: number
+  /** A queue change Chimmy proposed. Applied to this room's queue only when the user taps Confirm. */
+  queueProposal?: MockQueueProposal
+  queueProposalState?: 'pending' | 'applied' | 'stale' | 'dismissed'
+  queueProposalNote?: string
+  /** AF Pro tools a free answer reached for and the server refused (`meta.proUpsell`). */
+  proUpsell?: ChimmyProOnlyTool[]
 }
 
 interface DraftState {
@@ -647,35 +661,89 @@ function buildDefaultSettings(): DraftSettings {
   }
 }
 
-function buildPlayerContextMessage(state: DraftState, queue: string[]): string {
-  const currentTeam = state.teams.find((team) => team.slot === state.onTheClock)
-  const queuedPlayers = queue
-    .map((id) => state.availablePlayers.find((player) => player.id === id))
-    .filter((player): player is AvailablePlayer => player != null)
-    .slice(0, 5)
+/** The mock auction as Chimmy reads it: who is on the block, the bid, and every team's money. */
+function mockAuctionForChimmy(state: DraftState, now: number): MockBoardAuction | null {
+  const auction = state.auction
+  if (!auction) return null
+  const lot = auction.lot
+  const player = lot ? state.availablePlayers.find((p) => p.id === lot.playerId) ?? null : null
+  const nameOf = (slot: number) => state.teams.find((t) => t.slot === slot)?.managerName ?? null
+  return {
+    nomination: player ? { name: player.name, position: player.position, team: player.team || null } : null,
+    currentBid: lot?.bid ?? 0,
+    highBidderName: lot ? nameOf(lot.leaderSlot) : null,
+    minNextBid: lot ? lot.bid + 1 : auction.minBid,
+    bidSecondsLeft: lot ? Math.max(0, Math.ceil((lot.endsAtMs - now) / 1000)) : null,
+    teams: state.teams.map((t) => ({
+      name: t.managerName,
+      budget: auction.budgets[t.slot] ?? 0,
+      openSlots: Math.max(0, auction.rosterSize - t.picks.length),
+      isViewer: t.isUser,
+    })),
+  }
+}
 
-  const draftedNames = new Set(state.picks.map((pick) => pick.playerId))
-  const topAvailable = state.availablePlayers
-    .filter((player) => !draftedNames.has(player.id))
-    .slice(0, 8)
-    .map((player) => `${player.name} (${player.position}, ${player.team || 'FA'}, ADP ${player.adp?.toFixed(1) ?? 'unavailable'})`)
-    .join(', ')
+type ChimmyReply = { text: string; queueProposal: MockQueueProposal | null; proUpsell: ChimmyProOnlyTool[] }
 
-  const rosterSummary = currentTeam
-    ? currentTeam.picks.map((pick) => `${pick.playerName} (${pick.position})`).join(', ') || 'No picks yet'
-    : 'No active team'
+function aiMessageFrom(reply: ChimmyReply, pick?: number): ChatMessage {
+  return {
+    role: 'ai',
+    content: reply.text,
+    ...(pick != null ? { pick } : {}),
+    ...(reply.queueProposal ? { queueProposal: reply.queueProposal, queueProposalState: 'pending' as const } : {}),
+    ...(reply.proUpsell.length > 0 ? { proUpsell: reply.proUpsell } : {}),
+  }
+}
 
-  return [
-    `Mock draft context: ${state.settings.sport} ${state.settings.scoring} ${state.settings.draftType} draft.`,
-    `Current pick: #${state.currentPick}.`,
-    `On the clock: ${currentTeam?.managerName ?? 'Unknown manager'}.`,
-    `Current roster: ${rosterSummary}.`,
-    `Top available players: ${topAvailable}.`,
-    queuedPlayers.length > 0
-      ? `Queued players: ${queuedPlayers.map((player) => `${player.name} (${player.position})`).join(', ')}.`
-      : 'Queued players: none.',
-    'Keep the answer tight, practical, and fantasy-specific.',
-  ].join(' ')
+/**
+ * A queue change Chimmy proposed, in the chat. Nothing changes until Confirm, and Confirm only edits this
+ * room's queue — it never drafts. Stage 3 of drafts (2026-11-16).
+ */
+function MockQueueCard({ message, onResolve }: { message: ChatMessage; onResolve: (action: 'confirm' | 'dismiss') => void }) {
+  const proposal = message.queueProposal
+  if (!proposal) return null
+  const label = (p: { name: string; position: string }) => `${p.name}${p.position ? ` (${p.position})` : ''}`
+  const state = message.queueProposalState ?? 'pending'
+  return (
+    <div className="mt-2 rounded-lg border border-cyan-300/25 bg-black/25 p-2 text-white/80" data-testid="mock-draft-queue-card">
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">Queue change</div>
+      {proposal.add.length > 0 ? <div className="mt-1">Add to the {proposal.addAt}: {proposal.add.map(label).join(', ')}</div> : null}
+      {proposal.remove.length > 0 ? <div className="mt-1">Take off: {proposal.remove.map(label).join(', ')}</div> : null}
+      {state === 'pending' ? (
+        <>
+          {proposal.resultingTop.length > 0 ? <div className="mt-1 text-white/45">Your queue will start: {proposal.resultingTop.join(', ')}</div> : null}
+          <div className="mt-1 text-white/45">Nothing changes until you tap Confirm. Chimmy never makes a pick.</div>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => onResolve('confirm')}
+              className="min-h-[36px] rounded-lg bg-cyan-400 px-3 py-1 font-bold text-[#04121c] hover:bg-cyan-300"
+              data-testid="mock-draft-queue-confirm"
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              onClick={() => onResolve('dismiss')}
+              className="min-h-[36px] rounded-lg bg-white/10 px-3 py-1 text-white/70 hover:text-white"
+              data-testid="mock-draft-queue-dismiss"
+            >
+              Dismiss
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="mt-1 font-semibold" data-testid="mock-draft-queue-card-state">
+          {state === 'applied'
+            ? 'Done — your queue is updated.'
+            : state === 'stale'
+              ? 'Your queue changed after this card was made, so nothing was applied. Ask Chimmy again.'
+              : 'Dismissed — nothing changed.'}
+          {message.queueProposalNote ? <span className="ml-1 font-normal text-white/50">{message.queueProposalNote}</span> : null}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function MockDraftSleeperRoomClient({
@@ -897,6 +965,15 @@ export default function MockDraftSleeperRoomClient({
             ? `~${roomCopy.clockBarPicksUntil(picksUntilUser)}`
             : null
 
+  /* The chat log follows the newest message, so a Chimmy card's Confirm is in view without hunting. */
+  const chatMessageCount = draftState?.chatMessages.length ?? 0
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.querySelectorAll<HTMLElement>('[data-mock-chat-log]').forEach((el) => {
+      el.scrollTop = el.scrollHeight
+    })
+  }, [chatMessageCount, mobilePanel])
+
   const queuePlayers = useMemo(() => {
     if (!draftState) return []
     return queue
@@ -912,8 +989,13 @@ export default function MockDraftSleeperRoomClient({
     }
   }, [])
 
+  /*
+   * Chimmy reads THIS board (stage 3 of drafts, 2026-11-16). The room runs in the browser, so nothing
+   * on the server knows the mock — the snapshot rides with every question and the server turns it into
+   * Chimmy's grounding (lib/chimmy/mockDraftGrounding.ts). Before this, Chimmy saw a one-line summary.
+   */
   const callChimmy = useCallback(
-    async (message: string, includeConversation: boolean) => {
+    async (message: string, includeConversation: boolean): Promise<ChimmyReply> => {
       const formData = new FormData()
       formData.set('message', message)
       formData.set('source', 'mock-draft')
@@ -932,16 +1014,43 @@ export default function MockDraftSleeperRoomClient({
         ),
       )
 
+      if (draftState) {
+        const board = buildMockDraftBoard(
+          {
+            settings: draftState.settings,
+            teams: draftState.teams,
+            availablePlayers: draftState.availablePlayers,
+            picks: draftState.picks,
+            currentPick: draftState.currentPick,
+            status: draftState.status,
+            userSecondsLeft: isUserTurn && draftState.settings.speed > 0 ? draftState.timerSeconds : null,
+            slotAtOverall: (overall) => getOnTheClockSlot(draftState.teams, draftState.settings, overall),
+            auction: mockAuctionForChimmy(draftState, Date.now()),
+          },
+          queue,
+        )
+        if (board) formData.set('mockDraftBoard', JSON.stringify(board))
+      }
+
       const response = await postChimmyRequest(formData)
 
-      const payload = (await response.json().catch(() => ({}))) as { response?: string; error?: string }
+      const payload = (await response.json().catch(() => ({}))) as {
+        response?: string
+        error?: string
+        meta?: { mockQueueProposals?: unknown; proUpsell?: unknown }
+      }
       if (!response.ok) {
         throw new Error(payload.error ?? 'Chimmy request failed.')
       }
 
-      return payload.response ?? 'Chimmy did not return a message.'
+      const proposals = Array.isArray(payload.meta?.mockQueueProposals) ? payload.meta.mockQueueProposals : []
+      return {
+        text: payload.response ?? 'Chimmy did not return a message.',
+        queueProposal: readMockQueueProposal(proposals[0]),
+        proUpsell: readProUpsell(payload.meta?.proUpsell),
+      }
     },
-    [draftState, mode, settings.scoring, settings.sport],
+    [draftState, isUserTurn, mode, queue, settings.scoring, settings.sport],
   )
 
   const persistDraft = useCallback(
@@ -1453,15 +1562,12 @@ export default function MockDraftSleeperRoomClient({
 
     setChatLoading(true)
     try {
-      const response = await callChimmy(
-        `${buildPlayerContextMessage(draftState, queue)} Give me the best recommendation for this spot.`,
-        true,
-      )
+      const reply = await callChimmy('Give me the best recommendation for this spot.', true)
       setDraftState((current) =>
         current
           ? {
               ...current,
-              chatMessages: [...current.chatMessages, { role: 'ai', content: response, pick: current.currentPick }],
+              chatMessages: [...current.chatMessages, aiMessageFrom(reply, current.currentPick)],
             }
           : current,
       )
@@ -1483,7 +1589,7 @@ export default function MockDraftSleeperRoomClient({
     } finally {
       setChatLoading(false)
     }
-  }, [callChimmy, chatLoading, draftState, queue])
+  }, [callChimmy, chatLoading, draftState])
 
   const sendChat = useCallback(async () => {
     if (!draftState || chatLoading || chatInput.trim().length === 0) return
@@ -1501,15 +1607,12 @@ export default function MockDraftSleeperRoomClient({
     )
 
     try {
-      const response = await callChimmy(
-        `${buildPlayerContextMessage(draftState, queue)} User question: ${message}`,
-        true,
-      )
+      const reply = await callChimmy(message, true)
       setDraftState((current) =>
         current
           ? {
               ...current,
-              chatMessages: [...current.chatMessages, { role: 'ai', content: response }],
+              chatMessages: [...current.chatMessages, aiMessageFrom(reply)],
             }
           : current,
       )
@@ -1531,7 +1634,41 @@ export default function MockDraftSleeperRoomClient({
     } finally {
       setChatLoading(false)
     }
-  }, [callChimmy, chatInput, chatLoading, draftState, queue])
+  }, [callChimmy, chatInput, chatLoading, draftState])
+
+  /** A Chimmy queue card: applied to this room's queue only on the user's tap. Never a pick. */
+  const resolveQueueProposal = useCallback(
+    (index: number, action: 'confirm' | 'dismiss') => {
+      if (!draftState) return
+      const target = draftState.chatMessages[index]
+      if (!target?.queueProposal || (target.queueProposalState ?? 'pending') !== 'pending') return
+      let nextState: NonNullable<ChatMessage['queueProposalState']> = 'dismissed'
+      let note: string | undefined
+      if (action === 'confirm') {
+        const drafted = new Set(draftState.picks.map((p) => p.playerId))
+        const pool = new Set(draftState.availablePlayers.map((p) => p.id))
+        const result = applyMockQueueProposal(queue, target.queueProposal, (id) => pool.has(id) && !drafted.has(id))
+        if (result.ok) {
+          setQueue(result.queue)
+          nextState = 'applied'
+          if (result.skipped.length > 0) note = `Already drafted, so not added: ${result.skipped.join(', ')}.`
+        } else {
+          nextState = 'stale'
+        }
+      }
+      setDraftState((current) =>
+        current
+          ? {
+              ...current,
+              chatMessages: current.chatMessages.map((m, i) =>
+                i === index ? { ...m, queueProposalState: nextState, ...(note ? { queueProposalNote: note } : {}) } : m,
+              ),
+            }
+          : current,
+      )
+    },
+    [draftState, queue],
+  )
 
   const gradeMyTeam = useCallback(async () => {
     if (!draftState || draftState.status !== 'complete' || chatLoading) return
@@ -1547,13 +1684,13 @@ export default function MockDraftSleeperRoomClient({
         'Give one clear grade and a compact strengths / weaknesses breakdown.',
       ].join(' ')
 
-      const response = await callChimmy(message, false)
-      setTeamGrade(response)
+      const reply = await callChimmy(message, false)
+      setTeamGrade(reply.text)
       setDraftState((current) =>
         current
           ? {
               ...current,
-              chatMessages: [...current.chatMessages, { role: 'ai', content: response }],
+              chatMessages: [...current.chatMessages, aiMessageFrom(reply)],
             }
           : current,
       )
@@ -2260,76 +2397,102 @@ export default function MockDraftSleeperRoomClient({
       </div>
     )
 
+    /*
+     * Roster and chat are separate pieces so the phone tray can show one per tab — before this the Chat
+     * tab stacked the whole roster above a chat a few lines tall, which hid a Chimmy queue card's Confirm
+     * button. On desktop the roster is capped at under half the column so the chat always has room.
+     */
+    const rosterSection = (
+      <div className="shrink-0 border-b border-white/8 p-3 lg:max-h-[45%] lg:overflow-y-auto">
+        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">
+          {onTheClockTeam?.isUser ? 'Your Roster' : `${onTheClockTeam?.managerName ?? 'Current Team'} Roster`}
+        </div>
+        <div className="mt-3 space-y-1">
+          {getRosterSlots(draftState.settings).map((slot, index) => (
+            <div key={`${slot}-${index}`} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2 py-1.5">
+              <span className={`w-12 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(slot)}`}>
+                {slot}
+              </span>
+              {currentRosterSlots[index] ? (
+                <>
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-white/75">{currentRosterSlots[index]?.playerName}</span>
+                  <span className="text-[11px] text-white/30">{currentRosterSlots[index]?.team}</span>
+                </>
+              ) : (
+                <span className="text-[11px] italic text-white/20">Empty</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+
+    const chatSection = (
+      <div className="flex min-h-0 flex-1 flex-col p-3">
+        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">Chat</div>
+        <div className="mt-3 min-h-[120px] flex-1 space-y-2 overflow-y-auto" data-mock-chat-log="">
+          {draftState.chatMessages.map((message, index) => (
+            <div
+              key={`${message.role}-${index}`}
+              className={`rounded-lg px-2 py-1.5 text-[11px] ${
+                message.role === 'ai'
+                  ? 'bg-cyan-500/10 text-cyan-100'
+                  : 'bg-white/5 text-white/65'
+              }`}
+            >
+              {message.content}
+              {message.queueProposal ? (
+                <MockQueueCard message={message} onResolve={(action) => resolveQueueProposal(index, action)} />
+              ) : null}
+              {message.proUpsell && message.proUpsell.length > 0 ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/10 pt-2" data-testid="mock-draft-pro-upsell">
+                  <span className="text-white/60">{proUpsellLine(message.proUpsell)}</span>
+                  <a
+                    href={CHIMMY_PRO_TOOL_UPGRADE_HREF}
+                    className="rounded-lg bg-white/10 px-2 py-1 font-bold text-white hover:bg-white/15"
+                  >
+                    Get AF Pro
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <input
+            value={chatInput}
+            onChange={(event) => setChatInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void sendChat()
+            }}
+            placeholder="Type a message..."
+            className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/20 focus:outline-none"
+            data-testid="mock-draft-chat-input"
+          />
+          <button
+            type="button"
+            onClick={() => void sendChat()}
+            className="rounded-xl bg-white/10 px-3 py-2 text-xs text-white/70 hover:text-white"
+            data-testid="mock-draft-chat-send"
+          >
+            Send
+          </button>
+          <button
+            type="button"
+            onClick={() => void askAi()}
+            className="rounded-xl bg-[linear-gradient(135deg,#7c3aed,#0891b2)] px-3 py-2 text-xs font-bold text-white"
+            data-testid="mock-draft-ask-ai"
+          >
+            Ask Chimmy
+          </button>
+        </div>
+      </div>
+    )
+
     const rosterAndChatPanel = (
       <div className="flex h-full flex-col bg-[#0c0c1e]">
-        <div className="border-b border-white/8 p-3">
-          <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">
-            {onTheClockTeam?.isUser ? 'Your Roster' : `${onTheClockTeam?.managerName ?? 'Current Team'} Roster`}
-          </div>
-          <div className="mt-3 space-y-1">
-            {getRosterSlots(draftState.settings).map((slot, index) => (
-              <div key={`${slot}-${index}`} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2 py-1.5">
-                <span className={`w-12 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(slot)}`}>
-                  {slot}
-                </span>
-                {currentRosterSlots[index] ? (
-                  <>
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-white/75">{currentRosterSlots[index]?.playerName}</span>
-                    <span className="text-[11px] text-white/30">{currentRosterSlots[index]?.team}</span>
-                  </>
-                ) : (
-                  <span className="text-[11px] italic text-white/20">Empty</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col p-3">
-          <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">Chat</div>
-          <div className="mt-3 flex-1 space-y-2 overflow-y-auto">
-            {draftState.chatMessages.map((message, index) => (
-              <div
-                key={`${message.role}-${index}`}
-                className={`rounded-lg px-2 py-1.5 text-[11px] ${
-                  message.role === 'ai'
-                    ? 'bg-cyan-500/10 text-cyan-100'
-                    : 'bg-white/5 text-white/65'
-                }`}
-              >
-                {message.content}
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 flex gap-2">
-            <input
-              value={chatInput}
-              onChange={(event) => setChatInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void sendChat()
-              }}
-              placeholder="Type a message..."
-              className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-white/20 focus:outline-none"
-              data-testid="mock-draft-chat-input"
-            />
-            <button
-              type="button"
-              onClick={() => void sendChat()}
-              className="rounded-xl bg-white/10 px-3 py-2 text-xs text-white/70 hover:text-white"
-              data-testid="mock-draft-chat-send"
-            >
-              Send
-            </button>
-            <button
-              type="button"
-              onClick={() => void askAi()}
-              className="rounded-xl bg-[linear-gradient(135deg,#7c3aed,#0891b2)] px-3 py-2 text-xs font-bold text-white"
-              data-testid="mock-draft-ask-ai"
-            >
-              Ask Chimmy
-            </button>
-          </div>
-        </div>
+        {rosterSection}
+        {chatSection}
       </div>
     )
 
@@ -2550,7 +2713,13 @@ export default function MockDraftSleeperRoomClient({
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                    {mobilePanel === 'players' ? playerPanel : rosterAndChatPanel}
+                    {mobilePanel === 'players' ? (
+                      playerPanel
+                    ) : mobilePanel === 'roster' ? (
+                      <div className="bg-[#0c0c1e]">{rosterSection}</div>
+                    ) : (
+                      <div className="flex h-full flex-col bg-[#0c0c1e]">{chatSection}</div>
+                    )}
                   </div>
                 </div>
               ) : null}
