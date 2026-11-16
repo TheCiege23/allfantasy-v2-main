@@ -57,7 +57,7 @@ import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { KeeperRollCall } from '@/components/app/draft-room/KeeperRollCall'
 import { PickClockPlanner } from '@/components/app/draft-room/PickClockPlanner'
-import { nextPickLabel, normalizeQuietWindow } from '@/lib/draft-room/pickClockPlanning'
+import { isLongPickClock, nextPickLabel, normalizeQuietWindow } from '@/lib/draft-room/pickClockPlanning'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 
@@ -5359,7 +5359,12 @@ export function DraftRoomPageClient({
         draftRoomMode ? <DraftModeBanner mode={draftRoomMode} isCommissioner={isCommissioner} /> : null
       }
       pickClockStrip={
-        !isDraftCompleted && (session.status === 'in_progress' || session.status === 'paused') ? (
+        // Gate here, not only inside the planner: the shell wraps any non-null node in a padded,
+        // bordered strip, so an element that renders nothing still costs ~17px of height — enough
+        // to push the player list off a 1280x720 screen (e2e draft-room-visual pool-height test).
+        !isDraftCompleted &&
+        (session.status === 'in_progress' || session.status === 'paused') &&
+        (isLongPickClock(session.timerSeconds) || pickClockQuietWindow) ? (
           <PickClockPlanner
             timerSeconds={session.timerSeconds ?? null}
             timerEndAtIso={draftRoomState.timerEndAt}
