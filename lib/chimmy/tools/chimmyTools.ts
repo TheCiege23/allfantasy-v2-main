@@ -284,7 +284,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_value',
       description:
-        "What ONE named player is worth on the AllFantasy 0-10000 value scale — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. Returns long-term asset value for TRADING, not a weekly points projection and not a start/sit ranking. Only a few hundred players carry a published value; it says so plainly when there is no row, and a miss is NOT evidence the player is worthless.",
+        "What ONE named player is worth — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. In an NBA league in scope it returns that league's own value: fantasy points (or category score) over the best free agent, rest of season, plus a dynasty value in a dynasty league — the same pricing the Trade Center grades with. Otherwise it returns the AllFantasy 0-10000 NFL value scale, long-term asset value for TRADING; only a few hundred players carry a published NFL value, and a miss is NOT evidence the player is worthless. Never a weekly points projection or a start/sit ranking.",
       parameters: {
         type: 'object',
         properties: {
@@ -1235,6 +1235,16 @@ export async function executeChimmyTool(
        */
       case 'get_player_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
+        /*
+         * An NBA league in scope (2026-11-16): the league's own value board — the same pricing the trade
+         * grade uses (lib/chimmy/sportBoardValue.ts). Null for any other sport, which keeps the NFL
+         * market values below.
+         */
+        if (ctx.leagueId) {
+          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
+          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
+          if (board != null) return board
+        }
         return await buildPlayerValueContext({ playerName: asked })
       }
 
