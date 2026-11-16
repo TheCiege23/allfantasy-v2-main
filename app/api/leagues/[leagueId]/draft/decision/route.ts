@@ -21,11 +21,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
-import { validateRosterFitForDraftPick } from '@/lib/live-draft-engine/RosterFitValidation'
 import { buildDraftDecisionContext } from '@/lib/shared-services/draft/DraftContextAssembler'
-import { computeDraftRecommendation, type RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
+import type { RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
 import { buildAuctionDecision } from '@/lib/shared-services/draft/auctionDecision'
-import { runDraftPickDecision } from '@/lib/decision-os/draft'
+import { decideDraftPickForRoster } from '@/lib/shared-services/draft/pickDecision'
 import { scheduleDraftRecommendationRecord } from '@/lib/shared-services/draft/recommendationRecorder'
 import { loadManagersAhead } from '@/lib/competitive-edge/liveDraftManagers'
 
@@ -77,29 +76,19 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     round: context.round,
     input: context.engineInput,
   })
-  const existingPicks = snapshot.picks.map((p) => ({ rosterId: p.rosterId, position: p.position }))
   // The managers on the clock before this viewer's next pick (facts; history only with Competitive
   // Edge) — read alongside the decision, and never allowed to fail it.
   const managersAheadRead = loadManagersAhead({ leagueId, userId }).catch(() => null)
-  // Captured so the response can carry the engine's draft-context lines alongside the decision.
-  let engineResult: RecommendationResult | null = null
-  const { decision } = await runDraftPickDecision(
-    {
-      worldInput: { snapshot, rosterId },
-      userId,
-      leagueId,
-      sport: context.sport,
-      engineInput: context.engineInput,
-      coverage: context.dataCompleteness,
-    },
-    {
-      recommend: (input) => (engineResult = computeDraftRecommendation(input)),
-      ruleDeps: {
-        validateRosterFit: (candidate) =>
-          validateRosterFitForDraftPick({ leagueId, rosterId, existingPicks, newPickPosition: candidate.position }),
-      },
-    },
-  )
+  /*
+   * The same sequence Chimmy uses (lib/shared-services/draft/pickDecision.ts): the recommender, gated by the live
+   * pick rules — so the card and the chat cannot recommend different players.
+   */
+  const outcome = await decideDraftPickForRoster({ leagueId, userId, rosterId, snapshot, context })
+  if (!outcome.ok) {
+    return NextResponse.json({ error: 'The draft could not be loaded.', reason: outcome.reason }, { status: 409 })
+  }
+  const { decision } = outcome
+  const engineResult: RecommendationResult | null = outcome.engineResult
 
   return NextResponse.json({
     decision: {
