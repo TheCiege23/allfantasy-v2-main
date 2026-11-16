@@ -35,7 +35,7 @@ function players(v: unknown): ActionCardPlayer[] {
 function readActionCard(v: unknown): ChimmyActionCard | null {
   if (!v || typeof v !== 'object') return null
   const o = v as Record<string, unknown>
-  const kind = o.kind === 'lineup' || o.kind === 'trade' || o.kind === 'automation' ? o.kind : null
+  const kind = o.kind === 'lineup' || o.kind === 'trade' || o.kind === 'automation' || o.kind === 'queue' ? o.kind : null
   const actionId = str(o.actionId, 80)
   const token = typeof o.token === 'string' && o.token.length > 10 && o.token.length < 16_000 ? o.token : null
   const title = str(o.title, 120)
@@ -76,6 +76,15 @@ function readActionCard(v: unknown): ChimmyActionCard | null {
     const changes = a && Array.isArray(a.changes) ? a.changes.map((c) => str(c, 240)).filter((c): c is string => Boolean(c)).slice(0, 12) : []
     if (changes.length === 0) return null
     return { ...base, automation: { changes } }
+  }
+  if (kind === 'queue') {
+    const q = o.queue && typeof o.queue === 'object' ? (o.queue as Record<string, unknown>) : null
+    if (!q) return null
+    const add = players(q.add)
+    const remove = players(q.remove)
+    if (add.length === 0 && remove.length === 0) return null
+    const resultingTop = Array.isArray(q.resultingTop) ? q.resultingTop.map((n) => str(n, 80)).filter((n): n is string => Boolean(n)).slice(0, 5) : []
+    return { ...base, queue: { add, addAt: q.addAt === 'top' ? 'top' : 'bottom', remove, resultingTop } }
   }
   const t = o.trade && typeof o.trade === 'object' ? (o.trade as Record<string, unknown>) : null
   if (!t) return null

@@ -101,6 +101,20 @@ function isSpec(value: unknown): value is ChimmyActionSpec {
     }
     return false
   }
+  if (s.kind === 'queue') {
+    return (
+      typeof s.sessionId === 'string' &&
+      (s.addAt === 'top' || s.addAt === 'bottom') &&
+      typeof s.baseFingerprint === 'string' &&
+      Array.isArray(s.removeKeys) &&
+      s.removeKeys.every((k) => typeof k === 'string') &&
+      Array.isArray(s.add) &&
+      s.add.every((a) => {
+        const r = a as Record<string, unknown>
+        return Boolean(a) && typeof r.playerName === 'string' && typeof r.position === 'string'
+      })
+    )
+  }
   return false
 }
 

@@ -385,6 +385,23 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'propose_draft_queue_change',
+      description: 'Prepare a CONFIRM CARD that changes this manager’s own draft queue in the selected league: add players (at the top or the bottom), move a queued player to the top (add them with position "top"), or take players off. It changes NOTHING until the user taps Confirm, and it NEVER makes a pick — say exactly that. Use only when the user asks to queue, unqueue or reorder players. Names are checked against the draft room’s player pool; already-drafted players are skipped.',
+      parameters: {
+        type: 'object',
+        properties: {
+          add: { type: 'array', items: { type: 'string' }, description: 'Players to add (or move), by name. Up to 8.' },
+          remove: { type: 'array', items: { type: 'string' }, description: 'Queued players to take off, by name. Up to 8.' },
+          position: { type: 'string', enum: ['top', 'bottom'], description: '"top" = next in line; "bottom" (default) = after everyone already queued.' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_selected_league_rules',
       description: 'Read the selected league and season’s stored settings and published constitution. Use for scoring, slots, lineup locks, waivers, trades, playoffs and custom rule questions.',
       parameters: { type: 'object', properties: {}, required: [] },
@@ -1505,6 +1522,25 @@ export async function executeChimmyTool(
           preset: args.preset,
           handoverDays: args.handover_days,
           handoverTo: args.handover_to,
+        })
+        if (outcome.ok) ctx.actionCards.push(outcome.card)
+        return outcome.text
+      }
+
+      case 'propose_draft_queue_change': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        if (!ctx.actionCards) {
+          return 'This chat surface cannot show a confirm card, so nothing was prepared. Tell the user to change their queue in the draft room. Do not say it was changed.'
+        }
+        if (ctx.actionCards.length >= MAX_ACTION_CARDS_PER_ANSWER) {
+          return `There are already ${MAX_ACTION_CARDS_PER_ANSWER} confirm cards in this answer; no more were made. Ask the user to confirm or dismiss those first.`
+        }
+        const outcome = await (await import('@/lib/chimmy/actions/queueAction')).proposeDraftQueueChange({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          add: args.add,
+          remove: args.remove,
+          position: args.position,
         })
         if (outcome.ok) ctx.actionCards.push(outcome.card)
         return outcome.text
