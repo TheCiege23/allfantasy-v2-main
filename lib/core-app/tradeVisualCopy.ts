@@ -245,6 +245,12 @@ const tradeVisualSpanish: Record<string,string> = {
 
 /** Templates use {n} slots. Captured player/team names are preserved, never machine-translated. */
 const templates: Array<[string,string]> = [
+  // A manager's whole trade record (lib/competitive-edge/tradeEdge.ts buildTradeRecord, 2026-11-16). The
+  // "none" forms come first: the general form below would match them too and translate "none" as a count.
+  ["{0} took on a {1} in {2} of their {3} trades and sent one away in none.","{0} adquirió un {1} en {2} de sus {3} intercambios y no cedió ninguno."],
+  ["{0} sent away a {1} in {2} of their {3} trades and took one on in none.","{0} cedió un {1} en {2} de sus {3} intercambios y no adquirió ninguno."],
+  ["{0} took on a {1} in {2} of their {3} trades and sent one away in {4}.","{0} adquirió un {1} en {2} de sus {3} intercambios y cedió uno en {4}."],
+  ["{0} took on draft picks in {1} of their {2} trades and gave picks up in {3}.","{0} adquirió selecciones en {1} de sus {2} intercambios y cedió selecciones en {3}."],
   // Plain-language trade copy (2026-11-11).
   ["You send {0} player and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugador y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],
   ["You send {0} players and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugadores y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],

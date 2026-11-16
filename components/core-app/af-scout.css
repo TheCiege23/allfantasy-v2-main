@@ -343,6 +343,9 @@
 .af-core .af-sc-card-foot {
   margin-top: auto;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Links read as buttons and are thumb-sized: a 44px target, iOS's floor. */

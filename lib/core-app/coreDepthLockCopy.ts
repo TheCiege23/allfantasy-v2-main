@@ -70,6 +70,8 @@ export function depthLabelText(depth: CoreDepth, english: string, language: stri
  * there rather than shipping half Spanish.
  */
 const SUBJECT_ES: Record<string, string> = {
+  // The manager card (components/core-app/manager-record/ManagerRecordSheet.tsx), 2026-11-16
+  'A manager’s full record': 'El historial completo de un mánager',
   // Player Finder (components/core-app/screens/PlayerFinder.tsx and player-finder/)
   'Side-by-side compare': 'Comparación lado a lado',
   'Recommended moves': 'Movimientos recomendados',
