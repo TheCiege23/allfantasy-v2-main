@@ -110,6 +110,7 @@ import { draftRoomPickTrace, draftRoomWarn } from '@/lib/draft-room/draftRoomDev
 import { buildDraftRoomPageDerivedState } from '@/lib/draft-room/buildDraftRoomPageDerivedState'
 import { getPlayerImage, preloadPlayerImage } from '@/lib/players/getPlayerImage'
 import { LEAGUE_DRAFT_ROOM_REVALIDATE } from '@/lib/draft-room/emitLeagueDraftRoomRevalidate'
+import { DRAFT_QUEUE_CHANGED_EVENT, type DraftQueueChangedDetail } from '@/lib/draft-room/draftQueueChangedEvent'
 import { filterPlayersAvailableForDraftAi } from '@/lib/draft-room/availableForDraftAi'
 import { buildDraftRoomClientDiagnostics } from '@/lib/draft-room/player-pool-audit'
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
@@ -1627,6 +1628,20 @@ export function DraftRoomPageClient({
       setQueue([])
     }
   }, [leagueId])
+
+  /*
+   * A queue Chimmy saved (a confirmed queue card) is reloaded at once — otherwise the next drag here
+   * would save this page's stale copy over it. See lib/draft-room/draftQueueChangedEvent.ts.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !leagueId) return
+    const handler = (ev: Event) => {
+      if ((ev as CustomEvent<DraftQueueChangedDetail>).detail?.leagueId !== leagueId) return
+      void fetchQueue()
+    }
+    window.addEventListener(DRAFT_QUEUE_CHANGED_EVENT, handler as EventListener)
+    return () => window.removeEventListener(DRAFT_QUEUE_CHANGED_EVENT, handler as EventListener)
+  }, [leagueId, fetchQueue])
 
   const fetchChat = useCallback(async () => {
     if (!leagueId) return

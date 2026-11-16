@@ -13,6 +13,7 @@ import type { LiveDraftBrainEnvelope } from '@/lib/live-draft-brain/schemas'
 import type { LiveDraftBrainInput } from '@/lib/live-draft-brain'
 import { WarRoomPanel } from '@/components/war-room/WarRoomPanel'
 import ChimmyChatPanel from '@/components/chimmy/ChimmyChatPanel'
+import ChimmyActionCardTray from '@/components/chimmy/ChimmyActionCardTray'
 import { DraftWarRoom, type DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import type { PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 import { DraftHelperRedraftLayout } from '@/components/app/draft-room/DraftHelperRedraftLayout'
@@ -588,7 +589,10 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
               }}
               className="min-h-[340px] h-[380px]"
             />
-          ) : (
+          ) : null}
+          {/* Queue cards Chimmy prepared here ("add Waddle to my queue"): nothing saves until Confirm. */}
+          {aiAssistantEnabled ? <ChimmyActionCardTray leagueId={leagueId ?? null} /> : null}
+          {aiAssistantEnabled ? null : (
             <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-[11px] text-white/60">
               Chimmy is temporarily unavailable. The deterministic draft helper, live brain, and queue tools still work.
             </div>

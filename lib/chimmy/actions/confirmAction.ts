@@ -8,6 +8,7 @@ import { verifyChimmyActionToken } from './actionToken'
 import { executeLineupAction } from './lineupAction'
 import { executeTradeAction } from './tradeAction'
 import { executeAutomationAction } from './automationAction'
+import { executeQueueAction } from './queueAction'
 import type { ChimmyActionConfirmResult } from './types'
 
 /**
@@ -135,6 +136,22 @@ export async function confirmChimmyAction(args: { token: unknown; userId: string
       await writeOutcome(key, { ...base, status: 'executed', message: r.message, at: new Date().toISOString() })
       // The services log their own audit row (automation_preset.applied / inactive_auto_handover.set).
       return { ok: true, status: 'executed', kind: 'automation', message: r.message }
+    }
+
+    /*
+     * ⚠ BEFORE THE TRADE BRANCH BELOW, WHICH IS THE FALLTHROUGH. A kind with no branch of its own
+     * would otherwise be handed to `executeTradeAction` — which refuses it, but only by luck.
+     * A queue is the user's own list, not league state, so like the room's own save it writes no
+     * league audit row.
+     */
+    if (payload.spec.kind === 'queue') {
+      const r = await executeQueueAction(payload, args.userId)
+      if (!r.ok) {
+        await writeOutcome(key, { ...base, status: 'refused', message: r.message, at: new Date().toISOString() })
+        return { ok: false, status: 'refused', kind: 'queue', message: r.message }
+      }
+      await writeOutcome(key, { ...base, status: 'executed', message: r.message, at: new Date().toISOString() })
+      return { ok: true, status: 'executed', kind: 'queue', message: r.message }
     }
 
     const r = await executeTradeAction(payload, args.userId)
