@@ -95,6 +95,13 @@ export type DecisionOsFeed =
    * `managerPsychology`'s feed the way trajectory did.
    */
   | 'psychologyConsistency'
+  /**
+   * The waiver claim decision (R2.6) — a LIVE run of the waiver recommender over the league's available pool, on
+   * waiver questions only. 🛑 It had no switch (re-score item 9, 2026-11-16): the one slice that runs a real
+   * decision engine per turn could not be shed without a deploy. Kill it and waiver questions answer from the
+   * rest of the packet, with a stated gap.
+   */
+  | 'waiverDecision'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -113,6 +120,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'idpKickerValues',
   'rosterValueGrade',
   'psychologyConsistency',
+  'waiverDecision',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

@@ -224,3 +224,65 @@ export function buildTradeEdge(input: {
     facts,
   }
 }
+
+/** Positions a manager's whole-record trade lines name, at most — the busiest first. */
+const RECORD_POSITIONS = 6
+
+/**
+ * A manager's TRADE RECORD, not bound to any deal — for Chimmy, the manager card and the
+ * commissioner's directory (2026-11-16, "Manager Psychology as facts only, paid").
+ *
+ * The record half of `buildTradeEdge` (volume, trades with the viewer, coverage) is reused as is, so
+ * a manager's trade count reads the same everywhere. Above TRADE_FLOOR it adds, for each position
+ * they have moved, how many of their trades took one on and how many sent one away; and the same for
+ * draft picks. Counts the reader can check — "took on a RB in 5 of their 9 trades and sent one away
+ * in 1" — never "a RB buyer", and nothing about what they will do next.
+ */
+export function buildTradeRecord(input: Omit<Parameters<typeof buildTradeEdge>[0], 'deal'>): TradeEdge {
+  const base = buildTradeEdge({ ...input, deal: { theyGet: [], theySend: [] } })
+  if (!base.coverage.sufficient) return base
+
+  const sides = input.trades
+    .map((t) => t.sides.find((s) => s.ownerId === input.managerOwnerId))
+    .filter((s): s is EdgeTradeSide => Boolean(s))
+  const n = sides.length
+  const name = input.managerName
+
+  const tally = new Map<string, { inTrades: number; outTrades: number }>()
+  for (const side of sides) {
+    const ins = new Set(side.playersIn.map((pl) => pos(pl.position)).filter((p): p is string => Boolean(p)))
+    const outs = new Set(side.playersOut.map((pl) => pos(pl.position)).filter((p): p is string => Boolean(p)))
+    for (const p of new Set([...ins, ...outs])) {
+      const t = tally.get(p) ?? { inTrades: 0, outTrades: 0 }
+      if (ins.has(p)) t.inTrades += 1
+      if (outs.has(p)) t.outTrades += 1
+      tally.set(p, t)
+    }
+  }
+
+  const positionFacts: EdgeFact[] = [...tally]
+    .sort((a, b) => b[1].inTrades + b[1].outTrades - (a[1].inTrades + a[1].outTrades) || a[0].localeCompare(b[0]))
+    .slice(0, RECORD_POSITIONS)
+    .map(([p, t]) => ({
+      key: `trade.record.${p}`,
+      text:
+        t.inTrades === 0
+          ? `${name} sent away a ${p} in ${t.outTrades} of their ${n} trades and took one on in none.`
+          : t.outTrades === 0
+            ? `${name} took on a ${p} in ${t.inTrades} of their ${n} trades and sent one away in none.`
+            : `${name} took on a ${p} in ${t.inTrades} of their ${n} trades and sent one away in ${t.outTrades}.`,
+      bearsOnDeal: false,
+    }))
+
+  const picksIn = sides.filter((s) => s.picksIn.length > 0).length
+  const picksOut = sides.filter((s) => s.picksOut.length > 0).length
+  if (picksIn > 0 || picksOut > 0) {
+    positionFacts.push({
+      key: 'trade.record.picks',
+      text: `${name} took on draft picks in ${picksIn} of their ${n} trades and gave picks up in ${picksOut}.`,
+      bearsOnDeal: false,
+    })
+  }
+
+  return { ...base, facts: [...base.facts, ...positionFacts] }
+}
