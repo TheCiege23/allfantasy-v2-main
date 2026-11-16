@@ -51,6 +51,11 @@ type DraftRoomShellProps = {
   keeperStrip?: ReactNode
   /** Long-pick-clock / quiet-hours planning cards. Same placement and reason as `modeBanner`. */
   pickClockStrip?: ReactNode
+  /**
+   * Phone only: auction bid controls pinned above the tray on the Board tab, so Bid is never
+   * scrolled off-screen or under a floating button (2026-11-15).
+   */
+  mobileBidDock?: ReactNode
   draftBoard: ReactNode
   playerPanel: ReactNode
   queuePanel: ReactNode
@@ -119,6 +124,7 @@ export function DraftRoomShell({
   modeBanner,
   keeperStrip,
   pickClockStrip,
+  mobileBidDock,
   mobileTab,
   onMobileTabChange,
   layout = 'classic',
@@ -542,7 +548,10 @@ export function DraftRoomShell({
           children like the snake draft board can't bleed horizontal scroll out to
           the whole page. The board wraps its own children in `overflow-x-auto`.
         */}
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth" data-testid="draft-mobile-scroll-root">
+        <div
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth ${mobileBidDock && mobileTab === 'board' ? 'pb-20' : ''}`}
+          data-testid="draft-mobile-scroll-root"
+        >
           {mobileStickyBar && (
             <div className="sticky top-0 z-10 shrink-0 border-b border-white/10 bg-[#040915]/95 backdrop-blur-sm">
               {mobileStickyBar}
@@ -572,6 +581,7 @@ export function DraftRoomShell({
           testIdPrefix="draft-mobile"
           ariaLabel={t('draftRoom.shell.aria.draftSections')}
           accessory={mobileDockAccessory}
+          dock={mobileTab === 'board' ? mobileBidDock : null}
           onSnapChange={setTraySnap}
           chrome={
             <>
