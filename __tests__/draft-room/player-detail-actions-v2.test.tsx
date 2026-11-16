@@ -26,7 +26,7 @@ function renderCard(extra: Partial<React.ComponentProps<typeof PlayerDetailModal
 }
 
 describe('room v2 player card actions', () => {
-  it('puts star, + Queue and Draft in one row, each 44px tall', () => {
+  it('groups star, + Queue and Draft, each 44px tall: a row on phones, a column from md', () => {
     renderCard()
     const row = screen.getByTestId('player-detail-actions')
     for (const id of ['player-detail-watchlist', 'player-detail-queue', 'player-detail-draft']) {
@@ -35,6 +35,7 @@ describe('room v2 player card actions', () => {
       expect(button.className).toContain('h-11')
     }
     expect(row.className).toContain('flex-row')
+    expect(row.className).toContain('md:flex-col')
     // Visual order star → Queue → Draft, whatever the source order.
     expect(screen.getByTestId('player-detail-watchlist').className).toContain('order-1')
     expect(screen.getByTestId('player-detail-queue').className).toContain('order-2')

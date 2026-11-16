@@ -353,7 +353,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
               rsModal ? 'border-cyan-500/15 shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]' : 'border-white/8'
             }`}
           >
-            <div className="flex items-start gap-5">
+            <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
               {/* E.1: shared PlayerAvatar replaces the previous inline `<img>` + initials block.
                 * The old code rendered headerImageUrl unconditionally — when the resolver returned
                 * a synthesized `data:image/svg+xml` URI containing the literal text "AF" as a fallback
@@ -372,7 +372,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                 className={rsModal ? 'rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.45)]' : ''}
               />
 
-              <div className="min-w-0 flex-1">
+              <div className="min-w-[200px] flex-1">
                 <div className="flex items-center gap-2">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">
                     {player.position ?? '—'}
@@ -390,7 +390,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                 </h2>
 
                 {/* Physical-stat chip bar */}
-                <div className="mt-3 grid max-w-xl grid-cols-5 gap-3 text-center">
+                <div className="mt-3 grid max-w-xl grid-cols-3 gap-2 text-center sm:grid-cols-5 sm:gap-3">
                   <StatChip label="Age" value={player.age ? String(player.age) : '—'} />
                   <StatChip label="Height" value={formatHeight(player.heightIn)} />
                   <StatChip
@@ -473,10 +473,12 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                 ) : null}
               </div>
 
-              {/* Room v2 (2026-11): one row — star, + Queue, Draft — every button 44px tall (a phone
-                  touch target), Draft the widest. Draft and Queue sit in the header so you can act
-                  without closing the card. */}
-              <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-2" data-testid="player-detail-actions">
+              {/* Room v2 (2026-11): star, + Queue, Draft — every button 44px tall (a phone touch
+                  target), Draft the main one. Draft and Queue sit in the header so you can act
+                  without closing the card. A phone gives them their own full-width row under the
+                  name; from md they stack in a narrow column at the right, so the name and the
+                  Age / Height / Weight / Exp / College boxes keep their width. */}
+              <div className="flex w-full shrink-0 flex-row flex-wrap items-center gap-2 md:w-auto md:flex-col md:items-end" data-testid="player-detail-actions">
                 {onToggleWatchlist && (
                   <button
                     type="button"
