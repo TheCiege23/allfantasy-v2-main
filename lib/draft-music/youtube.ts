@@ -63,9 +63,23 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
      * always newest-first, at the cost of including their short clips.
      */
     id: 'ff-podcast',
-    label: 'Fantasy podcast',
+    label: 'Football podcast',
     channel: 'The Fantasy Footballers',
     source: { kind: 'playlist', listId: 'PLoISu6EAcn3AQQnURLbOkch3mloBBijQd' },
+  },
+  {
+    /*
+     * Talk, not music. Locked On Fantasy Basketball's own full-episode playlist
+     * — a daily show, hosted by Basketball Monster's lead analyst.
+     * Newest-first was checked, not assumed: on 2026-11-15 (playlist "Updated
+     * today") its first eight entries matched the channel's newest uploads in
+     * order, starting with "Fantasy Basketball Streaming Monday". Same fallback
+     * as the football podcast if that ever changes: the channel's "UU…" uploads.
+     */
+    id: 'fb-podcast',
+    label: 'Basketball podcast',
+    channel: 'Locked On',
+    source: { kind: 'playlist', listId: 'PL1U5boGn_ErQHkDY_ytdLguynLmxS9bRB' },
   },
   {
     id: 'hiphop-hype',
