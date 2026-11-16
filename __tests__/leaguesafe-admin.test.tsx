@@ -34,27 +34,53 @@ beforeEach(() => {
 describe("admin-only LeagueSafe capture viewer", () => {
   it.each(["unauthenticated", "forbidden"])("blocks %s users before any database read", async (status) => {
     mocks.access.mockResolvedValue({ status })
-    await expect(Page({ searchParams: { id: "raw-1" } })).rejects.toThrow("REDIRECT")
+    await expect(Page({ searchParams: Promise.resolve({ id: "raw-1" }) })).rejects.toThrow("REDIRECT")
     expect(mocks.redirect).toHaveBeenCalledWith("/admin")
     expect(mocks.findMany).not.toHaveBeenCalled()
     expect(mocks.findUnique).not.toHaveBeenCalled()
   })
   it("lists only envelope metadata without loading every raw email body", async () => {
-    const html = renderToStaticMarkup(await Page({ searchParams: {} }))
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }))
     expect(html).toContain("Synthetic subject")
     expect(mocks.findUnique).not.toHaveBeenCalled()
     expect(mocks.findMany.mock.calls[0][0].select).not.toHaveProperty("rawBody")
   })
   it("renders source content as escaped text, with no executable email HTML", async () => {
-    const html = renderToStaticMarkup(await Page({ searchParams: { id: "raw-1" } }))
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: "raw-1" }) }))
     expect(html).toContain("&lt;script&gt;")
     expect(html).not.toContain("<script>")
     expect(html).toContain("Delivery authentication")
     expect(html).toContain("fixture@example.invalid")
   })
+  it("uses the resolved query status even when the promise has React's status property", async () => {
+    const rejected = { ...row, id: "raw-rejected", subject: "Rejected synthetic email", processingStatus: "rejected" }
+    mocks.findMany.mockImplementation(async ({ where }) =>
+      where.processingStatus === "rejected" ? [rejected] : [row, rejected])
+    mocks.findUnique.mockResolvedValue({
+      ...rejected, rfcMessageId: "<rejected@example.invalid>",
+      rejectionReason: "leaguesafe_dkim_did_not_pass",
+      authResults: { dkim: "fail" }, rawBody: "<script>rejected fixture</script>",
+    })
+    // Next's compatibility promise exposes id/after, but reserves status for React.
+    const searchParams = Object.assign(
+      Promise.resolve({ status: "rejected", after: "raw-cursor", id: "raw-rejected" }),
+      { status: "fulfilled", after: "raw-cursor", id: "raw-rejected" },
+    )
+    const html = renderToStaticMarkup(await Page({ searchParams }))
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { processingStatus: "rejected" }, cursor: { id: "raw-cursor" }, skip: 1,
+    }))
+    expect(mocks.findUnique).toHaveBeenCalledWith({ where: { id: "raw-rejected" } })
+    expect(html).toContain("Rejected synthetic email")
+    expect(html).not.toContain("Synthetic subject")
+    expect(html).toContain("leaguesafe_dkim_did_not_pass")
+    expect(html).toContain("status=rejected&amp;after=raw-cursor&amp;id=raw-rejected")
+    expect(html).toContain("&lt;script&gt;")
+    expect(html).not.toContain("<script>")
+  })
   it("applies status filters and bounded cursor pagination", async () => {
     mocks.findMany.mockResolvedValue(Array.from({ length: 26 }, (_, index) => ({ ...row, id: "raw-" + index })))
-    const html = renderToStaticMarkup(await Page({ searchParams: { status: "rejected", after: "raw-cursor" } }))
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ status: "rejected", after: "raw-cursor" }) }))
     expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { processingStatus: "rejected" }, cursor: { id: "raw-cursor" }, skip: 1, take: 26,
     }))
@@ -62,10 +88,16 @@ describe("admin-only LeagueSafe capture viewer", () => {
     expect(html).toContain("after=raw-24")
     expect(html).not.toContain("id=raw-25")
   })
+  it.each(["invalid-status", ["rejected"]])("ignores invalid or repeated query values: %s", async (status) => {
+    await Page({ searchParams: Promise.resolve({ status, after: ["raw-cursor"], id: ["raw-1"] }) })
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {} }))
+    expect(mocks.findMany.mock.calls[0][0]).not.toHaveProperty("cursor")
+    expect(mocks.findUnique).not.toHaveBeenCalled()
+  })
   it("shows empty capture state and a missing selection", async () => {
     mocks.findMany.mockResolvedValue([])
     mocks.findUnique.mockResolvedValue(null)
-    const html = renderToStaticMarkup(await Page({ searchParams: { id: "missing" } }))
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: "missing" }) }))
     expect(html).toContain("No emails captured")
     expect(html).toContain("Email not found")
   })

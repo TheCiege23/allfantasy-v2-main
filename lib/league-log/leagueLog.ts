@@ -99,6 +99,8 @@ const SECTION_LABELS: Record<string, Line> = {
   playoffs: { en: 'playoff', es: 'playoffs' },
   commissioner: { en: 'commissioner', es: 'comisionado' },
   conceptRules: { en: 'format', es: 'formato' },
+  dynasty: { en: 'dynasty', es: 'dinastía' },
+  divisions: { en: 'division', es: 'divisiones' },
   ai: { en: 'AI', es: 'IA' },
 }
 
@@ -120,6 +122,10 @@ export const LOG_ACTIONS: Record<string, Action> = {
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
       const label = section ? SECTION_LABELS[section] : undefined
+      // Shared scoring (2026-11-16) says so, without naming the other league: its members are not this league's.
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring settings to the commissioner’s shared scoring', es: 'Cambió la puntuación a la puntuación compartida del comisionado' }
+      }
       return label
         ? { en: `Changed the ${label.en} settings`, es: `Cambió los ajustes de ${label.es}` }
         : { en: 'Changed the league settings', es: 'Cambió los ajustes de la liga' }
@@ -130,6 +136,9 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring rules mid-season to the commissioner’s shared scoring', es: 'Cambió la puntuación a mitad de temporada a la puntuación compartida del comisionado' }
+      }
       return section === 'scoring'
         ? { en: 'Changed the scoring rules mid-season', es: 'Cambió la puntuación a mitad de temporada' }
         : { en: 'Changed the roster settings mid-season', es: 'Cambió la plantilla a mitad de temporada' }
@@ -481,6 +490,36 @@ export const LOG_ACTIONS: Record<string, Action> = {
         ? { en: 'Turned on auto-subs', es: 'Activó los cambios automáticos' }
         : { en: 'Turned off auto-subs', es: 'Desactivó los cambios automáticos' },
   },
+  // lib/schedule-runtime/matchupSwapService.ts — two teams traded places in one week.
+  schedule_matchup_swap: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const a = team(ctx, m.rosterA)
+      const b = team(ctx, m.rosterB)
+      const wk = week != null ? week : '?'
+      return {
+        en: `Swapped ${a.en} and ${b.en} in the week ${wk} schedule`,
+        es: `Intercambió a ${a.es} y ${b.es} en el calendario de la semana ${wk}`,
+      }
+    },
+  },
+  schedule_rivalry_week: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const week = num(obj(ctx.row.metadata).week)
+      const wk = week != null ? week : '?'
+      return { en: `Made week ${wk} rivalry week`, es: `Convirtió la semana ${wk} en semana de rivalidades` }
+    },
+  },
+  schedule_regenerated: {
+    category: 'league',
+    members: true,
+    line: () => ({ en: 'Rebuilt the schedule for the weeks that had not started', es: 'Rehízo el calendario de las semanas que no habían empezado' }),
+  },
   commissioner_undo_draft_pick: {
     category: 'draft',
     members: true,
@@ -628,6 +667,7 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
   for (const row of rows) {
     const m = obj(row.metadata)
     if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo' || row.actionType === 'draft_commissioner_action') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if (row.actionType === 'schedule_matchup_swap') for (const k of ['rosterA', 'rosterB']) if (str(m[k])) ids.add(str(m[k])!)
     if (
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||

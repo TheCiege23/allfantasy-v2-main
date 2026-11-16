@@ -35,8 +35,6 @@ import { PlayoffSettingsEditor as PlayoffSettingsEditorLazy } from '@/components
 import { RosterSettingsEditor as RosterSettingsEditorLazy } from '@/components/league-settings/RosterSettingsEditor'
 import { detectScoringFlavor, getDivisionCount, getDraftIdFromSettings, getScoringSettings, getSleeperLikeBundle, getSettingsRecord, groupRosterSlotCounts, initialsFromName, sleeperAvatarUrl, waiverTypeText } from './league-settings-modal-utils'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
-import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
-import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -897,11 +895,7 @@ export function SettingsSubPanelBody({
     case 'ai-trash':
       return <AiFeaturePanel panelId={panelId} ctx={ctx} />
     case 'idp_roster':
-      return <IDPRosterPanel />
-    case 'idp_scoring':
-      return <IDPScoringPanel />
-    case 'idp_display':
-      return <IDPDisplayPanel />
+      return <IDPRosterPanel leagueId={ctx.league.id} canEdit={ctx.isCommissioner} />
     case 'idp_ai':
       return (
         <IDPAIPanel

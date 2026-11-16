@@ -18,6 +18,8 @@ import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { RULES_EXPLAINER_SPORTS } from '@/lib/league-rules-explainer/types'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { syncLeagueIrSlotsColumn } from '@/lib/roster-engine/irSlotsColumn'
+import { alertManagersToFixLineups, findLineupsNeedingFixes } from '@/lib/roster-legality/recheckLeagueLineups'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
@@ -163,6 +165,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     : null
   if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
+  // `League.irSlots` is what trade context, league summaries and the AI read for IR; the slot map is what lineups
+  // are checked against. Keep the column on the count just saved so the two never disagree (2026-11-15).
+  await syncLeagueIrSlotsColumn(leagueId, slots)
   invalidateLeagueDraftCaches(leagueId)
   // Rounds = draftable roster spots, so the draft follows the roster it was just given.
   const draftRounds = await applyRosterTemplateChange(leagueId, {
@@ -213,9 +218,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   }
 
   await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
+  // Every saved lineup against the layout just saved: the commissioner sees how many need moves, those managers are
+  // alerted (lib/roster-legality/recheckLeagueLineups.ts). Nothing is moved for anyone.
+  const lineupsNeedingFixes = await findLineupsNeedingFixes(leagueId)
+  if (lineupsNeedingFixes.length > 0) void alertManagersToFixLineups(leagueId, lineupsNeedingFixes)
   return NextResponse.json({
     ok: true, config, unifiedConfig, draftRounds,
     bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],
+    lineupsNeedingFixes: lineupsNeedingFixes.length,
   })
 }
 

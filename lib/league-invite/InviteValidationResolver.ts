@@ -171,6 +171,7 @@ export async function validateFantasyInviteCode(
       sport: true,
       leagueSize: true,
       settings: true,
+      disableInviteLinks: true,
     },
   })
 
@@ -185,10 +186,16 @@ export async function validateFantasyInviteCode(
     typeof settings[LEAGUE_VISIBILITY_KEY] === "string"
       ? String(settings[LEAGUE_VISIBILITY_KEY])
       : DEFAULT_LEAGUE_VISIBILITY
+  /*
+   * 🛑 THE SETTINGS WINDOW'S "DISABLE LEAGUE INVITE LINKS" NEVER TURNED A LINK OFF (2026-11-15). It saves the
+   * `League.disableInviteLinks` column; this check read only the privacy setting in `settings`. A commissioner who
+   * switched invites off still had a working link. Either one now turns it off.
+   */
   const allowInviteLink =
-    typeof settings[LEAGUE_ALLOW_INVITE_LINK_KEY] === "boolean"
+    league.disableInviteLinks !== true &&
+    (typeof settings[LEAGUE_ALLOW_INVITE_LINK_KEY] === "boolean"
       ? Boolean(settings[LEAGUE_ALLOW_INVITE_LINK_KEY])
-      : true
+      : true)
   const passwordHash =
     typeof settings[LEAGUE_PASSWORD_HASH_KEY] === "string" && settings[LEAGUE_PASSWORD_HASH_KEY]
       ? String(settings[LEAGUE_PASSWORD_HASH_KEY])

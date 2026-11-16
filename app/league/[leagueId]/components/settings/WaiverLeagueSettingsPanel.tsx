@@ -17,6 +17,7 @@ import {
   type FreeAgencyMode,
 } from '@/lib/waiver-wire/hub-waiver-options'
 import { effectiveFaabRolloverRule, faabRolloverFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
+import { utcProcessTimeAsLocalLabel } from '@/lib/waivers/dailyWaiverSchedule'
 
 const WAIVER_TYPES = [
   { value: 'faab', label: 'FAAB bidding' },
@@ -50,6 +51,7 @@ export function WaiverLeagueSettingsPanel({
   debouncedSave: (partial: Record<string, unknown>) => void
 }) {
   const disabled = !canEdit
+  const leagueTimeZone = initialData.timezone?.trim() || 'America/New_York'
   const [waiverType, setWaiverType] = useState(initialData.waiverType ?? 'faab')
   const [budget, setBudget] = useState(initialData.waiverBudget ?? 100)
   const [minBid, setMinBid] = useState(initialData.waiverMinBid ?? 0)
@@ -251,7 +253,12 @@ export function WaiverLeagueSettingsPanel({
       />
 
       <div>
-        <SettingsSectionLabel>Waiver processing time (league local / stored as HH:MM)</SettingsSectionLabel>
+        {/*
+          🛑 THIS SAID "LEAGUE LOCAL" AND SAVED UTC (2026-11-15). The time is stored as the engine's UTC run time, so a
+          commissioner in New York who picked 03:00 got a 10 PM run. The label now says UTC and shows the league's
+          own clock time beside each choice. League settings → Waivers sets the run in local time.
+        */}
+        <SettingsSectionLabel>Waiver processing time (UTC)</SettingsSectionLabel>
         <div className="flex flex-wrap gap-2">
           {TIME_PRESETS.map((t) => (
             <button
@@ -268,11 +275,17 @@ export function WaiverLeagueSettingsPanel({
                   : 'border border-white/15 bg-black/30 text-white/75 hover:bg-white/[0.06]'
               }`}
             >
-              {t}
+              {t} UTC
+              {utcProcessTimeAsLocalLabel(t, leagueTimeZone) ? (
+                <span className="ml-1 opacity-70" data-testid={`waiver-time-local-${t}`}>· {utcProcessTimeAsLocalLabel(t, leagueTimeZone)}</span>
+              ) : null}
             </button>
           ))}
         </div>
-        <SettingsHelper>Primary batch run time; cron and waiver engine also read LeagueWaiverSettings when present (leagueId: {leagueId}).</SettingsHelper>
+        <SettingsHelper>
+          Shown in your league&apos;s time zone ({leagueTimeZone.replace(/_/g, ' ')}) after each UTC time. To set the run in
+          local time by day, use League settings → Waivers.
+        </SettingsHelper>
       </div>
     </div>
   )

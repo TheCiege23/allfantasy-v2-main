@@ -23,6 +23,7 @@ import {
   controlClass,
 } from './settings-ui'
 import { ImportedKeeperGrid } from '@/components/import-assist/ImportedKeeperGrid'
+import LeaguePrivacyAndInvitesPanel from '@/components/app/settings/LeaguePrivacyAndInvitesPanel'
 
 /** `League.keeperRoundPenalty`: rounds EARLIER than last season; 0 = same round, negative = later. */
 const KEEPER_ROUND_SHIFTS = [5, 4, 3, 2, 1, 0, -1, -2, -3]
@@ -63,9 +64,6 @@ export function LeagueSettingsPanel({
   const [leagueDescription, setLeagueDescription] = useState(
     typeof settingsSnapshot.leagueDescription === 'string' ? settingsSnapshot.leagueDescription : '',
   )
-  const [listingVisibility, setListingVisibility] = useState(
-    typeof settingsSnapshot.leagueListingVisibility === 'string' ? settingsSnapshot.leagueListingVisibility : 'private',
-  )
   const [timezone, setTimezone] = useState(initialData.timezone ?? 'America/New_York')
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
   const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
@@ -76,7 +74,6 @@ export function LeagueSettingsPanel({
   const [lockMoves, setLockMoves] = useState(Boolean(initialData.lockAllMoves))
   const [draftPickTrading, setDraftPickTrading] = useState(Boolean(initialData.draftPickTrading))
   const [overrideInvite, setOverrideInvite] = useState(Boolean(initialData.overrideInviteCapacity))
-  const [disableInvites, setDisableInvites] = useState(Boolean(initialData.disableInviteLinks))
   const [dispersalRounds, setDispersalRounds] = useState(initialData.dispersalDraftRounds ?? 0)
   const [keeperCount, setKeeperCount] = useState(initialData.keeperCount ?? 3)
   const [keeperCostSystem, setKeeperCostSystem] = useState(initialData.keeperCostSystem ?? 'round_based')
@@ -99,9 +96,6 @@ export function LeagueSettingsPanel({
     setSeason(initialData.season ?? new Date().getFullYear())
     setLanguage(initialData.language ?? 'en')
     setLeagueDescription(typeof settingsSnapshot.leagueDescription === 'string' ? settingsSnapshot.leagueDescription : '')
-    setListingVisibility(
-      typeof settingsSnapshot.leagueListingVisibility === 'string' ? settingsSnapshot.leagueListingVisibility : 'private',
-    )
     setTimezone(initialData.timezone ?? 'America/New_York')
     setMedianGame(Boolean(initialData.medianGame))
     setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
@@ -112,7 +106,6 @@ export function LeagueSettingsPanel({
     setLockMoves(Boolean(initialData.lockAllMoves))
     setDraftPickTrading(Boolean(initialData.draftPickTrading))
     setOverrideInvite(Boolean(initialData.overrideInviteCapacity))
-    setDisableInvites(Boolean(initialData.disableInviteLinks))
     setDispersalRounds(initialData.dispersalDraftRounds ?? 0)
     setKeeperCount(initialData.keeperCount ?? 3)
     setKeeperCostSystem(initialData.keeperCostSystem ?? 'round_based')
@@ -204,24 +197,16 @@ export function LeagueSettingsPanel({
         </div>
       </div>
 
-      <div>
-        <SettingsSectionLabel>Listing &amp; discoverability</SettingsSectionLabel>
-        <select
-          className={controlClass}
-          disabled={disabled}
-          value={listingVisibility}
-          onChange={(e) => {
-            const v = e.target.value
-            setListingVisibility(v)
-            debouncedSave({ settingsMerge: { leagueListingVisibility: v } })
-          }}
-        >
-          <option value="private">Private — invite only</option>
-          <option value="unlisted">Unlisted — link only</option>
-          <option value="public">Public — discoverable in browse</option>
-        </select>
-        <SettingsHelper>Controls how this league can appear in Find League and shared links (enforced server-side where applicable).</SettingsHelper>
-      </div>
+      {/*
+        🛑 "LISTING & DISCOVERABILITY" SAVED A KEY NOTHING READ (2026-11-15). It wrote `leagueListingVisibility`; Find
+        League, invites and joins read the league's privacy setting. A commissioner who chose "Private" stayed listed.
+        This is now the league's real privacy and invite editor, the same one those paths read.
+      */}
+      {canEdit ? (
+        <div data-testid="league-settings-privacy">
+          <LeaguePrivacyAndInvitesPanel leagueId={leagueId} />
+        </div>
+      ) : null}
 
       <div>
         <SettingsSectionLabel>League name</SettingsSectionLabel>
@@ -382,15 +367,7 @@ export function LeagueSettingsPanel({
             debouncedSave({ overrideInviteCapacity: v })
           }}
         />
-        <SettingsToggleRow
-          label="Disable league invite links"
-          checked={disableInvites}
-          disabled={disabled}
-          onChange={(v) => {
-            setDisableInvites(v)
-            debouncedSave({ disableInviteLinks: v })
-          }}
-        />
+        {/* The invite link's on/off switch lives in the privacy editor above, which writes both stores joins read. */}
       </div>
 
       <div>

@@ -192,6 +192,9 @@ vi.mock('next/link', () => ({
 }))
 vi.mock('next/navigation', () => ({
   usePathname: () => '/demo',
+  // The demo frame and the app's own League Home (rendered on /demo) read these.
+  useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {}, back: () => {}, refresh: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND')
   },
@@ -229,10 +232,12 @@ const PAGE_FILES = [
   'app/demo/chimmy/page.tsx',
   'app/demo/players/page.tsx',
   'app/demo/trade-evaluator/page.tsx',
+  'app/demo/standings/page.tsx',
   // Generated sample leagues: no source data at all. Rendered, and checked to never touch the
   // database, in demo-formats.test.tsx.
   'app/demo/formats/page.tsx',
   'app/demo/formats/[format]/page.tsx',
+  'app/demo/formats/[format]/standings/page.tsx',
 ]
 
 function walk(dir: string, name: string): string[] {
@@ -363,6 +368,7 @@ describe('demo league — no real identifier reaches any response, page, prompt 
       ['/demo/chimmy', async () => (await import('@/app/demo/chimmy/page')).default()],
       ['/demo/players', async () => (await import('@/app/demo/players/page')).default()],
       ['/demo/trade-evaluator', async () => (await import('@/app/demo/trade-evaluator/page')).default()],
+      ['/demo/standings', async () => (await import('@/app/demo/standings/page')).default()],
       ...[1, 2, 3, 4].map((slot) => [`/demo/teams/${slot}`, async () => (await import('@/app/demo/teams/[slot]/page')).default({ params: Promise.resolve({ slot: String(slot) }) })] as [string, () => Promise<React.ReactElement>]),
     ]
     for (const [url, render] of pages) {
@@ -371,7 +377,8 @@ describe('demo league — no real identifier reaches any response, page, prompt 
       expect(findLeaks(html), url).toEqual([])
       expect(html, url).not.toContain('sleepercdn.com/avatars')
     }
-  })
+    // Eleven pages through the app's real Home and Standings; over 30s cold on a loaded machine.
+  }, 120_000)
 
   it('nothing logged while serving demo requests contains a real identifier', async () => {
     const { GET } = await import('@/app/api/demo/league/route')
