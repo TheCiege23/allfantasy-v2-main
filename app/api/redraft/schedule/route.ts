@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { swapTeamsInWeek } from '@/lib/schedule-runtime/matchupSwapService'
+import { applyRivalryWeek, previewRivalryWeek } from '@/lib/schedule-runtime/rivalryWeekService'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -26,6 +27,8 @@ type ScheduleAction =
   | 'lock_schedule'
   | 'recalculate_standings'
   | 'swap_teams'
+  | 'rivalry_week_preview'
+  | 'rivalry_week_apply'
 
 async function resolveSeasonGate(input: {
   seasonId?: string | null
@@ -124,6 +127,17 @@ export async function POST(req: NextRequest) {
     })
     if (!generated.ok) return NextResponse.json({ error: generated.message, code: generated.code }, { status: 409 })
     return NextResponse.json(generated)
+  }
+
+  // Rivalry week: pair each team with its biggest rival for one week (lib/schedule-runtime/rivalryWeekService.ts).
+  if (action === 'rivalry_week_preview' || action === 'rivalry_week_apply') {
+    const parsedWeek = parseOptionalRedraftPositiveInteger(body.week, 'week')
+    if (!parsedWeek.ok || parsedWeek.value == null) return NextResponse.json({ error: parsedWeek.ok ? 'week required' : parsedWeek.error }, { status: 400 })
+    const out = action === 'rivalry_week_preview'
+      ? await previewRivalryWeek({ seasonId: gate.season.id, week: parsedWeek.value })
+      : await applyRivalryWeek({ seasonId: gate.season.id, week: parsedWeek.value, actorUserId: userId })
+    if (!out.ok) return NextResponse.json({ error: out.message, code: out.code }, { status: out.status })
+    return NextResponse.json({ ok: true, seasonId: gate.season.id, week: out.week, pairs: out.pairs, applied: action === 'rivalry_week_apply' })
   }
 
   // Two teams trade places in one week that has not started (lib/schedule-runtime/matchupSwapService.ts).

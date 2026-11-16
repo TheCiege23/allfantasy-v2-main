@@ -499,6 +499,15 @@ export const LOG_ACTIONS: Record<string, Action> = {
       }
     },
   },
+  schedule_rivalry_week: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const week = num(obj(ctx.row.metadata).week)
+      const wk = week != null ? week : '?'
+      return { en: `Made week ${wk} rivalry week`, es: `Convirtió la semana ${wk} en semana de rivalidades` }
+    },
+  },
   schedule_regenerated: {
     category: 'league',
     members: true,

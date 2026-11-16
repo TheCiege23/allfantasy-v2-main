@@ -2348,6 +2348,12 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.swapBye": "descanso",
   "commControl.swapDone": "Semana {{n}} actualizada.",
   "commControl.swapNoWeeks": "Todas las semanas de la temporada regular ya empezaron, así que no queda nada por intercambiar.",
+  "commControl.rivalryTitle": "Semana de rivalidades",
+  "commControl.rivalryHelp": "Elige una semana y cada equipo juega contra su mayor rival, según el historial de enfrentamientos, partidos cerrados, cruces de playoffs y traspasos de la liga. Revísala primero; las semanas que ya empezaron no cambian.",
+  "commControl.rivalryPreview": "Ver la semana de rivalidades",
+  "commControl.rivalryApply": "Convertir la semana {{n}} en semana de rivalidades",
+  "commControl.rivalryApplied": "La semana {{n}} es semana de rivalidades.",
+  "commControl.rivalryNoHistory": "Todavía no hay historial de rivalidad entre estos dos.",
   "commControl.rebuildScheduleNote": "Las semanas que ya empezaron no cambian. Las demás reciben nuevos matchups y el cambio queda en el registro de la liga.",
 
   // ─── LEAGUE DUES TRACKER ───

@@ -12,6 +12,7 @@
 
 import { requestScheduleRebuild } from '@/lib/schedule-runtime/rebuildScheduleRequest'
 import { ScheduleSwapForm } from '@/components/league-settings/ScheduleSwapForm'
+import { RivalryWeekCard } from '@/components/league-settings/RivalryWeekCard'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Lock, Unlock, Check } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -550,6 +551,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
         {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{success}</div>}
         {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{error}</div>}
         <ScheduleSwapForm leagueId={leagueId} />
+        <RivalryWeekCard leagueId={leagueId} />
       </div>
     )
   }
