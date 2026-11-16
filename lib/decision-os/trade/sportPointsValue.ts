@@ -65,6 +65,8 @@ export type BoardPlayer = {
   rosterAlias?: string | null
   /** The season the projection's numbers come from (last season, until this one has games). */
   sourceSeason?: number | null
+  /** Set when the projection blends this season with last (`af-projections/seasonBlend.ts`): each season's games. */
+  seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null
   /**
    * A sport-specific sample bar, replacing the games bar when present. Baseball's: ten games is a weekend
    * hot streak (31 at-bats put a September call-up among the top five hitters, measured 2026-10-09), so an

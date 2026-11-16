@@ -102,6 +102,19 @@ function reasonsOf(adjustmentFactors: unknown): unknown {
   return adjustmentFactors && typeof adjustmentFactors === 'object' ? (adjustmentFactors as Record<string, unknown>).confidenceReasons : null
 }
 
+/** The two seasons a blended projection spans (`af-projections/seasonBlend.ts`), or null for one season's. */
+function seasonBlendOf(adjustmentFactors: unknown): { currentGames: number; previousGames: number; currentWeight: number } | null {
+  const raw = adjustmentFactors && typeof adjustmentFactors === 'object' ? (adjustmentFactors as Record<string, unknown>).seasonBlend : null
+  if (!raw || typeof raw !== 'object') return null
+  const b = raw as Record<string, unknown>
+  const c = Number(b.currentGames)
+  const p = Number(b.previousGames)
+  const w = Number(b.currentWeight)
+  return Number.isFinite(c) && Number.isFinite(p) && Number.isFinite(w) && c > 0 && p > 0 && w >= 0 && w <= 1
+    ? { currentGames: c, previousGames: p, currentWeight: w }
+    : null
+}
+
 function sourceSeasonOf(adjustmentFactors: unknown): number | null {
   const raw = adjustmentFactors && typeof adjustmentFactors === 'object' ? (adjustmentFactors as Record<string, unknown>).sourceSeason : null
   const n = Number(raw)
@@ -676,6 +689,7 @@ async function loadSnapshotLines(
       aliases: aliasesById.get(r.playerId) ?? [],
       rosterAlias: rosterAliasById.get(r.playerId),
       sourceSeason: sourceSeasonOf(r.adjustmentFactors),
+      seasonBlend: seasonBlendOf(r.adjustmentFactors),
       stats,
     })
   }

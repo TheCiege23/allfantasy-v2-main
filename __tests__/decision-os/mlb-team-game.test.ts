@@ -102,3 +102,23 @@ describe('MLB groups', () => {
     expect(isPitchingSlot([])).toBe(false)
   })
 })
+
+describe('a blended projection (MLB season blend, 2026-11-16)', () => {
+  // Ten games into 2027: an everyday vet blended (152 + 10), a rookie hitter and a rookie starter on 2027 alone.
+  const vet = { ...everyday, id: 'vet', sampleGames: 162, sourceSeason: 2027, seasonBlend: { currentGames: 10, previousGames: 152, currentWeight: 0.333 } }
+  const rookieBat = { ...everyday, id: 'rookie-bat', sampleGames: 10, sourceSeason: 2027 }
+  const rookieArm = { ...skenes, id: 'rookie-arm', sampleGames: 2, sourceSeason: 2027 }
+  const blendedAce = { ...skenes, id: 'ace', sampleGames: 34, sourceSeason: 2027, seasonBlend: { currentGames: 2, previousGames: 32, currentWeight: 0.091 } }
+
+  it('🛑 a blended hitter’s two seasons never inflate this season’s team games — a rookie starter keeps 2 of 10', () => {
+    const out = byId(toTeamGameLines([vet, rookieBat, rookieArm]))
+    expect(out.get('rookie-arm')!.share).toBeCloseTo(2 / 10, 9)
+  })
+
+  it('a blended pitcher’s share is each season’s share, weighted as his line is', () => {
+    const out = byId(toTeamGameLines([vet, rookieBat, blendedAce]))
+    // This season: 2 of 10 team games; last season: 32 of 152 (the vet’s 152 sets it).
+    expect(out.get('ace')!.share).toBeCloseTo(0.091 * (2 / 10) + 0.909 * (32 / 152), 9)
+  })
+})
+

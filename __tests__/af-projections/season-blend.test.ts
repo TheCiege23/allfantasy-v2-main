@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats, blendWeight } from '@/lib/af-projections/seasonBlend'
-import { extractSeasonAggregate, perGameRates } from '@/lib/af-projections/core'
+import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats, blendWeight, inningsNotation } from '@/lib/af-projections/seasonBlend'
+import { extractSeasonAggregate, mlbPerGameRates, perGameRates } from '@/lib/af-projections/core'
 
 const line = (gp: number, perGame: Record<string, number>, extra: Record<string, unknown> = {}) => ({
   position: 'PG',
@@ -71,7 +71,55 @@ describe('blendSeasonStats', () => {
     expect(blendSeasonStats(null, line(70, { points: 20 }))).toBeNull()
   })
 
-  it('NBA first, by the owner’s order', () => {
-    expect([...BLEND_SPORTS]).toEqual(['NBA'])
+  it('NBA first, then MLB, by the owner’s order', () => {
+    expect([...BLEND_SPORTS][0]).toBe('NBA')
   })
 })
+
+describe('⚾ baseball lines (MLB joined 2026-11-16)', () => {
+  // Shaped like production's 2025 rows: innings in baseball notation and ERA as strings, an id riding along.
+  const prev = { position: 'P', regular_season: { games_played: 32, E: 1, batting: null, pitching: { IP: '187.2', K: 216, ER: 41, ERA: '1.97', player_id: 4321 } } }
+  const cur = { position: 'P', regular_season: { games_played: 4, E: 0, batting: null, pitching: { IP: '20.1', K: 30, ER: 9, ERA: '3.98', player_id: 4321 } } }
+
+  it('blends innings as innings and writes them back in notation, so 187.2 is never read as 187.2', () => {
+    const r = blendSeasonStats(cur, prev)!
+    const w = 4 / 24
+    const trueIp = (w * (20 + 1 / 3) / 4 + (1 - w) * (187 + 2 / 3) / 32) * 36
+    const ip = (r.stats.regular_season as any).pitching.IP as number
+    // Notation: the tenths digit is outs, 0–2.
+    const outs = Math.round((ip - Math.trunc(ip)) * 10)
+    expect(outs).toBeGreaterThanOrEqual(0)
+    expect(outs).toBeLessThanOrEqual(2)
+    expect(Math.trunc(ip) + outs / 3).toBeCloseTo(trueIp, 0)
+  })
+
+  it('ERA blends as a rate, an id is kept, counting stats blend per game over both seasons’ games', () => {
+    const r = blendSeasonStats(cur, prev)!
+    const p = (r.stats.regular_season as any).pitching
+    const w = 4 / 24
+    expect(p.ERA).toBeCloseTo(w * 3.98 + (1 - w) * 1.97, 9)
+    expect(p.player_id).toBe(4321)
+    expect(p.K).toBeCloseTo((w * (30 / 4) + (1 - w) * (216 / 32)) * 36, 9)
+    expect((r.stats.regular_season as any).games_played).toBe(36)
+    expect((r.stats.regular_season as any).batting).toBeNull()
+  })
+
+  it('the blended line goes through the real MLB per-game reader: innings per start between the two seasons', () => {
+    const r = blendSeasonStats(cur, prev)!
+    const rates = mlbPerGameRates(extractSeasonAggregate(r.stats)!)!
+    const w = 4 / 24
+    expect(rates.ip).toBeCloseTo(w * ((20 + 1 / 3) / 4) + (1 - w) * ((187 + 2 / 3) / 32), 1)
+    expect(rates.so).toBeCloseTo(w * (30 / 4) + (1 - w) * (216 / 32), 6)
+  })
+
+  it('inningsNotation rounds to the nearest out and carries a third out into the next inning', () => {
+    expect(inningsNotation(190 + 1 / 3)).toBe(190.1)
+    expect(inningsNotation(190 + 2 / 3)).toBe(190.2)
+    expect(inningsNotation(190.99)).toBe(191)
+  })
+
+  it('MLB is a blend sport now', () => {
+    expect([...BLEND_SPORTS]).toEqual(['NBA', 'MLB'])
+  })
+})
+
