@@ -13,6 +13,7 @@ import {
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
 import { gradeArchivedTradeRows } from './archivedTradeGrade'
+import { playerIdSpaceFor, resolveTradePlayers, type ResolvedTradePlayer } from '@/lib/decision-os/trade/tradePlayers'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -203,6 +204,8 @@ async function resolveGrades(
   userId: string | null = null,
   /** The league's sport, so a Sleeper id is named from its own sport's pool. */
   sport: string | null = null,
+  /** The league's platform: which id space its stored player ids are in (`playerIdSpaceFor`). */
+  platform: string | null = null,
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -231,6 +234,8 @@ async function resolveGrades(
       partnerName: true,
       /* Which side of the graded ledger is the OTHER one — see `draftedPickNamesForRow`. */
       partnerRosterId: true,
+      /* When it completed: a provider league's original is priced at the time of the trade from it. */
+      tradeDate: true,
       history: { select: { sleeperUsername: true } },
     },
     /*
@@ -293,8 +298,20 @@ async function resolveGrades(
    * parallel with the snapshot read rather than after it. A failure degrades to
    * `Player <id>` in a sentence, never to a wrong name or a missing asset.
    */
+  /*
+   * 🛑 A PROVIDER LEAGUE'S IDS ARE NOT SLEEPER IDS (Trade OS, 2026-11-16). ESPN, Yahoo, MFL and Fleaflicker
+   * leagues keep their `LeagueTrade` rows in the provider's own id space, and this read looked every one up as a
+   * Sleeper id — so an MFL "13604" was named and PRICED as whichever Sleeper player holds 13604, and that letter
+   * was frozen as the trade's permanent original. Those ids now go through the provider identity map; a
+   * player it cannot match is unnamed, which withholds the letter rather than borrowing a stranger's value.
+   */
+  const space = playerIdSpaceFor({ platform, sport: sport ?? 'NFL' })
+  const providerIds = space !== 'sleeper'
+  const resolvedProvider: Map<string, ResolvedTradePlayer> = providerIds && ids.size > 0
+    ? await resolveTradePlayers([...ids], { space, sport: sport ?? 'NFL' }).catch(() => new Map())
+    : new Map()
   const playersPromise =
-    ids.size > 0
+    ids.size > 0 && !providerIds
       ? prisma.sportsPlayer
           .findMany({
             // Scoped to the league's sport when known: Sleeper numbers its NFL and NBA pools independently.
@@ -317,16 +334,25 @@ async function resolveGrades(
    * (the trade has happened). The honesty rule survives unchanged: any asset that cannot be priced
    * — an unnamed player, a pick whose draft has been held — withholds the letter; it is never zero.
    */
-  const nameOf = (id: string) => playerById.get(id)?.name?.trim() || null
+  const providerHit = (id: string) => {
+    const r = resolvedProvider.get(id)
+    return r?.ok ? r : null
+  }
+  const nameOf = (id: string) => (providerIds ? providerHit(id)?.name?.trim() || null : playerById.get(id)?.name?.trim() || null)
+  // A provider id prices as the Sleeper id it is linked to, or by name — never as itself.
+  const sleeperIdOf = providerIds ? (id: string) => providerHit(id)?.sleeperId ?? null : undefined
   // Warm the per-player analytics cache the pricer reads, in ONE query, before sixty deals hit it.
-  await getPlayerAnalyticsBatch([...playerById.values()].map((p) => p.name)).catch(() => null)
+  const warmNames = providerIds
+    ? [...resolvedProvider.values()].flatMap((r) => (r.ok ? [r.name] : []))
+    : [...playerById.values()].map((p) => p.name)
+  await getPlayerAnalyticsBatch(warmNames).catch(() => null)
 
   /*
    * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). The grading itself —
    * drafted-pick names from the league's ledger, then the one grader — lives in
    * `archivedTradeGrade.ts`, shared with the player card so one trade reads one letter on both.
    */
-  const gradedRows = await gradeArchivedTradeRows({ afLeagueId: leagueId, platformLeagueId, rows: distinctTrades, nameOf })
+  const gradedRows = await gradeArchivedTradeRows({ afLeagueId: leagueId, platformLeagueId, rows: distinctTrades, nameOf, ...(sleeperIdOf ? { sleeperIdOf } : {}) })
 
   const graded: GradedTrade[] = await Promise.all(distinctTrades.map(async (t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
@@ -799,6 +825,7 @@ async function readTradesSections(
       myTeam?.platformUserId?.trim() || null,
       userId,
       league.sport ?? null,
+      league.platform ?? null,
     )
     const current = sleeperHistory
       ? await getSleeperTradeHistory(
