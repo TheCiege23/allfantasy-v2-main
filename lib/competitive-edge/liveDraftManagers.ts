@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getUpcomingPickOwners } from '@/lib/live-draft-engine/DraftOrderService'
-import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { resolveViewerDraftIdentity } from '@/lib/draft-room/viewerDraftIdentity'
 import type { DraftType } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
@@ -38,8 +38,9 @@ export async function loadManagersAhead(input: {
   leagueId: string
   userId: string
   /**
-   * The viewer's slot when the caller already resolved it (`resolveViewerDraftIdentity`). Without it
-   * this matches on the AF `Roster.id`, which never matches a Sleeper-mirrored draft's slot order.
+   * The viewer's slot when the caller already resolved it (Chimmy's draft board does). Without it this
+   * resolves the slot itself through the SAME `resolveViewerDraftIdentity`, so every caller — the
+   * draft room's decision route included — finds the viewer in a Sleeper-mirrored draft too.
    */
   viewerSlot?: number
 }): Promise<ManagersAhead | null> {
@@ -55,18 +56,28 @@ export async function loadManagersAhead(input: {
       thirdRoundReversal: true,
       nextOverallPick: true,
       slotOrder: true,
+      sleeperDraftId: true,
     },
   })
   if (!session || session.draftType === 'auction' || session.status === 'completed') return null
   const slotOrder = parseSlotOrder(session.slotOrder)
   if (slotOrder.length === 0) return null
 
+  /*
+   * 🛑 WAS A ROSTER-ID MATCH ONLY. A Sleeper-mirrored draft's slot order holds Sleeper's roster NUMBER,
+   * so the draft room's "before your next pick" panel was empty on every Sleeper draft. Fixed for
+   * Chimmy and the room alike, 2026-11-16 (lib/draft-room/viewerDraftIdentity.ts).
+   */
   const mine = input.viewerSlot != null
     ? slotOrder.find((e) => e.slot === input.viewerSlot)
-    : await (async () => {
-        const viewerRosterId = await getCurrentUserRosterIdForLeague(input.leagueId, input.userId).catch(() => null)
-        return slotOrder.find((e) => e.rosterId === viewerRosterId)
-      })()
+    : (
+        await resolveViewerDraftIdentity({
+          leagueId: input.leagueId,
+          userId: input.userId,
+          slotOrder,
+          isSleeperMirror: Boolean(session.sleeperDraftId),
+        }).catch(() => null)
+      )?.slotEntry ?? undefined
   if (!mine) return null
 
   const teamCount = Math.max(1, session.teamCount)
