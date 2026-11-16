@@ -168,3 +168,16 @@ describe('position tile colours', () => {
     expect(positionTintHex('—')).toBeNull()
   })
 })
+
+describe('room v2: hidden board keeps its size control clear of the on-the-clock alert', () => {
+  it('moves the control to the right end while the board is hidden, centred otherwise', () => {
+    renderShell()
+    const bar = screen.getByTestId('draft-dock-size-bar')
+    expect(bar.className).toContain('justify-center')
+    fireEvent.click(screen.getByTestId('draft-board-hide'))
+    expect(bar.getAttribute('data-board-hidden')).toBe('true')
+    expect(bar.className).toContain('justify-end')
+    fireEvent.click(screen.getByTestId('draft-dock-size-half'))
+    expect(bar.className).toContain('justify-center')
+  })
+})

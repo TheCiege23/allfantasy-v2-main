@@ -337,7 +337,21 @@ export function DraftRoomShell({
           {/* D.6.2 — collapse arrow toggle between the board and the dock.
               Two stacked chevrons that flip direction based on state. Click → toggle. */}
           {allowPremiumDockCollapse ? (
-            <div className="flex shrink-0 items-center justify-center border-b border-white/[0.06] bg-[#081022] py-1">
+            /*
+              ⚠ WITH THE BOARD HIDDEN THIS BAR SITS RIGHT UNDER THE HEADER, where the on-the-clock
+              "You're up" alert floats (fixed, centred, lg:top-24). Centred, the alert covered Board /
+              Half / Players, so the board could not be brought back until the alert was dismissed —
+              e2e/draft-room-visual caught it. The control moves to the right end while the board is
+              hidden; with the board showing it stays centred.
+            */
+            <div
+              className={cn(
+                'flex shrink-0 items-center border-b border-white/[0.06] bg-[#081022] py-1',
+                boardHidden ? 'justify-end pr-3' : 'justify-center',
+              )}
+              data-testid="draft-dock-size-bar"
+              data-board-hidden={boardHidden ? 'true' : 'false'}
+            >
               {/* Panel size: hide it, split the screen, or give it most of the screen. It sits on its
                   own divider bar; floating across the edge, the panel below clipped it. */}
               <div
