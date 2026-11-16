@@ -184,6 +184,23 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'UULF-dkzX3W0_-EyX9zFoWec-w' },
   },
   {
+    /*
+     * The Cricket Draft: gameweek review-and-preview shows for fantasy County
+     * Championship cricket ("TCD Show GW 14 Review & GW 15 Preview"). Long uploads,
+     * newest first — checked 2026-11-16 by playing the list in the embed; newest
+     * upload 2026-09-22, the end of the English season.
+     *
+     * Chosen over "The Fantasy Cricket Podcast", which has the better name and
+     * stopped posting in January 2022. The rest of what YouTube offers for
+     * "fantasy cricket" is short Dream11 match-prediction clips, mostly in Hindi.
+     * Like NASCAR, it goes quiet in the off-season (October–March).
+     */
+    id: 'cricket-podcast',
+    label: 'Cricket podcast',
+    channel: 'The Cricket Draft',
+    source: { kind: 'playlist', listId: 'UULFmZti-Lfi8x2eNYjmUG2I0Q' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
