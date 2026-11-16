@@ -1,174 +1,78 @@
 /*
- * App-wide music dock (YouTube + Apple Music). Mounted in the ROOT layout, so it
- * renders on pages that never load af-core.css — it carries its own palette
- * (`--amd-*`) and follows `html[data-mode]` for light/dark.
+ * App-wide music: the YouTube box (engine, root layout), the chat panel's Music
+ * tab (.af-amp-*), and the draft room's launcher bar.
  *
- * ⚠ POSITIONS AVOID WHAT IS ALREADY FIXED ON SCREEN:
- *   - bottom-right is the FAB stack (comms launcher + toggles, af-core.css
- *     `--af-fab-*`); the YouTube box sits BESIDE it on desktop, never on it.
- *   - the left edge is the desktop nav rail; the side tab lives on the RIGHT.
- *   - below 720px the tab bar owns the bottom; the box sits above it, left side.
+ * ⚠ ONE LOOK: THE CHAT PANEL'S. The controls live in the chat panel, which is
+ * always dark with a teal accent (af-comms.css scopes those tokens to `.af-cm`).
+ * The corner box is that same player minimized, so it uses the same palette
+ * here (`--amp-*`) rather than following the page's light/dark theme.
  *
- * ⚠ THE YOUTUBE PLAYER IS 200×200 AND NEVER HIDDEN while it plays — YouTube's
- * embed rules. It sits ABOVE the picker backdrop for the same reason.
+ * ⚠ THE YOUTUBE PLAYER IS NEVER HIDDEN while it plays — YouTube's embed rules.
+ * In the chat it fills the Music tab's screen; minimized it is 200×200 and sits
+ * beside the bottom-right button stack (af-core.css `--af-fab-*`), never on it.
  */
 
 :root {
-  --amd-bg: #0d1020;
-  --amd-bg2: #151a33;
-  --amd-line: rgba(255, 255, 255, 0.12);
-  --amd-text: #eef0fa;
-  --amd-text2: #c3c8e0;
-  --amd-muted: #959dbd;
-  --amd-accent: #22d3ee;
-  --amd-accent-ink: #04121a;
-  --amd-accent-soft: rgba(34, 211, 238, 0.14);
-  --amd-warn: #fbbf24;
-  --amd-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --amp-bg: #111519;
+  --amp-surface: #191f24;
+  --amp-surface2: #14191e;
+  --amp-line: rgba(255, 255, 255, 0.1);
+  --amp-text: #eef0fa;
+  --amp-text2: #c3c9e6;
+  --amp-muted: #8f97bd;
+  --amp-accent: #5eead4;
+  --amp-accent-ink: #04050c;
+  --amp-accent-soft: rgba(94, 234, 212, 0.1);
+  --amp-warn: #fbbf24;
+  --amp-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   /* Bottom clearance for fixed corner UI. af-core.css owns the real token on
      /core pages; this fallback mirrors it everywhere else. */
-  --amd-bottom: var(--af-fab-bottom, 18px);
-}
-
-html[data-mode='light'] {
-  --amd-bg: #ffffff;
-  --amd-bg2: #f1f4fa;
-  --amd-line: rgba(15, 23, 42, 0.14);
-  --amd-text: #0f172a;
-  --amd-text2: #334155;
-  --amd-muted: #556078;
-  --amd-accent: #0e7490;
-  --amd-accent-ink: #ffffff;
-  --amd-accent-soft: rgba(14, 116, 144, 0.12);
-  --amd-warn: #b45309;
-  --amd-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  --amp-bottom: var(--af-fab-bottom, 18px);
 }
 
 @media (max-width: 720px) {
   :root {
-    --amd-bottom: var(--af-fab-bottom, calc(56px + env(safe-area-inset-bottom, 0px) + 12px));
+    --amp-bottom: var(--af-fab-bottom, calc(56px + env(safe-area-inset-bottom, 0px) + 12px));
   }
 }
 
-/* ── Side tab ───────────────────────────────────────────────────────────── */
-
-.af-amd-tab {
-  position: fixed;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 58;
-  display: grid;
-  place-items: center;
-  gap: 4px;
-  width: 40px;
-  min-height: 56px;
-  padding: 8px 0;
-  border: 1px solid var(--amd-line);
-  border-right: 0;
-  border-radius: 12px 0 0 12px;
-  background: var(--amd-bg);
-  color: var(--amd-text);
-  box-shadow: var(--amd-shadow);
-  cursor: pointer;
-}
-
-.af-amd-tab:hover { background: var(--amd-bg2); }
-.af-amd-tab img { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; }
-.af-amd-note { font-size: 18px; line-height: 1; color: var(--amd-accent); }
-
-/* Tiny equaliser: tells you music is playing even when tucked away. */
-.af-amd-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 10px; }
-.af-amd-eq i {
-  width: 3px;
-  height: 100%;
-  border-radius: 1px;
-  background: var(--amd-accent);
-  animation: af-amd-eq 0.9s ease-in-out infinite;
-}
-.af-amd-eq i:nth-child(2) { animation-delay: -0.3s; }
-.af-amd-eq i:nth-child(3) { animation-delay: -0.6s; }
-
-@keyframes af-amd-eq {
-  0%, 100% { transform: scaleY(0.3); }
-  50% { transform: scaleY(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .af-amd-eq i { animation: none; transform: scaleY(0.7); }
-}
-
-/* ── Apple Music controls, slid out from the tab ────────────────────────── */
-
-.af-amd-mini {
-  position: fixed;
-  right: 48px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 58;
-  display: grid;
-  gap: 10px;
-  width: min(300px, calc(100vw - 64px));
-  padding: 12px;
-  border: 1px solid var(--amd-line);
-  border-radius: 14px;
-  background: var(--amd-bg);
-  color: var(--amd-text);
-  box-shadow: var(--amd-shadow);
-}
-
-.af-amd-mini-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.af-amd-mini-top img,
-.af-amd-mini-art {
-  flex: none;
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  object-fit: cover;
-}
-.af-amd-mini-art { display: grid; place-items: center; background: var(--amd-bg2); color: var(--amd-muted); }
-.af-amd-mini-text { display: grid; min-width: 0; }
-.af-amd-mini-title,
-.af-amd-mini-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.af-amd-mini-title { font-size: 14px; font-weight: 700; }
-.af-amd-mini-artist { font-size: 12px; color: var(--amd-muted); }
-
-.af-amd-transport { display: flex; justify-content: center; gap: 6px; }
-
-.af-amd-icon {
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--amd-bg2);
-  color: var(--amd-text2);
-  font-size: 14px;
-  cursor: pointer;
-}
-.af-amd-icon--main { background: var(--amd-accent); color: var(--amd-accent-ink); }
-
-.af-amd-mini-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; }
-
-/* ── YouTube box ────────────────────────────────────────────────────────── */
+/* ── The YouTube box ────────────────────────────────────────────────────── */
 
 .af-amd-yt {
   position: fixed;
-  /* Beside the FAB stack: inset + the 56px launcher + a gap. */
+  /* Minimized: beside the chat bubble — inset + the 56px launcher + a gap. */
   right: calc(var(--af-fab-inset, 18px) + 56px + 12px);
-  bottom: var(--amd-bottom);
+  bottom: var(--amp-bottom);
   z-index: 58;
   width: 200px;
-  border: 1px solid var(--amd-line);
-  border-radius: 12px;
-  background: var(--amd-bg);
-  color: var(--amd-text);
-  box-shadow: var(--amd-shadow);
+  border: 1px solid var(--amp-line);
+  border-radius: 14px;
+  background: var(--amp-bg);
+  color: var(--amp-text);
+  box-shadow: var(--amp-shadow);
   overflow: hidden;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
-/* While the picker is open the box rides above its backdrop: the player is
-   never covered while it plays. */
-.af-amd-yt[data-raised] { z-index: 1001; }
+.af-amd-yt iframe {
+  display: block;
+  width: 100%;
+  height: 200px;
+  border: 0;
+  background: #000;
+}
+
+/* In the chat: laid exactly over the Music tab's screen (left/top/width/height
+   come from the tab, inline). Above the chat panel (af-comms.css: 901). */
+.af-amd-yt[data-in-chat] {
+  right: auto;
+  bottom: auto;
+  z-index: 902;
+  border: 0;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.af-amd-yt[data-in-chat] iframe { height: 100%; }
 
 .af-amd-yt-head {
   display: flex;
@@ -176,7 +80,7 @@ html[data-mode='light'] {
   gap: 4px;
   height: 36px;
   padding: 0 4px 0 10px;
-  background: var(--amd-bg2);
+  background: var(--amp-surface);
 }
 
 .af-amd-yt-title {
@@ -197,227 +101,260 @@ html[data-mode='light'] {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--amd-text2);
+  color: var(--amp-text2);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
-.af-amd-yt-btn:hover { background: var(--amd-bg); }
+.af-amd-yt-btn:hover { background: var(--amp-bg); color: var(--amp-accent); }
 
-.af-amd-yt iframe {
-  display: block;
-  width: 200px;
-  height: 200px;
-  border: 0;
+@media (max-width: 720px) {
+  .af-amd-yt:not([data-in-chat]) { left: 12px; right: auto; }
+}
+
+/* ── The chat panel's Music tab ─────────────────────────────────────────── */
+/* Inside .af-cm, so the chat's own tokens apply; --amp-* are the fallbacks. */
+
+.af-amp {
+  color: var(--text, var(--amp-text));
+}
+
+.af-amp-pad { padding: 16px; }
+
+.af-amp-now {
+  flex: none;
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line, var(--amp-line));
+}
+
+/* The screen: empty; the engine lays the YouTube iframe over it. 16:9, never
+   under 200px tall (YouTube's minimum), never taller than a third of a phone. */
+.af-amp-screen {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 200px;
+  max-height: 34vh;
+  border-radius: 12px;
   background: #000;
 }
 
-@media (max-width: 720px) {
-  .af-amd-yt { left: 12px; right: auto; }
+.af-amp-nowrow,
+.af-amp-apple,
+.af-amp-transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-/* ── Picker: large panel on desktop, full screen on a phone ─────────────── */
+.af-amp-nowtext {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.af-amp-nowtext b,
+.af-amp-nowtext span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-amp-nowtext b { font-size: 14px; font-weight: 700; color: var(--text, var(--amp-text)); }
+.af-amp-nowtext span { font-size: 12px; color: var(--muted, var(--amp-muted)); }
 
-.af-amd-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
+.af-amp-apple img,
+.af-amp-art {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.af-amp-art {
   display: grid;
   place-items: center;
-  padding: 24px;
-  background: rgba(3, 6, 18, 0.62);
+  background: var(--surface, var(--amp-surface));
+  color: var(--muted, var(--amp-muted));
 }
+.af-amp-art--sm { width: 40px; height: 40px; border-radius: 6px; }
 
-.af-amd-sheet {
+.af-amp-icon {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--chip, rgba(255, 255, 255, 0.05));
+  color: var(--text2, var(--amp-text2));
+  font-size: 14px;
+  cursor: pointer;
+}
+.af-amp-icon--main { background: var(--accent, var(--amp-accent)); color: #09231f; }
+.af-amp-transport .af-amp-chip { margin-left: auto; }
+
+.af-amp-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: grid;
   align-content: start;
   gap: 14px;
-  width: min(600px, 100%);
-  max-height: min(84vh, 760px);
-  overflow-y: auto;
-  padding: 18px;
-  border: 1px solid var(--amd-line);
-  border-radius: 18px;
-  background: var(--amd-bg);
-  color: var(--amd-text);
-  box-shadow: var(--amd-shadow);
-  font-family: inherit;
+  padding: 14px 16px 18px;
 }
 
-.af-amd-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.af-amd-sheet-title { margin: 0; font-size: 20px; font-weight: 800; }
-
-@media (max-width: 720px) {
-  .af-amd-backdrop { padding: 0; place-items: stretch; }
-  .af-amd-sheet {
-    width: 100%;
-    max-height: none;
-    height: 100%;
-    border: 0;
-    border-radius: 0;
-    padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-  /* Room for the YouTube box, which stays visible on top. */
-  .af-amd-backdrop[data-yt] .af-amd-sheet { padding-bottom: calc(var(--amd-bottom) + 250px); }
-}
-
-.af-amd-tabs {
+/* Matches the chat's own pill tab row. */
+.af-amp-switch {
   display: inline-flex;
   justify-self: start;
-  padding: 3px;
-  border-radius: 10px;
-  background: var(--amd-bg2);
+  gap: 3px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.af-amd-tabbtn {
-  min-height: 40px;
-  padding: 0 16px;
+.af-amp-switchbtn {
+  min-height: 36px;
+  padding: 0 14px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
-  color: var(--amd-text2);
-  font-size: 14px;
-  font-weight: 600;
+  color: var(--muted, var(--amp-muted));
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
 }
-
-.af-amd-tabbtn[aria-selected='true'] {
-  background: var(--amd-accent-soft);
-  color: var(--amd-text);
-  box-shadow: inset 0 0 0 1px var(--amd-accent);
+.af-amp-switchbtn[aria-selected='true'] {
+  background: var(--accent, var(--amp-accent));
+  color: #09231f;
+  font-weight: 800;
 }
 
-.af-amd-panel { display: grid; gap: 14px; }
+.af-amp-section { display: grid; gap: 12px; }
 
-.af-amd-stations {
+.af-amp-stations {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
 }
 
-.af-amd-station {
+.af-amp-station {
   display: grid;
-  gap: 3px;
-  min-height: 60px;
-  padding: 10px 14px;
-  border: 1px solid var(--amd-line);
+  gap: 2px;
+  min-height: 54px;
+  padding: 9px 12px;
+  border: 1px solid var(--line2, var(--amp-line));
   border-radius: 12px;
-  background: var(--amd-bg2);
-  color: var(--amd-text);
+  background: var(--surface, var(--amp-surface));
+  color: var(--text, var(--amp-text));
   text-align: left;
   cursor: pointer;
 }
-.af-amd-station:hover { border-color: var(--amd-accent); }
-.af-amd-station[data-active] { border-color: var(--amd-accent); background: var(--amd-accent-soft); }
-.af-amd-station-title { font-size: 15px; font-weight: 700; }
-.af-amd-station-sub { font-size: 12px; color: var(--amd-muted); }
+.af-amp-station:hover { border-color: var(--accent-line, var(--amp-accent)); }
+.af-amp-station[data-active] {
+  border-color: var(--accent, var(--amp-accent));
+  background: var(--accent-soft, var(--amp-accent-soft));
+}
+.af-amp-station-title { font-size: 13.5px; font-weight: 700; }
+.af-amp-station-sub { font-size: 11.5px; color: var(--muted, var(--amp-muted)); }
 
-.af-amd-link { display: grid; gap: 6px; }
-.af-amd-label { font-size: 13px; color: var(--amd-text2); }
-.af-amd-row { display: flex; align-items: center; gap: 8px; }
+.af-amp-link { display: grid; gap: 6px; }
+.af-amp-label { font-size: 12px; color: var(--text2, var(--amp-text2)); }
+.af-amp-row { display: flex; align-items: center; gap: 8px; }
 
-.af-amd-input {
+.af-amp-input {
   flex: 1;
   min-width: 0;
   min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--amd-line);
-  border-radius: 10px;
-  background: var(--amd-bg2);
-  color: var(--amd-text);
-  font-size: 15px;
+  padding: 0 14px;
+  border: 1px solid var(--line2, var(--amp-line));
+  border-radius: 999px;
+  background: var(--surface2, var(--amp-surface2));
+  color: var(--text, var(--amp-text));
+  font-size: 14px;
 }
-.af-amd-input::placeholder { color: var(--amd-muted); }
+.af-amp-input::placeholder { color: var(--muted, var(--amp-muted)); }
 
-.af-amd-btn {
+.af-amp-btn {
   flex: none;
   min-height: 44px;
   padding: 0 18px;
   border: 0;
-  border-radius: 10px;
-  background: var(--amd-accent);
-  color: var(--amd-accent-ink);
-  font-size: 14px;
-  font-weight: 700;
+  border-radius: 999px;
+  background: var(--accent, var(--amp-accent));
+  color: #09231f;
+  font-size: 13px;
+  font-weight: 800;
   cursor: pointer;
 }
-.af-amd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.af-amd-btn--apple { justify-self: start; background: linear-gradient(135deg, #fa2d48, #fc5c7d); color: #fff; }
+.af-amp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.af-amp-btn--apple { justify-self: start; background: linear-gradient(135deg, #fa2d48, #fc5c7d); color: #fff; }
 
-.af-amd-chip {
+.af-amp-chip {
   flex: none;
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid var(--amd-line);
+  border: 1px solid var(--line2, var(--amp-line));
   border-radius: 999px;
-  background: var(--amd-bg2);
-  color: var(--amd-text2);
-  font-size: 13px;
-  font-weight: 600;
+  background: var(--chip, rgba(255, 255, 255, 0.05));
+  color: var(--text2, var(--amp-text2));
+  font-size: 12.5px;
+  font-weight: 700;
   cursor: pointer;
 }
-.af-amd-chip--quiet { background: transparent; }
+.af-amp-chip:hover { color: var(--accent, var(--amp-accent)); }
 
-.af-amd-connect { display: grid; gap: 8px; justify-items: start; }
-.af-amd-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-amp-connect { display: grid; gap: 8px; justify-items: start; }
+.af-amp-quick { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.af-amd-results { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.af-amp-results { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 
-.af-amd-result {
+.af-amp-result {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 56px;
+  min-height: 52px;
   padding: 6px 8px;
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--amd-text);
   text-align: left;
   cursor: pointer;
 }
-.af-amd-result:hover { background: var(--amd-bg2); }
-.af-amd-result img,
-.af-amd-result-art { flex: none; width: 44px; height: 44px; border-radius: 6px; object-fit: cover; }
-.af-amd-result-art { display: grid; place-items: center; background: var(--amd-bg2); color: var(--amd-muted); }
-.af-amd-result-text { display: grid; min-width: 0; }
-.af-amd-result-title,
-.af-amd-result-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.af-amd-result-title { font-size: 14px; font-weight: 600; }
-.af-amd-result-sub { font-size: 12px; color: var(--amd-muted); }
+.af-amp-result:hover { background: var(--surface, var(--amp-surface)); }
+.af-amp-result img { flex: none; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
 
-.af-amd-linkbtn {
+.af-amp-linkbtn {
   justify-self: start;
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: var(--amd-muted);
+  color: var(--muted, var(--amp-muted));
   font-size: 12px;
   text-decoration: underline;
   cursor: pointer;
 }
 
-.af-amd-msg { margin: 0; font-size: 14px; line-height: 1.45; color: var(--amd-text2); }
-.af-amd-error { margin: 0; font-size: 13px; color: var(--amd-warn); }
-.af-amd-note-line { margin: 0; font-size: 12px; color: var(--amd-muted); }
+.af-amp-msg { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text2, var(--amp-text2)); }
+.af-amp-error { margin: 0; font-size: 12.5px; color: var(--amp-warn); }
+.af-amp-note { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted, var(--amp-muted)); }
 
-.af-amd-tab:focus-visible,
-.af-amd-icon:focus-visible,
-.af-amd-chip:focus-visible,
 .af-amd-yt-btn:focus-visible,
-.af-amd-tabbtn:focus-visible,
-.af-amd-station:focus-visible,
-.af-amd-btn:focus-visible,
-.af-amd-result:focus-visible,
-.af-amd-input:focus-visible,
-.af-amd-linkbtn:focus-visible,
+.af-amp-icon:focus-visible,
+.af-amp-chip:focus-visible,
+.af-amp-switchbtn:focus-visible,
+.af-amp-station:focus-visible,
+.af-amp-btn:focus-visible,
+.af-amp-result:focus-visible,
+.af-amp-input:focus-visible,
+.af-amp-linkbtn:focus-visible,
 .af-amd-launch-btn:focus-visible {
-  outline: 2px solid var(--amd-accent);
+  outline: 2px solid var(--accent, var(--amp-accent));
   outline-offset: 2px;
 }
 
 /* ── Draft room launcher: a slim bar in normal flow ─────────────────────── */
+/* On the draft board, inside .af-core, so it follows the page's theme. */
 
 .af-amd-launch {
   display: flex;
@@ -425,10 +362,10 @@ html[data-mode='light'] {
   gap: 10px;
   min-height: 44px;
   padding: 6px 8px 6px 10px;
-  border: 1px solid var(--amd-line);
+  border: 1px solid var(--line, var(--amp-line));
   border-radius: 12px;
-  background: var(--amd-bg2);
-  color: var(--amd-text);
+  background: var(--surface2, var(--amp-surface2));
+  color: var(--text, var(--amp-text));
 }
 
 .af-amd-launch-mark {
@@ -438,22 +375,22 @@ html[data-mode='light'] {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  background: var(--amd-accent);
-  color: var(--amd-accent-ink);
+  background: var(--accent, var(--amp-accent));
+  color: var(--accent-ink, var(--amp-accent-ink));
   font-size: 14px;
   font-weight: 800;
 }
 
-.af-amd-launch-text { flex: 1; min-width: 0; font-size: 13px; color: var(--amd-text2); }
+.af-amd-launch-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text2, var(--amp-text2)); }
 
 .af-amd-launch-btn {
   flex: none;
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid var(--amd-accent);
+  border: 1px solid var(--accent, var(--amp-accent));
   border-radius: 999px;
-  background: var(--amd-accent-soft);
-  color: var(--amd-text);
+  background: var(--accent-soft, var(--amp-accent-soft));
+  color: var(--text, var(--amp-text));
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;

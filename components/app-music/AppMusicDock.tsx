@@ -1,15 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import './af-app-music.css'
-import {
-  YOUTUBE_STATIONS,
-  parseYouTubeLink,
-  youTubeEmbedUrl,
-  type YouTubeSource,
-} from '@/lib/draft-music/youtube'
+import { youTubeEmbedUrl } from '@/lib/draft-music/youtube'
 import {
   artworkUrl,
   searchCatalog,
@@ -17,63 +12,53 @@ import {
   type AppleSearchResult,
   type MusicKitInstance,
 } from '@/lib/apple-music/musicKitClient'
+import { COMMS_OPEN_EVENT, type CommsOpenDetail } from '@/components/core-app/comms/commsEvents'
+import {
+  SUBSCRIPTION_NOTE,
+  musicBus,
+  type AppleNow,
+  type AppleStatus,
+  type MusicActions,
+  type YouTubePlaying,
+} from './musicBus'
 
 /**
- * App-wide music — YouTube for everyone, Apple Music for subscribers.
+ * App-wide music ENGINE — YouTube for everyone, Apple Music for subscribers.
  *
  * Mounted ONCE in the root layout, so it survives every client-side navigation:
  * music started in the draft room keeps playing on lineups, trades, standings.
  * A full page reload or signing out stops it; nothing can survive those.
  *
- * Three sizes, by design (the user's brief, 2026-11-15):
- *   choosing  — a full-screen sheet on a phone, a large panel on desktop
- *   playing   — Apple Music tucks into a small tab on the RIGHT EDGE; YouTube
- *               shrinks to a 200×200 box
- *   idle      — just the side tab
+ * ⚠ THE CONTROLS ARE NOT HERE. They are the Music tab of the chat panel
+ * (components/app-music/MusicPanel.tsx inside CommsDrawer) — the user's call on
+ * 2026-11-15, after the first version's right-edge "♫" tab proved too easy to
+ * miss. See musicBus.ts for why the chat panel cannot own the audio itself.
  *
- * ⚠ YOUTUBE CANNOT BE HIDDEN. YouTube's embed rules require the player to stay
- * visible and at least 200×200 while it plays, and forbid making it audio-only.
- * So its "small" is the box, never the tab, and the box sits ABOVE the picker
- * sheet rather than under it. Apple Music has no such rule and hides fully.
+ * What this renders, and nothing else:
+ *   - YouTube, while the chat's Music tab is open: the one iframe, positioned
+ *     over the tab's "screen" so it reads as playing inside the chat.
+ *   - YouTube, once the chat is minimized or closed: a 200×200 box in the corner.
+ *     ⚠ NEVER HIDDEN. YouTube's embed rules forbid hiding a playing player or
+ *     using it as background audio — the user chose "small box (allowed)" when
+ *     offered the alternative.
+ *   - Apple Music: nothing. Apple has no such rule, so minimized means hidden.
  *
- * ⚠ POSITIONS ARE CHOSEN AROUND WHAT IS ALREADY THERE. The bottom-right corner
- * is a stack (comms launcher, theme toggle, back-to-top — af-core.css
- * `--af-fab-*`), and the desktop nav rail owns the left edge. So: the tab sits
- * mid-height on the right edge; the YouTube box sits beside the stack on
- * desktop and above the tab bar on the LEFT on a phone.
- *
- * ⚠ NOTHING PLAYS UNTIL SOMEONE CHOOSES. Apple's script is not loaded until the
- * Apple Music tab of the picker is opened.
+ * ⚠ ONE IFRAME, MOVED WITH CSS. Re-parenting an iframe reloads it, which would
+ * restart the song every time the chat opened or closed. It stays in this
+ * component; only its position and size change.
  */
-
-const OPEN_EVENT = 'af:app-music:open'
-
-/** Opens the music picker from anywhere (the draft room's button uses it). */
-export function openAppMusicPicker(): void {
-  window.dispatchEvent(new Event(OPEN_EVENT))
-}
 
 const HIDDEN_PREFIXES = ['/login', '/signup', '/signin', '/logout', '/auth']
 
-type Source = 'youtube' | 'apple'
-type YouTubePlaying = { key: string; label: string; source: YouTubeSource }
-type AppleStatus = 'idle' | 'checking' | 'unavailable' | 'error' | 'signed-out' | 'connecting' | 'ready'
-type AppleNow = { title: string; artist: string; art: string | null; playing: boolean }
+/** Opens the chat panel on its Music tab, from anywhere (the draft room's button uses it). */
+export function openAppMusicPicker(): void {
+  const detail: CommsOpenDetail = { tab: 'music' }
+  window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail }))
+}
 
-const SOURCE_KEY = 'af:draft-music:source'
-const APPLE_QUICK_SEARCHES = ['Game day', 'Hip-hop hits', 'Rock anthems', 'Lo-fi']
-
-/*
- * ⚠ SAY IT BEFORE THE CLICK. Measured 2026-11-15 with an Apple ID that has no
- * subscription: Connect does not sign in at all — Apple sends the person to its
- * own "subscribe" page (music.apple.com/deeplink?p=subscribe) and authorize()
- * never succeeds. So the note must make clear this tab is for subscribers.
- */
-const SUBSCRIPTION_NOTE =
-  'For Apple Music subscribers. Without a subscription, Apple will offer you one instead of playing. That’s Apple’s rule, not ours.'
 
 export type AppMusicDockProps = {
-  /** Show even when signed out. Dev previews only; the app gates on a session. */
+  /** Play even when signed out. Dev previews only; the app gates on a session. */
   alwaysShow?: boolean
 }
 
@@ -84,32 +69,34 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     alwaysShow ||
     (status === 'authenticated' && !HIDDEN_PREFIXES.some((p) => pathname?.startsWith(p)))
 
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const [source, setSource] = useState<Source>('youtube')
-
   const [yt, setYt] = useState<YouTubePlaying | null>(null)
-  const [link, setLink] = useState('')
-  const [linkError, setLinkError] = useState<string | null>(null)
-
   const musicRef = useRef<MusicKitInstance | null>(null)
   const mountedRef = useRef(true)
-  const closeRef = useRef<HTMLButtonElement | null>(null)
   const [appleStatus, setAppleStatus] = useState<AppleStatus>('idle')
   const [appleNow, setAppleNow] = useState<AppleNow | null>(null)
-  const [appleExpanded, setAppleExpanded] = useState(false)
   const [appleMsg, setAppleMsg] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
   const [results, setResults] = useState<AppleSearchResult[]>([])
   const [searching, setSearching] = useState(false)
 
+  /** Where the chat tab's screen is — null whenever the Music tab is not showing. */
+  const screen = useSyncExternalStore(musicBus.subscribe, musicBus.getScreen, musicBus.getServerScreen)
+
+  /**
+   * "Change" only makes sense where there is a chat bubble to open. ⚠ Re-checked when the chat
+   * CLOSES as well: the bubble is not on the page while the chat is open, so a check made then
+   * found nothing and the minimized box came up with no Change button (seen in the preview).
+   */
+  const [hasChat, setHasChat] = useState(false)
+  const chatShowing = screen != null
+  useEffect(() => {
+    const check = () => setHasChat(!!document.querySelector('.af-cm-launch'))
+    check()
+    const t = window.setTimeout(check, 800)
+    return () => window.clearTimeout(t)
+  }, [pathname, yt, chatShowing])
+
   useEffect(() => {
     mountedRef.current = true
-    try {
-      const saved = window.localStorage.getItem(SOURCE_KEY)
-      if (saved === 'apple' || saved === 'youtube') setSource(saved)
-    } catch {
-      /* storage blocked — default to YouTube */
-    }
     return () => {
       mountedRef.current = false
       try {
@@ -128,50 +115,12 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       /* already stopped */
     }
     setAppleNow(null)
-    setAppleExpanded(false)
   }, [])
 
   // Signed out, or on a sign-in page: no music, and nothing left playing.
   useEffect(() => {
-    if (!visible) {
-      stopAll()
-      setSheetOpen(false)
-    }
+    if (!visible) stopAll()
   }, [visible, stopAll])
-
-  // Anything can ask for the picker (the draft room's "Play music" button).
-  useEffect(() => {
-    if (!visible) return
-    const open = () => setSheetOpen(true)
-    window.addEventListener(OPEN_EVENT, open)
-    return () => window.removeEventListener(OPEN_EVENT, open)
-  }, [visible])
-
-  // The picker is a dialog: Escape closes it, focus starts on Close, the page
-  // behind does not scroll.
-  useEffect(() => {
-    if (!sheetOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSheetOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    closeRef.current?.focus()
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = previousOverflow
-    }
-  }, [sheetOpen])
-
-  const chooseSource = (next: Source) => {
-    setSource(next)
-    try {
-      window.localStorage.setItem(SOURCE_KEY, next)
-    } catch {
-      /* not remembered — fine */
-    }
-  }
 
   /* ── Apple Music ─────────────────────────────────────────────────────── */
 
@@ -185,10 +134,6 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     musicRef.current = setup.music
     setAppleStatus(setup.music.isAuthorized ? 'ready' : 'signed-out')
   }, [])
-
-  useEffect(() => {
-    if (sheetOpen && source === 'apple' && appleStatus === 'idle') void startApple()
-  }, [sheetOpen, source, appleStatus, startApple])
 
   useEffect(() => {
     const music = musicRef.current
@@ -228,7 +173,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     return () => music.removeEventListener('authorizationStatusDidChange', onAuthChange)
   }, [appleStatus])
 
-  const connectApple = async () => {
+  const connectApple = useCallback(async () => {
     const music = musicRef.current
     if (!music) return
     setAppleStatus('connecting')
@@ -242,9 +187,9 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       if (mountedRef.current) setAppleMsg('Apple Music sign-in didn’t finish. Try again.')
     }
     if (mountedRef.current) setAppleStatus(music.isAuthorized ? 'ready' : 'signed-out')
-  }
+  }, [])
 
-  const disconnectApple = async () => {
+  const disconnectApple = useCallback(async () => {
     const music = musicRef.current
     if (!music) return
     try {
@@ -254,16 +199,14 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       /* Apple's session is gone either way */
     }
     setAppleNow(null)
-    setAppleExpanded(false)
     setResults([])
     setAppleStatus('signed-out')
-  }
+  }, [])
 
-  const runSearch = async (term: string) => {
+  const search = useCallback(async (term: string) => {
     const music = musicRef.current
     const trimmed = term.trim()
     if (!music || !trimmed) return
-    setQuery(trimmed)
     setSearching(true)
     setAppleMsg(null)
     try {
@@ -276,9 +219,9 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     } finally {
       if (mountedRef.current) setSearching(false)
     }
-  }
+  }, [])
 
-  const playApple = async (item: AppleSearchResult) => {
+  const playApple = useCallback(async (item: AppleSearchResult) => {
     const music = musicRef.current
     if (!music) return
     setYt(null) // one source at a time
@@ -287,394 +230,116 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       await music.setQueue(
         item.kind === 'song' ? { song: item.id, startPlaying: true } : { playlist: item.id, startPlaying: true },
       )
-      if (mountedRef.current) {
-        setSheetOpen(false) // tuck away into the side tab
-        setAppleExpanded(false)
-      }
     } catch {
       if (mountedRef.current) setAppleMsg(`That didn’t play. ${SUBSCRIPTION_NOTE}`)
     }
-  }
+  }, [])
 
-  const toggleApplePlay = () => {
+  const appleToggle = useCallback(() => {
     const music = musicRef.current
     if (!music) return
     if (music.isPlaying) music.pause()
     else void music.play().catch(() => setAppleMsg(`That didn’t play. ${SUBSCRIPTION_NOTE}`))
-  }
+  }, [])
 
   /* ── YouTube ─────────────────────────────────────────────────────────── */
 
-  const playYouTube = (next: YouTubePlaying) => {
+  const playYouTube = useCallback((next: YouTubePlaying) => {
     try {
       if (musicRef.current?.isPlaying) musicRef.current.pause()
     } catch {
       /* nothing to pause */
     }
-    setAppleExpanded(false)
     setYt(next)
-    setLinkError(null)
-    setSheetOpen(false) // shrink to the small box
-  }
+  }, [])
 
-  const submitLink = (e: FormEvent) => {
-    e.preventDefault()
-    const parsed = parseYouTubeLink(link)
-    if (!parsed) {
-      setLinkError('That isn’t a YouTube video or playlist link.')
-      return
+  /* ── Publish to the chat tab ─────────────────────────────────────────── */
+
+  /*
+   * ⚠ ONLY AN ACTIVE ENGINE SPEAKS FOR THE BUS. An inactive one (signed out, or a
+   * sign-in page) touches nothing: found 2026-11-15 when a page with two engines —
+   * the root layout's, inactive, and a dev preview's — had the inactive one publish
+   * "not ready" over the active one's state, and the chat tab said "Music isn't
+   * available". Going inactive withdraws once, here; declared FIRST so a remount's
+   * re-publish below lands after it.
+   */
+  useEffect(() => {
+    if (!visible) return
+    return () => {
+      musicBus.setActions(null)
+      musicBus.publish({ ...musicBus.getSnapshot(), ready: false })
     }
-    playYouTube({ key: `link:${link}`, label: 'Your YouTube link', source: parsed })
-    setLink('')
-  }
+  }, [visible])
 
-  if (!visible) return null
+  useEffect(() => {
+    if (!visible) return
+    musicBus.publish({ ready: true, yt, appleStatus, appleNow, appleMsg, results, searching })
+  }, [visible, yt, appleStatus, appleNow, appleMsg, results, searching])
 
-  const tabLabel = appleNow
-    ? `Now playing: ${appleNow.title}${appleNow.artist ? ` by ${appleNow.artist}` : ''}. Show controls`
-    : 'Music'
+  useEffect(() => {
+    if (!visible) return
+    const registered: MusicActions = {
+      playYouTube,
+      stop: stopAll,
+      startApple: () => void startApple(),
+      connectApple: () => void connectApple(),
+      disconnectApple: () => void disconnectApple(),
+      search: (term) => void search(term),
+      playApple: (item) => void playApple(item),
+      appleToggle,
+      appleNext: () => void musicRef.current?.skipToNextItem().catch(() => undefined),
+      applePrev: () => void musicRef.current?.skipToPreviousItem().catch(() => undefined),
+    }
+    musicBus.setActions(registered)
+    return () => musicBus.setActions(null)
+  }, [visible, playYouTube, stopAll, startApple, connectApple, disconnectApple, search, playApple, appleToggle])
+
+  if (!visible || !yt) return null
+
+  const inChat = screen != null
 
   return (
-    <>
-      {/* ── The side tab: idle, or Apple Music tucked away ─────────────── */}
-      {!yt ? (
-        <button
-          type="button"
-          className="af-amd-tab"
-          data-playing={appleNow?.playing ? 'true' : undefined}
-          aria-label={tabLabel}
-          aria-expanded={appleNow ? appleExpanded : sheetOpen}
-          onClick={() => (appleNow ? setAppleExpanded((v) => !v) : setSheetOpen(true))}
-        >
-          {appleNow?.art ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={appleNow.art} alt="" width={28} height={28} />
-          ) : (
-            <span className="af-amd-note" aria-hidden="true">
-              ♫
-            </span>
-          )}
-          {appleNow?.playing ? (
-            <span className="af-amd-eq" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
+    <div
+      className="af-amd-yt"
+      role="region"
+      aria-label="YouTube music player"
+      data-in-chat={inChat ? 'true' : undefined}
+      style={
+        inChat
+          ? { left: screen.left, top: screen.top, width: screen.width, height: screen.height }
+          : undefined
+      }
+    >
+      {/* In the chat, the Music tab draws its own title and Stop. Kept as a
+          null slot so the iframe below never changes position and never reloads. */}
+      {inChat ? null : (
+        <div className="af-amd-yt-head">
+          <span className="af-amd-yt-title">{yt.label}</span>
+          {hasChat ? (
+            <button type="button" className="af-amd-yt-btn" onClick={openAppMusicPicker}>
+              Change
+            </button>
           ) : null}
-        </button>
-      ) : null}
-
-      {/* ── Apple Music controls, slid out from the tab ────────────────── */}
-      {appleNow && appleExpanded && !yt ? (
-        <div className="af-amd-mini" role="region" aria-label="Now playing">
-          <div className="af-amd-mini-top">
-            {appleNow.art ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={appleNow.art} alt="" width={48} height={48} />
-            ) : (
-              <span className="af-amd-mini-art" aria-hidden="true">
-                ♫
-              </span>
-            )}
-            <span className="af-amd-mini-text">
-              <span className="af-amd-mini-title">{appleNow.title}</span>
-              <span className="af-amd-mini-artist">{appleNow.artist}</span>
-            </span>
-          </div>
-          <div className="af-amd-transport">
-            <button
-              type="button"
-              className="af-amd-icon"
-              aria-label="Previous track"
-              onClick={() => void musicRef.current?.skipToPreviousItem().catch(() => undefined)}
-            >
-              ⏮
-            </button>
-            <button
-              type="button"
-              className="af-amd-icon af-amd-icon--main"
-              aria-label={appleNow.playing ? 'Pause' : 'Play'}
-              onClick={toggleApplePlay}
-            >
-              {appleNow.playing ? '❚❚' : '▶'}
-            </button>
-            <button
-              type="button"
-              className="af-amd-icon"
-              aria-label="Next track"
-              onClick={() => void musicRef.current?.skipToNextItem().catch(() => undefined)}
-            >
-              ⏭
-            </button>
-          </div>
-          <div className="af-amd-mini-actions">
-            <button type="button" className="af-amd-chip" onClick={() => setSheetOpen(true)}>
-              Change
-            </button>
-            <button type="button" className="af-amd-chip" onClick={stopAll}>
-              Stop
-            </button>
-            <button
-              type="button"
-              className="af-amd-chip af-amd-chip--quiet"
-              onClick={() => setAppleExpanded(false)}
-            >
-              Hide ›
-            </button>
-          </div>
-          {appleMsg ? <p className="af-amd-error">{appleMsg}</p> : null}
+          <button type="button" className="af-amd-yt-btn" aria-label="Stop music" onClick={stopAll}>
+            ✕
+          </button>
         </div>
-      ) : null}
-
-      {/* ── YouTube: a small box, never hidden while it plays ─────────── */}
-      {yt ? (
-        <div
-          className="af-amd-yt"
-          role="region"
-          aria-label="YouTube music player"
-          data-raised={sheetOpen ? 'true' : undefined}
-        >
-          <div className="af-amd-yt-head">
-            <span className="af-amd-yt-title">{yt.label}</span>
-            <button type="button" className="af-amd-yt-btn" onClick={() => setSheetOpen(true)}>
-              Change
-            </button>
-            <button type="button" className="af-amd-yt-btn" aria-label="Stop music" onClick={stopAll}>
-              ✕
-            </button>
-          </div>
-          <iframe
-            key={yt.key}
-            src={youTubeEmbedUrl(yt.source, { autoplay: true })}
-            title={`${yt.label} on YouTube`}
-            width={200}
-            height={200}
-            allow="autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
-        </div>
-      ) : null}
-
-      {/* ── The picker: full screen on a phone, a large panel on desktop ─ */}
-      {sheetOpen ? (
-        <div
-          className="af-amd-backdrop"
-          data-yt={yt ? 'true' : undefined}
-          onClick={() => setSheetOpen(false)}
-        >
-          <div
-            className="af-amd-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="af-amd-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="af-amd-sheet-head">
-              <h2 id="af-amd-title" className="af-amd-sheet-title">
-                Music
-              </h2>
-              <button
-                ref={closeRef}
-                type="button"
-                className="af-amd-chip"
-                aria-label="Close music picker"
-                onClick={() => setSheetOpen(false)}
-              >
-                Close
-              </button>
-            </header>
-
-            <div className="af-amd-tabs" role="tablist" aria-label="Music source">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={source === 'youtube'}
-                className="af-amd-tabbtn"
-                onClick={() => chooseSource('youtube')}
-              >
-                YouTube
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={source === 'apple'}
-                className="af-amd-tabbtn"
-                onClick={() => chooseSource('apple')}
-              >
-                Apple Music
-              </button>
-            </div>
-
-            {source === 'youtube' ? (
-              <div role="tabpanel" aria-label="YouTube" className="af-amd-panel">
-                <div className="af-amd-stations">
-                  {YOUTUBE_STATIONS.map((station) => (
-                    <button
-                      key={station.id}
-                      type="button"
-                      className="af-amd-station"
-                      data-active={yt?.key === station.id ? 'true' : undefined}
-                      onClick={() =>
-                        playYouTube({ key: station.id, label: station.label, source: station.source })
-                      }
-                    >
-                      <span className="af-amd-station-title">{station.label}</span>
-                      <span className="af-amd-station-sub">{station.channel}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <form className="af-amd-link" onSubmit={submitLink}>
-                  <label className="af-amd-label" htmlFor="af-amd-link-input">
-                    Or paste any YouTube video or playlist link
-                  </label>
-                  <div className="af-amd-row">
-                    <input
-                      id="af-amd-link-input"
-                      className="af-amd-input"
-                      type="url"
-                      inputMode="url"
-                      placeholder="youtube.com/playlist?list=…"
-                      value={link}
-                      onChange={(e) => {
-                        setLink(e.target.value)
-                        setLinkError(null)
-                      }}
-                    />
-                    <button type="submit" className="af-amd-btn" disabled={!link.trim()}>
-                      Play
-                    </button>
-                  </div>
-                  {linkError ? (
-                    <p className="af-amd-error" role="alert">
-                      {linkError}
-                    </p>
-                  ) : null}
-                </form>
-              </div>
-            ) : (
-              <div role="tabpanel" aria-label="Apple Music" className="af-amd-panel">
-                {appleStatus === 'idle' || appleStatus === 'checking' ? (
-                  <p className="af-amd-msg">Checking Apple Music…</p>
-                ) : null}
-
-                {appleStatus === 'unavailable' ? (
-                  <p className="af-amd-msg">Apple Music isn’t set up yet. YouTube works for everyone.</p>
-                ) : null}
-
-                {appleStatus === 'error' ? (
-                  <div className="af-amd-row">
-                    <p className="af-amd-msg">Apple Music didn’t load.</p>
-                    <button type="button" className="af-amd-chip" onClick={() => void startApple()}>
-                      Try again
-                    </button>
-                  </div>
-                ) : null}
-
-                {appleStatus === 'signed-out' || appleStatus === 'connecting' ? (
-                  <div className="af-amd-connect">
-                    {/*
-                      ⚠ NEVER DISABLED WHILE CONNECTING. Apple's sign-in runs in its
-                      own window, and authorize() can stay pending forever if that
-                      window is closed or left on a later step (Allow, a 2FA code, a
-                      subscription offer). Observed 2026-11-15. A second press
-                      re-opens Apple's window.
-                    */}
-                    <button type="button" className="af-amd-btn af-amd-btn--apple" onClick={() => void connectApple()}>
-                      {appleStatus === 'connecting' ? 'Open Apple sign-in again' : 'Connect Apple Music'}
-                    </button>
-                    <p className="af-amd-msg">
-                      {appleStatus === 'connecting'
-                        ? 'Finish signing in on Apple’s window, including any “Allow” step. Closed it? Press the button again.'
-                        : SUBSCRIPTION_NOTE}
-                    </p>
-                  </div>
-                ) : null}
-
-                {appleStatus === 'ready' ? (
-                  <>
-                    <form
-                      className="af-amd-row"
-                      onSubmit={(e) => {
-                        e.preventDefault()
-                        void runSearch(query)
-                      }}
-                    >
-                      <input
-                        className="af-amd-input"
-                        type="search"
-                        aria-label="Search Apple Music"
-                        placeholder="Search songs or playlists"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                      />
-                      <button type="submit" className="af-amd-btn" disabled={!query.trim() || searching}>
-                        {searching ? 'Searching…' : 'Search'}
-                      </button>
-                    </form>
-
-                    {results.length === 0 ? (
-                      <div className="af-amd-quick">
-                        {APPLE_QUICK_SEARCHES.map((term) => (
-                          <button key={term} type="button" className="af-amd-chip" onClick={() => void runSearch(term)}>
-                            {term}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <ul className="af-amd-results">
-                        {results.map((item) => (
-                          <li key={`${item.kind}:${item.id}`}>
-                            <button type="button" className="af-amd-result" onClick={() => void playApple(item)}>
-                              {item.art ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={item.art} alt="" width={40} height={40} />
-                              ) : (
-                                <span className="af-amd-result-art" aria-hidden="true">
-                                  ♫
-                                </span>
-                              )}
-                              <span className="af-amd-result-text">
-                                <span className="af-amd-result-title">{item.title}</span>
-                                <span className="af-amd-result-sub">
-                                  {item.kind === 'playlist' ? 'Playlist' : 'Song'}
-                                  {item.subtitle ? ` · ${item.subtitle}` : ''}
-                                </span>
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    <button type="button" className="af-amd-linkbtn" onClick={() => void disconnectApple()}>
-                      Disconnect Apple Music
-                    </button>
-                  </>
-                ) : null}
-
-                {appleMsg ? (
-                  <p className="af-amd-error" role="status">
-                    {appleMsg}
-                  </p>
-                ) : null}
-              </div>
-            )}
-
-            <p className="af-amd-note-line">
-              Keeps playing while you move around AllFantasy. Plays on your device only.
-            </p>
-          </div>
-        </div>
-      ) : null}
-    </>
+      )}
+      <iframe
+        key={yt.key}
+        src={youTubeEmbedUrl(yt.source, { autoplay: true })}
+        title={`${yt.label} on YouTube`}
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
+      />
+    </div>
   )
 }
 
 /**
  * The draft room's way in: a slim bar in normal flow above the board that opens
- * the same app-wide picker. Never over the board, never autoplays.
+ * the chat on its Music tab. Never over the board, never autoplays.
  */
 export function AppMusicLauncher({ label = 'Music while you draft' }: { label?: string }) {
   return (
