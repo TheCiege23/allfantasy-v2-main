@@ -13,9 +13,11 @@ import {
   type MusicKitInstance,
 } from '@/lib/apple-music/musicKitClient'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from '@/components/core-app/comms/commsEvents'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { appMusicCopy, appMusicLang } from '@/lib/i18n/app-music-copy'
 import {
-  SUBSCRIPTION_NOTE,
   musicBus,
+  type AppleMsg,
   type AppleNow,
   type AppleStatus,
   type MusicActions,
@@ -65,6 +67,7 @@ export type AppMusicDockProps = {
 export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
   const { status } = useSession()
   const pathname = usePathname()
+  const lang = appMusicLang(useOptionalLanguage().language)
   const visible =
     alwaysShow ||
     (status === 'authenticated' && !HIDDEN_PREFIXES.some((p) => pathname?.startsWith(p)))
@@ -74,7 +77,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
   const mountedRef = useRef(true)
   const [appleStatus, setAppleStatus] = useState<AppleStatus>('idle')
   const [appleNow, setAppleNow] = useState<AppleNow | null>(null)
-  const [appleMsg, setAppleMsg] = useState<string | null>(null)
+  const [appleMsg, setAppleMsg] = useState<AppleMsg | null>(null)
   const [results, setResults] = useState<AppleSearchResult[]>([])
   const [searching, setSearching] = useState(false)
 
@@ -145,7 +148,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
         return
       }
       setAppleNow({
-        title: item.title ?? item.attributes?.name ?? 'Unknown track',
+        title: item.title ?? item.attributes?.name ?? '', // the Music tab words a missing title
         artist: item.artistName ?? item.attributes?.artistName ?? '',
         art: artworkUrl(item.artwork?.url ?? item.attributes?.artwork?.url, 96),
         playing: music.isPlaying,
@@ -190,9 +193,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       // rejects. "Try again" sent people round that loop (reported 2026-11-15), so
       // name the real reason and point at what works without a subscription.
       if (mountedRef.current) {
-        setAppleMsg(
-          'Apple Music didn’t connect. If Apple showed you a “subscribe” page, this Apple ID doesn’t have an Apple Music subscription, so it can’t play here. YouTube works without one.',
-        )
+        setAppleMsg({ code: 'connect-failed' })
       }
     }
     if (mountedRef.current) setAppleStatus(music.isAuthorized ? 'ready' : 'signed-out')
@@ -222,9 +223,9 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       const found = await searchCatalog(music, trimmed)
       if (!mountedRef.current) return
       setResults(found)
-      if (found.length === 0) setAppleMsg(`Nothing found for “${trimmed}”.`)
+      if (found.length === 0) setAppleMsg({ code: 'nothing-found', term: trimmed })
     } catch {
-      if (mountedRef.current) setAppleMsg('Search didn’t work. Try again.')
+      if (mountedRef.current) setAppleMsg({ code: 'search-failed' })
     } finally {
       if (mountedRef.current) setSearching(false)
     }
@@ -246,7 +247,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
         item.kind === 'song' ? { song: item.id, startPlaying: true } : { playlist: item.id, startPlaying: true },
       )
     } catch {
-      if (mountedRef.current) setAppleMsg(`That didn’t play. ${SUBSCRIPTION_NOTE}`)
+      if (mountedRef.current) setAppleMsg({ code: 'play-failed' })
     }
   }, [connectApple])
 
@@ -254,7 +255,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     const music = musicRef.current
     if (!music) return
     if (music.isPlaying) music.pause()
-    else void music.play().catch(() => setAppleMsg(`That didn’t play. ${SUBSCRIPTION_NOTE}`))
+    else void music.play().catch(() => setAppleMsg({ code: 'play-failed' }))
   }, [])
 
   /* ── YouTube ─────────────────────────────────────────────────────────── */
@@ -317,7 +318,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
     <div
       className="af-amd-yt"
       role="region"
-      aria-label="YouTube music player"
+      aria-label={appMusicCopy(lang, 'playerRegion')}
       data-in-chat={inChat ? 'true' : undefined}
       style={
         inChat
@@ -332,10 +333,10 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
           <span className="af-amd-yt-title">{yt.label}</span>
           {hasChat ? (
             <button type="button" className="af-amd-yt-btn" onClick={openAppMusicPicker}>
-              Change
+              {appMusicCopy(lang, 'change')}
             </button>
           ) : null}
-          <button type="button" className="af-amd-yt-btn" aria-label="Stop music" onClick={stopAll}>
+          <button type="button" className="af-amd-yt-btn" aria-label={appMusicCopy(lang, 'stopMusic')} onClick={stopAll}>
             ✕
           </button>
         </div>
@@ -343,7 +344,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
       <iframe
         key={yt.key}
         src={youTubeEmbedUrl(yt.source, { autoplay: true })}
-        title={`${yt.label} on YouTube`}
+        title={appMusicCopy(lang, 'onYouTube', { label: yt.label })}
         allow="autoplay; encrypted-media; picture-in-picture"
         allowFullScreen
         referrerPolicy="strict-origin-when-cross-origin"
@@ -356,15 +357,16 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
  * The draft room's way in: a slim bar in normal flow above the board that opens
  * the chat on its Music tab. Never over the board, never autoplays.
  */
-export function AppMusicLauncher({ label = 'Music while you draft' }: { label?: string }) {
+export function AppMusicLauncher({ label }: { label?: string }) {
+  const lang = appMusicLang(useOptionalLanguage().language)
   return (
     <div className="af-amd-launch">
       <span className="af-amd-launch-mark" aria-hidden="true">
         ♫
       </span>
-      <span className="af-amd-launch-text">{label}</span>
+      <span className="af-amd-launch-text">{label ?? appMusicCopy(lang, 'launcherLabel')}</span>
       <button type="button" className="af-amd-launch-btn" onClick={openAppMusicPicker}>
-        Play music
+        {appMusicCopy(lang, 'playMusic')}
       </button>
     </div>
   )

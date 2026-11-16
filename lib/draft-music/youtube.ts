@@ -379,8 +379,11 @@ export function parseYouTubeLink(input: string): YouTubeSource | null {
   return null
 }
 
-/** The message to show when `parseYouTubeLink` returns null. */
-export function describeYouTubeLinkProblem(input: string): string {
+/**
+ * Why `parseYouTubeLink` returned null, as a code the Music tab words in the
+ * viewer's language (lib/i18n/app-music-copy.ts: `linkIsMix` / `linkNotYouTube`).
+ */
+export function youTubeLinkProblem(input: string): 'mix' | 'not-youtube' {
   const list = (() => {
     try {
       const text = input.trim()
@@ -389,10 +392,14 @@ export function describeYouTubeLinkProblem(input: string): string {
       return null
     }
   })()
-  if (list && isYouTubeMix(list)) {
-    return 'That’s a YouTube Mix, which only plays on YouTube. Paste a song or a playlist link instead.'
-  }
-  return 'That isn’t a YouTube video or playlist link.'
+  return list && isYouTubeMix(list) ? 'mix' : 'not-youtube'
+}
+
+/** The English message to show when `parseYouTubeLink` returns null. */
+export function describeYouTubeLinkProblem(input: string): string {
+  return youTubeLinkProblem(input) === 'mix'
+    ? 'That’s a YouTube Mix, which only plays on YouTube. Paste a song or a playlist link instead.'
+    : 'That isn’t a YouTube video or playlist link.'
 }
 
 /** The privacy-enhanced embed URL. Autoplay only ever follows a user's click. */

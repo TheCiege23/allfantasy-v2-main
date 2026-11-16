@@ -36,13 +36,24 @@ export type AppleStatus =
 
 export type AppleNow = { title: string; artist: string; art: string | null; playing: boolean }
 
+/**
+ * What the engine has to say about Apple — a CODE, never a sentence. The Music
+ * tab words it in the viewer's language (lib/i18n/app-music-copy.ts), so a
+ * message already on screen follows a language switch.
+ */
+export type AppleMsg =
+  | { code: 'connect-failed' }
+  | { code: 'nothing-found'; term: string }
+  | { code: 'search-failed' }
+  | { code: 'play-failed' }
+
 export type MusicSnapshot = {
   /** The engine is mounted and allowed to play here (signed in, not on a sign-in page). */
   ready: boolean
   yt: YouTubePlaying | null
   appleStatus: AppleStatus
   appleNow: AppleNow | null
-  appleMsg: string | null
+  appleMsg: AppleMsg | null
   results: AppleSearchResult[]
   searching: boolean
 }
@@ -59,16 +70,6 @@ export type MusicActions = {
   appleNext(): void
   applePrev(): void
 }
-
-/*
- * ⚠ SAY IT BEFORE THE CLICK. Measured 2026-11-15 with an Apple ID that has no
- * subscription: Connect does not sign in at all — Apple sends the person to its
- * own "subscribe" page (music.apple.com/deeplink?p=subscribe) and authorize()
- * never succeeds. Here, not in AppMusicDock, so the chat tab never imports the
- * engine module (and its next-auth / MusicKit imports) for one sentence.
- */
-export const SUBSCRIPTION_NOTE =
-  'For Apple Music subscribers. Without a subscription, Apple will offer you one instead of playing. That’s Apple’s rule, not ours.'
 
 /** Where the chat tab's YouTube "screen" is on the page, in viewport pixels. */
 export type ScreenRect = { left: number; top: number; width: number; height: number }
