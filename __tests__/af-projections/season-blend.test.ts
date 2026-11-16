@@ -119,7 +119,30 @@ describe('⚾ baseball lines (MLB joined 2026-11-16)', () => {
   })
 
   it('MLB is a blend sport now', () => {
-    expect([...BLEND_SPORTS]).toEqual(['NBA', 'MLB'])
+    expect([...BLEND_SPORTS]).toContain('MLB')
+  })
+})
+
+describe('🏒 hockey lines (NHL joined 2026-11-16)', () => {
+  const goalie = (gp: number, sv: number, ga: number, svPct: number, gaa: number) => ({
+    position: 'G',
+    regular_season: { games_played: gp, saves: sv, goals_allowed: ga, win: Math.round(gp / 2), save_percentage: svPct, goals_against_average: gaa, time_on_ice: '58:12' },
+  })
+
+  it('save % and goals-against average blend as rates; saves and wins per game over both seasons’ games', () => {
+    const r = blendSeasonStats(goalie(6, 170, 14, 0.924, 2.33), goalie(55, 1500, 140, 0.915, 2.6))!
+    const rs = r.stats.regular_season as any
+    const w = 6 / 26
+    expect(rs.save_percentage).toBeCloseTo(w * 0.924 + (1 - w) * 0.915, 9)
+    expect(rs.goals_against_average).toBeCloseTo(w * 2.33 + (1 - w) * 2.6, 9)
+    expect(rs.saves).toBeCloseTo((w * (170 / 6) + (1 - w) * (1500 / 55)) * 61, 9)
+    expect(rs.games_played).toBe(61)
+    // A clock string is not a number: this season's is kept, never summed into nonsense.
+    expect(rs.time_on_ice).toBe('58:12')
+  })
+
+  it('NHL is a blend sport', () => {
+    expect([...BLEND_SPORTS]).toEqual(['NBA', 'MLB', 'NHL'])
   })
 })
 

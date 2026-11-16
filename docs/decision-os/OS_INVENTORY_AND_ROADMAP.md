@@ -134,6 +134,22 @@ rather than the packet; axis 6 marks ⚠ for "reaches the model, not through the
 
 Then B2B visuals, then gating + checkout (owner's order).
 
+### Ledger for the build list above (W4) — updated 2026-11-16
+
+| # | Status | Landed in |
+|---|---|---|
+| 1–3 | ✅ Done: every received offer reaches Chimmy, is auto-graded with counter-offers, and every platform's completed trades carry one frozen grade | #3729 |
+| 4–7 | ✅ Done: projection week, league-rules renderer, one start/sit answer, draft lines through the rules gate plus auction prices | #3734 |
+| 8–11 | ✅ Done: IDP/kicker slice and the cached roster grade; the `waiverDecision` kill switch; Commissioner Managers as facts; Manager Psychology as facts only, paid, on every platform with a named reason where data cannot support it | #3745 |
+| 12 · NBA | ✅ Done: Chimmy value (#3745), then Waivers, FAAB and the player card on the league's own board, plus the season blend (#3748) | #3745, #3748 |
+| 12 · MLB | ✅ Done: same surfaces; the sample is at-bats or innings; pitchers file SP/RP from the board; the blend handles innings notation and rate stats, and keeps pitcher share per season | #3751 |
+| 12 · NHL | ✅ Done: same surfaces and blend; 🛑 goalies now count for their share of team games (a backup was valued as if he started every night, which also corrects NHL trade grades) | this change |
+| 12 · Soccer | ⏳ Next: the board already blends two seasons and scales players to club matches (`soccerBoard.ts`); which leagues it can cover is still to be measured | — |
+
+Open follow-ups: the all-leagues Waivers board keeps NBA/MLB/NHL *category* leagues on AllFantasy's default
+scoring (its alert reads every gain as "pts per game"); Fantrax/Fleaflicker completed-trade history needs owner
+decisions; provider draft history per manager needs an importer change plus a production backfill.
+
 ## 0.4 ✅ R0.2 RESOLVED — `domain_os_facts` DOES NOT EXIST IN PRODUCTION
 
 Owner ran it 2026-09-01: **`Did not find any relation named "domain_os_facts"`.**

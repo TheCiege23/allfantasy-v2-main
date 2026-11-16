@@ -161,7 +161,11 @@ export function sportPointsBasis(
         : `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} ${games})`
   const mlb = ctx.sport === 'MLB'
   // MLB rates are per appearance; the loader puts every pitcher on the team-game scale first.
-  const pitchers = mlb ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.' : ''
+  const pitchers = mlb
+    ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.'
+    : ctx.sport === 'NHL'
+      ? ' Goalies count for the share of team games they played in that season — a starter about three in four, a backup about one in three.'
+      : ''
   if (ctx.valueKind === 'categories') {
     const where =
       ctx.scoringBasis === 'league'
