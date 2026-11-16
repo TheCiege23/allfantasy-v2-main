@@ -11,7 +11,7 @@ import type {
 } from '../types'
 import { DraftBoard } from './DraftBoard'
 import { DraftChatPanel } from './DraftChatPanel'
-import { ChimmyDraftChat } from './ChimmyDraftChat'
+import { ChimmyDraftChat, type LeagueMockChimmy } from './ChimmyDraftChat'
 import { DraftHeader } from './DraftHeader'
 import { DraftPlayerModal } from './DraftPlayerModal'
 import { DraftResultsView } from './DraftResultsView'
@@ -238,6 +238,33 @@ export function DraftShell({
     setQueue((q) => [...q, p])
   }
 
+  /*
+   * Chimmy in a league mock room (stage 4 of drafts). A queue card applies on Confirm and is SAVED here:
+   * the Queue panel only saves while its tab is open, and Confirm happens on the AI tab.
+   */
+  const leagueMockChimmy = useMemo<LeagueMockChimmy | undefined>(() => {
+    if (mode !== 'mock') return undefined
+    return {
+      queueIds: queue.map((q) => q.id),
+      isDrafted: (playerId) => draftedIds.has(playerId),
+      applyQueue: (ids, added) => {
+        const known = new Map(queue.map((q) => [q.id, q]))
+        for (const a of added) {
+          if (!known.has(a.id)) {
+            known.set(a.id, { id: a.id, name: a.name, position: a.position, team: a.team ?? '', adp: null, proj: null, bye: null, keyStat: '' })
+          }
+        }
+        const next = ids.map((id) => known.get(id)).filter((row): row is DraftPlayerRow => row != null)
+        setQueue(next)
+        void fetch('/api/draft/queue/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, playerIds: next.map((q) => q.id) }),
+        }).catch(() => {})
+      },
+    }
+  }, [mode, queue, draftedIds, sessionId])
+
   const toggleAutopick = async (v: boolean) => {
     setAutopick(v)
     await fetch('/api/draft/autopick/toggle', {
@@ -430,6 +457,7 @@ export function DraftShell({
                   state,
                   picks,
                 }}
+                mock={leagueMockChimmy}
               />
             )}
           </div>

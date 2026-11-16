@@ -251,7 +251,7 @@ describe('the draft tools answer from the mock board', () => {
 describe('wiring', () => {
   it('the route parses the board only from the mock room, grounds both paths on it, and returns the card', () => {
     const route = read('app/api/chat/chimmy/route.ts')
-    expect(route).toMatch(/source === 'mock-draft' \? parseMockDraftBoard\(formData\.get\('mockDraftBoard'\)\) : null/)
+    expect(route).toMatch(/source === 'mock-draft'\s*\? parseMockDraftBoard\(formData\.get\('mockDraftBoard'\)\)/)
     expect(route).toMatch(/## MOCK DRAFT BOARD/)
     expect(route).toMatch(/: null, mockDraftBoardBlock, draftRoomBoard/)
     expect(route).toMatch(/mockDraftBoard, mockQueueProposals: \[\] as MockQueueProposal\[\]/)
@@ -261,7 +261,8 @@ describe('wiring', () => {
   it('the room sends the board, renders the card, and applies it only through Confirm', () => {
     const client = read('components/mock-draft/MockDraftSleeperRoomClient.tsx')
     expect(client).toMatch(/formData\.set\('mockDraftBoard', JSON\.stringify\(board\)\)/)
-    expect(client).toMatch(/<MockQueueCard message=\{message\}/)
+    expect(client).toMatch(/<MockQueueCardForMessage message=\{message\}/)
+    expect(client).toMatch(/from '@\/components\/chimmy\/MockQueueCard'/)
     expect(client).toMatch(/applyMockQueueProposal\(queue, target\.queueProposal/)
     expect(client).not.toMatch(/buildPlayerContextMessage/)
     // the only setQueue fed by a proposal is inside the Confirm handler
