@@ -314,6 +314,14 @@ function AdminOverviewDeck({
             <span className="text-cyan-100/65">Open</span>
           </a>
           <a
+            href="/admin/music-search"
+            className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/40"
+            data-testid="admin-music-search-link"
+          >
+            <span>Music search — YouTube searches against the daily limits</span>
+            <span className="text-cyan-100/65">Open</span>
+          </a>
+          <a
             href="/admin/production-health"
             className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.08] px-4 py-3 text-sm font-bold text-cyan-100 transition hover:border-cyan-300/40"
           >

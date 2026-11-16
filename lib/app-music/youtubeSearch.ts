@@ -28,7 +28,23 @@ import { cachedFetch } from '@/lib/api-cache'
 
 export const PER_USER_DAILY = 20
 export const APP_DAILY = 60
-const PROVIDER = 'music-yt-search' // ApiRateLimitRecord.provider is VarChar(32)
+/** ApiRateLimitRecord.provider is VarChar(32). Read by the admin usage readout too. */
+export const MUSIC_SEARCH_PROVIDER = 'music-yt-search'
+const PROVIDER = MUSIC_SEARCH_PROVIDER
+
+/*
+ * Counter rows under MUSIC_SEARCH_PROVIDER, one per UTC day:
+ *   'app'          fresh YouTube searches (the quota spend) — also the app budget
+ *   'user:<hash>'  one person's fresh searches — also their budget
+ *   'searches'     EVERY search, cache hits included
+ *   'refused-user' / 'refused-app'  searches turned away by a limit
+ * The last three are tallies only: they never limit anything, and a failed tally
+ * never fails a search. They exist so /admin/music-search can say how much the cache
+ * saves and whether anyone is hitting the walls.
+ */
+export const TALLY_SEARCHES = 'searches'
+export const TALLY_REFUSED_USER = 'refused-user'
+export const TALLY_REFUSED_APP = 'refused-app'
 const CACHE_TTL_SECONDS = 24 * 60 * 60
 const MAX_RESULTS = 12
 const MAX_QUERY = 80
@@ -148,6 +164,22 @@ async function giveBack(endpoint: string): Promise<void> {
   }
 }
 
+/** Count something for the usage readout. Best-effort: never throws, never limits. */
+async function tally(endpoint: string): Promise<void> {
+  try {
+    const prisma = await getPrisma()
+    const { windowStart, windowEnd } = dayWindow()
+    await prisma.apiRateLimitRecord.upsert({
+      where: { uniq_api_rate_limits_window: { provider: PROVIDER, endpoint, windowStart, windowEnd } },
+      update: { callsMade: { increment: 1 } },
+      create: { provider: PROVIDER, endpoint, callsMade: 1, callsLimit: 0, windowStart, windowEnd },
+      select: { callsMade: true },
+    })
+  } catch {
+    /* the readout undercounts by one; the search is unaffected */
+  }
+}
+
 /* ── The search ────────────────────────────────────────────────────────── */
 
 class Refused extends Error {
@@ -181,6 +213,15 @@ export async function searchYouTubeMusic(rawQuery: string, userId: string): Prom
   if (!process.env.YOUTUBE_API_KEY?.trim()) return { status: 'unavailable' }
 
   const userKey = userBudgetKey(userId)
+  await tally(TALLY_SEARCHES)
+  const outcome = await runSearch(q, userKey)
+  if (outcome.status === 'limit') {
+    await tally(outcome.scope === 'user' ? TALLY_REFUSED_USER : TALLY_REFUSED_APP)
+  }
+  return outcome
+}
+
+async function runSearch(q: string, userKey: string): Promise<MusicSearchOutcome> {
   try {
     const results = await cachedFetch(
       `youtube:music-search:v1:${q}`,
