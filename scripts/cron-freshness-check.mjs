@@ -558,6 +558,13 @@ export const PROBES = {
   '/api/cron/trade-weekly-recalibration': { heartbeat: 'cron-trade-weekly-recalibration' },
 
   /*
+   * Weekly check of the Music tab's YouTube stations (lib/app-music/stationHealth.ts). A week
+   * where a station needs a look records `partial`, and a missing YOUTUBE_API_KEY records
+   * `failed` -- so this heartbeat answers both "did it fire" and "could it actually check".
+   */
+  '/api/cron/music-station-health': { heartbeat: 'cron-music-station-health' },
+
+  /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
    * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
    * season a suppressed output probe would have left it completely unwatched for seven months --

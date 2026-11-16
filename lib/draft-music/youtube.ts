@@ -131,6 +131,22 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
   },
   {
     /*
+     * Fantasy Rugby Geek: weekly fantasy picks for international rugby (it comes up
+     * for Six Nations fantasy tips; newest is the Nations Championship). Long
+     * uploads, newest first —
+     * checked 2026-11-16 by playing the list in the embed; newest upload 2026-11-12,
+     * "Fantasy Nations Championship 2026 Round 5 Top Picks".
+     *
+     * Chosen over FANTASY RUGBY DRAFT (last upload January 2022) and Draft Rugby
+     * (April 2026, and a draft game show more than fantasy advice).
+     */
+    id: 'rugby-podcast',
+    label: 'Rugby podcast',
+    channel: 'Fantasy Rugby Geek',
+    source: { kind: 'playlist', listId: 'UULF8gQUmspH8I5bdSwtkORv_Q' },
+  },
+  {
+    /*
      * Talk, not music. "Fantasy Golf Degenerates" on Pat Mayo's Mayo Media
      * Network — one episode per PGA Tour event (picks, DFS, bets).
      * Newest-first checked by real upload dates on 2026-11-15: Nov 9 (Austin
@@ -217,6 +233,22 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     label: 'Esports podcast',
     channel: 'HLTV Confirmed',
     source: { kind: 'playlist', listId: 'PLoTk8DCHxmcLG1alb-B278ws1xPpUxvsv' },
+  },
+  {
+    /*
+     * Lacrosse Classified: a weekly lacrosse talk and interview podcast, about two
+     * hours an episode. NOT a fantasy show — chosen with the owner's OK (2026-11-16)
+     * because no fantasy lacrosse podcast on YouTube is still posting: Pro Lacrosse
+     * Talk stopped in September 2022, Bet On Lacrosse (betting picks) in January
+     * 2025, and fantasy lacrosse otherwise appears only as one-off videos.
+     *
+     * Long uploads, newest first — checked by playing the list in the embed; newest
+     * upload 2026-11-11 ("LAX CLASS 416"), the one before 2026-11-04.
+     */
+    id: 'lacrosse-podcast',
+    label: 'Lacrosse podcast',
+    channel: 'Lacrosse Classified',
+    source: { kind: 'playlist', listId: 'UULFHwTFcC1Woi1orNgZYv-VhA' },
   },
   {
     id: 'hiphop-hype',

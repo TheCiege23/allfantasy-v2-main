@@ -50,9 +50,10 @@ test.describe('@mock-draft-room mobile production mock room', () => {
     await expect(restored.getByRole('button', { name: 'Queue Bravo', exact: true })).toBeDisabled()
     await page.screenshot({ path: testInfo.outputPath('mobile-mock-recovered.png') })
     await restored.getByRole('button', { name: 'Close', exact: true }).tap()
-    for (const name of ['Roster', 'Chat']) {
+    // Room v2 (phase 5): the mock room's tray is the live room's, whose roster tab reads "My team".
+    for (const name of ['My team', 'Chat']) {
       await page.getByRole('button', { name, exact: true }).tap()
-      const panel = page.getByRole('region', { name: name === 'Roster' ? 'Current Roster' : 'Draft Chat', exact: true })
+      const panel = page.getByRole('region', { name: name === 'My team' ? 'Current Roster' : 'Draft Chat', exact: true })
       await expect(panel).toBeVisible()
       if (name === 'Chat') {
         await panel.getByTestId('mock-draft-chat-input').fill('How is my NBA roster?')
