@@ -144,6 +144,29 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'PLAudWD2O3TTEk_vSF8VEnZc8QvcDTWoBh' },
   },
   {
+    /*
+     * Talk, not music. Holly's Racing Fantasy (channel UCjY9gBwUdTYjtJ8bH63qLLg),
+     * weekly picks + race recaps, posting through the 2026 Championship and a
+     * season wrap-up. Two others were rejected as DEAD on 2026-11-15: NASCAR's
+     * own "Fantasy Fastlane" (last episode 2019) and the "Fantasy NASCAR Podcast"
+     * (its videos no longer exist).
+     *
+     * ⚠ WHY THE UPLOADS LIST AND NOT THE "2026 NASCAR Fantasy Season" PLAYLIST.
+     * That playlist is clean but runs OLDEST-first (race order), so it would open
+     * on February's Cook Out Clash. The embed accepts a 1-based `index` to start
+     * further in (measured: index=36 -> "Xfinity 500"), but it has no "from the
+     * end" value (index=-1 starts at #1), so a fixed index goes stale every race.
+     * The long-videos uploads list ("UULF" + id) is newest-first with no upkeep.
+     * Its cost, measured the same day: positions 3-5 are off-topic "Halloween
+     * House Lights" videos. They sink once the new season starts in February.
+     * If the channel's off-topic uploads ever dominate, revisit this choice.
+     */
+    id: 'nascar-podcast',
+    label: 'NASCAR podcast',
+    channel: 'Holly’s Racing',
+    source: { kind: 'playlist', listId: 'UULFjY9gBwUdTYjtJ8bH63qLLg' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
