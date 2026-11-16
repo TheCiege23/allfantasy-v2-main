@@ -116,6 +116,20 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'UULFPtZxGWccCseAG7bPcbfFKA' },
   },
   {
+    /*
+     * Talk, not music. The official Fantasy Premier League podcast, "FPL Pod",
+     * from the Premier League's own channel — so it will outlast any fan show.
+     * Newest-first checked by real upload dates on 2026-11-15, not by titles:
+     * Nov 12, Nov 5, Oct 29, Oct 22, Oct 15 — weekly, latest three days old.
+     * Off-season (roughly June–July) it goes quiet and the station opens on the
+     * last episode of the season; that is the show's schedule, not a fault.
+     */
+    id: 'epl-podcast',
+    label: 'Soccer podcast',
+    channel: 'Premier League',
+    source: { kind: 'playlist', listId: 'PLQ_voP4Q3cfeBnNKaN2WDgzaoHRiaji7E' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
