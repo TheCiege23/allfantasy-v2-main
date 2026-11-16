@@ -28,3 +28,14 @@ describe('get_player_value', () => {
     expect(h.board).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('explain_value in an NBA league', () => {
+  it('answers "why" from the league board; another sport asked for goes to the engine path', async () => {
+    h.board.mockResolvedValue('NBA VALUE for Nikola Jokic …')
+    const out = await executeChimmyTool('explain_value', { player: 'Nikola Jokic' }, { leagueId: 'L1', userId: 'u1' } as ChimmyToolContext)
+    expect(out).toBe("WHY (the league's own value, step by step):\nNBA VALUE for Nikola Jokic …")
+    h.board.mockClear()
+    await executeChimmyTool('explain_value', { player: 'Josh Allen', sport: 'NFL' }, { leagueId: 'L1', userId: 'u1' } as ChimmyToolContext).catch(() => null)
+    expect(h.board).not.toHaveBeenCalled()
+  })
+})

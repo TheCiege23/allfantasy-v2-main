@@ -330,7 +330,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'explain_value',
       description:
-        "WHY a player is worth what he is worth — the step-by-step derivation: projection, the conversion to the value scale, positional scarcity, draft capital, and any compression at the top. Use when the user challenges or asks about a number ('why is he only worth that', 'how did you get that', 'that seems low'). Different from get_player_value, which reports the stored published number; this runs the engine over current inputs and can legitimately disagree with it, in which case it says so. Uses DEFAULT positional scarcity because it takes no league.",
+        "WHY a player is worth what he is worth — the step-by-step derivation: projection, the conversion to the value scale, positional scarcity, draft capital, and any compression at the top. Use when the user challenges or asks about a number ('why is he only worth that', 'how did you get that', 'that seems low'). Different from get_player_value, which reports the stored published number; this runs the engine over current inputs and can legitimately disagree with it, in which case it says so. Uses DEFAULT positional scarcity because it takes no league. Football only on that engine: in an NBA league in scope it explains that league's own value instead (per game against the best free agent, times games left).",
       parameters: {
         type: 'object',
         properties: {
@@ -1267,6 +1267,16 @@ export async function executeChimmyTool(
       case 'explain_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
+        /*
+         * In an NBA league in scope, "why is he worth that" is answered from the league's own value board —
+         * per game against the best free agent, times games left (lib/chimmy/sportBoardValue.ts). Null for
+         * any other league sport, or when the model asked about another sport.
+         */
+        if (ctx.leagueId && (!sport || sport.trim().toUpperCase() === 'NBA')) {
+          const { buildSportBoardValueContext } = await import('@/lib/chimmy/sportBoardValue')
+          const board = await buildSportBoardValueContext({ leagueId: ctx.leagueId, playerName: asked })
+          if (board != null) return `WHY (the league's own value, step by step):\n${board}`
+        }
         return await buildExplainValueContext({ playerName: asked, sport })
       }
 
