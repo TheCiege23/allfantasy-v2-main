@@ -291,24 +291,11 @@ export function DraftRoomShell({
           {auctionStrip && (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f]">{auctionStrip}</div>
           )}
-          <div className="draft-board-toolbar flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0a1425] px-3"
-            data-testid="draft-board-size-controls">
-            <span className="text-sm font-semibold text-slate-200">Draft workspace</span>
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              Board
-              <select aria-label="Draft board size" data-testid="draft-board-size"
-                value={boardSize} onChange={event => {
-                  const value = event.target.value as 'compact' | 'balanced' | 'hidden'
-                  persistDockSize(value === 'balanced' ? 'half' : 'tall')
-                  if (value === 'hidden') {
-                    setBoardHidden(true)
-                    try { localStorage.setItem('af:draft-board-size', value) } catch { /* optional */ }
-                  }
-                }} className="min-h-9 rounded-lg border border-white/20 bg-[#111f34] px-2 text-sm text-white">
-                <option value="compact">Compact</option><option value="balanced">Balanced</option><option value="hidden">Hidden</option>
-              </select>
-            </label>
-          </div>
+          {/*
+            Room v2 (2026-11): the "Draft workspace" row and its Compact / Balanced / Hidden picker
+            are gone. They duplicated the Board / Half / Players control under the board; "Hidden"
+            lives there now as "Hide board", saved under the same key.
+          */}
           {modeBanner ? (
             <div className="shrink-0 border-b border-white/8 bg-[#060d1f] px-2.5 py-2" data-testid="draft-mode-banner-slot">{modeBanner}</div>
           ) : null}
@@ -350,7 +337,21 @@ export function DraftRoomShell({
           {/* D.6.2 — collapse arrow toggle between the board and the dock.
               Two stacked chevrons that flip direction based on state. Click → toggle. */}
           {allowPremiumDockCollapse ? (
-            <div className="flex shrink-0 items-center justify-center border-b border-white/[0.06] bg-[#081022] py-1">
+            /*
+              ⚠ WITH THE BOARD HIDDEN THIS BAR SITS RIGHT UNDER THE HEADER, where the on-the-clock
+              "You're up" alert floats (fixed, centred, lg:top-24). Centred, the alert covered Board /
+              Half / Players, so the board could not be brought back until the alert was dismissed —
+              e2e/draft-room-visual caught it. The control moves to the right end while the board is
+              hidden; with the board showing it stays centred.
+            */
+            <div
+              className={cn(
+                'flex shrink-0 items-center border-b border-white/[0.06] bg-[#081022] py-1',
+                boardHidden ? 'justify-end pr-3' : 'justify-center',
+              )}
+              data-testid="draft-dock-size-bar"
+              data-board-hidden={boardHidden ? 'true' : 'false'}
+            >
               {/* Panel size: hide it, split the screen, or give it most of the screen. It sits on its
                   own divider bar; floating across the edge, the panel below clipped it. */}
               <div
@@ -392,15 +393,32 @@ export function DraftRoomShell({
                   type="button"
                   onClick={() => persistDockSize('tall')}
                   data-testid="draft-dock-size-tall"
-                  aria-pressed={dockSize === 'tall'}
+                  aria-pressed={dockSize === 'tall' && !boardHidden}
                   title="Give the player pool and chat most of the screen"
                   className={cn(
                     'inline-flex h-7 items-center justify-center gap-1 rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
-                    dockSize === 'tall' ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                    dockSize === 'tall' && !boardHidden ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
                   )}
                 >
                   <ChevronUp className="h-3.5 w-3.5" aria-hidden />
                   Players
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    persistDockSize('tall')
+                    setBoardHidden(true)
+                    try { window.localStorage.setItem('af:draft-board-size', 'hidden') } catch { /* optional */ }
+                  }}
+                  data-testid="draft-board-hide"
+                  aria-pressed={boardHidden}
+                  title="Hide the board and give the whole screen to the players"
+                  className={cn(
+                    'inline-flex h-7 items-center justify-center rounded-full px-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40',
+                    boardHidden ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/70 hover:text-white',
+                  )}
+                >
+                  Hide board
                 </button>
               </div>
             </div>

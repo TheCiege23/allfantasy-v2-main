@@ -573,7 +573,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : 'max-md:hidden'} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[11px] sm:px-4 ${draftType === 'auction' ? '' : `max-md:hidden ${viewMode === 'all' ? 'md:hidden' : ''}`} ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'
