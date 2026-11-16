@@ -1,8 +1,8 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 
 /**
  * POST: Transfer commissioner role to another user.
@@ -15,11 +15,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'head')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   const newCommissionerUserId = body?.newCommissionerUserId ?? body?.newCommissionerId

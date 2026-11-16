@@ -1,8 +1,8 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { updateDraftUISettings } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { applyChimmyAutopilot } from '@/lib/inactive-manager/inactiveManagerService'
@@ -20,11 +20,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const gate = await requireFeatureEntitlement({
     userId,

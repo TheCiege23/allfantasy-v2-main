@@ -14,6 +14,7 @@ vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id:
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/lib/commissioner/CommissionerChangeNotifier', () => ({ notifyCommissionerChange: vi.fn(async () => undefined) }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromOwner(() => 'commish'))
 
 import { PUT } from '@/app/api/commissioner/leagues/[leagueId]/division-settings/route'
 

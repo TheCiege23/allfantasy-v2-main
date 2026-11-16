@@ -83,9 +83,14 @@ export function coCommissionerAllowed(settings: unknown, coTeamIds: readonly str
 
 // Order matters: a draft-pick-trading key is a trade rule, a keeper-slot key is a roster rule, and
 // the draft-order and draft-slot keys are league setup.
+//
+// ⚠ IR IS MATCHED CASE-SENSITIVELY, AS ITS OWN WORD. It used to sit in the case-insensitive rule as `Ir[A-Z_]`, which
+// with the `i` flag matched any "ir" followed by a letter — so `thirdPlaceGame`, `firstPlaceBye` and `fairPlay` were
+// filed under rosters, and a co-commissioner granted league setup could not change the playoff bracket (2026-11-16).
 const KEY_RULES: Array<[RegExp, CoCommissionerScope]> = [
-  [/trad(e|ing)|veto/i, 'trades'],
-  [/keeper|taxi|roster|lineup|bench|starter|positions?$|^ir|Ir[A-Z_]|injur|devy/i, 'rosters'],
+  [/trad(e|ing)|veto|pick_?terms/i, 'trades'],
+  [/keeper|taxi|roster|lineup|bench|starter|positions?$|injur|devy/i, 'rosters'],
+  [/(^|_)ir(_|[A-Z]|$)|Ir([A-Z_]|$)|(^|_)IR(_|$)/, 'rosters'],
   [/^draft|Draft[A-Z]|pickTimer|autostart|autoPick|^ai[A-Z]|^rounds$|playerPool|alphabetical|randomize/i, 'league'],
   [/scor|median|ppr|points|stat[A-Z_]/i, 'scoring'],
   [/fee|dues|payout|buyIn|payment|prize|finance|money/i, 'money'],

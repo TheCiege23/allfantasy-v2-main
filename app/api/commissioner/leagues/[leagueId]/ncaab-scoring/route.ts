@@ -1,13 +1,13 @@
 /**
  * [NEW] GET/PUT: Commissioner NCAAB scoring config.
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueNcaabScoringConfig, getNcaabScoringPresets } from '@/lib/ncaab-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 import { applySportScoringToLeague } from '@/lib/league/applySportScoring'
 
 const featureGate = new FeatureGateService()
@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const config = await getLeagueNcaabScoringConfig(leagueId)
   let isPremium = false
   try { isPremium = (await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring')).allowed } catch {}
-  return NextResponse.json({ config, presets: getNcaabScoringPresets(), isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id), isPremium })
+  return NextResponse.json({ config, presets: getNcaabScoringPresets(), isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'scoring'), isPremium })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {

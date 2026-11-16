@@ -9,6 +9,7 @@
  * Stored in League.settings.dues_tracker. Every payment link is validated (https, on the service's own
  * host) before it is saved, because every member's screen renders it as a link.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
@@ -98,7 +99,9 @@ const UPDATE_ERROR: Record<string, string> = {
 export async function PUT(req: NextRequest, ctx: Ctx) {
   const v = await viewer(ctx)
   if ('error' in v) return v.error
-  if (!v.isCommissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  // Dues are money: a co-commissioner needs that area (lib/league/commissionerAccess.ts).
+  const refused = await commissionerAccessResponse(v.leagueId, v.userId, 'money')
+  if (refused) return refused
   const body = ((await req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>
 
   let before: DuesConfig | null = null

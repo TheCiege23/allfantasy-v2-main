@@ -53,6 +53,7 @@ vi.mock("@/lib/prisma", () => ({
     league: { findUnique: m.leagueFindUnique, update: m.leagueUpdate },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => m.assertCommissioner))
 
 const ME = "user-me"
 const RIVAL = "user-rival"

@@ -110,6 +110,7 @@ vi.mock('@/lib/draft-intelligence', () => ({
   publishDraftIntelForUpcomingManagers: vi.fn().mockResolvedValue([]),
   sendDraftIntelDm: vi.fn().mockResolvedValue(null),
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromOwner(() => 'commissioner-1'))
 
 import { computeTimerEndAt, computeTimerState } from '@/lib/live-draft-engine/DraftTimerService'
 import { resolveCurrentOnTheClock } from '@/lib/live-draft-engine/CurrentOnTheClockResolver'

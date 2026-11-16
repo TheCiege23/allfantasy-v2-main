@@ -47,11 +47,13 @@ vi.mock('@/lib/prisma', () => ({
     leagueTeam: { findMany: vi.fn(async () => h.flaggedTeams) },
   },
 }))
-vi.mock('@/lib/commissioner/leagueCommissionerAccount', () => ({
-  isOwnerOrLeagueCommissioner: vi.fn(async (league: { userId: string }, leagueId: string, userId: string) =>
-    league.userId === userId || h.commissionerOf.has(leagueId),
+// The scoring save asks the shared commissioner rule (lib/league/commissionerAccess.ts): here, the league's owner or
+// a league in `commissionerOf`.
+vi.mock('@/lib/league/commissionerAccess', async () =>
+  (await import('../helpers/commissionerAccessMock')).accessFromBoolean(
+    () => async (leagueId: string, userId: string) => h.leagues.get(leagueId)?.userId === userId || h.commissionerOf.has(leagueId),
   ),
-}))
+)
 vi.mock('@/lib/league/settingsLockGuard', () => ({
   settingsLockedResponse: vi.fn(async (leagueId: string) =>
     h.locked.has(leagueId) ? NextResponse.json({ error: 'Scoring settings are locked for the season', code: 'settings_locked' }, { status: 423 }) : null,
