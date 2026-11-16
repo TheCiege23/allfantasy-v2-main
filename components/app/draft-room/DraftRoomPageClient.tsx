@@ -403,7 +403,17 @@ export function DraftRoomPageClient({
   const [draftAiExplanationEnabled, setDraftAiExplanationEnabled] = useState(false)
   const [showAiOverlays, setShowAiOverlays] = useState(true)
   const [mobileTab, setMobileTabState] = useState<MobileDraftTab>('board')
-  const [centerDockTab, setCenterDockTab] = useState<CenterDockTab>('queue')
+  const [centerDockTab, setCenterDockTabState] = useState<CenterDockTab>('queue')
+  /*
+   * Room v2 (2026-11): on a tablet in portrait (768–1023px) the player pool and the dock take
+   * turns at full width under one tab bar. Any dock tab change (a tap, Ask Chimmy, the commissioner
+   * pick editor) brings the dock forward; the Players tab brings the pool back. 1024px+ ignores it.
+   */
+  const [tabletPanel, setTabletPanel] = useState<'players' | 'dock'>('players')
+  const setCenterDockTab = useCallback((tab: CenterDockTab) => {
+    setCenterDockTabState(tab)
+    setTabletPanel('dock')
+  }, [])
   const [commissionerEditOverall, setCommissionerEditOverall] = useState<number | null>(null)
   const [commissionerEditModalOpen, setCommissionerEditModalOpen] = useState(false)
   const openCommissionerPickEditor = useCallback((overall: number) => {
@@ -4387,23 +4397,9 @@ export function DraftRoomPageClient({
             </span>
           ) : null}
         </div>
-        <div className="af-dr-clockbar-actions" data-testid="draft-mobile-quick-actions">
-          <button type="button" data-primary="true" data-testid="draft-mobile-quick-search" onClick={openMobilePlayerSearch}>
-            {draftRoomCopy.clockBarSearch}
-          </button>
-          <button type="button" data-testid="draft-mobile-quick-queue" onClick={() => setMobileTab('queue')}>
-            {draftRoomCopy.clockBarQueue}
-          </button>
-          <button type="button" data-testid="draft-mobile-quick-roster" onClick={() => setMobileTab('roster')}>
-            {draftRoomCopy.clockBarRoster}
-          </button>
-          <button type="button" data-testid="draft-mobile-quick-chat" onClick={() => setMobileTab('chat')}>
-            {draftRoomCopy.clockBarChat}
-          </button>
-          <button type="button" data-testid="draft-mobile-quick-helper" onClick={openChimmy}>
-            {draftRoomCopy.clockBarHelper}
-          </button>
-        </div>
+        {/* Room v2 (2026-11): the Search / Queue / Roster / Chat / AI helper chips are gone. The tray's
+            tab bar right under the board already opens every one of them (and Ask Chimmy is in the
+            header), so the row only cost the board a row of tiles. */}
       </div>
     ) : null
 
@@ -4726,11 +4722,22 @@ export function DraftRoomPageClient({
                 : 'flex h-full min-h-0 flex-col bg-[#060d1e]'
           }
         >
+          <div className="shrink-0 lg:hidden" data-testid="draft-tablet-panel-tabs">
+            <DraftCenterDockTabBar
+              active={centerDockTab}
+              onSelect={setCenterDockTab}
+              showIntel={session.draftType !== 'auction'}
+              showCommish={isCommissioner}
+              redraftSnake={presentationVariant === 'redraft_snake'}
+              playersTab={{ label: 'Players', selected: tabletPanel === 'players', onSelect: () => setTabletPanel('players') }}
+              testIdBase="draft-tablet"
+            />
+          </div>
           <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
             <div
               className={`flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden border-r xl:flex-[13] ${
                 presentationVariant === 'redraft_snake' ? 'border-cyan-500/10' : 'border-white/8'
-              }`}
+              } ${tabletPanel === 'players' ? 'max-lg:border-r-0' : 'max-lg:hidden'}`}
               data-testid="draft-bottom-dock-pool"
             >
               {!isDraftCompleted ? (
@@ -4804,15 +4811,17 @@ export function DraftRoomPageClient({
               />
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden xl:hidden">
+            <div className={`flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden xl:hidden ${tabletPanel === 'dock' ? '' : 'max-lg:hidden'}`}>
               <div className="flex h-full min-h-0 w-full flex-col" data-testid="draft-bottom-dock-tabs">
-                <DraftCenterDockTabBar
-                  active={centerDockTab}
-                  onSelect={setCenterDockTab}
-                  showIntel={session.draftType !== 'auction'}
-                  showCommish={isCommissioner}
-                  redraftSnake={presentationVariant === 'redraft_snake'}
-                />
+                <div className="max-lg:hidden">
+                  <DraftCenterDockTabBar
+                    active={centerDockTab}
+                    onSelect={setCenterDockTab}
+                    showIntel={session.draftType !== 'auction'}
+                    showCommish={isCommissioner}
+                    redraftSnake={presentationVariant === 'redraft_snake'}
+                  />
+                </div>
 
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {centerDockTab === 'queue' ? (

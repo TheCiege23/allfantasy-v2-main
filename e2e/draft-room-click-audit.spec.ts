@@ -2043,21 +2043,16 @@ test.describe('@draft-room click audit', () => {
     await expect(mobile.getByTestId('draft-chat-media-image')).toBeVisible()
     await mobileTabClick('draft-mobile-tab-board')
     await expect(page.getByTestId('draft-mobile-current-pick')).toBeVisible()
-    await page.getByTestId('draft-mobile-quick-search').click()
+    // Room v2: the clock bar's quick chips are gone; the tray tabs reach the same panels.
+    await expect(page.getByTestId('draft-mobile-quick-actions')).toHaveCount(0)
+    await mobileTabClick('draft-mobile-tab-players')
     await expect(mobile.getByTestId('draft-player-panel')).toBeVisible()
-    await mobileTabClick('draft-mobile-tab-board')
-    await page.getByTestId('draft-mobile-quick-queue').click()
+    await mobileTabClick('draft-mobile-tab-queue')
     await expect(mobile.getByTestId('draft-queue-panel')).toBeVisible()
-    await page.getByTestId('draft-mobile-quick-roster').click()
+    await mobileTabClick('draft-mobile-tab-roster')
     await expect(mobile.getByTestId('draft-team-panel')).toBeVisible()
-    await mobileTabClick('draft-mobile-tab-board')
-    await page.getByTestId('draft-mobile-quick-chat').click()
+    await mobileTabClick('draft-mobile-tab-chat')
     await expect(mobile.getByTestId('draft-chat-panel')).toBeVisible()
-    const quickHelperBtn = page.getByTestId('draft-mobile-quick-helper')
-    if (await quickHelperBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await mobileTabClick('draft-mobile-tab-board')
-      await quickHelperBtn.click()
-    }
     await openCommissionerControls(page)
     const commissionerClose = page.getByTestId('draft-commissioner-close')
     // The control center is a lazy client chunk; await its real controls after the overlay opens.
