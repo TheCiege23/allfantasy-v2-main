@@ -63,9 +63,20 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  it('manager_psychology turns on psychologyConsistency, and nothing else', () => {
+  /*
+   * 🛑 INVERTED 2026-11-16 (re-score item 9): the slice ran on every psychology question and nothing printed it —
+   * `serialize.ts` has no entry for it. It comes back with the facts-only, paid psychology renderer (item 11).
+   */
+  it('NO intent runs psychologyConsistency while nothing renders it', () => {
+    for (const intent of ALL_INTENTS) expect(deriveWantFromIntent(intent).psychologyConsistency).toBe(false)
+    const serializer = readFileSync(resolve(process.cwd(), 'lib/decision-os/grounding/serialize.ts'), 'utf8')
+    // The day the serializer renders it, this fails — and the mapping above can be restored with item 11.
+    expect(serializer).not.toMatch(/packet\.psychologyConsistency/)
+  })
+
+  it('manager_psychology turns on nothing else either', () => {
     const w = deriveWantFromIntent('manager_psychology')
-    expect(w.psychologyConsistency).toBe(true)
+    expect(w.psychologyConsistency).toBe(false)
     expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.rosterValueGrade).toBe(false)

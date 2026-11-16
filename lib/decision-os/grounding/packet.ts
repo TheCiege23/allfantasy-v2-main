@@ -773,6 +773,7 @@ export async function buildDecisionOsGroundingPacket(
   const idpKickerKill = killed('idpKickerValues')
   const rosterValueGradeKill = killed('rosterValueGrade')
   const psychologyConsistencyKill = killed('psychologyConsistency')
+  const waiverDecisionKill = killed('waiverDecision')
 
   const pAssertions =
     leagueId && !importKill
@@ -851,7 +852,7 @@ export async function buildDecisionOsGroundingPacket(
    * after every other producer had finished, turning parallel work into a serial tail. In this wave
    * it overlaps with them and costs roughly its own slowest read.
    */
-  const pWaiverDecision = want.waiverDecision
+  const pWaiverDecision = want.waiverDecision && !waiverDecisionKill
     ? kick('waiverDecision', loadWaiverDecisionSlice({ userId: args.userId, leagueId, onClaims: args.onWaiverClaims }))
     : Promise.resolve(null)
 
@@ -1369,8 +1370,9 @@ export async function buildDecisionOsGroundingPacket(
    * `intent === 'waiver'`. The pool read and the engine run land on waiver questions and nothing
    * else — the gate below is load-bearing, not decorative.
    */
-  const waiverDecision: GroundedSlice<DecisionFact> =
-    (await pWaiverDecision) ??
+  const waiverDecision: GroundedSlice<DecisionFact> = waiverDecisionKill && want.waiverDecision
+    ? absent<DecisionFact>(waiverDecisionKill)
+    : (await pWaiverDecision) ??
     absent<DecisionFact>({
         reason: 'not_requested',
         detail: 'This question did not call for a waiver claim decision.',

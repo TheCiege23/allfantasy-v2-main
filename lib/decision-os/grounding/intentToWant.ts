@@ -101,7 +101,13 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      */
     lineupDecision: false,
     commissionerHealthDecision: intent === 'commissioner',
-    psychologyConsistency: intent === 'manager_psychology',
+    /*
+     * 🛑 OFF — 2026-11-16 (re-score item 9). It ran on every manager_psychology question and NOTHING printed it:
+     * `serialize.ts` has no entry for the slice, so each run was a cross-league walk whose result was thrown away,
+     * on a packet with a 3 s ceiling. It returns with the facts-only, paid psychology work (re-score item 11),
+     * which is where its renderer and its entitlement gate belong.
+     */
+    psychologyConsistency: false,
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *
