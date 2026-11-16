@@ -52,6 +52,22 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'PLzLL4DfilFdyUvq2CKE0IZVHjmMM0k_fa' },
   },
   {
+    /*
+     * Talk, not music. The Fantasy Footballers' own "The Fantasy Footballers
+     * Podcast" playlist (channel UC-No2ITxJsNt50oJQ3fLmUA), taken from their
+     * channel's Podcasts tab.
+     * ⚠ IT MUST BE NEWEST-FIRST, OR THE STATION OPENS ON AN OLD EPISODE. Checked
+     * 2026-11-15: its first entry (Ep. 2015, "Week 10 Matchups") was the same as
+     * the channel's newest upload. If they ever reorder it, use the channel's
+     * uploads list instead — "UU" + the channel id after "UC" — which is
+     * always newest-first, at the cost of including their short clips.
+     */
+    id: 'ff-podcast',
+    label: 'Fantasy podcast',
+    channel: 'The Fantasy Footballers',
+    source: { kind: 'playlist', listId: 'PLoISu6EAcn3AQQnURLbOkch3mloBBijQd' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
