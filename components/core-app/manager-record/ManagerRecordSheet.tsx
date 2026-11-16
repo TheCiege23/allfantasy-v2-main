@@ -9,6 +9,8 @@ import { draftFactText, draftReasonText } from '@/components/core-app/screens/Dr
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { messagesFor } from '@/lib/i18n/messages'
+import { managerRecordMessages } from '@/lib/core-app/messages/managerRecord'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { waiverFactText } from '@/lib/core-app/playerCardCopy'
 import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
@@ -34,32 +36,6 @@ type Loaded =
   | { state: 'locked'; access: CoreDepthAccess }
   | { state: 'ready'; record: ManagerRecord }
 
-const COPY = {
-  en: {
-    loading: 'Reading their record…',
-    close: 'Close',
-    basis: 'Competitive Edge · what they have done, as counts. It says nothing about what they will do.',
-    trades: 'Trades',
-    waivers: 'Waivers this season',
-    drafts: 'Past drafts',
-    stale: 'This history may be out of date.',
-    unattributed: (seasons: string) => `Picks from ${seasons} are not matched to managers yet, so this count may be low.`,
-    failed: 'This record could not be read just now.',
-    subject: 'A manager’s full record',
-  },
-  es: {
-    loading: 'Leyendo su historial…',
-    close: 'Cerrar',
-    basis: 'Competitive Edge · lo que ha hecho, en números. No dice nada de lo que hará.',
-    trades: 'Intercambios',
-    waivers: 'Reclamos esta temporada',
-    drafts: 'Drafts anteriores',
-    stale: 'Este historial puede estar desactualizado.',
-    unattributed: (seasons: string) => `Las selecciones de ${seasons} todavía no están asignadas a mánagers, así que este número puede ser bajo.`,
-    failed: 'No se pudo leer este historial ahora.',
-    subject: 'El historial completo de un mánager',
-  },
-} as const
 
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -86,7 +62,7 @@ function Section({ title, reason, children }: { title: string; reason: string | 
 }
 
 export function ManagerRecordView({ record, language }: { record: ManagerRecord; language: string }) {
-  const c = language === 'es' ? COPY.es : COPY.en
+  const c = messagesFor(managerRecordMessages, language)
   // The draft reason translator falls back to the shared /core copy for every other reason.
   const reason = (r: string) => draftReasonText(r, language)
   const { trades, waivers, drafts } = record
@@ -145,7 +121,7 @@ export function ManagerRecordSheet(props: {
   fetcher?: typeof fetch
 }) {
   const { language } = useOptionalLanguage()
-  const c = language === 'es' ? COPY.es : COPY.en
+  const c = messagesFor(managerRecordMessages, language)
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' })
   const panelRef = useRef<HTMLDivElement | null>(null)
   useOverlayContainment({ active: true, containerRef: panelRef, onClose: props.onClose, restoreFallbackRef: props.openerRef })
@@ -215,7 +191,7 @@ export function ManagerRecordButton(props: { leagueId: string; teamExternalId: s
   return (
     <>
       <button ref={ref} type="button" className="af-mr-open" onClick={() => setOpen(true)} data-testid="manager-record-open">
-        {props.label ?? (language === 'es' ? 'Historial completo' : 'Full record')}
+        {props.label ?? messagesFor(managerRecordMessages, language).open}
       </button>
       {open ? (
         <ManagerRecordSheet
