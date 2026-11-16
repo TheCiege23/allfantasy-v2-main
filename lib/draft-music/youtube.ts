@@ -82,6 +82,20 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'PL1U5boGn_ErQHkDY_ytdLguynLmxS9bRB' },
   },
   {
+    /*
+     * Talk, not music. Locked On Fantasy Baseball's own full-episode playlist
+     * (same network as the basketball show).
+     * Checked 2026-11-15, in the offseason on purpose: still posting ("Updated
+     * yesterday" — 2026 awards recap, 2027 draft targets, team reviews), and its
+     * first six entries matched the channel's newest uploads in order. Same
+     * "UU…" uploads fallback as the other podcasts if the order ever changes.
+     */
+    id: 'mlb-podcast',
+    label: 'Baseball podcast',
+    channel: 'Locked On',
+    source: { kind: 'playlist', listId: 'PLc30fhmgZQgV4w1mYm1dXsHPGrLGTaszA' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
