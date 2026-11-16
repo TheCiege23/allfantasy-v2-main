@@ -255,6 +255,15 @@ describe('what it says', () => {
     expect(href.searchParams.get('prompt')).toBe('Should I pick up Add N1 and drop Drop N1?')
   })
 
+  it('🛑 a row priced on its league’s own value board says so — never "AllFantasy’s default scoring"', () => {
+    const s = section('NBA', [row('A', 9, { basis: 'league_value_board' }), row('B', 8)])
+    const picks = selectSportWaiverPicks(s, rule('NBA'), new Set(['A', 'B']))
+    expect(picks.map((p) => [p.leagueId, p.basis])).toEqual([['A', 'league_value_board'], ['B', s.basis]])
+    const m = renderSportWaiverCheck([picks[0]!])!
+    expect(m.email.html).toContain('on this league&#39;s own value board')
+    expect(m.email.html).not.toContain('default NBA scoring')
+  })
+
   it('🛑 opens Chimmy in the PICK’S sport — not the NFL the weekly links default to', () => {
     const m = renderSportWaiverCheck([pick('NHL', 'H1', 3)])!
     expect(new URL(m.actionHref, 'https://x.test').searchParams.get('sport')).toBe('NHL')

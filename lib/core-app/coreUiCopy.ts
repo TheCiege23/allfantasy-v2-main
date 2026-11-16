@@ -1622,6 +1622,23 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     /^Per-game points from AllFantasy's (.+) season projection, on AllFantasy's default \1 scoring — not each league's own rules, which are written in a stat vocabulary the projection engine does not read yet\. A season rate, not a projection for this week\.$/,
     (m) => `Puntos por partido de la proyección de temporada de AllFantasy para ${m[1]}, con la puntuación predeterminada de AllFantasy, no con las reglas de cada liga, que usan un vocabulario de estadísticas que el motor todavía no lee. Es un promedio de temporada, no una proyección para esta semana.`,
   ],
+  // The league value board (lib/waivers/waiverSportBasis.ts, seasonRateWaiverBoard.ts — 2026-11-16).
+  [
+    /^Values from this league's own (.+) value board — the one its trade grades use — as per-game fantasy points under this league's own scoring\. A season rate, not a projection for this week\.$/,
+    (m) => `Valores de la tabla de valor de ${m[1]} de esta liga, la misma que usan sus notas de intercambios, en puntos de fantasy por partido con la puntuación propia de esta liga. Es un promedio de temporada, no una proyección para esta semana.`,
+  ],
+  [
+    /^Values from this league's own (.+) value board — the one its trade grades use — as per-game category score under this league's categories \((.+)\)\. A season rate, not a projection for this week\.$/,
+    (m) => `Valores de la tabla de valor de ${m[1]} de esta liga, la misma que usan sus notas de intercambios, como puntaje por partido en las categorías de esta liga (${m[2]}). Es un promedio de temporada, no una proyección para esta semana.`,
+  ],
+  [
+    /^This league's own (.+) value board is not available \((.+)\), so the wire is priced on the basis below instead\.$/,
+    (m) => `La tabla de valor de ${m[1]} de esta liga no está disponible (${coreUiCopy(`${m[2]}.`, 'es').replace(/[.]$/, '')}), así que los agentes libres se valoran con la base de abajo.`,
+  ],
+  [
+    /^Values still lean on the (.+) season while this one has few games; each add shows the games behind it\.$/,
+    (m) => `Los valores todavía se apoyan en la temporada ${m[1]} mientras esta tiene pocos partidos; cada alta muestra los partidos que hay detrás.`,
+  ],
   // Waiver Intelligence — a ruled-out target's reason line ("IR — he cannot play this week…").
   [
     /^(.+) — he cannot play this week, so any bid is a stash$/,

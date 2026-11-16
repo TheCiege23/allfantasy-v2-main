@@ -646,3 +646,49 @@ describe('Waivers Competitive Edge — English is unchanged', () => {
     )
   })
 })
+
+describe('player card — an NBA league value (2026-11-16, re-score item 12)', () => {
+  const BOARD_VALUE = yes({
+    sport: 'NBA', unit: 'fantasy points' as const, perGame: 40, replacementPerGame: 28, replacementName: 'Wire Guard',
+    value: 720, gamesRemaining: 60, seasonLabel: '2026-27', sampleGames: 26, baselineSeasonLabel: '2025-26', dynastyValue: 2140.6, age: 24,
+  })
+  const nbaLeague = () => league({ price: no('This league values its players on its own value board, not on the NFL market chart.'), boardValue: BOARD_VALUE })
+
+  it('English: the league value replaces the NFL price, with the per-game edge, games left, dynasty and its basis', async () => {
+    const { container } = sheet(universal({ context: 'league', league: nbaLeague(), market: no('Market prices are published for NFL players only.') }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('LEAGUE VALUE')
+    expect(out).not.toContain('LEAGUE PRICE')
+    expect(out).toContain('40.0 pts/g · 60 games left')
+    expect(out).toContain('DYNASTY')
+    expect(out).toContain('age 24 · model estimate')
+    expect(out).toContain(
+      "NBA value on this league's own board, the one its trade grades use: 40.0 fantasy points per game against 28.0 for the best free agent at his position (Wire Guard), over 60 games left. Rests on 26 games, leaning on the 2025-26 season.",
+    )
+    expect(out).toContain('Market prices are published for NFL players only.')
+  })
+
+  it('Spanish: every part of it', async () => {
+    lang.language = 'es'
+    const { container } = sheet(universal({ context: 'league', league: nbaLeague(), market: no('Market prices are published for NFL players only.') }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('VALOR EN LA LIGA')
+    expect(out).toContain('40.0 pts/p · quedan 60 partidos')
+    expect(out).toContain('DINASTÍA')
+    expect(out).toContain('24 años · estimación del modelo')
+    expect(out).toContain('Valor de NBA en la tabla propia de esta liga')
+    expect(out).toContain('Se apoya en 26 partidos, todavía con peso de la temporada 2025-26.')
+    expect(out).toContain('Los precios de mercado solo se publican para jugadores de la NFL.')
+    expect(out).not.toContain('Market prices are published')
+  })
+
+  it('a board that cannot price him: a dash, and the reason', async () => {
+    const { container } = sheet(universal({ context: 'league', league: league({ boardValue: no('This league’s value board could not be read just now.') }) }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('LEAGUE VALUE')
+    expect(out).toContain('This league’s value board could not be read just now.')
+  })
+})

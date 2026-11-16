@@ -168,7 +168,7 @@ export function selectSportWaiverPicks(
     .sort((a, b) => b.netGain - a.netGain || (a.leagueId < b.leagueId ? -1 : 1))
     .map((r) => ({
       sport: section.sport,
-      basis,
+      basis: r.basis ?? basis,
       leagueId: r.leagueId,
       leagueName: r.leagueName,
       add: r.add,
@@ -260,6 +260,7 @@ function joinAnd(items: string[]): string {
 
 /** What the per-game figure was priced on, briefly. */
 function sportBasisPhrase(p: Pick<SportWaiverPick, 'sport' | 'basis'>): string {
+  if (p.basis === 'league_value_board') return "on this league's own value board"
   return p.basis === 'season_per_game_league'
     ? "under this league's scoring"
     : `on AllFantasy's default ${sportInSentence(p.sport)} scoring`

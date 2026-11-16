@@ -60,6 +60,13 @@ export const playerCardMessages = defineMessages<PlayerCardCopy>({
     basedOn: (basis) => `Based on ${basis}.`,
     leaguePrice: 'LEAGUE PRICE',
     leaguePriceSub: (mode, numQbs, teams) => `${mode} · ${numQbs === 2 ? 'SF' : '1QB'} · ${teams}-team`,
+    leagueValue: 'LEAGUE VALUE',
+    leagueValueSub: (perGame, unit, gamesLeft) => `${perGame} ${unit === 'category score' ? 'cat' : 'pts'}/g · ${gamesLeft} games left`,
+    dynastyValue: 'DYNASTY',
+    dynastyValueSub: (age) => (age != null ? `age ${age} · model estimate` : 'no age on file · model estimate'),
+    boardBasis: (b) =>
+      `${b.sport} value on this league's own board, the one its trade grades use: ${b.perGame} ${b.unit} per game against ${b.replacement} for the best free agent at his position (${b.replacementName}), over ${b.gamesLeft} games left.` +
+      (b.sampleGames != null ? ` Rests on ${b.sampleGames} games${b.baseline ? `, leaning on the ${b.baseline} season` : ''}.` : ''),
     notPriced: 'not priced',
     slot: 'SLOT',
     tradePrice: 'TRADE PRICE',
@@ -137,6 +144,13 @@ export const playerCardMessages = defineMessages<PlayerCardCopy>({
     basedOn: (basis) => `Basado en ${basis}.`,
     leaguePrice: 'PRECIO EN LA LIGA',
     leaguePriceSub: (mode, numQbs, teams) => `${modeEs(mode)} · ${numQbs === 2 ? 'SF' : '1QB'} · ${teams} equipos`,
+    leagueValue: 'VALOR EN LA LIGA',
+    leagueValueSub: (perGame, unit, gamesLeft) => `${perGame} ${unit === 'category score' ? 'cat' : 'pts'}/p · quedan ${gamesLeft} partidos`,
+    dynastyValue: 'DINASTÍA',
+    dynastyValueSub: (age) => (age != null ? `${age} años · estimación del modelo` : 'sin edad registrada · estimación del modelo'),
+    boardBasis: (b) =>
+      `Valor de ${b.sport} en la tabla propia de esta liga, la misma que usan sus notas de intercambios: ${b.perGame} ${b.unit === 'category score' ? 'de puntaje de categorías' : 'puntos de fantasy'} por partido frente a ${b.replacement} del mejor agente libre en su posición (${b.replacementName}), en los ${b.gamesLeft} partidos que quedan.` +
+      (b.sampleGames != null ? ` Se apoya en ${b.sampleGames} partidos${b.baseline ? `, todavía con peso de la temporada ${b.baseline}` : ''}.` : ''),
     notPriced: 'sin precio',
     slot: 'PUESTO',
     tradePrice: 'PRECIO DE INTERCAMBIO',
