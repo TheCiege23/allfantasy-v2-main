@@ -2,7 +2,7 @@ import 'server-only'
 
 import { priceBoardPlayer } from '@/lib/decision-os/trade/sportPointsValue'
 import { isDynastyGradedSport, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
-import { BOARD_VALUE_SPORTS, boardUnit, loadLeagueValueBoard, type LeagueValueBoardDeps } from '@/lib/sport-values/leagueValueBoard'
+import { BOARD_VALUE_SPORTS, boardGamesText, boardSample, boardSampleText, boardUnit, loadLeagueValueBoard, type LeagueValueBoardDeps } from '@/lib/sport-values/leagueValueBoard'
 
 /**
  * What a player is worth IN AN NBA LEAGUE, for Chimmy (2026-11-16, re-score item 12: player values for
@@ -65,13 +65,14 @@ export async function buildSportBoardValueContext(
       ? categories ? `this league's categories (${ctx.categoryList ?? 'as configured'})` : "this league's own scoring"
       : `the ${sport} default scoring (this league's own rules could not be applied)`
   const lines = [
-    `${sport} VALUE for ${player.name} (${player.position}) in this league — ${scoring}, ${ctx.window.seasonLabel}, ${ctx.window.gamesRemaining} games left:`,
+    `${sport} VALUE for ${player.name} (${player.position}) in this league — ${scoring}, ${ctx.window.seasonLabel}, ${boardGamesText(ctx.window)}:`,
     `- ${fmt(player.perGame)} ${unit} per game against ${fmt(replacementPerGame)} for the best free agent at ${player.position.toUpperCase()} (${replacementName}): ${fmt(Math.max(0, player.perGame - replacementPerGame))} over replacement per game.`,
-    `- Rest of season: ${fmt(value)} ${unit} over replacement (per-game edge × ${ctx.window.gamesRemaining} games left).`,
+    `- Rest of season: ${fmt(value)} ${unit} over replacement (per-game edge × ${ctx.window.gamesRemaining} games${ctx.window.scheduleKnown === false ? ', a full season — the schedule is not posted yet' : ' left'}).`,
   ]
-  if (player.sampleGames != null) {
+  const sample = boardSample(player)
+  if (sample) {
     const from = ctx.window.baselineSeasonLabel ? ` from the ${ctx.window.baselineSeasonLabel} season (this season has too few games yet)` : ''
-    lines.push(`- The projection rests on ${player.sampleGames} games${from}.`)
+    lines.push(`- The projection rests on ${boardSampleText(sample)}${from}${sample.thin ? ' — a thin sample, so say the value is less certain' : ''}.`)
   }
   if (ctx.dynasty && isDynastyGradedSport(sport)) {
     const age = ctx.dynasty.ages.get(player.id)

@@ -70,7 +70,14 @@ export type BoardPlayer = {
    * hot streak (31 at-bats put a September call-up among the top five hitters, measured 2026-10-09), so an
    * MLB projection needs at-bats or innings behind it instead — `has` and `needs` are said in those terms.
    */
-  sampleBar?: { ok: boolean; has: string; needs: string }
+  sampleBar?: {
+    ok: boolean
+    has: string
+    needs: string
+    /** What `has` counts, as a number — so a surface can show "412 at-bats" in its own language. */
+    unit?: 'at_bats' | 'innings'
+    count?: number
+  }
 }
 
 /**

@@ -650,7 +650,7 @@ describe('Waivers Competitive Edge — English is unchanged', () => {
 describe('player card — an NBA league value (2026-11-16, re-score item 12)', () => {
   const BOARD_VALUE = yes({
     sport: 'NBA', unit: 'fantasy points' as const, perGame: 40, replacementPerGame: 28, replacementName: 'Wire Guard',
-    value: 720, gamesRemaining: 60, seasonLabel: '2026-27', sampleGames: 26, baselineSeasonLabel: '2025-26', dynastyValue: 2140.6, age: 24,
+    value: 720, gamesRemaining: 60, scheduleKnown: true, seasonLabel: '2026-27', sample: { kind: 'games' as const, count: 26, thin: false }, baselineSeasonLabel: '2025-26', dynastyValue: 2140.6, age: 24,
   })
   const nbaLeague = () => league({ price: no('This league values its players on its own value board, not on the NFL market chart.'), boardValue: BOARD_VALUE })
 
@@ -692,3 +692,30 @@ describe('player card — an NBA league value (2026-11-16, re-score item 12)', (
     expect(out).toContain('This league’s value board could not be read just now.')
   })
 })
+
+describe('player card — an MLB league value (2026-11-16)', () => {
+  const MLB_VALUE = yes({
+    sport: 'MLB', unit: 'fantasy points' as const, perGame: 4.1, replacementPerGame: 2.6, replacementName: 'Wire Bat',
+    value: 243, gamesRemaining: 162, scheduleKnown: false, seasonLabel: '2027', sample: { kind: 'at_bats' as const, count: 541, thin: false },
+    baselineSeasonLabel: null, dynastyValue: null, age: null,
+  })
+  const mlbLeague = () => league({ price: no('This league values its players on its own value board, not on the NFL market chart.'), boardValue: MLB_VALUE })
+
+  it('English: at-bats, never games, and a full season not yet scheduled', async () => {
+    const { container } = sheet(universal({ context: 'league', league: mlbLeague() }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('4.1 pts/g · 162-game season')
+    expect(out).toContain('over a full 162-game season (the schedule is not posted yet). Rests on 541 at-bats.')
+  })
+
+  it('Spanish', async () => {
+    lang.language = 'es'
+    const { container } = sheet(universal({ context: 'league', league: mlbLeague() }))
+    await settle(container)
+    const out = container.textContent ?? ''
+    expect(out).toContain('4.1 pts/p · temporada de 162 partidos')
+    expect(out).toContain('en una temporada completa de 162 partidos (el calendario todavía no se publicó). Se apoya en 541 turnos al bate.')
+  })
+})
+

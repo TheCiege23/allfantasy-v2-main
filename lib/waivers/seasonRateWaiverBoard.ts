@@ -19,7 +19,7 @@ import {
 } from './seasonRatePool'
 import { bestLineup, type Scored, type WaiverBoard, type WaiverBoardState, type WaiverCandidate } from './waiverBoard'
 import { noSeasonProjectionsReason, waiverBasisSentence, waiverSportLabel, type WaiverSportPlan } from './waiverSportBasis'
-import { boardPerGame, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
+import { boardPerGame, boardSample, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 
 /**
  * The one-league "Worth adding" board for the sports priced on a SEASON RATE — NBA, NCAAB, NHL,
@@ -130,9 +130,15 @@ export async function loadSeasonRateWaiverBoard(args: {
   /* One pricing path for both sides of the comparison: the board, or the season rate — never a mix. */
   const priceOf = (key: string, row: { perGame: number; components?: unknown } | undefined, use: 'wire' | 'roster'): number | null =>
     onBoard ? boardPerGame(onBoard, key, use) : row ? priceSeasonRate(row as never, basis, scoring) : null
-  const gamesOf = (key: string): number | undefined => {
-    const g = onBoard?.byId.get(key)?.sampleGames
-    return g != null && Number.isFinite(g) ? g : undefined
+  /*
+   * On a board, the board's position: it files a baseball pitcher SP or RP by his innings per outing and an
+   * outfielder as OF, where the projection files every pitcher `P` — which would let a reliever fill a
+   * starter's slot. Off a board, the projection's position, as before.
+   */
+  const positionOf = (key: string, filed: string | null) => onBoard?.byId.get(key)?.position ?? filed
+  const sampleOf = (key: string) => {
+    const p = onBoard?.byId.get(key)
+    return p ? boardSample(p) : null
   }
 
   const roster: Scored[] = []
@@ -141,7 +147,7 @@ export async function loadSeasonRateWaiverBoard(args: {
     if (!row) continue
     const pts = priceOf(key, row, 'roster')
     if (pts == null) continue
-    roster.push({ sleeperId: key, name: row.name, position: row.position, team: null, points: Math.round(pts * 100) / 100 })
+    roster.push({ sleeperId: key, name: row.name, position: positionOf(key, row.position), team: null, points: Math.round(pts * 100) / 100 })
   }
   if (roster.length === 0) {
     return empty('no_projections', plan, [`None of your rostered players has a ${label} season projection we can price here.`], season)
@@ -160,7 +166,7 @@ export async function loadSeasonRateWaiverBoard(args: {
       continue
     }
     if (taken.has(leagueId)) continue
-    if (!isStartableInSport(sport, slots, row.position)) {
+    if (!isStartableInSport(sport, slots, positionOf(row.key, row.position))) {
       ineligible++
       continue
     }
@@ -169,7 +175,7 @@ export async function loadSeasonRateWaiverBoard(args: {
     candidatesPool.push({
       sleeperId: row.key,
       name: row.name,
-      position: row.position,
+      position: positionOf(row.key, row.position),
       team: identity.get(row.key)?.team ?? null,
       points: Math.round(pts * 100) / 100,
     })
@@ -195,7 +201,7 @@ export async function loadSeasonRateWaiverBoard(args: {
         ? { sleeperId: null, playerKey: dropped.sleeperId, name: dropped.name, projectedPoints: dropped.points }
         : null,
       basis: 'season_rate',
-      ...(gamesOf(cand.sleeperId) != null ? { sampleGames: gamesOf(cand.sleeperId) } : {}),
+      ...(sampleOf(cand.sleeperId) ? { sample: sampleOf(cand.sleeperId)! } : {}),
     })
   }
   candidates.sort((a, b) => b.gain - a.gain)
@@ -207,7 +213,7 @@ export async function loadSeasonRateWaiverBoard(args: {
     waiverBasisSentence(basis, sport, onBoard ? { categoryList: onBoard.ctx.valueKind === 'categories' ? (onBoard.ctx.categoryList ?? 'as configured') : null } : null),
   ]
   if (onBoard?.ctx.window.baselineSeasonLabel) {
-    notes.push(`Values still lean on the ${onBoard.ctx.window.baselineSeasonLabel} season while this one has few games; each add shows the games behind it.`)
+    notes.push(`Values still lean on the ${onBoard.ctx.window.baselineSeasonLabel} season while this one has few games; each add shows what its value rests on.`)
   }
   if (candidates.length > limit) {
     notes.push(`${candidates.length} free agents would improve your lineup; showing the top ${limit}.`)

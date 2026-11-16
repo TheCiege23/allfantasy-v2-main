@@ -64,9 +64,9 @@ describe('toTeamGameLines', () => {
   it('prices a baseball projection on at-bats or innings, never on ten games', () => {
     const callUp = { id: 'callup', position: 'DH', sampleGames: 11, sourceSeason: 2025, stats: { ab: 2.8, hr: 0.09 } }
     const out = byId(toTeamGameLines([everyday, callUp, skenes, { ...clase, id: 'cup', sampleGames: 12 }]))
-    expect(out.get('callup')!.sampleBar).toEqual({ ok: false, has: '31 at-bats', needs: '100 at-bats or 30 innings' })
+    expect(out.get('callup')!.sampleBar).toEqual({ ok: false, has: '31 at-bats', needs: '100 at-bats or 30 innings', unit: 'at_bats', count: 31 })
     expect(out.get('everyday')!.sampleBar!.ok).toBe(true)
-    expect(out.get('skenes')!.sampleBar).toMatchObject({ ok: true, has: '187.5 innings' })
+    expect(out.get('skenes')!.sampleBar).toMatchObject({ ok: true, has: '187.5 innings', unit: 'innings', count: 187.5 })
     expect(out.get('cup')!.sampleBar).toMatchObject({ ok: false, has: '11.9 innings' })
   })
 

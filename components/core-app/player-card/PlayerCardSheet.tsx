@@ -730,6 +730,7 @@ export default function PlayerCardSheet({
                               league.boardValue.data.perGame.toFixed(1),
                               league.boardValue.data.unit,
                               league.boardValue.data.gamesRemaining,
+                              league.boardValue.data.scheduleKnown,
                             )}
                           </span>
                         }
@@ -810,7 +811,7 @@ export default function PlayerCardSheet({
             </div>
           ) : null}
 
-          {/* A league-value-board value says what it is, and how many games it rests on. */}
+          {/* A league-value-board value says what it is, and what it rests on (games, at-bats or innings). */}
           {data && league?.boardValue?.available ? (
             <p className="af-pc-basis">
               {c.boardBasis({
@@ -820,7 +821,8 @@ export default function PlayerCardSheet({
                 replacement: league.boardValue.data.replacementPerGame.toFixed(1),
                 replacementName: league.boardValue.data.replacementName,
                 gamesLeft: league.boardValue.data.gamesRemaining,
-                sampleGames: league.boardValue.data.sampleGames,
+                scheduleKnown: league.boardValue.data.scheduleKnown,
+                sample: league.boardValue.data.sample,
                 baseline: league.boardValue.data.baselineSeasonLabel,
               })}
             </p>

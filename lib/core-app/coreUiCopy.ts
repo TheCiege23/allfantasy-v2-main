@@ -1636,8 +1636,8 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     (m) => `La tabla de valor de ${m[1]} de esta liga no está disponible (${coreUiCopy(`${m[2]}.`, 'es').replace(/[.]$/, '')}), así que los agentes libres se valoran con la base de abajo.`,
   ],
   [
-    /^Values still lean on the (.+) season while this one has few games; each add shows the games behind it\.$/,
-    (m) => `Los valores todavía se apoyan en la temporada ${m[1]} mientras esta tiene pocos partidos; cada alta muestra los partidos que hay detrás.`,
+    /^Values still lean on the (.+) season while this one has few games; each add shows what its value rests on\.$/,
+    (m) => `Los valores todavía se apoyan en la temporada ${m[1]} mientras esta tiene pocos partidos; cada alta muestra en qué se apoya su valor.`,
   ],
   // Waiver Intelligence — a ruled-out target's reason line ("IR — he cannot play this week…").
   [

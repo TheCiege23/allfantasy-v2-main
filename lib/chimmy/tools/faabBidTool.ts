@@ -17,7 +17,7 @@ import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
 import { startingSlots } from '@/lib/core-app/slotEligibility'
 import { prisma } from '@/lib/prisma'
-import { boardUnit, isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
+import { boardGamesText, boardUnit, isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 import { loadSeasonRateWaiverBoard } from '@/lib/waivers/seasonRateWaiverBoard'
 import { waiverSportLabel, waiverSportPlan } from '@/lib/waivers/waiverSportBasis'
 import type { FaabCandidate } from '@/lib/trade-intel/faabBid'
@@ -346,7 +346,7 @@ async function computeBoardFaabPlan(
     platformLeagueId: league.platformLeagueId ?? null,
     concept,
     elimination: concept === 'guillotine' || concept === 'survivor',
-    valuesSource: `this league's own ${label} value board (${board.ctx.window.seasonLabel}, ${games} games left)`,
+    valuesSource: `this league's own ${label} value board (${board.ctx.window.seasonLabel}, ${boardGamesText(board.ctx.window)})`,
     valuesAsOf: (deps.now ?? new Date()).toISOString().slice(0, 10),
     remaining,
     seasonBudget: Number.isFinite(budgetRaw) && budgetRaw > 0 ? budgetRaw : null,

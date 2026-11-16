@@ -78,7 +78,7 @@ export type MlbTeamGameLine<T extends MlbLine> = T & {
   /** Share of team games this line counts for (1 for anyone who bats). */
   share: number
   /** At-bats or innings behind the projection, against `MIN_AT_BATS` / `MIN_INNINGS`. Absent when unknown. */
-  sampleBar?: { ok: boolean; has: string; needs: string }
+  sampleBar?: { ok: boolean; has: string; needs: string; unit: 'at_bats' | 'innings'; count: number }
 }
 
 function sampleBarFor(l: MlbLine, hitter: boolean): MlbTeamGameLine<MlbLine>['sampleBar'] {
@@ -89,6 +89,8 @@ function sampleBarFor(l: MlbLine, hitter: boolean): MlbTeamGameLine<MlbLine>['sa
     ok: atBats >= MIN_AT_BATS || innings >= MIN_INNINGS,
     has: hitter ? `${atBats} at-bat${atBats === 1 ? '' : 's'}` : `${innings} inning${innings === 1 ? '' : 's'}`,
     needs: `${MIN_AT_BATS} at-bats or ${MIN_INNINGS} innings`,
+    unit: hitter ? 'at_bats' : 'innings',
+    count: hitter ? atBats : innings,
   }
 }
 

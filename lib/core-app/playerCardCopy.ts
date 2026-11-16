@@ -85,7 +85,8 @@ export type PlayerCardCopy = {
   leaguePriceSub: (mode: string, numQbs: number, teams: number) => string
   /** A league-value-board sport (NBA first): his value on the league's own board. */
   leagueValue: string
-  leagueValueSub: (perGame: string, unit: 'fantasy points' | 'category score', gamesLeft: number) => string
+  /** `scheduleKnown` false: `gamesLeft` is the sport's full season, its schedule not posted yet (MLB's offseason). */
+  leagueValueSub: (perGame: string, unit: 'fantasy points' | 'category score', gamesLeft: number, scheduleKnown: boolean) => string
   dynastyValue: string
   dynastyValueSub: (age: number | null) => string
   boardBasis: (b: {
@@ -95,7 +96,9 @@ export type PlayerCardCopy = {
     replacement: string
     replacementName: string
     gamesLeft: number
-    sampleGames: number | null
+    scheduleKnown: boolean
+    /** What the value rests on: games, or in baseball at-bats or innings. */
+    sample: { kind: 'games' | 'at_bats' | 'innings'; count: number } | null
     baseline: string | null
   }) => string
   notPriced: string
