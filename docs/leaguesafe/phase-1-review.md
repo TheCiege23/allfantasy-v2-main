@@ -1,6 +1,7 @@
 # LeagueSafe Phase 1 — data models and tests
 
-Status: prepared for owner review. **No production migration or deployment has been run.**
+Status: owner design review confirmed; rollout checks remain pending.
+**No production migration or deployment has been run.**
 The owner authorized Phase 1 models and tests only. Apps Script capture remains manual,
 the automatic trigger stays disabled, and Phase 2 has not started. The approved Phase 0
 record remains in the private Phase 0 review branch; original financial emails stay private.
@@ -116,10 +117,53 @@ server, create a remote resource, or change the existing database safety setup.
 - Prisma validation passed, and the new migration contains LF bytes only. Production
   deployment and migration validation against a Neon preview remain future rollout checks.
 
+## Owner review — confirmed
+
+The owner reviewed and confirmed each item separately:
+
+- Payment/refund/late-fee/payout/signed-adjustment ledger rules. Payouts do not undo dues paid.
+- Unidentified LS people remain unmatched, with no AF team and no commissioner confirmation.
+- Member/team mappings remain within the connection's AF league.
+- Suggestions are distinct from commissioner confirmation; fuzzy matches must not be
+  automatically confirmed. Matching and the confirmation UI are future work.
+- Ledger entries retain same-connection source/member references; manual and screenshot
+  entries identify the creating AF user.
+- Duplicate ledger keys are rejected. Future processing must still construct keys that
+  identify the same underlying transaction across different emails.
+- Base dues and nullable member overrides, including an explicit zero-dues override.
+- Outstanding balances become overdue strictly after the configured deadline; fully paid
+  balances stay paid, and an absent deadline does not create overdue status.
+- The additive migration scope, preserving existing captures and payment records.
+- Restricting deletion/rekeying of referenced leagues, teams, members, connections, creators,
+  and source emails. League/account deletion may consequently fail until an explicit
+  financial-history retention/anonymization workflow handles those references.
+
+These confirmations complete the design review. They do not record production rollout,
+Phase 2 authorization, or completion of the outstanding Phase 0 sample-dependent checks.
+
+## Remaining rollout checks
+
+1. Prepare the review PR from the implementation branch, check it against current main,
+   and resolve any schema/migration overlap before rerunning affected validation. The
+   present local commit has not been published or checked by PR CI.
+2. Run the PR's required checks, including generated-client/type compatibility and the
+   existing capture/security regressions. Inspect the exact final diff for Phase 1 scope.
+3. Inspect the intended production database and pending migration history read-only.
+   Confirm existing nonnull raw-email connection IDs are valid before introducing the FK;
+   review the two indexes on existing tables and the deletion/purge behavior.
+4. Rehearse the exact release migration on an isolated Neon preview/branch with the
+   appropriate controlled checks. Local PostgreSQL validation is complete; this Neon
+   rehearsal has not been done. The committed database suite intentionally refuses remote
+   targets and must not have its guard bypassed to run it against Neon.
+5. After the owner elects to roll out Phase 1, use the guarded production migration
+   workflow and verify Railway build/deployment/health, new tables and constraints,
+   optional profile field, and preservation of existing capture records. Review all
+   pending migrations; do not silently deploy an unrelated migration backlog.
+
 No new environment variables are required by the feature. `LS_PHASE1_TEST_DATABASE_URL`
-is test-only and must never be set on Railway. No Apps Script action is needed. The owner
-must review the models, ledger semantics, deletion restrictions, and migration before
-production rollout. Stop at this checkpoint; Phase 2 requires a separate go-ahead.
+is test-only and must never be set on Railway. No Apps Script action is needed. Capture
+stays manual and the automatic trigger remains disabled. Stop at this checkpoint;
+Phase 2 requires a separate go-ahead.
 
 
 ## Files for review
@@ -133,4 +177,5 @@ production rollout. Stop at this checkpoint; Phase 2 requires a separate go-ahea
 
 The Phase 0 capture endpoint, Apps Script, Gmail labels, production records, and parser
 files were not changed. No private EML sample or financial email content is in this patch.
-The local branch is `codex/leaguesafe-phase1-models`; these changes await owner review.
+The local branch is `codex/leaguesafe-phase1-models`; design review is confirmed and
+rollout checks remain pending.
