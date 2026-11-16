@@ -341,7 +341,7 @@ function DraftBoardCellInner({
         <div className="flex min-w-0 items-center gap-0.5 overflow-hidden pr-8">
           {isKept ? (
             <span
-              className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px font-mono text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#14172a]"
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px font-mono text-[11px] font-extrabold uppercase leading-[13px] tracking-[0.04em] text-[#14172a]"
               style={{ backgroundColor: keptHex }}
               data-testid={`draft-board-cell-keeper-${pick.overall}`}
             >
@@ -451,7 +451,7 @@ function DraftBoardCellInner({
             </span>
             {isKept ? (
               <span
-                className="mt-0.5 block truncate text-[10px] font-bold leading-[12px]"
+                className="mt-0.5 block truncate text-[11px] font-bold leading-[13px]"
                 style={{ color: keptHex }}
                 data-testid={`draft-board-cell-keeper-cost-${pick.overall}`}
               >
