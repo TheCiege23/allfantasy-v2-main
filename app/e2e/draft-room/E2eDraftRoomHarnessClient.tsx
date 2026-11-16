@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { DraftBoard } from '@/components/draft/DraftBoard'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
 
 function E2EDraftRoomHarnessInner() {
   const searchParams = useSearchParams()
@@ -14,6 +15,17 @@ function E2EDraftRoomHarnessInner() {
   /** Room v2 league accents: `?leagueType=guillotine` etc. `dynasty` also turns on the dynasty room. */
   const leagueType = searchParams.get('leagueType')
   const isDynasty = leagueType === 'dynasty'
+  /** Room v2 league notes / slot salaries: `?leagueFacts=<json DraftRoomLeagueFacts>`. Bad JSON is ignored. */
+  const leagueFactsRaw = searchParams.get('leagueFacts')
+  const leagueFacts = useMemo<DraftRoomLeagueFacts | null>(() => {
+    if (!leagueFactsRaw) return null
+    try {
+      const parsed = JSON.parse(leagueFactsRaw) as DraftRoomLeagueFacts
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  }, [leagueFactsRaw])
 
   const [entered, setEntered] = useState(e2eRoom)
 
@@ -46,6 +58,7 @@ function E2EDraftRoomHarnessInner() {
           isDynasty={isDynasty}
           isCommissioner={isCommissioner}
           leagueType={leagueType}
+          leagueFacts={leagueFacts}
           presentationVariant={isDynasty ? 'default' : 'redraft_snake'}
         />
       )}

@@ -72,24 +72,26 @@ async function getSnakeSalaryScaleConfig(
   return getDefaultSnakeSalaryConfig(sport, teamCount, draftRounds)
 }
 
+/** A rookie / snake-draft slot's contract: what `assignRookieContract` writes for that pick. */
+export type RookieSlotTerms = { salary: number; years: number }
+
 /**
- * Assign rookie/snake-draft contract after draft pick.
- * Creates a PlayerContract with league-specific rookie years and slot salary
- * from the sport-aware snake salary scale.
+ * The league's rookie-contract terms, loaded once: config, team count and salary scale. `termsFor`
+ * is then pure, so the draft room can show every slot's salary and it is the SAME number the
+ * contract is written with — both go through this function.
  *
- * @param draftSlot - Overall pick number (1-based, e.g. 1.01 = slot 1)
+ * Null when the league has no salary-cap config.
  */
-export async function assignRookieContract(
+export async function loadRookieContractTerms(
   leagueId: string,
-  rosterId: string,
-  playerId: string,
-  playerName: string | null,
-  position: string | null,
-  draftSlot: number,
-  capYear: number
-): Promise<{ ok: boolean; contractId?: string; salary?: number; contractYears?: number; error?: string }> {
+): Promise<{
+  configId: string
+  teamCount: number
+  startupDraftType: string
+  termsFor: (draftSlot: number) => RookieSlotTerms
+} | null> {
   const config = await getSalaryCapConfig(leagueId)
-  if (!config) return { ok: false, error: 'Not a salary cap league' }
+  if (!config) return null
 
   // Load league team count from leagueSettings or fall back to default
   let teamCount = DEFAULT_TEAM_COUNT
@@ -110,18 +112,45 @@ export async function assignRookieContract(
     DEFAULT_DRAFT_ROUNDS
   )
 
-  const { salary, contractYears } = getSalaryForPick(draftSlot, scaleConfig)
-  // Use league's rookieContractYears as authority over scale-derived years when configured
-  const years = config.rookieContractYears > 0 ? config.rookieContractYears : contractYears
-  // Enforce minimum salary from league config
-  const finalSalary = Math.max(config.minimumSalary, Math.round(salary))
+  return {
+    configId: config.configId,
+    teamCount,
+    startupDraftType: String(config.startupDraftType),
+    termsFor: (draftSlot: number) => {
+      const { salary, contractYears } = getSalaryForPick(draftSlot, scaleConfig)
+      // Use league's rookieContractYears as authority over scale-derived years when configured
+      const years = config.rookieContractYears > 0 ? config.rookieContractYears : contractYears
+      // Enforce minimum salary from league config
+      return { salary: Math.max(config.minimumSalary, Math.round(salary)), years }
+    },
+  }
+}
 
-  const round = Math.ceil(draftSlot / teamCount)
+/**
+ * Assign rookie/snake-draft contract after draft pick.
+ * Creates a PlayerContract with league-specific rookie years and slot salary
+ * from the sport-aware snake salary scale.
+ *
+ * @param draftSlot - Overall pick number (1-based, e.g. 1.01 = slot 1)
+ */
+export async function assignRookieContract(
+  leagueId: string,
+  rosterId: string,
+  playerId: string,
+  playerName: string | null,
+  position: string | null,
+  draftSlot: number,
+  capYear: number
+): Promise<{ ok: boolean; contractId?: string; salary?: number; contractYears?: number; error?: string }> {
+  const terms = await loadRookieContractTerms(leagueId)
+  if (!terms) return { ok: false, error: 'Not a salary cap league' }
+  const { salary: finalSalary, years } = terms.termsFor(draftSlot)
+  const round = Math.ceil(draftSlot / terms.teamCount)
 
   const c = await prisma.playerContract.create({
     data: {
       leagueId,
-      configId: config.configId,
+      configId: terms.configId,
       rosterId,
       playerId,
       playerName,

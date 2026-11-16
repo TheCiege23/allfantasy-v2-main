@@ -16,11 +16,14 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { pickClockPlannerMessages } from '@/lib/core-app/messages/pickClockPlanner'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 import type { LeagueAccent } from '@/lib/draft-room/leagueAccent'
+import type { LeagueNote } from '@/lib/draft-room/leagueNote'
 
 type DraftTopBarProps = {
   leagueName: string
   /** Room v2: a chip naming the league type, in its accent color, beside the league name. */
   leagueAccent?: LeagueAccent | null
+  /** Room v2 league note: the one rule this type drafts under, beside its chip. */
+  leagueNote?: LeagueNote | null
   /** League avatar / logo URL. Rendered next to the name when provided. */
   leagueLogoUrl?: string | null
   sport: string
@@ -230,6 +233,7 @@ const DYN_CONDENSED_STYLE: CSSProperties = {
 export function DraftTopBar({
   leagueName,
   leagueAccent = null,
+  leagueNote = null,
   leagueLogoUrl,
   sport,
   draftType,
@@ -302,6 +306,15 @@ export function DraftTopBar({
   const { t, tInterpolate, language } = useLanguage()
   const pickClockCopy = useMessages(pickClockPlannerMessages)
   const headerCopy = useMessages(draftRoomHeaderMessages)
+  const noteText = !leagueNote
+    ? null
+    : leagueNote.kind === 'guillotine'
+      ? headerCopy.noteGuillotine(leagueNote.startWeek, leagueNote.perChop)
+      : leagueNote.kind === 'pirate'
+        ? headerCopy.notePirate(leagueNote.protect)
+        : leagueNote.kind === 'salary_cap'
+          ? headerCopy.noteCap(leagueNote.cap)
+          : [leagueNote.conference, leagueNote.round].filter(Boolean).join(' · ') || null
   const liveRemaining = useDraftCountdownSeconds(
     timerStatus,
     timerEndAtIso ?? undefined,
@@ -769,6 +782,25 @@ export function DraftTopBar({
                 </p>
               ) : null}
           <div className="mt-0 hidden flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7] md:flex">
+                {/*
+                  The one rule this league type drafts under, first on the rules line. It sat beside
+                  the chip in the title row and, at 1440px, truncated mid-word ("1 te…") while
+                  squeezing the league name; here it wraps as a whole item. Accent-coloured so it
+                  reads with the chip above.
+                */}
+                {leagueAccent && noteText ? (
+                  <>
+                    <span
+                      data-testid="draft-topbar-league-note"
+                      data-note-kind={leagueNote?.kind}
+                      className="whitespace-nowrap font-semibold"
+                      style={{ color: leagueAccent.color }}
+                    >
+                      {noteText}
+                    </span>
+                    <span className="text-white/24">·</span>
+                  </>
+                ) : null}
                 <span>{timerSummary}</span>
                 <span className="text-white/24">·</span>
                 <span>{withCount(t('draftRoom.topBar.teamsCount'), teamCount)}</span>
