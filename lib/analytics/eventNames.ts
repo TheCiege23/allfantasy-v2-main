@@ -68,6 +68,11 @@ export const MONETIZATION = {
   /** A payment that succeeded on a subscription that was past due: the card was fixed. */
   PAYMENT_RECOVERED: 'monetization.payment_recovered',
   SUBSCRIPTION_CANCELED: 'monetization.subscription_canceled',
+  /**
+   * An existing Pro / Commissioner subscription was switched to AF Supreme in place (prorated —
+   * lib/monetization/supremeSwitch.ts). Recorded when Stripe accepted the switch and its payment.
+   */
+  PLAN_SWITCHED: 'monetization.plan_switched',
 } as const
 
 /** Create-league funnel (client beacon + server confirmation). */
