@@ -73,8 +73,13 @@ describe('YOUTUBE_STATIONS', () => {
     for (const station of YOUTUBE_STATIONS) {
       expect(keys.has(station.id)).toBe(false)
       keys.add(station.id)
-      const id = station.source.kind === 'video' ? station.source.videoId : station.source.listId
-      expect(parseYouTubeLink(`https://www.youtube.com/watch?v=${id}`)).not.toBeNull()
+      // Round-trip each preset through the same parser a pasted link uses, in
+      // the URL shape YouTube itself gives for that kind.
+      const url =
+        station.source.kind === 'video'
+          ? `https://www.youtube.com/watch?v=${station.source.videoId}`
+          : `https://www.youtube.com/playlist?list=${station.source.listId}`
+      expect(parseYouTubeLink(url)).toEqual(station.source)
     }
   })
 })
