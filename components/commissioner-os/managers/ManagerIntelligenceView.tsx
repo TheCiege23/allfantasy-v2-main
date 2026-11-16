@@ -2,17 +2,24 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { TrendIndicator } from '@/components/commissioner-os/primitives/TrendIndicator'
-import { EmptyState } from '@/components/commissioner-os/states'
+import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { ManagerDnaProfile } from '@/lib/commissioner-ui/managers/decision-os-client'
 import { Users } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy, cosLoaderText, managerNameText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import { cosErrorText } from '@/lib/commissioner-os/i18n/analyticsCopy'
+import { MANAGER_PROFILES_RETIRED_MESSAGE } from '@/lib/commissioner-ui/managers/decision-os-client/retired'
 
 interface ManagerIntelligenceViewProps {
   managers: ManagerDnaProfile[]
   dataMode: CommissionerDataMode
+  /**
+   * The adapter's error, when the directory could not be read. Without it a failed read and an empty
+   * league looked the same, which is how a retired module showed "No manager history yet."
+   */
+  errorMessage?: string | null
 }
 
 const TREND_LABEL = { rising: 'Rising', steady: 'Steady', declining: 'Declining' } as const
@@ -33,14 +40,25 @@ const RELIABILITY_LABEL = {
  * Spanish: the screen's own labels through `cardsCopy`; `recognition` and `riskFlag` are sentences the
  * loader wrote, translated at render through `cosLoaderText`. Manager names stay as written.
  */
-export function ManagerIntelligenceView({ managers, dataMode }: ManagerIntelligenceViewProps) {
+export function ManagerIntelligenceView({ managers, dataMode, errorMessage }: ManagerIntelligenceViewProps) {
   const { language } = useOptionalLanguage()
   const ui = (english: string) => cardsCopy(english, language)
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
 
-      {managers.length === 0 ? (
+      {errorMessage === MANAGER_PROFILES_RETIRED_MESSAGE ? (
+        /* The live module is retired (Milestone 32). Say so; never "no history yet", which says wait. */
+        <EmptyState
+          icon={Users}
+          title={ui('Manager profiles are retired.')}
+          description={ui(
+            'AllFantasy no longer builds behavior profiles of the managers in your league. League Health still shows the risks in your league.',
+          )}
+        />
+      ) : errorMessage ? (
+        <ErrorState message={cosErrorText(errorMessage, language)} />
+      ) : managers.length === 0 ? (
         <EmptyState
           icon={Users}
           title={ui('No manager history yet.')}

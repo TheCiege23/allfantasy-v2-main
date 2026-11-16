@@ -215,9 +215,9 @@ describe('the live sentences are the loaders’ own, verbatim', () => {
       "?? 'Unknown'",
     ])
       expect(lh).toContain(t)
-    const mgr = source('lib', 'commissioner-ui', 'managers', 'decision-os-client', 'live.ts')
-    expect(mgr).toContain("'Major inactivity detected — may benefit from a personal check-in'")
-    expect(mgr).toContain("'Engagement declining over recent periods — may benefit from a personal check-in'")
+    // The live directory is retired (2026-11-16): its only loader sentence is the retired notice.
+    const mgr = source('lib', 'commissioner-ui', 'managers', 'decision-os-client', 'retired.ts')
+    expect(mgr).toContain("'AllFantasy no longer builds behavior profiles of the managers in your league.'")
     expect(source('lib', 'commissioner-managers', 'managerNames.ts')).toContain("UNKNOWN_MANAGER_NAME = 'Unknown manager'")
   })
 

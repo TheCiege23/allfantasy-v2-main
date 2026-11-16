@@ -131,6 +131,9 @@ const UI_ES: Record<string, string> = {
   'The league is in good shape.': 'La liga está en buena forma.',
 
   // ManagerIntelligenceView
+  'Manager profiles are retired.': 'Los perfiles de mánagers se retiraron.',
+  'AllFantasy no longer builds behavior profiles of the managers in your league. League Health still shows the risks in your league.':
+    'AllFantasy ya no crea perfiles de comportamiento de los mánagers de tu liga. Salud de la liga sigue mostrando los riesgos de tu liga.',
   'No manager history yet.': 'Aún no hay historial de mánagers.',
   'Behavioral profiles build over time as the season progresses.':
     'Los perfiles de comportamiento se van formando a medida que avanza la temporada.',
@@ -243,7 +246,8 @@ const LOADER_ES: Record<string, string> = {
   Retention: 'Retención',
   'Commissioner load': 'Carga del comisionado',
   Participation: 'Participación',
-  // managers/decision-os-client/live.ts — risk flags
+  // Manager directory risk flags. The live directory is retired (2026-11-16) and no longer writes these;
+  // kept so a row that still carries one (demo, a test) renders in Spanish rather than half-translated.
   'Major inactivity detected — may benefit from a personal check-in':
     'Inactividad importante detectada: podría venirle bien un contacto personal',
   'Engagement declining over recent periods — may benefit from a personal check-in':

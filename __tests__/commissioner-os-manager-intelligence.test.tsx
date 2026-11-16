@@ -12,10 +12,11 @@ describe("commissioner-os — Manager Intelligence client parity", () => {
     expect(typeof liveManagerIntelligenceClient.getManagerDirectory).toBe("function")
   })
 
-  it("live placeholder returns an honest error, never fixture data", async () => {
+  it("live returns the retired error, never fixture data (Milestone 32 retired the directory)", async () => {
     const response = await liveManagerIntelligenceClient.getManagerDirectory()
     expect(response.data).toBeNull()
-    expect(response.error?.category).toBe("upstream_unavailable")
+    expect(response.error?.category).toBe("not_found")
+    expect(response.error?.retryable).toBe(false)
   })
 
   it("demo data includes both recognition and risk — never all-negative or all-positive", async () => {

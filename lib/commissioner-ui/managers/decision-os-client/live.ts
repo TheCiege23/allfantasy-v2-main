@@ -1,138 +1,29 @@
-import { callDecisionOS } from '../../adapter/transport'
-import { isLiveReady } from '../../liveReadiness'
-import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
-import { resolveManagerDisplayNames, UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
-import type { CommissionerErrorContract } from '../../contracts'
-import type { ManagerDnaProfile, ManagerIntelligenceClient } from './types'
+import { managerProfilesRetired } from './retired'
+import type { ManagerIntelligenceClient } from './types'
 
 /**
- * Manager Intelligence — live, backed by Decision OS's Phase 6.2 Manager DNA classifier.
+ * Manager Intelligence, live mode: the directory is RETIRED, and this client says so.
  *
- * ── What changed, and why the previous refusal was right ──────────────────────────────────────
+ * 🛑 THE SCREEN TOLD PAYING COMMISSIONERS "No manager history yet." FOR A MODULE THAT NO LONGER EXISTS
+ * (2026-11-16, re-score item 10). This client read `/api/v1/intelligence/league/manager-dna`. The
+ * Milestone 32 privacy pass (`dcaaa6946`) retired that route and twelve others to a constant
+ * `410 PROFILE_SURFACE_RETIRED`, because AllFantasy no longer builds behavior profiles of named
+ * managers for anybody, commissioners included. This client was not updated. It called the dead
+ * route and got an error. The page then dropped the error and rendered `data ?? []`, so a deliberate
+ * retirement read as "your league has no history yet; check back later". That empty state promised
+ * something that was never coming.
  *
- * This method used to make its real calls and then discard the result, returning an honest
- * "backend does not expose this" error. That was correct at the time: `archetype`,
- * `engagementTrend` and `reliabilityScore` had no analog in the exposed Decision OS output, and the
- * one field that looked close (`participationTier`) is a FREQUENCY tier, not a behavioral
- * archetype — presenting it as one would have misrepresented what it measures.
+ * So it no longer makes the call, and it returns a fixed, recognisable error that the screen renders
+ * as the truth: the profiles are retired. It never fails as "not yet integrated" and never returns an
+ * empty list. Both of those say "wait", and there is nothing to wait for.
  *
- * The DNA classifier that does answer `archetype` genuinely existed the whole time, but every
- * exposed route narrowed it to the CALLER'S OWN profile, which a directory cannot use. The gap was
- * therefore never the classifier; it was that nothing exposed it league-wide.
- * `/api/v1/intelligence/league/manager-dna` now does, gated on `intelligence:league:read` — a scope
- * `TIER_SCOPE_MAP` grants to the commissioner and platform tiers only.
- *
- * ── What is still not sourced, and is omitted rather than invented ────────────────────────────
- *
- * - `tenureSeasons` — still has no source. It is a roster-history fact, not a Decision OS concept.
- *   The field is now optional and is left absent.
- * - `engagementTrend` — now REAL, from per-manager behavioral snapshots, but only where a manager
- *   has at least two. Absent means unknown. ⚠ It is never back-filled from `engagementReliability`:
- *   that is a LEVEL and this is a DIRECTION, and a manager can be reliably absent.
- * - `reliabilityScore` — the backend classifies reliability as an ordinal level, so the real
- *   `engagementReliability` is passed through instead of a manufactured number.
+ * Bringing a manager screen back is a product decision, not a repair. If it returns, it shows plain
+ * activity FACTS (lineups set, moves made), not classifications. The owner's rule for psychology is
+ * "facts only, paid" (re-score item 11), and a fresh route has to be built for it. This one must not
+ * be revived.
  */
-function notYetIntegrated(): CommissionerErrorContract {
-  return {
-    category: 'upstream_unavailable',
-    message: 'The live Decision OS backend is not yet integrated in this environment.',
-    moduleId: 'managers',
-    retryable: false,
-    timestamp: new Date().toISOString(),
-  }
-}
-
-/** The pipeline ran but could not compute — distinct from "not integrated", and retryable. */
-function directoryUnavailable(): CommissionerErrorContract {
-  return {
-    category: 'upstream_unavailable',
-    message: 'Decision OS could not compute manager profiles for this league right now.',
-    moduleId: 'managers',
-    retryable: true,
-    timestamp: new Date().toISOString(),
-  }
-}
-
-/*
- * 🛑 THE ROW'S `primaryIdentity` IS NOT READ. It is the DNA classifier's identity label
- * ("serial_trader", "waiver_hawk", "ghost_manager"…), and this client used to humanise it into an
- * `archetype` badge on every manager card. Milestone 32 shows a characterisation label of a named
- * manager to NOBODY, commissioners included, so the directory carries the continuity facts only:
- * reliability level, trend direction, and a risk flag phrased as what a commissioner might do.
- */
-interface DirectoryRowShape {
-  managerId: string
-  engagementReliability: 'reliable' | 'inconsistent' | 'unreliable'
-  engagementTrend:
-    | { available: false; reason: string }
-    | { available: true; direction: 'rising' | 'steady' | 'declining' }
-}
-interface ManagerDnaDirectoryShape {
-  data:
-    | { available: false }
-    | { available: true; rows: DirectoryRowShape[] }
-}
-
-/** Batch-resolves manager display names — one query for all managers, not N+1. Same pattern as Mission Control's live.ts. */
-/**
- * League-continuity risk framing only, never a characterological judgment — the contract's own
- * wording. Fires on a real continuity signal (unreliable engagement, or a declining trend), and
- * says what a commissioner might DO about it rather than what the manager is.
- */
-function riskFlagFor(row: DirectoryRowShape): string | undefined {
-  if (row.engagementReliability === 'unreliable') {
-    return 'Major inactivity detected — may benefit from a personal check-in'
-  }
-  if (row.engagementTrend.available && row.engagementTrend.direction === 'declining') {
-    return 'Engagement declining over recent periods — may benefit from a personal check-in'
-  }
-  return undefined
-}
-
 export const liveManagerIntelligenceClient: ManagerIntelligenceClient = {
   async getManagerDirectory() {
-    if (!(await isLiveReady('managers'))) {
-      return { data: null, error: notYetIntegrated(), source: 'live', timestamp: new Date().toISOString() }
-    }
-    const timestamp = new Date().toISOString()
-    const leagueId = await resolveActiveLeagueId()
-    if (!leagueId) {
-      return { data: null, error: notYetIntegrated(), source: 'live', timestamp }
-    }
-
-    const { data, error } = await callDecisionOS<ManagerDnaDirectoryShape>(
-      'managers',
-      `/api/v1/intelligence/league/manager-dna?leagueId=${encodeURIComponent(leagueId)}`,
-    )
-    if (error || !data) {
-      return { data: null, error: error ?? notYetIntegrated(), source: 'live', timestamp }
-    }
-    if (!data.data.available) {
-      return { data: null, error: directoryUnavailable(), source: 'live', timestamp }
-    }
-
-    const rows = data.data.rows
-    const names = await resolveManagerDisplayNames(leagueId, rows.map((r) => r.managerId))
-
-    const profiles: ManagerDnaProfile[] = rows.map((row) => {
-      const profile: ManagerDnaProfile = {
-        id: row.managerId,
-        // A manager resolvable by neither an AF account nor a league_teams row still belongs in
-        // their league's directory; omitting the row would under-report the league rather than
-        // under-report one name. After the two-source lookup above this is ~5 managers platform-wide,
-        // not the 1,137 it was.
-        managerName: names.get(row.managerId) ?? UNKNOWN_MANAGER_NAME,
-        engagementReliability: row.engagementReliability,
-      }
-      // Set only when real. An absent trend is unknown, and the view renders nothing for it.
-      if (row.engagementTrend.available) {
-        profile.engagementTrend = row.engagementTrend.direction
-      }
-      const riskFlag = riskFlagFor(row)
-      if (riskFlag) profile.riskFlag = riskFlag
-      return profile
-    })
-
-    return { data: profiles, error: null, source: 'live', timestamp }
+    return { data: null, error: managerProfilesRetired(), source: 'live', timestamp: new Date().toISOString() }
   },
 }
