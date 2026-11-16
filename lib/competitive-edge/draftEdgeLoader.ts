@@ -24,7 +24,7 @@ function ownerOf(metadata: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null
 }
 
-type DraftEdgeInput =
+export type DraftEdgeInput =
   | { ok: false; reason: string }
   | {
       ok: true
@@ -34,7 +34,7 @@ type DraftEdgeInput =
     }
 
 /** The league's attributed draft history — shared by Draft HQ's edge and the live draft room's. */
-async function readDraftEdgeInput(leagueId: string): Promise<DraftEdgeInput> {
+export async function readDraftEdgeInput(leagueId: string): Promise<DraftEdgeInput> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { platform: true, platformLeagueId: true, sport: true },
