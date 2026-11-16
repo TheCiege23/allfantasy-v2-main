@@ -39,6 +39,34 @@ import { musicBus, type AppleMsg } from './musicBus'
 type Source = 'youtube' | 'apple'
 const SOURCE_KEY = 'af:draft-music:source'
 
+/*
+ * ⚠ NO APPLE MUSIC SUBSCRIPTION, REMEMBERED. An Apple ID without a subscription
+ * never connects: Apple shows its own "subscribe" page and authorize() fails
+ * (measured 2026-11-15). After that happens once on this device, the Apple side
+ * says so in one line with a way to try again, instead of offering a search
+ * whose results cannot play. Apple does not tell us about a subscription before
+ * a connect, so a failed connect is the only signal there is — which is why the
+ * line says "your last try didn't connect" rather than "you have no subscription".
+ */
+const NO_SUB_KEY = 'af:apple-music:no-subscription'
+
+function readNoSubscription(): boolean {
+  try {
+    return window.localStorage.getItem(NO_SUB_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeNoSubscription(on: boolean): void {
+  try {
+    if (on) window.localStorage.setItem(NO_SUB_KEY, '1')
+    else window.localStorage.removeItem(NO_SUB_KEY)
+  } catch {
+    /* not remembered — the full Apple side shows next time, which is fine */
+  }
+}
+
 type YtHit = { videoId: string; title: string; channel: string; thumb: string | null }
 type YtNote = { key: AppMusicCopyKey; q?: string }
 type YtSearch = { query: string; hits: YtHit[]; note: YtNote | null }
@@ -100,6 +128,7 @@ export function MusicPanel() {
   const [ytQuery, setYtQuery] = useState(() => lastYtSearch?.query ?? '')
   const [ytSearch, setYtSearch] = useState<YtSearch | null>(() => lastYtSearch)
   const [ytSearching, setYtSearching] = useState(false)
+  const [appleNoSub, setAppleNoSub] = useState(false)
   const screenRef = useRef<HTMLDivElement | null>(null)
 
   const searchYouTube = async (e: FormEvent) => {
@@ -121,13 +150,36 @@ export function MusicPanel() {
   }
 
   useEffect(() => {
+    const noSub = readNoSubscription()
+    setAppleNoSub(noSub)
     try {
       const saved = window.localStorage.getItem(SOURCE_KEY)
-      if (saved === 'apple' || saved === 'youtube') setSource(saved)
+      // Apple cannot play for this device's Apple ID, so open on what can.
+      if (saved === 'youtube' || (saved === 'apple' && !noSub)) setSource(saved)
     } catch {
       /* storage blocked — default to YouTube */
     }
   }, [])
+
+  // A failed connect is remembered on this device; a successful one forgets it.
+  const appleMsgCode = snap.appleMsg?.code ?? null
+  useEffect(() => {
+    if (appleMsgCode === 'connect-failed') {
+      writeNoSubscription(true)
+      setAppleNoSub(true)
+    }
+  }, [appleMsgCode])
+  useEffect(() => {
+    if (snap.appleStatus === 'ready') {
+      writeNoSubscription(false)
+      setAppleNoSub(false)
+    }
+  }, [snap.appleStatus])
+
+  const retryApple = () => {
+    writeNoSubscription(false)
+    setAppleNoSub(false)
+  }
 
   const chooseSource = (next: Source) => {
     setSource(next)
@@ -290,8 +342,13 @@ export function MusicPanel() {
             {ytSearch ? (
               <div className="af-amp-found">
                 <div className="af-amp-found-head">
+                  {/* Only above real results: a note already says what happened. */}
                   <span>
-                    {t('resultsFor')} <b>“{ytSearch.query}”</b>
+                    {ytSearch.note ? null : (
+                      <>
+                        {t('resultsFor')} <b>“{ytSearch.query}”</b>
+                      </>
+                    )}
                   </span>
                   <button type="button" className="af-amp-linkbtn" onClick={clearYouTubeSearch}>
                     {t('clear')}
@@ -402,9 +459,20 @@ export function MusicPanel() {
               </div>
             ) : null}
 
+            {appleNoSub && snap.appleStatus === 'signed-out' ? (
+              <div className="af-amp-connect" data-testid="apple-no-subscription">
+                <p className="af-amp-msg">{t('appleNoSubscription')}</p>
+                <button type="button" className="af-amp-chip" onClick={retryApple}>
+                  {t('appleTryAgain')}
+                </button>
+              </div>
+            ) : null}
+
             {/* Search works BEFORE connecting: Apple's catalog only needs the app's own
                 key. Signing in is needed to PLAY, so tapping a result asks for it then. */}
-            {snap.appleStatus === 'signed-out' || snap.appleStatus === 'connecting' || snap.appleStatus === 'ready' ? (
+            {(snap.appleStatus === 'signed-out' && !appleNoSub) ||
+            snap.appleStatus === 'connecting' ||
+            snap.appleStatus === 'ready' ? (
               <>
                 <form
                   role="search"
@@ -491,7 +559,9 @@ export function MusicPanel() {
               </>
             ) : null}
 
-            {snap.appleMsg ? (
+            {/* The no-subscription line already says why a connect failed. */}
+            {snap.appleMsg &&
+            !(appleNoSub && snap.appleStatus === 'signed-out' && snap.appleMsg.code === 'connect-failed') ? (
               <p className="af-amp-error" role="status">
                 {appleMessage(t, snap.appleMsg)}
               </p>

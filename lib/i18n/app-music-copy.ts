@@ -98,6 +98,11 @@ export const APP_MUSIC_COPY = {
     en: 'Apple Music didn’t connect. If Apple showed you a “subscribe” page, this Apple ID doesn’t have an Apple Music subscription, so it can’t play here. YouTube works without one.',
     es: 'Apple Music no se conectó. Si Apple te mostró una página para “suscribirte”, este Apple ID no tiene suscripción a Apple Music, así que no puede reproducir aquí. YouTube funciona sin una.',
   },
+  appleNoSubscription: {
+    en: 'Apple Music needs a subscription to play here, and your last try didn’t connect. YouTube works without one.',
+    es: 'Apple Music necesita una suscripción para reproducir aquí, y tu último intento no se conectó. YouTube funciona sin una.',
+  },
+  appleTryAgain: { en: 'Try Apple Music again', es: 'Probar Apple Music de nuevo' },
   appleSearchFailed: { en: 'Search didn’t work. Try again.', es: 'La búsqueda no funcionó. Inténtalo de nuevo.' },
   applePlayFailed: { en: 'That didn’t play.', es: 'Eso no se reprodujo.' },
 
