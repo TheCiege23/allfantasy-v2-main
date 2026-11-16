@@ -141,11 +141,20 @@ The owner reviewed and confirmed each item separately:
 These confirmations complete the design review. They do not record production rollout,
 Phase 2 authorization, or completion of the outstanding Phase 0 sample-dependent checks.
 
+## PR preparation
+
+The implementation branch was rebased onto current main **79457ea68**. There was no
+schema or migration overlap in the intervening main commits. The PR includes a dedicated
+**LeagueSafe Phase 1 migration and ledger** CI job using an ephemeral PostgreSQL 16
+service and the database suite's guarded local URL. It applies the exact migrations and
+runs the arithmetic/constraint tests without Neon, Railway, production credentials, or
+any deployment step. The usual required PR checks remain unchanged. Live CI results
+are tracked on the PR rather than treated as completed by this document.
+
 ## Remaining rollout checks
 
-1. Prepare the review PR from the implementation branch, check it against current main,
-   and resolve any schema/migration overlap before rerunning affected validation. The
-   present local commit has not been published or checked by PR CI.
+1. Review the PR against current main and resolve any later schema/migration overlap
+   before rerunning affected validation.
 2. Run the PR's required checks, including generated-client/type compatibility and the
    existing capture/security regressions. Inspect the exact final diff for Phase 1 scope.
 3. Inspect the intended production database and pending migration history read-only.
@@ -174,6 +183,7 @@ Phase 2 requires a separate go-ahead.
 - `__tests__/leaguesafe-dues-ledger.test.ts`
 - `__tests__/leaguesafe-phase1-db.test.ts`
 - `docs/leaguesafe/phase-1-review.md`
+- `.github/workflows/leaguesafe-phase1-db.yml`
 
 The Phase 0 capture endpoint, Apps Script, Gmail labels, production records, and parser
 files were not changed. No private EML sample or financial email content is in this patch.
