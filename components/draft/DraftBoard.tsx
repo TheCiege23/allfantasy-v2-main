@@ -14,6 +14,8 @@ type LiveDraftBoardProps = {
   isDynasty: boolean
   isCommissioner: boolean
   formatType?: string
+  /** `League.leagueType`; picks the room's league-type accent. */
+  leagueType?: string | null
   /** Snake redraft live room — enables premium chrome from `/draft/[id]/snake`. */
   presentationVariant?: 'default' | 'redraft_snake'
   /**
@@ -47,6 +49,7 @@ export function DraftBoard(props: DraftBoardProps) {
       isDynasty={props.isDynasty}
       isCommissioner={props.isCommissioner}
       formatType={props.formatType}
+      leagueType={props.leagueType ?? null}
       presentationVariant={props.presentationVariant ?? 'default'}
       initialSnapshot={props.initialSnapshot ?? null}
       initialPoolReadiness={props.initialPoolReadiness ?? null}

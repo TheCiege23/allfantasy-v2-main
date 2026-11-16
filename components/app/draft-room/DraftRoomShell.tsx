@@ -1,12 +1,13 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, LayoutGrid, MessageCircle, ListOrdered, User, Sparkles, Users, Shield, Radar, MoreHorizontal } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cn } from '@/lib/utils'
 import type { TraySnap } from '@/lib/draft-room/mobileTraySnap'
 import { DraftMobileTray } from './DraftMobileTray'
 import { DRAFT_PHONE_LAYOUT_QUERY } from '@/lib/draft-room/phoneDraftLayout'
+import type { LeagueAccent } from '@/lib/draft-room/leagueAccent'
 import './draft-mobile.css'
 import './draft-desktop.css'
 import './draft-workspace.css'
@@ -36,6 +37,11 @@ type DraftRoomShellProps = {
    * skin: the same layout on the ink/vault ground. Redraft rooms never receive it.
    */
   surfaceVariant?: 'default' | 'redraft_snake' | 'dynasty'
+  /**
+   * Room v2 league-type accent. Sets `--af-league-accent` on the room (the on-the-clock tile reads
+   * it) and draws a thin accent stripe under the header. Omitted: the room's cyan, no stripe.
+   */
+  leagueAccent?: LeagueAccent | null
   /** Reserve usable desktop pool space for drafts with a pick-order board. */
   playerSpacePriority?: boolean
   topBar: ReactNode
@@ -107,6 +113,7 @@ const MOBILE_TABS = [
 
 export function DraftRoomShell({
   surfaceVariant = 'default',
+  leagueAccent = null,
   playerSpacePriority = false,
   topBar,
   managerStrip,
@@ -269,11 +276,23 @@ export function DraftRoomShell({
       data-board-size={boardSize}
       data-player-space-priority={playerSpacePriority ? 'true' : 'false'}
       className={`draft-touch-room af-draft-dark ${surfaceClass}`}
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        ...(leagueAccent ? ({ '--af-league-accent': leagueAccent.color } as CSSProperties) : null),
+      }}
       data-testid="draft-room-shell"
       data-dynasty-skin={surfaceVariant === 'dynasty' ? 'true' : undefined}
+      data-league-type={leagueAccent?.concept}
     >
       {topBar}
+      {leagueAccent ? (
+        <div
+          aria-hidden
+          className="h-0.5 shrink-0"
+          style={{ background: `linear-gradient(90deg, ${leagueAccent.color}, color-mix(in srgb, ${leagueAccent.color} 30%, transparent) 55%, transparent)` }}
+          data-testid="draft-league-accent-strip"
+        />
+      ) : null}
       {managerStrip}
 
       {/* Desktop — premium 4-zone + bottom dock */}

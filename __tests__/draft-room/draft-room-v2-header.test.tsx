@@ -89,7 +89,8 @@ describe('room v2 on-the-clock tile', () => {
   it('the current empty pick says "On the clock" on a cyan tile', () => {
     render(<DraftBoardCell pick={pick as never} isEmpty isCurrentPick />)
     const cell = screen.getByTestId('draft-board-cell-82')
-    expect(cell.className).toContain('ring-cyan-300')
+    // The league-type accent (room v2), cyan when the room sets none.
+    expect(cell.className).toContain('ring-[color:var(--af-league-accent,#67e8f9)]')
     expect(cell.className).not.toContain('f6c445')
     expect(screen.getByTestId('draft-board-cell-on-clock-82').textContent).toBe('On the clock')
   })

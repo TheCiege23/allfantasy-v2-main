@@ -57,6 +57,8 @@ export type LiveDraftRouteContext = {
   isDynasty: boolean
   isCommissioner: boolean
   formatType?: string
+  /** `League.leagueType` as stored (room v2 league accents normalize it). */
+  leagueType: string | null
   routeType: DraftRouteType
   draftType: string
   status: string
@@ -157,6 +159,7 @@ export async function resolveLiveDraftContextByDraftId(
     isDynasty: isDynastyLeague(resolvedLeague),
     isCommissioner: userId ? await isCommissioner(resolvedLeague.id, userId).catch(() => false) : false,
     formatType,
+    leagueType: resolvedLeague.leagueType ?? null,
     routeType,
     draftType: String(session.draftType ?? 'snake'),
     status: String(session.status ?? 'pre_draft'),

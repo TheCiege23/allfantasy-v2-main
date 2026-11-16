@@ -11,6 +11,9 @@ function E2EDraftRoomHarnessInner() {
   const sport = normalizeToSupportedSport(searchParams.get('sport'))
   const isCommissioner = searchParams.get('commissioner') !== '0'
   const e2eRoom = searchParams.get('e2eRoom') === '1'
+  /** Room v2 league accents: `?leagueType=guillotine` etc. `dynasty` also turns on the dynasty room. */
+  const leagueType = searchParams.get('leagueType')
+  const isDynasty = leagueType === 'dynasty'
 
   const [entered, setEntered] = useState(e2eRoom)
 
@@ -40,9 +43,10 @@ function E2EDraftRoomHarnessInner() {
           leagueId={leagueId}
           leagueName={`E2E ${leagueId}`}
           sport={sport}
-          isDynasty={false}
+          isDynasty={isDynasty}
           isCommissioner={isCommissioner}
-          presentationVariant="redraft_snake"
+          leagueType={leagueType}
+          presentationVariant={isDynasty ? 'default' : 'redraft_snake'}
         />
       )}
     </div>
