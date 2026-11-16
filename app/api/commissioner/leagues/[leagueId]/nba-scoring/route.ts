@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 /**
  * [NEW] app/api/commissioner/leagues/[leagueId]/nba-scoring/route.ts
@@ -14,7 +15,6 @@ import {
   getNbaScoringPresets,
 } from '@/lib/nba-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 import { applySportScoringToLeague } from '@/lib/league/applySportScoring'
 
 const featureGate = new FeatureGateService()
@@ -38,7 +38,7 @@ export async function GET(
 
   const config = await getLeagueNbaScoringConfig(leagueId)
   const presets = getNbaScoringPresets()
-  const isCommissioner = await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id)
+  const isCommissioner = await canCommissionerAct(leagueId, session.user.id, 'scoring')
 
   let isPremium = false
   try {

@@ -4,10 +4,10 @@
  * Only works when current on-the-clock roster is orphan and orphanTeamAiManagerEnabled is on.
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { executeDraftPickForOrphan } from '@/lib/orphan-ai-manager/OrphanAIManagerService'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
@@ -29,7 +29,7 @@ export async function POST(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

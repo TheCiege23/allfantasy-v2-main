@@ -31,6 +31,7 @@ vi.mock('@/lib/prisma', () => ({
     $transaction: vi.fn(async (ops: unknown[]) => Promise.all(ops)),
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromRole(() => h.role))
 
 import { PATCH } from '@/app/api/commissioner/leagues/[leagueId]/teams/route'
 

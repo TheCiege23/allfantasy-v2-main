@@ -1,6 +1,7 @@
 /**
  * [UPDATED] GET/PUT: Commissioner roster settings (multi-sport: NFL + NBA).
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -35,7 +36,6 @@ import {
   leagueSupportsTaxiDevy,
   isTaxiDevySlot,
 } from '@/lib/league-creation/prospectStashPolicy'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,7 +129,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     return NextResponse.json({ error: `Roster settings not yet available for ${league.sport}` }, { status: 400 })
   }
 
-  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'rosters')
+  if (refused) return refused
   const locked = await settingsLockedResponse(leagueId, 'rosters')
   if (locked) return locked
 

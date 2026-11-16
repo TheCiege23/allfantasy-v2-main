@@ -9,12 +9,12 @@
  *
  * ⚠ Imported leagues are refused: their team names come from the host platform on every sync.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { checkTeamName } from '@/lib/league/myTeamEdit'
 import { logAction } from '@/server/services/auditService'
@@ -39,8 +39,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ le
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { leagueId } = await params
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, userId, 'league')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })

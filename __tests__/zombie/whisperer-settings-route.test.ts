@@ -31,6 +31,8 @@ vi.mock('@/lib/prisma', () => ({
     zombieFreeRewardConfig: { findUnique: h.zombieFreeRewardConfigFindUnique },
   },
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 function patch(changes: Record<string, unknown>) {
   return new Request('http://localhost/api/zombie/settings', {

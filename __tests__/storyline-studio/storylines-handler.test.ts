@@ -18,6 +18,8 @@ vi.mock('@/lib/storyline-studio/storylineService', () => ({
   saveStudioSettings: saveMock,
   postStoryline: postMock,
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 const HANDLER = '../../app/api/leagues/[leagueId]/storylines/handler'
 const ctx = { params: Promise.resolve({ leagueId: 'l1' }) }

@@ -26,6 +26,7 @@ vi.mock('@/lib/waiver-wire', () => ({
 vi.mock('@/lib/waiver-wire/process-engine', () => ({ processWaiverClaimsForLeague: vi.fn() }))
 vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ setWaiverProcessingLocked: vi.fn(), refreshLeagueWaiverNextRunAt: vi.fn() }))
 vi.mock('@/lib/league-rules-explainer/publishRuleChanges', () => ({ publishRuleChangesEvent: h.publish }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessAllowAll())
 
 import { PUT } from '@/app/api/commissioner/leagues/[leagueId]/waivers/route'
 import { waiverRulesFromEffective, ruleSnapshotFromLeague, type RulesLeagueRow } from '@/lib/league-rules-explainer/snapshot'

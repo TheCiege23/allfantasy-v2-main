@@ -1,6 +1,7 @@
 /**
  * [NEW] GET/PUT: Commissioner MLB scoring config.
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,7 +9,6 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueMlbScoringConfig, getMlbScoringPresets } from '@/lib/mlb-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { resolveLeagueCategories } from '@/lib/category-scoring/leagueScoringType'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 import { applySportScoringToLeague } from '@/lib/league/applySportScoring'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const categoryPresetId = (league.settings as Record<string, unknown>)?.category_preset_id ?? null
   // The league's own (possibly edited) category list, so the panel never shows the preset's instead.
   const categoryLabels = resolveLeagueCategories(league.settings, categoryPresetId)?.map((c) => c.label) ?? null
-  return NextResponse.json({ scoringMode: (league.settings as Record<string, unknown>)?.scoring_mode ?? 'points', categoryPresetId, categoryLabels, config, presets, isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id), isPremium })
+  return NextResponse.json({ scoringMode: (league.settings as Record<string, unknown>)?.scoring_mode ?? 'points', categoryPresetId, categoryLabels, config, presets, isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'scoring'), isPremium })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {

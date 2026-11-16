@@ -58,6 +58,7 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromOwner(() => 'commissioner-1'))
 
 describe('C2C commissioner renew / continue-to-next-year', () => {
   beforeEach(() => {

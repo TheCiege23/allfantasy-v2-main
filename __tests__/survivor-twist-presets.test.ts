@@ -56,6 +56,8 @@ vi.mock('@/lib/prisma', () => ({ prisma: m.db }))
 vi.mock('@/lib/survivor/survivorAccessControl', async original => ({ ...await original<typeof import('@/lib/survivor/survivorAccessControl')>(), resolveSurvivorAccessContext: m.access }))
 vi.mock('@/lib/survivor/survivorIdolConfigService', () => ({ getSurvivorIdolSetupView: m.view, isSurvivorDraftStarted: m.started, saveSurvivorIdolConfig: m.saveIdol }))
 vi.mock('@/lib/survivor/SurvivorLeagueConfig', async original => ({ ...await original<typeof import('@/lib/survivor/SurvivorLeagueConfig')>(), upsertSurvivorConfig: m.upsertConfig }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { buildSurvivorAccessContextFromSnapshot } from '@/lib/survivor/survivorAccessControl'
 import { POST } from '@/server/api-route-modules/league-survivor/foundation/route'

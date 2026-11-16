@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * POST: Run weighted lottery. Optionally finalize (write slotOrder to draft session).
@@ -8,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { runWeightedLottery } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
@@ -42,7 +42,7 @@ export async function POST(
   const seed = typeof body.seed === 'string' && body.seed.trim() ? body.seed.trim() : `lottery-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 
   if (finalize) {
-    const commissioner = await isCommissioner(leagueId, userId)
+    const commissioner = await canCommissionerAct(leagueId, userId, 'league')
     if (!commissioner) return NextResponse.json({ error: 'Commissioner only to finalize lottery' }, { status: 403 })
   }
 

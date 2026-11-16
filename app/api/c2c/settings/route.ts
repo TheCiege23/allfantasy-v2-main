@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest) {
   const leagueId = typeof body?.leagueId === 'string' ? body.leagueId.trim() : ''
   if (!body || !leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const current = await prisma.c2CLeague.findUnique({ where: { leagueId } })

@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   const leagueId = body.leagueId?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const existing = await prisma.devyLeague.findUnique({ where: { leagueId } })
@@ -103,7 +103,7 @@ export async function PATCH(req: NextRequest) {
   const leagueId = typeof body?.leagueId === 'string' ? body.leagueId.trim() : ''
   if (!body || !leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Commissioner only' }, { status: gate.status })
 
   const current = await prisma.devyLeague.findUnique({ where: { leagueId } })

@@ -36,6 +36,7 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: mocks.leagueFind },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => mocks.assertCommissioner))
 
 const PARAMS = { params: Promise.resolve({ leagueId: 'lg1' }) }
 const route = () => import('@/app/api/commissioner/leagues/[leagueId]/idp/cap-config/route')

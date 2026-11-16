@@ -244,7 +244,7 @@ export async function loadCommissionerHealthDecisionSlice(
   }
 
   try {
-    const access = await assertLeagueCommissioner(leagueId, userId)
+    const access = await assertLeagueCommissioner(leagueId, userId, 'view')
     if (!access?.ok) return notEntitled()
 
     // Safe to assert: the line above verified it. The loader filters on this flag.

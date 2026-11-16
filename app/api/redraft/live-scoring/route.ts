@@ -92,7 +92,7 @@ export async function POST(request: Request) {
   const resolvedLeagueId = await leagueIdFromInput({ seasonId: body.seasonId, leagueId: body.leagueId })
   if (!resolvedLeagueId) return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(resolvedLeagueId, userId)
+  const gate = await assertLeagueCommissioner(resolvedLeagueId, userId, 'scoring')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const parsedWeek = parseOptionalRedraftPositiveInteger(body.week, 'week')

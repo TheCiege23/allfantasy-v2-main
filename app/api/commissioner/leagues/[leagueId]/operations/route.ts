@@ -1,8 +1,8 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { ADJUSTMENT_ERROR_TEXT } from '@/lib/score-adjustments/scoreAdjustments'
 import {
@@ -37,11 +37,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
   const view = req.nextUrl.searchParams.get('view')
   if (view === 'stat_corrections') return NextResponse.json(await readStatCorrections(params.leagueId))
   if (view !== 'score_adjustments') return NextResponse.json({ error: 'Unknown view. Use: score_adjustments, stat_corrections' }, { status: 400 })
@@ -61,11 +58,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   const action = String(body?.action || '').toLowerCase()

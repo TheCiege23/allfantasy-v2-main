@@ -2,12 +2,12 @@
  * POST: Submit a pick. Validates duplicate, slot, then persists. Realtime: client should re-GET session after.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { withTimedRoute } from '@/lib/logging/withTimedRoute'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, canSubmitPickForRoster, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { recordCommissionerDraftAction, refuseIfSleeperMirrored } from '@/lib/draft-room/commissionerDraftActions'
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import {
@@ -125,7 +125,7 @@ export const POST = withTimedRoute('draft_pick', async (
   let effectiveRosterId = source === 'commissioner' ? expectedRosterId : (rosterId ?? expectedRosterId)
 
   // Check if user is commissioner - if so, allow drafting for any roster
-  const isComm = await isCommissioner(leagueId, userId)
+  const isComm = await canCommissionerAct(leagueId, userId, 'league')
   if (source === 'commissioner' && !isComm) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

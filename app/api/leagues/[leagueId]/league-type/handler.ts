@@ -14,11 +14,11 @@
  * standing. Reading is open to any member so the prompt can be shown.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { leagueTypeState, confirmLeagueType } from '@/lib/career/leagueTypeConfirmation'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   try {
     const [state, commissioner] = await Promise.all([
       leagueTypeState(gate.leagueId),
-      isCommissioner(gate.leagueId, gate.userId),
+      canCommissionerAct(gate.leagueId, gate.userId, 'view'),
     ])
     if (!state) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -66,7 +66,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
   const gate = await requireMember(ctx)
   if (gate instanceof NextResponse) return gate
 
-  const commissioner = await isCommissioner(gate.leagueId, gate.userId)
+  const commissioner = await canCommissionerAct(gate.leagueId, gate.userId, 'league')
   if (!commissioner) {
     return NextResponse.json(
       { error: 'Only the commissioner can confirm a league format' },

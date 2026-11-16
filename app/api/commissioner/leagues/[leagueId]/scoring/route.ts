@@ -1,9 +1,9 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { replaceLeagueScoringOverrides } from '@/lib/scoring-defaults/ScoringOverrideService'
 import { normalizeScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
@@ -58,10 +58,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const role = await getLeagueRole(params.leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'scoring')
+  if (refused) return refused
   const locked = await settingsLockedResponse(params.leagueId, 'scoring')
   if (locked) return locked
 

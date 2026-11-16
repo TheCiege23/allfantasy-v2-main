@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
 
@@ -56,8 +58,8 @@ describe('Slice 4 — commissioner-only audit log read endpoint', () => {
     expect(src).toMatch(/draftPickAuditLog\.findMany/)
   })
 
-  it('uses isCommissioner from canonical permissions module', () => {
-    expect(src).toMatch(/import \{ isCommissioner \} from '@\/lib\/commissioner\/permissions'/)
+  it('asks the shared commissioner rule (lib/league/commissionerAccess.ts)', () => {
+    expect(src).toMatch(/import \{ canCommissionerAct \} from '@\/lib\/league\/commissionerAccess'/)
   })
 })
 

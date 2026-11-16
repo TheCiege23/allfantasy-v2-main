@@ -6,6 +6,7 @@
  * rule. Survivor tribes keep 2/4/8 and are not validated as divisions.
  * Handles AI naming requests.
  */
+import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 import { logAction } from '@/server/services/auditService'
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,7 +27,6 @@ import {
   type DivisionPlayoffRule,
   type LeagueDivisionConfig,
 } from '@/lib/league/divisions/leagueDivisions'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,7 +104,7 @@ export async function GET(
 
   return NextResponse.json({
     config,
-    isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id),
+    isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'league'),
     isSurvivor,
     sport: league.sport,
     leagueVariant: league.leagueVariant,
@@ -124,7 +124,8 @@ export async function PUT(
     select: { userId: true, settings: true, leagueVariant: true, teams: { select: { id: true, teamName: true, ownerName: true, avatarUrl: true, lifecycleState: true } } },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
   // 🛑 Divisions decide the schedule and playoff seeding, and this save skipped the settings lock and the league log
   // (2026-11-15). They are locked with the playoffs.
   const locked = await settingsLockedResponse(leagueId, 'playoffs')

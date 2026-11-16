@@ -2389,6 +2389,14 @@ export const translationsEsParity: Record<string, string> = {
   "sharedScoring.outcome.needs_confirmation": "En temporada — confirma para cambiarla",
   "sharedScoring.outcome.refused": "No se puede cambiar ahora",
   "sharedScoring.outcome.premium_required": "Requiere AF Commissioner",
+  "coCommissioner.limitedBanner": "Eres co-comisionado en esta liga. Puedes cambiar: {{areas}}. Las demás áreas son solo de lectura: el comisionado principal decide qué pueden cambiar los co-comisionados.",
+  "coCommissioner.none": "nada todavía (solo lectura)",
+  "coCommissioner.area.scoring": "Puntuación",
+  "coCommissioner.area.rosters": "Plantillas",
+  "coCommissioner.area.trades": "Intercambios",
+  "coCommissioner.area.money": "Dinero",
+  "coCommissioner.area.chat": "Chat",
+  "coCommissioner.area.league": "Configuración de la liga",
   "commControl.rebuildScheduleNote": "Las semanas que ya empezaron no cambian. Las demás reciben nuevos matchups y el cambio queda en el registro de la liga.",
 
   // ─── LEAGUE DUES TRACKER ───

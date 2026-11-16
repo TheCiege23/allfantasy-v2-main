@@ -16,6 +16,7 @@
  * order, and the preview stays free. A config already saved enabled keeps seating drafts after a
  * plan lapses, like the live order's automation.
  */
+import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -29,7 +30,6 @@ import {
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { publishRookieDraftOrderChange } from '@/lib/league-rules-explainer/rookieOrderChange'
 import { isLeagueEntitledToLiveRookieOrder } from '@/lib/rookie-order/liveRookieOrderService'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,7 +63,7 @@ export async function GET(
     return NextResponse.json({ error: 'Only available for Dynasty, C2C, Devy, and Keeper leagues' }, { status: 400 })
   }
 
-  const isCommissioner = await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id)
+  const isCommissioner = await canCommissionerAct(leagueId, session.user.id, 'league')
   const [savedConfig, canAutomate] = await Promise.all([
     getRookieDraftOrderConfig(leagueId),
     isCommissioner ? isLeagueEntitledToLiveRookieOrder(league.userId) : Promise.resolve(false),
@@ -99,7 +99,8 @@ export async function PUT(
     select: { userId: true, isDynasty: true, leagueVariant: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
 
   if (!isDynastyLike(league)) {
     return NextResponse.json({ error: 'Only available for Dynasty, C2C, Devy, and Keeper leagues' }, { status: 400 })
