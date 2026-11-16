@@ -96,6 +96,26 @@ export const YOUTUBE_STATIONS: YouTubeStation[] = [
     source: { kind: 'playlist', listId: 'PLc30fhmgZQgV4w1mYm1dXsHPGrLGTaszA' },
   },
   {
+    /*
+     * Talk, not music. Apples & Ginos Fantasy Hockey (channel
+     * UCPtZxGWccCseAG7bPcbfFKA), chosen 2026-11-15 over two shows that have gone
+     * quiet: Fantasy Hockey Podcast's last upload is literally its "Farewell",
+     * and Five Hole Fantasy Hockey's last episode was Sept 11, two months into
+     * the NHL season.
+     * ⚠ NOT ONE OF THEIR "PODCAST" PLAYLISTS — all three stop at the 2024-25
+     * season, so the station would open on an episode two seasons old. This is
+     * the channel's own LONG-VIDEOS uploads list, "UULF" + the channel id after
+     * "UC": YouTube keeps it newest-first by itself, and unlike plain "UU…" it
+     * leaves out Shorts. It also leaves out their live streams (the "Puzzling
+     * Players" show), which is the trade for not playing 30-second clips.
+     * First entry on the day: "Week 8 Waiver Wire | Fantasy Hockey 2026-27".
+     */
+    id: 'nhl-podcast',
+    label: 'Hockey podcast',
+    channel: 'Apples & Ginos',
+    source: { kind: 'playlist', listId: 'UULFPtZxGWccCseAG7bPcbfFKA' },
+  },
+  {
     id: 'hiphop-hype',
     label: 'Hip-hop hype',
     channel: 'Warner Records',
