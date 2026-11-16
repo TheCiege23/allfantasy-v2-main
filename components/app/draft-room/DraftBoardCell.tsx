@@ -256,6 +256,17 @@ function DraftBoardCellInner({
       (isEmpty && (isCollegeRound || isDevyRound)),
   )
 
+  /*
+   * Tile buttons. Empty tiles keep trade / history bottom-right. A filled tile's text runs to the
+   * bottom edge, and below md these buttons are always visible (no hover on touch), so there they
+   * move to the top-left corner, which a filled tile leaves free (the pick number is top-right).
+   */
+  const topLeftStart = onCommissionerEditPick ? 'left-6' : 'left-0.5'
+  const tradeSpot = isEmpty ? 'bottom-0.5 right-0.5' : `top-0.5 ${topLeftStart}`
+  const historySpot = isEmpty
+    ? onTradeFromCell ? 'bottom-0.5 right-6' : 'bottom-0.5 right-0.5'
+    : `top-0.5 ${onTradeFromCell ? (onCommissionerEditPick ? 'left-[46px]' : 'left-6') : topLeftStart}`
+
   const nameParts = (pick.playerName ?? '').trim().split(/\s+/)
   const firstName = nameParts.length > 1 ? nameParts[0] : ''
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : nameParts[0] ?? ''
@@ -308,7 +319,7 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-trade-${pick.overall}`}
           title={t('draftRoom.board.offerPickTrade')}
           aria-label={t('draftRoom.board.offerPickTradeAria')}
-          className="absolute bottom-0.5 right-0.5 z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+          className={`absolute ${tradeSpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <ArrowLeftRight className="h-3 w-3" />
         </button>
@@ -323,7 +334,7 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-history-${pick.overall}`}
           title="View trade history for this pick"
           aria-label="View trade history for this pick"
-          className={`absolute ${onTradeFromCell ? 'bottom-0.5 right-6' : 'bottom-0.5 right-0.5'} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-amber-200 opacity-80 transition duration-150 hover:bg-black/65 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
+          className={`absolute ${historySpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-amber-200 opacity-80 transition duration-150 hover:bg-black/65 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <History className="h-3 w-3" />
         </button>
