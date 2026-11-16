@@ -760,7 +760,7 @@ function DraftBoardInner({
                   ) : null}
                   {keeperCountByRoster.get(entry.rosterId) ? (
                     <span
-                      className="absolute right-0.5 top-0 inline-flex items-center gap-0.5 rounded-full bg-amber-400/15 px-1 text-[10px] font-bold leading-[14px] text-amber-300"
+                      className="absolute right-0.5 top-0 inline-flex items-center gap-0.5 rounded-full bg-amber-400/15 px-1 text-[11px] font-bold leading-[14px] text-amber-300"
                       title={`${keeperCountByRoster.get(entry.rosterId)} kept`}
                       data-testid={`draft-board-team-header-keepers-${entry.slot}`}
                     >
