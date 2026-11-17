@@ -104,3 +104,70 @@ export function buildNextGameMap(
   }
   return best
 }
+
+/** The subset of `SportsGame` the kickoff correction reads. */
+export type KickoffRow = {
+  homeTeam: string | null
+  awayTeam: string | null
+  startTime: Date | null
+  /** When the provider last wrote this row. A row without one never corrects another. */
+  fetchedAt?: Date | null
+}
+
+/** How far apart two rows of one pairing may sit and still be the same game. */
+const SAME_FIXTURE_MS = 7 * 86_400_000
+
+/**
+ * Each row's kickoff, taken from the most recently fetched row for the SAME game. Pure.
+ *
+ * ⚠ THE SOURCES REFRESH AT DIFFERENT SPEEDS, SO WHEN THE LEAGUE MOVES A GAME THEY DISAGREE FOR
+ * DAYS. Rolling Insights and API-Sports schedules are re-imported weekly (Monday 03:00 UTC);
+ * TheSportsDB every six hours. Measured on production 2026-11-17, for 2026 week 11, after a
+ * flex swap: Rolling Insights and API-Sports still put PIT @ PHI at 4:25 PM ET and JAX @ NYG at
+ * 1:00 PM; TheSportsDB, fetched a day and a half later, had them the other way round, and ESPN
+ * agreed with TheSportsDB. Matchup and My Team read only the TYPED rows (TheSportsDB leaves
+ * `seasonType` null) and took the earliest, so both screens showed the stale time with nothing
+ * to say it was stale — and would have until the next weekly import, after the games were played.
+ *
+ * So each row in `rows` keeps its own identity, opponent, venue and season type — the selection
+ * rules callers already rely on are untouched — and only its KICKOFF is replaced by the newest
+ * fetched row in `rows` or `correctors` for the same pairing within a week of it. `correctors`
+ * is where the untyped rows go: they may correct a kickoff, never introduce a game, which keeps
+ * an untyped preseason row out (the August-lock failure `nflRegularSlate` records).
+ *
+ * The pairing is order-insensitive, in case one source files a game home/away the other way.
+ *
+ * Not for lineup LOCKING. `lib/redraft/lineupLock.ts` deliberately locks at each team's EARLIEST
+ * kickoff from any source, which is safe when sources disagree: early, never late. This is for
+ * showing people when the game is.
+ */
+export function withNewestKickoffs<T extends KickoffRow>(
+  rows: readonly T[],
+  correctors: readonly KickoffRow[] = [],
+  fold: (team: string | null) => string | null = normalizeTeamAbbrev,
+): T[] {
+  const pairOf = (r: KickoffRow): string | null => {
+    const a = fold(r.homeTeam)
+    const b = fold(r.awayTeam)
+    return a && b ? [a, b].sort().join('|') : null
+  }
+  const byPair = new Map<string, KickoffRow[]>()
+  for (const r of [...rows, ...correctors]) {
+    const key = r.startTime && r.fetchedAt ? pairOf(r) : null
+    if (key) byPair.set(key, [...(byPair.get(key) ?? []), r])
+  }
+  return rows.map((row) => {
+    const key = row.startTime ? pairOf(row) : null
+    if (!key || !row.startTime) return row
+    const at = row.startTime.getTime()
+    let newest: KickoffRow | null = null
+    for (const other of byPair.get(key) ?? []) {
+      if (Math.abs(other.startTime!.getTime() - at) > SAME_FIXTURE_MS) continue
+      if (!newest || other.fetchedAt!.getTime() > newest.fetchedAt!.getTime()) newest = other
+    }
+    if (!newest || newest.startTime!.getTime() === at) return row
+    // A row fetched no earlier than the newest one is already the best word on this game.
+    if (row.fetchedAt && row.fetchedAt.getTime() >= newest.fetchedAt!.getTime()) return row
+    return { ...row, startTime: newest.startTime }
+  })
+}

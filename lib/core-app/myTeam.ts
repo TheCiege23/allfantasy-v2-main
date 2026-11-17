@@ -31,7 +31,7 @@ import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
 import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
-import { buildNextGameMap } from './nextGameMap'
+import { buildNextGameMap, withNewestKickoffs } from './nextGameMap'
 import { collegeFixturesByPlayerTeam } from './collegeNextGame'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { displayPosition, inferSlotLabel } from './positionLabels'
@@ -694,8 +694,11 @@ async function resolvePlayers(
                * the exhibition game every time. Every starter was badged
                * PRESEASON and the lineup lock read "Locked" against a date in
                * mid-August, for a week that had not been played.
+               *
+               * Untyped rows are read too, but only to CORRECT a typed fixture's
+               * kickoff (see `withNewestKickoffs`); they are dropped before the map.
                */
-              seasonType: week.seasonType,
+              OR: [{ seasonType: week.seasonType }, { seasonType: null }],
             },
             orderBy: { startTime: 'asc' },
             take: 400,
@@ -705,6 +708,7 @@ async function resolvePlayers(
               startTime: true,
               seasonType: true,
               venue: true,
+              fetchedAt: true,
             },
           })
           .catch(() => [])
@@ -715,7 +719,13 @@ async function resolvePlayers(
    * composed player carry — see `buildNextGameMap` for what the translation
    * layer this replaced was costing.
    */
-  const nextGameFor = buildNextGameMap(weekGames, rosterTeams)
+  const nextGameFor = buildNextGameMap(
+    withNewestKickoffs(
+      weekGames.filter((g) => g.seasonType === week?.seasonType),
+      weekGames,
+    ),
+    rosterTeams,
+  )
 
   const injuryById = await injuryRead
 
