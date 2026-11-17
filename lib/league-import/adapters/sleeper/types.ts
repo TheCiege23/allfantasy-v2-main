@@ -143,6 +143,7 @@ export interface SleeperImportPayload {
   matchupsByWeek?: { week: number; matchups: SleeperMatchupRaw[] }[]
   transactions?: SleeperTransactionRaw[]
   draftPicks?: SleeperDraftPickRaw[]
+  drafts?: Array<{ draft_id: string; status?: string; start_time?: number }>
   /** Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`). */
   tradedPicks?: SleeperTradedPickRaw[]
   playerMap?: Record<string, { name: string; position: string; team: string }>

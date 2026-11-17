@@ -29,6 +29,10 @@ export type NotificationCategoryId =
   | "career_milestones"
   | "breaking_news"
   | "live_game_alerts"
+  | "imported_scoring"
+  | "imported_lineup"
+  | "imported_trade"
+  | "imported_draft"
 
 export interface NotificationChannelPrefs {
   enabled: boolean
@@ -125,7 +129,16 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "career_milestones",
   "breaking_news",
   "live_game_alerts",
+  "imported_scoring",
+  "imported_lineup",
+  "imported_trade",
+  "imported_draft",
 ]
+
+/** Imported activity has independent controls; it must not enable native AF alerts. */
+export const IMPORTED_NOTIFICATION_CATEGORY_IDS = [
+  "imported_scoring", "imported_lineup", "imported_trade", "imported_draft",
+] as const satisfies readonly NotificationCategoryId[]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
   // Chimmy's two weekly messages: the waiver check on Tuesday (lib/chimmy-alerts/waiverCheck.ts) and
@@ -181,6 +194,10 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // big playoff checkpoints (halftime, 7th inning, end of a period, final) for the sports you play.
   // Teams you follow get every moment under "Teams you follow — scores" instead.
   live_game_alerts: "Live game moments — close games, OT & playoff updates",
+  imported_scoring: "Imported league scoring",
+  imported_lineup: "Imported league lineup changes",
+  imported_trade: "Imported league completed trades",
+  imported_draft: "Imported league draft activity",
 }
 
 /**
