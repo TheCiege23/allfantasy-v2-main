@@ -29,6 +29,8 @@ export default function LeagueTypesHubPage() {
             {LEAGUE_TYPES_HUB.intro}
           </p>
 
+          <Link href="/league-types/faq" className="mt-6 inline-flex min-h-11 items-center rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold underline underline-offset-4">Compare formats, rules & commissioner settings</Link>
+
           <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {LEAGUE_TYPE_PAGES.map((page) => {
               const meta = getLeagueTypeDemoMeta(page)

@@ -724,6 +724,7 @@ export function LandingV4({
             <Link href="/core/players">{c.footer.playerFinder}</Link>
             <Link href="/blog">{c.footer.blog}</Link>
             <Link href="/core">{c.footer.dashboard}</Link>
+            <Link href="/league-types/faq">{c.footer.leagueTypesFaq}</Link>
             <Link href="/core/partners">{c.nav.partners}</Link>
             <Link href="/privacy">{c.footer.privacy}</Link>
             <Link href="/terms">{c.footer.terms}</Link>
