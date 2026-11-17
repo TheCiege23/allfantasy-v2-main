@@ -64,7 +64,12 @@ describe('fillPoolFromConsensus', () => {
 describe('wiring', () => {
   it('the pool builder tops up redraft pools (not rookie pools) from the DB-first consensus board', () => {
     const src = readFileSync(path.resolve(__dirname, '..', '..', 'lib/mock-draft/mock-draft-pool-cache.ts'), 'utf8')
-    expect(src).toMatch(/if \(type === 'redraft' && pool !== 'rookie'\) \{\s*const consensus = await getLiveAdpByName\(\{ sport: 'NFL' \}\)\.catch\(\(\) => new Map\(\)\)\s*entries = fillPoolFromConsensus\(entries, consensus\.values\(\), limit\)/)
+    expect(src).toMatch(/if \(type === 'redraft' && pool !== 'rookie'\) \{/)
+    expect(src).toMatch(/getLiveAdpByName\(\{ sport: 'NFL' \}\)\.catch\(/)
+    // Team defenses: the latest week's board held 4; each defense's last price this season fills the rest.
+    expect(src).toMatch(/getSeasonDefenseAdp\(\{ sport: 'NFL' \}\)\.catch\(\(\) => \[\]\)/)
+    expect(src).toMatch(/\.\.\.defenses\.map\(\(d\) => \(\{ name: d\.name, adp: d\.adp, position: 'DEF', team: d\.team \}\)\)/)
+    expect(src).toMatch(/entries = fillPoolFromConsensus\(entries, rows, limit\)/)
     // The fill comes before the Sleeper-id and injury passes, so added players get ids and badges too.
     expect(src.indexOf('fillPoolFromConsensus(entries')).toBeLessThan(src.indexOf('resolveSleeperIdsBatch('))
   })
