@@ -7,7 +7,7 @@ import 'server-only'
  * behavior; the enabled path only ADDS certified context. Season/cadence state is NOT controlled here — the
  * season resolver remains the source of truth.
  */
-export type SportsDataSubsystem = 'lineup' | 'waiver' | 'trade' | 'draft' | 'matchup' | 'scoring' | 'intelligence' | 'coach' | 'observability'
+type SportsDataSubsystem = 'lineup' | 'waiver' | 'trade' | 'draft' | 'matchup' | 'scoring' | 'intelligence' | 'coach' | 'observability'
 
 const ENV_KEY: Record<SportsDataSubsystem, string> = {
   lineup: 'FANTASY_OS_SPORTS_DATA_LINEUP_ENABLED',
