@@ -18,8 +18,8 @@ describe('member format FAQ links', () => {
     expect(link.getAttribute('rel')).toContain('noopener')
     expect(link.getAttribute('title')).toContain('Check your league settings')
   })
-  it('uses persisted format before modifiers, legacy labels and mode flags', () => {
-    expect(leagueFormatFaqHref({ leagueType: 'redraft', leagueVariant: 'guillotine', isDynasty: true })).toBe(faq + '#redraft')
+  it('uses persisted specialty format before modifiers, legacy labels and mode flags', () => {
+    expect(leagueFormatFaqHref({ leagueType: 'dynasty', leagueVariant: 'superflex' })).toBe(faq + '#dynasty')
     expect(leagueFormatFaqHref({ leagueType: 'keeper', settings: { league_type: 'dynasty' }, bestBallMode: true })).toBe(faq + '#keeper')
     expect(leagueFormatFaqHref({ settings: { leagueType: 'SALARY_CAP' }, leagueVariant: 'superflex' })).toBe(faq + '#salary_cap')
     expect(leagueFormatFaqHref({ leagueType: 'future_format', isDynasty: false })).toBe(faq)
@@ -30,6 +30,21 @@ describe('member format FAQ links', () => {
     ['idp', 'modifier-idp'], ['survivor_guillotine', 'survivor-guillotine'],
   ])('recognizes the legacy identity %s', (value, anchor) => {
     expect(leagueFormatFaqHref({ leagueVariant: value })).toBe(faq + '#' + anchor)
+  })
+  it('honors league type confirmations including specialty concepts on a base format', () => {
+    expect(leagueFormatFaqHref({ leagueType: 'dynasty', settings: { leagueTypeConfirmation: { type: 'pirate', baseFormat: 'dynasty' } } })).toBe(faq + '#pirate')
+    expect(leagueFormatFaqHref({ leagueType: 'guillotine', settings: { leagueTypeConfirmation: { type: 'survivor_guillotine' } } })).toBe(faq + '#survivor-guillotine')
+    expect(leagueFormatFaqHref({ leagueType: 'dynasty', leagueVariant: 'guillotine', settings: { leagueTypeConfirmation: { type: 'redraft' } } })).toBe(faq + '#redraft')
+    expect(leagueFormatFaqHref({ leagueType: 'keeper', settings: { leagueTypeConfirmation: { type: 'invalid' } } })).toBe(faq + '#keeper')
+  })
+  it('recognizes specialty variants and flags on an old default redraft column', () => {
+    for (const leagueVariant of ['zombie', 'survivor', 'big_brother', 'guillotine', 'pirate']) {
+      expect(leagueFormatFaqHref({ leagueType: 'redraft', leagueVariant })).toBe(faq + '#' + leagueVariant)
+    }
+    expect(leagueFormatFaqHref({ leagueType: 'redraft', guillotineMode: true })).toBe(faq + '#guillotine')
+    expect(leagueFormatFaqHref({ leagueType: 'redraft', isDynasty: true })).toBe(faq + '#dynasty')
+    expect(leagueFormatFaqHref({ leagueType: 'redraft', leagueVariant: 'idp' })).toBe(faq + '#redraft')
+    expect(leagueFormatFaqHref({ leagueType: 'redraft', leagueVariant: 'superflex' })).toBe(faq + '#redraft')
   })
   it('recognizes the Survivor Guilly redraft shell without replacing another canonical format', () => {
     expect(leagueFormatFaqHref({ leagueType: 'redraft', leagueVariant: 'survivor_guillotine' })).toBe(faq + '#survivor-guillotine')
