@@ -194,7 +194,7 @@ export async function buildCommissionerContext(
     'CAVEAT ON ACTIVITY: most teams in imported leagues are UNCLAIMED in our data, which reflects how import works and NOT whether a manager is engaged. Never report unclaimed teams as inactive managers.',
   )
   lines.push(
-    'RULES: answer what the league looks like and what the options are. Do NOT tell the commissioner to veto, reverse, remove, replace, pause or discipline anyone, and do NOT recommend a punishment. AllFantasy changes nothing on the platform — point them at their platform to act.',
+    'RULES: answer what the league looks like and what the options are. Do NOT tell the commissioner to veto, reverse, remove, replace, pause or discipline anyone, and do NOT recommend a punishment. In an imported league AllFantasy changes nothing on the platform — point them at their platform to act. In a league AllFantasy hosts, a SETTINGS change they ask for (waivers, trades, playoffs, IR slots, name) goes through propose_league_rule_change, which only prepares a confirm card.',
   )
 
   return lines.join('\n')

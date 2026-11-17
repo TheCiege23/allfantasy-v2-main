@@ -218,6 +218,8 @@ describe('tool specs', () => {
       'propose_lineup_change',
       'propose_trade',
       'propose_automation_change',
+      // Writes nothing: a settings confirm card; the save is the confirm route's, behind the commissioner's tap.
+      'propose_league_rule_change',
       // AF Pro: reads the user's OWN earlier Chimmy messages; writes nothing.
       'recall_past_chats',
     ])
