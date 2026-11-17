@@ -35,6 +35,15 @@ async function readNote(leagueId: string, concept: LeagueConceptType): Promise<L
     const cap = positiveInt((await getSalaryCapConfig(leagueId))?.startupCap)
     return cap ? { kind: 'salary_cap', cap } : null
   }
+  if (concept === 'zombie') {
+    const row = await prisma.zombieLeague.findUnique({
+      where: { leagueId },
+      select: { universe: { select: { name: true } }, level: { select: { name: true, tierLabel: true } } },
+    })
+    const universe = row?.universe?.name?.trim() || null
+    const level = row?.level?.tierLabel?.trim() || row?.level?.name?.trim() || null
+    return universe || level ? { kind: 'zombie', universe, level } : null
+  }
   if (concept === 'tournament') {
     const row = await prisma.tournamentLeague.findUnique({
       where: { leagueId },
@@ -61,6 +70,24 @@ async function readSlotSalaries(leagueId: string, totalSlots: number): Promise<R
   return out
 }
 
+/**
+ * A stage 2/3 season tournament seats each pool by its previous-stage seed. The frozen manifest
+ * lists members in seat order and `loadSeasonDraftContext` maps them to roster ids in that order;
+ * stage 1 has no seeds. The loader verifies the manifest's checksum and throws on any mismatch —
+ * which here means no seeds, never a guess.
+ */
+async function readSeeds(leagueId: string): Promise<Record<string, number> | null> {
+  const { loadSeasonDraftContext } = await import('@/lib/tournament/seasonDraftRuntime')
+  const context = await loadSeasonDraftContext(leagueId)
+  if (!context || context.stage === 1) return null
+  const out: Record<string, number> = {}
+  context.pool.members.forEach((member, i) => {
+    const rosterId = context.rosterIds[i]
+    if (rosterId && typeof member.previousSeed === 'number' && member.previousSeed > 0) out[rosterId] = member.previousSeed
+  })
+  return Object.keys(out).length ? out : null
+}
+
 export async function loadDraftRoomLeagueFacts(input: {
   leagueId: string
   concept: LeagueConceptType
@@ -69,13 +96,14 @@ export async function loadDraftRoomLeagueFacts(input: {
   teamCount: number
 }): Promise<DraftRoomLeagueFacts> {
   const totalSlots = Math.max(0, Math.floor(input.rounds) * Math.floor(input.teamCount))
-  const [note, slotSalaryByOverall] = await Promise.all([
+  const [note, slotSalaryByOverall, seedByRosterId] = await Promise.all([
     readNote(input.leagueId, input.concept).catch(() => null),
     // No concept gate: `submitPick` signs a contract for ANY league with a snake cap config.
     input.draftType === 'auction'
       ? Promise.resolve(null)
       : readSlotSalaries(input.leagueId, totalSlots).catch(() => null),
+    input.concept === 'tournament' ? readSeeds(input.leagueId).catch(() => null) : Promise.resolve(null),
   ])
-  if (!note && !slotSalaryByOverall) return NO_LEAGUE_FACTS
-  return { note, slotSalaryByOverall }
+  if (!note && !slotSalaryByOverall && !seedByRosterId) return NO_LEAGUE_FACTS
+  return { note, slotSalaryByOverall, seedByRosterId }
 }

@@ -314,7 +314,9 @@ export function DraftTopBar({
         ? headerCopy.notePirate(leagueNote.protect)
         : leagueNote.kind === 'salary_cap'
           ? headerCopy.noteCap(leagueNote.cap)
-          : [leagueNote.conference, leagueNote.round].filter(Boolean).join(' · ') || null
+          : leagueNote.kind === 'zombie'
+            ? [leagueNote.universe, leagueNote.level].filter(Boolean).join(' · ') || null
+            : [leagueNote.conference, leagueNote.round].filter(Boolean).join(' · ') || null
   const liveRemaining = useDraftCountdownSeconds(
     timerStatus,
     timerEndAtIso ?? undefined,

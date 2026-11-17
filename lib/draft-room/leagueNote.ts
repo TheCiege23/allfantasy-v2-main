@@ -11,6 +11,8 @@ export type LeagueNote =
   | { kind: 'pirate'; protect: number }
   | { kind: 'salary_cap'; cap: number }
   | { kind: 'tournament'; conference: string | null; round: string | null }
+  /** Proper names from the league's Zombie universe, printed as they are. */
+  | { kind: 'zombie'; universe: string | null; level: string | null }
 
 /** A snake salary-cap slot: the contract that pick is signed to (`loadRookieContractTerms`). */
 export type SlotSalary = { salary: number; years: number }
@@ -19,6 +21,11 @@ export type DraftRoomLeagueFacts = {
   note: LeagueNote | null
   /** Overall pick → salary, only for a salary-cap league drafting by snake. */
   slotSalaryByOverall: Record<number, SlotSalary> | null
+  /**
+   * Roster → its seed from the previous stage, for a stage 2/3 season tournament draft. From the
+   * FROZEN field (`loadSeasonDraftContext`), so it cannot drift from the order the draft runs in.
+   */
+  seedByRosterId?: Record<string, number> | null
 }
 
-export const NO_LEAGUE_FACTS: DraftRoomLeagueFacts = { note: null, slotSalaryByOverall: null }
+export const NO_LEAGUE_FACTS: DraftRoomLeagueFacts = { note: null, slotSalaryByOverall: null, seedByRosterId: null }
