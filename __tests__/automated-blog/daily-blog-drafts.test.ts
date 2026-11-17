@@ -5,18 +5,10 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const router = vi.hoisted(() => ({ routeTextCall: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
-vi.mock('@/lib/openai-client', () => ({
-  openaiChatJson: vi.fn(),
-  parseJsonContentFromChatCompletion: (data: any) => {
-    const c = data?.choices?.[0]?.message?.content
-    try {
-      return typeof c === 'string' ? JSON.parse(c) : null
-    } catch {
-      return null
-    }
-  },
-}))
+// The default model call is the fallback router; nothing here may reach a real provider.
+vi.mock('@/lib/ai/providerRouter', () => router)
 
 import {
   baseGameId,
@@ -29,7 +21,13 @@ import {
   type RawLine,
 } from '@/lib/automated-blog/daily/gameNightFacts'
 import { checkDraftAgainstFacts, numberTokens } from '@/lib/automated-blog/daily/factCheck'
-import { dailyDraftSlug, serializeFacts, writeGameNightDraft, type ChatJson } from '@/lib/automated-blog/daily/gameNightDraft'
+import {
+  dailyDraftSlug,
+  parseJsonObject,
+  serializeFacts,
+  writeGameNightDraft,
+  type ModelCall,
+} from '@/lib/automated-blog/daily/gameNightDraft'
 import { runDailyBlogDrafts, type DailyDraftDeps } from '@/lib/automated-blog/daily/runDailyBlogDrafts'
 
 afterEach(() => vi.unstubAllEnvs())
@@ -167,11 +165,12 @@ const BODY_OK =
   'That is the kind of line that swings a points matchup on its own, and it helps in points, rebounds and assists in a categories week. ' +
   'HOU won 125 to 118.'
 
-function chatReturning(body: string, excerpt = 'Sengun’s 43 led the night.'): ChatJson {
-  return vi.fn(async () => ({
-    ok: true as const,
-    json: { choices: [{ message: { content: JSON.stringify({ body, excerpt, seoDescription: 'Who helped fantasy teams.' }) } }] },
-  }))
+function replyJson(body: string, excerpt = 'Sengun’s 43 led the night.'): string {
+  return JSON.stringify({ body, excerpt, seoDescription: 'Who helped fantasy teams.' })
+}
+
+function chatReturning(body: string, excerpt?: string): ModelCall {
+  return vi.fn(async () => ({ ok: true as const, text: replyJson(body, excerpt) }))
 }
 
 describe('writeGameNightDraft', () => {
@@ -194,9 +193,58 @@ describe('writeGameNightDraft', () => {
   })
 
   it('a model failure or an empty answer produces no draft — no fallback text', async () => {
-    const failing: ChatJson = vi.fn(async () => ({ ok: false as const, status: 500 }))
+    const failing: ModelCall = vi.fn(async () => ({ ok: false as const, detail: 'all providers failed' }))
     expect(await writeGameNightDraft({ facts: FACTS, nameUniverse: UNIVERSE, chat: failing })).toMatchObject({ ok: false, reason: 'generation_failed' })
     expect(await writeGameNightDraft({ facts: FACTS, nameUniverse: UNIVERSE, chat: chatReturning('too short') })).toMatchObject({ ok: false, reason: 'bad_output' })
+  })
+
+  // The first live run (2026-11-16) wrote nothing: it called OpenAI directly and the key answered 401.
+  it('by default goes through the fallback router, named for spend tracking, never one provider', async () => {
+    router.routeTextCall.mockReset().mockResolvedValue({
+      ok: true,
+      text: 'Here you go:\n```json\n' + replyJson(BODY_OK) + '\n```',
+      model: 'deepseek-chat',
+      provider: 'deepseek',
+      tokensUsed: 900,
+    })
+    const r = await writeGameNightDraft({ facts: FACTS, nameUniverse: UNIVERSE })
+    expect(r.ok).toBe(true)
+    expect(router.routeTextCall).toHaveBeenCalledTimes(1)
+    expect(router.routeTextCall.mock.calls[0][0]).toMatchObject({
+      feature: 'blog-daily-drafts',
+      timeoutMs: 60_000,
+      skipCache: true,
+      maxTokens: 1400,
+    })
+  })
+
+  it('when every provider fails, the heartbeat says which ones and why', async () => {
+    router.routeTextCall.mockReset().mockResolvedValue({
+      ok: false,
+      failure: {
+        attempts: [
+          { provider: 'openai', category: 'auth', status: 401 },
+          { provider: 'deepseek', category: 'timeout', status: null },
+        ],
+        retryable: true,
+      },
+    })
+    expect(await writeGameNightDraft({ facts: FACTS, nameUniverse: UNIVERSE })).toEqual({
+      ok: false,
+      reason: 'generation_failed',
+      detail: 'all providers failed (openai:auth, deepseek:timeout)',
+    })
+  })
+})
+
+describe('parseJsonObject', () => {
+  it('reads bare, fenced or wrapped JSON, and nothing else', () => {
+    expect(parseJsonObject('{"a":1}')).toEqual({ a: 1 })
+    expect(parseJsonObject('```json\n{"a":1}\n```')).toEqual({ a: 1 })
+    expect(parseJsonObject('Sure! {"a":1} Hope that helps.')).toEqual({ a: 1 })
+    expect(parseJsonObject('[1,2]')).toBeNull()
+    expect(parseJsonObject('{"a":')).toBeNull()
+    expect(parseJsonObject('no json here')).toBeNull()
   })
 })
 
