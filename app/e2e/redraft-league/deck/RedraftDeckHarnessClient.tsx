@@ -3,6 +3,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
+import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
+import { ImportedGuillyChopCard } from '@/components/league/ImportedGuillyChopCard'
+import { buildImportedGuillyView } from '@/lib/guillotine/importedGuillyView'
 import { DecideHome } from '@/components/decide/DecideHome'
 import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
 import { LegacyHome } from '@/components/decide/LegacyHome'
@@ -28,6 +31,34 @@ const TABS = [
   { id: 'legacy', label: 'Legacy' }, { id: 'standings', label: 'Standings' }, { id: 'league_chat', label: 'League Chat' },
   { id: 'commissioner', label: 'Commissioner' }, { id: 'settings', label: '⚙ Settings' },
 ]
+/**
+ * An imported Guilly league's provider scores for the Chopping block card, through the REAL view builder:
+ * 12 teams, three chopped in weeks 6–8, week 9 under way. The viewer is roster '2'. Fixture data only.
+ */
+const GUILLY_TEAMS = ['MacMats', 'TheCiege24', 'MasterBuckets', 'Gridiron Ghosts', 'Fourth & Forever', 'Taco Tuesday', 'Monday Night Misery', 'Waiver Wire Wizards', 'Sunday Squad', 'Bench Mob', 'Red Zone Rats', 'Hail Marys']
+  .map((name, i) => ({ rosterId: String(i + 1), name }))
+const GUILLY_WEEK9 = [112.4, 98.8, 104.1, 93.6, 101.7, 88.2, 96.3, 90.5, 107.9]
+function guillyFixture() {
+  const rows: Array<{ week: number; rosterId: string; pointsFor: number; matchupId: number | null }> = []
+  for (let week = 6; week <= 9; week += 1) {
+    GUILLY_TEAMS.forEach((t, i) => {
+      // Rosters 12, 11, 10 hold the low score in weeks 6, 7, 8 and are chopped after it.
+      const choppedAfter = i === 11 ? 6 : i === 10 ? 7 : i === 9 ? 8 : null
+      if (choppedAfter != null && week > choppedAfter) return
+      const low = choppedAfter === week
+      rows.push({ week, rosterId: t.rosterId, pointsFor: week === 9 ? GUILLY_WEEK9[i] ?? 0 : low ? 61 + week : 95 + ((i * 7 + week) % 20), matchupId: null })
+    })
+  }
+  return {
+    platform: 'sleeper',
+    view: buildImportedGuillyView({ rows, teams: GUILLY_TEAMS }),
+    check: { status: 'ok', attention: 0, format: 'confirmed' },
+    lastReadAt: null,
+  }
+}
+
+/** An imported league has no native_home: LeagueShell lands it on Decide, which the sidebar names League home. */
+const IMPORTED_TABS = TABS.filter((t) => t.id !== 'native_home')
 
 /**
  * Answers the deck's own fetches from the fixtures, so the real components run with no database and no
@@ -57,13 +88,15 @@ function installFixtureFetch(sport: DeckSport, state: DeckState) {
       return json({ supported: false, platform: 'allfantasy' })
     }
     if (path === '/api/draft/intel') return json({ linked: false, scope: 'league', drafts: [] })
+    if (path.endsWith('/guillotine/imported')) return json(guillyFixture())
     if (path.endsWith('/health-summary')) return json(healthSummaryResponse(st, now))
     if (path.endsWith('/weekly-checklist')) return json(weeklyChecklistResponse(s, `e2e-redraft-deck-${s.toLowerCase()}`, st, now))
     return json({ error: 'not in harness' }, 404)
   }
 }
 
-type Props = { tab: DeckTab; sport: DeckSport; state: DeckState; leagueType: string }
+/** `platform`: 'allfantasy' (default) or an import source such as 'sleeper', to render the imported workspace. */
+type Props = { tab: DeckTab; sport: DeckSport; state: DeckState; leagueType: string; platform?: string }
 
 /** Harness only (app/e2e is 404 in production): the real workspace chrome around one real deck tab. */
 export default function RedraftDeckHarnessClient(props: Props) {
@@ -87,7 +120,7 @@ export default function RedraftDeckHarnessClient(props: Props) {
   const league = {
     id: `e2e-redraft-deck-${sport.toLowerCase()}`,
     name: 'Sunday Night Redraft',
-    platform: 'allfantasy',
+    platform: props.platform ?? 'allfantasy',
     sport,
     format: 'redraft',
     scoring: 'Half PPR',
@@ -102,6 +135,7 @@ export default function RedraftDeckHarnessClient(props: Props) {
     isCommissioner: true,
   } as unknown as UserLeague
   const teams = deckTeams()
+  const imported = (props.platform ?? 'allfantasy') !== 'allfantasy'
   const tab = activeTab as DeckTab
   // The same wrapper LeagueShell puts around these three tabs.
   const scroll = (node: ReactNode) => <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">{node}</div>
@@ -109,10 +143,12 @@ export default function RedraftDeckHarnessClient(props: Props) {
   const key = `${tab}:${sport}:${state}`
   return (
     <NativeLeagueWorkspace
-      native
+      native={!imported}
+      workspaceShell
+      sourceLink={imported ? { href: 'https://sleeper.com/leagues/0000000000/league', platformLabel: 'Sleeper' } : null}
       league={league}
       leagues={[league]}
-      tabs={TABS}
+      tabs={imported ? IMPORTED_TABS : TABS}
       activeTab={activeTab}
       isCommissioner
       onSelectTab={setActiveTab}
@@ -122,8 +158,13 @@ export default function RedraftDeckHarnessClient(props: Props) {
       rightPanel={null}
     >
       <div data-testid="redraft-deck-harness" data-tab={tab} data-sport-key={sport} style={{ display: 'contents' }} key={key}>
+        {imported ? <ImportedLeagueQuickActions leagueId={league.id} leagueName={league.name} platform={league.platform} canRemove strip /> : null}
         {tab === 'decide'
-          ? scroll(<DecideHome league={league} teams={teams} userTeamId={VIEWER_TEAM_ID} isCommissioner onOpenTab={setActiveTab} />)
+          ? scroll(<>
+              {/* Where LeagueShell puts it: above DecideHome, in the same scroll, for an imported Guilly league. */}
+              {imported && props.leagueType === 'guillotine' ? <ImportedGuillyChopCard leagueId={league.id} platform={league.platform} yourRosterId="2" onOpenGuilly={() => {}} /> : null}
+              <DecideHome league={league} teams={teams} userTeamId={VIEWER_TEAM_ID} isCommissioner onOpenTab={setActiveTab} />
+            </>)
           : tab === 'draft_intel'
             ? scroll(<DraftIntelHome league={league} leagueId={league.id} />)
             : tab === 'legacy'

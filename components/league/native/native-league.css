@@ -68,6 +68,8 @@
 .nl-chip{display:inline-flex;align-items:center;min-height:23px;padding:4px 10px;border:1px solid var(--chip-line);border-radius:999px;background:var(--chip);font-size:11px;font-weight:700;white-space:nowrap}
 .nl-accent{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .nl-gold{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 30%,transparent)}
+/* Imported leagues: names the host platform where a native league shows "Native on AllFantasy". */
+.nl-imported-chip{color:#c4b5fd;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
 .nl-sport-week{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:var(--faint);white-space:nowrap}
 .nl-content{overflow:auto;min-height:0;padding:24px;scrollbar-gutter:stable;flex:1}
 /* /core's `.af-frame`: 16px radius, the hero wash. */

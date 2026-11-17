@@ -101,13 +101,19 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   const tr = translator(t)
   const used = new Set<string>()
   const item = (key: string, english: string, icon: string, ...ids: string[]): WorkspaceNavItem[] => {
-    const id = ids.find(value => tabs.some(tab => tab.id === value))
+    // A tab already placed under another group is not a second destination.
+    const id = ids.find(value => !used.has(value) && tabs.some(tab => tab.id === value))
     if (!id) return []
     used.add(id)
     return [{ id, label: tr(key, english), icon }]
   }
   const primary = [
-    ...item('league.nav.leagueHome', 'League home', 'home', 'native_home', 'home'),
+    /*
+     * An imported league has no native_home: its landing is the Decide screen (this week's clocks, record,
+     * standings, needs-your-call). It takes the League home slot so imported and native leagues read the
+     * same (2026-11-09), and so it is not offered a second time as Decision OS below.
+     */
+    ...item('league.nav.leagueHome', 'League home', 'home', 'native_home', 'home', 'decide'),
     // A guillotine league's defining screen (chop line, danger zone, history) sat under "More tools".
     ...item('league.nav.guilly', 'Guilly', 'guillotine', 'guillotine'),
     ...item('league.nav.myTeam', 'My team', 'team', 'roster', 'team', 'squad'),
