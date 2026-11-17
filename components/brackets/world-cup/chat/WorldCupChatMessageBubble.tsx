@@ -212,9 +212,9 @@ export function WorldCupChatMessageBubble({
             {/* AI pill */}
             <span
               className="rounded-full border border-cyan-400/35 bg-cyan-400/[0.12] px-1.5 py-px text-[11px] font-black uppercase tracking-wide text-cyan-300/90"
-              aria-label="AI-generated response"
+              aria-label="Chimmy-generated response"
             >
-              AI
+              Chimmy
             </span>
             {/* Freshness chip — data source label */}
             {message.dataSourceDisplay ? (

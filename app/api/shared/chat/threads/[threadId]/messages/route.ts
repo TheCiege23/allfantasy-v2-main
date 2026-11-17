@@ -636,7 +636,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ threadId
       onDecision: result => { decision = decisionAnswerMeta(result) },
     }).catch(
       () =>
-        "I could not reach the AI just now. Try again in a moment, or open the Chimmy panel on a league page.",
+        "I could not reach Chimmy just now. Try again in a moment, or open the Chimmy panel on a league page.",
     )
 
     aiReply = await createSystemMessage(

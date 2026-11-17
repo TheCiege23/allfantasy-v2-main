@@ -120,7 +120,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
         <div>
           <h3 className="text-lg font-bold text-white">Build Your Legacy Profile</h3>
           <p className="mt-0.5 text-sm text-white/50">
-            Import your fantasy history to calculate your AllFantasy rank, XP progress, and AI grade.
+            Import your fantasy history to calculate your AllFantasy rank, XP progress, and Chimmy grade.
           </p>
         </div>
         {variant === 'dashboard' ? (
@@ -200,7 +200,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
         </div>
       )}
       <p className="mt-3 text-center text-[11px] text-white/25">
-        Career rank cache, AI report, and overview cards all refresh from this import.
+        Career rank cache, Chimmy report, and overview cards all refresh from this import.
       </p>
     </div>
   )

@@ -259,7 +259,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
                 } catch (e) {
                   setMatchupAi(null)
                   setMatchupAiRefusal(refusalOf(e))
-                  setMatchupAiErr(e instanceof Error ? e.message : 'AI failed')
+                  setMatchupAiErr(e instanceof Error ? e.message : 'Chimmy failed')
                 }
               })()
             }}

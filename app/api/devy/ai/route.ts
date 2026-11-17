@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
             devySlots: 10,
             reasoning: smoke.text,
             prosCons: ['Smoke provider fallback output.'],
-            warnings: ['Verify live Devy AI output before publishing settings guidance.'],
+            warnings: ['Verify live Devy Chimmy output before publishing settings guidance.'],
           }
           await writeAiResultCache({
             resultKey,
@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
           const smokePayload = {
             ceiling: 'medium (smoke fallback)',
             timeline: 'Verify with live provider.',
-            fit: 'Roster fit requires live AI confirmation.',
+            fit: 'Roster fit requires live Chimmy confirmation.',
             grade: 'B',
             risks: ['Smoke provider fallback output.'],
             verdict: smoke.text,

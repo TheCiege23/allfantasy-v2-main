@@ -229,7 +229,7 @@ const ES: Record<string, string> = {
   'Asking…': 'Preguntando…',
   'Ask Chimmy': 'Preguntar a Chimmy',
   'Template guidance': 'Orientación de plantilla',
-  'AI guidance': 'Orientación de IA',
+  'Chimmy guidance': 'Orientación de Chimmy',
   'review evidence before acting.': 'revisa los datos antes de actuar.',
   'Chimmy could not answer': 'Chimmy no pudo responder',
 

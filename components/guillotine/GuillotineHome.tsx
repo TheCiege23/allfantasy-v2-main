@@ -302,7 +302,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           className="text-sm text-cyan-400 hover:underline"
           data-testid="guillotine-more-ai-tools"
         >
-          More research &amp; AI tools →
+          More research &amp; Chimmy tools →
         </Link>
       </section>
 

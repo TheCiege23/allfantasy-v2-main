@@ -328,7 +328,7 @@ Return JSON: {"ceiling":"high|medium|low + short reason","timeline":"text","fit"
 
   if (!o.ok) {
     return {
-      ceiling: 'medium (AI unavailable — heuristic)',
+      ceiling: 'medium (Chimmy unavailable — heuristic)',
       timeline: projYear ? `Declaration window around ${projYear} (projected).` : 'Timeline unclear from profile.',
       fit: `Roster need signal: ${needs}.`,
       grade: 'B',
@@ -676,7 +676,7 @@ export async function handleCommissionerQuery(
     temperature: 0.45,
   })
 
-  return { reply: o.ok && o.text?.trim() ? o.text.trim() : 'Chimmy could not reach the AI provider — try again shortly.' }
+  return { reply: o.ok && o.text?.trim() ? o.text.trim() : 'Chimmy could not be reached — try again shortly.' }
 }
 
 export async function generateLeagueConstitution(leagueId: string): Promise<string> {
@@ -756,7 +756,7 @@ export async function getDraftStrategyAdvice(
     temperature: 0.45,
   })
 
-  const text = o.ok ? o.text ?? '' : 'Draft advice unavailable (AI provider).'
+  const text = o.ok ? o.text ?? '' : 'Draft advice unavailable (Chimmy provider).'
   return {
     recommendation: text.split('\n')[0] ?? text,
     topOptions: ['Best player available', 'Positional scarcity play', 'Devy upside swing'],

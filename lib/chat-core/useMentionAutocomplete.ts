@@ -84,7 +84,7 @@ export function useMentionAutocomplete({
           type: '@chimmy',
           value: '@chimmy ',
           label: '@chimmy',
-          description: 'Private message to Chimmy AI (only you see this)',
+          description: 'Private message to Chimmy (only you see this)',
         })
       }
 

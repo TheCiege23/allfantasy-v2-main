@@ -159,7 +159,7 @@ export function DraftSettingsPanel({
     <div className="min-h-0 flex-1 space-y-8 px-6 py-6 text-[13px] text-white/85" data-testid="settings-draft-panel">
       <SettingsPanelHeading
         title="Draft settings"
-        subtitle="Draft type, clock, rounds, and draft-room AI. Syncs to the live draft session when applicable."
+        subtitle="Draft type, clock, rounds, and draft-room Chimmy. Syncs to the live draft session when applicable."
       />
 
       <div>
@@ -395,7 +395,7 @@ export function DraftSettingsPanel({
           }}
         />
         <SettingsToggleRow
-          label="AI autopick"
+          label="Chimmy autopick"
           checked={aiAutoPick}
           disabled={disabled}
           onChange={(v) => {
@@ -415,7 +415,7 @@ export function DraftSettingsPanel({
       </div>
 
       <div>
-        <SettingsSectionLabel>Draft AI scope</SettingsSectionLabel>
+        <SettingsSectionLabel>Draft Chimmy scope</SettingsSectionLabel>
         <select
           className={controlClass}
           disabled={disabled}
@@ -434,7 +434,7 @@ export function DraftSettingsPanel({
       </div>
 
       <div className="space-y-2">
-        <SettingsSectionLabel>In-draft AI assists</SettingsSectionLabel>
+        <SettingsSectionLabel>In-draft Chimmy assists</SettingsSectionLabel>
         <SettingsToggleRow
           label="Queue suggestions"
           checked={aiQueueSuggestions}

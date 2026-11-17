@@ -112,7 +112,7 @@ export function generateFeedFlavorLine(input: FeedFlavorInput): { flavor: string
       lines = [`Taking over the roster.`, `Stepping in here.`, `Managing this slot now.`]
       break
     case "commissioner_assigned_ai":
-      lines = [`AI manager assigned.`, `Running this team now.`, `Locked in as AI.`]
+      lines = [`Chimmy manager assigned.`, `Running this team now.`, `Locked in as Chimmy.`]
       break
     case "lineup_set":
       lines = [`Lineup saved.`, `Starters set.`, `Locked starters.`]

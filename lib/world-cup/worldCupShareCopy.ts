@@ -104,7 +104,7 @@ const INVITE_MESSAGE_TEMPLATES: Record<string, InviteMessageTemplates> = {
     memberAsk: "Ask the pool commissioner for the invite link.",
     commissionerHeading: (p) => `Join my 2026 World Cup Bracket Pool on AllFantasy: ${p}.`,
     commissionerPitch:
-      "Make your picks, finalize your bracket, and see if your AI Bracket Report says you can beat the pool.",
+      "Make your picks, finalize your bracket, and see if your Chimmy Bracket Report says you can beat the pool.",
     deadline: (l) => `Picks lock ${l}.`,
     inviteCodeLine: (c) => `Invite code: ${c}`,
   },
@@ -115,7 +115,7 @@ const INVITE_MESSAGE_TEMPLATES: Record<string, InviteMessageTemplates> = {
     commissionerHeading: (p) =>
       `Únete a mi grupo de brackets de la Copa del Mundo 2026 en AllFantasy: ${p}.`,
     commissionerPitch:
-      "Haz tus picks, finaliza tu bracket y mira si tu Informe IA dice que puedes ganarle al grupo.",
+      "Haz tus picks, finaliza tu bracket y mira si tu Informe Chimmy dice que puedes ganarle al grupo.",
     deadline: (l) => `Los picks cierran ${l}.`,
     inviteCodeLine: (c) => `Código de invitación: ${c}`,
   },
@@ -126,7 +126,7 @@ const INVITE_MESSAGE_TEMPLATES: Record<string, InviteMessageTemplates> = {
     commissionerHeading: (p) =>
       `來加入我在 AllFantasy 的 2026 世界盃對戰群組:${p}。`,
     commissionerPitch:
-      "做出你的選擇、送出對戰表,看看 AI 對戰表報告能不能說你可以擊敗整個群組。",
+      "做出你的選擇、送出對戰表,看看 Chimmy 對戰表報告能不能說你可以擊敗整個群組。",
     deadline: (l) => `選擇將於 ${l} 鎖定。`,
     inviteCodeLine: (c) => `邀請碼:${c}`,
   },
@@ -137,7 +137,7 @@ const INVITE_MESSAGE_TEMPLATES: Record<string, InviteMessageTemplates> = {
     commissionerHeading: (p) =>
       `Sumali sa 2026 World Cup Bracket Pool ko sa AllFantasy: ${p}.`,
     commissionerPitch:
-      "Mag-pick ka, i-finalize ang bracket mo, at tingnan kung sasabihin ng AI Bracket Report mo na kaya mong talunin ang pool.",
+      "Mag-pick ka, i-finalize ang bracket mo, at tingnan kung sasabihin ng Chimmy Bracket Report mo na kaya mong talunin ang pool.",
     deadline: (l) => `Magla-lock ang picks ${l}.`,
     inviteCodeLine: (c) => `Invite code: ${c}`,
   },
@@ -148,7 +148,7 @@ const INVITE_MESSAGE_TEMPLATES: Record<string, InviteMessageTemplates> = {
     commissionerHeading: (p) =>
       `Tham gia pool bracket World Cup 2026 của tôi trên AllFantasy: ${p}.`,
     commissionerPitch:
-      "Đưa ra lựa chọn, hoàn tất bracket, và xem báo cáo AI nói bạn có thể đánh bại pool hay không.",
+      "Đưa ra lựa chọn, hoàn tất bracket, và xem báo cáo Chimmy nói bạn có thể đánh bại pool hay không.",
     deadline: (l) => `Lựa chọn khoá lúc ${l}.`,
     inviteCodeLine: (c) => `Mã mời: ${c}`,
   },
@@ -454,7 +454,7 @@ const CAPTION_TEMPLATES: Record<
           `Pool: ${c.pool}`,
           c.championLn,
           c.gradeLn,
-          `AI Bracket Report says it's ready for the field.`,
+          `Chimmy Bracket Report says it's ready for the field.`,
           `Make your picks and try to beat it.`,
           c.poolUrl,
         ]
@@ -546,7 +546,7 @@ const CAPTION_TEMPLATES: Record<
           `Grupo: ${c.pool}`,
           c.championLn,
           c.gradeLn,
-          `El Informe IA dice que está listo para la cancha.`,
+          `El Informe Chimmy dice que está listo para la cancha.`,
           `Haz tus picks y trata de vencerme.`,
           c.poolUrl,
         ]
@@ -638,7 +638,7 @@ const CAPTION_TEMPLATES: Record<
           `群組:${c.pool}`,
           c.championLn,
           c.gradeLn,
-          `AI 對戰表報告說已經準備好出戰。`,
+          `Chimmy 對戰表報告說已經準備好出戰。`,
           `做出你的選擇,試著贏過我。`,
           c.poolUrl,
         ]
@@ -730,7 +730,7 @@ const CAPTION_TEMPLATES: Record<
           `Pool: ${c.pool}`,
           c.championLn,
           c.gradeLn,
-          `Sabi ng AI Bracket Report handa na para sa laban.`,
+          `Sabi ng Chimmy Bracket Report handa na para sa laban.`,
           `Mag-pick ka at subukang talunin ako.`,
           c.poolUrl,
         ]
@@ -822,7 +822,7 @@ const CAPTION_TEMPLATES: Record<
           `Pool: ${c.pool}`,
           c.championLn,
           c.gradeLn,
-          `Báo cáo AI nói đã sẵn sàng ra sân.`,
+          `Báo cáo Chimmy nói đã sẵn sàng ra sân.`,
           `Hoàn thành lựa chọn và thử thắng tôi đi.`,
           c.poolUrl,
         ]

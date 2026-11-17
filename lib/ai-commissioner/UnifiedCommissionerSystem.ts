@@ -263,7 +263,7 @@ export async function getUnifiedCommissionerAssessment(input: {
     },
     {
       key: 'commissioner_alerts',
-      label: 'AI commissioner alerts enabled',
+      label: 'Chimmy commissioner alerts enabled',
       status: league.leagueAiCommissionerAlerts ? 'ok' : 'warn',
       detail: league.leagueAiCommissionerAlerts
         ? 'League alerts are enabled.'
@@ -339,8 +339,8 @@ export async function getUnifiedCommissionerAssessment(input: {
   const proposedActions: UnifiedActionProposal[] = [
     {
       key: 'enable_ai_alerts',
-      title: 'Enable league AI alerts',
-      summary: 'Turn on AI commissioner alerting for this league.',
+      title: 'Enable league Chimmy alerts',
+      summary: 'Turn on Chimmy commissioner alerting for this league.',
       requiresSubscription: false,
       requiresConfirmation: true,
     },
@@ -372,7 +372,7 @@ export async function getUnifiedCommissionerAssessment(input: {
     },
     {
       key: 'promote_commissioner_notifications',
-      title: 'Enable AI notification fanout',
+      title: 'Enable Chimmy notification fanout',
       summary: 'Promote notification mode to both in-app and chat.',
       requiresSubscription: true,
       requiresConfirmation: true,
@@ -610,7 +610,7 @@ export async function applyUnifiedCommissionerAction(input: {
       where: { id: input.leagueId },
       data: { leagueAiCommissionerAlerts: true },
     })
-    message = 'League AI commissioner alerts enabled.'
+    message = 'League Chimmy commissioner alerts enabled.'
   } else if (input.actionKey === 'enable_collusion_monitoring') {
     await prisma.leagueIntegritySettings.upsert({
       where: { leagueId: input.leagueId },
@@ -650,7 +650,7 @@ export async function applyUnifiedCommissionerAction(input: {
       where: { leagueId: input.leagueId },
       data: { commissionerNotificationMode: 'both' },
     })
-    message = 'AI commissioner notifications promoted to both chat and in-app.'
+    message = 'Chimmy commissioner notifications promoted to both chat and in-app.'
   } else if (input.actionKey === 'run_commissioner_cycle') {
     const sport = typeof input.payload?.sport === 'string' ? String(input.payload.sport) : null
     const seasonRaw = Number(input.payload?.season)
@@ -661,7 +661,7 @@ export async function applyUnifiedCommissionerAction(input: {
       season,
       source: 'unified_commissioner_api',
     })
-    message = `AI Commissioner cycle completed (${result.createdAlerts.length} new alerts).`
+    message = `Chimmy Commissioner cycle completed (${result.createdAlerts.length} new alerts).`
     meta = {
       createdAlerts: result.createdAlerts.length,
       touchedAlerts: result.touchedAlerts,

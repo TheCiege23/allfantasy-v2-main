@@ -437,7 +437,7 @@ export async function buildStandingsSummaryLines(challengeId: string) {
   if (!challenge) return []
   if (challenge.entries.length === 0) {
     return [
-      "No finalized brackets are available yet. Finalized entries will appear in the AI standings summary once participants submit their brackets.",
+      "No finalized brackets are available yet. Finalized entries will appear in Chimmy standings summary once participants submit their brackets.",
     ]
   }
   const rows = buildWorldCupLeaderboardRows({

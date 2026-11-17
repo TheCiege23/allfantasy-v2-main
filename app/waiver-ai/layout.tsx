@@ -8,7 +8,7 @@ import { getSEOPageConfig } from "@/lib/seo"
 export const metadata: Metadata = buildMetadata(
   getSEOPageConfig("waiver-ai") ?? {
     title: "Waiver Wire Advisor | AllFantasy",
-    description: "AI-powered waiver and lineup help for fantasy leagues.",
+    description: "Chimmy-powered waiver and lineup help for fantasy leagues.",
     canonical: `${getPublicSiteOrigin()}/waiver-ai`,
   }
 )

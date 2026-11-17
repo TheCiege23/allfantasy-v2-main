@@ -154,14 +154,14 @@ function getTitleAndBody(
       }
     case 'draft_ai_trade_review_available':
       return {
-        title: `AI trade review ready${league}`,
-        body: 'An AI review is available for a draft pick trade.',
+        title: `Chimmy trade review ready${league}`,
+        body: 'a Chimmy review is available for a draft pick trade.',
         severity: 'low',
       }
     case 'draft_orphan_ai_assigned':
       return {
-        title: `Orphan/AI manager updated${league}`,
-        body: 'Commissioner has updated AI manager settings for empty teams.',
+        title: `Orphan/Chimmy manager updated${league}`,
+        body: 'Commissioner has updated Chimmy manager settings for empty teams.',
         severity: 'low',
       }
     case 'draft_auction_outbid':
@@ -187,7 +187,7 @@ function getTitleAndBody(
       }
     case 'draft_intel_queue_ready':
       return {
-        title: `AI queue ready${league}`,
+        title: `Chimmy queue ready${league}`,
         body: payload.playerName
           ? `${payload.playerName} leads your Chimmy queue.`
           : 'Chimmy built your 5-pick queue.',

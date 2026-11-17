@@ -53,7 +53,7 @@ function defaultTitle(kind: ShareableKind, context: { leagueName?: string; brack
     case "bracket_invite":
       return context.bracketName ? `${context.bracketName} bracket invite` : "AllFantasy bracket invite";
     case "ai_result_card":
-      return "AllFantasy AI analysis";
+      return "AllFantasy Chimmy analysis";
     case "matchup_result":
       return "AllFantasy matchup result";
     case "power_rankings":
@@ -95,7 +95,7 @@ function defaultDescription(
         ? `Join this ${sportLabel}bracket challenge on AllFantasy.`
         : "An AllFantasy bracket invite is ready to open.";
     case "ai_result_card":
-      return "Share a public-safe AllFantasy AI analysis card.";
+      return "Share a public-safe AllFantasy Chimmy analysis card.";
     case "matchup_result":
       return "Share a matchup result card with AllFantasy context and sport-aware styling.";
     case "power_rankings":

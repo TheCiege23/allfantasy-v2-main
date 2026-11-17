@@ -105,7 +105,7 @@ export function WorldCupChatEmptyState({
             Ask Chimmy about your bracket
           </p>
           <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-white/40">
-            Your private AI helper. Ask about your path to first, what match matters most, or who you should root for.
+            Your private Chimmy helper. Ask about your path to first, what match matters most, or who you should root for.
           </p>
         </div>
         {onSuggestPrompt ? (

@@ -336,7 +336,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
               <span className="text-xs font-bold bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent">AllFantasy Enhanced</span>
               <div className="flex items-center gap-1 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-rival-pulse" />
-                <span className="text-[11px] text-emerald-400/60 font-medium">AI-Powered</span>
+                <span className="text-[11px] text-emerald-400/60 font-medium">Chimmy-powered</span>
               </div>
             </div>
             <span className="ml-auto text-[11px] text-cyan-400/40 uppercase tracking-widest font-medium">Enhanced</span>
@@ -483,7 +483,7 @@ export default function MigrationProof({ preview }: { preview: TransferPreview }
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm">{'\u{1F4CA}'}</span>
-                  <span className="text-[11px] font-bold bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent uppercase tracking-wider">AI Power Rankings</span>
+                  <span className="text-[11px] font-bold bg-gradient-to-r from-cyan-300 to-purple-300 bg-clip-text text-transparent uppercase tracking-wider">Chimmy Power Rankings</span>
                 </div>
                 <AIFoundTag label="rankings" delay={1100} />
               </div>

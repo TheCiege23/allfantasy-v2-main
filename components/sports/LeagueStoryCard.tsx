@@ -44,7 +44,7 @@ export function LeagueStoryCard({ leagueId, sport, week }: { leagueId: string; s
         <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-white/30">
           <BookOpen className="h-3.5 w-3.5" /> Weekly Storyline
         </div>
-        <p className="mt-2 text-xs text-white/40">Generate an AI-powered recap of this week&apos;s league action.</p>
+        <p className="mt-2 text-xs text-white/40">Generate a Chimmy-powered recap of this week&apos;s league action.</p>
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
         <button
           type="button"

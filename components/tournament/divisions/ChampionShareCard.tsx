@@ -54,7 +54,7 @@ function ShareCardFace({ card, view, size, showPath, showStats }: { card: ShareC
         </ol>
       )}
       <div style={{ position: 'absolute', left: 64, right: 64, bottom: 48, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <span style={{ fontSize: 28, letterSpacing: 4, fontWeight: 800, color: '#c7cbe0' }}>ALLFANTASY.AI</span>
+        <span style={{ fontSize: 28, letterSpacing: 4, fontWeight: 800, color: '#c7cbe0' }}>ALLFANTASY</span>
         <span style={{ fontSize: 40, color: '#e8b84a', fontFamily: 'Caveat, cursive' }}>created by KB</span>
       </div>
     </div>

@@ -393,7 +393,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
 
         <FeatureGate
           featureId="commissioner_automation"
-          featureNameOverride="AI Commissioner"
+          featureNameOverride="Chimmy Commissioner"
           tokenRuleCodeOverride="commissioner_ai_cycle_run"
         >
           <AICommissionerPanel leagueId={leagueId} />

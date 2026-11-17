@@ -90,7 +90,7 @@ const SALARY_CAP_NAV: Record<string, [string, string, string]> = {
   cap_contracts: ['league.nav.cap.contracts', 'Contracts', 'capContracts'],
   cap_team_builder: ['league.nav.cap.teamBuilder', 'Team builder', 'capBuilder'],
   cap_auction: ['league.nav.cap.auction', 'Startup auction', 'capAuction'],
-  cap_ai: ['league.nav.cap.ai', 'Cap AI', 'insight'],
+  cap_ai: ['league.nav.cap.ai', 'Cap Chimmy', 'insight'],
   cap_rules: ['league.nav.cap.rules', 'Cap rules', 'capRules'],
 }
 

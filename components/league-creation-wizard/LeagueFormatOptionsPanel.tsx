@@ -179,7 +179,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="app_generated">App-generated names</SelectItem>
-                <SelectItem value="ai_themed">AI-themed names</SelectItem>
+                <SelectItem value="ai_themed">Chimmy-themed names</SelectItem>
                 <SelectItem value="commissioner_custom">I will name each league (one per line below)</SelectItem>
               </SelectContent>
             </Select>
@@ -569,7 +569,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               >
                 <option value="deterministic_score">Fantasy score (highest weekly score wins)</option>
                 <option value="hybrid">Hybrid (score + challenge factor)</option>
-                <option value="ai_theme">AI-themed challenges</option>
+                <option value="ai_theme">Chimmy-themed challenges</option>
               </select>
             </div>
             <div className="space-y-1.5">

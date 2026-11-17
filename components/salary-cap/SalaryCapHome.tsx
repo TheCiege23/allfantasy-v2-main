@@ -38,7 +38,7 @@ const VIEW_LABELS: Record<SalaryCapView, string> = {
   contracts: 'Contracts',
   'team-builder': 'Team Builder',
   draft: 'Draft & Contracts',
-  ai: 'AI Tools',
+  ai: 'Chimmy Tools',
   rules: 'Rules & Settings',
 }
 

@@ -103,7 +103,7 @@ export async function resolveSurvivorAiAccess(input: {
       entitlement,
       requiredPlan: null,
       upgradePath: '/settings',
-      message: 'Ungated Survivor AI surface.',
+      message: 'Ungated Survivor Chimmy surface.',
     }
     return {
       ok: true,
@@ -160,7 +160,7 @@ export async function resolveSurvivorAiAccess(input: {
     tokenRuleCode: ruleCode,
     tokenSourceType: 'survivor_ai',
     tokenSourceId: `${leagueId}:${type}:${Date.now()}`,
-    tokenDescription: `Survivor AI — ${type}`,
+    tokenDescription: `Survivor Chimmy — ${type}`,
     tokenMetadata: { leagueId, survivorAiType: type },
   })
 

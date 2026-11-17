@@ -23,7 +23,7 @@ const ASSET_TYPE_LABELS: Record<SocialAssetType, string> = {
   draft_highlights: 'Draft Highlights',
   rivalry_moments: 'Rivalry Moments',
   bracket_challenge_highlights: 'Bracket Challenge Highlights',
-  ai_insight_moments: 'AI Insight Moments',
+  ai_insight_moments: 'Chimmy Insight Moments',
   sport_platform_highlights: 'Sport Platform Highlights',
 };
 
@@ -181,7 +181,7 @@ export default function SocialClipsPage() {
               className="text-amber-400 text-sm"
               data-testid="social-clip-ai-provider-unavailable-message"
             >
-              No AI provider available. Set XAI_API_KEY or OPENAI_API_KEY.
+              No Chimmy provider available. Set XAI_API_KEY or OPENAI_API_KEY.
             </p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

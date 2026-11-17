@@ -126,7 +126,7 @@ export async function POST(
 
     const proposerName = slotOrder.find((s) => s.rosterId === rosterId)?.displayName ?? 'AI Orphan Manager'
     const receiverName = slotOrder.find((s) => s.rosterId === targetRosterId)?.displayName ?? 'Manager'
-    const summary = `AI manager suggests ${proposerName} send ${givePick.round}.${String(givePick.slot).padStart(2, '0')} for ${receiverName}'s ${receivePick.round}.${String(receivePick.slot).padStart(2, '0')}.`
+    const summary = `Chimmy manager suggests ${proposerName} send ${givePick.round}.${String(givePick.slot).padStart(2, '0')} for ${receiverName}'s ${receivePick.round}.${String(receivePick.slot).padStart(2, '0')}.`
     const createProposal = Boolean(body.createProposal ?? body.applyDecision ?? false)
 
     let createdProposalId: string | null = null

@@ -138,7 +138,7 @@ function buildAutoEvalMessage(row: TradeCheckRow): string {
         : `This trade hasn't been graded yet — not enough data to grade it honestly.`,
     letter ? row.aiAnalysis?.expertAnalysis?.trim() ?? '' : '',
     verdict,
-    `[Open AI Trade Analyzer for a deeper response](${href})`,
+    `[Open Chimmy Trade Analyzer for a deeper response](${href})`,
   ]
     .filter(Boolean)
     .join('\n')

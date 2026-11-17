@@ -79,7 +79,7 @@ export function AiInsightsPanel({
             <p className="text-lg font-semibold text-white">{engine.lineupMode}</p>
           </div>
           <div className="text-right">
-            <p className="text-[11px] text-white/45">AI confidence</p>
+            <p className="text-[11px] text-white/45">Chimmy confidence</p>
             <p className="text-xl font-semibold tabular-nums text-cyan-200">{aiConfidencePct}%</p>
           </div>
         </div>

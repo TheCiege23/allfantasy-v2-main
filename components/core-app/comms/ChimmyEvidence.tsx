@@ -61,7 +61,7 @@ export type ChimmyEvidence = {
  * would understate what the answer touched.
  */
 const SOURCE_LABELS: Record<string, string> = {
-  deterministic: 'Stored data (no AI call)',
+  deterministic: 'Stored data (no Chimmy call)',
   live_web_search: 'Live web search',
   league_sports_grounding_packet: 'Your league settings and rosters',
   league_source_references: 'Your league pages',

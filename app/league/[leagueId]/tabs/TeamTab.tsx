@@ -1213,7 +1213,7 @@ export function TeamTab({
               blockedByCommissioner: false,
             }
       )
-      toast.success(next ? 'AI Auto Start/Sit Protection on' : 'AI Auto Start/Sit Protection off')
+      toast.success(next ? 'Chimmy Auto Start/Sit Protection on' : 'Chimmy Auto Start/Sit Protection off')
     } finally {
       setAutoCoachLoading(false)
     }
@@ -1877,7 +1877,7 @@ const maxWeekMenu = useMemo(() => {
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-bold text-primary">Lightning AI Auto Start/Sit Protection</p>
+              <p className="text-sm font-bold text-primary">Lightning Chimmy Auto Start/Sit Protection</p>
               {!hasProAutoCoach ? <SubscriptionGateBadge featureId="pro_autocoach" /> : null}
             </div>
             <p className="mt-0.5 text-xs text-muted">
@@ -1936,7 +1936,7 @@ const maxWeekMenu = useMemo(() => {
       <div className="rounded-xl border border-brand-primary/15 bg-surface-muted p-4 backdrop-blur-sm">
         <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted">Start A vs B</p>
         <p className="mb-3 text-xs text-muted">
-          Compare two players with deterministic projections first; AI explains the math (Pro). Supports all league sports.
+          Compare two players with deterministic projections first; Chimmy explains the math (Pro). Supports all league sports.
         </p>
         <StartVsComparisonLauncher
           leagueId={league.id}

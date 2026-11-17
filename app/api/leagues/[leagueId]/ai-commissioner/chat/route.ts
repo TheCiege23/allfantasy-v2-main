@@ -57,7 +57,7 @@ async function paidToolPost(
     tokenRuleCode: 'commissioner_ai_chat_question',
     tokenSourceType: 'commissioner_ai_chat',
     tokenSourceId: `${leagueId}:${Date.now()}`,
-    tokenDescription: 'AI Commissioner question',
+    tokenDescription: 'Chimmy Commissioner question',
     tokenMetadata: {
       leagueId,
       sport: body.sport ?? null,
@@ -110,7 +110,7 @@ async function paidToolPost(
           sourceType: 'commissioner_ai_chat_refund',
           sourceId: spendLedgerId,
           idempotencyKey: `refund:commissioner_ai_chat:${spendLedgerId}`,
-          description: 'Auto refund after failed AI Commissioner question.',
+          description: 'Auto refund after failed Chimmy Commissioner question.',
           metadata: { leagueId },
         })
         .catch(() => null)

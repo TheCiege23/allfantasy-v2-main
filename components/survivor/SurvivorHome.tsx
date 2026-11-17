@@ -31,7 +31,7 @@ const VIEW_LABELS: Record<SurvivorView, string> = {
   idols: 'Idols & Advantages',
   exile: 'Exile Island',
   'merge-jury': 'Merge & Jury',
-  ai: 'AI Host',
+  ai: 'Chimmy Host',
 }
 
 interface SurvivorHomeProps {

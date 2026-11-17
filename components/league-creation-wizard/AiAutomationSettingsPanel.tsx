@@ -120,7 +120,7 @@ export function AiAutomationSettingsPanel({
     {
       key: 'leagueAutomation',
       label: 'League automation',
-      description: 'AI-assisted league cycles and commissioner workflows.',
+      description: 'Chimmy-assisted league cycles and commissioner workflows.',
     },
     {
       key: 'integrityMonitoring',
@@ -149,7 +149,7 @@ export function AiAutomationSettingsPanel({
     },
     {
       key: 'powerRankingsAi',
-      label: 'AI power rankings',
+      label: 'Chimmy power rankings',
       description: 'League power ranks with explanations.',
     },
     {
@@ -166,8 +166,8 @@ export function AiAutomationSettingsPanel({
   }[] = [
     {
       key: 'aiAdpEnabled',
-      label: 'AI rankings in draft room',
-      description: `Use AI-assisted player lists during the draft (${sport}).`,
+      label: 'Chimmy rankings in draft room',
+      description: `Use Chimmy-assisted player lists during the draft (${sport}).`,
     },
     {
       key: 'draftHelperEnabled',
@@ -185,7 +185,7 @@ export function AiAutomationSettingsPanel({
     <div className="space-y-8">
       <StepHeader
         title="Draft help & automation"
-        description="Free draft alerts and queue behavior. Advanced commissioner AI is optional and can be managed later in league settings."
+        description="Free draft alerts and queue behavior. Advanced commissioner Chimmy is optional and can be managed later in league settings."
         help={
           <>
             <strong>Free</strong> — draft notifications, autopick from queue, and slow-draft reminders (Sleeper-style draft
@@ -280,7 +280,7 @@ export function AiAutomationSettingsPanel({
         }`}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold text-white">AF Commissioner AI</h4>
+          <h4 className="text-sm font-semibold text-white">AF Commissioner Chimmy</h4>
           {loading ? (
             <span className="text-xs text-white/45">Checking subscription…</span>
           ) : locked ? (

@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       temperature: 0.8,
     })
 
-    const insight = completion.choices[0]?.message?.content?.trim() || "AI insight unavailable."
+    const insight = completion.choices[0]?.message?.content?.trim() || "Chimmy insight unavailable."
 
     return NextResponse.json({ ok: true, featureId, insight })
   } catch (err: any) {

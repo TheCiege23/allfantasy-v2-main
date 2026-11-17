@@ -84,7 +84,7 @@ describe('withLockReturn', () => {
 
 describe('the feature lock card links with its lock and its page', () => {
   it('View plans carries from=lock_<featureId> and back=<this page>', async () => {
-    render(<LockedFeatureCard featureName="AI Waivers" featureId="ai_waivers" requiredPlan="AF Pro" upgradeHref="/upgrade?plan=pro&feature=ai_waivers" />)
+    render(<LockedFeatureCard featureName="Chimmy Waivers" featureId="ai_waivers" requiredPlan="AF Pro" upgradeHref="/upgrade?plan=pro&feature=ai_waivers" />)
     const link = screen.getByTestId('locked-feature-upgrade-link')
     await waitFor(() => expect(paramsOf(link.getAttribute('href')).get('back')).toBe('/league/L1?view=waivers'))
     const p = paramsOf(link.getAttribute('href'))
@@ -105,10 +105,10 @@ describe('the feature lock card links with its lock and its page', () => {
 })
 
 describe('after paying, the primary button returns to the lock', () => {
-  it('back + a feature id the old list never knew: "Back to AI Waivers", to the exact league page', () => {
+  it('back + a feature id the old list never knew: "Back to Chimmy Waivers", to the exact league page', () => {
     search = new URLSearchParams({ plan: 'pro', feature: 'ai_waivers', from: 'lock_ai_waivers', back: '/league/L1?view=waivers', checkout: 'success' })
     render(<CheckoutOutcomePanel phase="success" planName="AF Pro" />)
-    const button = screen.getByRole('link', { name: 'Back to AI Waivers' })
+    const button = screen.getByRole('link', { name: 'Back to Chimmy Waivers' })
     expect(button.getAttribute('href')).toBe('/league/L1?view=waivers')
     expect(screen.queryByRole('link', { name: 'Go to your dashboard' })).toBeNull()
   })
@@ -135,14 +135,14 @@ describe('after paying, the primary button returns to the lock', () => {
   it('a cancelled checkout offers the way back too', () => {
     search = new URLSearchParams({ feature: 'ai_waivers', back: '/league/L1?view=waivers', checkout: 'cancelled' })
     render(<CheckoutOutcomePanel phase="cancelled" />)
-    expect(screen.getByRole('link', { name: 'Back to AI Waivers' }).getAttribute('href')).toBe('/league/L1?view=waivers')
+    expect(screen.getByRole('link', { name: 'Back to Chimmy Waivers' }).getAttribute('href')).toBe('/league/L1?view=waivers')
   })
 })
 
 describe('resolveLockedFeature names any premium feature from the plan matrix', () => {
   it('listed keys keep their entry; premium ids get their matrix title; junk stays null', () => {
     expect(resolveLockedFeature('league_rankings')).toEqual({ label: 'power rankings commentary', href: '/core/rankings?scope=league&panel=power' })
-    expect(resolveLockedFeature('ai_waivers')).toEqual({ label: 'AI Waivers', href: null })
+    expect(resolveLockedFeature('ai_waivers')).toEqual({ label: 'Chimmy Waivers', href: null })
     expect(resolveLockedFeature('legacy_trade_finder')).toEqual({ label: 'Trade Review', href: null })
     expect(resolveLockedFeature('some_new_key')).toBeNull()
   })

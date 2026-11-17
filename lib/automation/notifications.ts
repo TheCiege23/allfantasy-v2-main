@@ -100,7 +100,7 @@ export async function enqueueWaiverAiReminder(input: {
     channel: "in_app",
     eventType: "WAIVER_AI_REMINDER",
     title: "Waiver deadline approaching",
-    body: "Your AI waiver recommendations are ready. Check your top targets before the deadline.",
+    body: "Your Chimmy waiver recommendations are ready. Check your top targets before the deadline.",
     sendAfter,
     metadata: input.metadata,
   })

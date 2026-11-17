@@ -1428,7 +1428,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               className="rounded-xl border border-violet-500/35 bg-violet-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-violet-100 hover:bg-violet-500/20"
               data-testid="trades-tab-chimmy-analyze"
             >
-              AI trade analysis
+              Chimmy trade analysis
             </button>
           ) : null}
             <button

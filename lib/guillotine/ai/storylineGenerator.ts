@@ -68,7 +68,7 @@ export async function generateEliminationPage(eliminationId: string): Promise<Dy
       `${Math.abs(elimination.marginBelowSafe).toFixed(2)} points separated them from safety.`,
       elimination.aiCollapseReason
         ? `Collapse reason: ${elimination.aiCollapseReason}`
-        : 'No AI collapse reason was recorded.',
+        : 'No Chimmy collapse reason was recorded.',
     ].join(' '),
     tags: ['guillotine', 'elimination'],
   }

@@ -153,7 +153,7 @@ function buildDeterministicExplanation(params: {
   }
 
   lines.push(
-    "Note: AI narrative is temporarily unavailable — this is a deterministic fallback. The full narrative returns when the AI service is restored."
+    "Note: Chimmy narrative is temporarily unavailable — this is a deterministic fallback. The full narrative returns when Chimmy service is restored."
   )
 
   return { summary, lines }

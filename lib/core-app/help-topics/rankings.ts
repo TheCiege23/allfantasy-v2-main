@@ -70,11 +70,11 @@ export const RANKINGS_TOPICS = {
   storedPowerRanking: {
     en: {
       title: 'League power',
-      body: 'Read from this league’s latest saved power ranking, which is saved whenever someone in the league runs Power rankings. Strengths and risks come from an AI refresh. Nothing here is recomputed when you open the page.',
+      body: 'Read from this league’s latest saved power ranking, which is saved whenever someone in the league runs Power rankings. Strengths and risks come from a Chimmy refresh. Nothing here is recomputed when you open the page.',
     },
     es: {
       title: 'Poder de la liga',
-      body: 'Se lee del último ranking de poder guardado de esta liga, que se guarda cada vez que alguien de la liga ejecuta Power rankings. Fortalezas y riesgos vienen de una actualización con IA. Nada se recalcula al abrir la página.',
+      body: 'Se lee del último ranking de poder guardado de esta liga, que se guarda cada vez que alguien de la liga ejecuta Power rankings. Fortalezas y riesgos vienen de una actualización con Chimmy. Nada se recalcula al abrir la página.',
     },
   },
   letterGrade: {

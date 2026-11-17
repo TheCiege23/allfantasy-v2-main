@@ -37,8 +37,8 @@ function formatWorldCupTokenConfirmationMessage(
 
   const costLine =
     cost != null
-      ? `This World Cup AI action costs ${cost} token${cost === 1 ? "" : "s"}.`
-      : "This World Cup AI action requires tokens."
+      ? `This World Cup Chimmy action costs ${cost} token${cost === 1 ? "" : "s"}.`
+      : "This World Cup Chimmy action requires tokens."
   const balanceLine =
     balanceAfter != null
       ? ` Your balance after this action will be ${balanceAfter}.`

@@ -20,7 +20,7 @@ export default function DonateSuccessPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text)' }}>Thank You!</h1>
           <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            Your donation means a lot to the AllFantasy team. Every dollar goes directly toward keeping our servers running, improving our AI tools, and building new features for the fantasy community.
+            Your donation means a lot to the AllFantasy team. Every dollar goes directly toward keeping our servers running, improving our Chimmy tools, and building new features for the fantasy community.
           </p>
         </div>
 

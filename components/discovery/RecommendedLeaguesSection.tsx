@@ -112,7 +112,7 @@ export function RecommendedLeaguesSection({ sport = null, limit = 6 }: Recommend
             Recommended for you
           </h2>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Deterministic-first matching from your favorite sports, past leagues, draft behavior, league types, and AI usage.
+            Deterministic-first matching from your favorite sports, past leagues, draft behavior, league types, and Chimmy usage.
           </p>
         </div>
         <button
@@ -129,7 +129,7 @@ export function RecommendedLeaguesSection({ sport = null, limit = 6 }: Recommend
           }}
         >
           <Wand2 className="h-3.5 w-3.5" />
-          {aiExplainEnabled ? "AI explanations on" : "Enable AI explanations"}
+          {aiExplainEnabled ? "Chimmy explanations on" : "Enable Chimmy explanations"}
         </button>
       </div>
       <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
@@ -185,7 +185,7 @@ export function RecommendedLeaguesSection({ sport = null, limit = 6 }: Recommend
                 </div>
               ) : null}
               <p className="mt-1 text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--muted)" }}>
-                {explanationSource === "ai" ? "AI-enhanced explanation" : "Deterministic explanation"}
+                {explanationSource === "ai" ? "Chimmy-enhanced explanation" : "Deterministic explanation"}
               </p>
             </div>
           </div>

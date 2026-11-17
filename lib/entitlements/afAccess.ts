@@ -109,13 +109,13 @@ export async function canUseCommissionerWaiverAI(userId: string, leagueId: strin
 export class AfProRequiredError extends Error {
   readonly errorCode = "AF_PRO_REQUIRED" as const
   constructor() {
-    super("AI waiver recommendations are available with AF Pro.")
+    super("Chimmy waiver recommendations are available with AF Pro.")
     this.name = "AfProRequiredError"
   }
   toResponse(): AfProError {
     return {
       error: "AF_PRO_REQUIRED",
-      message: "AI waiver recommendations are available with AF Pro.",
+      message: "Chimmy waiver recommendations are available with AF Pro.",
       upgradePath: "/pricing?plan=af-pro&feature=waiver-ai",
     }
   }
@@ -125,13 +125,13 @@ export class AfProRequiredError extends Error {
 export class AfCommissionerRequiredError extends Error {
   readonly errorCode = "AF_COMMISSIONER_REQUIRED" as const
   constructor() {
-    super("League-wide AI waiver tools require AF Commissioner.")
+    super("League-wide Chimmy waiver tools require AF Commissioner.")
     this.name = "AfCommissionerRequiredError"
   }
   toResponse(): AfCommissionerError {
     return {
       error: "AF_COMMISSIONER_REQUIRED",
-      message: "League-wide AI waiver tools require AF Commissioner.",
+      message: "League-wide Chimmy waiver tools require AF Commissioner.",
       upgradePath: "/pricing?plan=af-commissioner&feature=commissioner-waiver-ai",
     }
   }

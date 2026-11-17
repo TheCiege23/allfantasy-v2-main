@@ -154,7 +154,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   chat_mentions: "Chat mentions",
   league_announcements: "League announcements & @all",
   bracket_updates: "Bracket updates",
-  ai_alerts: "AI alerts",
+  ai_alerts: "Chimmy alerts",
   league_drama: "League drama / storylines",
   commissioner_alerts: "Commissioner alerts",
   system_account: "System & account alerts",
@@ -162,7 +162,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   performance_alerts: "Scoring plays & big plays",
   lineup_alerts: "Starting lineup alerts",
   draft_alerts: "Draft alerts (on the clock, timer, trade offers)",
-  draft_intel_alerts: "Draft intelligence (AI queue, Chimmy DMs, recap)",
+  draft_intel_alerts: "Draft intelligence (Chimmy queue, Chimmy DMs, recap)",
   autocoach: "Chimmy AutoCoach lineup swaps",
   // Players followed from the ☆ on any player card (2026-09-14) — injuries and big news about
   // them, including players on none of your rosters. Its own switch so a follow can stay in the

@@ -126,13 +126,13 @@ function computeTradeDeviation(input: TradeActionInput): {
     deviationScore += 30
     if (favorsThem) {
       riskFactors.push(`Trade strongly favors the other team`)
-      details.push(`AI analysis shows this trade heavily benefits the other team. ${youReceive} doesn't match the value of ${youGiveUp}.`)
+      details.push(`Chimmy analysis shows this trade heavily benefits the other team. ${youReceive} doesn't match the value of ${youGiveUp}.`)
     } else if (favorsYou) {
       riskFactors.push(`Trade strongly favors you — may be rejected`)
       details.push(`This trade is heavily in your favor, which means the other manager is unlikely to accept it.`)
     } else {
       riskFactors.push('Trade strongly favors one side')
-      details.push('AI analysis shows this trade heavily benefits one team over the other.')
+      details.push('Chimmy analysis shows this trade heavily benefits one team over the other.')
     }
     confidenceInWarning += 10
   } else if (verdict.includes('slightly favors')) {
@@ -215,14 +215,14 @@ function computeTradeDeviation(input: TradeActionInput): {
 
   let aiRecText: string
   if (favorsThem && grade) {
-    aiRecText = `AI grades this trade ${grade} for your side. You're sending away ${youGiveUp} and getting back ${youReceive}, which doesn't return equal value.`
+    aiRecText = `Chimmy grades this trade ${grade} for your side. You're sending away ${youGiveUp} and getting back ${youReceive}, which doesn't return equal value.`
     if (netDelta !== 0) {
       aiRecText += ` Net value gap: ${Math.abs(netDelta).toLocaleString()} points ${netDelta < 0 ? 'against you' : 'in your favor'}.`
     }
   } else if (favorsYou && grade) {
-    aiRecText = `AI grades this trade ${grade}. This trade favors your side — ${youReceive} is worth more than ${youGiveUp}. The other manager may reject this.`
+    aiRecText = `Chimmy grades this trade ${grade}. This trade favors your side — ${youReceive} is worth more than ${youGiveUp}. The other manager may reject this.`
   } else if (grade) {
-    aiRecText = `AI grades this trade ${grade}. The value exchange between ${youGiveUp} and ${youReceive} is ${gradeNum >= 75 ? 'reasonably balanced' : 'somewhat uneven'}.`
+    aiRecText = `Chimmy grades this trade ${grade}. The value exchange between ${youGiveUp} and ${youReceive} is ${gradeNum >= 75 ? 'reasonably balanced' : 'somewhat uneven'}.`
     if (netDelta !== 0) {
       aiRecText += ` Value gap: ${Math.abs(netDelta).toLocaleString()} points.`
     }
@@ -284,12 +284,12 @@ function computeDropDeviation(input: DropActionInput): {
     if (valueDiff > 1000) {
       deviationScore += 30
       expectedValueLoss = Math.max(expectedValueLoss, valueDiff)
-      riskFactors.push(`AI suggested dropping ${input.aiRecommendedDrop} instead (${valueDiff.toLocaleString()} less valuable)`)
-      details.push(`The AI recommended dropping ${input.aiRecommendedDrop} (value: ${aiDropVal.toLocaleString()}) instead of ${input.playerToDrop} (value: ${dropVal.toLocaleString()}).`)
+      riskFactors.push(`Chimmy suggested dropping ${input.aiRecommendedDrop} instead (${valueDiff.toLocaleString()} less valuable)`)
+      details.push(`Chimmy recommended dropping ${input.aiRecommendedDrop} (value: ${aiDropVal.toLocaleString()}) instead of ${input.playerToDrop} (value: ${dropVal.toLocaleString()}).`)
       confidenceInWarning += 10
     } else if (valueDiff > 300) {
       deviationScore += 15
-      riskFactors.push(`AI recommended a different drop candidate: ${input.aiRecommendedDrop}`)
+      riskFactors.push(`Chimmy recommended a different drop candidate: ${input.aiRecommendedDrop}`)
     }
   }
 
@@ -323,7 +323,7 @@ function computeDropDeviation(input: DropActionInput): {
     headline,
     details,
     aiRec: input.aiRecommendedDrop
-      ? `AI recommends dropping ${input.aiRecommendedDrop} (value: ${aiDropVal.toLocaleString()}) instead.`
+      ? `Chimmy recommends dropping ${input.aiRecommendedDrop} (value: ${aiDropVal.toLocaleString()}) instead.`
       : `Player value at risk: ${dropVal.toLocaleString()}.`,
     userAct: `Dropping ${input.playerToDrop}${input.playerToAdd ? ` to add ${input.playerToAdd}` : ''}`,
     confidenceInWarning,
@@ -357,14 +357,14 @@ function computeFaabDeviation(input: FaabActionInput): {
 
     if (deviationPct > 100) {
       deviationScore += 40
-      riskFactors.push(`Bid is ${deviationPct.toFixed(0)}% above AI recommendation`)
-      details.push(`You're bidding $${userBid} but AI suggests $${aiBid}. This is a significant overpay.`)
+      riskFactors.push(`Bid is ${deviationPct.toFixed(0)}% above Chimmy recommendation`)
+      details.push(`You're bidding $${userBid} but Chimmy suggests $${aiBid}. This is a significant overpay.`)
       expectedValueLoss = bidDiff
       confidenceInWarning += 15
     } else if (deviationPct > 50) {
       deviationScore += 25
-      riskFactors.push(`Bid deviates ${deviationPct.toFixed(0)}% from AI recommendation`)
-      details.push(`Your bid of $${userBid} is notably higher than the AI-recommended $${aiBid}.`)
+      riskFactors.push(`Bid deviates ${deviationPct.toFixed(0)}% from Chimmy recommendation`)
+      details.push(`Your bid of $${userBid} is notably higher than Chimmy-recommended $${aiBid}.`)
       expectedValueLoss = bidDiff
       confidenceInWarning += 8
     } else if (deviationPct > 25) {
@@ -410,7 +410,7 @@ function computeFaabDeviation(input: FaabActionInput): {
     headline,
     details,
     aiRec: aiBid > 0
-      ? `AI recommends a FAAB bid of $${aiBid} for ${input.playerName}.`
+      ? `Chimmy recommends a FAAB bid of $${aiBid} for ${input.playerName}.`
       : `Consider the player's value ($${(input.playerValue ?? 0).toLocaleString()}) relative to your bid.`,
     userAct: `Bidding $${userBid} FAAB on ${input.playerName}`,
     confidenceInWarning,

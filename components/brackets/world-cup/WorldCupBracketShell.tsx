@@ -2408,7 +2408,7 @@ export default function WorldCupBracketShell({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-black text-white">Ask Chimmy for a Pool Intro</p>
-                <p className="mt-0.5 text-[11px] text-white/50">AI-written intro to share with your players — free to try</p>
+                <p className="mt-0.5 text-[11px] text-white/50">Chimmy-written intro to share with your players — free to try</p>
               </div>
               <Sparkles className="h-4 w-4 shrink-0 text-cyan-300/50" />
             </button>
@@ -2945,7 +2945,7 @@ export default function WorldCupBracketShell({
                       ok: true,
                     },
                     {
-                      label: "AI previews available",
+                      label: "Chimmy previews available",
                       ok: view.matches.some((m) => m.homeTeamId && m.awayTeamId) ? true : null,
                       hint: "Requires team IDs on matches",
                     },
@@ -4225,7 +4225,7 @@ export default function WorldCupBracketShell({
 
                     <section
                       data-testid="world-cup-review-ai-report"
-                      aria-label="Bracket AI report"
+                      aria-label="Bracket Chimmy report"
                       className="space-y-3 rounded-2xl border border-cyan-300/15 bg-gradient-to-b from-cyan-300/[0.04] to-transparent p-3 sm:p-4"
                     >
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -5204,7 +5204,7 @@ function WorldCupDashBracketPreviewToolbar({
             onClick={() => setDashboardPreviewMode("ai")}
             className={`rounded-lg px-3 py-1.5 text-[11px] font-black ${dashboardPreviewMode === "ai" ? "bg-cyan-300 text-black" : "text-white/55 hover:text-white"}`}
           >
-            AI Simulation
+            Chimmy Simulation
           </button>
         </div>
         <button
@@ -5256,7 +5256,7 @@ function PremiumFeatureCard({
 }: {
   title: string
   description: string
-  tier: "AF Commissioner" | "AI/Pro"
+  tier: "AF Commissioner" | "Chimmy/Pro"
   unlocked: boolean
 }) {
   const { language } = useOptionalLanguage()
@@ -5377,25 +5377,25 @@ function WorldCupPremiumAccessPanel({
           <div className="grid gap-2 sm:grid-cols-2">
             <PremiumFeatureCard
               title={t("wc.premium.card.bracketBuilder.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.bracketBuilder.desc")}
             />
             <PremiumFeatureCard
               title={t("wc.premium.card.matchupPreview.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.matchupPreview.desc")}
             />
             <PremiumFeatureCard
               title={t("wc.premium.card.whatIf.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.whatIf.desc")}
             />
             <PremiumFeatureCard
               title={t("wc.premium.card.alerts.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.alerts.desc")}
             />
@@ -6658,7 +6658,7 @@ function WorldCupCommunityFoundationPanel({
               <div className="flex items-start gap-2">
                 <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-black text-white">You reached today&apos;s AI limit.</p>
+                  <p className="text-[11px] font-black text-white">You reached today&apos;s Chimmy limit.</p>
                   <p className="mt-0.5 text-xs leading-5 text-white/60">
                     {chatAiGate.message}
                   </p>
@@ -6674,7 +6674,7 @@ function WorldCupCommunityFoundationPanel({
                 className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/15 px-4 py-1.5 text-[11px] font-black text-amber-300 transition-colors hover:bg-amber-400/25"
               >
                 <Zap className="h-3 w-3" aria-hidden />
-                Upgrade for more AI
+                Upgrade for more Chimmy
               </Link>
             </div>
           ) : chatError ? (

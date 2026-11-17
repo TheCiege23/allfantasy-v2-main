@@ -116,7 +116,7 @@ export function IDPAIPanel({
       {afSubDenied ? (
         <div className="mx-4 mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
-          <span>IDP AI runs with AF Commissioner. The preview below needs it too.</span>
+          <span>IDP Chimmy runs with AF Commissioner. The preview below needs it too.</span>
           <SubscriptionGateBadge
             featureId="commissioner_idp_analysis"
             onClick={() => gate('commissioner_idp_analysis')}
@@ -125,7 +125,7 @@ export function IDPAIPanel({
       ) : null}
 
       <SettingsSection
-        title="IDP AI toggles"
+        title="IDP Chimmy toggles"
         description="Preferences save to this device; with AF Commissioner, a commissioner's also save to the league."
       >
         <SettingsRow label="Start/Sit recommendations">

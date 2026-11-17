@@ -621,14 +621,14 @@ export function LeagueSettingsTab({
           control={<Toggle checked={Boolean(s?.cpuAutoPick ?? true)} onChange={(v) => void patch({ cpuAutoPick: v })} />}
         />
         <SettingsRow
-          label="AI Auto-Pick"
+          label="Chimmy Auto-Pick"
           description="Chimmy drafts intelligently when timer expires — considers roster build, positional scarcity, projections, and bye weeks."
-          faqText="AI Auto-Pick uses Chimmy to make smart draft decisions. Falls back to CPU if AI unavailable."
+          faqText="Chimmy Auto-Pick uses Chimmy to make smart draft decisions. Falls back to CPU if Chimmy unavailable."
           control={
             <div>
               <Toggle checked={Boolean(s?.aiAutoPick)} onChange={(v) => void patch({ aiAutoPick: v })} />
               {s?.aiAutoPick ? (
-                <p className="mt-1.5 text-[11px] text-[#ff3d81]/70">✓ AI takes priority over CPU auto-pick</p>
+                <p className="mt-1.5 text-[11px] text-[#ff3d81]/70">✓ Chimmy takes priority over CPU auto-pick</p>
               ) : null}
             </div>
           }
@@ -1083,11 +1083,11 @@ export function LeagueSettingsTab({
 
       <SettingsSection
         id="ai-controls"
-        title="AI Features"
-        description="Configure AllFantasy AI assistance for your draft."
+        title="Chimmy Features"
+        description="Configure AllFantasy Chimmy assistance for your draft."
       >
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#ff3d81]/12 bg-[#ff3d81]/[0.06] p-3">
-          <span className="text-[12px] font-semibold text-[#ff9ec0]">AI Scope:</span>
+          <span className="text-[12px] font-semibold text-[#ff9ec0]">Chimmy Scope:</span>
           <Select value={String(s?.aiScope ?? 'everyone')} onChange={(v) => void patch({ aiScope: v })} className="max-w-[220px]">
             <option value="everyone">Available to everyone</option>
             <option value="per_user">Optional per user</option>
@@ -1096,13 +1096,13 @@ export function LeagueSettingsTab({
           </Select>
         </div>
         <SettingsRow
-          label="AI Auto-Pick"
-          description="Matches Automation → AI Auto-Pick."
+          label="Chimmy Auto-Pick"
+          description="Matches Automation → Chimmy Auto-Pick."
           faqText="When a manager times out, Chimmy picks based on roster needs, value, scarcity, and bye weeks."
           control={<Toggle checked={Boolean(s?.aiAutoPick)} onChange={(v) => void patch({ aiAutoPick: v })} />}
         />
         <SettingsRow
-          label="AI Queue Suggestions"
+          label="Chimmy Queue Suggestions"
           faqText="Chimmy suggests players to queue before your pick."
           control={<Toggle checked={Boolean(s?.aiQueueSuggestions ?? true)} onChange={(v) => void patch({ aiQueueSuggestions: v })} />}
         />
@@ -1153,7 +1153,7 @@ export function LeagueSettingsTab({
       {isHeadCommissioner ? (
         isBestBall ? (
           <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-            <p className="text-sm font-bold text-white/80">⚡ AutoCoach AI</p>
+            <p className="text-sm font-bold text-white/80">⚡ AutoCoach Chimmy</p>
             <p className="mt-1 text-xs text-white/45">
               Not available in Best Ball — lineups optimize automatically for this format.
             </p>
@@ -1163,7 +1163,7 @@ export function LeagueSettingsTab({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="flex items-center gap-2 text-sm font-bold text-white">
-                  ⚡ AutoCoach AI
+                  ⚡ AutoCoach Chimmy
                   <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2 py-0.5 text-[11px] font-bold text-[#ff3d81]">
                     FREE FOR LEAGUES
                   </span>
@@ -1175,7 +1175,7 @@ export function LeagueSettingsTab({
               </div>
               <button
                 type="button"
-                aria-label="Toggle AutoCoach AI for this league"
+                aria-label="Toggle AutoCoach Chimmy for this league"
                 onClick={() => void handleAutoCoachLeagueToggle()}
                 className={[
                   'relative h-6 w-11 shrink-0 rounded-full border transition-colors',

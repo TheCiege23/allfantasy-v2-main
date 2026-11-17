@@ -9,7 +9,7 @@ export default function LegacyWaiverTabIntro() {
           <span className="text-emerald-400 text-base">&#x2197;</span>
         </div>
         <div>
-          <h3 className="text-lg sm:text-xl font-bold text-cyan-400">Waiver AI</h3>
+          <h3 className="text-lg sm:text-xl font-bold text-cyan-400">Waiver Chimmy</h3>
           <p className="text-xs sm:text-sm text-gray-400">Find the best adds for your team and league</p>
         </div>
       </div>

@@ -211,7 +211,7 @@ export function TournamentControlDashboard({
           <MessageSquare className="h-5 w-5 text-amber-400" /> Announcements
         </h2>
         <p className="mb-4 text-sm text-white/60">
-          Create hub announcements. Use AI to generate copy from current standings and rules, then post.
+          Create hub announcements. Use Chimmy to generate copy from current standings and rules, then post.
         </p>
         <button
           type="button"

@@ -23,17 +23,29 @@ import { describe, expect, it } from 'vitest'
 
 const ROOT = process.cwd()
 
-/** Deliberately narrow — see file header. Recursively walked. */
-// app/partners + components/partners: the B2B front door, whose language rule is the same ("Intelligence", never
-// the bare label) by the B2B requirements doc — added with the page on 2026-11-17.
-const SCAN_ROOTS = ['app/dashboard', 'app/partners', 'components/partners']
+/**
+ * WIDENED TO THE WHOLE APP 2026-11-17, owner's decision ("remove the AI wording from the rest of the
+ * app"): every screen, component and translation says Chimmy. The header above describes the narrow
+ * first version and why it was narrow; the product-branding decision it deferred has now been made.
+ *
+ * Kept OUT of scope, deliberately and by the same decision:
+ *   - legal and disclosure pages (components/legal, app/ai-transparency, app/ai — the provider
+ *     explainer), where "AI Output" / "AI Features" are defined terms and the use of AI is disclosed;
+ *   - search-engine metadata (`metadata`, `generateMetadata`, openGraph/twitter, keywords), which keeps
+ *     "AI" as a search keyword while the page itself says Chimmy — see `isMetadataLine` below;
+ *   - app/api, whose remaining "AI" strings are instructions sent to the model, never rendered;
+ *   - app/e2e test harnesses.
+ */
+const SCAN_ROOTS = ['app', 'components', 'lib/i18n']
 
 /** Specific files outside SCAN_ROOTS that are part of the same dashboard surface (already fixed
  *  this pass) or return literal strings rendered to users despite living under app/api. */
 const ADDITIONAL_INCLUDES = ['app/api/user/rank/route.ts', 'components/rankings/af-rankings-ui/AfRankingsUiKit.tsx']
 
 const SCAN_EXTENSIONS = new Set(['.ts', '.tsx'])
-const EXCLUDED_SEGMENTS = ['admin', 'dev', 'internal', '__tests__', 'node_modules']
+const EXCLUDED_SEGMENTS = ['admin', 'dev', 'internal', '__tests__', 'node_modules', 'api', 'e2e', 'legal', 'ai-transparency']
+/** Directories excluded by full path (a bare segment name would be too broad). */
+const EXCLUDED_DIRS = new Set(['app/ai'])
 
 /** Individual files that are dev/ops-only despite not living under an excluded directory —
  *  e.g. flag-gated debug panels. Reviewed case by case, not a blanket filename pattern. */
@@ -51,6 +63,7 @@ function walk(dir: string, out: string[] = []): string[] {
     const abs = path.join(dir, entry.name)
     if (entry.isDirectory()) {
       if (EXCLUDED_SEGMENTS.includes(entry.name)) continue
+      if (EXCLUDED_DIRS.has(path.relative(ROOT, abs).split(path.sep).join('/'))) continue
       walk(abs, out)
     } else if (SCAN_EXTENSIONS.has(path.extname(entry.name))) {
       if (entry.name.includes('.test.')) continue
@@ -107,11 +120,31 @@ function isBareTextLine(line: string): boolean {
  * usage, or a specific, named open question (never a silent, undocumented pass).
  */
 const ALLOWLIST: Record<string, string[]> = {
-  // "Waiver AI" and "AI Trade Analyzer" are used consistently as peer feature names (see
-  // app/trade-evaluator/page.tsx's own "AI Trade Analyzer" badge next to its "Trade Hub" heading)
-  // — these read like established feature names, not a generic AI label that clearly should say
-  // Chimmy instead. Open product-naming question, not fixed in this pass; allowlisted rather than
-  // guessed at.
+  // Disclosure copy: the trust block names and links the legal AI Transparency page, and says plainly
+  // that recommendations are machine-generated. Same reasoning as brand-voice-chimmy-labels.test.ts.
+  'app/ai/tools/AIToolsPageClient.tsx': ['AI Transparency', 'league management, AI analysis, and', 'AI recommendations are designed to support your decisions'],
+  'app/war-room/page.tsx': ['AI Transparency'],
+  'app/mission/page.tsx': ['AI Transparency'],
+  'components/landing/SeoLandingFooter.tsx': ['AI Transparency'],
+}
+
+/**
+ * Search-engine metadata keeps "AI" (owner's decision, 2026-11-17). Skips the body of a `metadata`
+ * export, a `generateMetadata` function and any openGraph / twitter / keywords block, by brace depth.
+ * Returns a per-line mask: true means the line is metadata.
+ */
+const METADATA_START = /export const metadata\b|export (async )?function generateMetadata|\bopenGraph\s*:|\btwitter\s*:|\bkeywords\s*:|\b(title|description)\s*:\s*['"`].*\|\s*AllFantasy/
+function metadataMask(lines: string[]): boolean[] {
+  const mask = new Array<boolean>(lines.length).fill(false)
+  let depth: number | null = null
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (depth === null && !METADATA_START.test(line)) continue
+    mask[i] = true
+    const d = (depth ?? 0) + (line.match(/[{[]/g)?.length ?? 0) - (line.match(/[}\]]/g)?.length ?? 0)
+    depth = d > 0 ? d : null
+  }
+  return mask
 }
 
 function isAllowlisted(file: string, quoted: string): boolean {
@@ -120,7 +153,7 @@ function isAllowlisted(file: string, quoted: string): boolean {
   return entries.some((allowed) => quoted.includes(allowed) || allowed.includes(quoted))
 }
 
-describe('no-AI customer-copy regression guard (dashboard surface)', () => {
+describe('no-AI customer-copy regression guard (whole app)', () => {
   const files = [...new Set([...SCAN_ROOTS.flatMap((root) => walk(path.join(ROOT, root))), ...ADDITIONAL_INCLUDES])]
 
   it('scanned a non-trivial dashboard surface (sanity check the walk itself)', () => {
@@ -132,7 +165,9 @@ describe('no-AI customer-copy regression guard (dashboard surface)', () => {
       const src = fs.readFileSync(path.join(ROOT, rel), 'utf8')
       const offenders: string[] = []
       const lines = src.split(/\r?\n/)
-      for (const raw of lines) {
+      const isMeta = metadataMask(lines)
+      for (const [idx, raw] of lines.entries()) {
+        if (isMeta[idx]) continue
         if (isCommentOrImport(raw) || isConsoleCall(raw)) continue
 
         const quotedMatches = raw.match(/["'`]([^"'`]*)["'`]/g) ?? []
