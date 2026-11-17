@@ -213,7 +213,7 @@ test.describe("@find-league click audit", () => {
     await page.getByLabel("Sort").selectOption("ranking_match")
     await page.getByPlaceholder("Min").fill("10")
     await page.getByPlaceholder("Max").fill("14")
-    await page.getByRole("checkbox", { name: /ai enabled/i }).check()
+    await page.getByRole("checkbox", { name: /chimmy enabled/i }).check()
 
     await page.getByTestId("find-league-search-input").fill("alpha")
     await page.getByTestId("find-league-search-submit").click()
