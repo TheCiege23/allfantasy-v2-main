@@ -2,6 +2,7 @@ import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
+import { isPlaceholderSeatName, OPEN_SEAT_LABEL } from '@/lib/draft-room/seatLabel'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
@@ -475,8 +476,14 @@ export async function buildSessionSnapshot(
 
   // Survivor tribe badges ride on the slot entries so every room surface (strip, board, big
   // screen) can show a seat's tribe without a second fetch. Never a reason for a snapshot to fail.
-  const slotOrder = await attachSurvivorTribeBadges(leagueId, (session.slotOrder as unknown as SlotOrderEntry[]) ?? []).catch(
+  const slotOrderWithBadges = await attachSurvivorTribeBadges(leagueId, (session.slotOrder as unknown as SlotOrderEntry[]) ?? []).catch(
     () => (session.slotOrder as unknown as SlotOrderEntry[]) ?? [],
+  )
+  // An empty imported seat carries the import's "Unknown" (or no name at all). Every room surface reads
+  // these names - strip, top bar, chat, roster tab - so name the seat once, here. Display only: the
+  // stored order is untouched.
+  const slotOrder = slotOrderWithBadges.map((entry) =>
+    isPlaceholderSeatName(entry.displayName) ? { ...entry, displayName: OPEN_SEAT_LABEL } : entry,
   )
   const teamCount = session.teamCount
   const totalPicks = session.rounds * teamCount
