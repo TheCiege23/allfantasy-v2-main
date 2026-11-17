@@ -5,7 +5,7 @@ import { ChevronDown, Lock, Music2 } from 'lucide-react'
 import { musicBus } from '@/components/app-music/musicBus'
 import { YOUTUBE_STATIONS } from '@/lib/draft-music/youtube'
 import { findStation } from '@/lib/chimmy/musicCards'
-import { draftPlaylistOffered, draftPlaylistPlayKey, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
+import { draftPlaylistOffered, draftPlaylistPlayKey, followPlaylistChange, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
 
 /**
  * Music in the live draft room (2026-11-17). ONE slim row under the top bar, in normal flow — never over the board.
@@ -16,6 +16,8 @@ import { draftPlaylistOffered, draftPlaylistPlayKey, type DraftPlaylist } from '
  *  - If the commissioner set a draft playlist (AF Commissioner / AF Supreme), the row leads with it while the draft
  *    runs, one tap to play. When the draft finishes, the playlist stops if it is what is playing.
  *  - The commissioner sets or clears it under "More"; without the plan it says which plans include it.
+ *  - A change reaches every open room on its next draft settings poll (6–24 s; `livePlaylist`). Someone already
+ *    playing the room playlist is switched to the new one, or stopped when it is removed; nobody else hears a thing.
  *
  * 🛑 NOTHING PLAYS WITHOUT A TAP, and nothing is broadcast. See lib/draft-room/draftPlaylist.ts.
  * The player is the app-wide one (AppMusicDock, through musicBus), so music keeps playing after the room.
@@ -43,7 +45,17 @@ const primary = `${btn} bg-cyan-500 text-slate-950 hover:bg-cyan-400`
 const quiet = `${btn} border border-white/15 bg-white/[0.04] text-white/85 hover:bg-white/10`
 const select = 'min-h-[36px] min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 px-2 text-xs text-white sm:flex-none'
 
-export default function DraftRoomMusicBar({ leagueId, draftStatus }: { leagueId: string; draftStatus: string | null | undefined }) {
+/** How long after this viewer's own save a poll may still carry the value it replaced. */
+const OWN_SAVE_GRACE_MS = 30_000
+
+type Props = {
+  leagueId: string
+  draftStatus: string | null | undefined
+  /** The playlist from the room's draft settings poll; undefined until the room has read it. */
+  livePlaylist?: DraftPlaylist | null
+}
+
+export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist }: Props) {
   const snap = useSyncExternalStore(musicBus.subscribe, musicBus.getSnapshot, musicBus.getServerSnapshot)
   const available = Boolean(snap.ready && musicBus.actions())
   const [info, setInfo] = useState<Info | null>(null)
@@ -96,11 +108,33 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus }: { leagueId:
     }
   }, [inRow])
 
-  // The draft is over: the background playlist ends with it. Music a member chose themselves keeps going.
+  // A change the commissioner made, from the room's settings poll (every 6–24 s). Right after this viewer's own
+  // save, a poll that left before it can still bring back the value just replaced — that one value is ignored.
+  const replacedRef = useRef<{ stationId: string | null; at: number } | null>(null)
+  const liveStationId = livePlaylist === undefined ? undefined : (livePlaylist?.stationId ?? null)
   useEffect(() => {
-    if (draftStatus !== 'completed') return
-    if (playing?.key.startsWith('draft-playlist:')) musicBus.actions()?.stop()
-  }, [draftStatus, playing?.key])
+    if (liveStationId === undefined) return
+    const replaced = replacedRef.current
+    if (replaced && replaced.stationId === liveStationId && Date.now() - replaced.at < OWN_SAVE_GRACE_MS) return
+    const current = info ? (info.playlist?.stationId ?? null) : undefined
+    if (current === liveStationId) return
+    if (current !== undefined) setNote(livePlaylist ? `The draft playlist is now ${livePlaylist.label}.` : 'The draft playlist was turned off.')
+    setInfo((prev) => ({ ...(prev ?? { isCommissioner: false, canSet: false, planRequired: false }), playlist: livePlaylist ?? null }))
+    if (!open) setChoice(liveStationId ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the station, not the object
+  }, [liveStationId])
+
+  // Someone already playing the room playlist follows it: switched when it changes, stopped when it is removed or
+  // the draft finishes. Music a member chose themselves is never touched, and nothing starts in a quiet room.
+  // Only once the playlist is KNOWN — before that, music carried in from another page must not be stopped.
+  const known = info !== null
+  useEffect(() => {
+    if (!known) return
+    const next = followPlaylistChange(playing?.key, playlist)
+    if (next.action === 'stop') musicBus.actions()?.stop()
+    else if (next.action === 'play' && playlist) play(playlist.stationId, draftPlaylistPlayKey(playlist.stationId), `${playlist.label} · draft playlist`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- play() reads only the station it is given
+  }, [known, playlist?.stationId, playing?.key])
 
   function play(stationId: string, key: string, label: string) {
     const station = findStation(stationId)
@@ -123,6 +157,7 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus }: { leagueId:
         setNote(body.error ?? 'Could not save the playlist.')
         return
       }
+      replacedRef.current = { stationId: info?.playlist?.stationId ?? null, at: Date.now() }
       setInfo((prev) => (prev ? { ...prev, playlist: body.playlist ?? null } : prev))
       setNote(body.playlist ? `Draft playlist set to ${body.playlist.label}.` : 'Draft playlist removed.')
     } catch {

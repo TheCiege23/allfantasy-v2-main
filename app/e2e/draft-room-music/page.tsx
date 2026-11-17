@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import DraftRoomMusicBar from '@/components/app/draft-room/DraftRoomMusicBar'
 import { musicBus, placeYouTube, type MusicActions } from '@/components/app-music/musicBus'
 import '@/components/app-music/af-app-music.css'
+import { readLivePlaylist, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
 
 /**
  * Stands in for AppMusicDock's YouTube box: the same class, attributes and placement rule (placeYouTube), with a
@@ -39,6 +40,7 @@ function StandInPlayer() {
 export default function DraftRoomMusicHarness() {
   const [log, setLog] = useState<string[]>([])
   const [status, setStatus] = useState('in_progress')
+  const [livePlaylist, setLivePlaylist] = useState<DraftPlaylist | null | undefined>(undefined)
   useEffect(() => {
     const note = (line: string) => setLog((prev) => [...prev, line])
     const actions = {
@@ -67,7 +69,7 @@ export default function DraftRoomMusicHarness() {
         <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/60">
           Draft room top bar · Round 3, pick 5 · You are on the clock in 2 picks
         </div>
-        <DraftRoomMusicBar leagueId="e2e-league" draftStatus={status} />
+        <DraftRoomMusicBar leagueId="e2e-league" draftStatus={status} livePlaylist={livePlaylist} />
         <StandInPlayer />
         <div className="grid h-40 grid-cols-6 gap-1 rounded-xl border border-white/10 p-2" aria-hidden data-testid="harness-board">
           {Array.from({ length: 18 }, (_, i) => (
@@ -79,6 +81,13 @@ export default function DraftRoomMusicHarness() {
             Finish the draft
           </button>
           <span data-testid="harness-status">{status}</span>
+          {/* Stand in for the room's settings poll bringing back a change the commissioner made elsewhere. */}
+          <button type="button" className="rounded border border-white/20 px-2 py-1" onClick={() => setLivePlaylist(readLivePlaylist({ stationId: 'ff-podcast' }))} data-testid="harness-live-change">
+            Commissioner switches to the podcast
+          </button>
+          <button type="button" className="rounded border border-white/20 px-2 py-1" onClick={() => setLivePlaylist(null)} data-testid="harness-live-remove">
+            Commissioner removes the playlist
+          </button>
         </div>
         <ol className="mt-2 text-xs text-white/50" data-testid="music-engine-log">
           {log.map((l, i) => (

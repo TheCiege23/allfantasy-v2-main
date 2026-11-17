@@ -29,6 +29,7 @@ import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { readLeagueDraftPlaylist } from '@/lib/draft-room/draftPlaylistRead'
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
 import { markDraftRoundsManual } from '@/lib/draft/syncDraftRoundsToRoster'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
@@ -151,7 +152,7 @@ export async function GET(
     const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
     const providerStatus = getProviderStatus()
 
-    const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub] = await Promise.all([
+    const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub, draftPlaylist] = await Promise.all([
       prisma.leagueSettings.findUnique({
         where: { leagueId },
         select: {
@@ -163,6 +164,9 @@ export async function GET(
       prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } }),
       getComputedDraftRounds(leagueId).catch(() => null),
       commissioner ? hasAfCommissionerSub(userId) : Promise.resolve(false),
+      // The commissioner's draft playlist rides on this poll so a change reaches every member's room (2026-11-17).
+      // undefined on a failed read: the key is left out and the room keeps what it has.
+      readLeagueDraftPlaylist(leagueId).catch(() => undefined),
     ])
     const teams = await loadDraftOrderTeams(leagueId, lsRow?.draftOrderSlots ?? null, leagueMeta?.leagueSize ?? null).catch(() => [])
 
@@ -222,6 +226,7 @@ export async function GET(
       sessionPreDraft: variant.sessionPreDraft ?? false,
       orphanStatus,
       chimmyManagedRosterIds,
+      draftPlaylist,
       orphanAiProviderAvailable: providerStatus.anyAi,
       orphanDrafterEffectiveMode:
         variant.draftUISettings.orphanDrafterMode === 'ai' && !providerStatus.anyAi

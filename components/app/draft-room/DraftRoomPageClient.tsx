@@ -14,6 +14,7 @@ import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
 import DraftRoomMusicBar from './DraftRoomMusicBar'
+import { readLivePlaylist, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
 import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
 import { useCommissionerActions } from '@/hooks/useCommissionerActions'
 import { DraftRoomSettingsModal } from '@/components/app/draft-room/DraftRoomSettingsModal'
@@ -375,6 +376,8 @@ export function DraftRoomPageClient({
   } | null>(null)
   /** Teams a commissioner handed to Chimmy (active Chimmy manager assignments), for every member's room. */
   const [chimmyManagedRosterIds, setChimmyManagedRosterIds] = useState<string[]>([])
+  /** The commissioner's draft playlist from the settings poll, so a change reaches this room; undefined until read. */
+  const [livePlaylist, setLivePlaylist] = useState<DraftPlaylist | null | undefined>(undefined)
   /** Prisma Chimmy opponent assignments — draft roster ids (see `/api/league/ai-opponents/summary`). */
   const [aiOpponentRosterIds, setAiOpponentRosterIds] = useState<string[]>([])
   /** Draft roster id → Chimmy archetype label for manager strip badges. */
@@ -1321,6 +1324,10 @@ export function DraftRoomPageClient({
             ? data.chimmyManagedRosterIds.filter((id: unknown): id is string => typeof id === 'string')
             : [],
         )
+        const nextPlaylist = readLivePlaylist(data.draftPlaylist)
+        if (nextPlaylist !== undefined) {
+          setLivePlaylist((prev) => (prev !== undefined && (prev?.stationId ?? null) === (nextPlaylist?.stationId ?? null) ? prev : nextPlaylist))
+        }
         // Phase 3b — perf: ai-opponents/summary takes ~70s on cold load
         // (calls AI provider). DON'T await it — fire-and-forget and let the
         // panel re-render when it lands. Initialize to empty so consumers
@@ -5350,7 +5357,7 @@ export function DraftRoomPageClient({
             leagueId={leagueId}
             onUpdate={handleAutopickMeUpdate}
           />
-          {leagueId ? <DraftRoomMusicBar leagueId={leagueId} draftStatus={session.status} /> : null}
+          {leagueId ? <DraftRoomMusicBar leagueId={leagueId} draftStatus={session.status} livePlaylist={livePlaylist} /> : null}
         </>
       }
       managerStrip={null}

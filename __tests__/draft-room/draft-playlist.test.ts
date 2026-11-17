@@ -11,7 +11,7 @@ const h = vi.hoisted(() => ({
   commish: vi.fn(),
   refusal: vi.fn(),
   plan: vi.fn(),
-  findUnique: vi.fn(),
+  queryRaw: vi.fn(),
   executeRaw: vi.fn(),
 }))
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
@@ -19,7 +19,7 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: h.access }))
 vi.mock('@/lib/league/commissionerAccess', () => ({ canCommissionerAct: h.commish, commissionerAccessResponse: h.refusal }))
 vi.mock('@/lib/entitlements/afCommissionerPlan', () => ({ hasAfCommissionerPlan: h.plan }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.findUnique }, $executeRaw: h.executeRaw } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { $queryRaw: h.queryRaw, $executeRaw: h.executeRaw } }))
 
 type Route = typeof import('@/app/api/leagues/[leagueId]/draft/playlist/route')
 let route: Route
@@ -39,7 +39,7 @@ beforeEach(() => {
   h.commish.mockResolvedValue(false)
   h.refusal.mockResolvedValue(null)
   h.plan.mockResolvedValue(true)
-  h.findUnique.mockResolvedValue({ settings: { draft_room_playlist: { stationId: 'game-day', setAt: 'x', setBy: 'u1' } } })
+  h.queryRaw.mockResolvedValue([{ playlist: { stationId: "game-day", setAt: "x", setBy: "u1" } }])
   h.executeRaw.mockResolvedValue(1)
 })
 
@@ -84,7 +84,7 @@ describe('GET', () => {
   it('someone outside the draft reads nothing', async () => {
     h.access.mockResolvedValue(false)
     expect((await route.GET(new Request('http://localhost'), ctx)).status).toBe(403)
-    expect(h.findUnique).not.toHaveBeenCalled()
+    expect(h.queryRaw).not.toHaveBeenCalled()
   })
 })
 
@@ -122,9 +122,46 @@ describe('PUT', () => {
   })
 
   it('clears it', async () => {
-    h.findUnique.mockResolvedValue({ settings: {} })
+    h.queryRaw.mockResolvedValue([{ playlist: null }])
     const res = await put({ stationId: null })
     expect((await res.json()).playlist).toBeNull()
     expect(sqlText(h.executeRaw.mock.calls[0])).toMatch(/settings - /)
+  })
+})
+
+describe('a playlist change reaching an open room (2026-11-17)', () => {
+  it('reads the playlist the settings poll carries; a missing key means "keep what you have"', async () => {
+    const { readLivePlaylist } = await import('@/lib/draft-room/draftPlaylist')
+    expect(readLivePlaylist({ stationId: 'game-day', label: 'whatever' })).toMatchObject({ stationId: 'game-day', label: 'Game day hype' })
+    expect(readLivePlaylist(null)).toBeNull()
+    expect(readLivePlaylist(undefined)).toBeUndefined()
+    expect(readLivePlaylist({ stationId: 'not-a-station' })).toBeNull()
+  })
+
+  it('someone playing the room playlist follows it: switched, or stopped when it is removed', async () => {
+    const { followPlaylistChange, readDraftPlaylist } = await import('@/lib/draft-room/draftPlaylist')
+    const podcast = readDraftPlaylist({ draft_room_playlist: { stationId: 'ff-podcast' } })!
+    expect(followPlaylistChange('draft-playlist:game-day', podcast)).toEqual({ action: 'play', stationId: 'ff-podcast' })
+    expect(followPlaylistChange('draft-playlist:game-day', null)).toEqual({ action: 'stop' })
+    expect(followPlaylistChange('draft-playlist:ff-podcast', podcast)).toEqual({ action: 'none' })
+  })
+
+  it('🛑 music a member chose, and a quiet room, are never touched', async () => {
+    const { followPlaylistChange, readDraftPlaylist } = await import('@/lib/draft-room/draftPlaylist')
+    const podcast = readDraftPlaylist({ draft_room_playlist: { stationId: 'ff-podcast' } })!
+    expect(followPlaylistChange('game-day', podcast)).toEqual({ action: 'none' })
+    expect(followPlaylistChange('game-day', null)).toEqual({ action: 'none' })
+    expect(followPlaylistChange(null, podcast)).toEqual({ action: 'none' })
+    expect(followPlaylistChange(undefined, podcast)).toEqual({ action: 'none' })
+  })
+
+  it('the one-key read asks Postgres for the playlist key only', async () => {
+    const { readLeagueDraftPlaylist } = await import('@/lib/draft-room/draftPlaylistRead')
+    h.queryRaw.mockResolvedValue([{ playlist: { stationId: 'game-day' } }])
+    expect(await readLeagueDraftPlaylist('L1')).toMatchObject({ stationId: 'game-day' })
+    const sql = (h.queryRaw.mock.calls.at(-1)![0] as string[]).join('?')
+    expect(sql).toMatch(/settings -> \?::text AS playlist FROM leagues WHERE id = \?/)
+    h.queryRaw.mockResolvedValue([])
+    expect(await readLeagueDraftPlaylist('missing')).toBeNull()
   })
 })
