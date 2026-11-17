@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
 import {
   composePlayerIdentities,
   type ComposedPlayerIdentity,
@@ -16,7 +16,7 @@ import { BEST_BALL_REASON, matchupStarted, SCORING_TYPE_REASON, STATES_UNKNOWN_R
 import { weeklyFormat } from './weeklyCapabilities'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { startingSlotTemplate } from './rosterSlots'
+import { assignLineupToSlots, expandSlotCountTemplate, startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
@@ -836,11 +836,15 @@ async function buildMatchupData(
    * is written with the platform's own ids too. Translating anything but this
    * one lookup would silently break the score join.
    */
-  const sleeperIdByRosterId = scoreIds.length
+  const playerCrosswalk = scoreIds.length
     ? await timer.time('crosswalk', crosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
         () => new Map<string, string>(),
       ))
     : new Map<string, string>()
+  /* ⚠ ESPN D/ST ids (`-16002` is BUF) are not in the player crosswalk; the id alone names the club. */
+  const sleeperIdByRosterId = String(sport ?? 'NFL').toUpperCase() === 'NFL'
+    ? withTeamDefenseIds(league.platform, playerCrosswalk, scoreIds.map((playerId) => ({ playerId })))
+    : playerCrosswalk
 
   const lookupIds = [
     ...new Set(
@@ -1175,6 +1179,39 @@ async function buildMatchupData(
           }
         }
         const template = startingSlotTemplate(league.settings)
+        /*
+         * ⚠ AN ESPN LINEUP CANNOT BE PAIRED BY INDEX. Its `starters` come in ESPN's roster-array order
+         * — a WR first, the QB fifth — and the opponent's come in THEIR roster's order, so index
+         * pairing put your WR against their QB under a label named after whoever stood on your side.
+         * There is no aligned template to fall back on (`startingSlotTemplate` refuses ESPN's
+         * SLOT:COUNT shape, rightly), so each side is PLACED into the league's own slot list instead
+         * and the two are paired slot by slot. A Sleeper template and a native lineup never reach this.
+         */
+        const leagueSlots = template || isNativePlatform(league.platform) ? null : expandSlotCountTemplate(league.settings)
+        if (leagueSlots) {
+          const place = (line: typeof yourLine, slotById: Record<string, string> | null | undefined) =>
+            assignLineupToSlots(
+              leagueSlots,
+              line.map((entry) => ({ entry, cell: cellFor(entry) })),
+              (c) => slotById?.[c.entry.playerId],
+              (c) => (c.cell && !c.cell.empty ? c.cell.position : null),
+              sport,
+            )
+          const mine = place(yourLine, sideProjections.you.slotById)
+          const theirs = place(oppLine, sideProjections.opponent.slotById)
+          const placed: MatchupSlot[] = leagueSlots.map((slotLabel, i) => ({
+            slotLabel,
+            you: mine.slots[i]?.cell ?? null,
+            opponent: theirs.slots[i]?.cell ?? null,
+          }))
+          // A starter who fits no slot the template names still shows — appended, never dropped.
+          for (let i = 0; i < Math.max(mine.extra.length, theirs.extra.length); i++) {
+            const you = mine.extra[i]?.cell ?? null
+            const opponent = theirs.extra[i]?.cell ?? null
+            placed.push({ slotLabel: inferSlotLabel(you?.position ?? opponent?.position ?? null, placed.length), you, opponent })
+          }
+          return { available: true as const, data: placed }
+        }
         const slots: MatchupSlot[] = []
         for (let i = 0; i < depth; i++) {
           const you = cellFor(yourLine[i])
