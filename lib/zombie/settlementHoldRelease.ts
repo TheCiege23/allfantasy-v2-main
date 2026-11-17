@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logAuditEntry } from './auditService'
 import { runWeeklyResolution, type WeeklyResolutionRunResult } from './weeklyResolutionEngine'
-import { SETTLEMENT_HELD_ACTION, SETTLEMENT_RELEASED_ACTION, describeHoldReason, type HoldReason } from './settlementHoldReasons'
+import { SETTLEMENT_RELEASED_ACTION, readSettlementHold } from './settlementHoldReasons'
 
 /**
  * Read and release a zombie week held for review (`review_required`).
@@ -23,26 +23,8 @@ import { SETTLEMENT_HELD_ACTION, SETTLEMENT_RELEASED_ACTION, describeHoldReason,
  * the cause is still there, the week is held again with the same reason.
  */
 
-export type SettlementHoldView = { week: number; reason: HoldReason; heldAt: string | null }
-
-export async function readSettlementHold(zombieLeagueId: string): Promise<SettlementHoldView | null> {
-  const held = await prisma.zombieWeeklyResolution.findFirst({
-    where: { zombieLeagueId, status: 'review_required' },
-    orderBy: { week: 'asc' },
-    select: { week: true },
-  })
-  if (!held) return null
-  const entry = await prisma.zombieAuditEntry.findFirst({
-    where: { zombieLeagueId, week: held.week, action: SETTLEMENT_HELD_ACTION },
-    orderBy: { createdAt: 'desc' },
-    select: { newState: true, createdAt: true },
-  })
-  const code = entry?.newState && typeof entry.newState === 'object' && !Array.isArray(entry.newState)
-    ? (entry.newState as Record<string, unknown>).code
-    : null
-  // A week held before reasons were recorded reads as unknown (support), never as a guess.
-  return { week: held.week, reason: describeHoldReason(typeof code === 'string' ? code : null), heldAt: entry?.createdAt.toISOString() ?? null }
-}
+// The read lives beside the reasons, so a reader (the weekly checklist) does not load the settlement engine.
+export { readSettlementHold, type SettlementHoldView } from './settlementHoldReasons'
 
 export type ReleaseResult =
   | { ok: true; outcome: 'settled' | 'held_again' | 'waiting'; detail: string; run: WeeklyResolutionRunResult }

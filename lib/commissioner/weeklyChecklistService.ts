@@ -6,6 +6,8 @@ import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { findGuillotineSeasonId } from '@/lib/guillotine/guillotineChopAudit'
 import { COMMISSIONER_TIEBREAKS_KEY, decisionDeadline, readCommissionerTiebreak, tiebreakState } from '@/lib/guillotine/commissionerTiebreak'
 import { buildWeeklyChecklist, isStarterSlot, isUnavailable, type ChecklistFormat, type ChecklistItem } from './weeklyChecklist'
+import { buildZombieWeeklyChecklist } from './zombieWeeklyChecklist'
+import { readSettlementHold } from '@/lib/zombie/settlementHoldReasons'
 
 /**
  * Reads for the weekly commissioner checklist (./weeklyChecklist). The league must be AllFantasy-run,
@@ -82,6 +84,10 @@ export async function readWeeklyChecklist(leagueId: string, now = new Date()): P
     },
   })
   if (!league) return null
+  // A zombie week runs on the zombie engine's own tables, not the redraft season this checklist reads below.
+  if (resolveWriteAuthority(league.platform) === 'NATIVE' && String(league.leagueVariant ?? '').trim().toLowerCase() === ZOMBIE_VARIANT) {
+    return readZombieChecklist(leagueId)
+  }
   const format = checklistFormat(league)
   // `not_redraft` is kept as the wire value: it means "a format this checklist does not cover".
   if (!format) return { applies: false, reason: 'not_redraft' }
@@ -170,6 +176,32 @@ export async function readWeeklyChecklist(leagueId: string, now = new Date()): P
       },
       now,
     ),
+  }
+}
+
+const ZOMBIE_VARIANT = 'zombie'
+
+/** The zombie league's week: the four states in which its engine waits for a person (./zombieWeeklyChecklist.ts). */
+async function readZombieChecklist(leagueId: string): Promise<WeeklyChecklistView> {
+  const z = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true, status: true, currentWeek: true, correctionHoldFromWeek: true } })
+  if (!z) return { applies: false, reason: 'no_season' }
+  if (z.currentWeek < 1) return { applies: false, reason: 'not_in_season' }
+  const [hold, whisperer] = await Promise.all([
+    readSettlementHold(z.id),
+    prisma.zombieRoleWorkflow.findFirst({ where: { zombieLeagueId: z.id, kind: 'initial_offer', status: 'review_required' }, select: { id: true } }),
+  ])
+  return {
+    applies: true,
+    week: z.currentWeek,
+    format: 'zombie',
+    items: buildZombieWeeklyChecklist({
+      leagueId,
+      week: z.currentWeek,
+      paused: z.status === 'paused',
+      hold: hold ? { week: hold.week, reasonText: hold.reason.text } : null,
+      correctionFromWeek: z.correctionHoldFromWeek,
+      whispererReviewNeeded: Boolean(whisperer),
+    }),
   }
 }
 
