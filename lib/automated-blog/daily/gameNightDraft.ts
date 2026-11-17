@@ -7,7 +7,7 @@
  * There is no fallback text: a failed or unchecked generation produces no draft.
  */
 
-import { openaiChatJson, parseJsonContentFromChatCompletion } from "@/lib/openai-client"
+import { routeTextCall } from "@/lib/ai/providerRouter"
 import type { GeneratedDraft } from "../types"
 import { checkDraftAgainstFacts, type FactCheckResult } from "./factCheck"
 import type { GameNightFacts, GameNightSport, Performer } from "./gameNightFacts"
@@ -72,13 +72,55 @@ function systemPrompt(sport: GameNightSport): string {
     .join("\n")
 }
 
-export type ChatJson = (args: {
+/** One model call: the reply text, or why there is none. Injectable so tests never reach a provider. */
+export type ModelCall = (args: {
   messages: Array<{ role: "system" | "user"; content: string }>
   temperature?: number
   maxTokens?: number
   skipCache?: boolean
-  signal?: AbortSignal
-}) => Promise<{ ok: true; json: unknown } | { ok: false; status?: number; details?: string }>
+}) => Promise<{ ok: true; text: string } | { ok: false; detail?: string }>
+
+/** Per-provider wait. A draft is ~1,400 tokens, far past the router's 12 s chat default. */
+const PROVIDER_TIMEOUT_MS = 60_000
+
+/**
+ * The default model call goes through the AI fallback router, never one provider directly.
+ *
+ * 🛑 THE FIRST LIVE RUN (2026-11-16) PRODUCED NOTHING because this called `openaiChatJson` directly
+ * and the worker's OpenAI key answered 401 for both sports. The router moves past a dead key (401 is
+ * fallback-eligible) to whichever provider is answering, and the fact check below is what makes the
+ * output safe — it does not care which model wrote the prose.
+ */
+export const routerModelCall: ModelCall = async (args) => {
+  const res = await routeTextCall({
+    messages: args.messages,
+    temperature: args.temperature,
+    maxTokens: args.maxTokens,
+    skipCache: args.skipCache,
+    timeoutMs: PROVIDER_TIMEOUT_MS,
+    feature: "blog-daily-drafts",
+  })
+  if (res.ok) return { ok: true, text: res.text }
+  const tried = res.failure?.attempts.map((a) => `${a.provider}:${a.category}`).join(", ")
+  return { ok: false, detail: tried ? `all providers failed (${tried})` : "all providers failed" }
+}
+
+/**
+ * The JSON object in a model reply. Providers differ: some return bare JSON, some wrap it in a
+ * ```json fence or a sentence. Anything that is not one object parses to null and the draft is dropped.
+ */
+export function parseJsonObject(text: string): Record<string, unknown> | null {
+  const unfenced = text.replace(/```(?:json)?/gi, "")
+  const start = unfenced.indexOf("{")
+  const end = unfenced.lastIndexOf("}")
+  if (start === -1 || end <= start) return null
+  try {
+    const value: unknown = JSON.parse(unfenced.slice(start, end + 1))
+    return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
 
 export type DraftOutcome =
   | { ok: true; draft: GeneratedDraft; check: FactCheckResult }
@@ -99,14 +141,13 @@ function footer(sport: GameNightSport): string {
 export async function writeGameNightDraft(args: {
   facts: GameNightFacts
   nameUniverse: string[]
-  chat?: ChatJson
-  timeoutMs?: number
+  chat?: ModelCall
 }): Promise<DraftOutcome> {
   const { facts } = args
-  const chat: ChatJson = args.chat ?? (openaiChatJson as unknown as ChatJson)
+  const chat: ModelCall = args.chat ?? routerModelCall
   const factsText = serializeFacts(facts)
 
-  let res: Awaited<ReturnType<ChatJson>>
+  let res: Awaited<ReturnType<ModelCall>>
   try {
     res = await chat({
       messages: [
@@ -116,14 +157,13 @@ export async function writeGameNightDraft(args: {
       temperature: 0.3,
       maxTokens: 1400,
       skipCache: true,
-      signal: AbortSignal.timeout(args.timeoutMs ?? 90_000),
     })
   } catch (err) {
     return { ok: false, reason: "generation_failed", detail: err instanceof Error ? err.message.slice(0, 160) : "error" }
   }
-  if (!res.ok) return { ok: false, reason: "generation_failed", detail: `status ${res.status ?? "?"}` }
+  if (!res.ok) return { ok: false, reason: "generation_failed", detail: res.detail ?? "no reply" }
 
-  const json = parseJsonContentFromChatCompletion(res.json) as Record<string, unknown> | null
+  const json = parseJsonObject(res.text)
   const body = typeof json?.body === "string" ? json.body.trim() : ""
   const excerpt = typeof json?.excerpt === "string" ? json.excerpt.trim() : ""
   const seoDescription = typeof json?.seoDescription === "string" ? json.seoDescription.trim() : ""
