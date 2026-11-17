@@ -1,5 +1,6 @@
 'use client'
 
+import ShareChimmyAnswerButton, { isShareableChimmyAnswer } from '@/components/chat/ShareChimmyAnswerButton'
 import {
   useCallback,
   useEffect,
@@ -139,6 +140,11 @@ export type ChatMessageListProps = {
    * `data-event-kind` for styling; absent (the default everywhere else) stamps nothing.
    */
   eventKindFor?: (m: ChatListMessage) => string | null
+  /**
+   * League chat only. Posts one of the viewer's own private @chimmy answers to the league, on their
+   * tap. Absent (DMs, huddles) means the button is not offered. Resolve true when it was shared.
+   */
+  onShareChimmyAnswer?: (m: ChatListMessage) => Promise<boolean>
 }
 
 /** What a reporter can pick. The route takes one of these; "Something else" is the default. */
@@ -285,6 +291,7 @@ export function ChatMessageList({
   onReport,
   onBlock,
   eventKindFor,
+  onShareChimmyAnswer,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -650,6 +657,9 @@ export function ChatMessageList({
                       {chimmyVerdict ? <ChimmyVerdictChip verdict={chimmyVerdict} /> : null}
                       {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
                       {rich ? renderRich(m) : null}
+                      {onShareChimmyAnswer && !m.pending && isShareableChimmyAnswer(m.metadata) ? (
+                        <ShareChimmyAnswerButton shared={typeof m.metadata?.sharedMessageId === 'string'} onShare={() => onShareChimmyAnswer(m)} />
+                      ) : null}
                     </>
                   )}
                 </div>
