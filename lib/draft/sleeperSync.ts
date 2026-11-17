@@ -1,4 +1,28 @@
 import { prisma } from '@/lib/prisma'
+import {
+  buildSleeperTeamNumberToRosterIdMap,
+  rosterImportedName,
+  slotOrderHasMissingRosters,
+  type MirrorRosterRow,
+} from '@/lib/draft/sleeperMirrorRosterIds'
+
+/**
+ * This draft's league rosters, read before the transaction so the order can be seated by `Roster.id`.
+ * Never a reason for the mirror to fail: on any error the order is built exactly as it was before.
+ */
+async function loadLeagueRostersForSession(internalDraftId: string): Promise<MirrorRosterRow[]> {
+  try {
+    const session = await prisma.draftSession.findUnique({ where: { id: internalDraftId }, select: { leagueId: true } })
+    if (!session?.leagueId) return []
+    const rows = await prisma.roster.findMany({
+      where: { leagueId: session.leagueId },
+      select: { id: true, platformUserId: true, playerData: true },
+    })
+    return Array.isArray(rows) ? rows : []
+  } catch {
+    return []
+  }
+}
 
 type SleeperDraft = {
   draft_id?: string
@@ -63,6 +87,10 @@ function mapSleeperDraftType(raw: string | undefined): string {
 function buildSlotOrder(
   draft: SleeperDraft,
   usersById: Record<string, { display_name?: string }>,
+  /** Sleeper roster number -> our `Roster.id`, from the import. Unmapped numbers are written as-is. */
+  rosterIdForTeamNumber: Map<string, string> = new Map(),
+  /** Manager name the import stored per `Roster.id`, for slots Sleeper has not named yet. */
+  importedNameByRosterId: Map<string, string> = new Map(),
 ): SlotOrderEntry[] {
   const slotToRoster = draft.slot_to_roster_id
   if (!slotToRoster || typeof slotToRoster !== 'object') return []
@@ -85,12 +113,18 @@ function buildSlotOrder(
     if (!Number.isInteger(slot) || slot < 1) continue
     if (rosterId == null) continue
     const userId = userBySlot.get(slot)
+    /* 🛑 A slot's rosterId must be a `Roster.id`: the board, "my team" and the pick authority all
+       compare against it. Sleeper's `roster_id` is its own 1..N number, which matches no roster
+       here, so it is translated through the import's `sourceTeamId` and only written raw when the
+       league has no such roster. */
+    const ourRosterId = rosterIdForTeamNumber.get(String(rosterId)) ?? String(rosterId)
     entries.push({
       slot,
-      rosterId: String(rosterId),
+      rosterId: ourRosterId,
       /* Empty rather than a placeholder like "Team 4": the board can render a real absence,
          and a fabricated name is indistinguishable from a manager who chose that name. */
-      displayName: (userId ? usersById[userId]?.display_name : undefined) ?? '',
+      displayName:
+        (userId ? usersById[userId]?.display_name : undefined) ?? importedNameByRosterId.get(ourRosterId) ?? '',
     })
   }
   return entries.sort((a, b) => a.slot - b.slot)
@@ -175,7 +209,20 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
   const teams = typeof settings.teams === 'number' ? settings.teams : 12
   const timer = typeof settings.pick_timer === 'number' ? settings.pick_timer : 120
 
-  const slotOrder = buildSlotOrder(draft, usersById)
+  const leagueRosters = await loadLeagueRostersForSession(internalDraftId)
+  const rosterIdSet = new Set(leagueRosters.map((r) => r.id))
+  const importedNameByRosterId = new Map<string, string>()
+  for (const r of leagueRosters) {
+    const n = rosterImportedName(r)
+    if (n) importedNameByRosterId.set(r.id, n)
+  }
+  const slotOrder = buildSlotOrder(
+    draft,
+    usersById,
+    buildSleeperTeamNumberToRosterIdMap(leagueRosters),
+    importedNameByRosterId,
+  )
+  const slotOrderFullyResolved = slotOrder.length > 0 && slotOrder.every((e) => rosterIdSet.has(e.rosterId))
   /* 3 is Sleeper's third-round reversal. Absent/0 means a plain snake. */
   const thirdRoundReversal = settings.reversal_round === 3
 
@@ -212,7 +259,17 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
     })
     const existingOrder = existing?.slotOrder
     const hasLocalOrder = Array.isArray(existingOrder) && existingOrder.length > 0
-    const slotOrderPatch = slotOrder.length > 0 && !hasLocalOrder ? { slotOrder } : {}
+    /*
+     * ⚠ ONE EXCEPTION: AN ORDER THAT SEATS ROSTERS THIS LEAGUE NO LONGER HAS IS NOT A HUMAN'S
+     * CHOICE, IT IS DEBRIS. A re-import deletes and recreates every roster, and an order saved
+     * before it keeps the dead ids forever — measured 2026-11-17 on every mirrored KBI draft:
+     * 16 of 16 ids gone, every header "Unknown". No commissioner or lottery result survives a
+     * re-import either (their ids died too), so replacing it protects nothing. It is replaced
+     * only by an order whose every seat is a live roster here, never by another broken one.
+     */
+    const staleLocalOrder = hasLocalOrder && slotOrderHasMissingRosters(existingOrder, rosterIdSet)
+    const slotOrderPatch =
+      slotOrder.length > 0 && (!hasLocalOrder || (staleLocalOrder && slotOrderFullyResolved)) ? { slotOrder } : {}
 
     const session = await tx.draftSession.update({
       where: { id: internalDraftId },
