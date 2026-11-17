@@ -52,19 +52,37 @@ const ALIASES: Record<string, LeagueConceptType> = {
 }
 
 /**
+ * Variant → concept, for variants that are a whole league type. Mirrors the specialty registry
+ * (`lib/specialty-league/registry.ts`, which cannot be imported client-side); a test holds the two
+ * together. `pirate`, `survivor_guillotine` and `season_tournament` are not registry specialties —
+ * their creation and confirmation paths are the evidence.
+ */
+const VARIANT_CONCEPT: Record<string, LeagueConceptType> = {
+  pirate: 'pirate',
+  survivor_guillotine: 'survivor_guillotine',
+  season_tournament: 'tournament',
+  tournament_mode: 'tournament',
+  survivor: 'survivor',
+  zombie: 'zombie',
+  big_brother: 'big_brother',
+  devy_dynasty: 'devy',
+  merged_devy_c2c: 'c2c',
+}
+
+/**
  * The raw concept a draft room should show, before normalizing. `League.leagueType` alone cannot
  * say it: a concept that is a label over another format stores its BASE in the column
  * (`lib/career/leagueTypeConfirmation.ts` — pirate → dynasty/redraft, efl → dynasty,
  * survivor_guillotine → guillotine). So, in order:
  *
  *   1. the concept a person confirmed (`settings.leagueTypeConfirmation.type`);
- *   2. `leagueVariant`, but ONLY for the two specialties whose column holds a base. A variant is
- *      not trusted in general — a redraft league with a guillotine modifier is not a Guillotine
- *      league (`resolveLeagueConceptIntroKey` records that bug);
+ *   2. a `leagueVariant` that names a WHOLE league type (`VARIANT_CONCEPT`). Specialties are often
+ *      created over a base column: a season tournament league is `leagueType: 'redraft'`,
+ *      `leagueVariant: 'season_tournament'` (`lib/domain/seasonTournamentLeague.ts`). `guillotine` is
+ *      deliberately absent: it is also a modifier on a redraft league, and such a league is not a
+ *      Guillotine league (`resolveLeagueConceptIntroKey` records that bug);
  *   3. the column.
  */
-const VARIANT_OVER_BASE = new Set(['pirate', 'survivor_guillotine'])
-
 export function draftRoomLeagueConceptRaw(league: {
   leagueType?: string | null
   leagueVariant?: string | null
@@ -73,7 +91,7 @@ export function draftRoomLeagueConceptRaw(league: {
   const confirmed = readConfirmedLeagueConcept(league.settings)
   if (confirmed) return confirmed
   const variant = String(league.leagueVariant ?? '').trim().toLowerCase()
-  if (VARIANT_OVER_BASE.has(variant)) return variant
+  if (VARIANT_CONCEPT[variant]) return VARIANT_CONCEPT[variant]
   const column = String(league.leagueType ?? '').trim()
   return column || null
 }

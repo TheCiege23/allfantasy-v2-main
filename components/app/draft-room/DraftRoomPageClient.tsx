@@ -5427,6 +5427,7 @@ export function DraftRoomPageClient({
                   adpDeltaByOverall={boardAdpDeltaByOverall}
                   signatureByOverall={boardSignatureByOverall}
                   slotSalaryByOverall={leagueFacts?.slotSalaryByOverall ?? undefined}
+                  seedByRosterId={leagueFacts?.seedByRosterId ?? null}
                   teamMetaByRoster={teamMetaByRoster}
                 />
               </div>

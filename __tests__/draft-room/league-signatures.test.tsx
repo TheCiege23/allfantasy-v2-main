@@ -33,10 +33,10 @@ describe('which concept the room is', () => {
     expect(concept({ leagueType: 'redraft', leagueVariant: 'pirate', settings: { leagueTypeConfirmation: { type: 'keeper' } } })).toBe('keeper')
   })
 
-  it('any other variant does not override the column', () => {
+  it('a modifier variant does not override the column', () => {
     // A redraft league with a guillotine modifier is not a Guillotine league.
     expect(concept({ leagueType: 'redraft', leagueVariant: 'guillotine' })).toBe('redraft')
-    expect(concept({ leagueType: 'dynasty', leagueVariant: 'devy_dynasty' })).toBe('dynasty')
+    expect(concept({ leagueType: 'redraft', leagueVariant: 'idp' })).toBe('redraft')
     expect(draftRoomLeagueConceptRaw({ leagueType: null, leagueVariant: null })).toBeNull()
   })
 

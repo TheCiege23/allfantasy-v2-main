@@ -23,6 +23,8 @@ export const draftRoomHeaderMessages = defineMessages({
     /** A snake salary-cap slot: what the pick is signed to. */
     slotSalary: (salary: number, years: number): string =>
       `Salary $${salary} for ${years} ${years === 1 ? 'year' : 'years'}`,
+    /** A stage 2/3 tournament seat's seed from the previous stage. */
+    seed: (n: number): string => `Seed ${n} from the last stage`,
   },
   es: {
     upIn: (n: number): string => (n === 1 ? 'Te toca después' : `Te toca en ${n}`),
@@ -39,5 +41,6 @@ export const draftRoomHeaderMessages = defineMessages({
     noteCap: (cap: number): string => `Tope de $${cap}`,
     slotSalary: (salary: number, years: number): string =>
       `Salario de $${salary} por ${years} ${years === 1 ? 'año' : 'años'}`,
+    seed: (n: number): string => `Cabeza de serie ${n} de la etapa anterior`,
   },
 })

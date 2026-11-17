@@ -17,6 +17,8 @@ import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
 import type { TileSignatureChip } from '@/lib/draft-room/leagueSignature'
 import type { SlotSalary } from '@/lib/draft-room/leagueNote'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -83,6 +85,8 @@ type DraftBoardProps = {
   signatureByOverall?: Record<number, TileSignatureChip>
   /** Snake salary-cap slot salaries by overall pick (`loadDraftRoomLeagueFacts`); empty and made tiles. */
   slotSalaryByOverall?: Record<number, SlotSalary>
+  /** Stage 2/3 tournament: each seat's previous-stage seed (`loadDraftRoomLeagueFacts`). */
+  seedByRosterId?: Record<string, number> | null
   /**
    * Team avatars / orphan / bot-personality for the sticky column header. Snake and linear
    * boards have no separate team strip, so the header is where this lives.
@@ -193,10 +197,12 @@ function DraftBoardInner({
   adpDeltaByOverall,
   signatureByOverall,
   slotSalaryByOverall,
+  seedByRosterId,
   teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const { t } = useOptionalLanguage()
+  const headerCopy = useMessages(draftRoomHeaderMessages)
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
   const boardRef = useRef<HTMLElement | null>(null)
@@ -810,6 +816,16 @@ function DraftBoardInner({
                   ) : null}
                   {currentOwnerSlot === entry.slot ? (
                     <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
+                  ) : null}
+                  {seedByRosterId?.[entry.rosterId] ? (
+                    <span
+                      className="absolute left-0.5 top-0 rounded-full bg-white/10 px-1 text-[11px] font-bold leading-[14px] tabular-nums text-white/75"
+                      title={headerCopy.seed(seedByRosterId[entry.rosterId]!)}
+                      aria-label={headerCopy.seed(seedByRosterId[entry.rosterId]!)}
+                      data-testid={`draft-board-team-header-seed-${entry.slot}`}
+                    >
+                      #{seedByRosterId[entry.rosterId]}
+                    </span>
                   ) : null}
                   {keeperCountByRoster.get(entry.rosterId) ? (
                     <span
