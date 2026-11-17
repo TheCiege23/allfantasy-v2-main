@@ -2035,6 +2035,9 @@ model LeagueTrade {
   partnerName       String?
   valueGiven        Float?
   valueReceived     Float?
+  /// Waiver budget (FAAB) this side gave / received in the trade. NULL = not read (older rows), not zero.
+  budgetGiven       Float?
+  budgetReceived    Float?
   tradeDate         DateTime?
   createdAt         DateTime           @default(now())
   analysisResult    Json?

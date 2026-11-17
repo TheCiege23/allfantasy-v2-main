@@ -88,6 +88,8 @@ export async function loadGradedLeagueTradeRows(args: {
       partnerRosterId: true,
       /* When it completed: a provider league's original is priced at the time of the trade from it. */
       tradeDate: true,
+      /* Waiver budget each way — priced on the league's own budget, or the letter is withheld. */
+      budgetGiven: true, budgetReceived: true,
       history: { select: { sleeperUsername: true } },
     },
     /*
