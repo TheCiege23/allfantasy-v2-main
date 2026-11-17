@@ -12,6 +12,7 @@ import { MessageModerationMenu } from '@/components/moderation/MessageModeration
 import { RecapShareButton } from '@/components/core-app/comms/RecapShareButton'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { survivorIdolArt } from '@/lib/survivor/survivorIdolTypes'
+import ShareChimmyAnswerButton, { isShareableChimmyAnswer, postChimmyShare } from '@/components/chat/ShareChimmyAnswerButton'
 
 type LeagueChatMessage = {
   id: string
@@ -646,6 +647,17 @@ export function LeagueChatInPanel({
                       <div className="max-w-[92%] whitespace-pre-wrap rounded-[18px] rounded-tl-md bg-violet-500/10 px-3 py-2 text-[15px] leading-[1.42] text-white ring-1 ring-inset ring-violet-400/20">
                         {message.text}
                       </div>
+                      {/* Only a general answer is marked shareable — never a Survivor vote, power or host reply. */}
+                      {isShareableChimmyAnswer(meta) ? (
+                        <ShareChimmyAnswerButton
+                          shared={typeof meta?.sharedMessageId === 'string'}
+                          onShare={async () => {
+                            const ok = await postChimmyShare(selectedLeague.id, message.id)
+                            if (ok) await loadMessages()
+                            return ok
+                          }}
+                        />
+                      ) : null}
                       <span className="mt-0.5 text-[11px] text-white/30">{formatChatTime(message.createdAt)}</span>
                     </div>
                   </div>

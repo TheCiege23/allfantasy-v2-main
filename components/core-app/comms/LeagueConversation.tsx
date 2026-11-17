@@ -966,6 +966,24 @@ export function LeagueConversation({
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
           eventKindFor={eventKindFor}
+          /*
+           * "Share with league" under the viewer's private @chimmy answers (2026-11-16). League channel
+           * only — a Survivor tribe camp is its own private room, so nothing is offered there.
+           */
+          onShareChimmyAnswer={
+            tribe
+              ? undefined
+              : async (m) => {
+                  const res = await fetch('/api/league/chat/chimmy-share', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ leagueId, messageId: m.id }),
+                  })
+                  if (!res.ok) return false
+                  await load(true)
+                  return true
+                }
+          }
           tagFor={(m) =>
             // 'broadcast' is server-owned (sanitizeClientMessageType turns it into 'text'): only a
             // commissioner announcement or the Survivor FAQ carries it. Same label the draft room uses.
