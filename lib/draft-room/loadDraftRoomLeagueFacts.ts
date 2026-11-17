@@ -13,6 +13,7 @@ import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { readPirateRules } from '@/lib/pirate/rules'
 import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { loadRookieContractTerms } from '@/lib/salary-cap/RookieContractService'
+import { countKeeperYears } from '@/lib/keeper/keeperPlayerKey'
 import { NO_LEAGUE_FACTS, type DraftRoomLeagueFacts, type LeagueNote, type SlotSalary } from './leagueNote'
 
 function positiveInt(value: unknown): number | null {
@@ -88,6 +89,22 @@ async function readSeeds(leagueId: string): Promise<Record<string, number> | nul
   return Object.keys(out).length ? out : null
 }
 
+/**
+ * A kept player's year as a keeper, counted from the league's locked keeper records — the count the
+ * eligibility engine's max-years rule uses (`countKeeperYears`), never `KeeperRecord.yearsKept`,
+ * which is written as a constant 1. Only players kept 2+ seasons are returned.
+ */
+async function readKeeperYears(leagueId: string): Promise<Record<string, number> | null> {
+  const locked = await prisma.keeperRecord.findMany({
+    where: { leagueId, status: 'locked' },
+    select: { playerId: true, playerName: true, position: true },
+  })
+  if (locked.length === 0) return null
+  const out: Record<string, number> = {}
+  for (const [key, years] of countKeeperYears(locked)) if (years >= 2) out[key] = years
+  return Object.keys(out).length ? out : null
+}
+
 export async function loadDraftRoomLeagueFacts(input: {
   leagueId: string
   concept: LeagueConceptType
@@ -96,14 +113,16 @@ export async function loadDraftRoomLeagueFacts(input: {
   teamCount: number
 }): Promise<DraftRoomLeagueFacts> {
   const totalSlots = Math.max(0, Math.floor(input.rounds) * Math.floor(input.teamCount))
-  const [note, slotSalaryByOverall, seedByRosterId] = await Promise.all([
+  const [note, slotSalaryByOverall, seedByRosterId, keeperYearsByPlayer] = await Promise.all([
     readNote(input.leagueId, input.concept).catch(() => null),
     // No concept gate: `submitPick` signs a contract for ANY league with a snake cap config.
     input.draftType === 'auction'
       ? Promise.resolve(null)
       : readSlotSalaries(input.leagueId, totalSlots).catch(() => null),
     input.concept === 'tournament' ? readSeeds(input.leagueId).catch(() => null) : Promise.resolve(null),
+    // Keepers are locked in keeper leagues; any league with locked records shows their year.
+    readKeeperYears(input.leagueId).catch(() => null),
   ])
-  if (!note && !slotSalaryByOverall && !seedByRosterId) return NO_LEAGUE_FACTS
-  return { note, slotSalaryByOverall, seedByRosterId }
+  if (!note && !slotSalaryByOverall && !seedByRosterId && !keeperYearsByPlayer) return NO_LEAGUE_FACTS
+  return { note, slotSalaryByOverall, seedByRosterId, keeperYearsByPlayer }
 }
