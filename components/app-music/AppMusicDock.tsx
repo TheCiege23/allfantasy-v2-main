@@ -40,7 +40,7 @@ import {
  * What this renders, and nothing else:
  *   - YouTube, while the chat's Music tab is open: the one iframe, positioned
  *     over the tab's "screen" so it reads as playing inside the chat.
- *   - YouTube, where a page reports its own slot (musicBus.setSlot — the draft room's music row on a phone):
+ *   - YouTube, where a page reports its own slot (musicBus.setSlot — the draft room's music row):
  *     laid over that slot, so it sits in the page instead of over the board.
  *   - YouTube, once the chat is minimized or closed: a 200×200 box in the corner.
  *     ⚠ NEVER HIDDEN. YouTube's embed rules forbid hiding a playing player or
@@ -86,7 +86,7 @@ export function AppMusicDock({ alwaysShow = false }: AppMusicDockProps) {
 
   /** Where the chat tab's screen is — null whenever the Music tab is not showing. */
   const screen = useSyncExternalStore(musicBus.subscribe, musicBus.getScreen, musicBus.getServerScreen)
-  /** A page's own place for the player (the draft room's music row on a phone) — null almost everywhere. */
+  /** A page's own place for the player (the draft room's music row) — null almost everywhere. */
   const slot = useSyncExternalStore(musicBus.subscribe, musicBus.getSlot, musicBus.getServerSlot)
 
   /**

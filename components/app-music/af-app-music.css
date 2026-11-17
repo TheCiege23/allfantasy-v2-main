@@ -74,7 +74,7 @@
 }
 .af-amd-yt[data-in-chat] iframe { height: 100%; }
 
-/* In a page's own slot (the draft room's music row on a phone): laid over the slot, inline like the chat.
+/* In a page's own slot (the draft room's music row): laid over the slot, inline like the chat.
    It keeps the corner box's z-index (58), so the chat panel and sheets still cover it. */
 .af-amd-yt[data-in-slot] {
   right: auto;
