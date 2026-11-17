@@ -44,6 +44,15 @@ describe('official NBA recovery of real incomplete primary boxes', () => {
    const spoof=structuredClone(cle);spoof.game.awayTeam.players.find(p=>p.personId===1629023)!.name='Different Washington'
    expect(()=>prepareSGOfficialNbaBox(target(cle),match(cle),spoof,identities,now)).toThrow('UNRESOLVED_PLAYER_1629023')
  })
+ it('matches the corroborated Jabari Smith identity and rejects a different official name',()=>{
+   const box=structuredClone(cle), player=box.game.homeTeam.players.find(p=>p.played==='1')!
+   const original=prepareSGOfficialNbaBox(target(cle),match(cle),cle,identities,now).rows.find(r=>r.providerPlayerId===String(player.personId))!
+   const mapped=identities.map(i=>i.id===original.playerId?{...i,canonicalName:'Jabari Smith',rollingInsightsId:'1478'}:i)
+   player.personId=1631095;player.name='Jabari Smith Jr.'
+   expect(prepareSGOfficialNbaBox(target(box),match(box),box,mapped,now).rows.find(r=>r.providerPlayerId==='1631095')?.playerId).toBe(original.playerId)
+   player.name='Different Smith'
+   expect(()=>prepareSGOfficialNbaBox(target(box),match(box),box,mapped,now)).toThrow('UNRESOLVED_PLAYER_1631095')
+ })
  it('accepts official provenance only for NBA and preserves the genuine correction window',()=>{
    expect(acceptedDailyBoxSource('NBA','nba_official_live')).toBe(true)
    expect(acceptedDailyBoxSource('NFL','nba_official_live')).toBe(false)

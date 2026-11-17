@@ -20,6 +20,7 @@ const aliases: Record<string, { official: string; primary: string; riId: string 
   '1626171': { official: 'Bobby Portis Jr.', primary: 'Bobby Portis', riId: '74' },
   '1641842': { official: 'Ronald Holland II', primary: 'Ron Holland II', riId: '1640' },
   '1642449': { official: 'Tolu Smith', primary: 'Tolu Smith III', riId: '1643' },
+  '1631095': { official: 'Jabari Smith Jr.', primary: 'Jabari Smith', riId: '1478' },
 }
 const fail = (code: string): never => { throw Error('OFFICIAL_NBA_' + code) }
 const count = (v: unknown): number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : fail('INVALID_COUNT')
