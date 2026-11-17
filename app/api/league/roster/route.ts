@@ -378,6 +378,16 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // Survivor's canonical roster already contains provider-backed player metadata. Preserve it
+    // when optional normalized enrichment is unavailable or has no row for a native player.
+    const nativePlayerFallback = leagueVariant === 'survivor_guillotine' && roster.redraftRosterId
+      ? Object.fromEntries((await prisma.redraftRosterPlayer.findMany({
+          where: { rosterId: roster.redraftRosterId, droppedAt: null, roster: { leagueId } },
+          select: { playerId: true, playerName: true, position: true, team: true },
+        })).map(player => [player.playerId, { id: player.playerId, name: player.playerName,
+          position: player.position, team: player.team ?? '' }]))
+      : undefined
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
@@ -389,6 +399,7 @@ export async function GET(req: NextRequest) {
       campus,
       roster: roster.playerData,
       unifiedRoster,
+      nativePlayerFallback,
       faabRemaining: roster.faabRemaining,
       waiverPriority: roster.waiverPriority ?? null,
       sport: leagueSport,
