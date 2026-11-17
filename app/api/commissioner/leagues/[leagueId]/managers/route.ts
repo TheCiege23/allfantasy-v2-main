@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole } from '@/lib/league/permissions'
-import { tournamentCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
+import { teamlessCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { trackDiscoveryOrphanAdoption } from '@/lib/discovery-analytics/server'
 import { assignLeagueSeat, releaseLeagueSeat } from '@/lib/league/leagueSeats'
@@ -52,7 +52,7 @@ export async function GET(
   ])
   // Co-commissioners the tournament that created this league granted (no team needed). A team's own
   // flag only covers people holding a seat, so the list would otherwise show them as plain managers.
-  const tournamentCoIds = new Set(tournamentCoCommissionerIds(leagueRow?.settings))
+  const tournamentCoIds = new Set(teamlessCoCommissionerIds(leagueRow?.settings))
   const teams = teamRows.map(({ claimedByUserId, ...t }) => ({
     ...t,
     isCoCommissioner: t.isCoCommissioner || (!t.isCommissioner && Boolean(claimedByUserId) && tournamentCoIds.has(claimedByUserId as string)),
