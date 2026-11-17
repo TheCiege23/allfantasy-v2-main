@@ -12,7 +12,7 @@ import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
 import { stripCommissionerFlagsFromUnprovenClaims } from '../espn/espnPublicMemberImport'
 
-export interface SleeperLeagueBootstrapResult {
+interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
   rostersCreated: number
   /**
@@ -534,12 +534,3 @@ export async function bootstrapLeagueFromNormalizedImport(
   }
 }
 
-/**
- * Backward-compatible alias for older Sleeper-specific call sites.
- */
-export async function bootstrapLeagueFromSleeperImport(
-  leagueId: string,
-  normalized: NormalizedImportResult
-): Promise<SleeperLeagueBootstrapResult> {
-  return bootstrapLeagueFromNormalizedImport(leagueId, normalized)
-}

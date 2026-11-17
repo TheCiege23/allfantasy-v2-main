@@ -14,7 +14,7 @@
  */
 import { z } from 'zod'
 
-export const YAHOO_SNAPSHOT_PAGE_KINDS = ['settings', 'standings', 'draft', 'roster'] as const
+const YAHOO_SNAPSHOT_PAGE_KINDS = ['settings', 'standings', 'draft', 'roster'] as const
 export type YahooSnapshotPageKind = (typeof YAHOO_SNAPSHOT_PAGE_KINDS)[number]
 
 const name = z.string().trim().min(1).max(120)
@@ -22,13 +22,13 @@ const optName = z.string().trim().max(120).nullish()
 const count = z.number().int().min(0).max(1000)
 
 /** A scoring row as the settings page shows it. `points` is per ONE unit: "25 yards per point" → 0.04. */
-export const yahooSnapshotScoringRowSchema = z.object({
+const yahooSnapshotScoringRowSchema = z.object({
   group: z.enum(['offense', 'kickers', 'defense', 'other']),
   name,
   points: z.number().finite().min(-100).max(100),
 })
 
-export const yahooSnapshotSettingsSchema = z.object({
+const yahooSnapshotSettingsSchema = z.object({
   kind: z.literal('settings'),
   leagueName: name,
   numTeams: z.number().int().min(2).max(32).nullish(),
@@ -44,7 +44,7 @@ export const yahooSnapshotSettingsSchema = z.object({
   scoring: z.array(yahooSnapshotScoringRowSchema).max(150),
 })
 
-export const yahooSnapshotStandingsSchema = z.object({
+const yahooSnapshotStandingsSchema = z.object({
   kind: z.literal('standings'),
   teams: z
     .array(
@@ -70,7 +70,7 @@ const playerRow = {
   nflTeam: z.string().trim().max(8).nullish(),
 }
 
-export const yahooSnapshotDraftSchema = z.object({
+const yahooSnapshotDraftSchema = z.object({
   kind: z.literal('draft'),
   picks: z
     .array(
@@ -90,7 +90,7 @@ export const yahooSnapshotDraftSchema = z.object({
     .max(1000),
 })
 
-export const yahooSnapshotRosterSchema = z.object({
+const yahooSnapshotRosterSchema = z.object({
   kind: z.literal('roster'),
   teamName: name,
   managerName: optName,

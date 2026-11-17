@@ -9,7 +9,7 @@ import { validateCanonicalBundle, validateNormalizedImport } from '@/lib/league-
 import type { ImportProvider, NormalizedImportResult } from '@/lib/league-import/types'
 import type { CanonicalImportBundle } from '@/lib/league-import/types'
 
-export type ImportOrchestratorPreviewSuccess = {
+type ImportOrchestratorPreviewSuccess = {
   ok: true
   normalized: NormalizedImportResult
   canonical: CanonicalImportBundle
@@ -17,7 +17,7 @@ export type ImportOrchestratorPreviewSuccess = {
   canonicalPreview: ReturnType<typeof toCanonicalImportPreviewJson>
 }
 
-export type ImportOrchestratorPreviewFailure = {
+type ImportOrchestratorPreviewFailure = {
   ok: false
   error: string
   code?: string

@@ -260,7 +260,7 @@ interface SleeperDraftSummaryRaw {
   slot_to_roster_id?: Record<string, string>
 }
 
-export interface SleeperFetchOptions {
+interface SleeperFetchOptions {
   maxMatchupWeeks?: number
   maxTransactionWeeks?: number
   maxPreviousSeasons?: number
@@ -286,7 +286,7 @@ const DEFAULTS: SleeperFetchOptions = {
   maxPreviousSeasons: 10,
 }
 
-export async function fetchLeagueDraftPicks(
+async function fetchLeagueDraftPicks(
   leagueId: string,
   season?: string,
   fetchDraftPicks?: (

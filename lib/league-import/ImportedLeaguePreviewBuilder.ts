@@ -23,7 +23,7 @@ import {
 } from '@/lib/league/format-engine'
 import { expandProviderRosterPositions, footballSlotSpec } from '@/lib/league/importedLineupTemplate'
 
-export interface ImportPreviewLeague {
+interface ImportPreviewLeague {
   id: string
   name: string
   sport: string
@@ -43,7 +43,7 @@ export interface ImportPreviewLeague {
   }
 }
 
-export interface ImportPreviewManager {
+interface ImportPreviewManager {
   rosterId: string
   ownerId: string
   username: string
@@ -109,7 +109,7 @@ function resolveImportTeamIdentity(
   }
 }
 
-export interface ImportPreviewDataQuality {
+interface ImportPreviewDataQuality {
   fetchedAt: number
   sources: {
     users: boolean
@@ -443,7 +443,7 @@ function finiteOrNull(v: unknown): number | null {
 }
 
 /** Pure projection of the normalized league onto the fields the review screen shows. */
-export function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
+function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
   const l = normalized.league as NormalizedImportResult['league'] & Record<string, unknown>
   const rawType = l.league_type ?? l.sleeper_league_type
   return {
