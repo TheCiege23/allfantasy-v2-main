@@ -77,6 +77,10 @@ const SURVIVOR: BlogGuideLink = {
   slug: 'survivor-fantasy-league',
   title: 'How Survivor Fantasy Leagues Work: Tribes, Idols and Tribal Council',
 }
+const ZOMBIE: BlogGuideLink = {
+  slug: 'zombie-fantasy-league',
+  title: 'How Zombie Fantasy Leagues Work: Survivors, Zombies and the Whisperer',
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
@@ -91,6 +95,7 @@ export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGui
   'salary-cap': [SALARY_CAP, DYNASTY],
   idp: [IDP, DYNASTY],
   c2c: [C2C, DEVY],
+  zombie: [ZOMBIE, SURVIVOR, GUILLOTINE],
 }
 
 /** Guides for /sports/<slug>. */
