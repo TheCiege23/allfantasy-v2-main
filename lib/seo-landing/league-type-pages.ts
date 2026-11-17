@@ -156,9 +156,9 @@ export const LEAGUE_TYPE_PAGES: LeagueTypePage[] = [
     h1: 'Zombie Fantasy Leagues',
     title: 'Zombie Fantasy League – Survivors, Zombies & a Whisperer | AllFantasy',
     description:
-      'Start a free zombie league. One secret Whisperer, everyone else a Survivor. Lose to the Whisperer or a Zombie and you turn. Last Survivors standing win.',
+      'Start a free zombie league. One Whisperer, everyone else a Survivor. Lose to the Whisperer or a Zombie and you turn, and serums can bring you back.',
     intro:
-      'In a zombie league one manager is secretly the Whisperer and everyone else starts as a Survivor. Lose to the Whisperer or a Zombie and you turn into one.',
+      'In a zombie league one manager is the Whisperer and everyone else starts as a Survivor. Lose to the Whisperer or a Zombie and you turn into one.',
     forWho: 'For leagues that want a story that changes every week, not just a standings table.',
     faqs: [
       {
@@ -183,7 +183,7 @@ export const LEAGUE_TYPE_PAGES: LeagueTypePage[] = [
     faqs: [
       {
         q: 'What happens to my team if I am evicted?',
-        a: 'An evicted team stops scoring. Evicted managers form the jury that picks the winner at the finale.',
+        a: 'Your roster is cleared and its players go back into the pool for everyone else. From the 7th eviction on, evicted managers join the jury that picks the winner at the finale.',
       },
     ],
     related: ['survivor', 'zombie', 'guillotine'],
