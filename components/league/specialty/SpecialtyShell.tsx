@@ -32,7 +32,7 @@ import { SPECIALTY_THEMES, formatSpecialtyCountdown, type SpecialtyFormat } from
 
 export const spStyles = styles
 export { SPECIALTY_THEMES, specialtyAsset, formatSpecialtyCountdown } from './theme'
-export type { SpecialtyFormat, SpecialtyTheme } from './theme'
+export type { SpecialtyFormat } from './theme'
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')

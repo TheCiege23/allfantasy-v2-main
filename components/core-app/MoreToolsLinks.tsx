@@ -40,4 +40,3 @@ export function MoreToolsLinks({ screen, language }: { screen: MoreToolsScreen; 
   )
 }
 
-export default MoreToolsLinks

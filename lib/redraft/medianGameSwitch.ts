@@ -18,10 +18,10 @@ import { isSealedWeek } from '@/lib/redraft/weekSealed'
  * Only a real change is checked: re-saving the stored value is never refused.
  */
 
-export type MedianGameSwitchRefusal = { status: number; code: string; message: string }
+type MedianGameSwitchRefusal = { status: number; code: string; message: string }
 
-export type MedianSwitchMatchup = { week: number; status: string | null; awayRosterId: string | null }
-export type SeasonForMedianSwitch = { season: number; status: string | null; schedule: MedianSwitchMatchup[] }
+type MedianSwitchMatchup = { week: number; status: string | null; awayRosterId: string | null }
+type SeasonForMedianSwitch = { season: number; status: string | null; schedule: MedianSwitchMatchup[] }
 
 /** True once a season has a played week on record: its first week sealed, or any later result final. */
 export function seasonHasFinalWeek(schedule: readonly MedianSwitchMatchup[]): boolean {

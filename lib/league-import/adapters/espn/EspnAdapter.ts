@@ -39,7 +39,7 @@ function detectEspnDynasty(raw: EspnImportPayload): boolean {
   return (espnKeeperCount(raw) ?? 0) > 0
 }
 
-export function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
+function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
   const scoringType = raw.settings?.scoringType?.trim().toUpperCase() ?? ''
   if (scoringType.includes('TOTAL_POINTS')) return 'total_points'
   if (scoringType.includes('ROTO')) return 'rotisserie'
@@ -91,6 +91,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
       points_against: team.pointsAgainst ?? undefined,
       player_ids: team.rosterPlayerIds,
       starter_ids: team.starterPlayerIds,
+      starter_slot_by_id: team.starterSlotById,
       reserve_ids: team.reservePlayerIds,
       taxi_ids: [],
       faab_remaining: team.faabRemaining,

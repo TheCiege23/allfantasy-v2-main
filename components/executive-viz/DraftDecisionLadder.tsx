@@ -28,7 +28,7 @@ import {
   ExecutiveVisualizationShell,
 } from './ExecutiveVisualizationShell'
 
-export function DraftDecisionLadder({
+function DraftDecisionLadder({
   snapshot,
   loading = false,
 }: {

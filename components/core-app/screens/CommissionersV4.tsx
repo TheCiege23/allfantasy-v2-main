@@ -5,7 +5,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-landing.css'
 import '@/components/core-app/af-commissioners.css'
-import { Shield } from '@/components/core-app/screens/LandingV4'
+import { NoBreakHyphens, Shield } from '@/components/core-app/screens/LandingV4'
 import { CommissionersCtaLink } from '@/components/core-app/screens/CommissionersCtaLink'
 import { CommissionerScreenshot } from '@/components/core-app/screens/CommissionerScreenshot'
 import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
@@ -74,7 +74,7 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
 
         <div className="af-lp-nav-right">
           {signedIn ? null : (
-            <Link href="/login" className="af-lp-signin">
+            <Link href="/login" className="af-btn af-btn--ghost af-lp-signin" data-testid="commissioners-nav-sign-in">
               Sign in
             </Link>
           )}
@@ -83,7 +83,17 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
           </CommissionersCtaLink>
         </div>
 
+        {/* Same pair as the landing page's phone header: a returning commissioner needs a way in. */}
         <div className="af-lp-mobile-actions">
+          {signedIn ? null : (
+            <Link
+              href="/login"
+              className="af-btn af-btn--ghost af-lp-mobile-signin"
+              data-testid="commissioners-mobile-sign-in"
+            >
+              Sign in
+            </Link>
+          )}
           <CommissionersCtaLink
             href={importHref}
             cta="import"
@@ -119,7 +129,7 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
           <div className="af-lp-hero-text">
             <span className="af-lp-eyebrow af-lp-eyebrow--accent af-num">{h.eyebrow}</span>
             <h1 className="af-lp-h1" data-testid="commissioners-hero-headline">
-              {h.h1a}
+              <NoBreakHyphens text={h.h1a} />
               <br />
               <span className="af-lp-h1-accent">{h.h1b}</span>
             </h1>

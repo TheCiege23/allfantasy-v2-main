@@ -12,7 +12,7 @@
  * Append only.
  */
 
-export const FAKE_TEAM_NAMES: readonly string[] = [
+const FAKE_TEAM_NAMES: readonly string[] = [
   'Gridiron Ghosts',
   'Fourth & Forever',
   'Red Zone Rebels',

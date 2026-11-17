@@ -260,10 +260,13 @@ function SuccessContent() {
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              Sneak peek:{' '}
+              {/* Pirate shipped (#2852), so it is no longer a sneak peek; the survey options above are
+                  stored answers and keep their wording. */}
+              Coming soon:{' '}
               <Link href="/formats/king-of-the-hill" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">King of the Hill</Link>
               {' · '}
-              <Link href="/formats/pirate" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">Pirate</Link>
+              Live now:{' '}
+              <Link href="/league-types/pirate" className="inline-flex min-h-[44px] items-center text-neon-cyan underline">Pirate</Link>
             </p>
             {errors.experimentalInterest && <p className="text-xs text-red-400 mt-1">{errors.experimentalInterest.message}</p>}
           </div>
@@ -314,10 +317,10 @@ function SuccessContent() {
                   <span className="text-xs font-bold uppercase tracking-widest text-neon-cyan/80">Live Preview</span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
-                  See the AI in action with AF Legacy
+                  See Chimmy in action with AF Legacy
                 </h3>
                 <p className="text-sm text-gray-400 mb-5 max-w-sm mx-auto">
-                  Import your Sleeper leagues and get AI-powered trade evaluations, rankings, and insights — right now.
+                  Import your Sleeper leagues and get Chimmy-powered trade evaluations, rankings, and insights — right now.
                 </p>
                 <div className="inline-flex items-center gap-2 bg-gradient-to-r from-neon-cyan to-neon-blue text-dark-900 font-bold rounded-xl px-6 py-3 text-sm transition-transform group-hover:scale-105">
                   Try AF Legacy

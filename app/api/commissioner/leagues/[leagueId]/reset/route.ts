@@ -1,7 +1,7 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { prisma } from "@/lib/prisma"
 import { resetDraftSession } from "@/lib/live-draft-engine/DraftSessionService"
 
@@ -10,11 +10,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'head')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   const mode = body?.mode === "full" ? "full" : "soft"

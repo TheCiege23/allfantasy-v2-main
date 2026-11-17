@@ -16,21 +16,12 @@ import { updateSessionWithArchive, recordArchiveEvent } from '@/lib/draft-archiv
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { logAction } from '@/server/services/auditService'
-import {
-  type ApplyPostDraftLifecycleResult,
-  applyDraftingLifecycleOnDraftResetInTransaction,
-  applyPostDraftLifecycleInTransaction,
-  ensureDraftingLifecycleForActiveSession,
-} from '@/server/services/leagueLifecycleService'
+import { applyDraftingLifecycleOnDraftResetInTransaction, applyPostDraftLifecycleInTransaction, ensureDraftingLifecycleForActiveSession } from '@/server/services/leagueLifecycleService'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
 import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
 import { applyTradedOwnerToCurrentPick } from './PickOwnershipResolver'
-import {
-  computeTimerState,
-  computeTimerStateWithPauseWindow,
-  isInsidePauseWindow,
-} from './DraftTimerService'
+import { computeTimerStateWithPauseWindow, isInsidePauseWindow } from './DraftTimerService'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getViewerAutopickPreference } from './LiveDraftAutopickPreferenceService'
 import { getCurrentUserRosterIdForLeague } from './auth'
@@ -58,6 +49,13 @@ import { DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE } from '@/lib/league/roster-c
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { COMPLETED_DRAFT_SESSION_STATUS, CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
+import {
+  buildSleeperUserToRosterIdMap,
+  remapSleeperMirrorPickRosterIds,
+  rosterImportedName,
+  slotOrderFromMirroredPicks,
+  slotOrderHasMissingRosters,
+} from '@/lib/draft/sleeperMirrorRosterIds'
 
 /** `pickMetadata.adpAtPick` when it is a positive number (recorded at pick time since #2475). */
 function adpAtPickFromMetadata(meta: unknown): number | null {
@@ -282,12 +280,72 @@ export async function buildSlotOrderForLeague(leagueId: string): Promise<SlotOrd
   return slotOrder
 }
 
+/**
+ * 🛑 A COMPLETE ORDER CAN STILL BE A DEAD ONE. `isCompleteSlotOrder` checks shape only — N slots,
+ * N non-empty ids — so an order whose rosters were all deleted by a re-import passes it and is
+ * never repaired. Measured 2026-11-17: every mirrored KBI draft had 16 of 16 seat ids pointing at
+ * rosters that no longer exist, every header read "Unknown", and nothing on the board matched
+ * the viewer's team.
+ *
+ * Repaired from data already in Postgres, never a provider call (this runs on the snapshot path):
+ *   - a Sleeper-mirrored draft is re-seated from its own picks (`slotOrderFromMirroredPicks`), which
+ *     only answers when every slot resolves to a distinct live roster;
+ *   - a native draft is rebuilt by `buildSlotOrderForLeague`, and only before any pick is made,
+ *     because picks already on the board were attributed against the old seats.
+ * Anything it cannot resolve completely is left exactly as it was.
+ */
+async function repairSlotOrderSeatingDeletedRosters(
+  leagueId: string,
+  session: { id: string; slotOrder: unknown; teamCount: number; status: string; version: number; sleeperDraftId?: string | null },
+): Promise<void> {
+  // Cheap check first: this runs on every snapshot, and playerData is only needed when something is wrong.
+  const liveIds = await prisma.roster.findMany({ where: { leagueId }, select: { id: true } })
+  const rosterIdSet = new Set(liveIds.map((r) => r.id))
+  if (!slotOrderHasMissingRosters(session.slotOrder, rosterIdSet)) return
+
+  let next: SlotOrderEntry[] | null = null
+  if (session.sleeperDraftId) {
+    const [rosters, picks] = await Promise.all([
+      prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } }),
+      prisma.draftPick.findMany({
+        where: { sessionId: session.id },
+        select: { slot: true, rosterId: true, source: true, displayName: true },
+      }),
+    ])
+    const nameById = new Map(rosters.map((r) => [r.id, rosterImportedName(r)]))
+    next = slotOrderFromMirroredPicks({
+      teamCount: session.teamCount,
+      picks,
+      sleeperUserToRosterId: buildSleeperUserToRosterIdMap(rosters),
+      nameForRoster: (id) => nameById.get(id) ?? null,
+    })
+  } else if (session.status === 'pre_draft') {
+    const rebuilt = await buildSlotOrderForLeague(leagueId)
+    next = isCompleteSlotOrder(rebuilt, session.teamCount) ? rebuilt : null
+  }
+  if (!next || slotOrderHasMissingRosters(next, rosterIdSet)) return
+
+  // Version-guarded: a concurrent writer (lottery, commissioner, the mirror) wins, and this simply no-ops.
+  await prisma.draftSession.updateMany({
+    where: { id: session.id, version: session.version },
+    data: { slotOrder: next as unknown as Prisma.InputJsonValue, version: { increment: 1 } },
+  })
+}
+
 async function repairDraftSessionSlotOrderIfNeeded(leagueId: string): Promise<void> {
   if (await isSeasonTournamentDraft(leagueId)) return
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session) return
   const teamCount = session.teamCount
-  if (isCompleteSlotOrder(session.slotOrder, teamCount)) return
+  if (isCompleteSlotOrder(session.slotOrder, teamCount)) {
+    // Never a reason for a snapshot to fail: on any error the room renders the order it has.
+    try {
+      await repairSlotOrderSeatingDeletedRosters(leagueId, session)
+    } catch (err) {
+      console.warn('[draft] slot order repair skipped', err instanceof Error ? err.message : String(err))
+    }
+    return
+  }
 
   // Weighted lottery (dynasty rookie): apply stored lottery order first — do not replace with roster-based order.
   const lotteryOrder = await resolveWeightedLotterySlotOrderForLeague(leagueId).catch(() => null)
@@ -510,6 +568,20 @@ export async function buildSessionSnapshot(
     }
   })
 
+  // Mirrored picks carry a Sleeper USER id in `rosterId`; the room keys "mine" on `Roster.id`.
+  // See lib/draft/sleeperMirrorRosterIds.ts for why platformUserId alone is not the join.
+  const clientPicks: DraftPickSnapshot[] =
+    session.sleeperDraftId && picks.some((p) => p.source === 'sleeper-mirror')
+      ? remapSleeperMirrorPickRosterIds(
+          picks,
+          buildSleeperUserToRosterIdMap(
+            await prisma.roster
+              .findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } })
+              .catch(() => []),
+          ),
+        )
+      : picks
+
   let auction: AuctionSessionSnapshot | undefined
   if (session.draftType === 'auction') {
     const config = getAuctionConfigFromSession(session)
@@ -629,7 +701,7 @@ export async function buildSessionSnapshot(
     slotOrder,
     tradedPicks,
     version: session.version,
-    picks,
+    picks: clientPicks,
     currentPick,
     timer,
     updatedAt: session.updatedAt.toISOString(),
@@ -1005,6 +1077,17 @@ export async function setTimerSeconds(
  * `DraftPickAuditLog`. The reason is commissioner-visible only (read endpoint hides it for non-commissioners).
  * Optional args keep the function backward-compatible for legacy callers; routes always pass them.
  */
+/**
+ * An auction budget map with `amount` given back to `rosterId` — the inverse of the winner's deduction in
+ * auction/AuctionEngine.ts. A missing or unreadable map is left alone rather than invented (null).
+ */
+export function refundAuctionBudget(budgets: unknown, rosterId: string, amount: number): Record<string, number> | null {
+  if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) return null
+  const current = (budgets as Record<string, unknown>)[rosterId]
+  if (typeof current !== 'number' || !Number.isFinite(current)) return null
+  return { ...(budgets as Record<string, number>), [rosterId]: current + amount }
+}
+
 export async function undoLastPick(
   leagueId: string,
   options?: { reason?: string; actorUserId?: string | null },
@@ -1031,6 +1114,19 @@ export async function undoLastPick(
       : null
 
   await prisma.$transaction(async (tx) => {
+    /*
+     * 🛑 UNDO LEFT TWO THINGS BEHIND (2026-11-15). An NBA devy / C2C college pick creates a draft right; undo deleted
+     * the pick and kept the right, so the player stayed owned and could not be drafted again. An auction pick spent
+     * the winner's budget; undo deleted the pick and kept the money spent. Both are reversed with the pick — the
+     * pick editor and draft reset already did the first.
+     */
+    const { removeDraftCollegeRight } = await import('@/lib/devy/nbaDraftRights')
+    await removeDraftCollegeRight(tx, leagueId, last)
+    // A snake salary-cap pick signed a rookie contract; taking the pick back takes the contract back.
+    const { removeRookieDraftContract } = await import('@/lib/salary-cap/RookieContractService')
+    await removeRookieDraftContract(tx, leagueId, last)
+    const refund = session.draftType === 'auction' && last.rosterId && typeof last.amount === 'number' && last.amount > 0 ? last.amount : 0
+    const refundedBudgets = refund ? refundAuctionBudget(session.auctionBudgets, last.rosterId!, refund) : null
     await tx.draftPick.delete({ where: { id: last.id } })
     let updatedSession: Parameters<typeof recordArchiveEvent>[1] = session
     if (freshTimerEndAt !== null) {
@@ -1042,12 +1138,13 @@ export async function undoLastPick(
           timerEndAt: freshTimerEndAt,
           pausedRemainingSeconds: null,
           overnightFrozenPickSeconds: null,
+          ...(refundedBudgets ? { auctionBudgets: refundedBudgets } : {}),
         },
       })
     } else {
       updatedSession = await tx.draftSession.update({
         where: { id: session.id },
-        data: { version: { increment: 1 }, updatedAt: new Date() },
+        data: { version: { increment: 1 }, updatedAt: new Date(), ...(refundedBudgets ? { auctionBudgets: refundedBudgets } : {}) },
       })
     }
     await recordArchiveEvent(tx, updatedSession, 'reset_timer', { actorUserId, correction: 'undo_pick' })
@@ -1069,6 +1166,7 @@ export async function undoLastPick(
             position: last.position,
             team: last.team,
             source: last.source,
+            ...(refund ? { refundedAuctionAmount: refund } : {}),
           },
         },
       })
@@ -1372,6 +1470,8 @@ export async function resetDraftSession(
     // Remove only rights this draft created; a changed or transferred right aborts the reset.
     const { removeDraftCollegeRight } = await import('@/lib/devy/nbaDraftRights')
     for (const pick of archivedPicks) await removeDraftCollegeRight(tx, leagueId, pick)
+    const { removeRookieDraftContract } = await import('@/lib/salary-cap/RookieContractService')
+    for (const pick of archivedPicks) await removeRookieDraftContract(tx, leagueId, pick)
     await tx.draftPick.deleteMany({ where: { sessionId: session.id } })
     await tx.draftSession.update({
       where: { id: session.id },

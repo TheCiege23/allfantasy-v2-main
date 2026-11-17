@@ -2,9 +2,9 @@
 import type { WaiverSuggestion, WaiverPlayerRef } from "./waiver-types";
 import { runGrokAssistOnWaiverSuggestions } from "./grok-waiver-ai-layer";
 
-export type PlayerLookup = (playerNameOrId: string) => Partial<WaiverPlayerRef> | null | undefined;
+type PlayerLookup = (playerNameOrId: string) => Partial<WaiverPlayerRef> | null | undefined;
 
-export type WaiverGrokAdapterOptions = {
+type WaiverGrokAdapterOptions = {
   enabled?: boolean;
   lookupPlayer?: PlayerLookup;
   leagueMeta?: {
@@ -80,7 +80,7 @@ function buildAddRef(raw: AnyObj, lookup?: PlayerLookup): WaiverPlayerRef | unde
   };
 }
 
-export function mapRawSuggestionToWaiverSuggestion(raw: AnyObj, idx: number, lookupPlayer?: PlayerLookup): WaiverSuggestion {
+function mapRawSuggestionToWaiverSuggestion(raw: AnyObj, idx: number, lookupPlayer?: PlayerLookup): WaiverSuggestion {
   const tier = asString(raw?.tier);
   const reasoning = asString(raw?.reasoning) || asString(raw?.rationale) || asString(raw?.explanation);
 

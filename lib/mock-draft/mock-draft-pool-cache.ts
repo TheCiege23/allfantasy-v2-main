@@ -8,6 +8,9 @@ import { findMultiADP, type ADPFormat } from '@/lib/multi-platform-adp'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
 import { attachAfAdpToMockPool } from '@/lib/mock-draft/mockPoolAfAdp'
+import { loadNflAgesBySleeperId, plausibleAge } from '@/lib/mock-draft/mockPoolAges'
+import { fillPoolFromConsensus, type ConsensusRow, type MockPoolEntry } from '@/lib/mock-draft/nflPoolConsensusFill'
+import { getLiveAdpByName, getSeasonDefenseAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
 import { prisma } from '@/lib/prisma'
 import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -174,6 +177,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
       adp: player.adp,
       playerId: player.playerId ?? null,
       injuryStatus: null,
+      age: player.age ?? null,
     }))
     const normalized = normalizePlayerList(raw, sport)
     return {
@@ -195,6 +199,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
         isRookie: false,
         multiPlatformADP: null,
         playerId: player.playerId ?? null,
+        age: plausibleAge(player.age),
         byeWeek: normalized[index]?.byeWeek ?? null,
         injuryStatus: normalized[index]?.injuryStatus ?? null,
         display: normalized[index]?.display ?? null,
@@ -212,7 +217,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
     }
   }
 
-  let entries: Awaited<ReturnType<typeof getLiveADP>> = []
+  let entries: MockPoolEntry[] = []
 
   if (pool === 'rookie') {
     const [devyEntries, ffcRookies] = await Promise.all([
@@ -256,6 +261,29 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
   }
 
   /*
+   * 🛑 A REDRAFT POOL IS TOPPED UP FROM THE CONSENSUS BOARD (2026-11-16). FFC's live list was the only
+   * source contributing on production — 118 players for a 120-pick draft, and no Bijan Robinson. The
+   * consensus board (`adp_data`, DB-first) fills every gap at its own ADP; players already on the list
+   * keep their entries. Redraft only: the consensus board is a redraft board, and rookie pools are
+   * built from their own sources above. A failed read leaves the list as it was.
+   */
+  if (type === 'redraft' && pool !== 'rookie') {
+    const [consensus, defenses] = await Promise.all([
+      getLiveAdpByName({ sport: 'NFL' }).catch(() => new Map<string, LiveAdpEntry>()),
+      /*
+       * The latest week's board held 4 team defenses (2026-11-16) — 4 for an 8-team draft. Each
+       * defense's last consensus price this season fills the rest (lib/adp/liveAdpFallback.ts).
+       */
+      getSeasonDefenseAdp({ sport: 'NFL' }).catch(() => []),
+    ])
+    const rows: ConsensusRow[] = [
+      ...consensus.values(),
+      ...defenses.map((d) => ({ name: d.name, adp: d.adp, position: 'DEF', team: d.team })),
+    ]
+    entries = fillPoolFromConsensus(entries, rows, limit)
+  }
+
+  /*
    * Position-verified, aligned by index (see `resolveSleeperIdsBatch`). A name-only bind put QB
    * Josh Allen's board row on a free-agent guard's id and headshot. Devy/rookie teams are college
    * programmes, which fold onto NFL clubs ("Tennessee" -> TEN), so they are not passed as a team.
@@ -272,6 +300,15 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
   } catch {
     sleeperIds = []
   }
+
+  /*
+   * Ages for the league signature chip (room v2). A college row's Sleeper id was resolved without a
+   * team, so its age is not borrowed from a pro row that may share the name; it shows its class.
+   */
+  const isCollegeRow = (entry: MockPoolEntry) => entry.source === 'devy'
+  const agesBySleeperId = await loadNflAgesBySleeperId(
+    entries.map((entry, index) => (isCollegeRow(entry) ? null : sleeperIds[index] ?? null)),
+  )
 
   const adpFormat: ADPFormat = type === 'dynasty' ? 'dynasty' : 'redraft'
   const rawNormalized = entries.map((entry, index) => ({
@@ -335,6 +372,9 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
         bye: entry.bye,
         isRookie,
         playerId: sleeperIds[index] ?? null,
+        age: plausibleAge(entry.age) ?? (isCollegeRow(entry) ? null : agesBySleeperId.get(sleeperIds[index] ?? '') ?? null),
+        poolType: isCollegeRow(entry) ? 'college' : 'pro',
+        classYearLabel: isCollegeRow(entry) ? entry.classYearLabel ?? null : null,
         byeWeek: normalized[index]?.byeWeek ?? entry.bye ?? null,
         injuryStatus: injuryStatus != null ? String(injuryStatus) : null,
         display,

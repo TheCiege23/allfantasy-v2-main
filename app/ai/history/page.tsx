@@ -48,7 +48,7 @@ export default function AIHistoryPage() {
         const message =
           data?.userMessage ??
           data?.message ??
-          'Unable to load saved AI history right now.'
+          'Unable to load saved Chimmy history right now.'
         setError(message)
         setItems([])
         return
@@ -62,7 +62,7 @@ export default function AIHistoryPage() {
         : []
       setItems(parsedItems)
     } catch {
-      setError('Network error while loading AI history.')
+      setError('Network error while loading Chimmy history.')
       setItems([])
     } finally {
       setLoading(false)
@@ -89,14 +89,14 @@ export default function AIHistoryPage() {
         const message =
           data?.userMessage ??
           data?.message ??
-          'Unable to delete this saved AI result.'
+          'Unable to delete this saved Chimmy result.'
         toast.error(message)
         return
       }
       setItems((current) => current.filter((item) => item.id !== id))
-      toast.success('Saved AI result removed.')
+      toast.success('Saved Chimmy result removed.')
     } catch {
-      toast.error('Network error while deleting this saved AI result.')
+      toast.error('Network error while deleting this saved Chimmy result.')
     } finally {
       setDeletingId(null)
     }
@@ -116,12 +116,12 @@ export default function AIHistoryPage() {
           data-testid="ai-history-back-link"
         >
           <ChevronLeft className="h-4 w-4" />
-          Back to AI tools
+          Back to Chimmy tools
         </Link>
         <div className="mb-4 flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-xl font-semibold text-white">Saved AI history</h1>
-            <p className="text-sm text-white/50">Review, revisit, and remove previous AI analyses.</p>
+            <h1 className="text-xl font-semibold text-white">Saved Chimmy history</h1>
+            <p className="text-sm text-white/50">Review, revisit, and remove previous Chimmy analyses.</p>
           </div>
           <button
             type="button"
@@ -138,7 +138,7 @@ export default function AIHistoryPage() {
         {loading ? (
           <div className="flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] py-16 text-white/50">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading saved AI history...
+            Loading saved Chimmy history...
           </div>
         ) : error ? (
           <div
@@ -159,14 +159,14 @@ export default function AIHistoryPage() {
             <LayoutGrid className="mb-4 h-12 w-12 text-white/30" aria-hidden />
             <h2 className="text-lg font-semibold text-white">No saved analyses yet</h2>
             <p className="mt-2 max-w-sm text-sm text-white/50">
-              Save a result from AI Tools to see it here.
+              Save a result from Chimmy Tools to see it here.
             </p>
             <Link
               href="/ai/tools"
               className="mt-6 rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
               data-testid="ai-history-open-tools-link"
             >
-              Open AI tools
+              Open Chimmy tools
             </Link>
           </div>
         ) : (
@@ -236,7 +236,7 @@ export default function AIHistoryPage() {
                     href="/ai/tools"
                     className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/75 hover:bg-white/10"
                   >
-                    Open AI tools
+                    Open Chimmy tools
                   </Link>
                   <Link
                     href={getChimmyChatHrefWithPrompt(item.output.aiExplanation)}

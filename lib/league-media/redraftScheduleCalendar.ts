@@ -14,9 +14,9 @@
  * Pure, so the mapping is unit-tested without rendering anything.
  */
 
-export type CalendarWeekInput = { week: number; status: string; isCurrent?: boolean; matchups?: unknown[] }
+type CalendarWeekInput = { week: number; status: string; isCurrent?: boolean; matchups?: unknown[] }
 
-export type ScheduleCalendarInput = {
+type ScheduleCalendarInput = {
   weeks: CalendarWeekInput[]
   currentWeek?: number | null
   playoffStartWeek?: number | null
@@ -37,7 +37,7 @@ export type CalendarCell = {
   selectable: boolean
 }
 
-export type ScheduleCalendar = {
+type ScheduleCalendar = {
   cells: CalendarCell[]
   /** The deadline week actually marked, or null when it was dropped. */
   deadlineWeek: number | null

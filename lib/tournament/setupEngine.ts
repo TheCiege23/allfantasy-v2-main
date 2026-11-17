@@ -282,7 +282,6 @@ export async function buildConferencesAndLeagues(tournamentId: string, namingMod
   if (!round1) throw new Error('Round 1 not found')
 
   const existingNames: string[] = []
-  const season = new Date().getFullYear()
 
   for (let c = 0; c < shell.conferenceCount; c++) {
     const confName = generateConferenceName(shell.id, c + 1, existingNames)

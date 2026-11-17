@@ -276,10 +276,11 @@ describe('My Team — the reported problems', () => {
     expect(t).toMatch(/has not been ingested/)
   })
 
-  it('names the week and first kickoff without claiming every player locks together', () => {
-    const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('Week 1 · first kickoff')
-    expect(t).not.toContain('Week 1 locks')
+  it('says the next kickoff once, as the top number, without claiming every player locks together', () => {
+    const c = render(<MyTeam data={data()} />).container
+    expect(c.querySelector('[data-chip=kickoff]')).not.toBeNull()
+    expect(c.querySelector('.af-mt-lock')).toBeNull()
+    expect(c.textContent).not.toContain('Week 1 locks')
   })
 
   it('⚠ shows the manager, whose name was imported and never rendered', () => {
@@ -357,10 +358,12 @@ describe('My Team — the reported problems', () => {
     expect(t).not.toContain('projected ahead')
   })
 
-  it('prints the read, and no pricing reason, when both totals are league-scored', () => {
-    const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('You are projected ahead by 13.5')
-    expect(t).not.toContain('No projected totals')
+  it('says both league-scored totals once, as the top number, and no pricing reason', () => {
+    const c = render(<MyTeam data={data()} />).container
+    const m = data().nextMatchup as { available: true; data: { you: { projected: number }; opponent: { projected: number } } }
+    expect(c.querySelector('[data-chip=projected] b')?.textContent).toBe(`${m.data.you.projected.toFixed(1)} vs ${m.data.opponent.projected.toFixed(1)}`)
+    expect(c.textContent).not.toContain('No projected totals')
+    expect(c.querySelector('.af-mt-matchup')).toBeNull()
   })
 
   it('offers to hand the question to Chimmy, seeded and unsent', () => {
@@ -658,11 +661,12 @@ describe('My Team — the reported problems', () => {
     expect(c.querySelector('.af-mt-proj--af')?.getAttribute('title')).toContain('standard PPR 19.8')
   })
 
-  it('puts the league total first among the header tiles', () => {
+  it('puts the league total first in the scoring card, not again in the team card (2026-11-14)', () => {
     const c = render(<MyTeam data={data()} />).container
-    const first = c.querySelector('.af-mt-tile')
+    const first = c.querySelector('.af-mt-basis .af-mt-tile')
     expect(first?.className).toContain('af-mt-tile--af')
     expect(first?.textContent).toContain('131.7')
+    expect(c.querySelector('.af-mt-head .af-mt-tile--af')).toBeNull()
   })
 
   it('abbreviates every designation to a fixed-width code', () => {

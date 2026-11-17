@@ -59,6 +59,9 @@ export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
       scoring: scoring ?? null,
       schedule,
       draft_picks: history.draft_picks,
+      drafts: raw.drafts?.filter((d) => d.draft_id && d.status).map((d) => ({
+        source_draft_id: d.draft_id, status: d.status!, start_time: d.start_time,
+      })),
       traded_picks: tradedPicks,
       /*
        * From the winners bracket only. `standings` below is a wins/points sort (see

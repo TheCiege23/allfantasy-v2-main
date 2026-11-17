@@ -25,7 +25,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/league/league-draft-template-payload', () => ({ getLeagueDraftTemplatePayload: m.template }))
 
-import { addFollowUpDraftPlayers, finalizeRosterAssignments } from '@/lib/live-draft-engine/RosterAssignmentService'
+import { addFollowUpDraftPlayers, finalizeRosterAssignments, stillRosteredDraftPicks } from '@/lib/live-draft-engine/RosterAssignmentService'
 
 const template = {
   slots: [
@@ -160,5 +160,25 @@ describe("a full draft after another draft rebuilds the lineup", () => {
 
     const written = m.rosterUpdate.mock.calls[0]![0].data.playerData as Record<string, unknown>
     expect(written.starters).toEqual(['q1', 'r1'])
+  })
+})
+
+describe('draftPicks keeps only players still on the roster (2026-11-15)', () => {
+  it('REGRESSION: a player dropped or traded since last year leaves draftPicks when the rookie draft lands', () => {
+    // r2 was traded away: gone from players and the lineup, still in last year's draftPicks.
+    const traded = {
+      ...lastYear,
+      players: ['q1', 'r1'],
+      lineup_sections: { ...lastYear.lineup_sections, bench: [] },
+    }
+    const out = addFollowUpDraftPlayers(traded, [{ playerId: 'rk1', playerName: 'Rookie One', position: 'RB', team: 'NYG' }], template as never)
+    expect((out.draftPicks as Array<{ playerId: string }>).map((p) => p.playerId)).toEqual(['q1', 'r1', 'rk1'])
+    expect(out.players).toEqual(['q1', 'r1', 'rk1'])
+  })
+
+  it('a roster with nothing to check against keeps its list, and a pick with no id is kept', () => {
+    expect(stillRosteredDraftPicks({}, [{ playerId: 'x', playerName: 'X', position: 'RB' } as never])).toHaveLength(1)
+    expect(stillRosteredDraftPicks({ players: ['a'] }, [{ playerId: null, playerName: 'No Id', position: 'K' } as never, { playerId: 'b', playerName: 'B', position: 'RB' } as never]))
+      .toEqual([{ playerId: null, playerName: 'No Id', position: 'K' }])
   })
 })

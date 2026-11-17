@@ -4,7 +4,6 @@ import { createImportOsLoaders } from '../import-os'
 import { createValueOsLoaders } from '../value-os'
 import { createProjectionOsLoaders } from '../projection-os'
 import { createLeagueOsLoaders } from '../league-os'
-import type { PsychologyProfileFact } from '../psychology-os'
 import { ChimmyContextEngine } from '@/lib/chimmy-context/ChimmyContextEngine'
 import {
   resolveCommissionerGroundingOutcome,
@@ -22,14 +21,12 @@ import {
  */
 import type { DecisionFact } from './decisionToSlice'
 import {
-  loadLineupDecisionSlice,
   loadCommissionerHealthDecisionSlice,
   loadWaiverDecisionSlice,
   type WaiverDecisionBridgeArgs,
 } from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
-import { loadRosterValueGradeSlice, type RosterValueGradeFact } from './rosterValueGradeSlice'
-import { loadPsychologyConsistencySlice, type PsychologyConsistencyFact } from './psychologyConsistencySlice'
+import { loadRosterValueGradeSliceCached, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
@@ -218,16 +215,6 @@ export interface DecisionOsGroundingPacket {
    * ⚠ `locked` becomes `not_entitled` — the SECOND real producer of that reason, which until now
    * only commissioner intelligence could raise.
    */
-  /**
-   * Manager behavioural profiles (R4b). LEAGUE-scoped: every manager in this league.
-   *
-   * ⚠ The scores inside are ALREADY EVIDENCE-GATED — null means "not enough observation to say",
-   * never zero. `gateScores` decides that, not this packet, so there is one floor rather than two.
-   *
-   * 🛑 NO LONGER LOADED (Milestone 32): always absent — `disabled` when killed, otherwise
-   * `not_requested`. The field stays so the serializer's refusal stays tested against it.
-   */
-  managerPsychology: GroundedSlice<PsychologyProfileFact[]>
   savedAnalysis: GroundedSlice<string>
 
   /*
@@ -246,7 +233,6 @@ export interface DecisionOsGroundingPacket {
    * proposal. Adding a trade slice here would mean inventing one. The proposal-scoped path already
    * exists at `lib/chimmy-trade/pendingTradeDecisionGrounding.ts`.
    */
-  lineupDecision?: GroundedSlice<DecisionFact>
   waiverDecision?: GroundedSlice<DecisionFact>
   commissionerHealthDecision?: GroundedSlice<DecisionFact>
 
@@ -265,12 +251,6 @@ export interface DecisionOsGroundingPacket {
    * the same playbook R2 used for the four live decision engines rather than re-deriving the math.
    */
   rosterValueGrade?: GroundedSlice<RosterValueGradeFact>
-
-  /**
-   * R4b.5 — cross-league + cross-sport psychology consistency, self only (P5/P7). Derived at
-   * read, never cached — see `psychologyConsistencySlice.ts`.
-   */
-  psychologyConsistency?: GroundedSlice<PsychologyConsistencyFact>
 
   /**
    * Every gap on the packet, flattened.
@@ -561,8 +541,9 @@ export function oldestAsOf(rows: ReadonlyArray<{ computedAt?: string | null }>):
  * of packet.ts's imports, `ChimmyContextEngine` included, on messages that never build a packet.
  * One implementation, two callers, no second copy to drift.
  */
-export { deriveValueFormat, deriveIdpRules, deriveWantsDevyBoard } from './leagueValueFormat'
-import { deriveValueFormat, deriveIdpRules, deriveLeagueSizeAndPpr, deriveWantsDevyBoard } from './leagueValueFormat'
+export { deriveIdpRules, deriveWantsDevyBoard } from './leagueValueFormat'
+import { deriveIdpRules, deriveLeagueSizeAndPpr, deriveWantsDevyBoard } from './leagueValueFormat'
+import { loadLeagueValueFormat } from './leagueValueBook'
 
 export interface GroundingPacketArgs {
   leagueId?: string | null
@@ -582,16 +563,6 @@ export interface GroundingPacketArgs {
     devy?: boolean
     projections?: boolean
     leagueRules?: boolean
-    /**
-     * R2.4 — run the live lineup engine and carry its decision (default OFF).
-     *
-     * 🛑 OPT-IN, UNLIKE EVERY FLAG ABOVE IT, AND THE ASYMMETRY IS DELIBERATE. The others gate a
-     * READ; this gates running a decision engine inside the chat route's latency ceiling. Costing
-     * every turn a lineup decision — including the ones asking about trade values — is how the
-     * packet went 5.4s over that ceiling before R0.8. A caller asks for this when the question is
-     * about a lineup.
-     */
-    lineupDecision?: boolean
     /**
      * R2.3 — run the live commissioner-health engine (default OFF, and the most expensive slice
      * here). `getCommissionerHubHealthForUser` is TEN parallel queries, and the decision is only
@@ -617,12 +588,6 @@ export interface GroundingPacketArgs {
      * because of an ordering constraint.
      */
     rosterValueGrade?: boolean
-    /**
-     * R4b.5 — cross-league + cross-sport psychology consistency, self only (default OFF). Joins
-     * the concurrent wave; opt-in because it is a real query cost (walks every league the caller
-     * manages), not because of an ordering constraint.
-     */
-    psychologyConsistency?: boolean
     /**
      * R2.6 — the waiver claim decision (default OFF).
      *
@@ -655,6 +620,35 @@ export interface GroundingPacketArgs {
  * `Promise.allSettled` semantics via per-slice catch, the same reason `ChimmyContextEngine` runs
  * its providers that way. A failed slice becomes an honest gap, not an exception.
  */
+/**
+ * When the serialized IDP/kicker hop must be done by, measured from the packet's start: under the chat route's
+ * 3,000 ms ceiling with room for serialization.
+ */
+export const IDP_KICKER_DEADLINE_MS = 2700
+
+/** The slice, or a stated gap when it cannot finish in the time left. Never throws. */
+export function withSliceDeadline(
+  remainingMs: number,
+  work: Promise<GroundedSlice<ValueLookup[]>>,
+): Promise<GroundedSlice<ValueLookup[]>> {
+  const late = absent<ValueLookup[]>({
+    reason: 'not_computed',
+    detail: 'IDP and kicker values did not finish in time for this answer.',
+    remedy: 'They are priced per request; asking again usually includes them.',
+  })
+  if (remainingMs <= 0) {
+    work.catch(() => undefined)
+    return Promise.resolve(late)
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<GroundedSlice<ValueLookup[]>>((resolve) => {
+    timer = setTimeout(() => resolve(late), remainingMs)
+  })
+  return Promise.race([work.catch(() => late), timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
 export async function buildDecisionOsGroundingPacket(
   args: GroundingPacketArgs,
 ): Promise<DecisionOsGroundingPacket> {
@@ -738,12 +732,10 @@ export async function buildDecisionOsGroundingPacket(
   const commishKill = killed('commissionerIntelligence')
   const leagueIntelKill = killed('leagueIntelligence')
   const portfolioKill = killed('portfolio')
-  const psychologyKill = killed('managerPsychology')
-  const lineupDecisionKill = killed('lineupDecision')
   const commishHealthKill = killed('commissionerHealthDecision')
   const idpKickerKill = killed('idpKickerValues')
   const rosterValueGradeKill = killed('rosterValueGrade')
-  const psychologyConsistencyKill = killed('psychologyConsistency')
+  const waiverDecisionKill = killed('waiverDecision')
 
   const pAssertions =
     leagueId && !importKill
@@ -766,9 +758,12 @@ export async function buildDecisionOsGroundingPacket(
    * An explicit argument still wins and stays fully parallel, which is why the resolution is a
    * promise rather than an await: a caller that already knows the format pays nothing for this.
    */
+  // 🛑 THE CHART COMES FROM THE LEAGUE ROW, BY THE SAME RULE EVERY SCREEN USES (`valueBookFor`, via
+  // ./leagueValueBook) — not from the rules. Reading it off the rules was a second rule, and it priced
+  // keeper leagues on the dynasty chart that the player card does not (2026-11-17).
   const pValueFormat: Promise<{ format: string; qbFormat: string } | null> = args.valueFormat
     ? Promise.resolve(args.valueFormat)
-    : pRules.then(deriveValueFormat).catch(() => null)
+    : loadLeagueValueFormat(leagueId).catch(() => null)
 
   const pMarket =
     want.values && !marketKill
@@ -782,23 +777,6 @@ export async function buildDecisionOsGroundingPacket(
               : null,
           ),
         )
-      : Promise.resolve(null)
-
-  /*
-   * R2.4 — the lineup decision, bridged from the live engine.
-   *
-   * ⚠ STARTED HERE WITH THE OTHERS, NOT AWAITED HERE. It joins the same concurrent wave the
-   * waterfall fix established: none of these reads consumes another's result, so they all start
-   * together and each `await` stays in slice order below. An engine run awaited in sequence would
-   * put the packet straight back over the ceiling R0.8 measured.
-   *
-   * ⚠ `.catch` IS INSIDE THE BRIDGE, not here. `loadLineupDecisionSlice` returns an honest gap
-   * slice rather than throwing, so unlike the loaders above it never resolves to null — which is
-   * why the assembly below reads it directly instead of testing for substance.
-   */
-  const pLineupDecision =
-    want.lineupDecision && !lineupDecisionKill
-      ? kick('lineupDecision', loadLineupDecisionSlice({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   /*
@@ -822,7 +800,7 @@ export async function buildDecisionOsGroundingPacket(
    * after every other producer had finished, turning parallel work into a serial tail. In this wave
    * it overlaps with them and costs roughly its own slowest read.
    */
-  const pWaiverDecision = want.waiverDecision
+  const pWaiverDecision = want.waiverDecision && !waiverDecisionKill
     ? kick('waiverDecision', loadWaiverDecisionSlice({ userId: args.userId, leagueId, onClaims: args.onWaiverClaims }))
     : Promise.resolve(null)
 
@@ -833,16 +811,7 @@ export async function buildDecisionOsGroundingPacket(
    */
   const pRosterValueGrade =
     want.rosterValueGrade && !rosterValueGradeKill
-      ? kick('rosterValueGrade', loadRosterValueGradeSlice({ userId: args.userId, leagueId }))
-      : Promise.resolve(null)
-
-  /*
-   * R4b.5 — cross-league + cross-sport psychology. Same wave, same rules: its own DB reads, no
-   * dependency on any other slice.
-   */
-  const pPsychologyConsistency =
-    want.psychologyConsistency && !psychologyConsistencyKill
-      ? kick('psychologyConsistency', loadPsychologyConsistencySlice({ userId: args.userId, leagueId }))
+      ? kick('rosterValueGrade', loadRosterValueGradeSliceCached({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   /*
@@ -1268,24 +1237,6 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'It needs recorded league activity — trades, matchups, valuations — to summarise.',
       })
 
-  /*
-   * R2.4 — the bridged lineup decision.
-   *
-   * ⚠ THREE STATES, AND THE THIRD IS THE ONE WORTH NAMING. A killed feed and an unrequested one
-   * are different absences: `disabled` says an operator switched it off and the user can do
-   * nothing, `not_requested` says the question did not call for a lineup decision and assembling
-   * one would be waste. Collapsing them would report an operator action as a user's phrasing.
-   */
-  const lineupDecisionSlice = await pLineupDecision
-  const lineupDecision: GroundedSlice<DecisionFact> = lineupDecisionKill
-    ? absent<DecisionFact>(lineupDecisionKill)
-    : lineupDecisionSlice ??
-      absent<DecisionFact>({
-        reason: 'not_requested',
-        detail: 'This question did not call for a lineup decision.',
-        remedy: 'Ask about your lineup and the deterministic engine runs.',
-      })
-
   const commissionerHealthDecision: GroundedSlice<DecisionFact> = commishHealthKill
     ? absent<DecisionFact>(commishHealthKill)
     : (await pCommishHealth) ??
@@ -1302,15 +1253,6 @@ export async function buildDecisionOsGroundingPacket(
         reason: 'not_requested',
         detail: 'This question did not call for a roster value grade.',
         remedy: 'Ask where you are weak or how your roster compares and it runs.',
-      })
-
-  const psychologyConsistency: GroundedSlice<PsychologyConsistencyFact> = psychologyConsistencyKill
-    ? absent<PsychologyConsistencyFact>(psychologyConsistencyKill)
-    : (await pPsychologyConsistency) ??
-      absent<PsychologyConsistencyFact>({
-        reason: 'not_requested',
-        detail: 'This question did not call for a cross-league or cross-sport read.',
-        remedy: 'Ask how consistent you are across leagues or sports and it runs.',
       })
 
   /*
@@ -1340,31 +1282,13 @@ export async function buildDecisionOsGroundingPacket(
    * `intent === 'waiver'`. The pool read and the engine run land on waiver questions and nothing
    * else — the gate below is load-bearing, not decorative.
    */
-  const waiverDecision: GroundedSlice<DecisionFact> =
-    (await pWaiverDecision) ??
+  const waiverDecision: GroundedSlice<DecisionFact> = waiverDecisionKill && want.waiverDecision
+    ? absent<DecisionFact>(waiverDecisionKill)
+    : (await pWaiverDecision) ??
     absent<DecisionFact>({
         reason: 'not_requested',
         detail: 'This question did not call for a waiver claim decision.',
         remedy: 'Ask who to claim off waivers and it is requested.',
-      })
-
-  /*
-   * Manager psychology (R4b) — 🛑 NOT LOADED, because nothing can render it (Milestone 32).
-   *
-   * `serialize.ts` has no entry for this slice and refuses any profile-shaped item on sight, so the
-   * psychology-os read cost a query per chat turn for a value no prompt printed. Its only effect on
-   * the prompt was a "no behavioural profiles" gap line for leagues without sufficient profiles,
-   * which asked Chimmy to tell the user about profile data it may not characterise anyway.
-   *
-   * ⚠ THE KILL SWITCH KEEPS ITS MEANING: killed still reads `disabled` (a named gap, as before).
-   * Otherwise the slice is `not_requested`, which `collectGaps` leaves out of the prompt.
-   */
-  const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill
-    ? absent<PsychologyProfileFact[]>(psychologyKill)
-    : absent<PsychologyProfileFact[]>({
-        reason: 'not_requested',
-        detail: 'Manager behavioural profiles are not part of Chimmy grounding.',
-        remedy: 'None needed — Chimmy answers from league facts, never from profiles.',
       })
 
   const portfolio: GroundedSlice<string> = portfolioKill
@@ -1472,11 +1396,18 @@ export async function buildDecisionOsGroundingPacket(
     })
   } else if (want.idpKicker && leagueId) {
     const rulesValue = leagueRules.present ? leagueRules.value : null
-    const fmt = deriveValueFormat(rulesValue)
+    const fmt = await pValueFormat
     const size = deriveLeagueSizeAndPpr(rulesValue)
+    /*
+     * 🛑 BOUNDED BY THE PACKET'S OWN CLOCK (2026-11-16, re-score item 8). This hop starts only after the context
+     * engine returns, and the chat route discards the WHOLE packet past its 3s ceiling — so an IDP league's
+     * values could cost every other slice in the turn. The slice gets what is left before
+     * `IDP_KICKER_DEADLINE_MS` from the packet's start; past that it reports a gap and the packet still lands.
+     */
+    const remainingMs = IDP_KICKER_DEADLINE_MS - (Date.now() - startedAt)
     idpKickerValues = await kick(
       'idpKickerValues',
-      loadIdpKickerValueSlice({
+      withSliceDeadline(remainingMs, loadIdpKickerValueSlice({
         sport: args.sport,
         leagueId,
         // Optional-chained rather than relying on narrowing: the guard above tests a COMPOUND
@@ -1493,7 +1424,7 @@ export async function buildDecisionOsGroundingPacket(
          */
         numTeams: size.numTeams ?? 12,
         isDynasty: fmt?.format === 'DYNASTY',
-      }),
+      })),
     )
   }
 
@@ -1503,12 +1434,9 @@ export async function buildDecisionOsGroundingPacket(
     ['leagueIntelligence', leagueIntelligence as GroundedSlice<unknown>],
     ['portfolio', portfolio as GroundedSlice<unknown>],
     ['savedAnalysis', savedAnalysis as GroundedSlice<unknown>],
-    ['managerPsychology', managerPsychology as GroundedSlice<unknown>],
-    ['lineupDecision', lineupDecision as GroundedSlice<unknown>],
     ['commissionerHealthDecision', commissionerHealthDecision as GroundedSlice<unknown>],
     ['idpKickerValues', idpKickerValues as GroundedSlice<unknown>],
     ['rosterValueGrade', rosterValueGrade as GroundedSlice<unknown>],
-    ['psychologyConsistency', psychologyConsistency as GroundedSlice<unknown>],
     ['waiverDecision', waiverDecision as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
@@ -1534,13 +1462,10 @@ export async function buildDecisionOsGroundingPacket(
     leagueIntelligence,
     portfolio,
     savedAnalysis,
-    managerPsychology,
     waiverDecision,
-    lineupDecision,
     commissionerHealthDecision,
     idpKickerValues,
     rosterValueGrade,
-    psychologyConsistency,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,

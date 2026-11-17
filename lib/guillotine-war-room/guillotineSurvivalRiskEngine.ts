@@ -9,7 +9,7 @@
 
 import type { GuillotineWarRoomContext } from './types'
 
-export type SurvivalRiskLevel = 'critical' | 'high' | 'moderate' | 'safe' | 'eliminated' | 'limited'
+type SurvivalRiskLevel = 'critical' | 'high' | 'moderate' | 'safe' | 'eliminated' | 'limited'
 
 export interface GuillotineSurvivalRiskResult {
   rosterId: string

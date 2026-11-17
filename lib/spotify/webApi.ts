@@ -18,7 +18,7 @@ const CONTEXT_URI = /^spotify:(playlist|album|artist):[0-9A-Za-z]{22}$/
 /** Web Playback SDK device ids are hex; allow a generous alnum range, nothing else. */
 const DEVICE_ID = /^[0-9A-Za-z]{8,128}$/
 
-export type SpotifyPlaylistSummary = {
+type SpotifyPlaylistSummary = {
   id: string
   name: string
   uri: string
@@ -73,7 +73,7 @@ export function normalizePlaylist(raw: unknown): SpotifyPlaylistSummary | null {
   return { id, name, uri, imageUrl, trackCount, ownerName }
 }
 
-export type ListPlaylistsResult =
+type ListPlaylistsResult =
   | { ok: true; playlists: SpotifyPlaylistSummary[]; truncated: boolean }
   | { ok: false; status: number }
 
@@ -106,7 +106,7 @@ export async function listMyPlaylists(accessToken: string): Promise<ListPlaylist
   return { ok: true, playlists, truncated: true }
 }
 
-export type StartPlaybackResult =
+type StartPlaybackResult =
   | { ok: true }
   | { ok: false; status: number; reason: 'premium_required' | 'forbidden' | 'device_not_found' | 'unauthorized' | 'rate_limited' | 'failed' }
 

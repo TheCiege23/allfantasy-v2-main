@@ -354,7 +354,10 @@ async function manualRecipients(
     where: { email: { in: allowed, mode: "insensitive" } },
     select: { id: true, email: true, username: true },
   })
-  const knownByEmail = new Map(knownUsers.map((user) => [user.email.toLowerCase(), user]))
+  // Phone-only accounts carry no email; the `in` filter already excludes them, the guard keeps the key a string.
+  const knownByEmail = new Map(
+    knownUsers.flatMap((user) => (user.email ? [[user.email.toLowerCase(), user] as const] : [])),
+  )
 
   const recipients = allowed.map((email) => {
     const known = knownByEmail.get(email)
@@ -413,9 +416,11 @@ export async function previewEmailAudience(
     orderBy: { createdAt: "desc" },
     take: Math.min(Math.max(limit * 2, 50), MAX_BROADCAST_RECIPIENTS * 2),
   })
-  const emailValues = rows.map((row) => row.email.toLowerCase())
+  // `contains: "@"` already skips phone-only accounts (no email); narrowing makes that explicit.
+  const withEmail = rows.filter((row): row is typeof row & { email: string } => typeof row.email === "string")
+  const emailValues = withEmail.map((row) => row.email.toLowerCase())
   const optOuts = await optOutEmailSet(emailValues)
-  const recipients = rows
+  const recipients = withEmail
     .filter((row) => !optOuts.has(row.email.toLowerCase()))
     .slice(0, limit)
     .map((row) => ({ userId: row.id, email: row.email, username: row.username }))

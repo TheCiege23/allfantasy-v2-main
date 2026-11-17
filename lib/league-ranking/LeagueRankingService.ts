@@ -92,7 +92,7 @@ function getLeagueActivitySignal(input: {
  * Load raw metrics for a set of leagues (or all leagues).
  * Uses Prisma aggregates and optional date window for "recent" activity.
  */
-export async function getLeagueMetrics(
+async function getLeagueMetrics(
   options: { leagueIds?: string[]; recentDays?: number } = {}
 ): Promise<Map<string, LeagueRankingMetrics>> {
   const { leagueIds, recentDays } = options
@@ -392,7 +392,7 @@ export async function getLeagueMetrics(
  * Compute popularity score from metrics.
  * Components are normalized 0–1; composite is 0–100.
  */
-export function computePopularityScore(metrics: LeagueRankingMetrics): LeaguePopularityScore {
+function computePopularityScore(metrics: LeagueRankingMetrics): LeaguePopularityScore {
   const size = Math.max(8, metrics.leagueSize ?? metrics.managerCount ?? 12)
   const chatCap = Math.max(30, size * 15)
   const tradeCap = Math.max(8, Math.round(size * 1.5))

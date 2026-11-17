@@ -121,6 +121,8 @@ describe('StandingsBoardView — official table', () => {
 
   it('hatches and tags the projection, and keeps the actual record apart', () => {
     const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    // 2026-11-14: the projections are behind "More columns".
+    fireEvent.click(within(container).getByTestId('standings-more-columns'))
     const projHeads = [...container.querySelectorAll('thead th.af-stb-proj')]
     expect(projHeads).toHaveLength(2)
     for (const h of projHeads) expect(h.querySelector('.af-stb-projtag')?.textContent).toBe('Model')
@@ -151,9 +153,9 @@ describe('StandingsBoardView — power, cards, divisions', () => {
     expect(window.location.search).toContain('league=L1')
   })
 
-  it('renders every team as a labelled card, and remembers the choice', () => {
-    render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
-    fireEvent.click(screen.getByRole('radio', { name: 'Cards' }))
+  // 2026-11-14: there is no Table/Cards switch; the layout follows the screen, and a URL can name it.
+  it('renders every team as a labelled card', () => {
+    render(<StandingsBoardView board={board()} initial={{ ...DEFAULT_STANDINGS_VIEW, layout: 'cards' }} />)
     const cards = screen.getAllByRole('article')
     expect(cards).toHaveLength(4)
     const you = cards.find((c) => c.getAttribute('data-you') === 'true')!
@@ -161,17 +163,14 @@ describe('StandingsBoardView — power, cards, divisions', () => {
     expect(within(you).getByText('Record')).toBeTruthy()
     expect(within(you).getByText('Points against')).toBeTruthy()
     expect(you.querySelector('.af-stb-cardproj')?.textContent).toMatch(/Model.*an expectation, not a result/)
-    expect(window.location.search).toContain('st_layout=cards')
-    expect(window.localStorage.getItem('af-standings-layout')).toBe('cards')
   })
 
-  it('applies a remembered card layout only when the URL did not choose', () => {
+  it('offers no Table/Cards switch, and ignores a layout remembered by the old one', () => {
     window.localStorage.setItem('af-standings-layout', 'cards')
-    const { unmount } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
-    expect(screen.getAllByRole('article')).toHaveLength(4)
-    unmount()
-    window.history.replaceState(null, '', '/core/standings?league=L1&st_layout=table')
     render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    expect(screen.queryByRole('radio', { name: 'Cards' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'Table' })).toBeNull()
+    // Not a phone in this test, so the table — a stale "cards" in storage no longer traps a desktop.
     expect(screen.queryAllByRole('article')).toHaveLength(0)
   })
 
@@ -233,7 +232,8 @@ describe('StandingsBoardView — charts and notes', () => {
   it('says a week is still being played', () => {
     const b = { ...board(), pendingWeeks: [5], throughWeek: 4 }
     render(<StandingsBoardView board={b} initial={DEFAULT_STANDINGS_VIEW} />)
-    expect(screen.getByRole('note').textContent).toMatch(/Week 5 is still being played.*through week 4.*Sleeper/)
+    // 2026-11-14: once, and short.
+    expect(screen.getByRole('note').textContent).toBe('Week 5 is still being played, so the table counts results through week 4.')
   })
 })
 

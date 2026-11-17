@@ -3,17 +3,12 @@
  * Creates tournament parent, conferences, batch of feeder leagues, round records, and invite distribution.
  */
 
-import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
 import { buildLeagueInviteUrl } from '@/lib/viral-loop'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { RetiredConceptError, checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
-import {
-  DEFAULT_TOURNAMENT_SETTINGS,
-  TOURNAMENT_LEAGUE_VARIANT,
-  BLACK_VS_GOLD_CONFERENCE_NAMES,
-} from './constants'
+import { DEFAULT_TOURNAMENT_SETTINGS, TOURNAMENT_LEAGUE_VARIANT } from './constants'
 import { generateLeagueNames, getConferenceDisplayNames, generateInviteCode } from './LeagueNamingService'
 import type { CreateTournamentInput, TournamentSettings, InviteDistributionItem } from './types'
 import {

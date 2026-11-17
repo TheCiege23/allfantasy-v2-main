@@ -9,6 +9,7 @@ import type { RequestRow } from '@/components/tournament/TournamentApprovalsCent
 import type { DraftScheduleV1 } from '@/lib/tournament/draft-schedule-types'
 import { defaultAiAutomationV1 } from '@/lib/tournament/ai-automation-hub'
 import { TOURNAMENT_ID } from './fixtures'
+import type { HarnessApiRoute } from '../harnessApi'
 
 const FEEDERS = [
   ['Gridiron North', 'Gridiron Conference', 'GRDN7Q'],
@@ -54,7 +55,7 @@ export const summary: TournamentCommissionerSummary = {
 }
 
 /** GET /api/tournament/[id]/access as the creator. */
-export const access = { authenticated: true, isCreator: true, canUseControlConsole: true, canEditHubSettings: true }
+const access = { authenticated: true, isCreator: true, canUseControlConsole: true, canEditHubSettings: true }
 
 export const announcements: AnnouncementFeedItem[] = [
   { id: 'ca-1', title: 'Week 6 is final', body: 'Two weeks left in the Opening Round. The top 2 in each league advance; 2 wildcards come from the bubble.', type: 'round_update', pinned: true, createdAt: '2026-10-14T13:00:00.000Z' },
@@ -67,7 +68,7 @@ export const waitlist = {
   })),
 }
 
-export const staff = {
+const staff = {
   staff: [
     { userId: 'cku0000staff00001', displayName: 'Riley Castellanos-Whitmore', permissions: { dashboard: true, manageLeagues: true, manageDrafts: true } },
     { userId: 'cku0000staff00002', displayName: 'Avery', permissions: { dashboard: true, manageChat: true } },
@@ -93,3 +94,16 @@ export const approvals: { requests: RequestRow[] } = {
     },
   ],
 }
+
+const base = `/api/tournament/${TOURNAMENT_ID}`
+
+/** Every /api/ answer the commissioner dashboard needs, served by scripts/e2e-harness-capture.mjs. */
+export const COMMISSIONER_HARNESS_API: HarnessApiRoute[] = [
+  { path: `${base}/access`, body: access },
+  { path: `${base}/commissioner-dashboard`, body: summary },
+  { path: `${base}/announcements`, body: { announcements } },
+  { path: `${base}/waitlist`, body: waitlist },
+  { path: `${base}/staff`, body: staff },
+  { path: `${base}/control`, body: control },
+  { path: `${base}/league-settings-request`, body: approvals },
+]

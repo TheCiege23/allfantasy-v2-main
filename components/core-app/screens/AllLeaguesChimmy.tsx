@@ -15,7 +15,7 @@ import { getImportPlatforms, type ImportPlatform } from '@/lib/league-import/pro
  * relies on the af-core / af-landing token layer the host page already loads.
  */
 
-export type AllLeaguesChimmyCopy = {
+type AllLeaguesChimmyCopy = {
   label: string
   h2: string
   body: string
@@ -35,7 +35,7 @@ const EXAMPLE_LEAGUES = [
   { name: 'End Zone Elites', format: 'Keeper' },
 ] as const
 
-export function exampleLeaguePlatforms(platforms: ImportPlatform[] = getImportPlatforms()) {
+function exampleLeaguePlatforms(platforms: ImportPlatform[] = getImportPlatforms()) {
   const live = platforms.filter((p) => p.status === 'live')
   if (live.length === 0) return []
   return EXAMPLE_LEAGUES.map((league, i) => ({ ...league, platform: live[i % live.length] }))

@@ -38,7 +38,7 @@ export function MatchupStartSitModal({
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <Scale className="h-5 w-5 text-[#ff9ec0]/90" />
-            <h2 className="text-sm font-bold text-white">Start / sit — AI</h2>
+            <h2 className="text-sm font-bold text-white">Start / sit — Chimmy</h2>
           </div>
           <button
             type="button"

@@ -234,7 +234,7 @@ test.describe('@player-trend full click audit', () => {
       'href',
       '/app/trend-feed?sport=NCAAF&timeframe=30d'
     )
-    await expect(page.getByRole('link', { name: 'Waiver AI' }).first()).toHaveAttribute('href', '/waiver-ai')
+    await expect(page.getByRole('link', { name: 'Waiver Chimmy' }).first()).toHaveAttribute('href', '/waiver-ai')
 
     await page.goto('/app/trend-feed?sport=NBA&timeframe=30d')
     await expect(page.getByRole('heading', { name: 'Player trend feed' })).toBeVisible()

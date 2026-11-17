@@ -14,7 +14,7 @@ import { isConsecutiveSchedule } from './periodCalendar'
  * still closed by a durable SKIP.
  */
 
-export type ProcessingLane = 'live' | 'historical_backfill'
+type ProcessingLane = 'live' | 'historical_backfill'
 
 export interface LaneSpec {
   readonly processingLane: ProcessingLane
@@ -33,12 +33,12 @@ export interface LaneSpec {
   readonly blocksLiveSettlement: boolean
 }
 
-export type LanePlanState =
+type LanePlanState =
   | 'ongoing_live_only'
   | 'ongoing_with_seed'
   | 'completed_season_backfill'
 
-export type LanePlanRefusal =
+type LanePlanRefusal =
   | 'schedule_empty'
   | 'schedule_not_consecutive'
   | 'required_lookback_invalid'
@@ -60,7 +60,7 @@ export interface LanePlanInput {
   requiredLookback: number
 }
 
-export type LanePlan =
+type LanePlan =
   | { kind: 'plan'; state: LanePlanState; live: LaneSpec | null; historical: LaneSpec | null }
   | { kind: 'refused'; reason: LanePlanRefusal }
 

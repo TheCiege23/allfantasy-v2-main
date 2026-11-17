@@ -20,14 +20,14 @@ import type { ScarcityRow } from './warRoomFormat'
  */
 
 /** A bench player counts as a fit only when he beats the starter he would replace by at least this. */
-export const MIN_UPGRADE = 1
+const MIN_UPGRADE = 1
 /** A position counts as thin for a team only this far under the league's average starter. */
-export const MIN_THIN = 1
+const MIN_THIN = 1
 export const MAX_PARTNERS = 5
 
-export type MapPlayer = { id: string; name: string; position: string; points: number }
+type MapPlayer = { id: string; name: string; position: string; points: number }
 
-export type TradeMapPartner = {
+type TradeMapPartner = {
   rosterId: string
   name: string
   /** Their bench players who would start for you, best upgrade first. */

@@ -42,7 +42,7 @@ export type LeagueMeta = {
   settings: unknown
 }
 
-export const subjectKeyOf = (platform: string, platformUserId: string) => `${platform}:${platformUserId}`
+const subjectKeyOf = (platform: string, platformUserId: string) => `${platform}:${platformUserId}`
 
 /**
  * Is (league, season, week) a finished week?
@@ -84,7 +84,7 @@ export function makeCompleteWeekTest(rows: FactRow[], leagues: Map<string, Leagu
   }
 }
 
-export type RatingInputs = {
+type RatingInputs = {
   games: RatingGame[]
   /** Subject key → the AF account that claimed a team held by that person. */
   claimedBy: Map<string, string>

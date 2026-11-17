@@ -22,7 +22,7 @@ import {
   type StarterSlotNeed,
 } from '@/lib/live-draft-engine/autopickStarterNeeds'
 
-export type StarterGuard = {
+type StarterGuard = {
   /** True when this pick must fill an open starting spot. */
   mustFill: boolean
   open: StarterSlotNeed[]
@@ -30,7 +30,7 @@ export type StarterGuard = {
   allows: (position: string | null | undefined) => boolean
 }
 
-export const OPEN_GUARD: StarterGuard = { mustFill: false, open: [], allows: () => true }
+const OPEN_GUARD: StarterGuard = { mustFill: false, open: [], allows: () => true }
 
 /** Pure: the guard for a team, from the template's slots, its own picks so far and the draft's rounds. */
 export function starterGuardFor(

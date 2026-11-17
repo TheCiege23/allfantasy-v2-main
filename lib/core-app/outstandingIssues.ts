@@ -75,7 +75,7 @@ export type CoreIssueParts =
   /** The home's one row standing for every `starter-out` row while the injury report is shown (homeGuide.ts). */
   | { kind: 'injury-summary'; starters: number; leagues: number }
 
-export type IssueDetector =
+type IssueDetector =
   | 'stale_sync'
   | 'disconnected_platform'
   | 'draft_upcoming'
@@ -86,7 +86,7 @@ export type IssueDetector =
   | 'bye_week_hole'
   | 'commissioner_vote'
 
-export type OutstandingIssuesResult = {
+type OutstandingIssuesResult = {
   issues: CoreIssue[]
   /** Detectors that can actually fire today, and why the rest cannot. */
   detectorsAvailable: IssueDetector[]
@@ -134,7 +134,7 @@ const NON_SYNCING_PLATFORMS = new Set(['allfantasy', 'af', 'manual', 'native'])
  * tab's urgency badge both call it, so a badge can never count a league the queue
  * does not list, or the reverse.
  */
-export function isStaleLeague(
+function isStaleLeague(
   league: { platform?: string | null },
   lastSync: Date | null,
   now: Date,

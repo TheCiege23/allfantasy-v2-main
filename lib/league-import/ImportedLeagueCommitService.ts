@@ -17,6 +17,8 @@ import { persistProviderTransactionFacts, type ProviderTransactionFactInput } fr
 import type { ImportWarningRecord } from '@/lib/league-import/types'
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 import { hasIdpRosterSlot } from './idpRosterSlots'
+import { IMPORT_CO_COMMISSIONERS_KEY, importCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
+import { isYahooSnapshotYahooSettings } from './yahoo/snapshot/yahooSnapshotModel'
 import type {
   CanonicalImportBundle,
   ImportProvider,
@@ -82,6 +84,13 @@ export interface PersistImportedLeagueOptions {
    * team somebody already holds.
    */
   importerSourceTeamId?: string | null
+  /**
+   * True only when the commissioner gate PROVED, from the provider's own API, that the importer is
+   * the source league's commissioner (`isCommissioner === true && verification === 'api'`). Never a
+   * self-attestation. It lets a commissioner with no team of their own join a league another account
+   * already imported, as a co-commissioner, instead of creating a duplicate copy of it.
+   */
+  importerIsProvenCommissioner?: boolean
 }
 
 export interface PersistImportedLeagueResult {
@@ -503,6 +512,11 @@ async function runHistoricalBackfill(args: {
   }
 
   if (args.provider === 'yahoo') {
+    /* A pasted league has no Yahoo access behind it: the backfill reads past seasons through the
+       Yahoo API and could only fail. Skipped, and said so, rather than attempted. */
+    if (isYahooSnapshotYahooSettings(args.normalized.league.yahoo_settings)) {
+      return { attempted: false, skipped: true, reason: 'Pasted Yahoo league: no Yahoo API access to backfill past seasons from.' }
+    }
     const { syncYahooHistoricalBackfillAfterImport } = await import(
       '@/lib/league-import/yahoo/YahooHistoricalBackfillService'
     )
@@ -750,6 +764,8 @@ export async function claimExistingLeagueForMember(args: {
       platformLeagueId,
       season: seasonYear,
     },
+    // Oldest first: with several copies already present, always the same one, never an arbitrary pick.
+    orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, sport: true },
   })
   if (!otherLeague) return null
@@ -851,6 +867,57 @@ export async function claimExistingLeagueForMember(args: {
     league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
     historicalBackfill: null,
     existed: false,
+    joinedExisting: true,
+    incompleteSteps: [],
+  }
+}
+
+/**
+ * A provider-proven commissioner who has NO team in a league another account already imported joins
+ * that league as a co-commissioner, instead of creating a second copy of it.
+ *
+ * 🛑 THE GAP THIS CLOSES, MEASURED 2026-11-17: `claimExistingLeagueForMember` can only join someone by
+ * claiming their own team, so a commissioner who runs a league without playing in it fell through
+ * to `league.create` every time. One KBI commissioner had a team in 1 of 29 conference leagues and
+ * so made a second copy of the other 28 — each with its own rosters, draft session and chat, none of
+ * them the copy the managers were actually drafting in.
+ *
+ * Recorded in `League.settings[IMPORT_CO_COMMISSIONERS_KEY]`, which `isTournamentCoCommissioner`
+ * reads as co-commissioner — NOT the tournament key, which the tournament sync rewrites wholesale.
+ */
+export async function joinExistingLeagueAsCoCommissioner(args: {
+  userId: string
+  provider: ImportProvider
+  platformLeagueId: string
+  seasonYear: number
+}): Promise<PersistImportedLeagueResult | null> {
+  const { userId, provider, platformLeagueId, seasonYear } = args
+  const otherLeague = await (prisma as any).league.findFirst({
+    where: { userId: { not: userId }, platform: provider, platformLeagueId, season: seasonYear },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true, sport: true },
+  })
+  if (!otherLeague) return null
+
+  const alreadyCo = await prisma.$transaction(async (tx) => {
+    const row = await (tx as any).league.findUnique({ where: { id: otherLeague.id }, select: { settings: true } })
+    const settings =
+      row?.settings && typeof row.settings === 'object' && !Array.isArray(row.settings)
+        ? (row.settings as Record<string, unknown>)
+        : {}
+    const current = importCoCommissionerIds(settings)
+    if (current.includes(userId)) return true
+    await (tx as any).league.update({
+      where: { id: otherLeague.id },
+      data: { settings: { ...settings, [IMPORT_CO_COMMISSIONERS_KEY]: [...current, userId].sort() } },
+    })
+    return false
+  })
+
+  return {
+    league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
+    historicalBackfill: null,
+    existed: alreadyCo,
     joinedExisting: true,
     incompleteSteps: [],
   }
@@ -967,6 +1034,12 @@ export async function persistImportedLeagueFromNormalization(
       }
       return joined
     }
+  }
+
+  // A proven commissioner with no team to claim joins the existing copy rather than making another.
+  if (!existing && options.importerIsProvenCommissioner) {
+    const joinedAsCo = await joinExistingLeagueAsCoCommissioner({ userId, provider, platformLeagueId, seasonYear })
+    if (joinedAsCo) return joinedAsCo
   }
 
   const resolvedSport = resolveImportedLeagueSport(normalized)

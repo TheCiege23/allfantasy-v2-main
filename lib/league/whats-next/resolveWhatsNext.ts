@@ -13,7 +13,7 @@ import { FORMAT_GUIDES } from './formatPhaseGuides'
 import type { PhaseAction, PhaseGuide, WhatsNextFacts, WhatsNextView, WhatsNextViewer } from './types'
 
 /** What a missing template value reads as. A raw `{hoh}` must never reach a manager. */
-export const PLACEHOLDER_FALLBACKS: Record<string, string> = {
+const PLACEHOLDER_FALLBACKS: Record<string, string> = {
   hoh: 'the HOH',
   nominees: 'two houseguests',
   nomineeCount: '2',
@@ -76,7 +76,7 @@ function fillAction(action: PhaseAction | undefined, vars: Record<string, string
   }
 }
 
-export function getPhaseGuide(facts: Pick<WhatsNextFacts, 'format' | 'phase'>): PhaseGuide | null {
+function getPhaseGuide(facts: Pick<WhatsNextFacts, 'format' | 'phase'>): PhaseGuide | null {
   return FORMAT_GUIDES[facts.format]?.phases[facts.phase] ?? null
 }
 

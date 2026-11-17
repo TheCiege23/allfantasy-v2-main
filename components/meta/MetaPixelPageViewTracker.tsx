@@ -7,13 +7,13 @@ import { ensureMetaPixel, mirrorMetaEventServerSide, trackMetaEventAndMirror } f
 
 function resolveAiChimmyContent(pathname: string): { name: string; category: string } | null {
   if (pathname === "/ai-chat" || pathname.startsWith("/ai-chat/")) {
-    return { name: "AI Chimmy Chat", category: "AI Chimmy" }
+    return { name: "Chimmy Chat", category: "Chimmy" }
   }
   if (pathname === "/ai" || pathname.startsWith("/ai/")) {
-    return { name: "AI Chimmy", category: "AI Chimmy" }
+    return { name: "Chimmy", category: "Chimmy" }
   }
   if (pathname.toLowerCase().includes("/chimmy")) {
-    return { name: "AI Chimmy", category: "AI Chimmy" }
+    return { name: "Chimmy", category: "Chimmy" }
   }
   return null
 }

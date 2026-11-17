@@ -38,7 +38,7 @@ const KIND_HOSTS: Record<Exclude<PaymentLinkKind, 'other'>, readonly string[]> =
 }
 
 export const MAX_PAYMENT_LINKS = 4
-export const SELF_REPORT_NOTE_MAX = 140
+const SELF_REPORT_NOTE_MAX = 140
 
 export type DuesEntry = {
   teamId: string
@@ -70,7 +70,7 @@ export type DuesConfig = {
   lastUpdatedBy: string | null
 }
 
-export function defaultDuesConfig(): DuesConfig {
+function defaultDuesConfig(): DuesConfig {
   return {
     enabled: false,
     amount: null,
@@ -153,7 +153,7 @@ export function readDuesConfig(raw: unknown): DuesConfig {
   }
 }
 
-export type DuesUpdateError = 'invalid_payment_link' | 'invalid_due_date' | 'invalid_amount' | 'too_many_links'
+type DuesUpdateError = 'invalid_payment_link' | 'invalid_due_date' | 'invalid_amount' | 'too_many_links'
 
 /** A commissioner's edit applied to the stored config. Every payment link is validated or the edit is refused. */
 export function applyCommissionerUpdate(
@@ -238,7 +238,7 @@ export function teamPaid(config: DuesConfig, teamId: string, season: number, mul
   return multiSeason ? e.paidSeasons.includes(season) || e.paid : e.paid
 }
 
-export type ReminderKind = 'week_before' | 'day_before' | 'overdue'
+type ReminderKind = 'week_before' | 'day_before' | 'overdue'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

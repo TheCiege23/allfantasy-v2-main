@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { getLeagueRosters, getAllPlayers, getLeagueInfo } from '@/lib/sleeper-client'
 import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
-import type { ConfidenceRiskOutput, RiskTag } from '@/lib/analytics/confidence-risk-engine'
+import type { ConfidenceRiskOutput } from '@/lib/analytics/confidence-risk-engine'
 
 export type DecisionType = 'trade' | 'waiver' | 'sit_start' | 'trade_proposal' | 'trade_finder'
 export type RiskProfile = 'low' | 'moderate' | 'high' | 'extreme'

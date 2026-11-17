@@ -428,40 +428,11 @@ async function createWorldCupBracketTemplateRows(
   }
 }
 
-export async function ensureWorldCupBracketFixtureTemplate(challengeId: string) {
-  const challenge = await prisma.worldCupBracketChallenge.findUnique({
-    where: { id: challengeId },
-    select: {
-      id: true,
-      includeThirdPlace: true,
-      _count: { select: { slots: true, matches: true } },
-    },
-  })
-  if (!challenge) throw new Error("Challenge not found")
-  if (challenge._count.matches > 0) {
-    return {
-      created: false,
-      slotCount: challenge._count.slots,
-      matchCount: challenge._count.matches,
-    }
-  }
-
-  const created = await prisma.$transaction(async (tx) =>
-    createWorldCupBracketTemplateRows(tx, {
-      challengeId: challenge.id,
-      includeThirdPlace: challenge.includeThirdPlace,
-      createSlots: challenge._count.slots === 0,
-    })
-  )
-
-  return { created: true, ...created }
-}
-
-export function getWorldCupAppBaseUrl() {
+function getWorldCupAppBaseUrl() {
   return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXTAUTH_URL || "http://localhost:3000").replace(/\/$/, "")
 }
 
-export async function generateWorldCupInviteCode() {
+async function generateWorldCupInviteCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
   for (let a = 0; a < 12; a++) {
     let out = "WC"
@@ -1721,79 +1692,6 @@ export async function saveWorldCupBracketPickForEntry(input: {
     entry: updatedEntry,
     pick: savedPick,
     picks: returnedPicks,
-    isComplete,
-  }
-}
-
-/** Batch save multiple picks for one entry (used by legacy route). */
-export async function saveWorldCupPicksForEntry(input: {
-  challengeId: string
-  entryId: string
-  userId: string
-  picks: Array<{ matchId: string; selectedTeamId?: string | null; selectedSlotKey?: string | null }>
-}) {
-  const c = await prisma.worldCupBracketChallenge.findUnique({
-    where: { id: input.challengeId },
-    include: { matches: true },
-  })
-  if (!c) throw new Error("Challenge not found")
-  const entry = await prisma.worldCupBracketEntry.findFirst({
-    where: { id: input.entryId, challengeId: input.challengeId, userId: input.userId },
-  })
-  if (!entry) throw new Error("Entry not found")
-  const lock = isWorldCupChallengeLocked({ challenge: c, matches: c.matches, entry })
-  const allowPostLockKnockoutOverride =
-    lock.locked &&
-    input.picks.every((pick) => {
-      const match = c.matches.find((m) => m.id === pick.matchId)
-      return canUseWorldCupPostLockKnockoutEditOverride({
-        challenge: c,
-        match,
-        matches: c.matches,
-      })
-    })
-  if (lock.locked && !allowPostLockKnockoutOverride) throw new Error(WORLD_CUP_BRACKET_LOCKED_MESSAGE)
-
-  const confidenceColumnEnabled = await worldCupConfidencePointsColumnReadyForWrites()
-  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await savePicksForEntryTx(tx, {
-      challenge: c,
-      entry: { ...entry, participantId: entry.participantId, userId: input.userId },
-      allowPostLockKnockoutOverride,
-      confidenceColumnEnabled,
-      picks: input.picks,
-    })
-  })
-  if (allowPostLockKnockoutOverride) {
-    await emitWorldCupKnockoutOverrideAuditEvent({
-      action: "pick_saved",
-      challengeId: c.id,
-      entryId: entry.id,
-      userId: input.userId,
-      matchIds: input.picks.map((pick) => pick.matchId),
-    })
-  }
-  await recalculateWorldCupChallenge(c.id)
-  const updatedEntry = await prisma.worldCupBracketEntry.findUnique({
-    where: { id: entry.id },
-    include: {
-      picks: {
-        select: WORLD_CUP_PICK_VIEW_SELECT,
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  })
-  const isComplete = updatedEntry
-    ? isWorldCupEntryCompleteFromSelections({
-        matches: c.matches as Parameters<typeof isWorldCupEntryCompleteFromSelections>[0]["matches"],
-        picks: updatedEntry.picks.filter(hasWorldCupPickSelection),
-        includeThirdPlace: c.includeThirdPlace,
-      })
-    : false
-  return {
-    success: true as const,
-    entry: updatedEntry,
-    picks: updatedEntry?.picks.filter(hasWorldCupPickSelection) ?? [],
     isComplete,
   }
 }

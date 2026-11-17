@@ -42,7 +42,7 @@ async function runWeekStart(req: NextRequest) {
   if (!userId || !leagueId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   await advanceWeek(leagueId)

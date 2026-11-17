@@ -30,6 +30,7 @@ import type { CategoryDefinition } from '@/lib/category-scoring/types'
 import { rosteredIdsOf } from './ncaafRedraftContext'
 import { categoryList, categoryPerGameValues, groupedCategoryValues } from './sportCategoryValue'
 import { isPitchingCategory, isPitchingSlot, MLB_CLUBS, MLB_REGULAR_SEASON_GAMES, toTeamGameLines } from './mlbTeamGame'
+import { toNhlTeamGameLines } from './nhlTeamGame'
 import { blendSoccerSeasons, clubMatchCounts } from './soccerBoard'
 import { soccerSeasonLines, type SoccerGameRow } from '@/lib/af-projections/soccerSeasonLines'
 import { eplGoalKeyForRollingMatch, ownGoalsByPlayer, readEplGoalReceipt } from '@/lib/sports-data/soccerOwnGoalEvidence'
@@ -100,6 +101,19 @@ function engineKeyedLine(raw: unknown): { stats: Record<string, number>; unmappe
 
 function reasonsOf(adjustmentFactors: unknown): unknown {
   return adjustmentFactors && typeof adjustmentFactors === 'object' ? (adjustmentFactors as Record<string, unknown>).confidenceReasons : null
+}
+
+/** The two seasons a blended projection spans (`af-projections/seasonBlend.ts`), or null for one season's. */
+function seasonBlendOf(adjustmentFactors: unknown): { currentGames: number; previousGames: number; currentWeight: number } | null {
+  const raw = adjustmentFactors && typeof adjustmentFactors === 'object' ? (adjustmentFactors as Record<string, unknown>).seasonBlend : null
+  if (!raw || typeof raw !== 'object') return null
+  const b = raw as Record<string, unknown>
+  const c = Number(b.currentGames)
+  const p = Number(b.previousGames)
+  const w = Number(b.currentWeight)
+  return Number.isFinite(c) && Number.isFinite(p) && Number.isFinite(w) && c > 0 && p > 0 && w >= 0 && w <= 1
+    ? { currentGames: c, previousGames: p, currentWeight: w }
+    : null
 }
 
 function sourceSeasonOf(adjustmentFactors: unknown): number | null {
@@ -676,6 +690,7 @@ async function loadSnapshotLines(
       aliases: aliasesById.get(r.playerId) ?? [],
       rosterAlias: rosterAliasById.get(r.playerId),
       sourceSeason: sourceSeasonOf(r.adjustmentFactors),
+      seasonBlend: seasonBlendOf(r.adjustmentFactors),
       stats,
     })
   }
@@ -736,9 +751,10 @@ async function finishBoard(args: {
     }
   }
 
-  // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`).
+  // Baseball onto one scale first: per TEAM game, pitchers split into SP and RP (`./mlbTeamGame.ts`). Hockey's
+  // goalies likewise count for the share of team games they play (`./nhlTeamGame.ts`); skaters are unscaled.
   const valued: Array<(typeof lines)[number] & { hitter?: boolean; pitcher?: boolean }> =
-    sport === 'MLB' ? toTeamGameLines(lines) : lines
+    sport === 'MLB' ? toTeamGameLines(lines) : sport === 'NHL' ? toNhlTeamGameLines(lines) : lines
 
   let perGameOf: (line: (typeof valued)[number]) => number
   if (valuation.kind === 'points') {

@@ -28,7 +28,17 @@ import {
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
-import { CSP_ENFORCED_POLICY, CSP_REPORT_ONLY_POLICY, cspMode } from "@/lib/security/cspReportOnly"
+import {
+  CSP_ENFORCED_POLICY,
+  CSP_PROBE_COOKIE,
+  CSP_REPORT_ONLY_POLICY,
+  buildNoncePolicy,
+  cspMode,
+  cspModeForRequest,
+  generateCspNonce,
+  modeUsesNonce,
+  type CspMode,
+} from "@/lib/security/cspReportOnly"
 
 /**
  * Inside the iOS app nothing is sold except through Apple (App Store guideline
@@ -704,6 +714,10 @@ async function refusalAsPageIfNavigation(request: NextRequest, refusal: NextResp
 }
 
 async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  // The Gmail capture bridge runs on Google's servers, not a visitor's connection.
+  // This exact POST is machine ingestion: the handler verifies timestamped HMAC
+  // before any storage. Keep the origin lock and every other path/method gated.
+  if (request.method === "POST" && pathname === "/api/integrations/leaguesafe/inbound") return null
   if (hasMachineCredential(request.headers)) return null
   // Before the geo exemptions and the `country !== "US"` early return below: a
   // VPN is refused wherever its exit is, and /api/auth sign-in is refused too.
@@ -1051,16 +1065,38 @@ export async function middleware(request: NextRequest) {
   // Edge-location headers no edge of ours vouched for are removed BEFORE any gate reads
   // them — and the cleaned set is what reaches route handlers (nextWithRouteHeaders
   // forwards `request.headers`). See lib/http/edgeHeaderTrust.
-  const untrusted = untrustedEdgeHeaderNames(request.headers)
-  let trusted: NextRequest = request
-  if (untrusted.length > 0) {
-    const cleaned = new Headers(request.headers)
-    for (const name of untrusted) cleaned.delete(name)
-    trusted = new NextRequest(request, { headers: cleaned })
+  const cleaned = new Headers(request.headers)
+  for (const name of untrustedEdgeHeaderNames(request.headers)) cleaned.delete(name)
+
+  /*
+   * 🛑 THE NONCE MUST REACH THE PAGE ON THE *REQUEST*, NOT ONLY THE RESPONSE.
+   * Next stamps its own inline bootstrap and chunk scripts with the nonce it finds in
+   * the REQUEST's `content-security-policy` header, falling back to
+   * `content-security-policy-report-only` (next/dist/server/app-render/app-render.js).
+   * So the policy is written onto the forwarded request as well, and `x-nonce` carries
+   * the bare value for the root layout's own scripts.
+   *
+   * Whatever a client sent in those three headers is discarded first: a caller-chosen
+   * nonce would only ever break their own page, but nothing should be able to pick it.
+   * In nonce-report mode only the REPORT-ONLY copy is set, because Next reads the
+   * enforced header first and the enforced allowlist carries no nonce.
+   */
+  cleaned.delete("content-security-policy")
+  cleaned.delete("content-security-policy-report-only")
+  cleaned.delete("x-nonce")
+  const mode = cspModeForRequest(request.cookies.get(CSP_PROBE_COOKIE)?.value)
+  const nonce = process.env.NODE_ENV !== "development" && modeUsesNonce(mode) ? generateCspNonce() : undefined
+  if (nonce) {
+    cleaned.set("x-nonce", nonce)
+    cleaned.set(mode === "nonce" ? "content-security-policy" : "content-security-policy-report-only", buildNoncePolicy(nonce))
   }
+  // Requests crossing runtime realms may fail NextRequest's instanceof check;
+  // its URL-only fallback defaults to GET. Preserve the original method so
+  // method-bound machine exemptions and internal-hop verification stay correct.
+  const trusted = new NextRequest(request, { headers: cleaned, method: request.method })
 
   const response = await routeMiddleware(trusted)
-  return applyBaselineSecurityHeaders(applyAttributionCapture(trusted, response))
+  return applyBaselineSecurityHeaders(applyAttributionCapture(trusted, response), nonce, mode)
 }
 
 /*
@@ -1096,17 +1132,21 @@ const BASELINE_SECURITY_HEADERS: Record<string, string> = {
 }
 
 /*
- * 🛑 THE FULL SCRIPT CSP IS ENFORCED (Phase 2, lib/security/cspReportOnly.ts) — built from a
- * week of measured production reports, so every tag that was live keeps loading.
+ * 🛑 WHICH CSP IS SENT IS `CSP_MODE` (lib/security/cspReportOnly.ts `cspMode`), except
+ * that a browser with the `af_csp_probe=nonce` cookie gets `nonce` (stricter only):
  *
- * Two exceptions, both keeping the old minimal header above:
- *  - `next dev`: webpack's HMR runtime evals module code and would be refused.
- *  - `CSP_MODE=report-only`: the no-code rollback, back to Phase 1 (enforce the minimal
- *    header, REPORT the full policy). Use it if something breaks, then fix the allowlist.
+ *   enforce (default)  enforce the measured allowlist (Phase 2)
+ *   nonce              enforce the nonce policy, which has no 'unsafe-inline' (Phase 3)
+ *   report-only        report the allowlist only (Phase 1)
+ *   nonce-report       allowlist + report the nonce policy; NOT a preview of `nonce`
+ *                      (Next stamps no nonce there — see cspReportOnly.ts)
  *
- * A route that set its own Content-Security-Policy keeps it (e.g. the sandboxed emblem SVG).
+ * `next dev` keeps the minimal header above: webpack's HMR runtime evals module code.
+ * A response built before a nonce exists (an origin-lock refusal) is not a page, so it
+ * gets the allowlist rather than a nonce policy. A route that set its own
+ * Content-Security-Policy keeps it (e.g. the sandboxed emblem SVG).
  */
-function applyBaselineSecurityHeaders<T extends Response>(response: T): T {
+function applyBaselineSecurityHeaders<T extends Response>(response: T, nonce?: string, requestMode?: CspMode): T {
   const routeSetCsp = response.headers.has('Content-Security-Policy')
   for (const [key, value] of Object.entries(BASELINE_SECURITY_HEADERS)) {
     // Never overwrite a header a route set on purpose (e.g. its own CSP).
@@ -1115,10 +1155,24 @@ function applyBaselineSecurityHeaders<T extends Response>(response: T): T {
   // Next dev's evaluated bundles generate a flood of reports and break under enforcement.
   if (process.env.NODE_ENV === 'development') return response
 
-  if (cspMode() === 'enforce') {
-    if (!routeSetCsp) response.headers.set('Content-Security-Policy', CSP_ENFORCED_POLICY)
-  } else if (!response.headers.has('Content-Security-Policy-Report-Only')) {
-    response.headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY_POLICY)
+  // The mode decided for this request (env + probe cookie); responses built before that
+  // (origin-lock refusals) fall back to the service's mode.
+  const mode = requestMode ?? cspMode()
+  if (mode === 'report-only') {
+    if (!response.headers.has('Content-Security-Policy-Report-Only')) {
+      response.headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY_POLICY)
+    }
+    return response
+  }
+  if (routeSetCsp) return response
+
+  if (mode === 'nonce' && nonce) {
+    response.headers.set('Content-Security-Policy', buildNoncePolicy(nonce))
+    return response
+  }
+  response.headers.set('Content-Security-Policy', CSP_ENFORCED_POLICY)
+  if (mode === 'nonce-report' && nonce) {
+    response.headers.set('Content-Security-Policy-Report-Only', buildNoncePolicy(nonce))
   }
   return response
 }

@@ -14,11 +14,9 @@
 
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 
-export type ConnectLeagueStep =
+type ConnectLeagueStep =
   /** We know their team. Say nothing. */
   | 'none'
-  /** The import refuses an unverified account, so this comes first. */
-  | 'verify'
   /** No league at all. */
   | 'connect'
   /** Leagues here, none of them linked to their team. */
@@ -33,11 +31,24 @@ export type ConnectLeagueFacts = {
   verified: boolean
 }
 
+/**
+ * 🛑 VERIFICATION NO LONGER COMES FIRST (owner's call 2026-11-15, "import before confirmation is
+ * fine"). The import used to refuse an unverified account, so this card led with "verify your email"
+ * — and 40 of the 77 users without a team were unverified, so most of them never reached "connect".
+ * Import and sync now take an unverified account (lib/auth-guard.ts `requireAgeConfirmedUser`), so
+ * the league comes first and confirming the email is a secondary nudge on the same card
+ * (`CONFIRM_EMAIL_NUDGE`), never a step in front of it.
+ */
 export function connectLeagueStep(f: ConnectLeagueFacts): ConnectLeagueStep {
   if (f.claimedTeams > 0) return 'none'
-  if (!f.verified) return 'verify'
   return f.leagueCount > 0 ? 'claim' : 'connect'
 }
+
+/** The secondary line an unverified account sees under the card's main action. */
+export const CONFIRM_EMAIL_NUDGE = {
+  body: 'Confirm your email when you get a minute so we can reach you before kickoff.',
+  cta: 'Send the link again',
+} as const
 
 /**
  * The season a "current team" belongs to. Fantasy football's 2026 season runs into February 2027,
@@ -56,16 +67,10 @@ export function connectLeagueHref(opts: { sleeperLinked: boolean }): string {
   return opts.sleeperLinked ? '/import?provider=sleeper' : '/import'
 }
 
-export type ConnectLeagueCopy = { title: string; body: string; cta: string }
+type ConnectLeagueCopy = { title: string; body: string; cta: string }
 
 export function connectLeagueCopy(step: Exclude<ConnectLeagueStep, 'none'>): ConnectLeagueCopy {
   switch (step) {
-    case 'verify':
-      return {
-        title: 'Verify your email, then bring your league in',
-        body: "Connecting a league needs a verified account. Tap the link we emailed you — or get a fresh one here — and you'll be back in a minute.",
-        cta: 'Send the link again',
-      }
     case 'claim':
       return {
         title: "Chimmy doesn't know which team is yours yet",

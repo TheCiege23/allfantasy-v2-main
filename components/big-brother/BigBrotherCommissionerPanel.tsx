@@ -1,12 +1,13 @@
 'use client'
 
 /**
- * [NEW] Commissioner panel: week progression, automation run, audit log, overrides. PROMPT 4.
+ * Commissioner panel: week progression, automation run, audit log, overrides, and the league rules editor.
  */
 
 import { useState } from 'react'
+import { BigBrotherRulesEditor } from './BigBrotherRulesEditor'
 
-export interface BigBrotherCommissionerPanelProps {
+interface BigBrotherCommissionerPanelProps {
   leagueId: string
   onAction?: () => void
   nominees?: { id: string; name: string }[]
@@ -207,7 +208,8 @@ export function BigBrotherCommissionerPanel({ leagueId, onAction, nominees = [] 
         )}
       </div>
 
-      <p className="text-xs text-white/40">Schedule controls and inactivity overrides are in Settings → Big Brother Settings. Emergency timing extensions can be added as config overrides.</p>
+      {/* Rules used to be fixed at creation: this note sent commissioners to a tab that did not exist, then said so. */}
+      <BigBrotherRulesEditor leagueId={leagueId} />
     </div>
   )
 }

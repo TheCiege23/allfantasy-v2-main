@@ -33,7 +33,7 @@ export interface KeeperDataAvailability {
   freeAgentPool: DataState
 }
 
-export interface KeeperFreshness {
+interface KeeperFreshness {
   generatedAt: string
   statsAsOf: string | null
   projectionsAsOf: string | null
@@ -155,13 +155,3 @@ export interface KeeperWarRoomContext {
   }
 }
 
-export type KeeperWarRoomAction =
-  | 'keeper-recommendations'
-  | 'cut-list'
-  | 'draft-plan'
-  | 'roster-needs'
-  | 'waivers'
-  | 'lineup'
-  | 'trade-analyze'
-  | 'trade-find'
-  | 'ask'

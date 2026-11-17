@@ -42,7 +42,7 @@ type PrismaLike = typeof defaultPrisma
 
 const DEFAULT_RESERVATION_TTL_MS = 5 * 60_000
 
-export type ReservationView = {
+type ReservationView = {
   id: string
   status: 'reserved' | 'finalized' | 'released'
   amount: number

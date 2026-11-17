@@ -32,7 +32,7 @@ export const MAX_GAMES = 8
 /** Below this many points of playoff probability between the two results, a game barely moves you. */
 export const MIN_SWING = 3
 
-export type CampaignOpponent = {
+type CampaignOpponent = {
   rosterId: string
   name: string | null
   wins: number
@@ -57,7 +57,7 @@ export type CampaignGame = {
   small: boolean
 }
 
-export type TiebreakRow = {
+type TiebreakRow = {
   rosterId: string
   name: string | null
   isYou: boolean

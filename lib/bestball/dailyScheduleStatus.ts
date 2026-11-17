@@ -19,7 +19,7 @@ import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportS
 import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
 import { bestBallSportSupportsDaily } from './scoringPeriod'
 
-export type DailyBestBallScheduleStatus = {
+type DailyBestBallScheduleStatus = {
   /** `waiting`: no recorded or derivable opener, so daily weeks cannot be scored yet. */
   state: 'ready' | 'waiting'
   season: number

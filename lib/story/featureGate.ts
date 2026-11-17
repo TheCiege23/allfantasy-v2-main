@@ -16,15 +16,15 @@ export const STORY_FEATURES = Object.fromEntries(
   ALL_STORY_TYPES.map((t) => [t, `story.${t}`]),
 ) as Record<StoryType, string>
 
-export type StoryFeature = string
-export type StoryFeatureDecision = 'allow' | 'deny' | 'upgrade_required'
+type StoryFeature = string
+type StoryFeatureDecision = 'allow' | 'deny' | 'upgrade_required'
 
 export interface IStoryFeatureGate {
   decide(principal: FeatureGatePrincipal | null, feature: StoryFeature): StoryFeatureDecision
 }
 
 /** G15.13 default: everything allowed. */
-export class AllowAllStoryFeatureGate implements IStoryFeatureGate {
+class AllowAllStoryFeatureGate implements IStoryFeatureGate {
   decide(): StoryFeatureDecision {
     return 'allow'
   }

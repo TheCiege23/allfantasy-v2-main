@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Share2, ExternalLink } from 'lucide-react';
 import { newsPlayerHref } from '@/lib/fantasy-news-aggregator/playerLinkResolver';
 
-export interface PlayerNewsPanelProps {
+interface PlayerNewsPanelProps {
   items: EnrichedNewsItem[];
   title?: string;
   /** Callback when user clicks share on a card. */

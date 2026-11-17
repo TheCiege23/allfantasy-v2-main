@@ -718,7 +718,35 @@ export default function PlayerCardSheet({
             <div className="af-pc-tiles">
               {league ? (
                 <>
-                  {league.price.available ? (
+                  {league.boardValue?.available ? (
+                    <>
+                      <Tile
+                        label={c.leagueValue}
+                        value={Math.round(league.boardValue.data.value).toLocaleString(getAppIntlLocale())}
+                        tone="accent"
+                        sub={
+                          <span className="af-pc-faint">
+                            {c.leagueValueSub(
+                              league.boardValue.data.perGame.toFixed(1),
+                              league.boardValue.data.unit,
+                              league.boardValue.data.gamesRemaining,
+                              league.boardValue.data.scheduleKnown,
+                            )}
+                          </span>
+                        }
+                      />
+                      {league.boardValue.data.dynastyValue != null ? (
+                        <Tile
+                          label={c.dynastyValue}
+                          value={Math.round(league.boardValue.data.dynastyValue).toLocaleString(getAppIntlLocale())}
+                          tone="plain"
+                          sub={<span className="af-pc-faint">{c.dynastyValueSub(league.boardValue.data.age)}</span>}
+                        />
+                      ) : null}
+                    </>
+                  ) : league.boardValue ? (
+                    <Tile label={c.leagueValue} value="—" tone="plain" sub={<span className="af-pc-faint">{c.notPriced}</span>} />
+                  ) : league.price.available ? (
                     <Tile
                       label={c.leaguePrice}
                       value={league.price.data.value.toLocaleString(getAppIntlLocale())}
@@ -782,6 +810,24 @@ export default function PlayerCardSheet({
               ) : null}
             </div>
           ) : null}
+
+          {/* A league-value-board value says what it is, and what it rests on (games, at-bats or innings). */}
+          {data && league?.boardValue?.available ? (
+            <p className="af-pc-basis">
+              {c.boardBasis({
+                sport: league.boardValue.data.sport,
+                perGame: league.boardValue.data.perGame.toFixed(1),
+                unit: league.boardValue.data.unit,
+                replacement: league.boardValue.data.replacementPerGame.toFixed(1),
+                replacementName: league.boardValue.data.replacementName,
+                gamesLeft: league.boardValue.data.gamesRemaining,
+                scheduleKnown: league.boardValue.data.scheduleKnown,
+                sample: league.boardValue.data.sample,
+                baseline: league.boardValue.data.baselineSeasonLabel,
+              })}
+            </p>
+          ) : null}
+          {data && league?.boardValue && !league.boardValue.available ? <Absent reason={reason(league.boardValue.reason)} /> : null}
 
           {/* the price basis, which the tile above deliberately does not hide */}
           {data && market?.available && !league ? (

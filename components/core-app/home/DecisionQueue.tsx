@@ -371,4 +371,3 @@ export function DecisionQueue({
   )
 }
 
-export default DecisionQueue

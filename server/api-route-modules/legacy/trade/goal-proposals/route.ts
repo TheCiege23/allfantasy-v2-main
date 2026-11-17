@@ -10,6 +10,7 @@ import { buildLeagueDecisionContext, leagueContextToIntelligence } from '@/lib/t
 import type { Asset } from '@/lib/trade-engine/types'
 import { createLegacyPackageGrader, legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
 import { gradeInputsFromEngineAssets, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -99,6 +100,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/goal-proposals",
       requestedUsername: parsed.data.username,
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_trade_proposals`, owner's decision 2026-11-17: lock all four free AF Legacy AI tools). Goal Proposals ran its
+     * model for anyone before; the /af-legacy screen now locks it too. A guest actor holds no plan.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_trade_proposals' })
+    if (!plan.ok) return plan.response
     const username = gate.identity.sleeperUsername
     const { leagueId, goal } = parsed.data
 

@@ -9,9 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
-import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type WaiverType = 'FAAB' | 'ROLLING' | 'PRIORITY'
 type LeagueFormat = 'redraft' | 'dynasty' | 'keeper'
@@ -133,13 +134,9 @@ const PHASES: Array<{ key: PhaseKey; label: string; icon: string }> = [
   { key: 'plan', label: 'Planning', icon: '📋' },
   { key: 'pricing', label: 'Pricing', icon: '💰' },
   { key: 'engine', label: 'Engine', icon: '⚙️' },
-  { key: 'ai', label: 'AI', icon: '🧠' },
+  { key: 'ai', label: 'Chimmy', icon: '🧠' },
   { key: 'check', label: 'Check', icon: '✅' },
 ]
-
-function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-}
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -260,7 +257,7 @@ function normalizeWireSuggestion(rawSuggestion: unknown): WirePlayer | null {
     ownership: null,
     projectedPts: null,
     aiScore: priority,
-    reason: stringFromUnknown(raw.reason) ?? 'AI shortlisted this player as a relevant waiver target for your current roster.',
+    reason: stringFromUnknown(raw.reason) ?? 'Chimmy shortlisted this player as a relevant waiver target for your current roster.',
     faabLow: null,
     faabHigh: null,
   }
@@ -555,7 +552,7 @@ function LoginRequiredState() {
     <div className="min-h-screen bg-[#07071a] text-white">
       <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
         <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-8 text-center">
-          <div className="text-xs font-bold uppercase tracking-[0.3em] text-green-300">Waiver AI</div>
+          <div className="text-xs font-bold uppercase tracking-[0.3em] text-green-300">Waiver Chimmy</div>
           <h1 className="mt-4 text-3xl font-black">Sign in to analyze your leagues</h1>
           <p className="mt-3 text-sm leading-6 text-white/55">
             League selection, roster loading, and waiver analysis require an authenticated account.
@@ -589,7 +586,7 @@ function LeagueGate({
         <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-green-300">
-              Waiver AI
+              Waiver Chimmy
             </span>
           </div>
           <h1 className="mt-2 text-3xl font-black">Select a League</h1>
@@ -617,7 +614,7 @@ function LeagueGate({
             <div className="text-5xl">🏈</div>
             <h2 className="mt-4 text-2xl font-black text-white">No leagues connected yet</h2>
             <p className="mt-3 text-sm leading-6 text-white/50">
-              Import a league first so Waiver AI can read your roster and league settings.
+              Import a league first so Waiver Chimmy can read your roster and league settings.
             </p>
             <Link
               href="/af-legacy"
@@ -917,7 +914,7 @@ function AnalysisPanel({
   return (
     <div className="overflow-hidden rounded-3xl border border-white/8 bg-[#0c0c1e]">
       <div className="border-b border-white/6 p-4">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">AI Analysis Panel</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Chimmy Analysis Panel</div>
         <div className="mt-2 text-xs text-white/45">
           {league.name} · {SPORT_LABELS[league.sport]} · {league.format}
         </div>
@@ -998,7 +995,7 @@ function AnalysisPanel({
             <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
               <div className="flex items-center gap-2">
                 <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-green-300">
-                  AI Summary
+                  Chimmy Summary
                 </span>
                 {typeof analysis.pecrIterations === 'number' && analysis.pecrIterations > 1 ? (
                   <span className="ml-auto text-[11px] uppercase tracking-[0.2em] text-white/35">{analysis.pecrIterations} iterations</span>
@@ -1391,7 +1388,8 @@ export default function WaiverAIPage() {
       }
 
       if (!response.ok || !payload.data) {
-        throw new Error(payload.error ?? 'Failed to analyze waivers.')
+        // A plan refusal says which plan and why ("AF Pro is required…"), never the bare "Premium feature".
+        throw new Error(readPlanRefusal(response.status, payload)?.message ?? payload.error ?? 'Failed to analyze waivers.')
       }
 
       setAnalysis({
@@ -1434,7 +1432,7 @@ export default function WaiverAIPage() {
 
   return (
     <>
-      <LandingToolVisitTracker path="/waiver-ai" toolName="Waiver AI" />
+      <LandingToolVisitTracker path="/waiver-ai" toolName="Waiver Chimmy" />
       <EngagementEventTracker
         eventType="waiver_ai"
         oncePerDayKey={`tool_waiver_ai:${activeSport}`}
@@ -1485,7 +1483,7 @@ export default function WaiverAIPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-green-300">
-                      Waiver AI
+                      Waiver Chimmy
                     </span>
                   </div>
                   <h1 className="mt-2 text-2xl font-black">Waiver Hub</h1>
@@ -1539,7 +1537,7 @@ export default function WaiverAIPage() {
                 <div className="text-xs font-bold uppercase tracking-[0.3em] text-green-300/80">League-Gated Analysis</div>
                 <h2 className="mt-3 text-2xl font-black leading-tight sm:text-3xl">Queue claims, assign drop targets, and run one focused waiver plan.</h2>
                 <p className="mt-3 text-sm leading-6 text-white/55">
-                  The selected league auto-loads your roster on the left and a waiver shortlist in the center. Queue targets on the right and run the main waiver AI against that selected claim set.
+                  The selected league auto-loads your roster on the left and a waiver shortlist in the center. Queue targets on the right and run the main waiver Chimmy against that selected claim set.
                 </p>
               </div>
             </div>

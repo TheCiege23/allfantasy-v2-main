@@ -1,4 +1,4 @@
-export type ProviderCapability =
+type ProviderCapability =
   | "bracket_seeding"
   | "schedule"
   | "live_scores"

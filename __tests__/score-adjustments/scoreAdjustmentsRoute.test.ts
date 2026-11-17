@@ -20,6 +20,7 @@ vi.mock('@/lib/stat-corrections/statCorrectionService', () => ({
   commissionerApplyStatCorrections: applyCorrections,
   APPLY_STAT_CORRECTION_ERROR_TEXT: { not_in_review: 'not in review', not_covered: 'not covered', no_review: 'no review' },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => commish))
 
 import { GET, POST } from '@/app/api/commissioner/leagues/[leagueId]/operations/route'
 

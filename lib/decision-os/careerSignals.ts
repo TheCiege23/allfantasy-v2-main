@@ -93,7 +93,7 @@ export function careerTitleStakeSignals(
   return out
 }
 
-export interface CareerSignalInputs {
+interface CareerSignalInputs {
   wireLeagues: readonly WireLeague[]
   stakes: readonly LegacyStake[]
   now: Date

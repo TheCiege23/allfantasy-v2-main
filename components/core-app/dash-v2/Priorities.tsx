@@ -130,4 +130,3 @@ function headlineFor(league: Dash34League): string {
   return `${league.name} needs a starter`
 }
 
-export default Priorities

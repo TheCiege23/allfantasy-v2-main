@@ -19,7 +19,7 @@ import type { TradeDCO, TradeParticipant } from './dco'
 import { evaluateTradeRules, type TradeRuleDeps } from './rules'
 
 /** Per-participant deterministic value (multi-team capable). */
-export interface ParticipantEvaluation {
+interface ParticipantEvaluation {
   rosterId: string
   sideTotal: number
   /** This participant's total minus the mean of the other participants' totals. */
@@ -55,7 +55,7 @@ export interface TradeDecisionDeps {
 }
 
 /** Build per-participant evaluations from snapshot sides (each side's total + delta vs the mean of others). */
-export function participantEvalsFromSides(sides: SideTotals[]): ParticipantEvaluation[] {
+function participantEvalsFromSides(sides: SideTotals[]): ParticipantEvaluation[] {
   const totals = sides.map((s) => s.total)
   const sum = totals.reduce((a, b) => a + b, 0)
   return sides.map((s) => {

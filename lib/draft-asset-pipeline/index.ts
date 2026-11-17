@@ -5,17 +5,9 @@
  */
 
 export {
-  resolveAssets,
-  resolveAssetsBatch,
-  getTeamDisplay,
-  getTeamLogoUrl,
-  getStatSnapshotForPlayer,
   normalizePlayer,
   normalizePlayerList,
-  clearPipelineCaches,
 } from './DraftAssetPipelineService'
-
-export { getStatSnapshot, setStatSnapshot, clearStatSnapshotCache } from './stat-snapshot-cache'
 
 export type {
   NormalizedDraftEntry,

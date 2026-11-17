@@ -36,6 +36,7 @@ import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type
 import { startingSlots } from './slotEligibility'
 import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
 import { loadSleeperWaiverSchedules, type SleeperWaiverSchedule } from '@/lib/waivers/sleeperWaiverSchedule'
+import { boardPerGame, isBoardValueSport, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
 import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } from './waiversBoard'
 
 /**
@@ -54,6 +55,16 @@ import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } fr
  * than a rate computed over someone else's leagues.
  *
  * ⚠ CLOCK-FREE, like the NFL half: this is served from the screen-summary cache.
+ *
+ * 🛑 A POINTS LEAGUE IN A LEAGUE-VALUE-BOARD SPORT (NBA first, 2026-11-16) IS PRICED ON ITS OWN BOARD — the
+ * trade grade's per-game points under that league's rules, as the one-league board does
+ * (`seasonRateWaiverBoard.ts`). Each such row carries `basis: 'league_value_board'`, so a message about
+ * it never claims AllFantasy's default scoring.
+ *
+ * A CATEGORY league is priced on its board too (2026-11-16): before, it was priced on AllFantasy's default
+ * POINTS, a number with no meaning in a category league. Its row carries `valueKind: 'categories'` — its
+ * gain is a per-game category score, not points — and Chimmy's waiver alert, whose bar and wording are
+ * points per game, leaves such rows out rather than mislabel them (`selectSportWaiverPicks`).
  */
 
 /** Projected players considered per sport. The wire below this is noise, as on the NFL board. */
@@ -226,8 +237,19 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     startPct: null,
   })
 
+  /* Each league's own value board, for a board sport — points leagues only (see the header). */
+  const boards = new Map<string, Extract<LeagueValueBoard, { kind: 'ok' }>>()
+  if (isBoardValueSport(sport)) {
+    await Promise.all(
+      leagueIds.map(async (id) => {
+        const b = await loadLeagueValueBoard(id).catch((): LeagueValueBoard => ({ kind: 'not_board_sport' }))
+        if (b.kind === 'ok') boards.set(id, b)
+      }),
+    )
+  }
+
   const label = waiverSportLabel(sport)
-  const basisPhrase =
+  const seasonRatePhrase =
     basis === 'season_per_game_league' ? "under this league's own scoring" : "on AllFantasy's default scoring"
 
   const withheld = noWithheld()
@@ -241,8 +263,13 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       continue
     }
 
+    const onBoard = boards.get(c.leagueId) ?? null
+    const categories = onBoard?.ctx.valueKind === 'categories'
+    const basisPhrase = onBoard
+      ? categories ? "in category score on this league's own value board" : "on this league's own value board"
+      : seasonRatePhrase
     const scoring = extractScoringSettings(l.settings)
-    if (basis === 'season_per_game_league' && !scoring) {
+    if (!onBoard && basis === 'season_per_game_league' && !scoring) {
       withheld.noScoring++
       continue
     }
@@ -277,11 +304,13 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       // A player with no id in this league's space cannot be looked for on its rosters: not provably free.
       const leagueId = leagueIdOf(identity.get(row.key), column)
       if (!leagueId || taken.has(leagueId)) continue
-      if (!isStartableInSport(sport, slots, row.position)) continue
+      // On a board, the board's position (a pitcher filed SP or RP, not `P` — see seasonRateWaiverBoard.ts).
+      const position = onBoard?.byId.get(row.key)?.position ?? row.position
+      if (!isStartableInSport(sport, slots, position)) continue
       if (ruledOut.has(row.key)) continue
-      const pts = priceSeasonRate(row, basis, scoring)
+      const pts = onBoard ? boardPerGame(onBoard, row.key, 'wire') : priceSeasonRate(row, basis, scoring)
       if (pts == null) continue
-      wire.push({ id: row.key, position: row.position, points: pts })
+      wire.push({ id: row.key, position, points: pts })
       rowByKey.set(row.key, row)
       pointsByKey.set(row.key, pts)
     }
@@ -306,10 +335,10 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       seen.add(key)
       if (starterIds.has(id)) starterKeys.add(key)
       const row = myRows.get(key)
-      const pts = row && !ruledOut.has(key) ? priceSeasonRate(row, basis, scoring) : null
+      const pts = row && !ruledOut.has(key) ? (onBoard ? boardPerGame(onBoard, key, 'roster') : priceSeasonRate(row, basis, scoring)) : null
       if (row) rowByKey.set(key, row)
       if (pts != null) pointsByKey.set(key, pts)
-      roster.push({ id: key, position: row?.position ?? null, points: pts })
+      roster.push({ id: key, position: onBoard?.byId.get(key)?.position ?? row?.position ?? null, points: pts })
     }
 
     const swap = pickLineupSwap({
@@ -335,7 +364,9 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     const netGain = swap.gain
 
     const reasoning = swapReasoning({
-      addLead: `${add.name}${add.position ? ` (${add.position})` : ''} projects ${add.projected.toFixed(1)} per game ${basisPhrase}, from AllFantasy's ${label} season projection`,
+      addLead: onBoard
+        ? `${add.name}${add.position ? ` (${add.position})` : ''} is worth ${add.projected.toFixed(1)} per game ${basisPhrase}`
+        : `${add.name}${add.position ? ` (${add.position})` : ''} projects ${add.projected.toFixed(1)} per game ${basisPhrase}, from AllFantasy's ${label} season projection`,
       over,
       drop: dropPlayer,
       dropBasis: swap.dropBasis,
@@ -374,6 +405,8 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
       reasoning,
       sport,
+      ...(onBoard ? { basis: 'league_value_board' as const } : {}),
+      ...(categories ? { valueKind: 'categories' as const } : {}),
     })
   }
 

@@ -49,7 +49,7 @@ function isMissingRelation(e: unknown): boolean {
   return /does not exist in the current database|relation .* does not exist/i.test(msg)
 }
 
-export type StoredCorrection = {
+type StoredCorrection = {
   id: string
   teamId: string
   previousValue: number
@@ -59,7 +59,7 @@ export type StoredCorrection = {
   correctedAt: string
 }
 
-export type StoredMaxPfFreeze = {
+type StoredMaxPfFreeze = {
   freezeId: string
   /** Exactly as computed at freeze time. Immutable. */
   original: MaxPfFreezeSnapshot
@@ -161,7 +161,7 @@ export async function readStoredMaxPfFreeze(key: FreezeKey): Promise<StoredMaxPf
   }
 }
 
-export type FreezeMaxPfResult =
+type FreezeMaxPfResult =
   | { ok: true; created: boolean; stored: StoredMaxPfFreeze }
   | { ok: false; reason: 'not_persistable'; detail: string }
 
@@ -229,7 +229,7 @@ export async function freezeMaxPf(input: {
   }
 }
 
-export type RecordCorrectionResult =
+type RecordCorrectionResult =
   | { ok: true; stored: StoredMaxPfFreeze; correctionId: string }
   | { ok: false; reason: 'no_freeze' | 'unknown_team' | 'not_persistable'; detail: string }
 

@@ -23,6 +23,7 @@ import {
   controlClass,
 } from './settings-ui'
 import { ImportedKeeperGrid } from '@/components/import-assist/ImportedKeeperGrid'
+import LeaguePrivacyAndInvitesPanel from '@/components/app/settings/LeaguePrivacyAndInvitesPanel'
 
 /** `League.keeperRoundPenalty`: rounds EARLIER than last season; 0 = same round, negative = later. */
 const KEEPER_ROUND_SHIFTS = [5, 4, 3, 2, 1, 0, -1, -2, -3]
@@ -63,9 +64,6 @@ export function LeagueSettingsPanel({
   const [leagueDescription, setLeagueDescription] = useState(
     typeof settingsSnapshot.leagueDescription === 'string' ? settingsSnapshot.leagueDescription : '',
   )
-  const [listingVisibility, setListingVisibility] = useState(
-    typeof settingsSnapshot.leagueListingVisibility === 'string' ? settingsSnapshot.leagueListingVisibility : 'private',
-  )
   const [timezone, setTimezone] = useState(initialData.timezone ?? 'America/New_York')
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
   const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
@@ -76,7 +74,6 @@ export function LeagueSettingsPanel({
   const [lockMoves, setLockMoves] = useState(Boolean(initialData.lockAllMoves))
   const [draftPickTrading, setDraftPickTrading] = useState(Boolean(initialData.draftPickTrading))
   const [overrideInvite, setOverrideInvite] = useState(Boolean(initialData.overrideInviteCapacity))
-  const [disableInvites, setDisableInvites] = useState(Boolean(initialData.disableInviteLinks))
   const [dispersalRounds, setDispersalRounds] = useState(initialData.dispersalDraftRounds ?? 0)
   const [keeperCount, setKeeperCount] = useState(initialData.keeperCount ?? 3)
   const [keeperCostSystem, setKeeperCostSystem] = useState(initialData.keeperCostSystem ?? 'round_based')
@@ -87,7 +84,6 @@ export function LeagueSettingsPanel({
   )
   const [keeperMaxYears, setKeeperMaxYears] = useState(initialData.keeperMaxYears ?? 3)
   const [keeperWaiverAllowed, setKeeperWaiverAllowed] = useState(initialData.keeperWaiverAllowed ?? true)
-  const [keeperMinRoundsHeld, setKeeperMinRoundsHeld] = useState(initialData.keeperMinRoundsHeld ?? 0)
   const [keeperDeadlineLocal, setKeeperDeadlineLocal] = useState('')
   const [keeperConflictRule, setKeeperConflictRule] = useState(initialData.keeperConflictRule ?? 'player_chooses')
   const [keeperMissedDeadlineRule, setKeeperMissedDeadlineRule] = useState(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
@@ -99,9 +95,6 @@ export function LeagueSettingsPanel({
     setSeason(initialData.season ?? new Date().getFullYear())
     setLanguage(initialData.language ?? 'en')
     setLeagueDescription(typeof settingsSnapshot.leagueDescription === 'string' ? settingsSnapshot.leagueDescription : '')
-    setListingVisibility(
-      typeof settingsSnapshot.leagueListingVisibility === 'string' ? settingsSnapshot.leagueListingVisibility : 'private',
-    )
     setTimezone(initialData.timezone ?? 'America/New_York')
     setMedianGame(Boolean(initialData.medianGame))
     setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
@@ -112,7 +105,6 @@ export function LeagueSettingsPanel({
     setLockMoves(Boolean(initialData.lockAllMoves))
     setDraftPickTrading(Boolean(initialData.draftPickTrading))
     setOverrideInvite(Boolean(initialData.overrideInviteCapacity))
-    setDisableInvites(Boolean(initialData.disableInviteLinks))
     setDispersalRounds(initialData.dispersalDraftRounds ?? 0)
     setKeeperCount(initialData.keeperCount ?? 3)
     setKeeperCostSystem(initialData.keeperCostSystem ?? 'round_based')
@@ -121,7 +113,6 @@ export function LeagueSettingsPanel({
     setKeeperAuctionPct(initialData.keeperAuctionPctIncrease != null ? initialData.keeperAuctionPctIncrease * 100 : 20)
     setKeeperMaxYears(initialData.keeperMaxYears ?? 3)
     setKeeperWaiverAllowed(initialData.keeperWaiverAllowed ?? true)
-    setKeeperMinRoundsHeld(initialData.keeperMinRoundsHeld ?? 0)
     setKeeperConflictRule(initialData.keeperConflictRule ?? 'player_chooses')
     setKeeperMissedDeadlineRule(initialData.keeperMissedDeadlineRule ?? 'auto_no_keepers')
     setKeeperWaiverRound(roundOrNull(settingsSnapshot.keeper_waiver_cost_round))
@@ -204,24 +195,16 @@ export function LeagueSettingsPanel({
         </div>
       </div>
 
-      <div>
-        <SettingsSectionLabel>Listing &amp; discoverability</SettingsSectionLabel>
-        <select
-          className={controlClass}
-          disabled={disabled}
-          value={listingVisibility}
-          onChange={(e) => {
-            const v = e.target.value
-            setListingVisibility(v)
-            debouncedSave({ settingsMerge: { leagueListingVisibility: v } })
-          }}
-        >
-          <option value="private">Private — invite only</option>
-          <option value="unlisted">Unlisted — link only</option>
-          <option value="public">Public — discoverable in browse</option>
-        </select>
-        <SettingsHelper>Controls how this league can appear in Find League and shared links (enforced server-side where applicable).</SettingsHelper>
-      </div>
+      {/*
+        🛑 "LISTING & DISCOVERABILITY" SAVED A KEY NOTHING READ (2026-11-15). It wrote `leagueListingVisibility`; Find
+        League, invites and joins read the league's privacy setting. A commissioner who chose "Private" stayed listed.
+        This is now the league's real privacy and invite editor, the same one those paths read.
+      */}
+      {canEdit ? (
+        <div data-testid="league-settings-privacy">
+          <LeaguePrivacyAndInvitesPanel leagueId={leagueId} />
+        </div>
+      ) : null}
 
       <div>
         <SettingsSectionLabel>League name</SettingsSectionLabel>
@@ -382,15 +365,7 @@ export function LeagueSettingsPanel({
             debouncedSave({ overrideInviteCapacity: v })
           }}
         />
-        <SettingsToggleRow
-          label="Disable league invite links"
-          checked={disableInvites}
-          disabled={disabled}
-          onChange={(v) => {
-            setDisableInvites(v)
-            debouncedSave({ disableInviteLinks: v })
-          }}
-        />
+        {/* The invite link's on/off switch lives in the privacy editor above, which writes both stores joins read. */}
       </div>
 
       <div>
@@ -708,26 +683,6 @@ export function LeagueSettingsPanel({
                 ? 'For a team that submits nothing, AF keeps the eligible players whose market value beats the pick they cost by the most, up to the keeper limit — never someone worth less than his pick. A team that chose to keep nobody is left alone. NFL leagues; other sports keep nobody.'
                 : 'A team that submits nothing by the deadline keeps no one.'}
             </p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] text-white/45">Minimum rounds held</label>
-            <select
-              className="rounded-lg border border-white/[0.12] bg-[#0a1220] px-3 py-2 text-white disabled:opacity-50"
-              disabled={disabled}
-              value={keeperMinRoundsHeld}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                setKeeperMinRoundsHeld(n)
-                debouncedSave({ keeperMinRoundsHeld: n })
-              }}
-            >
-              {Array.from({ length: 11 }, (_, i) => (
-                <option key={i} value={i}>
-                  {i}
-                </option>
-              ))}
-            </select>
           </div>
 
           <ImportedKeeperGrid leagueId={leagueId} />

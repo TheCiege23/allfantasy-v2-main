@@ -34,7 +34,7 @@ function rowId(row: unknown): string {
 }
 
 /** True when the row names a slot at all, valid or not. */
-export function hasStarterSlotIndex(row: unknown): boolean {
+function hasStarterSlotIndex(row: unknown): boolean {
   const o = rowObject(row)
   return Boolean(o && STARTER_SLOT_INDEX_KEY in o && o[STARTER_SLOT_INDEX_KEY] !== undefined && o[STARTER_SLOT_INDEX_KEY] !== null)
 }
@@ -81,7 +81,7 @@ export function placeStartersBySlotIndex(rows: readonly unknown[], slotCount: nu
   return out
 }
 
-export type StarterSlotIssue = {
+type StarterSlotIssue = {
   code: 'starter_slot_invalid' | 'starter_slot_out_of_range' | 'starter_slot_duplicate' | 'starter_slot_ineligible'
   message: string
   section: 'starters'

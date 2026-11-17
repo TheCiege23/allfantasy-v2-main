@@ -64,7 +64,7 @@ type BestBallApiResponse = {
 
 const RESULT_LABEL: Record<string, string> = { W: 'Won', L: 'Lost', T: 'Tied' }
 
-export type BestBallTabProps = {
+type BestBallTabProps = {
   leagueId: string
   sport: SupportedSport | string
 }

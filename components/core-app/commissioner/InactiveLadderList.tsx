@@ -139,4 +139,3 @@ export function InactiveLadderList({
   )
 }
 
-export default InactiveLadderList

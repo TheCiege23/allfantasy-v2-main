@@ -170,15 +170,20 @@ describe('Standings — the per-league Rankings design', () => {
         },
       })
     // Seeds: 1 (1-0), 3 (1-0), 2 (0-1, the last spot), 4 (0-1, out on points).
-    const tile = (you: string) => {
+    /*
+     * 2026-11-14: the record tile no longer restates the line — the headline does, and must keep the same
+     * honesty at zero games back: level on record but out on the tiebreak is "just outside", not "in".
+     */
+    const headline = (you: string) => {
       const { container, unmount } = render(<Standings data={standings({ board: boardFor(you) })} />)
-      const text = [...container.querySelectorAll('.af-st-tile')][1].textContent
+      const text = container.querySelector('.af-st-title')?.textContent ?? ''
       unmount()
       return text
     }
-    expect(tile('4')).toMatch(/level with the last playoff spot, out on the tiebreak/)
-    expect(tile('2')).toMatch(/holding the last playoff spot/)
-    expect(tile('1')).toMatch(/1 game clear of the line/)
+    expect(headline('4')).toMatch(/^You’re 4th of 4, (just )?outside the playoffs$/)
+    expect(headline('2')).toMatch(/^You’re 3rd of 4, in a playoff spot/)
+    // Team 1 has clinched in this fixture; either way it is never told it is out.
+    expect(headline('1')).toMatch(/^You’re 1st of 4(, in a playoff spot| and have clinched)/)
     expect(document.body.textContent).not.toMatch(/on the playoff line/)
   })
 })

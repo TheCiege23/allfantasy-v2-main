@@ -23,7 +23,7 @@ import { buildLeagueShape, type LeagueShape } from '@/lib/trade-value/leagueShap
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 
 /** The subset of the canonical world this needs. Structural, so any world-shaped object works. */
-export interface ScoringContextWorldInput {
+interface ScoringContextWorldInput {
   teams: number
   starterSlots: readonly string[] | null | undefined
   rosterSize?: number | null

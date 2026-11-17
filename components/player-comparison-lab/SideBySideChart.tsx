@@ -9,7 +9,7 @@ const HISTORICAL_DIMENSIONS = new Set(['fantasy_production', 'consistency']);
 const PROJECTION_DIMENSIONS = new Set(['market_value', 'projection', 'trend_momentum', 'volatility']);
 const BAR_COLORS = ['#a78bfa', '#22d3ee', '#34d399', '#f59e0b', '#f472b6', '#60a5fa'];
 
-export interface SideBySideChartProps {
+interface SideBySideChartProps {
   matrix: ComparisonMatrixRow[];
   players: ResolvedPlayerStats[];
 }

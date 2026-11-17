@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSGSchedule, SG_MODE_LABELS } from '@/lib/survivor-guillotine/config'
 import { SG_POWER_LABELS } from '@/lib/survivor-guillotine/powers'
@@ -173,6 +175,7 @@ export function SurvivorGuillotineLeague({ leagueId }: { leagueId: string }) {
     ? pickPlace : captainDraft.leaders.length * 2 - pickPlace - 1]
   if (!data) return <main className={styles.page}><p role="status">{notice || 'Loading Survivor Guilly…'}</p></main>
   return <main className={styles.page}>
+    <LeagueFormatFaqLink league={{ leagueVariant: 'survivor_guillotine' }} />
     <SGVisualSet leagueId={leagueId} isCommissioner={isCommissioner} input={{ season: { config: data.season.config,
       tribes: data.season.tribes, periodState: data.season.periodState, currentPeriod: data.season.currentPeriod,
       status: data.season.status, periodHistory: data.season.periodHistory }, ownRosterId: data.ownRoster?.id ?? null,

@@ -36,12 +36,7 @@ import {
 import { buildClaudeReviewRequest, validateClaudeReview } from './claudeReview'
 import { createAnthropicThreeBrainClient } from './anthropicClient'
 import { evidenceIdSet } from './evidencePacket'
-import type {
-  ThreeBrainChatOptions,
-  ThreeBrainProviderClient,
-  ThreeBrainProviderGetter,
-  ThreeBrainRole,
-} from './providerClient'
+import type { ThreeBrainProviderClient, ThreeBrainProviderGetter, ThreeBrainRole } from './providerClient'
 import {
   THREE_BRAIN_SCHEMA_VERSION,
   type AgreementState,
@@ -56,8 +51,8 @@ import {
 // Re-exported for backward compatibility (Phase 1 callers/tests import these from the orchestrator module).
 // ClaudeReviewPolicy is intentionally NOT re-exported here — the barrel surfaces it from ./eligibility (its
 // single source) to avoid an ambiguous `export *` collision.
-export type { ThreeBrainChatOptions, ThreeBrainProviderClient, ThreeBrainProviderGetter, ThreeBrainRole }
-export type RecordUsageFn = typeof recordLlmUsage
+export type { ThreeBrainProviderGetter }
+type RecordUsageFn = typeof recordLlmUsage
 
 export type RunThreeBrainOptions = {
   /** defaults to the production provider registry (+ the Anthropic adapter for the 'anthropic' role). */
@@ -92,7 +87,7 @@ function isAborted(opts: RunThreeBrainOptions): boolean {
  *                     producing a usable response.
  *   • indeterminate — did NOT settle within the grace, OR rejected with an AMBIGUOUS/timeout error: the remote may
  *                     have completed or may still be running — its outcome is UNKNOWN. */
-export type ProviderCallSettlement = 'cancelled' | 'completed' | 'indeterminate'
+type ProviderCallSettlement = 'cancelled' | 'completed' | 'indeterminate'
 
 /** One row of the orchestration's complete execution history — retained for EVERY issued provider request so a
  *  stage that completed BEFORE an external abort is never forgotten by the whole-run settlement decision. */
@@ -120,7 +115,7 @@ export type OwnerExecutionSettlement = 'confirmed_cancelled' | 'confirmed_comple
  * A dropped connection, `socket hang up`, `ECONNRESET`, or a bare timeout does NOT prove the remote provider
  * stopped, so those are deliberately NOT treated as confirmed cancellations (→ classified `indeterminate`).
  */
-export function isCancellationError(e: unknown): boolean {
+function isCancellationError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false
   const name = String((e as { name?: unknown }).name ?? '')
   return name === 'AbortError' || name === 'APIUserAbortError'
@@ -283,7 +278,7 @@ function deterministicOnlyResult(
   return {
     schemaVersion: THREE_BRAIN_SCHEMA_VERSION,
     decisionType: packet.decisionType,
-    shortAnswer: 'AI analysis unavailable — relying on the deterministic Decision OS evidence only.',
+    shortAnswer: 'Chimmy analysis unavailable — relying on the deterministic Decision OS evidence only.',
     whatDataSays: '',
     whatItMeans: '',
     recommendedAction: undefined,

@@ -1,8 +1,9 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
 import { isZombieExperienceMode, zombieExperienceDefaults } from '@/lib/zombie/zombieExperience'
 
@@ -21,7 +22,7 @@ export async function PATCH(req: Request) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   try {
-    await requireCommissionerOnly(leagueId, userId)
+    await requireCommissionerAccess(leagueId, userId, 'league')
   } catch (denied) {
     if (denied instanceof Response) return denied
     throw denied
@@ -29,6 +30,9 @@ export async function PATCH(req: Request) {
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
+  // 🛑 Zombie rules and money skipped the settings lock and the league log (2026-11-15), unlike every other format.
+  const locked = await formatRulesLockedResponse(leagueId)
+  if (locked) return locked
 
   if (['status', 'currentWeek', 'universeId'].some((key) => body[key] !== undefined)) {
     return NextResponse.json({ error: 'League lifecycle and universe membership use dedicated commissioner actions.' }, { status: 400 })
@@ -354,5 +358,6 @@ export async function PATCH(req: Request) {
     await generateRulesDocument(z.id)
   }
 
+  await logFormatRulesChange({ leagueId, userId, format: 'zombie', fields: Object.keys(body).filter((k) => k !== 'leagueId') })
   return NextResponse.json({ zombieLeague: row, config, paidConfig, freeRewardConfig })
 }

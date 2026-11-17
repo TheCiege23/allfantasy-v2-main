@@ -100,7 +100,7 @@ function isCopilotLocal(m: DraftChatMessage): boolean {
  * checks — an arbitrary pasted host still renders as text, never as an <img>.
  */
 function toListMessage(m: DraftChatMessage): ChatListMessage {
-  const system = Boolean(m.isDraftPickEvent || m.isAiSuggestion)
+  const system = Boolean(m.isDraftPickEvent || m.isAiSuggestion || m.draftRoomEvent)
   const meta: Record<string, unknown> = { ...(m.metadata ?? {}) }
   const type = String(m.messageType ?? '').toLowerCase()
   if (m.mediaUrl && !Array.isArray(meta.attachments) && (type === 'image' || type === 'meme')) {
@@ -116,7 +116,7 @@ function toListMessage(m: DraftChatMessage): ChatListMessage {
     authorId: system ? null : m.senderUserId ?? null,
     authorName: m.from || m.senderDisplayName || 'Someone',
     avatarUrl: m.senderAvatarUrl ?? null,
-    body: m.isDraftPickEvent ? '' : m.text,
+    body: m.isDraftPickEvent || m.draftRoomEvent ? '' : m.text,
     createdAt: m.at,
     parentMessageId: m.parentMessageId ?? null,
     metadata: meta,
@@ -420,7 +420,7 @@ export function DraftChatPanel({
                       className="ml-1.5 inline-flex items-center rounded-full border border-violet-400/35 bg-violet-500/15 px-1.5 py-[1px] text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-100"
                       data-testid="draft-chat-pick-ai-badge"
                     >
-                      AI
+                      Chimmy
                     </span>
                   ) : null}
                 </p>
@@ -437,6 +437,40 @@ export function DraftChatPanel({
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        )
+      }
+      if (m.draftRoomEvent) {
+        const ev = m.draftRoomEvent
+        const trade = ev.kind === 'pick_trade'
+        return (
+          <div
+            className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-lg ${
+              trade ? 'border-sky-400/30 bg-sky-500/10' : 'border-amber-400/30 bg-amber-500/10'
+            }`}
+            data-testid={trade ? 'draft-chat-trade-event' : 'draft-chat-commish-event'}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
+              <span className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${trade ? 'text-sky-200/95' : 'text-amber-200/95'}`}>
+                {ev.title}
+              </span>
+              <span className="text-[11px] text-white/55 tabular-nums">
+                {new Date(m.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </span>
+            </div>
+            <div className="mt-2 flex items-start gap-2.5">
+              {ev.playerName ? (
+                <PlayerAvatar
+                  headshotUrl={ev.headshotUrl}
+                  teamAbbr={ev.team}
+                  position={ev.position}
+                  displayName={ev.playerName}
+                  size={40}
+                  testIdBase="draft-chat-event-headshot"
+                />
+              ) : null}
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-white/90">{ev.detail}</p>
             </div>
           </div>
         )

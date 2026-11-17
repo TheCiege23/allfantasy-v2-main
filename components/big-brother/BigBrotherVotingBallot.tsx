@@ -8,7 +8,7 @@ import { useState } from 'react'
 import type { BigBrotherSummary } from './types'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 
-export interface BigBrotherVotingBallotProps {
+interface BigBrotherVotingBallotProps {
   leagueId: string
   summary: BigBrotherSummary
   onVoted?: () => void

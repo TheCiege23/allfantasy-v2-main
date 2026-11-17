@@ -4,7 +4,7 @@
  */
 import type { TiebreakRule } from '@/lib/waiver-wire/types'
 
-export interface ClaimPriorityDescription {
+interface ClaimPriorityDescription {
   rule: TiebreakRule | string
   label: string
   description: string

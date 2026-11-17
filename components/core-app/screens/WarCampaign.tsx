@@ -85,6 +85,15 @@ export function WarCampaign({ view }: { view: WarCampaignView }) {
 
       {view.kind === 'none' ? (
         <p className="af-wc-note">{m.none(view.why)}</p>
+      ) : view.games.length > 0 && view.games.every((g) => g.small) ? (
+        /*
+         * 2026-11-14: when no game moves your odds, that is one sentence. A long shot used to get five rows
+         * reading "Win: 1% · Lose: 0% · Barely moves your odds".
+         */
+        <>
+          <p className="af-wc-note" data-testid="war-road-quiet">{m.allSmall(pct(view.playoffPct))}</p>
+          <p className="af-wc-note af-wc-basis">{m.basis}</p>
+        </>
       ) : (
         <>
           <p className="af-wc-note">{m.lead(pct(view.playoffPct))}</p>

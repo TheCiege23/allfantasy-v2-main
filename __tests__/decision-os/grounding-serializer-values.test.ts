@@ -102,7 +102,6 @@ function packet(over: Partial<DecisionOsGroundingPacket> = {}): DecisionOsGround
     leagueIntelligence: absent('not_requested'),
     portfolio: absent('not_requested'),
     savedAnalysis: absent('not_requested'),
-    managerPsychology: absent('not_requested'),
     gaps: [],
     meta: { durationMs: 1, engineMs: null, sources: [], killedFeeds: [] },
     ...over,
@@ -130,6 +129,17 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     )
     expect(text).toContain('Malik Nabers')
     expect(text).toContain('14.8')
+  })
+
+  it('🛑 says which week each projection is for, and never lets a season baseline pass as this week', () => {
+    const weekly = serializeDecisionOsGroundingForPrompt(packet({ projections: present([projection('Malik Nabers', 14.8)]) }), NOW)
+    expect(weekly).toContain('Malik Nabers (WR) 14.8 pts, week 3 2026')
+    const baseline = serializeDecisionOsGroundingForPrompt(
+      packet({ projections: present([{ ...projection('Malik Nabers', 13.1), week: null } as ProjectionFact]) }),
+      NOW,
+    )
+    expect(baseline).toContain('13.1 pts, season baseline per game (no weekly projection on file — NOT a projection for this week)')
+    expect(baseline).not.toMatch(/13\.1 pts, week/)
   })
 
   it('emits the four prose slices VERBATIM — they are already prompt-ready', () => {
@@ -244,9 +254,9 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
   it('🛑 raw behavior framing is excluded even alongside a decision', () => {
     const text = serializeDecisionOsGroundingForPrompt(
       packet({
-        lineupDecision: present({
-          decisionType: 'lineup', whatHappened: 'Start Nabers', whyItMatters: 'better matchup',
-          whatToDo: 'start him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
+        waiverDecision: present({
+          decisionType: 'waiver', whatHappened: 'Add Nabers', whyItMatters: 'better matchup',
+          whatToDo: 'claim him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
           dataCompleteness: 100, weakestSource: null, weakestTrust: null,
         } as never),
         managerPsychology: present([
@@ -273,9 +283,9 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
   it('does NOT pad the prompt with the framing instruction when there is a decision but no psychology', () => {
     const text = serializeDecisionOsGroundingForPrompt(
       packet({
-        lineupDecision: present({
-          decisionType: 'lineup', whatHappened: 'Start Nabers', whyItMatters: 'better matchup',
-          whatToDo: 'start him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
+        waiverDecision: present({
+          decisionType: 'waiver', whatHappened: 'Add Nabers', whyItMatters: 'better matchup',
+          whatToDo: 'claim him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
           dataCompleteness: 100, weakestSource: null, weakestTrust: null,
         } as never),
       }),
@@ -337,8 +347,8 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
 describe('a missing slice degrades, it does not throw', () => {
   it('renders every other slice when one is absent from the packet entirely', () => {
     const p = packet({ marketValues: present([marketValue('Malik Nabers', 6420, 12)]) })
-    delete (p as Record<string, unknown>).managerPsychology
     delete (p as Record<string, unknown>).savedAnalysis
+    delete (p as Record<string, unknown>).leagueIntelligence
     const text = serializeDecisionOsGroundingForPrompt(p, NOW)
     expect(text).toContain('Malik Nabers')   // the surviving slices still render
     expect(text).toContain('6420')

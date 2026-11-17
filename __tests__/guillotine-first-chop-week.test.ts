@@ -28,6 +28,8 @@ vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurr
 // A native league: the route refuses an imported one (lib/guillotine/importedLeagueGuard.ts).
 const leaguePlatform = vi.hoisted(() => ({ value: 'allfantasy' as string | null }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: async () => ({ platform: leaguePlatform.value }) } } }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { NextRequest } from 'next/server'
 import { PATCH } from '@/app/api/leagues/[leagueId]/guillotine/summary/route'

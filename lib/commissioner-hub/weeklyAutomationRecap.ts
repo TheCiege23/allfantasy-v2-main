@@ -11,7 +11,7 @@
  * Pure.
  */
 
-export type RecapCounts = {
+type RecapCounts = {
   emptySpotsFilled: number
   byesBenched: number
   managedLineupsSet: number
@@ -25,7 +25,7 @@ export type RecapCounts = {
   autoHandovers: number
 }
 
-export const EMPTY_RECAP: RecapCounts = {
+const EMPTY_RECAP: RecapCounts = {
   emptySpotsFilled: 0,
   byesBenched: 0,
   managedLineupsSet: 0,
@@ -65,7 +65,7 @@ export function countRecapActions(actions: ReadonlyArray<{ action: string; n: nu
   return out
 }
 
-export type RecapLanguage = 'en' | 'es'
+type RecapLanguage = 'en' | 'es'
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 

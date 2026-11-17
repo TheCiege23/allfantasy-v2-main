@@ -1,3 +1,4 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
@@ -65,8 +66,13 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
+  // Waiver rules are league setup: the head commissioner, or a co-commissioner granted it
+  // (lib/league/commissionerAccess.ts). This matched the league OWNER only, so a co-commissioner given league setup
+  // was told the league did not exist (2026-11-16).
+  const refused = await commissionerAccessResponse(leagueId, userId, "league")
+  if (refused) return refused.status === 404 ? NextResponse.json({ error: "League not found" }, { status: 404 }) : refused
   const league = await (prisma as any).league.findFirst({
-    where: { id: leagueId, userId },
+    where: { id: leagueId },
   })
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 

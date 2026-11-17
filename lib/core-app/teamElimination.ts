@@ -16,7 +16,7 @@
  * Pure. Callers read the rows; this only decides.
  */
 
-export const GUILLOTINE_VARIANTS: ReadonlySet<string> = new Set(['guillotine', 'survivor_guillotine'])
+const GUILLOTINE_VARIANTS: ReadonlySet<string> = new Set(['guillotine', 'survivor_guillotine'])
 
 export function isGuillotineLeague(league: { guillotineMode?: boolean | null; leagueVariant?: string | null }): boolean {
   return league.guillotineMode === true || GUILLOTINE_VARIANTS.has(String(league.leagueVariant ?? '').toLowerCase())

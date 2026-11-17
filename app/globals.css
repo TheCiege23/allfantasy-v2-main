@@ -1564,15 +1564,28 @@ html[data-mode="light"] .via-white\/10:where(:not(.af-draft-dark, .af-draft-dark
   50% { transform: scale(1.1); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+/* Room v2: the pick on the clock glows in the league-type accent (`--af-league-accent`, set by
+   DraftRoomShell); cyan when no accent is set. */
+/*
+ * Room v2 league signatures: a board tile is an inline-size container (DraftBoardCell), and a
+ * tile carrying a signature chip drops its ADP gap below 120px, where the two no longer fit on the
+ * info line's single row. A top-level @container rule, never nested in a @media block.
+ */
+@container (max-width: 119px) {
+  .af-tile-squeezable {
+    display: none;
+  }
+}
+
 @keyframes draft-current-pick-pulse {
   0%,
   100% {
     transform: translateZ(0) scale(1);
-    box-shadow: 0 0 0 rgba(246, 196, 69, 0), 0 0 20px rgba(246, 196, 69, 0.18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-league-accent, #22d3ee) 12%, transparent), 0 0 18px color-mix(in srgb, var(--af-league-accent, #22d3ee) 30%, transparent);
   }
   45% {
     transform: translateZ(0) scale(1.01);
-    box-shadow: 0 0 0 1px rgba(246, 196, 69, 0.32), 0 0 34px rgba(246, 196, 69, 0.42);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-league-accent, #22d3ee) 22%, transparent), 0 0 30px color-mix(in srgb, var(--af-league-accent, #22d3ee) 50%, transparent);
   }
 }
 
@@ -3495,7 +3508,9 @@ html[data-mode='light'] .af-atmo-guillotine-embers:where(:not(.af-draft-dark, .a
  * and tokens through Apple, so links to those pages, and copy marked
  * `data-ios-purchase`, are hidden only in a build WITHOUT it. Donations, the
  * Stripe billing portal and anything marked data-hide-in-ios-app stay hidden in
- * every build. Keep those four hrefs in step with IOS_APP_IAP_PAGE_PREFIXES.
+ * every build. Keep those hrefs in step with IOS_APP_IAP_PAGE_PREFIXES.
+ * /pro and /all-access are matched exactly (`='/pro'`, `^='/pro?'`, `^='/pro/'`), never by a bare
+ * `^='/pro'` prefix, which would also hide every link to /profile and /projections.
  */
 html[data-ios-app] [data-hide-in-ios-app],
 html[data-ios-app]:not([data-ios-iap]) [data-ios-purchase],
@@ -3516,6 +3531,17 @@ html[data-ios-app] a[href^='/api/subscription/billing-portal'] {
    is an <a> straight to an API that IOS_APP_PURCHASE_API_PREFIXES refuses in
    the app, so a subscriber who tapped it got a raw 403 body. An Apple
    subscriber manages it through "Manage Subscriptions" on the plan pages. */
+/* /pro (AF Pro) and /all-access (AF Supreme) are purchase pages too (IOS_APP_IAP_PAGE_PREFIXES, 2026-11-17).
+   Exact forms only: a bare ^='/pro' would also hide every link to /profile and /projections. */
+html[data-ios-app]:not([data-ios-iap]) a[href='/pro'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro?'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro/'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pro#'],
+html[data-ios-app]:not([data-ios-iap]) a[href='/all-access'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/all-access?'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/all-access/'] {
+  display: none !important;
+}
 
 /*
  * The other half: copy that exists ONLY in the app, for a spot where hiding

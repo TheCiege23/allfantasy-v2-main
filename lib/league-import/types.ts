@@ -20,17 +20,6 @@ export interface C2CImportSource {
   rosterDepth: number | 'all'
 }
 
-/**
- * Multi-source import job payload. `sources` must include exactly one 'pro'
- * and one 'college' entry. Downstream normalizer runs each source through
- * the single-provider pipeline, then merges by manager email/name match.
- */
-export interface MultiSourceImportJob {
-  leagueId?: string
-  leagueName?: string
-  sources: C2CImportSource[]
-}
-
 export interface SourceTracking {
   source_provider: ImportProvider
   source_league_id: string
@@ -97,6 +86,12 @@ export interface NormalizedLeagueSettings {
   is_keeper?: boolean
   /** Sleeper's raw `settings.type` (0 redraft, 1 keeper, 2 dynasty); absent when Sleeper sent none. */
   sleeper_league_type?: number
+  /**
+   * The first NFL week the league scores (Sleeper `settings.start_week`). A league that starts after
+   * week 1 — a mid-season or tournament-stage redraft — scores only part of the season, which the
+   * draft engine uses as its scoring window (lib/shared-services/draft/DraftContextAssembler.ts).
+   */
+  start_week?: number
   /** ESPN's raw keeper count, only when ESPN sent a number (see EspnAdapter `espnKeeperCount`). */
   espn_keeper_count?: number
   /**
@@ -152,6 +147,12 @@ export interface NormalizedRoster {
   points_against?: number
   player_ids: string[]
   starter_ids: string[]
+  /**
+   * The slot each starter is in, keyed by player id, for a provider whose league template cannot
+   * be aligned to `starter_ids` (ESPN — see `startingSlotTemplate`). Stored as
+   * `playerData.starter_slot_by_id`; read by `storedStarterSlotLabels`. Omit when unknown.
+   */
+  starter_slot_by_id?: Record<string, string>
   /**
    * INJURED RESERVE ONLY — never the bench.
    *
@@ -268,6 +269,8 @@ export interface NormalizedTransaction {
   type: 'waiver' | 'trade' | 'free_agent' | 'drop'
   status: string
   created_at: string
+  /** Provider-reported status change time; distinct from when a trade was proposed. */
+  status_updated_at?: string
   adds?: Record<string, string>
   drops?: Record<string, string>
   roster_ids: string[]
@@ -309,7 +312,7 @@ export interface NormalizedTradedPick {
 }
 
 /** Title-game result for one season, in the adapter's own team id space. */
-export interface NormalizedSeasonPlacement {
+interface NormalizedSeasonPlacement {
   champion_source_team_id: string | null
   runner_up_source_team_id: string | null
   /** How the title game was identified — see `sleeper/bracketPlacements.ts`. */
@@ -364,6 +367,8 @@ export interface NormalizedImportResult {
   scoring: NormalizedScoring | null
   schedule: NormalizedMatchup[]
   draft_picks: NormalizedDraftPick[]
+  /** Fresh draft lifecycle observations when the provider exposes them. */
+  drafts?: Array<{ source_draft_id: string; status: string; start_time?: number }>
   /**
    * Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`).
    * Absent = provider does not expose traded picks; empty array = provider
@@ -427,7 +432,7 @@ export interface ExternalIdentityMapping {
   external_ids?: { sportradar?: string }
 }
 
-export type ImportWarningSeverity = 'info' | 'warn' | 'error'
+type ImportWarningSeverity = 'info' | 'warn' | 'error'
 
 export interface ImportWarningRecord {
   code: string

@@ -108,7 +108,7 @@ export function uninvolvedTradeParticipants(
 export const MULTI_TEAM_GRADE_WITHHELD = 'Grades are shown for two-team trades.'
 
 /** What one team in the trade sends and receives. */
-export type TradeTeamMoves<A> = { rosterId: string; gives: A[]; gets: A[] }
+type TradeTeamMoves<A> = { rosterId: string; gives: A[]; gets: A[] }
 
 /**
  * Every team in the trade, in participant order, with the assets it sends (`gives`) and receives

@@ -1,0 +1,97 @@
+/* Settings hub guide (2026-11-14): app/settings/components/SettingsChrome.tsx → SettingsHub.
+   The answer at the top, a state line on each card, and the plan named once. */
+
+/* ── The answer ─────────────────────────────────────────────────────────────────────────────── */
+.nocturne-settings .ns-hubg-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 72ch;
+}
+.nocturne-settings .ns-hubg-eyebrow {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font: 700 12px/1.3 var(--ns-mono);
+  letter-spacing: 0.04em;
+  color: var(--ns-muted);
+}
+.nocturne-settings .ns-hubg-avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--ns-chip);
+  border: 1px solid var(--ns-chip-line);
+  color: var(--ns-muted-2);
+  font: 800 11px/1 var(--ns-sans);
+  letter-spacing: 0;
+}
+.nocturne-settings .ns-hubg-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.nocturne-settings .ns-hubg-avatar .ns-avatar-emoji { font-size: 15px; }
+.nocturne-settings .ns-hubg-title {
+  margin: 0;
+  font: 900 28px/1.15 var(--ns-sans);
+  letter-spacing: -0.03em;
+  color: var(--ns-text);
+}
+.nocturne-settings .ns-hubg-intro {
+  margin: 0;
+  font: 400 14px/1.5 var(--ns-sans);
+  color: var(--ns-muted-2);
+}
+.nocturne-settings .ns-hubg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.nocturne-settings .ns-hubg-chip {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid color-mix(in srgb, var(--ns-warn) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ns-warn) 9%, transparent);
+  color: var(--ns-text);
+  font: 700 13px/1.2 var(--ns-sans);
+  cursor: pointer;
+}
+.nocturne-settings .ns-hubg-chip:hover { background: color-mix(in srgb, var(--ns-warn) 16%, transparent); }
+/* A profile field is a to-do, not a problem: accent, not warning amber. */
+.nocturne-settings .ns-hubg-chip[data-issue='profileField'] {
+  border-color: color-mix(in srgb, var(--ns-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--ns-accent) 9%, transparent);
+}
+.nocturne-settings .ns-hubg-chip[data-issue='profileField']:hover { background: color-mix(in srgb, var(--ns-accent) 16%, transparent); }
+.nocturne-settings .ns-hubg-why {
+  margin: 0;
+  font: 400 13px/1.5 var(--ns-sans);
+  color: var(--ns-muted);
+}
+
+/* ── Cards: a state line instead of a verb ──────────────────────────────────────────────────── */
+.nocturne-settings .ns-hubg-go {
+  flex: none;
+  color: var(--ns-muted);
+  font: 400 14px/1 var(--ns-sans);
+}
+.nocturne-settings .ns-hub-card:hover .ns-hubg-go { color: var(--ns-accent); }
+.nocturne-settings .ns-hubg-state {
+  font: 700 13px/1.35 var(--ns-sans);
+  color: var(--ns-text);
+}
+.nocturne-settings .ns-hubg-state[data-tone='warn'] { color: var(--ns-warn); }
+.nocturne-settings .ns-hubg-state[data-tone='todo'] { color: var(--ns-accent-bright); }
+
+@media (max-width: 720px) {
+  .nocturne-settings .ns-hubg-title { font-size: 23px; }
+}
+
+/* Phone: the base sheet already turns cards into rows with a › chevron. The state line takes the
+   description's place where there is one, so each row reads "name / state". */
+@media (max-width: 560px) {
+  .nocturne-settings .ns-hubg-go { display: none; }
+  .nocturne-settings .ns-hubg-state { padding-left: 44px; }
+  .nocturne-settings .ns-hub-card:has(.ns-hubg-state) .ns-hub-card-desc { display: none; }
+  .nocturne-settings .ns-hubg-chip { min-height: 44px; }
+}

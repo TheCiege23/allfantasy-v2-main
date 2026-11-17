@@ -442,12 +442,23 @@ export async function POST(req: NextRequest) {
       select: { userId: true },
     })
     const announcerId = leagueRow?.userId ?? userId
+    /*
+     * "Share with league" (2026-11-16): only a GENERAL Chimmy answer may be shared. A Survivor vote, an
+     * idol or token play, or a Survivor host reply is a secret game move — never shareable. The link to
+     * the question lets the share post both. lib/league-chat/shareChimmyAnswer.ts checks both keys.
+     */
+    const shareable = !sgReply && !voteResult?.handled && !survivorAsk && Boolean(replyText?.trim())
     const privateChimmyMsg = await createLeagueChatMessage(leagueId, announcerId, replyText, {
       type: 'system',
       isPrivate: true,
       visibleToUserId: userId,
       messageSubtype: 'chimmy_private',
-      metadata: { isSystem: true, chimmyPrivateReply: true, ...(decision ? { decision } : {}) },
+      metadata: {
+        isSystem: true,
+        chimmyPrivateReply: true,
+        ...(decision ? { decision } : {}),
+        ...(shareable ? { chimmyShareable: true, questionMessageId: privateUserMsg.id } : {}),
+      },
     })
 
     return NextResponse.json({

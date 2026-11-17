@@ -28,7 +28,7 @@ import type { IdpScoringBreakdown, IdpSourceKind } from './types'
  * projection that uses it says so.
  */
 export const MEASURED_SOLO_TACKLE_SHARE = 0.5364
-export const MEASURED_TACKLE_SPLIT_PROVENANCE =
+const MEASURED_TACKLE_SPLIT_PROVENANCE =
   'NFL 2025, 5,186 weekly rows with solo+assist present (53.64% solo / 46.36% assist)'
 
 /**

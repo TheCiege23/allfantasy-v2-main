@@ -12,7 +12,7 @@
  * `PlayerIdentityMap` has dedicated columns for sleeperId / espnId / mflId /
  * fleaflickerId, and now `fantraxId` — the schema change this docstring said was out of
  * scope has been made, and the column is written weekly by
- * `lib/devy/ingestFantraxPlayerIdentities.ts`. **Yahoo is still uncovered** and still
+ * `lib/player-identity/ingestNcaafFantraxIdentities.ts` (CFB) and its pro/NFL siblings. **Yahoo is still uncovered** and still
  * falls back to normalized-name matching only.
  *
  * ⚠ FANTRAX COVERAGE IS 25%, NOT 100%, AND THE REMAINDER IS NOT A MATCHING BUG.

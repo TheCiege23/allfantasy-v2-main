@@ -7,21 +7,16 @@ export {
   getAllSports,
   getToolsInCategory,
   getToolsForSport,
-  getFeaturedTools,
-  getTrendingTools,
 } from './ToolHubService'
-export type { ToolHubTool, ToolHubSport } from './ToolHubService'
 
-export { getToolCardDisplay, getToolCardsForSlugs } from './ToolCardResolver'
+export { getToolCardDisplay } from './ToolCardResolver'
 
-export { getRelatedTools, getRelatedToolCards } from './RelatedToolResolver'
-export type { RelatedToolLink } from './RelatedToolResolver'
+export { getRelatedTools } from './RelatedToolResolver'
 
 export {
   getSportFilterOptions,
   getToolSlugsForSport,
 } from './SportToolFilterResolver'
-export type { SportFilterOption } from './SportToolFilterResolver'
 
 export {
   getFeaturedToolSlugs,
@@ -35,10 +30,9 @@ export {
 export {
   ROUTES,
   getOpenToolHref,
-  getToolsHubPath,
   getToolLandingPath,
   getToolsHubPathWithFilters,
   getBestToolForMeHref,
 } from './ToolDiscoveryNavigationService'
 
-export type { ToolCardDisplay, ToolCategoryId, FeaturedToolEntry } from './types'
+export type { ToolCardDisplay, ToolCategoryId } from './types'

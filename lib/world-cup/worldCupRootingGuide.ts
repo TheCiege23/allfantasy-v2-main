@@ -15,14 +15,14 @@ import type {
 
 export type RootingImpact = "Low" | "Medium" | "High"
 
-export type RootingTag =
+type RootingTag =
   | "Champion path"
   | "Knockout pick"
   | "Group pick"
   | "Third-place pick"
   | "Upside"
 
-export type RootingStatus =
+type RootingStatus =
   | "ready"
   | "no_entry"
   | "no_matches"
@@ -38,7 +38,7 @@ export type RootingRecommendation = {
   matchStartsAt: string | null
 }
 
-export type RootingGuideResult = {
+type RootingGuideResult = {
   title: string
   status: RootingStatus
   windowLabel: string
@@ -48,7 +48,7 @@ export type RootingGuideResult = {
 }
 
 /** Minimum entry shape needed to compute rooting recommendations. */
-export type WorldCupRootingGuideEntry = {
+type WorldCupRootingGuideEntry = {
   id: string
   name: string
   championTeamId: string | null

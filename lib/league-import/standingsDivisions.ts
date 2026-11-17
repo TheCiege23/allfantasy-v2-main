@@ -18,7 +18,7 @@
 
 export const STANDINGS_DIVISIONS_KEY = 'standings_divisions'
 
-export type StandingsDivisions = {
+type StandingsDivisions = {
   source: 'sleeper' | 'espn'
   /** Division key → display name. */
   names: Record<string, string>

@@ -58,7 +58,7 @@ type Summary = {
   } | null
 }
 
-export interface GuillotineHomeProps {
+interface GuillotineHomeProps {
   leagueId: string
   /** Used for AI / intelligence deep links (tab availability varies by sport). */
   sport: string
@@ -163,7 +163,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           data-tone="accent"
           data-testid="guillotine-quick-ai"
         >
-          <Sparkles className="h-4 w-4" /> AI Tools
+          <Sparkles className="h-4 w-4" /> Chimmy Tools
         </Link>
         <Link
           href={leagueQueryPath(leagueId, { view: 'players' })}
@@ -305,7 +305,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           className="gl-accent-text text-sm hover:underline"
           data-testid="guillotine-more-ai-tools"
         >
-          More research &amp; AI tools →
+          More research &amp; Chimmy tools →
         </Link>
       </section>
 

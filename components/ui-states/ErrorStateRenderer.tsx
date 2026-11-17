@@ -19,7 +19,7 @@ import { AlertTriangle, RotateCcw } from "lucide-react"
  * alike. See StaleDataNotice below.
  */
 
-export interface ErrorStateAction {
+interface ErrorStateAction {
   id: string
   label: string
   href?: string
@@ -27,7 +27,7 @@ export interface ErrorStateAction {
   testId?: string
 }
 
-export interface ErrorStateRendererProps {
+interface ErrorStateRendererProps {
   title?: string
   message: string
   onRetry?: () => void

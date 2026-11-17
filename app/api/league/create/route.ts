@@ -1266,11 +1266,6 @@ export async function POST(req: Request) {
     const isSurvivorLeague =
       String(leagueVariantEffective ?? '').toLowerCase() === 'survivor' ||
       String(requestedLeagueType ?? '').toLowerCase() === 'survivor';
-    const survivorTribeCountColumn =
-      isSurvivorLeague &&
-      typeof (initialSettings as Record<string, unknown>).survivor_suggested_tribe_count === 'number'
-        ? Math.max(2, Math.min(4, Math.round(Number((initialSettings as Record<string, unknown>).survivor_suggested_tribe_count))))
-        : 4;
     const survivorTribeNamingColumn =
       isSurvivorLeague &&
       String((initialSettings as Record<string, unknown>).survivor_tribe_name_mode ?? 'auto') === 'custom'
@@ -1380,7 +1375,6 @@ export async function POST(req: Request) {
             where: { leagueId: league.id, claimedByUserId: userId },
           });
           if (!hasTeam) {
-            const leagueName = String(name ?? 'League').trim();
             await tx.leagueTeam.create({
               data: {
                 leagueId: league.id,

@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Home, Calendar, Vote, Users, Settings, MessageSquare, Sparkles, ChevronDown } from 'lucide-react'
+import { Home, Settings, MessageSquare, Sparkles, ChevronDown } from 'lucide-react'
 import type { BigBrotherView } from './types'
 import { BigBrotherStatusBadge } from './BigBrotherStatusBadge'
 import { BigBrotherCeremonyCenter } from './BigBrotherCeremonyCenter'
@@ -31,7 +31,7 @@ const VIEW_LABELS: Record<BigBrotherView, string> = {
   commissioner: 'Commissioner',
 }
 
-export interface BigBrotherHomeProps {
+interface BigBrotherHomeProps {
   leagueId: string
   isCommissioner?: boolean
   /** When set from league shell tabs, opens this lens directly. */
@@ -220,7 +220,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
                 </span>
               </p>
               <p className="mt-2 text-[12px] leading-relaxed text-white/45">
-                HOH and Veto winners are computed by the league engine (lineups, seeds, or configured rules). Chimmy and AI
+                HOH and Veto winners are computed by the league engine (lineups, seeds, or configured rules). Chimmy and Chimmy
                 only narrate — they never pick the winner.
               </p>
             </div>

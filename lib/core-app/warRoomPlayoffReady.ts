@@ -37,11 +37,11 @@ const IN_PLAY: ReadonlySet<WarPosture> = new Set(['contender', 'clinched', 'bubb
 /** How many starters are named as "where one injury hurts most". */
 export const MAX_THIN = 3
 /** A drop-off smaller than this is not called out — depth there is fine. */
-export const MIN_DROP = 2
+const MIN_DROP = 2
 
-export type ReadyPlayer = { id: string; name: string; position: string; team: string | null; points: number }
+type ReadyPlayer = { id: string; name: string; position: string; team: string | null; points: number }
 
-export type ReadyStarter = {
+type ReadyStarter = {
   player: ReadyPlayer
   /** Your playoff weeks in which this player's NFL team is on bye. */
   byeWeeks: number[]

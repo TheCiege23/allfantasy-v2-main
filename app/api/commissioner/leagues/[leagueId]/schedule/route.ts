@@ -1,7 +1,7 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { getScheduleConfigForLeague } from '@/lib/schedule-defaults/ScheduleConfigResolver'
 import { regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
@@ -16,11 +16,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const type = req.nextUrl.searchParams?.get('type') || 'settings'
   if (type !== 'settings') {
@@ -38,11 +35,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const league = await (prisma as any).league.findUnique({

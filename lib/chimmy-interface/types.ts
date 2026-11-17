@@ -30,11 +30,3 @@ export interface ChimmySuggestedChip {
   category?: string
 }
 
-export interface ChimmyConfidenceDisplay {
-  /** 0–100 or undefined if not applicable. */
-  confidencePct?: number
-  /** Short label: "High", "Medium", "Low", or custom. */
-  label?: string
-  /** Optional explanation for the user. */
-  explanation?: string
-}

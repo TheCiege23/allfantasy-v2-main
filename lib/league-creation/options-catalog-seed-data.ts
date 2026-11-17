@@ -6,9 +6,9 @@ import { SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailab
 import { KEEPER_EVEN_TEAM_COUNTS, KEEPER_ODD_TEAM_COUNTS } from '@/lib/league/oddTeamLeagues'
 import { sgCreateTeamCounts } from '@/lib/survivor-guillotine/createFit'
 
-export type CreateMode = 'quick' | 'advanced'
+type CreateMode = 'quick' | 'advanced'
 
-export interface LeagueCreateConceptSeed {
+interface LeagueCreateConceptSeed {
   id: string
   title: string
   subtitle: string

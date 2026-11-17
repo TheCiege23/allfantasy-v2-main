@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
-import { isCommissioner } from '@/lib/commissioner/permissions'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { validateWeeklyTask } from '@/lib/core-app/commissionerWeeklyPlan'
 import { prisma } from '@/lib/prisma'
 import { reconcileLeagueTasks,readLeagueTasks } from '@/lib/commissioner-workspace/taskStore'
@@ -11,7 +10,8 @@ async function handle(req:Request){
   const session=await getServerSession(authOptions as never) as {user?:{id?:string}}|null,userId=session?.user?.id
   if(!userId)return NextResponse.json({error:'Unauthorized'},{status:401})
   const leagueId=new URL(req.url).searchParams.get('league')??''
-  try{await assertCommissioner(leagueId,userId)}catch{return NextResponse.json({error:'Commissioner only'},{status:403})}
+  // Reading the queue is any commissioner's; changing it is league setup (lib/league/commissionerAccess.ts).
+  if(!await canCommissionerAct(leagueId,userId,req.method==='GET'?'view':'league'))return NextResponse.json({error:'Commissioner only'},{status:403})
   if(req.method==='GET'){
     await reconcileLeagueTasks(leagueId)
     return NextResponse.json({tasks:(await readLeagueTasks(leagueId)).filter(t=>t.sourceKey.startsWith('operational:')||t.sourceKey.startsWith('weekly:')),checkedAt:new Date().toISOString()},{headers:{'Cache-Control':'private, no-store'}})
@@ -23,7 +23,7 @@ async function handle(req:Request){
     const task=validateWeeklyTask(body)
     if(!task || (task.issueId && !task.issueId.startsWith(`${leagueId}:`)))return NextResponse.json({error:'Invalid weekly task'},{status:400})
     const saved=await prisma.$transaction(async tx=>{
-      if(!await isCommissioner(leagueId,userId,tx))return null
+      if(!await canCommissionerAct(leagueId,userId,'league'))return null
       const sourceKey=`weekly:task:${task.requestId}`
       const created=await tx.commissionerWorkspaceTask.createMany({data:[{
         leagueId,sourceKey,title:task.title,description:task.description,dueAt:task.dueAt,
@@ -40,7 +40,7 @@ async function handle(req:Request){
   const statuses=['open','in_progress','waiting_on_manager','waiting_on_league_vote','completed','archived']
   if(typeof body.id!=='string'||typeof body.expectedStatus!=='string'||typeof body.expectedUpdatedAt!=='string'||!Number.isFinite(Date.parse(body.expectedUpdatedAt))||typeof body.status!=='string'||!statuses.includes(body.status))return NextResponse.json({error:'Invalid task update'},{status:400})
   const updated=await prisma.$transaction(async tx=>{
-    if(!await isCommissioner(leagueId,userId,tx))return 'forbidden' as const
+    if(!await canCommissionerAct(leagueId,userId,'league'))return 'forbidden' as const
     const task=await tx.commissionerWorkspaceTask.findFirst({where:{id:body.id as string,leagueId},select:{title:true}})
     const count=await tx.commissionerWorkspaceTask.updateMany({where:{id:body.id as string,leagueId,status:body.expectedStatus as string,updatedAt:new Date(body.expectedUpdatedAt as string),OR:[{sourceKey:{startsWith:'operational:'}},{sourceKey:{startsWith:'weekly:'}}]},data:{status:body.status as string,resolvedAt:body.status==='completed'?new Date():null,autoResolvedAt:null}})
     if(count.count!==1)return false

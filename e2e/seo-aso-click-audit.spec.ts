@@ -18,7 +18,7 @@ test.describe("@growth seo + aso click audit", () => {
     expect(xShareHref ?? "").toContain("twitter.com/intent/tweet")
     expect(fbShareHref ?? "").toContain("facebook.com/sharer/sharer.php")
     expect(liShareHref ?? "").toContain("linkedin.com/sharing/share-offsite/")
-    expect(xShareHref ?? "").toContain(encodeURIComponent("https://allfantasy.ai/tools/trade-analyzer"))
+    expect(xShareHref ?? "").toContain(encodeURIComponent("https://www.allfantasy.ai/tools/trade-analyzer"))
 
     await clickHydrated(page.getByTestId("tool-landing-install-link"))
     await expect(page).toHaveURL(/\/install$/, { timeout: 20_000 })

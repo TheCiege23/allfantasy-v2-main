@@ -50,6 +50,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/ai-learning-system/recordTradeParticipants', () => ({ recordTradeOutcomeForBothManagers: vi.fn() }))
 vi.mock('@/lib/trade-market/redraftTradeMarketEvents', () => ({ recordRedraftTradeMarketEvent: vi.fn(async () => undefined) }))
 vi.mock('@/lib/chat-notifications/tradeOfferDm', () => ({ queueTradeStatusInDm: vi.fn() }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET as review } from '@/app/api/leagues/[leagueId]/trades/[tradeId]/review/route'
 import { POST as nativeDecision } from '@/app/api/leagues/[leagueId]/trades/[tradeId]/commissioner/route'

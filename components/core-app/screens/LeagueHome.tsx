@@ -1,6 +1,9 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import { MemberStatusCard } from '@/components/league-home/MemberStatusCard'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import Link from 'next/link'
 import { LeagueDisplayPreferences, LeagueSection, CustomizeLeagueLink } from '@/components/league/LeagueDisplayPreferences'
 import type { LeagueSectionId } from '@/lib/league/leagueSections'
@@ -18,8 +21,7 @@ import '@/components/core-app/af-league-home.css'
 import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
-import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
-import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
+import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 
 import { ConnectedRoster } from './ConnectedRoster'
 import { RedraftHomeDeck } from './RedraftHomeDeck'
@@ -41,6 +43,12 @@ import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { useMessages } from '@/components/i18n/useMessages'
 import { leagueHomeMessages } from '@/lib/core-app/messages/leagueHome'
+import { leagueOverviewGuideMessages } from '@/lib/core-app/messages/leagueOverviewGuide'
+import {
+  isEliminationLeague, overviewHeadline, overviewWeekLine, standingsRowsToShow, type OverviewHeadline,
+} from '@/lib/core-app/leagueOverviewGuide'
+import type { RailMatchup } from '@/lib/core-app/railMatchups'
+import '@/components/core-app/af-league-overview-guide.css'
 
 /**
  * "Your season at a glance": record and rank, points for, FAAB left, trade deadline (the redesign's KPI
@@ -51,12 +59,19 @@ import { leagueHomeMessages } from '@/lib/core-app/messages/leagueHome'
 function HomeKpiRow({
   data,
   tradeDeadline,
+  elimination = false,
 }: {
   data: LeagueHomeData
   tradeDeadline: TradeDeadlineCountdown | null
+  /**
+   * Leave the record tile out: an elimination league has no matchups (a W-L record and a rank counting chopped
+   * teams is noise there), and a head-to-head headline already says the record and the place.
+   */
+  elimination?: boolean
 }) {
   const m = useMessages(leagueHomeMessages)
-  const kpis = buildHomeKpis(data)
+  const built = buildHomeKpis(data)
+  const kpis = elimination ? { ...built, record: null } : built
   const deadlineText = useTradeDeadlineCountdownText(tradeDeadline)
   const deadline = tradeDeadline && tradeDeadline.state !== 'none' && deadlineText ? tradeDeadline : null
   if (!kpis.record && !kpis.pointsFor && !kpis.faab && !deadline) return null
@@ -103,9 +118,10 @@ function HomeKpiRow({
           <strong className="af-num af-lh-kpi-value">
             {deadlineWeek != null ? m.kpiDeadlineWeek(deadlineWeek) : deadlineText}
           </strong>
+          {/* "Week 12" above, "2 weeks left" here — not "Trade deadline after Week 12 · 2 weeks left" again (2026-11-14). */}
           {deadlineWeek != null ? (
-            <span className="af-lh-kpi-sub" role="status">
-              {deadlineText}
+            <span className="af-lh-kpi-sub" role="status" data-testid="league-home-deadline-sub">
+              {deadline.state === 'weeks' ? m.kpiWeeksLeft(deadline.weeksLeft) : deadlineText}
             </span>
           ) : null}
         </Link>
@@ -245,6 +261,12 @@ export type LeagueHomeProps = {
    * platform named the same way, and saying it twice is noise.
    */
   coverageSlot?: React.ReactNode
+  /**
+   * The rail's row for THIS league (lib/core-app/railMatchups.ts) — the same standing the left rail draws.
+   * The guide's headline reads it so an elimination league says "6th of 7 alive · 12.4 over the cut" on
+   * both surfaces, never "0-0 · 2nd of 18" on one of them. Null keeps the head-to-head headline.
+   */
+  rail?: RailMatchup | null
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -554,6 +576,7 @@ export function LeagueHome({
   coverageSlot,
   lineups = null,
   tradeDeadline = null,
+  rail = null,
 }: LeagueHomeProps) {
   const { language } = useOptionalLanguage()
   const m = useMessages(leagueHomeMessages)
@@ -567,10 +590,9 @@ export function LeagueHome({
    * "Needs your attention": the top THREE issues, most urgent first (the redesign
    * supersedes the old one-card rule). Three, not all — the rest stay reachable
    * from the nav counts, so nothing is hidden, it just does not crowd the row.
-   * `urgent` is still the first one; the week summary leads with it.
+   * They are said once, there: the week summary's Lineup cell used to lead with the first one too.
    */
   const attention = issues.slice(0, 3)
-  const urgent = attention[0] ?? null
   const kpis = buildHomeKpis(data)
   /*
    * ON A REDRAFT HOME INSIDE THE SHELL, PAGE TOOLS GO TO THE FOOT. There the header holds nothing
@@ -579,7 +601,12 @@ export function LeagueHome({
    * support card stood between the manager and their week. Same controls, same behaviour, moved
    * below the league's content. Every other format keeps its layout.
    */
-  const toolsAtFoot = Boolean(data.redraft) && identityInShell
+  /*
+   * 2026-11-13 guide: EVERY format inside the shell puts the page tools at the foot, not only redraft. The
+   * top of the Overview carried "Imported from Sleeper · Remove from my leagues (red) · Contact support"
+   * above anything about the league; the guide's answer goes there now.
+   */
+  const toolsAtFoot = identityInShell
   const headActions = (
     <>
       <CustomizeLeagueLink returnTo={`/core?league=${encodeURIComponent(league.id)}`} className="af-btn af-btn--ghost" />
@@ -612,6 +639,178 @@ export function LeagueHome({
     />
   ) : null
 
+  /* ── The guide (2026-11-13): the answer first, then this week, then everything else folded. ── */
+  const g = useMessages(leagueOverviewGuideMessages)
+  const elimination = isEliminationLeague(rail, league.variant)
+  const preDraft = data.preSeason && rosteredPlayerCount === 0
+  const pWin = data.matchup?.available ? data.matchup.data.winProbability?.pWin ?? null : null
+  const head: OverviewHeadline = overviewHeadline({
+    rail,
+    variant: league.variant,
+    preDraft,
+    record: kpis.record,
+    matchup: data.matchup?.available ? { opponent: data.matchup.data.opponent.name, pWin } : null,
+  })
+  const headline =
+    head.kind === 'chopped'
+      ? g.headChopped(head.week)
+      : head.kind === 'alive'
+        ? g.headAlive(head.rank, head.outOf, head.overCut)
+        : head.kind === 'aliveUnranked'
+          ? g.headAliveUnranked(head.outOf)
+          : head.kind === 'preDraft'
+            ? g.headPreDraft
+            : head.kind === 'h2h'
+              ? g.headH2h(head.rank, head.teams, head.record, null)
+              : league.name
+  /* This week, once, under the headline: the game (h2h) or the cut (elimination). */
+  const weekLine = overviewWeekLine(head)
+  const winPct = pWin != null ? Math.round(Math.max(0, Math.min(1, pWin)) * 100) : null
+  const chips: Array<{ key: string; label: string; href: string }> = []
+  // The win chance is said once, on the week's Matchup cell below — not again as a chip here.
+  if (attention.length > 0) chips.push({ key: 'todo', label: g.chipToDo(issues.length), href: '#af-lh-attention-title' })
+  const cutText =
+    head.kind === 'chopped'
+      ? g.cutChopped
+      : head.kind === 'alive'
+        ? /* The headline says the points; the cell says the places — each number once. */
+          head.placesAboveCut != null && head.placesAboveCut > 0
+          ? g.chipPlaces(head.placesAboveCut)
+          : head.overCut != null
+            ? g.cutClear(head.overCut)
+            : g.cutAt
+        : g.cutUnranked
+
+  const showCommish = data.commissioner.available || 'href' in data.commissioner
+  const scoreboardSection = (
+    <>
+      {/* ── Every game in the league ────────────────────────────────── */}
+      {/*
+        ⚠ THE PAGE SHOWED ONE MATCHUP — THE VIEWER'S. On a screen whose whole
+        subject is the league, the other games were invisible: you could not see
+        who was getting blown out, who was in a shootout, or whether next week's
+        opponent was in trouble.
+      */}
+      <LeagueSection id="matchups"><StatePanel
+        title={
+          data.weekPicker && data.weekPicker.isFuture
+            ? `${copy('Week')} ${data.weekPicker.selected} ${copy('in the league')}`
+            : copy('This week in the league')
+        }
+        className="af-lh-scoreboard-panel"
+        state={data.scoreboard}
+        help={data.weekPicker ? <WeekPicker picker={data.weekPicker} /> : null}
+      >
+        {(board) => (
+          <>
+            {/*
+              ⚠ A FUTURE WEEK MUST NOT LOOK LIKE A LIVE ONE. Nothing in it has
+              happened, and the projections behind it may not even be for the
+              week on screen -- the feed only holds the week ahead, so asking
+              for week 10 in September prices the right players in the wrong
+              week. That is still the best available answer to "who looks
+              strong in week 10", and it is a different claim from a week-10
+              projection. Saying which is the whole point of this line.
+            */}
+            {data.weekPicker?.isFuture ? (
+              <p className="af-lh-weeknote">
+                {m.futureWeekNotPlayed(data.weekPicker.selected)}
+                {/* With no league-scored totals there are no numbers to vouch for; the board says why. */}
+                {board.unpricedReason ? null : (
+                  <>
+                    {' '}{copy('Every number is projected from today’s rosters')}
+                    {board.projectionBasis && !board.projectionBasis.matchesViewedWeek
+                      ? m.futureWeekBasis(board.projectionBasis.week, data.weekPicker.selected)
+                      : ''}
+                    .
+                  </>
+                )}
+              </p>
+            ) : null}
+            <LeagueScoreboardPanel
+              board={board}
+              winProbability={data.matchup.available ? data.matchup.data.winProbability : null}
+            />
+          </>
+        )}
+      </StatePanel></LeagueSection>
+
+    </>
+  )
+  const draftSection = (
+    <>
+            <LeagueSection id="draft"><StatePanel title={copy('Draft HQ')} state={data.draftHq}>
+            {(d) => (
+              <div className="af-ch">
+                <p className="af-ch-headline">{d.headline}</p>
+                {d.detail ? <p className="af-ch-detail">{d.detail}</p> : null}
+                {d.href && d.linkLabel ? (
+                  <Link href={d.href} className="af-btn af-ch-open">
+                    {copy(d.linkLabel)}
+                  </Link>
+                ) : null}
+              </div>
+            )}
+          </StatePanel></LeagueSection>
+
+    </>
+  )
+  const commishSection = (
+    <>
+            <LeagueSection id="commissioner"><StatePanel
+            title={copy('Commissioner Hub')}
+            help={<span className="af-lh-scope">{copy('Commissioners only')}</span>}
+            state={data.commissioner}
+            unavailableFooter={
+              // A commissioner whose league can't be judged right now still gets the hub, which
+              // carries the re-sync card; a non-commissioner's unavailable state has no href.
+              !data.commissioner.available && 'href' in data.commissioner ? (
+                <Link href={data.commissioner.href} className="af-btn af-ch-open">
+                  {copy('Open the commissioner hub')}
+                </Link>
+              ) : null
+            }
+          >
+            {(hub) => (
+              <div className="af-ch">
+                {/*
+                  THE TWO FACTS A COMMISSIONER OPENS THE APP FOR: is anybody
+                  checked out, and who. Everything else belongs behind the link
+                  rather than crammed into a preview card.
+                */}
+                {/*
+                  One sentence with the names (2026-11-14) — not two count tiles plus a names line saying
+                  the same numbers. A league where EVERYONE is quiet is a lull, and naming the whole league
+                  would read as an accusation — the hub's abandoned check says the same.
+                */}
+                {hub.totalManagers > 0 && hub.inactiveCount === hub.totalManagers ? (
+                  <p className="af-ch-names" data-testid="league-home-commish-line">{copy('Nobody in this league has been active lately — a quiet stretch.')}</p>
+                ) : hub.inactiveCount > 0 ? (
+                  <p className="af-ch-names" data-testid="league-home-commish-line">
+                    {g.commishInactive(hub.inactiveCount, hub.totalManagers)} {hub.inactiveNames.join(', ')}
+                    {hub.inactiveCount > hub.inactiveNames.length
+                      ? m.inactiveMore(hub.inactiveCount - hub.inactiveNames.length)
+                      : ''}
+                    .
+                  </p>
+                ) : (
+                  <p className="af-ch-names af-ch-names--ok" data-testid="league-home-commish-line">{copy('Nobody is inactive.')}</p>
+                )}
+                {/* Absent, not zero, where at-risk is not measured (imported leagues). */}
+                {hub.atRiskCount != null && hub.atRiskCount > 0 ? (
+                  <p className="af-ch-names">{g.commishAtRisk(hub.atRiskCount)}</p>
+                ) : null}
+                <p className="af-ch-basis">{copy('Judged by')} {hub.basis}.</p>
+
+                <Link href={hub.href} className="af-btn af-ch-open">
+                  {copy('Open the commissioner hub')}
+                </Link>
+              </div>
+            )}
+          </StatePanel></LeagueSection>
+    </>
+  )
+
   return (
     <LeagueDisplayPreferences hidden={hiddenSections}><div className="af-lh" data-redraft={data.redraft ? 'true' : undefined} data-dynasty={data.dynasty ? 'true' : undefined}>
       {/* ── League identity ─────────────────────────────────────────── */}
@@ -640,10 +839,46 @@ export function LeagueHome({
           </div>
         </div>
 
+        {!identityInShell && <LeagueFormatFaqLink href={league.formatFaqHref} league={{ leagueType: league.format, leagueVariant: league.variant }} />}
         {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
       </header>
+      <section className="af-lho-head" data-testid="league-overview-guide" data-format={elimination ? 'elimination' : 'h2h'}>
+        <span className="af-label">{g.eyebrow}</span>
+        <p className="af-display af-lho-title">{headline}</p>
+        {/*
+          2026-11-14: the intro ("This league at a glance … Official moves are made on Sleeper") and the
+          "Why it matters" paragraph are gone. Where official moves happen is said once, by the banner
+          above every league tab; what this week is, is said here.
+        */}
+        {weekLine ? (
+          <Link
+            className="af-lho-week"
+            data-testid="league-overview-week"
+            data-week={weekLine.kind}
+            href={weekLine.kind === 'game' ? `/core/matchup?league=${encodeURIComponent(league.id)}` : `/core/standings?league=${encodeURIComponent(league.id)}`}
+          >
+            {weekLine.kind === 'game' ? g.weekVs(weekLine.opponent, weekLine.winPct) : cutText} <span aria-hidden>→</span>
+          </Link>
+        ) : null}
+        {chips.length > 0 ? (
+          <div className="af-lho-chips">
+            {chips.map((c) => (
+              <Link key={c.key} className="af-lho-chip" data-chip={c.key} href={c.href}>
+                {c.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </section>
       {/* When the draft is and what you owe — renders nothing when neither applies (components/league-home). */}
       <MemberStatusCard leagueId={league.id} />
+
+      {/*
+        Bring the rest of the league (2026-11-15): while teams still have no AllFantasy manager, the
+        invite — carrying this member's referral code — sits on the league's own home, not only behind
+        Settings and Portfolio. Renders nothing while loading, on a failed read, or once every team is claimed.
+      */}
+      <LeagueInvitePanel leagueId={league.id} leagueName={league.name} compact hideWhenFull />
 
       {/* Redraft season race — imported redraft leagues only (lib/core-app/redraftLeagueHome.ts); absent otherwise. */}
       {data.redraft ? <RedraftHomeDeck deck={data.redraft} leagueId={league.id} season={league.season} /> : null}
@@ -651,7 +886,8 @@ export function LeagueHome({
       {/* Dynasty Era deck — dynasty leagues only (lib/core-app/dynastyLeagueHome.ts); absent otherwise. */}
       {data.dynasty ? <DynastyHomeDeck deck={data.dynasty} leagueId={league.id} /> : null}
 
-      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} />
+      {/* The record tile only when the headline does not already say it ("say each number once"). */}
+      <HomeKpiRow data={data} tradeDeadline={tradeDeadline} elimination={elimination || head.kind === 'h2h'} />
 
       {toolsAtFoot ? null : importedActions}
 
@@ -666,28 +902,147 @@ export function LeagueHome({
 
       <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
-          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
+          <div><span className="af-label">{g.nextSteps}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
           <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
         </div>
-        <div className="af-lh-week-summary-grid">
+        <div className="af-lh-week-summary-grid" data-cells="2">
           <Link href={`/core/my-team?league=${league.id}`}>
-            <span className="af-label">{copy('Lineup')}</span>
-            <strong>{data.preSeason && rosteredPlayerCount === 0 ? copy('Your roster is awaiting the draft') : urgent ? urgent.title : copy('Review your starters')}</strong>
-            <span>{data.preSeason && rosteredPlayerCount === 0 ? `${teamDirectory.length} ${copy('teams imported')}` : urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
+            <span className="af-label">{g.lineup}</span>
+            <strong>{data.preSeason && rosteredPlayerCount === 0 ? copy('Your roster is awaiting the draft') : g.reviewStarters}</strong>
+            <span>{data.preSeason && rosteredPlayerCount === 0 ? `${teamDirectory.length} ${copy('teams imported')}` : g.checkKickoff} →</span>
           </Link>
-          <Link href={`/core/matchup?league=${league.id}`}>
-            <span className="af-label">{copy('Matchup')}</span>
-            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : data.preSeason ? copy('Matchups begin after the draft') : copy('Open matchup')}</strong>
-            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : data.preSeason ? copy('No games have been scored yet') : copy('Matchup data is not ready')} →</span>
-          </Link>
+          {/* The game and the cut are said once, under the headline (2026-11-14); this row is what to do. */}
           <div className="af-lh-week-summary-moves">
             <span className="af-label">{copy('Moves')}</span>
-            <strong>{copy('Plan your next move')}</strong>
+            <strong>{g.planMove}</strong>
             <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
           </div>
         </div>
       </section></LeagueSection>
 
+      {elimination ? null : scoreboardSection}
+
+      {/* ── Main / side ─────────────────────────────────────────────── */}
+      <div className="af-lh-grid">
+        <div className="af-lh-main">
+          {/*
+            ⚠ THE "THIS WEEK'S MATCHUP" PANEL WAS HERE AND HAS BEEN DELETED.
+            The scoreboard above shows every game in the league with yours
+            marked and sorted first, so this panel printed week 1 a second time
+            a few hundred pixels lower.
+
+            The one thing it had that the scoreboard did not is the win
+            probability, which now renders on your own game up there rather
+            than being lost with the panel.
+          */}
+
+          {/* Needs your attention — up to three, each with the verb that fixes it */}
+          {attention.length > 0 ? (
+            <section className="af-lh-attention" aria-labelledby="af-lh-attention-title" data-testid="league-home-attention">
+              <h2 id="af-lh-attention-title" className="af-label af-lh-attention-title">
+                {m.attentionTitle}
+              </h2>
+              <ul className="af-lh-attention-list">
+                {attention.map((issue, i) => (
+                  <li
+                    key={`${issue.title}-${i}`}
+                    className={`af-card af-issue af-lh-urgent${i > 0 ? ' af-lh-urgent--minor' : ''}`}
+                    data-severity={issue.severity}
+                  >
+                    <span className="af-lh-urgent-glyph" aria-hidden>
+                      {issue.glyph}
+                    </span>
+                    <div className="af-lh-urgent-body">
+                      <h3 className="af-lh-urgent-title">{issue.title}</h3>
+                      <p className="af-lh-urgent-meta">{issue.meta}</p>
+                    </div>
+                    {issue.action ? (
+                      <Link
+                        href={issue.action.href}
+                        className={i === 0 ? 'af-btn af-lh-urgent-cta' : 'af-btn af-btn--ghost af-lh-urgent-cta'}
+                        {...(issue.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                      >
+                        {copy(issue.action.label)}
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {/* Draft HQ + Commissioner Hub, two-up — Draft HQ only before the draft (else folded), the hub only for a commissioner. */}
+          <div className="af-lh-two">
+            {preDraft ? draftSection : null}
+            {showCommish ? commishSection : null}
+          </div>
+
+          {/* Standings */}
+          <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
+            {(rows) => (
+              <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
+                {/*
+                  Column heads, because three numeric columns without them is a
+                  guessing game. The budget column only applies to confirmed FAAB leagues.
+                */}
+                <div className="af-standings-head" aria-hidden>
+                  <span />
+                  <span />
+                  <span className="af-label">W-L</span>
+                  <span className="af-label">PF</span>
+                  {data.faabEnabled === true ? <span className="af-label">FAAB</span> : null}
+                </div>
+                <ol className="af-standings">
+                  {standingsRowsToShow(rows).map((t, i) => (
+                    <li key={t.teamId} className="af-standings-row" data-you={t.isYou}>
+                      <span className="af-standings-rank af-num">{t.rank ?? i + 1}</span>
+                      <span className="af-standings-name">
+                        {t.teamName}
+                        {t.isYou ? <span className="af-standings-you"> — {copy('you')}</span> : null}
+                      </span>
+                      <span className="af-standings-record af-num">
+                        {t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`}
+                      </span>
+                      <span className="af-standings-pf af-num">{Math.round(t.pointsFor)}</span>
+                      {/*
+                        ⚠ A DASH, NOT $0, WHEN WE DO NOT KNOW. The importer stores
+                        null whenever it could not compute budget minus spend, and
+                        a non-FAAB league can retain irrelevant imported balances.
+                        "$0" would tell a manager holding a full budget that they
+                        are broke.
+                      */}
+                      {data.faabEnabled === true ? <span className="af-standings-faab af-num">
+                        {t.faabRemaining == null ? '\u2014' : `$${t.faabRemaining}`}
+                      </span> : null}
+                    </li>
+                  ))}
+                </ol>
+                {/* The points are in the PF column; the bar chart that drew them again is gone (2026-11-14). */}
+                <Link className="af-lh-standings-all" data-testid="league-home-standings-all" href={`/core/standings?league=${encodeURIComponent(league.id)}`}>
+                  {g.fullStandings} <span aria-hidden>→</span>
+                </Link>
+              </div>
+            )}
+          </StatePanel></LeagueSection>
+        </div>
+
+        {/*
+          The Ask Chimmy card that sat here is gone (2026-11-14): the league bar's Ask Chimmy and the chat
+          button already open Chimmy on this league, and its "Make changes in Sleeper — AllFantasy only
+          reads your league" contradicted the banner above every league tab.
+        */}
+      </div>
+
+      {/*
+        ── More about this league (2026-11-13 guide) ──────────────────
+        Reference, history and league-wide boards: one tap away, not the page. The import coverage panel,
+        the team directory, the paired-league offer, the season timeline, the power board, league buzz,
+        rivalry radar and the prediction leaderboard — plus Draft HQ once the draft is done, and the
+        league's every-game board in an elimination league, which has no head-to-head games.
+      */}
+      <details className="af-lho-more" data-testid="league-overview-more">
+        <summary>{g.more}</summary>
+        <div className="af-lho-more-body">
       {/*
         ── What this import could not bring across ───────────────────
         Top of the screen, above everything, because it changes how to read every
@@ -761,56 +1116,7 @@ export function LeagueHome({
         )}
       </StatePanel></LeagueSection>}
 
-      {/* ── Every game in the league ────────────────────────────────── */}
-      {/*
-        ⚠ THE PAGE SHOWED ONE MATCHUP — THE VIEWER'S. On a screen whose whole
-        subject is the league, the other games were invisible: you could not see
-        who was getting blown out, who was in a shootout, or whether next week's
-        opponent was in trouble.
-      */}
-      <LeagueSection id="matchups"><StatePanel
-        title={
-          data.weekPicker && data.weekPicker.isFuture
-            ? `${copy('Week')} ${data.weekPicker.selected} ${copy('in the league')}`
-            : copy('This week in the league')
-        }
-        className="af-lh-scoreboard-panel"
-        state={data.scoreboard}
-        help={data.weekPicker ? <WeekPicker picker={data.weekPicker} /> : null}
-      >
-        {(board) => (
-          <>
-            {/*
-              ⚠ A FUTURE WEEK MUST NOT LOOK LIKE A LIVE ONE. Nothing in it has
-              happened, and the projections behind it may not even be for the
-              week on screen -- the feed only holds the week ahead, so asking
-              for week 10 in September prices the right players in the wrong
-              week. That is still the best available answer to "who looks
-              strong in week 10", and it is a different claim from a week-10
-              projection. Saying which is the whole point of this line.
-            */}
-            {data.weekPicker?.isFuture ? (
-              <p className="af-lh-weeknote">
-                {m.futureWeekNotPlayed(data.weekPicker.selected)}
-                {/* With no league-scored totals there are no numbers to vouch for; the board says why. */}
-                {board.unpricedReason ? null : (
-                  <>
-                    {' '}{copy('Every number is projected from today’s rosters')}
-                    {board.projectionBasis && !board.projectionBasis.matchesViewedWeek
-                      ? m.futureWeekBasis(board.projectionBasis.week, data.weekPicker.selected)
-                      : ''}
-                    .
-                  </>
-                )}
-              </p>
-            ) : null}
-            <LeagueScoreboardPanel
-              board={board}
-              winProbability={data.matchup.available ? data.matchup.data.winProbability : null}
-            />
-          </>
-        )}
-      </StatePanel></LeagueSection>
+      {elimination ? scoreboardSection : null}
 
       {/* ── Power board: all-play + movement ────────────────────────── */}
       {/*
@@ -897,246 +1203,7 @@ export function LeagueHome({
         )}
       </StatePanel></LeagueSection>
 
-      {/* ── Main / side ─────────────────────────────────────────────── */}
-      <div className="af-lh-grid">
-        <div className="af-lh-main">
-          {/*
-            ⚠ THE "THIS WEEK'S MATCHUP" PANEL WAS HERE AND HAS BEEN DELETED.
-            The scoreboard above shows every game in the league with yours
-            marked and sorted first, so this panel printed week 1 a second time
-            a few hundred pixels lower.
-
-            The one thing it had that the scoreboard did not is the win
-            probability, which now renders on your own game up there rather
-            than being lost with the panel.
-          */}
-
-          {/* Needs your attention — up to three, each with the verb that fixes it */}
-          {attention.length > 0 ? (
-            <section className="af-lh-attention" aria-labelledby="af-lh-attention-title" data-testid="league-home-attention">
-              <h2 id="af-lh-attention-title" className="af-label af-lh-attention-title">
-                {m.attentionTitle}
-              </h2>
-              <ul className="af-lh-attention-list">
-                {attention.map((issue, i) => (
-                  <li
-                    key={`${issue.title}-${i}`}
-                    className={`af-card af-issue af-lh-urgent${i > 0 ? ' af-lh-urgent--minor' : ''}`}
-                    data-severity={issue.severity}
-                  >
-                    <span className="af-lh-urgent-glyph" aria-hidden>
-                      {issue.glyph}
-                    </span>
-                    <div className="af-lh-urgent-body">
-                      <h3 className="af-lh-urgent-title">{issue.title}</h3>
-                      <p className="af-lh-urgent-meta">{issue.meta}</p>
-                    </div>
-                    {issue.action ? (
-                      <Link
-                        href={issue.action.href}
-                        className={i === 0 ? 'af-btn af-lh-urgent-cta' : 'af-btn af-btn--ghost af-lh-urgent-cta'}
-                        {...(issue.action.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                      >
-                        {copy(issue.action.label)}
-                      </Link>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {/* Draft HQ + Commissioner Hub, two-up */}
-          <div className="af-lh-two">
-            <LeagueSection id="draft"><StatePanel title={copy('Draft HQ')} state={data.draftHq}>
-            {(d) => (
-              <div className="af-ch">
-                <p className="af-ch-headline">{d.headline}</p>
-                {d.detail ? <p className="af-ch-detail">{d.detail}</p> : null}
-                {d.href && d.linkLabel ? (
-                  <Link href={d.href} className="af-btn af-ch-open">
-                    {copy(d.linkLabel)}
-                  </Link>
-                ) : null}
-              </div>
-            )}
-          </StatePanel></LeagueSection>
-
-            <LeagueSection id="commissioner"><StatePanel
-            title={copy('Commissioner Hub')}
-            help={<span className="af-lh-scope">{copy('Commissioners only')}</span>}
-            state={data.commissioner}
-            unavailableFooter={
-              // A commissioner whose league can't be judged right now still gets the hub, which
-              // carries the re-sync card; a non-commissioner's unavailable state has no href.
-              !data.commissioner.available && 'href' in data.commissioner ? (
-                <Link href={data.commissioner.href} className="af-btn af-ch-open">
-                  {copy('Open the commissioner hub')}
-                </Link>
-              ) : null
-            }
-          >
-            {(hub) => (
-              <div className="af-ch">
-                {/*
-                  THE TWO FACTS A COMMISSIONER OPENS THE APP FOR: is anybody
-                  checked out, and who. Everything else belongs behind the link
-                  rather than crammed into a preview card.
-                */}
-                <div className="af-ch-tiles">
-                  <div className="af-ch-tile" data-tone={hub.inactiveCount > 0 ? 'bad' : 'ok'}>
-                    <span className="af-ch-n af-num">{hub.inactiveCount}</span>
-                    <span className="af-label">{copy('Inactive')}</span>
-                  </div>
-                  {/* Absent, not zero, where at-risk is not measured (imported leagues). */}
-                  {hub.atRiskCount != null ? (
-                    <div className="af-ch-tile" data-tone={hub.atRiskCount > 0 ? 'warn' : 'ok'}>
-                      <span className="af-ch-n af-num">{hub.atRiskCount}</span>
-                      <span className="af-label">{copy('At risk')}</span>
-                    </div>
-                  ) : null}
-                  <div className="af-ch-tile">
-                    <span className="af-ch-n af-num">{hub.totalManagers}</span>
-                    <span className="af-label">{copy('Managers')}</span>
-                  </div>
-                </div>
-
-                {/*
-                  Named rather than counted. "3 inactive" is a statistic; three
-                  names is something to act on this afternoon. A league where
-                  EVERYONE is quiet is a lull, and naming the whole league would
-                  read as an accusation — the hub's abandoned check says the same.
-                */}
-                {hub.totalManagers > 0 && hub.inactiveCount === hub.totalManagers ? (
-                  <p className="af-ch-names">{copy('Nobody in this league has been active lately — a quiet stretch.')}</p>
-                ) : hub.inactiveNames.length > 0 ? (
-                  <p className="af-ch-names">
-                    {copy('Inactive:')} {hub.inactiveNames.join(', ')}
-                    {hub.inactiveCount > hub.inactiveNames.length
-                      ? m.inactiveMore(hub.inactiveCount - hub.inactiveNames.length)
-                      : ''}
-                  </p>
-                ) : (
-                  <p className="af-ch-names af-ch-names--ok">{copy('Nobody is inactive.')}</p>
-                )}
-                <p className="af-ch-names">{copy('Judged by')} {hub.basis}.</p>
-
-                <Link href={hub.href} className="af-btn af-ch-open">
-                  {copy('Open the commissioner hub')}
-                </Link>
-              </div>
-            )}
-          </StatePanel></LeagueSection>
-          </div>
-
-          {/* Standings */}
-          <LeagueSection id="standings"><StatePanel title={copy('Standings')} state={data.standings}>
-            {(rows) => (
-              <div className="af-standings-wrap" data-faab={data.faabEnabled === true}>
-                <WorkbookBarChart
-                  title={copy('Points for by team')}
-                  subtitle={copy('Current standings leaders')}
-                  valueLabel={copy('Points')}
-                  data={rows.slice(0, 8).map((team) => ({
-                    key: team.teamId,
-                    label: team.teamName,
-                    value: team.pointsFor,
-                    displayValue: Math.round(team.pointsFor).toLocaleString(getAppIntlLocale()),
-                    tone: team.isYou ? 'good' : 'accent',
-                  }))}
-                />
-                {/*
-                  Column heads, because three numeric columns without them is a
-                  guessing game. The budget column only applies to confirmed FAAB leagues.
-                */}
-                <div className="af-standings-head" aria-hidden>
-                  <span />
-                  <span />
-                  <span className="af-label">W-L</span>
-                  <span className="af-label">PF</span>
-                  {data.faabEnabled === true ? <span className="af-label">FAAB</span> : null}
-                </div>
-                <ol className="af-standings">
-                  {rows.slice(0, 6).map((t, i) => (
-                    <li key={t.teamId} className="af-standings-row" data-you={t.isYou}>
-                      <span className="af-standings-rank af-num">{t.rank ?? i + 1}</span>
-                      <span className="af-standings-name">
-                        {t.teamName}
-                        {t.isYou ? <span className="af-standings-you"> — {copy('you')}</span> : null}
-                      </span>
-                      <span className="af-standings-record af-num">
-                        {t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`}
-                      </span>
-                      <span className="af-standings-pf af-num">{Math.round(t.pointsFor)}</span>
-                      {/*
-                        ⚠ A DASH, NOT $0, WHEN WE DO NOT KNOW. The importer stores
-                        null whenever it could not compute budget minus spend, and
-                        a non-FAAB league can retain irrelevant imported balances.
-                        "$0" would tell a manager holding a full budget that they
-                        are broke.
-                      */}
-                      {data.faabEnabled === true ? <span className="af-standings-faab af-num">
-                        {t.faabRemaining == null ? '\u2014' : `$${t.faabRemaining}`}
-                      </span> : null}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
-          </StatePanel></LeagueSection>
-        </div>
-
-        <aside className="af-lh-side">
-          {/*
-            ── Ask Chimmy ───────────────────────────────────────────────
-            The handoff's open item resolves here: the screenshot label reads
-            CHIMMY INTELLIGENCE, ship it as ASK CHIMMY to match the rest of the
-            product.
-
-            ⚠ THIS CARD SAID THE LINEUP AND MATCHUP READS "ARE NOT INGESTED FOR
-            THIS LEAGUE", AND THAT STOPPED BEING TRUE. The panel it was pointing
-            at is now the scoreboard, which resolves every game in the week and
-            prices both lineups under the league's own scoring. Repeating the
-            old sentence beneath a working scoreboard is the same failure as the
-            buzz panel blaming the data for a query nobody had written.
-
-            So the card now offers the question when there is something to
-            reason about, and says what is missing when there is not.
-          */}
-          <LeagueSection id="chat"><Panel title={copy('Ask Chimmy')} help={<span className="af-lh-scope">{copy('This league only')}</span>}>
-            {data.scoreboard.available ? (
-              <>
-                <p className="af-lh-chimmy-note">
-                  {copy('Chimmy reasons about this league only from here — this week’s games, your lineup and the league’s own scoring.')}
-                </p>
-                <button
-                  type="button"
-                  className="af-btn af-lh-ask"
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent(COMMS_OPEN_EVENT, {
-                        detail: {
-                          tab: 'chimmy',
-                          // Seeded, never sent — see the note on COMMS_OPEN_EVENT.
-                          prefill: m.askWeekPrefill(data.scoreboard.available ? data.scoreboard.data.week : '', league.name),
-                        },
-                      }),
-                    )
-                  }
-                >
-                  {copy('Ask about this week')}
-                </button>
-              </>
-            ) : (
-              <p className="af-lh-chimmy-note">
-                {copy('Chimmy reasons about this league only from here.')} {data.scoreboard.reason} — {copy('so there is nothing to reason about this week yet.')}
-              </p>
-            )}
-            <p className="af-lh-readonly-note">
-              {m.readOnlyNote(platformLabel)}
-            </p>
-          </Panel></LeagueSection>
-
+            {preDraft ? null : draftSection}
           <LeagueSection id="activity"><StatePanel title={copy('League buzz')} state={data.buzz}>
             {(items) => (
               <ul className="af-buzz">
@@ -1260,11 +1327,11 @@ export function LeagueHome({
               </div>
             )}
           </StatePanel></LeagueSection>
-        </aside>
-      </div>
-
       {/* The league chat's prediction polls, scored over the season. AF-hosted leagues only. */}
       <LeagueSection id="insights">{isNativePlatform(league.platform) ? <PredictionLeaderboard leagueId={league.id} /> : null}</LeagueSection>
+
+        </div>
+      </details>
 
       {/*
         ── All leagues ──────────────────────────────────────────────────

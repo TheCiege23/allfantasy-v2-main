@@ -20,7 +20,6 @@ import { ensureDraftPoolReady, getWarmDraftPoolSnapshotFast } from '@/lib/draft-
 import { getAiAdpForLeague } from '@/lib/ai-adp-engine'
 import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-resolver'
 import { resolveCurrentOnTheClock } from '@/lib/live-draft-engine/CurrentOnTheClockResolver'
-import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
 import { draftPoolRowMatchesEligiblePositions } from '@/lib/draft-room/draft-pool-eligible-positions'
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/RosterFitValidation'

@@ -6,7 +6,7 @@ import { fetchWithMidSeasonConfirmation } from '@/lib/league/midSeasonConfirmati
 
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
-export type AutosaveOptions = {
+type AutosaveOptions = {
   /**
    * Asked when the server answers 409 `mid_season_confirmation_required` (a scoring or roster key
    * changed after the season started). Yes re-sends with `confirmMidSeasonChange: true`; no leaves

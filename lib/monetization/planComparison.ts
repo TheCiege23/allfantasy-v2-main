@@ -38,7 +38,7 @@ const TIER_PLAN_IDS: Record<ComparisonTier, SubscriptionPlanId[]> = {
 /** One cell: included, not included, coming soon, or a short limit ("2 a day"). */
 export type ComparisonCell = { kind: 'yes' } | { kind: 'no' } | { kind: 'soon' } | { kind: 'text'; text: string }
 
-export type ComparisonRow = {
+type ComparisonRow = {
   id: string
   label: string
   /** One plain sentence under the label. */

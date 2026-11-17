@@ -8,7 +8,7 @@
 import { interpolateTemplate } from '@/lib/i18n/interpolate'
 import type { ChangeLine, RuleText, RuleVar } from './types'
 
-export type Translate = (key: string) => string
+type Translate = (key: string) => string
 
 function locale(lang: string): string {
   return lang === 'es' ? 'es-ES' : 'en-US'

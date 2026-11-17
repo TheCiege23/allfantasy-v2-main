@@ -12,7 +12,7 @@ import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
 import { stripCommissionerFlagsFromUnprovenClaims } from '../espn/espnPublicMemberImport'
 
-export interface SleeperLeagueBootstrapResult {
+interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
   rostersCreated: number
   /**
@@ -340,6 +340,10 @@ export async function bootstrapLeagueFromNormalizedImport(
       players: r.player_ids,
       player_metadata: snapshotImportedPlayerMetadata(r.player_ids, normalized.player_map),
       starters: r.starter_ids,
+      // ESPN only: the provider's own slot per starter, so My Team need not guess FLEX from a position.
+      ...(r.starter_slot_by_id && Object.keys(r.starter_slot_by_id).length > 0
+        ? { starter_slot_by_id: r.starter_slot_by_id }
+        : {}),
       reserve: r.reserve_ids ?? [],
       taxi: r.taxi_ids ?? [],
       lineup_sections: {
@@ -530,12 +534,3 @@ export async function bootstrapLeagueFromNormalizedImport(
   }
 }
 
-/**
- * Backward-compatible alias for older Sleeper-specific call sites.
- */
-export async function bootstrapLeagueFromSleeperImport(
-  leagueId: string,
-  normalized: NormalizedImportResult
-): Promise<SleeperLeagueBootstrapResult> {
-  return bootstrapLeagueFromNormalizedImport(leagueId, normalized)
-}

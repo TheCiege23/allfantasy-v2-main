@@ -86,19 +86,13 @@ const TAG_LABELS: Record<string, string> = {
   negative_trend: 'Trend',
 }
 
-export function scoreToTrustState(score: number): TrustState {
-  if (score >= 70) return 'high'
-  if (score >= 45) return 'medium'
-  return 'learning'
-}
-
-export function confidenceLevelToTrustState(level: 'high' | 'learning' | 'evolving'): TrustState {
+function confidenceLevelToTrustState(level: 'high' | 'learning' | 'evolving'): TrustState {
   if (level === 'high') return 'high'
   if (level === 'evolving') return 'medium'
   return 'learning'
 }
 
-export function mapRiskTagToChip(tag: string): TrustRiskChip {
+function mapRiskTagToChip(tag: string): TrustRiskChip {
   return {
     tag,
     label: TAG_LABELS[tag] || tag.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
@@ -131,11 +125,11 @@ export function buildDataSources(params: {
   return sources
 }
 
-export function buildImprovementHints(state: TrustState, riskTags: string[]): string[] {
+function buildImprovementHints(state: TrustState, riskTags: string[]): string[] {
   const hints: string[] = []
   if (state === 'learning') {
     hints.push('More historical trade data would improve accuracy.')
-    hints.push('Playing more seasons helps the AI learn your patterns.')
+    hints.push('Playing more seasons helps Chimmy learn your patterns.')
   }
   if (state === 'medium') {
     hints.push('Simulating outcomes can help clarify edge cases.')
@@ -149,7 +143,7 @@ export function buildImprovementHints(state: TrustState, riskTags: string[]): st
   return hints
 }
 
-export function buildKnownUnknowns(riskTags: string[]): string[] {
+function buildKnownUnknowns(riskTags: string[]): string[] {
   const unknowns: string[] = []
   if (riskTags.includes('injury_risk')) unknowns.push('Injury timeline and recovery trajectory.')
   if (riskTags.includes('role_uncertainty')) unknowns.push('Final depth chart and snap share allocation.')

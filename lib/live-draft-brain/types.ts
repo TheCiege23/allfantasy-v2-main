@@ -93,7 +93,7 @@ export interface LiveDraftBrainContext {
 }
 
 /** Metadata for filtering external/site rows to comparable draft contexts only. */
-export interface AdpSourceMeta {
+interface AdpSourceMeta {
   sport: string
   formatKey?: string
   matchesContext: boolean
@@ -125,7 +125,7 @@ export interface CombinedAdpInputs {
   auctionInflationScore?: number
 }
 
-export interface ManagerTendencyHint {
+interface ManagerTendencyHint {
   managerId: string
   displayName?: string
   /** 0–1 weights: value vs upside vs youth */
@@ -134,7 +134,7 @@ export interface ManagerTendencyHint {
   youthLean?: number
 }
 
-export interface LiveDraftBrainTeamState {
+interface LiveDraftBrainTeamState {
   teamRoster: Array<{ position: string; team?: string | null; byeWeek?: number | null; playerName?: string }>
   rosterSlots: string[]
   /** Optional projections keyed by player key */

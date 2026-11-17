@@ -15,7 +15,7 @@ test.describe('@advantage dashboard click audit', () => {
 
     await expect(page.getByTestId('advantage-hero-summary')).toContainText(/advantage pulse/i)
     await expect(page.getByTestId('advantage-card-trend-alerts')).toContainText('Sky Moore')
-    await expect(page.getByTestId('advantage-card-coach-advice')).toContainText('Open Waiver AI')
+    await expect(page.getByTestId('advantage-card-coach-advice')).toContainText('Open Waiver Chimmy')
     await expect(page.getByTestId('advantage-card-power-rankings')).toContainText('Alpha Gridiron')
     await expect(page.getByTestId('advantage-card-simulation-insights')).toContainText(
       'NFL Alpha'

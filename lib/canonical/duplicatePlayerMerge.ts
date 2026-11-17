@@ -64,7 +64,7 @@ import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolut
 /** Providers that may end up with two ids on one merged player. See the header for why. */
 export const PROVIDERS_ALLOWED_TWICE: ReadonlySet<string> = new Set(['thesportsdb'])
 
-export type CanonicalPlayerRow = {
+type CanonicalPlayerRow = {
   id: string
   name: string
   birthDate: string | Date | null
@@ -72,11 +72,11 @@ export type CanonicalPlayerRow = {
   providerIds: Record<string, unknown> | null
 }
 
-export type ProviderIdentityRow = { playerId: string; provider: string; providerPlayerId: string }
+type ProviderIdentityRow = { playerId: string; provider: string; providerPlayerId: string }
 
-export type DuplicateMerge = { dupId: string; keepId: string }
+type DuplicateMerge = { dupId: string; keepId: string }
 
-export type SkippedDuplicate = {
+type SkippedDuplicate = {
   dupId: string
   reason: 'ambiguous_twin' | 'provider_clash' | 'two_crosswalk_ids' | 'birthday_contradicts'
   /** For a clash: the providers that would carry two different ids. */
@@ -84,7 +84,7 @@ export type SkippedDuplicate = {
   keepIds: string[]
 }
 
-export type DuplicateMergePlan = {
+type DuplicateMergePlan = {
   merges: DuplicateMerge[]
   skipped: SkippedDuplicate[]
   /** Rows with no Sleeper id that could not even be considered: no birthday or no name. */
@@ -281,9 +281,9 @@ export function foldTargetsForUnkeyedGroups(
 /** Providers a Rolling Insights copy may carry. `backfill` is the backfill's own bookkeeping. */
 const CROSSWALK_COPY_PROVIDERS: ReadonlySet<string> = new Set(['rolling_insights', 'backfill'])
 
-export type CrosswalkLink = { rollingInsightsId: string; sleeperId: string }
+type CrosswalkLink = { rollingInsightsId: string; sleeperId: string }
 
-export type CrosswalkDecision =
+type CrosswalkDecision =
   | { target: string; rollingInsightsId: string }
   | { skip: 'not_a_copy' | 'no_link' }
   | { skip: SkippedDuplicate['reason']; keepIds: string[] }
@@ -325,7 +325,7 @@ export function crosswalkDecision(copy: {
   return { target, rollingInsightsId: ri }
 }
 
-export type CrosswalkMergePlan = {
+type CrosswalkMergePlan = {
   merges: DuplicateMerge[]
   skipped: SkippedDuplicate[]
   /** Rolling Insights copies whose id the identity map does not link to any Sleeper player. */

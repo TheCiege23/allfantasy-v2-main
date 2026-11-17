@@ -163,4 +163,3 @@ function Pick({ label, name }: { label: string; name: string | null }) {
   )
 }
 
-export default LeagueStartVsCard

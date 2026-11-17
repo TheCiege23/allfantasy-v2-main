@@ -42,6 +42,9 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
+const native = vi.hoisted(() => ({ grade: vi.fn() }))
+vi.mock('@/lib/decision-os/trade/nativeCompletedGrades', () => ({ gradeNativeCompletedTrades: native.grade }))
+
 import { buildLeagueTradeHistoryOutcome } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 
 const playerItem = (ref: string, from: string, to: string, metadata: Record<string, unknown> = {}) => ({ itemType: 'player', itemReference: ref, fromRosterId: from, toRosterId: to, faabAmount: null, metadata })
@@ -91,6 +94,58 @@ describe('a native league: its AllFantasy trades ARE its history', () => {
     if (out.kind === 'ok') expect(out.text).toContain('No trade matches that filter.')
     const all = await buildLeagueTradeHistoryOutcome('lg', 'u-a', { manager: 'blitz' })
     if (all.kind === 'ok') expect(all.text.match(/^- /gm)?.length).toBe(1)
+  })
+})
+
+describe('a native league: each completed trade carries its frozen original grade', () => {
+  beforeEach(() => {
+    db.league = { platform: 'manual', platformLeagueId: null, sport: 'NFL', season: 2026 }
+    native.grade.mockReset()
+    native.grade.mockResolvedValue(
+      new Map([['t1', { graded: true, lettersByRoster: { 'r-a': 'B+', 'r-b': 'C' }, moment: 'when it was proposed (Oct 10)', basis: 'proposal_receipt' }]]),
+    )
+  })
+
+  it('prints the frozen letters for both teams, as the asker, and tells the route the letters', async () => {
+    const onGrade = vi.fn()
+    const out = await buildLeagueTradeHistoryOutcome('lg', 'u-a', { frozenGrades: true, onGrade })
+    expect(out.kind).toBe('ok')
+    if (out.kind !== 'ok') return
+    expect(native.grade).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'lg', userId: 'u-a', tradeIds: ['t1'] }))
+    expect(native.grade.mock.calls[0]![0].teamsOf('t1')).toEqual(['r-a', 'r-b'])
+    expect(out.text).toContain("AllFantasy grade (the frozen original, on this league's values when it was proposed (Oct 10)): B+ for Gridiron Gang (alex), C for Blitz (blake).")
+    expect(out.text).toContain('that letter is FROZEN')
+    expect(onGrade).toHaveBeenCalledWith(expect.objectContaining({ letters: ['B+', 'C'] }))
+  })
+
+  it('puts each letter on its own team, by roster, and prints none when a team has no letter', async () => {
+    native.grade.mockResolvedValue(new Map([['t1', { graded: true, lettersByRoster: { 'r-b': 'C', 'r-a': 'B+' }, moment: 'today', basis: 'completed_original' }]]))
+    const out = await buildLeagueTradeHistoryOutcome('lg', 'u-a', { frozenGrades: true })
+    if (out.kind === 'ok') expect(out.text).toContain('B+ for Gridiron Gang (alex), C for Blitz (blake).')
+
+    native.grade.mockResolvedValue(new Map([['t1', { graded: true, lettersByRoster: { 'r-a': 'B+' }, moment: 'today', basis: 'completed_original' }]]))
+    const half = await buildLeagueTradeHistoryOutcome('lg', 'u-a', { frozenGrades: true })
+    if (half.kind === 'ok') expect(half.text).not.toContain('AllFantasy grade (the frozen original')
+  })
+
+  it('a withheld grade says why', async () => {
+    native.grade.mockResolvedValue(new Map([['t1', { graded: false, reason: 'an asset has no value yet' }]]))
+    const out = await buildLeagueTradeHistoryOutcome('lg', 'u-a', { frozenGrades: true })
+    if (out.kind === 'ok') expect(out.text).toContain('  Not graded: an asset has no value yet')
+  })
+
+  it('grades nothing for a caller that did not ask, and a grading failure lists the trades ungraded', async () => {
+    const plain = await buildLeagueTradeHistoryOutcome('lg', 'u-a')
+    expect(native.grade).not.toHaveBeenCalled()
+    if (plain.kind === 'ok') expect(plain.text).toContain('do NOT state what any of these was worth, who won, or assign a grade')
+
+    native.grade.mockRejectedValue(new Error('down'))
+    const failed = await buildLeagueTradeHistoryOutcome('lg', 'u-a', { frozenGrades: true })
+    expect(failed.kind).toBe('ok')
+    if (failed.kind === 'ok') {
+      expect(failed.text).not.toContain('AllFantasy grade (the frozen original')
+      expect(failed.text).toContain('who won, or assign a grade')
+    }
   })
 })
 

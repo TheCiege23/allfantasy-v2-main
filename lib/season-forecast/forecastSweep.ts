@@ -47,7 +47,7 @@ import { runSeasonForecast } from './SeasonForecastEngine'
 /** Off unless explicitly enabled. Landing this changes nothing until an operator flips it. */
 export const FORECAST_SWEEP_FLAG = 'DECISION_OS_FORECAST_SWEEP_ENABLED'
 
-export function forecastSweepEnabled(): boolean {
+function forecastSweepEnabled(): boolean {
   return process.env[FORECAST_SWEEP_FLAG] === 'true'
 }
 
@@ -124,7 +124,7 @@ export function emptyForecastSweepCounts(): ForecastSweepCounts {
   return { considered: 0, due: 0, written: 0, pastSeasonEnd: 0, declined: 0, failed: 0, skippedForTime: 0, errors: [] }
 }
 
-export interface ForecastSweepDeps {
+interface ForecastSweepDeps {
   prisma?: typeof defaultPrisma
   budget: RunBudget
   leagueCap?: number
@@ -159,7 +159,6 @@ export async function runForecastSweep(deps: ForecastSweepDeps): Promise<Forecas
   if (!forecastSweepEnabled()) return counts
 
   const prisma = deps.prisma ?? defaultPrisma
-  const now = deps.now ?? (() => Date.now())
   const leagueCap = Math.max(1, deps.leagueCap ?? DEFAULT_LEAGUE_CAP)
 
   /*

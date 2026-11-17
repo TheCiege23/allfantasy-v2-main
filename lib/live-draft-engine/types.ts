@@ -248,28 +248,6 @@ export interface QueueEntry {
   aiReason?: string | null
 }
 
-export type DraftEventType =
-  | 'session_created'
-  | 'session_started'
-  | 'session_paused'
-  | 'session_resumed'
-  | 'session_completed'
-  | 'pick_submitted'
-  | 'pick_undone'
-  | 'timer_reset'
-  | 'autopick_triggered'
-  | 'auction_nominated'
-  | 'auction_bid'
-  | 'auction_sold'
-
-export interface DraftEvent {
-  type: DraftEventType
-  sessionId: string
-  leagueId: string
-  at: string
-  payload?: Record<string, unknown>
-}
-
 // ————— Auction draft (deterministic) —————
 
 export interface AuctionNomination {

@@ -15,8 +15,9 @@ import {
   trackUpgradeEntryClicked,
   trackUpgradePromptOpened,
 } from '@/lib/monetization-analytics'
+import { useLockUpgradeHref } from '@/hooks/useLockUpgradeHref'
 
-export interface LockedFeatureCardProps {
+interface LockedFeatureCardProps {
   featureName: string
   featureId?: string
   requiredPlan: string
@@ -57,6 +58,12 @@ export function LockedFeatureCard({
     tokenCtaLabel
     ?? `Or use ${tokenCost} token${tokenCost !== 1 ? 's' : ''} for one-time use`
   const didTrackView = useRef(false)
+  /*
+   * `from=lock_<featureId>` names this lock in the purchase funnel, and `back=<this page>` is where the
+   * success panel returns the buyer (lib/monetization/lockReturn.ts). Before 2026-11-17 this link was the
+   * bare plan path: the sale counted as "no source" and the buyer landed on /core.
+   */
+  const planHref = useLockUpgradeHref(upgradeHref, featureId ? `lock_${featureId}` : null)
 
   useEffect(() => {
     if (didTrackView.current) return
@@ -144,7 +151,7 @@ export function LockedFeatureCard({
           </button>
         ) : (
           <Link
-            href={upgradeHref}
+            href={planHref}
             onClick={() => {
               trackLockedFeatureConversionClick({
                 surface: 'locked_feature_card',

@@ -195,7 +195,7 @@ export type MyTeamRow = {
  * 'Jayden Daniels OUT' on one board row is a lineup problem; the same player ruled out in three
  * leagues is one piece of news with three places to act on it.
  */
-export type CrossLeagueFlag = {
+type CrossLeagueFlag = {
   id: string
   name: string
   status: 'out' | 'questionable'

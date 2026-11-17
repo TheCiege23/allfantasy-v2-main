@@ -75,7 +75,7 @@ function toISODate(input: Date): string {
   return input.toISOString().slice(0, 10)
 }
 
-export function getLastNDaysRange(days: number, now: Date = new Date()): { from: string; to: string } {
+function getLastNDaysRange(days: number, now: Date = new Date()): { from: string; to: string } {
   const safeDays = Number.isFinite(days) ? Math.max(1, Math.floor(days)) : 7
   const end = new Date(now)
   end.setUTCHours(0, 0, 0, 0)

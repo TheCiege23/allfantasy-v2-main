@@ -9,7 +9,7 @@ import { RIVALRY_NAMES, type RivalryCrestKey } from "@/lib/college/rivalryCrests
  * the same on the dark, light and AF themes.
  */
 
-export type CollegeCrestKey = CfpBowlCrestKey | RivalryCrestKey
+type CollegeCrestKey = CfpBowlCrestKey | RivalryCrestKey
 
 const CREST_NAMES: Record<CollegeCrestKey, string> = { ...CFP_BOWL_CREST_NAMES, ...RIVALRY_NAMES }
 

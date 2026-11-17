@@ -34,13 +34,13 @@ type LegacyProfilePayload = {
   last_import?: { status?: string; progress?: number } | null
 }
 
-export type LeagueImportSuccessPayload = {
+type LeagueImportSuccessPayload = {
   leagueId: string
   leagueName: string
   sport: string
 }
 
-export type LegacyImportResultsProps = {
+type LegacyImportResultsProps = {
   variant: 'legacy_sleeper' | 'league_created'
   returnTo: string
   /** Sleeper username for profile fetch */
@@ -219,7 +219,7 @@ export function LegacyImportResults({
               />
               <StatTile
                 icon={<Sparkles className="h-4 w-4 text-violet-300" aria-hidden />}
-                label="AI system sync"
+                label="Chimmy system sync"
                 value={
                   payload.latest_ai_report?.rating != null
                     ? `Grade ${payload.latest_ai_report.rating}`

@@ -27,13 +27,13 @@ import type { NormalizedImportResult } from '@/lib/league-import/types'
 import { ensureSystemLeagueOwner, isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 
 /** The import screen's answer to "Who's the commissioner of this league on ESPN?" */
-export type EspnLeagueRunBy = 'espn' | 'member' | 'me'
+type EspnLeagueRunBy = 'espn' | 'member' | 'me'
 
 export function parseEspnLeagueRunBy(raw: unknown): EspnLeagueRunBy | null {
   return raw === 'espn' || raw === 'member' || raw === 'me' ? raw : null
 }
 
-export type EspnPublicMemberImportResult =
+type EspnPublicMemberImportResult =
   | { ok: true; league: PersistImportedLeagueResult['league']; joinedExisting: boolean; existed: boolean }
   | { ok: false; status: number; code: string; error: string }
 

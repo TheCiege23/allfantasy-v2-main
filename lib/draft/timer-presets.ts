@@ -10,7 +10,7 @@
 
 export type TimerUnit = 'seconds' | 'minutes' | 'hours'
 
-export interface TimerPreset {
+interface TimerPreset {
   value: string
   label: string
   seconds: number
@@ -42,12 +42,6 @@ export const TIMER_PRESETS: TimerPreset[] = [
   { value: '24h', label: '24 hours', seconds: 86400 },
 ]
 
-export const TIMER_PRESET_KEYS = new Set<string>([
-  ...TIMER_PRESETS.map((p) => p.value),
-  'custom',
-  'off',
-])
-
 const PRESET_BY_VALUE: Record<string, TimerPreset> = Object.fromEntries(
   TIMER_PRESETS.map((p) => [p.value, p]),
 )
@@ -57,7 +51,7 @@ const PRESET_BY_SECONDS: Record<number, TimerPreset> = Object.fromEntries(
 )
 
 /** Custom amount validation bounds, by unit. Min 1 in any unit; cap maps to 24h total. */
-export const CUSTOM_BOUNDS: Record<TimerUnit, { min: number; max: number }> = {
+const CUSTOM_BOUNDS: Record<TimerUnit, { min: number; max: number }> = {
   seconds: { min: 1, max: 86400 },
   minutes: { min: 1, max: 1440 },
   hours: { min: 1, max: 24 },
@@ -112,12 +106,3 @@ export function bestUnit(seconds: number): TimerUnit {
   return 'seconds'
 }
 
-export function timerLabel(seconds: number | null | undefined): string {
-  if (seconds == null || seconds === 0) return 'Off'
-  const match = PRESET_BY_SECONDS[seconds]
-  if (match) return match.label
-  if (seconds < 60) return `Custom: ${seconds} seconds`
-  if (seconds % 3600 === 0) return `Custom: ${seconds / 3600} hours`
-  if (seconds % 60 === 0) return `Custom: ${seconds / 60} minutes`
-  return `Custom: ${seconds} seconds`
-}

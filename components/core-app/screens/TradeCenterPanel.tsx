@@ -65,7 +65,7 @@ type PanelData = {
   pending?: { platform: string; leagueUrl: string | null } | null
 }
 
-export type TradeCenterTab = 'active' | 'review' | 'history'
+type TradeCenterTab = 'active' | 'review' | 'history'
 
 type Card =
   | { kind: 'native'; key: string; trade: PanelTrade }

@@ -152,68 +152,6 @@ export function classifySourceStatus(raw: string | null | undefined): {
   return { active: true, injuryStatus: value }
 }
 
-async function upsertProviderIdentity(args: {
-  playerId: string
-  sportKey: string
-  provider: string
-  providerPlayerId: string
-  displayName: string
-  teamId?: string | null
-}): Promise<boolean> {
-  const providerPlayerId = normalizeProviderPlayerId(args.provider, args.providerPlayerId?.trim() ?? '')
-  if (!providerPlayerId) return false
-
-  try {
-    // NOT an upsert: `uniq_player_provider_identity` spans the nullable `leagueKey`, and
-    // Prisma's compound-unique where-input demands a non-null String for it, so a
-    // league-agnostic identity cannot be addressed that way. Find-then-write instead.
-    const existing = await prisma.playerProviderIdentity.findFirst({
-      where: {
-        provider: args.provider,
-        sportKey: args.sportKey,
-        leagueKey: null,
-        providerPlayerId,
-      },
-      select: { id: true },
-    })
-
-    if (existing) {
-      await prisma.playerProviderIdentity.update({
-        where: { id: existing.id },
-        data: {
-          playerId: args.playerId,
-          displayName: args.displayName,
-          teamId: args.teamId ?? null,
-          lastSeenAt: new Date(),
-        },
-      })
-    } else {
-      await prisma.playerProviderIdentity.create({
-        data: {
-          playerId: args.playerId,
-          sportKey: args.sportKey,
-          leagueKey: null,
-          provider: args.provider,
-          providerPlayerId,
-          displayName: args.displayName,
-          teamId: args.teamId ?? null,
-          confidence: 1,
-          verified: true,
-          source: 'phase2-backfill',
-          lastSeenAt: new Date(),
-        },
-      })
-    }
-    return true
-  } catch (err) {
-    console.warn(
-      `[backfill] identity ${args.provider}:${providerPlayerId} failed:`,
-      err instanceof Error ? err.message : String(err),
-    )
-    return false
-  }
-}
-
 interface PlayerWriteRow {
   id: string
   name: string

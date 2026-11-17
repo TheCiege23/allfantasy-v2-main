@@ -786,6 +786,42 @@
 .af-cm-newer:hover { background: var(--accent-line); }
 
 /*
+ * AF Pro depth (lib/chimmy/chimmyDepth.ts): "From your past chats" when an answer quoted the user's
+ * earlier conversations, and the one-line "AF Pro adds …" + Get AF Pro under a free answer whose
+ * question needed a Pro tool. The button reuses the out-of-answers button so both upgrade paths look
+ * the same.
+ */
+.af-cm-pastchats {
+  display: inline-block;
+  margin: 2px 6px 4px 0;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.af-cm-proupsell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+}
+
+.af-cm-proupsell-line {
+  flex: 1 1 180px;
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/*
  * "Did it / Not doing it" under advice Chimmy put on file. Quiet by design: it asks once, it is
  * optional, and the answer above it matters more.
  */
@@ -2662,7 +2698,7 @@
 .af-cm-bubble .af-cm-rich { margin-top: 6px; }
 .af-cm-bubble .af-cm-rich:first-child { margin-top: 0; }
 /* A GIF or photo on its own needs no bubble around it. */
-.af-cm-bubble:has(> .af-cm-rich:only-child) { padding: 0; background: transparent; }
+.af-cm-bubble:has(> .af-cm-rich:not(.af-cm-chimmy-text):only-child) { padding: 0; background: transparent; }
 
 /* The corner facing the speaker squares off inside a run, so a run reads as one voice. */
 .af-cm-row:not([data-mine='true']):not([data-run-start='true']) .af-cm-bubble { border-top-left-radius: 6px; }
@@ -4762,3 +4798,50 @@ html[data-mode='light'] .af-cm .af-cm-act { box-shadow: 0 1px 2px rgba(11, 16, 3
     .af-cm .af-cm-brandmark { display: none; }
   }
 }
+
+/*
+ * Music (2026-11-15): the sixth tab, and the only icon-only one.
+ *
+ * ⚠ THE TAB ROW IS A FIVE-COLUMN GRID, written twice above — `repeat(5, minmax(0, 1fr))` for
+ * every width and `repeat(5, auto)` inside the ≤520px container query. A sixth tab therefore
+ * wrapped onto a row of its own (measured in the preview). These two rules add a sixth,
+ * content-sized column; they sit last and match the narrow rule's specificity so both win.
+ * If a seventh tab is ever added, both `repeat(5` rules need the same treatment.
+ *
+ * ⚠ AND TAB ICONS ARE HIDDEN at most widths (only Chimmy's shows), which left this tab blank.
+ * Its ♫ is shown always; its label stays in the DOM, so screen readers and the tooltip still
+ * say "Music" — only the text is visually hidden.
+ */
+.af-cm .af-cm-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)) auto; }
+@container af-cm (width <= 520px) {
+  .af-cm .af-cm-tabs { grid-template-columns: repeat(5, auto) auto; }
+}
+.af-cm .af-cm-tab[data-tab='music'] {
+  min-width: 44px;
+  padding-inline: 12px;
+}
+.af-cm .af-cm-tab[data-tab='music'] > svg {
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.af-cm-tab[data-tab='music'] > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/*
+ * Chimmy's rows in league chat, formatted (ChatMessageList → ChimmyRichText). Last in the file on purpose:
+ * `.af-cm-bubble-text` sets pre-wrap, which would double every break now that breaks are real elements, and
+ * `.af-cm-rich` above is also the flex column for GIFs and polls, which a block of text must not inherit.
+ */
+.af-cm-bubble-text.af-cm-chimmy-text { display: block; white-space: normal; margin-top: 0; }
+.af-cm-bubble-text.af-cm-chimmy-text ul, .af-cm-bubble-text.af-cm-chimmy-text ol { margin: 0 0 8px; }
+/* The base reset strips list markers; without them a list reads as stray indented lines. */
+.af-cm-bubble-text.af-cm-chimmy-text ul { list-style: disc; }
+.af-cm-bubble-text.af-cm-chimmy-text ol { list-style: decimal; }

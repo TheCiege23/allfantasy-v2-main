@@ -336,20 +336,6 @@ interface ConsolidationStats {
   '3-for-1': { count: number; totalPremium: number };
 }
 
-interface PositionTrend {
-  position: string;
-  avgValue: number;
-  tradeVolume: number;
-  avgGapPct: number;
-}
-
-interface AgeCurveTrend {
-  position: string;
-  ageRange: string;
-  avgValue: number;
-  tradeCount: number;
-}
-
 export async function aggregateComprehensiveInsights(): Promise<void> {
   const allAnalyzedTrades = await prisma.leagueTrade.findMany({
     where: {

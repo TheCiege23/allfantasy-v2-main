@@ -10,7 +10,7 @@ import "./af-nba-cup.css"
 
 type Filter = "next" | "results" | "all"
 
-export type CupGroupPlaySectionProps = {
+type CupGroupPlaySectionProps = {
   scoringExcludedReasonFor?: (game: PlayoffSeriesView) => "draft" | "late" | null
   games: PlayoffSeriesView[]
   allGames?: PlayoffSeriesView[]

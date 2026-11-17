@@ -305,19 +305,23 @@ self.addEventListener('push', (event) => {
   );
 });
 
+/*
+ * The button names what the alert is about, and EVERY button opens the alert's own link (2026-11-15).
+ *
+ * ⚠ This used to match the types 'trade' / 'waiver' / 'draft' / 'score', which the dispatcher never sends
+ * (it sends `trade_proposed`, `draft_on_the_clock`, `waiver_won`, …), so almost no alert had a button; and
+ * the buttons it did have went to hand-built addresses (`/app/league/<id>/trades`, `/app/league/<id>/scores`)
+ * that have no page. The sender already puts the right page in `url`, so the button opens that.
+ */
 function buildNotificationActions(type) {
-  switch (type) {
-    case 'trade':
-      return [{ action: 'view', title: 'View Trade' }, { action: 'dismiss', title: 'Dismiss' }];
-    case 'waiver':
-      return [{ action: 'view', title: 'View Waivers' }, { action: 'dismiss', title: 'Dismiss' }];
-    case 'draft':
-      return [{ action: 'join', title: 'Join Draft' }, { action: 'dismiss', title: 'Dismiss' }];
-    case 'score':
-      return [{ action: 'view', title: 'View Scores' }, { action: 'dismiss', title: 'Dismiss' }];
-    default:
-      return [{ action: 'open', title: 'Open App' }];
-  }
+  const t = String(type || '');
+  let title = 'Open';
+  if (/trade/.test(t)) title = 'View trade';
+  else if (/waiver/.test(t)) title = 'View waivers';
+  else if (/draft/.test(t)) title = 'Open draft';
+  else if (/matchup|score|result/.test(t)) title = 'View matchup';
+  else if (/message|chat|mention/.test(t)) title = 'Reply';
+  return [{ action: 'open', title }, { action: 'dismiss', title: 'Dismiss' }];
 }
 
 self.addEventListener('notificationclick', (event) => {
@@ -326,13 +330,11 @@ self.addEventListener('notificationclick', (event) => {
   const { action } = event;
   const { url, leagueId, type } = event.notification.data || {};
 
-  let targetUrl = url || '/app';
-
   if (action === 'dismiss') return;
-  if (action === 'join' && type === 'draft') targetUrl = leagueId ? `/league/${leagueId}/draft` : '/app';
-  if (action === 'view' && type === 'trade') targetUrl = leagueId ? `/app/league/${leagueId}/trades` : '/app';
-  if (action === 'view' && type === 'waiver') targetUrl = '/waiver-wire';
-  if (action === 'view' && type === 'score') targetUrl = leagueId ? `/app/league/${leagueId}/scores` : '/app';
+
+  // The alert's own link. Only a draft alert that arrived without one falls back to its league's draft room.
+  let targetUrl = url || '/app';
+  if (!url && leagueId && /draft/.test(String(type || ''))) targetUrl = `/league/${leagueId}/draft`;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })

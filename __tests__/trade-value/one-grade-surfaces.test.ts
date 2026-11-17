@@ -55,7 +55,15 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
    * returning its inputs too so a surface can record a receipt).
    */
   { file: 'lib/core-app/archivedTradeGrade.ts', entry: /gradeArchivedTrade(?:WithInputs)?\(/, what: 'archived-trade grading (the /core Trades list and the player card)' },
-  { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTradeRows\(/, what: 'the /core Trades grade list' },
+  /*
+   * 2026-11-17: the /core Trades read moved into `leagueTradeRowGrades.ts`, shared with the Trade Center's
+   * provider-completed history. /core Trades and the Trade Center are pinned to that loader, and the loader to
+   * the archived-trade grader.
+   */
+  { file: 'lib/core-app/leagueTradeRowGrades.ts', entry: /gradeArchivedTradeRows\(/, what: 'the stored-trade grade read (/core Trades and the Trade Center)' },
+  { file: 'lib/core-app/trades.ts', entry: /loadGradedLeagueTradeRows\(/, what: 'the /core Trades grade list' },
+  { file: 'lib/provider-trades/providerCompletedHistory.ts', entry: /\?\? loadGradedLeagueTradeRows\b/, what: 'the Trade Center\u2019s completed trades on ESPN, Yahoo, MFL and Fleaflicker leagues' },
+  { file: 'app/api/league/trades-panel/route.ts', entry: /buildProviderCompletedHistory\(/, what: 'the Trade Center history tab, imported leagues' },
   { file: 'lib/core-app/playerCard.ts', entry: /gradeArchivedTradeRows\(/, what: 'the player card’s trades' },
   { file: 'lib/core-app/tradesBoard.ts', entry: /gradeArchivedTrade\(/, what: 'the cross-league trades board' },
   /* The one trade engine, Phase 1 (2026-09-26): these call `evaluateTrade()` and show its receipt's letter. */

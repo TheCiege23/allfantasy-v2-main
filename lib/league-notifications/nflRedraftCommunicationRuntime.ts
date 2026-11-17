@@ -5,8 +5,8 @@ import type {
 
 export const NFL_REDRAFT_COMMUNICATION_RUNTIME_VERSION = 'nfl-redraft-communication-v1' as const
 
-export type NflRedraftNotificationPriority = 'low' | 'medium' | 'high'
-export type NflRedraftDeliveryChannel =
+type NflRedraftNotificationPriority = 'low' | 'medium' | 'high'
+type NflRedraftDeliveryChannel =
   | 'in_app'
   | 'league_feed'
   | 'league_chat'
@@ -26,12 +26,12 @@ export type NflRedraftCommunicationCategory =
   | 'chat'
   | 'system'
 
-export type NflRedraftCommunicationTarget = {
+type NflRedraftCommunicationTarget = {
   userId: string
   teamId?: string | null
 }
 
-export type NflRedraftNotificationIntent = {
+type NflRedraftNotificationIntent = {
   id: string
   sourceKey: string
   leagueId: string
@@ -51,7 +51,7 @@ export type NflRedraftNotificationIntent = {
   meta: Record<string, unknown>
 }
 
-export type NflRedraftLeagueChatIntent = {
+type NflRedraftLeagueChatIntent = {
   dedupeKey: string
   leagueId: string
   messageType: string
@@ -60,7 +60,7 @@ export type NflRedraftLeagueChatIntent = {
   metadata: Record<string, unknown>
 }
 
-export type NflRedraftLeagueFeedIntent = {
+type NflRedraftLeagueFeedIntent = {
   dedupeKey: string
   leagueId: string
   eventType: string
@@ -70,7 +70,7 @@ export type NflRedraftLeagueFeedIntent = {
   details: Record<string, unknown>
 }
 
-export type NflRedraftDiscordIntent = {
+type NflRedraftDiscordIntent = {
   dedupeKey: string
   leagueId: string
   title: string
@@ -203,7 +203,7 @@ function simpleHash(input: string): string {
   return Math.abs(hash >>> 0).toString(36)
 }
 
-export function communicationDedupeKey(event: CanonicalLeagueRuntimeEvent, suffix = 'event'): string {
+function communicationDedupeKey(event: CanonicalLeagueRuntimeEvent, suffix = 'event'): string {
   const seed = [
     NFL_REDRAFT_COMMUNICATION_RUNTIME_VERSION,
     event.leagueId,

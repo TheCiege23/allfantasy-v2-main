@@ -9,7 +9,7 @@ import type {
   TimerMode,
 } from '@/lib/draft-defaults/DraftUISettingsResolver'
 
-export type DraftRoomSettingsModalProps = {
+type DraftRoomSettingsModalProps = {
   open: boolean
   onClose: () => void
   leagueId: string
@@ -348,14 +348,14 @@ export function DraftRoomSettingsModal({
                   onChange={(v) => setDraftUI((p) => ({ ...p, liveDraftChatSyncEnabled: v }))}
                 />
                 <ToggleRow
-                  label="AI ADP (league-aware)"
+                  label="Chimmy ADP (league-aware)"
                   helper="Uses anonymized league ADP when available."
                   checked={Boolean(draftUI.aiAdpEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, aiAdpEnabled: v }))}
                 />
                 <ToggleRow
-                  label="AI queue reorder suggestions"
+                  label="Chimmy queue reorder suggestions"
                   checked={Boolean(draftUI.aiQueueReorderEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, aiQueueReorderEnabled: v }))}
@@ -417,7 +417,7 @@ export function DraftRoomSettingsModal({
                   onChange={(v) => setDraftUI((p) => ({ ...p, autoPickEnabled: v }))}
                 />
                 <ToggleRow
-                  label="Orphan team AI manager"
+                  label="Orphan team Chimmy manager"
                   checked={Boolean(draftUI.orphanTeamAiManagerEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, orphanTeamAiManagerEnabled: v }))}
@@ -434,7 +434,7 @@ export function DraftRoomSettingsModal({
                     }
                   >
                     <option value="cpu">CPU (deterministic)</option>
-                    <option value="ai">AI (with CPU fallback)</option>
+                    <option value="ai">Chimmy (with CPU fallback)</option>
                   </select>
                 </div>
 

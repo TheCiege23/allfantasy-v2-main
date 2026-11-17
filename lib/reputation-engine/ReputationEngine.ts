@@ -14,7 +14,7 @@ import { computeDimensionScores } from './ReputationScoreCalculator'
 import { getReputationRuntimeConfig } from './ReputationConfigService'
 import type { ReputationEngineInput, ReputationEngineResult, ReputationTier } from './types'
 
-export async function runReputationEngine(
+async function runReputationEngine(
   input: ReputationEngineInput
 ): Promise<ReputationEngineResult | null> {
   const sport = normalizeSportForReputation(input.sport)

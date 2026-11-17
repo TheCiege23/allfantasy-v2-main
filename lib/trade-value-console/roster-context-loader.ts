@@ -26,7 +26,7 @@ export type TradeEngineRosterContext = {
 }
 
 /** Shapes expected by `buildNegotiationToolkit` `availablePicks`. */
-export type NegotiationAvailablePick = {
+type NegotiationAvailablePick = {
   id: string
   displayName?: string
   round?: number
@@ -167,7 +167,7 @@ async function rosterIdsToAssets(args: {
   return out
 }
 
-export type OpponentTeamOption = {
+type OpponentTeamOption = {
   externalId: string
   teamName: string
   ownerName: string

@@ -20,7 +20,18 @@ export function resolveTiebreak(args: {
    * the seeded order above, which is what every real chop and preview uses.
    */
   random?: () => number
-}): { choppedRosterIds: string[]; stepUsed: TiebreakStep | null; reason: string } {
+}): {
+  choppedRosterIds: string[]
+  stepUsed: TiebreakStep | null
+  reason: string
+  /**
+   * Set when the tie reached the "Commissioner decides" step and the commissioner had not picked (2026-11-15): the
+   * teams still tied there and how many of them go. The resolver still answers with the next step's choice, so a
+   * caller that does not wait (the chop preview, a commissioner who let the window pass) behaves exactly as before;
+   * the chop engine uses this to hold the chop and ask (lib/guillotine/commissionerTiebreak.ts).
+   */
+  awaitingCommissioner?: { tiedRosterIds: string[]; needed: number }
+} {
   const { candidates, tiebreakerOrder, weekOrPeriod, draftSlotByRoster } = args
   const seed = args.tiebreakSeed ?? ''
   const count = Math.max(0, Math.min(Math.floor(args.teamsPerChop), candidates.length))
@@ -32,6 +43,7 @@ export function resolveTiebreak(args: {
   }
 
   let stepUsed: TiebreakStep | null = null
+  let awaitingCommissioner: { tiedRosterIds: string[]; needed: number } | undefined
   function takeGroups(rows: PeriodScoreRow[], remaining: number, key: (row: PeriodScoreRow) => number, nextStep: number): PeriodScoreRow[] {
     const ordered = [...rows].sort((a, b) => key(a) - key(b))
     const selected: PeriodScoreRow[] = []
@@ -50,7 +62,11 @@ export function resolveTiebreak(args: {
     if (!step) return seededOrder(rows, seed, weekOrPeriod).slice(0, needed)
     if (step === 'commissioner') {
       const chosen = rows.filter((row) => overrides.includes(row.rosterId))
-      if (!chosen.length) return breakTie(rows, needed, index + 1)
+      if (!chosen.length) {
+        // The first tie that reaches this step is the one to ask about.
+        if (!awaitingCommissioner) awaitingCommissioner = { tiedRosterIds: rows.map((row) => row.rosterId), needed }
+        return breakTie(rows, needed, index + 1)
+      }
       stepUsed = step
       return [...chosen.slice(0, needed), ...breakTie(rows.filter((row) => !overrides.includes(row.rosterId)), Math.max(0, needed - chosen.length), index + 1)]
     }
@@ -69,7 +85,12 @@ export function resolveTiebreak(args: {
     return takeGroups(rows, needed, key, index + 1)
   }
   const selected = takeGroups(candidates, count, (row) => row.periodPoints, 0)
-  return { choppedRosterIds: selected.map((row) => row.rosterId), stepUsed, reason: stepUsed ? `tiebreak: ${stepUsed}` : 'lowest period score' }
+  return {
+    choppedRosterIds: selected.map((row) => row.rosterId),
+    stepUsed,
+    reason: stepUsed ? `tiebreak: ${stepUsed}` : 'lowest period score',
+    ...(awaitingCommissioner ? { awaitingCommissioner } : {}),
+  }
 }
 
 function groupByKey<T>(sorted: T[], key: (row: T) => number): T[][] {

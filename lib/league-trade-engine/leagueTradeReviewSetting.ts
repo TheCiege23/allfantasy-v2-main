@@ -23,7 +23,7 @@ import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { tradeReviewMode, effectiveVetoRule } from '@/lib/league-rules-explainer/snapshot'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
-export type LeagueTradeReviewMode = 'commissioner' | 'league_vote' | 'instant'
+type LeagueTradeReviewMode = 'commissioner' | 'league_vote' | 'instant'
 
 /** A panel or API value as the mode it means; null for anything unrecognised. */
 export function normalizeTradeReviewChoice(raw: unknown): LeagueTradeReviewMode | null {

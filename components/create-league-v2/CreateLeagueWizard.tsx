@@ -21,6 +21,7 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Lock, Minus, Plus, X } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -611,6 +612,7 @@ export function CreateLeagueWizard(props: WizardProps) {
             {props.importedLeagues && props.importedLeagues.length > 0 ? (
               <ImportedLeaguesCard leagues={props.importedLeagues} />
             ) : null}
+            <Link href="/league-types/faq" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm font-semibold text-violet-700 underline underline-offset-4 dark:text-violet-200">Compare league types & rules (opens in a new tab)</Link>
           </header>
 
           {props.restoredAt ? (

@@ -8,7 +8,7 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import type { C2CDraftSide } from '@/lib/parsePickLabel'
 import type { EvaluatedCounterOffer } from './counterOffers'
 
-export type TradeSportFilter = 'ALL' | SupportedSport
+type TradeSportFilter = 'ALL' | SupportedSport
 
 export type TradeStrategyMode =
   | 'contender'
@@ -245,7 +245,7 @@ export type TradeIntelligence = {
 }
 
 /** One asset the AllFantasy trade market (or this lineup) moved, as shown beside the grade. */
-export type TradeConsoleTradeMarketLine = {
+type TradeConsoleTradeMarketLine = {
   side: 'give' | 'get'
   name: string
   /** `market`: what this player trades for; `lineup`: what his position trades for in lineups like this one. */
@@ -380,7 +380,7 @@ export type TradeConsoleAnalyzeResult = {
   } | null
 }
 
-export type TradeConsoleAnalyzeError = {
+type TradeConsoleAnalyzeError = {
   ok: false
   error: string
   code?: 'CROSS_SPORT' | 'VALIDATION' | 'EMPTY' | 'PLAYER_NOT_FOUND' | LeagueToolAccessErrorCode

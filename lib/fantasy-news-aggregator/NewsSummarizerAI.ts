@@ -29,7 +29,7 @@ function getOpenAIClient(): OpenAI | null {
 const MAX_BATCH = 15;
 const SUMMARIZE_PROMPT = `You are a fantasy sports editor. For each news headline below, output a very short summarized headline (one line, under 80 chars) that keeps the fantasy-relevant takeaway. Keep player/team names and key facts. Output only the summarized headlines, one per line, in the same order as the input. No numbering or bullets.`;
 
-export interface ItemForSummary {
+interface ItemForSummary {
   id: string;
   title: string;
 }
@@ -45,7 +45,6 @@ export async function summarizeHeadlines(
 
   const batch = items.slice(0, MAX_BATCH);
   const titles = batch.map((i) => i.title);
-  const byId = new Map(batch.map((i) => [i.id, i.title]));
 
   for (const item of items) {
     result[item.id] = item.title;

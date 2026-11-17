@@ -65,12 +65,21 @@ export type BoardPlayer = {
   rosterAlias?: string | null
   /** The season the projection's numbers come from (last season, until this one has games). */
   sourceSeason?: number | null
+  /** Set when the projection blends this season with last (`af-projections/seasonBlend.ts`): each season's games. */
+  seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null
   /**
    * A sport-specific sample bar, replacing the games bar when present. Baseball's: ten games is a weekend
    * hot streak (31 at-bats put a September call-up among the top five hitters, measured 2026-10-09), so an
    * MLB projection needs at-bats or innings behind it instead — `has` and `needs` are said in those terms.
    */
-  sampleBar?: { ok: boolean; has: string; needs: string }
+  sampleBar?: {
+    ok: boolean
+    has: string
+    needs: string
+    /** What `has` counts, as a number — so a surface can show "412 at-bats" in its own language. */
+    unit?: 'at_bats' | 'innings'
+    count?: number
+  }
 }
 
 /**
@@ -78,12 +87,12 @@ export type BoardPlayer = {
  * replacement levels would be computed from a fragment. Measured 2026-10-09: NBA 516 of 585 (88%) clear
  * it; NHL 219 of 1,049 (21%) — 707 of its projections already rest on 2–4 games of the new season.
  */
-export const MIN_BOARD_COVERAGE = 0.6
+const MIN_BOARD_COVERAGE = 0.6
 
 /** A starting lineup slot: how many per team and which positions may fill it. */
 export type LineupSlot = { slot: string; eligible: readonly string[]; count: number }
 
-export type SportSeasonWindow = {
+type SportSeasonWindow = {
   season: number
   seasonLabel: string
   gamesRemaining: number
@@ -127,7 +136,7 @@ export type SportPointsContext = {
   rosterProvider?: string
 }
 
-export const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
+const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
   `Draft picks have no ${SPORT_LABEL[sport]} price yet, so a deal carrying one is not graded.`
 export const SPORT_FAAB_REASON =
   'FAAB has no price on the over-replacement scale this sport is graded on, so a deal carrying it is not graded.'
@@ -152,7 +161,11 @@ export function sportPointsBasis(
         : `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} ${games})`
   const mlb = ctx.sport === 'MLB'
   // MLB rates are per appearance; the loader puts every pitcher on the team-game scale first.
-  const pitchers = mlb ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.' : ''
+  const pitchers = mlb
+    ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.'
+    : ctx.sport === 'NHL'
+      ? ' Goalies count for the share of team games they played in that season — a starter about three in four, a backup about one in three.'
+      : ''
   if (ctx.valueKind === 'categories') {
     const where =
       ctx.scoringBasis === 'league'
@@ -401,6 +414,56 @@ export function replacementFromLineups(
 
 type Priced = { name: string; value: number }
 
+/** One player's price on the board, or why not — what a value lookup and the trade grade both read. */
+type BoardPlayerPrice =
+  | {
+      ok: true
+      player: BoardPlayer
+      /** The best free agent at his position, per game, under the league's rules. */
+      replacementPerGame: number
+      replacementName: string
+      /** Rest-of-season value over replacement: max(0, perGame − replacement) × games left. */
+      value: number
+    }
+  | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' }
+
+/**
+ * ONE player, priced the way the trade grade prices him (2026-11-16): the same resolution, sample bar,
+ * replacement level and rest-of-season multiplier. `priceSide` below calls this, so a player's value and
+ * a deal's grade cannot disagree about him. The refusal reasons are the grade's own, minus its
+ * "This deal is not graded." tail.
+ */
+export function priceBoardPlayer(
+  asset: { playerId?: string | null; rosterPlayerId?: string | null; name?: string | null },
+  ctx: SportPointsContext,
+  index: ReadonlyMap<string, BoardPlayer> = indexBoard(ctx.board),
+): BoardPlayerPrice {
+  const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
+  if (!found.ok) return { ok: false, reason: found.reason, valuationGap: found.valuationGap }
+  const { player } = found
+  if (!meetsSampleBar(player)) {
+    const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
+    const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
+    return { ok: false, reason: `${player.name}’s projection rests on ${has}, too few to price — values start at ${needs}.` }
+  }
+  const pos = player.position.trim().toUpperCase()
+  const replacement = ctx.replacementByPosition.get(pos)
+  if (!replacement) {
+    return {
+      ok: false,
+      reason: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level.`,
+    }
+  }
+  // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
+  return {
+    ok: true,
+    player,
+    replacementPerGame: replacement.perGame,
+    replacementName: replacement.name,
+    value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining,
+  }
+}
+
 function priceSide(
   assets: readonly TradeAssetInput[],
   ctx: SportPointsContext,
@@ -410,23 +473,12 @@ function priceSide(
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: SPORT_PICKS_REASON(ctx.sport) }
     if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
-    const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
-    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: found.valuationGap }
-    const { player } = found
-    if (!meetsSampleBar(player)) {
-      const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
-      const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
-      return { withheld: `${player.name}’s projection rests on ${has}, too few to price — grades start at ${needs}. This deal is not graded.` }
+    const price = priceBoardPlayer(asset, ctx, index)
+    if (!price.ok) {
+      const reason = price.reason.replace(/ — values start at /, ' — grades start at ')
+      return { withheld: `${reason} This deal is not graded.`, ...(price.valuationGap ? { valuationGap: price.valuationGap } : {}) }
     }
-    const pos = player.position.trim().toUpperCase()
-    const replacement = ctx.replacementByPosition.get(pos)
-    if (!replacement) {
-      return {
-        withheld: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level. This deal is not graded.`,
-      }
-    }
-    // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
-    priced.push({ name: player.name, value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining })
+    priced.push({ name: price.player.name, value: price.value })
   }
   return { priced }
 }

@@ -4,9 +4,8 @@
  */
 
 const MENTION_REGEX_GLOBAL = /@([a-zA-Z0-9_]+)/g
-const MENTION_REGEX_SINGLE = /@([a-zA-Z0-9_]+)/
 
-export type LeagueMentionRange = { start: number; end: number; username: string }
+type LeagueMentionRange = { start: number; end: number; username: string }
 
 export function parseMentions(text: string): string[] {
   const matches = text.match(MENTION_REGEX_GLOBAL) || []
@@ -14,10 +13,6 @@ export function parseMentions(text: string): string[] {
     .map((m) => m.slice(1).trim().replace(/^@+/, ""))
     .filter(Boolean)
   return [...new Set(normalized)]
-}
-
-export function hasMentions(text: string): boolean {
-  return MENTION_REGEX_SINGLE.test(text)
 }
 
 export function getLeagueMentionRanges(text: string): LeagueMentionRange[] {

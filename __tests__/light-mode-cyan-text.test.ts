@@ -27,7 +27,7 @@ const LEAGUE_FILES = [...walk('components/league'), ...walk('app/league')]
 describe('league screens: no pale cyan text in light mode', () => {
   it('scans a real file set', () => {
     expect(LEAGUE_FILES.length).toBeGreaterThan(50)
-    expect(LEAGUE_FILES.some((f) => f.endsWith('PowerRankings.tsx'))).toBe(true)
+    expect(LEAGUE_FILES.some((f) => f.endsWith('LeagueSurfaceState.tsx'))).toBe(true)
   })
 
   it('no league file uses text-cyan-100', () => {
@@ -53,7 +53,6 @@ describe('league screens: no pale cyan text in light mode', () => {
 
   it('the converted screens use the token', () => {
     for (const f of [
-      'components/league/PowerRankings.tsx',
       'components/league/LeagueSurfaceState.tsx',
       'app/league/[leagueId]/dispersal-draft/[draftId]/page.tsx',
     ]) {

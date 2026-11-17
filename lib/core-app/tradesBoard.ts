@@ -93,8 +93,17 @@ export type BoardTrade = {
   toName: string
   sent: TradeAsset[]
   received: TradeAsset[]
-  /** Null when the trade could not be priced on both sides — see the header. */
+  /** `fromName`'s grade. Null when the trade could not be priced on both sides — see the header. */
   letter: 'A' | 'B' | 'C' | 'D' | 'F' | null
+  /**
+   * `toName`'s grade — the same grade from the other side (`partnerLetter`, the mirror on league value).
+   * 2026-11-14: the board showed only `letter`, labelled "Latest grade", so a reader could not tell whose
+   * grade it was and never saw the other team's. Null exactly when `letter` is.
+   */
+  partnerLetter?: 'A' | 'B' | 'C' | 'D' | 'F' | null
+  /** League value `fromName` received and gave, as the grade was taken. Null when ungraded. */
+  getValue?: number | null
+  giveValue?: number | null
   sharePct: number | null
   withheldReason: string | null
   /**
@@ -550,7 +559,12 @@ export async function getTradesBoard(
       e = { byUserId: new Map(), byRoster: new Map() }
       managersByLeague.set(row.leagueId, e)
     }
-    const name = realManagerName(row.ownerName) || realManagerName(row.teamName) || ''
+    /*
+     * TEAM NAME FIRST (2026-11-14), the order the league's own Completed trades list uses
+     * (lib/core-app/trades.ts: `team.teamName ?? team.ownerName`). This board put the owner's username
+     * first, so one trade read "Angs / Chrundle12" here and "CeeDee's Nutz / Nosey Nabers" one tap away.
+     */
+    const name = realManagerName(row.teamName) || realManagerName(row.ownerName) || ''
     if (row.platformUserId) {
       e.byUserId.set(String(row.platformUserId), { name, mine: row.claimedByUserId === userId })
     }
@@ -1042,6 +1056,9 @@ export async function getTradesBoard(
       sent: sentAssets,
       received: recvAssets,
       letter: g.graded ? g.letter : null,
+      partnerLetter: g.graded ? g.partnerLetter : null,
+      getValue: g.graded ? g.getValue : null,
+      giveValue: g.graded ? g.giveValue : null,
       sharePct: g.graded ? Math.round((g.getValue / Math.max(1, g.getValue + g.giveValue)) * 1000) / 10 : null,
       breakdown,
       // The grader's own reason — it names what could not be priced, never a count.

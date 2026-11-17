@@ -47,7 +47,7 @@ import { templateKey, type LeagueTemplateDefinition, type ScheduledRuleEffect } 
  * Structurally assignable to `PlannedAction` — `actionType`, `targetType`, `targetId`, `metadata` —
  * so it can be handed to `persistAutomationActions` unchanged when executors eventually exist.
  */
-export type PlannedTemplateAction = {
+type PlannedTemplateAction = {
   actionType: string
   targetType?: string
   targetId?: string
@@ -64,7 +64,7 @@ export type PlannedTemplateAction = {
   description: string
 }
 
-export type TemplatePlan = {
+type TemplatePlan = {
   leagueId: string
   season: number
   templateKey: string
@@ -78,7 +78,7 @@ export type TemplatePlan = {
   skipReason?: string
 }
 
-export type PlanTemplateActionsInput = {
+type PlanTemplateActionsInput = {
   profile: CommissionerLeagueProfile
   template: LeagueTemplateDefinition
   trigger: AutomationTrigger

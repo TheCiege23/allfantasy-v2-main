@@ -42,7 +42,7 @@ const CACHE_KEY_PREFIX = 'fantrax_matchup_sync'
 const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
 const FAILURE_RETRY_MS = 30 * 60 * 1000
 
-export interface FantraxMatchupConnection {
+interface FantraxMatchupConnection {
   /** `League.platformLeagueId` — for Fantrax this is the `FantraxLeague` row's uuid. */
   platformLeagueId: string
   /** Fantrax's own league id, the only thing the API can be called with. */

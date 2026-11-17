@@ -4,7 +4,7 @@
  * `getFutureCapProjection` — so nothing here re-derives a cap rule the engine owns.
  */
 
-export type CapYearInput = {
+type CapYearInput = {
   capYear: number
   capCeiling: number
   totalCapHit: number
@@ -12,7 +12,7 @@ export type CapYearInput = {
   projectedSpace: number
 }
 
-export type CapLedgerInput = {
+type CapLedgerInput = {
   totalCapHit: number
   deadMoneyHit: number
   rolloverUsed: number
@@ -44,7 +44,7 @@ export function capBarSegments(ledger: CapLedgerInput, ceiling: number) {
   }
 }
 
-export type BidPreviewRow = {
+type BidPreviewRow = {
   capYear: number
   ceiling: number
   committedBefore: number
@@ -87,7 +87,7 @@ export function clampSalary(value: number, minimumSalary: number, maximum: numbe
   return Math.max(Math.max(0, minimumSalary), Math.min(Math.max(minimumSalary, maximum), v))
 }
 
-export type ContractTag = { label: string; tone: 'safe' | 'acc' | 'gold' | 'danger' | 'zone' }
+type ContractTag = { label: string; tone: 'safe' | 'acc' | 'gold' | 'danger' | 'zone' }
 
 /**
  * Status tags for a contract row. Mirrors how the summary route counts candidates: a contract in its

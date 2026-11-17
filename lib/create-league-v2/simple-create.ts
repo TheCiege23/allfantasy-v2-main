@@ -36,7 +36,7 @@ export const CREATE_LEAGUE_TIMEZONE_LABELS: Readonly<Record<string, string>> = {
 
 export const CREATE_LEAGUE_TIMEZONES: readonly string[] = Object.keys(CREATE_LEAGUE_TIMEZONE_LABELS)
 
-export type ImportProviderState = 'available' | 'limited_beta' | 'coming_soon'
+type ImportProviderState = 'available' | 'limited_beta' | 'coming_soon'
 
 export type ImportProviderOption = {
   id: ImportProvider | 'manual'

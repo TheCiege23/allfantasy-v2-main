@@ -27,7 +27,7 @@ async function progressDraft(leagueId: string, kind: string, now: Date) {
   }
 }
 
-export type SeasonTournamentDeps = Parameters<typeof scoreSeasonLeaguePeriod>[3] & {
+type SeasonTournamentDeps = Parameters<typeof scoreSeasonLeaguePeriod>[3] & {
   refreshDraft?: typeof refreshSeasonDraftPool
   progressDraft?: typeof progressDraft
   dispatchDraftReminder?: Parameters<typeof remindSeasonDraft>[1]

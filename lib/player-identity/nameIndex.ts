@@ -24,7 +24,7 @@
  * A name is not an id. Where an id exists, use it; this is for the fallbacks that remain.
  */
 
-export interface NameIndexOptions<T> {
+interface NameIndexOptions<T> {
   /**
    * Identity of the underlying thing, when duplicate ROWS for the SAME entity are expected.
    * Two rows that agree on identity collapse to the first rather than being refused — a

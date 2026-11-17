@@ -201,6 +201,36 @@ export type BigBrotherConfigUpsertInput = Partial<{
   weekProgressionPaused: boolean
 }>
 
+/**
+ * The game's built-in rules: what a config is created with when nothing else is given. Exported so the setup-rules
+ * pass (./bigBrotherSetupRules.ts) can tell a value nobody chose from one somebody set.
+ */
+export const BIG_BROTHER_CONFIG_DEFAULTS = {
+  finalNomineeCount: FINAL_NOMINEE_COUNT,
+  vetoCompetitorCount: DEFAULT_VETO_COMPETITOR_COUNT,
+  consecutiveHohAllowed: false,
+  hohVotesOnlyInTie: true,
+  juryStartMode: 'after_eliminations',
+  juryStartAfterEliminations: DEFAULT_JURY_START_AFTER_ELIMINATIONS,
+  juryStartWhenRemaining: null,
+  juryStartWeek: null,
+  finaleFormat: 'final_2',
+  waiverReleaseTiming: 'next_waiver_run',
+  publicVoteTotalsVisibility: 'evicted_only',
+  challengeMode: 'hybrid',
+  antiCollusionLogging: true,
+  inactivePlayerHandling: 'commissioner_only',
+  autoNominationFallback: 'lowest_season_points',
+  evictionTieBreakMode: 'season_points',
+} as const
+
+/**
+ * Create the league's config (built-in defaults for anything not given), or change ONLY the given fields.
+ *
+ * 🛑 AN UPDATE USED TO RESET EVERYTHING IT WAS NOT GIVEN. The same defaults-filled object was written on create and
+ * on update, so pausing the week (`{ weekProgressionPaused: true }`) quietly put finale format, jury start, challenge
+ * mode, consecutive HOH and eight more back to their defaults — undoing whatever had been set.
+ */
 export async function upsertBigBrotherConfig(
   leagueId: string,
   input: BigBrotherConfigUpsertInput
@@ -210,50 +240,12 @@ export async function upsertBigBrotherConfig(
     select: { id: true, sport: true },
   })
   if (!league) throw new Error('League not found')
-  const sport = normalizeToSupportedSport(league.sport) as LeagueSport
 
-  const data: Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['create'] & Partial<Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['update']> = {
-    leagueId,
-    finalNomineeCount: input.finalNomineeCount ?? FINAL_NOMINEE_COUNT,
-    vetoCompetitorCount: input.vetoCompetitorCount ?? DEFAULT_VETO_COMPETITOR_COUNT,
-    consecutiveHohAllowed: input.consecutiveHohAllowed ?? false,
-    hohVotesOnlyInTie: input.hohVotesOnlyInTie ?? true,
-    juryStartMode: input.juryStartMode ?? 'after_eliminations',
-    juryStartAfterEliminations: input.juryStartAfterEliminations ?? DEFAULT_JURY_START_AFTER_ELIMINATIONS,
-    juryStartWhenRemaining: input.juryStartWhenRemaining ?? null,
-    juryStartWeek: input.juryStartWeek ?? null,
-    finaleFormat: input.finaleFormat ?? 'final_2',
-    waiverReleaseTiming: input.waiverReleaseTiming ?? 'next_waiver_run',
-    publicVoteTotalsVisibility: input.publicVoteTotalsVisibility ?? 'evicted_only',
-    challengeMode: input.challengeMode ?? 'hybrid',
-    antiCollusionLogging: input.antiCollusionLogging ?? true,
-    inactivePlayerHandling: input.inactivePlayerHandling ?? 'commissioner_only',
-    autoNominationFallback: input.autoNominationFallback ?? 'lowest_season_points',
-  }
-  if (input.hohChallengeDayOfWeek !== undefined) data.hohChallengeDayOfWeek = input.hohChallengeDayOfWeek
-  if (input.hohChallengeTimeUtc !== undefined) data.hohChallengeTimeUtc = input.hohChallengeTimeUtc
-  if (input.nominationDeadlineDayOfWeek !== undefined) data.nominationDeadlineDayOfWeek = input.nominationDeadlineDayOfWeek
-  if (input.nominationDeadlineTimeUtc !== undefined) data.nominationDeadlineTimeUtc = input.nominationDeadlineTimeUtc
-  if (input.vetoDrawDayOfWeek !== undefined) data.vetoDrawDayOfWeek = input.vetoDrawDayOfWeek
-  if (input.vetoDrawTimeUtc !== undefined) data.vetoDrawTimeUtc = input.vetoDrawTimeUtc
-  if (input.vetoDecisionDeadlineDayOfWeek !== undefined) data.vetoDecisionDeadlineDayOfWeek = input.vetoDecisionDeadlineDayOfWeek
-  if (input.vetoDecisionDeadlineTimeUtc !== undefined) data.vetoDecisionDeadlineTimeUtc = input.vetoDecisionDeadlineTimeUtc
-  if (input.replacementNomineeDeadlineDayOfWeek !== undefined) data.replacementNomineeDeadlineDayOfWeek = input.replacementNomineeDeadlineDayOfWeek
-  if (input.replacementNomineeDeadlineTimeUtc !== undefined) data.replacementNomineeDeadlineTimeUtc = input.replacementNomineeDeadlineTimeUtc
-  if (input.evictionVoteOpenDayOfWeek !== undefined) data.evictionVoteOpenDayOfWeek = input.evictionVoteOpenDayOfWeek
-  if (input.evictionVoteOpenTimeUtc !== undefined) data.evictionVoteOpenTimeUtc = input.evictionVoteOpenTimeUtc
-  if (input.evictionVoteCloseDayOfWeek !== undefined) data.evictionVoteCloseDayOfWeek = input.evictionVoteCloseDayOfWeek
-  if (input.evictionVoteCloseTimeUtc !== undefined) data.evictionVoteCloseTimeUtc = input.evictionVoteCloseTimeUtc
-  if (input.evictionTieBreakMode !== undefined) (data as Record<string, unknown>).evictionTieBreakMode = input.evictionTieBreakMode
-  if (input.weekProgressionPaused !== undefined) (data as Record<string, unknown>).weekProgressionPaused = input.weekProgressionPaused
-
+  const given = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))
   await prisma.bigBrotherLeagueConfig.upsert({
     where: { leagueId },
-    create: data as Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['create'],
-    update: {
-      ...data,
-      leagueId: undefined,
-    } as Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['update'],
+    create: { leagueId, ...BIG_BROTHER_CONFIG_DEFAULTS, ...given } as Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['create'],
+    update: given as Parameters<typeof prisma.bigBrotherLeagueConfig.upsert>[0]['update'],
   })
 
   const config = await getBigBrotherConfig(leagueId)

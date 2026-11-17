@@ -8,6 +8,7 @@ import { purchaseReturnPath, upgradePathForPlan } from "@/lib/monetization/upgra
 import { usePostPurchaseSync } from "@/hooks/usePostPurchaseSync";
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget";
 import { resolveCheckoutUrl } from "@/lib/monetization/checkout-client";
+import { trialAppliesTo, useTrialOffer, type TrialOffer } from "@/lib/monetization/useTrialOffer";
 import { manageNativeSubscriptions, restoreNativePurchases, useNativeIapPrices } from "@/lib/monetization/native-iap-client";
 import { trackMetaBrowserEvent } from "@/lib/meta-client";
 import { MonetizationComplianceNotice } from "@/components/monetization/MonetizationComplianceNotice";
@@ -32,7 +33,7 @@ import { trackCouponApplied } from "@/lib/promotions/couponAnalytics";
 import { useLaunchOffer } from "@/components/launch/LaunchOfferContext";
 import { LaunchOfferStrip } from "@/components/launch/LaunchOfferStrip";
 
-export type PlanFamily =
+type PlanFamily =
   | "af_pro"
   | "af_commissioner"
   | "af_war_room"
@@ -135,6 +136,21 @@ function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+/**
+ * The AF Pro free trial's terms, said before the click (lib/monetization/freeTrial.ts). Web only — the
+ * caller renders it only outside a native build — and marked for the iOS hide rule as well.
+ */
+function TrialTerms({ offer, sku, price, per }: { offer: TrialOffer; sku: string; price: string; per: string }) {
+  if (!trialAppliesTo(offer, sku)) return null;
+  return (
+    <p className="mt-1.5 text-center text-[11px] text-white/55" data-testid={`trial-terms-${sku}`} data-ios-purchase>
+      {offer.eligible === true
+        ? `Free for ${offer.days} days, then ${price} ${per}. Cancel before the trial ends and you won’t be charged.`
+        : `New members get ${offer.days} days free.`}
+    </p>
+  );
+}
+
 export default function MonetizationPurchaseSurface({
   pagePath,
   title,
@@ -151,6 +167,8 @@ export default function MonetizationPurchaseSurface({
 }) {
   const [payload, setPayload] = useState<CatalogPayload | null>(null);
   const { nativeApp, prices: nativePrices, needsUpdate, error: playError } = useNativeIapPrices();
+  // The AF Pro free trial — web only: a store build never asks, and never shows it (App Store 3.1.1 / 3.1.3).
+  const trialOffer = useTrialOffer(!nativeApp);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -561,7 +579,7 @@ export default function MonetizationPurchaseSurface({
           </div>
           <p className="mt-4 text-xs leading-relaxed text-white/55" data-testid="pricing-token-model-copy">
             {/* No subscriber discount: every plan's `discountedTokenSpendPct` is 0 (lib/tokens/subscription-policy.ts). */}
-            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for single AI actions, each
+            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for single Chimmy actions, each
             priced before you spend. A plan doesn&apos;t discount them, and they don&apos;t unlock a plan.
           </p>
         </section>
@@ -707,10 +725,13 @@ export default function MonetizationPurchaseSurface({
                           >
                             {nativeApp ? (pendingSku === monthly.sku ? "Opening store purchase…" : "Subscribe in app") : pendingSku === monthly.sku
                               ? "Opening Stripe…"
-                              : appliedCouponCode
-                                ? `Continue — ${appliedCouponPct}% off applied`
-                                : "Continue with Stripe — Monthly"}
+                              : trialOffer.eligible === true && trialAppliesTo(trialOffer, monthly.sku)
+                                ? `Start your ${trialOffer.days}-day free trial`
+                                : appliedCouponCode
+                                  ? `Continue — ${appliedCouponPct}% off applied`
+                                  : "Continue with Stripe — Monthly"}
                           </button>
+                          {!nativeApp ? <TrialTerms offer={trialOffer} sku={monthly.sku} price={formatUsd(monthly.amountUsd)} per="a month" /> : null}
                           {!nativeApp && !appliedCouponCode && !foundingMember && (
                             <p className="mt-1.5 text-center text-[11px] text-white/30">
                               Use <span className="font-bold text-amber-300/60">WassupFred</span> for 20% off first purchase
@@ -745,8 +766,11 @@ export default function MonetizationPurchaseSurface({
                           >
                             {nativeApp ? (pendingSku === yearly.sku ? "Opening store purchase…" : "Subscribe in app") : pendingSku === yearly.sku
                               ? "Opening Stripe…"
-                              : "Continue with Stripe — Yearly"}
+                              : trialOffer.eligible === true && trialAppliesTo(trialOffer, yearly.sku)
+                                ? `Start your ${trialOffer.days}-day free trial`
+                                : "Continue with Stripe — Yearly"}
                           </button>
+                          {!nativeApp ? <TrialTerms offer={trialOffer} sku={yearly.sku} price={formatUsd(yearly.amountUsd)} per="a year" /> : null}
                           {!nativeApp && (yearly.stripePriceConfigured ? (
                             <StripePaymentHint className="mt-2" />
                           ) : (

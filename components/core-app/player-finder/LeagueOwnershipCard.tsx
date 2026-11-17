@@ -157,4 +157,3 @@ export function LeagueOwnershipCard({
   )
 }
 
-export default LeagueOwnershipCard

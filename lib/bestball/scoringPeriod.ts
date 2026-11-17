@@ -23,7 +23,7 @@
 export type BestBallScoringPeriodValue = 'weekly' | 'daily'
 
 /** The sports with per-day stat rows and a daily week window (`resolveDailySportWeekWindow`). */
-export const DAILY_BEST_BALL_SPORTS = ['NBA', 'NHL', 'MLB'] as const
+const DAILY_BEST_BALL_SPORTS = ['NBA', 'NHL', 'MLB'] as const
 
 export function bestBallSportSupportsDaily(sport: string | null | undefined): boolean {
   return (DAILY_BEST_BALL_SPORTS as readonly string[]).includes(String(sport ?? '').trim().toUpperCase())
@@ -72,9 +72,3 @@ export function withEffectiveScoringPeriod(
   return { ...bb, scoringPeriod: period, dailyBestBall: period === 'daily' }
 }
 
-/** One plain sentence on how the automatic lineup is chosen, for prompts and member-facing copy. */
-export function describeBestBallScoringPeriod(period: BestBallScoringPeriodValue): string {
-  return period === 'daily'
-    ? 'Daily best ball: each day the highest-scoring legal lineup from the players on the roster that day counts, and the week score is the sum of the days.'
-    : 'Weekly best ball: each week the highest-scoring legal lineup from the whole roster, on weekly totals, counts.'
-}

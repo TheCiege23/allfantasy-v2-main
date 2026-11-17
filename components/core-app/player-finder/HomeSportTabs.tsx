@@ -51,4 +51,3 @@ export function HomeSportTabs({ sports, active, leagueId = null }: { sports: rea
   )
 }
 
-export default HomeSportTabs

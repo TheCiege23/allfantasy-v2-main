@@ -7,6 +7,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { getAICoachResponse, normalizeAdviceType } from '@/lib/ai-coach';
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates';
 import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration';
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,10 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  // AF Pro (`player_ai_recommendations`, owner's decision 2026-11-16), before the coach model call.
+  const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'player_ai_recommendations' });
+  if (!plan.ok) return plan.response;
 
   let body: {
     type?: string;

@@ -27,8 +27,8 @@ import { planDisplayNameForSku } from "@/lib/monetization/planPresentation"
  * Apple subscriptions are excluded: the App Store sends its own renewal notices.
  */
 
-export const REMINDER_MIN_DAYS = 15
-export const REMINDER_MAX_DAYS = 30
+const REMINDER_MIN_DAYS = 15
+const REMINDER_MAX_DAYS = 30
 export const REMINDER_MARKER_KEY = "af_renewal_reminder_period_end"
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -41,7 +41,7 @@ export type RenewalCandidate = {
   user: { email: string | null } | null
 }
 
-export type RenewalReminderDeps = {
+type RenewalReminderDeps = {
   findCandidates: (window: { from: Date; to: Date; limit: number }) => Promise<RenewalCandidate[]>
   stripe: () => Pick<Stripe, "subscriptions" | "invoices">
   send: (msg: { to: string; subject: string; html: string }) => Promise<{ ok: boolean; error?: string }>

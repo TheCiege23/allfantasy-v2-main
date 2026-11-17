@@ -82,7 +82,7 @@ export type WarFrontCard = {
   scoutHref: string
 }
 
-export type WarFront = {
+type WarFront = {
   /**
    * False when the outlook itself could not be read. Every card would then be `unplaced`, and 60
    * "could not place" cards would read as 60 findings about your teams rather than one failed read —

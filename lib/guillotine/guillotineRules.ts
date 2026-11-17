@@ -79,12 +79,12 @@ export const ENDGAME_OPTIONS: ReadonlyArray<{ value: GuillotineEndgameFormat; la
   { value: 'final_two', label: 'Final two showdown', help: 'When two teams remain, the best total over three weeks wins.' },
 ]
 
-export const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: string }> = [
+const TIEBREAK_OPTIONS: ReadonlyArray<{ value: TiebreakStep; label: string }> = [
   { value: 'bench_points', label: 'Fewer bench points is chopped' },
   { value: 'season_points', label: 'Fewer season points is chopped' },
   { value: 'previous_period', label: 'Lower score last week is chopped' },
   { value: 'draft_slot', label: 'Later draft slot is chopped (week 1 only)' },
-  { value: 'commissioner', label: 'Commissioner decides' },
+  { value: 'commissioner', label: 'Commissioner decides (12 hours to pick, then the next rule)' },
   { value: 'random', label: 'Random' },
 ]
 
@@ -117,7 +117,7 @@ export const RULE_DEFAULTS: Pick<GuillotineRules, 'teamsPerChop' | 'tiebreakerOr
   dangerMarginPoints: 10,
 }
 
-export type RulesPatchError = { field: GuillotineRuleField | null; message: string }
+type RulesPatchError = { field: GuillotineRuleField | null; message: string }
 
 const ENDGAMES = new Set(ENDGAME_OPTIONS.map((o) => o.value))
 const TIEBREAKS = new Set(TIEBREAK_OPTIONS.map((o) => o.value))

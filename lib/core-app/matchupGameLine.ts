@@ -13,7 +13,7 @@
  * when nothing is left the line is null and the board draws nothing.
  */
 
-export type GameOutcome = 'W' | 'L' | 'T'
+type GameOutcome = 'W' | 'L' | 'T'
 
 export type GameResult = {
   outcome: GameOutcome

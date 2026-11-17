@@ -15,13 +15,11 @@ import { gradeGuillotineDeal, isGuillotineTradeLeague } from './guillotineValue'
  *
  * Not `survivor_guillotine`: that format allows no trades.
  */
-export type GuillotineGrader = {
+type GuillotineGrader = {
   grade(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView>
 }
 
-export type GuillotineGraderDeps = { loadContext: typeof loadGuillotineContext }
-
-export { isGuillotineTradeLeague }
+type GuillotineGraderDeps = { loadContext: typeof loadGuillotineContext }
 
 export function createGuillotineGrader(
   args: {

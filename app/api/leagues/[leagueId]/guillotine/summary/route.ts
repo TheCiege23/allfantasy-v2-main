@@ -10,8 +10,15 @@
  *
  * POST: a chopped manager's "Who's next?" pick (`{ action: 'next_chop_pick', week, rosterId }`,
  * lib/guillotine/nextChopPick.ts). Any member; the store refuses a manager who is still alive.
+ *
+ * Commissioner decides (lib/guillotine/commissionerTiebreak.ts): `GET ?view=tiebreak` lists chop ties left to the
+ * commissioner, and `POST { action: 'commissioner_tiebreak', key, rosterIds }` picks who goes. Commissioner only.
+ *
+ * Undo a chop (lib/guillotine/chopUndo.ts): `GET ?view=undo` says whether the latest chop can be undone, and
+ * `POST { action: 'undo_chop', week, chopInstead? }` undoes it. Commissioner only.
  */
 
+import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -21,7 +28,6 @@ import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryServ
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
 import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guillotine/guillotineCurrentWeek'
-import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
@@ -30,6 +36,8 @@ import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRu
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
 import { loadNextChopPickState, saveNextChopPick } from '@/lib/guillotine/nextChopPickStore'
+import { decideCommissionerTiebreak, loadCommissionerTiebreaks } from '@/lib/guillotine/commissionerTiebreakLoad'
+import { loadChopUndoState, undoLatestChop } from '@/lib/guillotine/chopUndoService'
 import { guillotineAdvancedSnapshot, guillotineRulesSnapshot } from '@/lib/league-rules-explainer/snapshot'
 import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
@@ -37,6 +45,7 @@ import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { providerLabel } from '@/lib/guillotine/importedLeagueGuard'
 import { readPeriodWeeks } from '@/lib/guillotine/eliminationPeriods'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,7 +78,7 @@ export async function GET(
   // `?view=rules`: the commissioner's "League rules" page (lib/guillotine/guillotineRules.ts).
   if (req.nextUrl.searchParams?.get('view') === 'rules') {
     try {
-      await assertCommissioner(leagueId, userId)
+      await assertCommissionerAccess(leagueId, userId, 'view')
     } catch {
       return NextResponse.json({ error: 'Only the commissioner can edit league rules.' }, { status: 403 })
     }
@@ -77,11 +86,28 @@ export async function GET(
     return view ? NextResponse.json(view) : NextResponse.json({ error: 'Not a guillotine league' }, { status: 404 })
   }
 
+  // `?view=tiebreak`: chop ties left to the commissioner (lib/guillotine/commissionerTiebreak.ts). Free — the step
+  // is in every league's default tiebreak order.
+  if (req.nextUrl.searchParams?.get('view') === 'tiebreak') {
+    if (!(await canCommissionerAct(leagueId, userId, 'view'))) {
+      return NextResponse.json({ error: 'Only the commissioner can decide a chop tie.' }, { status: 403 })
+    }
+    return NextResponse.json({ ties: await loadCommissionerTiebreaks(leagueId) })
+  }
+
+  // `?view=undo`: whether the latest chop can be undone, and who could be chopped instead (lib/guillotine/chopUndo.ts).
+  if (req.nextUrl.searchParams?.get('view') === 'undo') {
+    if (!(await canCommissionerAct(leagueId, userId, 'view'))) {
+      return NextResponse.json({ error: 'Only the commissioner can undo a chop.' }, { status: 403 })
+    }
+    return NextResponse.json(await loadChopUndoState(leagueId))
+  }
+
   // `?view=preview`: the commissioner's chop-week preview (lib/guillotine/chopPreview.ts). AF Commissioner,
   // by the same check as the paid league rules. Reads only — nothing is chopped, moved or posted.
   if (req.nextUrl.searchParams?.get('view') === 'preview') {
     try {
-      await assertCommissioner(leagueId, userId)
+      await assertCommissionerAccess(leagueId, userId, 'view')
     } catch {
       return NextResponse.json({ error: 'Only the commissioner can preview the chop.' }, { status: 403 })
     }
@@ -118,7 +144,7 @@ export async function GET(
   ])
   // For the commissioner only: may they change the AF Commissioner guillotine rules? The SAME check
   // the chop-rules and league-rules saves enforce, so no page shows an editor the save will refuse.
-  const canEditPaidRules = (await isCommissioner(leagueId, userId).catch(() => false))
+  const canEditPaidRules = (await canCommissionerAct(leagueId, userId, 'view').catch(() => false))
     ? await viewerCanEditPaidGuillotineRules(userId)
     : null
 
@@ -173,7 +199,25 @@ export async function POST(
   if (!(await canAccessLeagueDraft(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!(await isGuillotineLeague(leagueId))) return NextResponse.json({ error: 'Not a Guilly league' }, { status: 404 })
 
-  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown } | null
+  const body = (await req.json().catch(() => null)) as { action?: unknown; week?: unknown; rosterId?: unknown; key?: unknown; rosterIds?: unknown; chopInstead?: unknown } | null
+  // The commissioner picks who goes in a tied chop (`{ action: 'commissioner_tiebreak', key, rosterIds }`).
+  if (body?.action === 'commissioner_tiebreak') {
+    if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
+      return NextResponse.json({ error: 'Only the commissioner can decide a chop tie.' }, { status: 403 })
+    }
+    const decided = await decideCommissionerTiebreak({ leagueId, userId, key: body.key, rosterIds: body.rosterIds })
+    if (!decided.ok) return NextResponse.json({ error: decided.error }, { status: decided.status })
+    return NextResponse.json({ ok: true, ties: await loadCommissionerTiebreaks(leagueId) })
+  }
+  // The commissioner undoes the latest chop (`{ action: 'undo_chop', week, chopInstead? }`).
+  if (body?.action === 'undo_chop') {
+    if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
+      return NextResponse.json({ error: 'Only the commissioner can undo a chop.' }, { status: 403 })
+    }
+    const undone = await undoLatestChop({ leagueId, userId, week: body.week, chopInstead: body.chopInstead })
+    if (!undone.ok) return NextResponse.json({ error: undone.error, blockers: undone.blockers ?? [] }, { status: undone.status })
+    return NextResponse.json({ ...undone, undo: await loadChopUndoState(leagueId) })
+  }
   if (body?.action !== 'next_chop_pick' || typeof body.rosterId !== 'string' || !body.rosterId || !Number.isInteger(body.week)) {
     return NextResponse.json({ error: 'Send { action: "next_chop_pick", week, rosterId }.' }, { status: 400 })
   }
@@ -195,7 +239,7 @@ export async function PATCH(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Only the commissioner can change the first chop week.' }, { status: 403 })
   }
@@ -212,6 +256,8 @@ export async function PATCH(
     )
   }
 
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
   const body = (await req.json().catch(() => null)) as { eliminationStartWeek?: unknown; advanced?: unknown; rules?: unknown } | null
   if (body && 'rules' in body) {
     try {
@@ -229,6 +275,7 @@ export async function PATCH(
           changes: diffRuleSnapshots(guillotineRulesSnapshot(before.rules), guillotineRulesSnapshot(saved.view.rules)),
         })
       }
+      await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['rules'] })
       return NextResponse.json({ ok: true, ...saved.view })
     } catch (e) {
       console.error('[guillotine/summary PATCH rules]', e instanceof Error ? e.message : 'unknown error')
@@ -251,6 +298,7 @@ export async function PATCH(
         changes: diffRuleSnapshots(guillotineAdvancedSnapshot(before), guillotineAdvancedSnapshot(saved.value)),
       })
     }
+    await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['chopSchedule'] })
     const config = await getGuillotineConfig(leagueId)
     return NextResponse.json({ ok: true, advanced: saved.value, scheduleLines: config ? describeSchedule(saved.value, config.teamsPerChop, config.eliminationStartWeek) : [] })
   }
@@ -273,6 +321,7 @@ export async function PATCH(
         ),
       })
     }
+    await logFormatRulesChange({ leagueId, userId, format: 'guillotine', fields: ['eliminationStartWeek'] })
     return NextResponse.json({
       ok: true,
       config: {

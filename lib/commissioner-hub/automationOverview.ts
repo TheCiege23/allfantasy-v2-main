@@ -15,7 +15,7 @@ import { readTaxiRulesEnforced } from '@/lib/taxi/taxiMoveRules'
 import { readAutoHandover } from '@/lib/inactive-manager/autoHandover'
 
 export type AutomationGroup = 'lineups' | 'drafts' | 'fairness'
-export type AutomationState = 'on' | 'off' | 'needs_plan'
+type AutomationState = 'on' | 'off' | 'needs_plan'
 
 export type AutomationRow = {
   key: string

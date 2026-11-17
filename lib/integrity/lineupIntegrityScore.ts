@@ -46,7 +46,7 @@ export type SnapshotPlayer = {
 /** One starting seat: its label and the positions that may fill it. */
 export type SnapshotSlot = { slot: string; eligible: string[] }
 
-export type WeekScoreInput = {
+type WeekScoreInput = {
   week: number
   players: Record<string, SnapshotPlayer>
   slots: readonly SnapshotSlot[]
@@ -71,7 +71,7 @@ export type WeekScore =
   | { scored: false; skipReason: 'no_lineup' | 'no_slots' | 'thin_projections' | 'no_projected_points' }
 
 /** Above this share of the roster without a projection, the week is not scored. */
-export const MAX_MISSING_PROJECTION_SHARE = 0.25
+const MAX_MISSING_PROJECTION_SHARE = 0.25
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10
@@ -128,7 +128,7 @@ function positionsOf(position: string | null | undefined): string[] {
 }
 
 /** The line a week must fall under, and how many scored weeks in a row it takes. */
-export const LINEUP_INTEGRITY_THRESHOLD: Record<IntegritySensitivity, { below: number; weeks: number }> = {
+const LINEUP_INTEGRITY_THRESHOLD: Record<IntegritySensitivity, { below: number; weeks: number }> = {
   low: { below: 0.8, weeks: 3 },
   medium: { below: 0.85, weeks: 2 },
   high: { below: 0.9, weeks: 2 },
@@ -181,7 +181,7 @@ export function percent(ratio: number): number {
  * The line a commissioner can post: what they started against what they could have started.
  * "Started 9 of 9 highest-projected players (100%)".
  */
-export function describeWeekScore(s: { week: number; startedTopCount: number; starterCount: number; ratio: number }): string {
+function describeWeekScore(s: { week: number; startedTopCount: number; starterCount: number; ratio: number }): string {
   return `Week ${s.week}: started ${s.startedTopCount} of ${s.starterCount} highest-projected players (${percent(s.ratio)}% of the best possible projection).`
 }
 

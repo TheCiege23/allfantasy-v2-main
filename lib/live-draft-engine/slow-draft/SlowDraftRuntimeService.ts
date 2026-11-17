@@ -1,4 +1,4 @@
-import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
+import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
 import { loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
 import { prisma } from '@/lib/prisma'

@@ -29,7 +29,7 @@ export default async function MockDraftSimulatorPage() {
           Mock Draft Simulator
         </h1>
         <p className="text-center text-gray-400 text-base sm:text-xl mb-10">
-          Powered by Sleeper data + AI that learns real draft tendencies
+          Powered by Sleeper data + Chimmy that learns real draft tendencies
         </p>
 
         <MockDraftSimulatorWrapper

@@ -33,6 +33,7 @@ import { standingsBoardCopy } from '@/lib/core-app/standingsUiCopy'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { useMessages } from '@/components/i18n/useMessages'
+import { standingsGuideMessages } from '@/lib/core-app/messages/standingsGuide'
 import { standingsBoardMessages } from '@/lib/core-app/messages/standingsScreen'
 import { redraftRaceTag } from '@/lib/core-app/redraftCoreRace'
 
@@ -69,7 +70,7 @@ export type EliminationZones = {
   /** Roster ids in this week's bottom three; null when the week cannot be ranked yet. */
   bubble: readonly string[] | null
 }
-export type EliminationStatus = 'safe' | 'bubble' | 'eliminated'
+type EliminationStatus = 'safe' | 'bubble' | 'eliminated'
 
 export function eliminationStatusOf(rosterId: string, zones: EliminationZones): EliminationStatus | null {
   if (zones.eliminated.includes(rosterId)) return 'eliminated'
@@ -95,7 +96,6 @@ function useZoneOf(): (t: BoardTeam) => Zone | undefined {
   }
 }
 
-const LAYOUT_STORAGE_KEY = 'af-standings-layout'
 /** Below this the table cannot show a record without a sideways scroll, so the list is the default. */
 const PHONE_QUERY = '(max-width: 640px)'
 
@@ -146,7 +146,7 @@ function ZoneChip({ team }: { team: BoardTeam }) {
   )
 }
 
-export function Move({ value }: { value: number | null }) {
+function Move({ value }: { value: number | null }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
   if (value == null) {
@@ -465,6 +465,7 @@ function OfficialTable({
   odds,
   sort,
   onSort,
+  more = false,
 }: {
   board: StandingsBoard
   groups: Group[]
@@ -472,6 +473,11 @@ function OfficialTable({
   odds: StandingsOdds | null
   sort: StandingsSort
   onSort: (key: StandingsSortKey) => void
+  /**
+   * 2026-11-14: the table drew about 20 columns by default. Without `more` it keeps the ones that answer
+   * "where does everyone stand": #, Team, Status, W-L, GB, Playoff %, PF and Streak. `more` adds the rest.
+   */
+  more?: boolean
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
@@ -490,17 +496,24 @@ function OfficialTable({
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
-  /* W-L, Pct, GB, PA, Diff, Last 5 and Streak come with head-to-head; PF, Move and AF are always there. */
+  /*
+   * ⚠ COUNT EXACTLY WHAT IS DRAWN — the division and line rows span `cols`, and a count that disagrees
+   * with the header draws them short or long. Always: #, Team, Status, PF; with head-to-head W-L, GB and
+   * Streak; with odds Playoff %. With `more`: Pct, PA, Diff and Last 5 (head-to-head), the median split,
+   * Magic #, Schedule left (odds), Next, Div, the two projections, Move and AF.
+   */
+  const showSplit = more && hasSplit
+  const showPath = more && hasPath
+  const showNext = more && hasNext
+  const showDiv = more && hasDiv
+  const showProj = more && hasProj
   const cols =
     4 +
-    (h2h ? 7 : 0) +
-    (hasSplit ? 2 : 0) +
-    (odds ? 2 : 0) +
-    (hasNext ? 1 : 0) +
-    (hasPath ? 1 : 0) +
-    (hasDiv ? 1 : 0) +
-    (hasProj ? 2 : 0) +
-    2
+    (h2h ? 3 : 0) +
+    (odds ? 1 : 0) +
+    (more
+      ? (h2h ? 4 : 0) + (showSplit ? 2 : 0) + (showPath ? 1 : 0) + (odds ? 1 : 0) + (showNext ? 1 : 0) + (showDiv ? 1 : 0) + (showProj ? 2 : 0) + 2
+      : 0)
   const th = { sort, onSort }
 
   return (
@@ -523,7 +536,7 @@ function OfficialTable({
                 <th scope="col" className="af-stb-n">
                   <abbr title={copy('Wins-losses-ties')}>{m.winLossAbbrev}</abbr>
                 </th>
-                {hasSplit ? (
+                {showSplit ? (
                   <>
                     <th scope="col" className="af-stb-n">
                       <abbr title={copy('Head-to-head games only')}>H2H</abbr>
@@ -533,15 +546,17 @@ function OfficialTable({
                     </th>
                   </>
                 ) : null}
-                <SortTh {...th} sortKey="pct" label="Winning percentage" className="af-stb-n">
-                  Pct
-                </SortTh>
+                {more ? (
+                  <SortTh {...th} sortKey="pct" label="Winning percentage" className="af-stb-n">
+                    Pct
+                  </SortTh>
+                ) : null}
                 <th scope="col" className="af-stb-n">
                   <abbr title={m.gamesBackTitle(field, ordinal(field))}>GB</abbr>
                 </th>
               </>
             ) : null}
-            {hasPath ? (
+            {showPath ? (
               <th scope="col" className="af-stb-n">
                 <abbr title={copy('C: more wins that guarantee a playoff spot. E: more losses that end the chase. Both hold whatever every other game does.')}>
                   {copy('Magic #')}
@@ -562,33 +577,37 @@ function OfficialTable({
             <SortTh {...th} sortKey="pf" label="Points for" title="Points for" className="af-stb-n">
               PF
             </SortTh>
-            {h2h ? (
+            {more && h2h ? (
               <SortTh {...th} sortKey="pa" label="Points against" title="Points against" className="af-stb-n">
                 PA
               </SortTh>
             ) : null}
-            {h2h ? (
+            {more && h2h ? (
               <th scope="col" className="af-stb-n">
                 <abbr title={m.diffTitle}>{m.diffAbbrev}</abbr>
               </th>
             ) : null}
-            <th scope="col" className="af-stb-n">
-              {copy('Move')}
-            </th>
+            {more ? (
+              <th scope="col" className="af-stb-n">
+                {copy('Move')}
+              </th>
+            ) : null}
             {/* AF Power beside the table's own order, so "where am I" and "how good am I" share a row. */}
-            <th scope="col" className="af-stb-n">
-              <abbr title={m.powerColTitle}>{m.powerColAbbrev}</abbr>
-            </th>
+            {more ? (
+              <th scope="col" className="af-stb-n">
+                <abbr title={m.powerColTitle}>{m.powerColAbbrev}</abbr>
+              </th>
+            ) : null}
             {h2h ? (
               <>
-                <th scope="col">{copy('Last 5')}</th>
+                {more ? <th scope="col">{copy('Last 5')}</th> : null}
                 <SortTh {...th} sortKey="streak" label="Streak" title="The current run of identical results" className="af-stb-n">
                   {copy('Strk')}
                 </SortTh>
               </>
             ) : null}
-            {hasNext ? <th scope="col">{copy('Next')}</th> : null}
-            {odds ? (
+            {showNext ? <th scope="col">{copy('Next')}</th> : null}
+            {more && odds ? (
               <SortTh
                 {...th}
                 sortKey="sos"
@@ -599,12 +618,12 @@ function OfficialTable({
                 {copy('SOS left')}
               </SortTh>
             ) : null}
-            {hasDiv ? (
+            {showDiv ? (
               <th scope="col" className="af-stb-n">
                 Div
               </th>
             ) : null}
-            {hasProj ? (
+            {showProj ? (
               <>
                 <th scope="col" className="af-stb-n af-stb-proj">
                   <span className="af-stb-projtag">{copy('Model')}</span> {copy('Proj. W-L')}
@@ -648,17 +667,17 @@ function OfficialTable({
                     {h2h ? (
                       <>
                         <td className="af-stb-n af-num">{formatRecord(t.record)}</td>
-                        {hasSplit ? (
+                        {showSplit ? (
                           <>
                             <td className="af-stb-n af-num">{t.split ? formatRecord(t.split.headToHead) : '—'}</td>
                             <td className="af-stb-n af-num">{t.split ? formatRecord(t.split.median) : '—'}</td>
                           </>
                         ) : null}
-                        <td className="af-stb-n af-num">{pct(t.winPct)}</td>
+                        {more ? <td className="af-stb-n af-num">{pct(t.winPct)}</td> : null}
                         <td className="af-stb-n af-num">{gamesBackText(t.gamesBack)}</td>
                       </>
                     ) : null}
-                    {hasPath ? (
+                    {showPath ? (
                       <td className="af-stb-n">
                         <PathCell team={t} />
                       </td>
@@ -669,43 +688,49 @@ function OfficialTable({
                       </td>
                     ) : null}
                     <td className="af-stb-n af-num">{pts(t.pointsFor)}</td>
-                    {h2h ? <td className="af-stb-n af-num">{pts(t.pointsAgainst)}</td> : null}
-                    {h2h ? (
+                    {more && h2h ? <td className="af-stb-n af-num">{pts(t.pointsAgainst)}</td> : null}
+                    {more && h2h ? (
                       <td className="af-stb-n af-num af-stb-diff" data-tone={diffTone(t)}>
                         {diffText(t)}
                       </td>
                     ) : null}
-                    <td className="af-stb-n">
-                      <Move value={t.seedMove} />
-                    </td>
-                    <td className="af-stb-n">
-                      <span className="af-stb-afrank">
-                        <span className="af-num">{t.powerRank}</span>
-                        <Move value={t.powerMove} />
-                      </span>
-                    </td>
+                    {more ? (
+                      <td className="af-stb-n">
+                        <Move value={t.seedMove} />
+                      </td>
+                    ) : null}
+                    {more ? (
+                      <td className="af-stb-n">
+                        <span className="af-stb-afrank">
+                          <span className="af-num">{t.powerRank}</span>
+                          <Move value={t.powerMove} />
+                        </span>
+                      </td>
+                    ) : null}
                     {h2h ? (
                       <>
-                        <td>
-                          <Form form={t.form} />
-                        </td>
+                        {more ? (
+                          <td>
+                            <Form form={t.form} />
+                          </td>
+                        ) : null}
                         <td className="af-stb-n">
                           <StreakCell team={t} />
                         </td>
                       </>
                     ) : null}
-                    {hasNext ? (
+                    {showNext ? (
                       <td>
                         <NextCell team={t} seedOf={seedOf} />
                       </td>
                     ) : null}
-                    {odds ? (
+                    {more && odds ? (
                       <td className="af-stb-n">
                         <SosCell team={t} odds={odds} />
                       </td>
                     ) : null}
-                    {hasDiv ? <td className="af-stb-n af-num">{t.divisionRank ?? '—'}</td> : null}
-                    {hasProj ? (
+                    {showDiv ? <td className="af-stb-n af-num">{t.divisionRank ?? '—'}</td> : null}
+                    {showProj ? (
                       <>
                         <td className="af-stb-n af-num af-stb-proj">{t.projected ? formatRecord(t.projected) : '—'}</td>
                         <td className="af-stb-n af-num af-stb-proj">{t.projected ? t.projected.seed : '—'}</td>
@@ -1553,6 +1578,7 @@ export function StandingsBoardView({
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
   const m = useMessages(standingsBoardMessages)
+  const guideCopy = useMessages(standingsGuideMessages)
   const [view, setView] = useState<StandingsViewKey>(initial.view)
   const [division, setDivision] = useState<string>(
     initial.division === 'all' || initial.division === 'group' || finalBoard.divisions.some((d) => d.key === initial.division)
@@ -1562,6 +1588,8 @@ export function StandingsBoardView({
   const [layout, setLayout] = useState<StandingsLayout>(initial.layout)
   const [sort, setSort] = useState<StandingsSort>(initial.sort ?? DEFAULT_STANDINGS_SORT)
   const [asIf, setAsIf] = useState(false)
+  /* 2026-11-14: the table opens short; this shows every column. */
+  const [moreCols, setMoreCols] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   /*
@@ -1579,25 +1607,28 @@ export function StandingsBoardView({
    */
   const autoLayout = useRef(false)
 
-  // A remembered layout applies only when the URL did not choose one.
+  /*
+   * 2026-11-14: the layout follows the screen — the list on a phone, the table anywhere wider — and there is
+   * no Table/Cards switch any more. A URL that names a layout still gets it.
+   *
+   * ⚠ ON A PHONE THE TABLE IS A 1,480px STRIP IN A 340px WINDOW — rank, team and status, and everything else
+   * a sideways scroll away. The list fits.
+   */
   useEffect(() => {
     try {
       const url = new URL(window.location.href)
       if (url.searchParams.has(STANDINGS_VIEW_PARAMS.layout)) return
-      const remembered = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
-      if (remembered === 'cards') {
-        setLayout('cards')
-      } else if (remembered == null && window.matchMedia?.(PHONE_QUERY).matches) {
-        /*
-         * ⚠ ON A PHONE THE TABLE IS A 1,480px STRIP IN A 340px WINDOW — rank, team and status, and
-         * everything else a sideways scroll away. The list fits. Only a phone that has never chosen
-         * gets it; a remembered "table" is honoured.
-         */
+      const mq = window.matchMedia?.(PHONE_QUERY)
+      if (!mq) return
+      const apply = () => {
         autoLayout.current = true
-        setLayout('cards')
+        setLayout(mq.matches ? 'cards' : 'table')
       }
+      apply()
+      mq.addEventListener?.('change', apply)
+      return () => mq.removeEventListener?.('change', apply)
     } catch {
-      /* storage can be unavailable; the table is the default */
+      /* no matchMedia: the table is the default */
     }
   }, [])
 
@@ -1615,16 +1646,6 @@ export function StandingsBoardView({
       /* a URL we cannot write is not worth breaking the board over */
     }
   }, [view, division, layout, sort])
-
-  function chooseLayout(next: StandingsLayout) {
-    autoLayout.current = false
-    setLayout(next)
-    try {
-      window.localStorage.setItem(LAYOUT_STORAGE_KEY, next)
-    } catch {
-      /* ignore */
-    }
-  }
 
   /* The same header flips direction; a new header starts at its natural first order. */
   function chooseSort(key: StandingsSortKey) {
@@ -1659,7 +1680,6 @@ export function StandingsBoardView({
     division !== 'all' && division !== 'group' ? new Set(board.teams.filter((t) => t.division?.key === division).map((t) => t.rosterId)) : null
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
-  const withheld = board.projectionWithheld
   const you = board.teams.find((t) => t.isYou) ?? null
   /*
    * The playoff picture needs a playoff line to draw: head-to-head results, no elimination format, and
@@ -1682,30 +1702,55 @@ export function StandingsBoardView({
   return (
     <EliminationContext.Provider value={elimination}>
     <div className="af-stb" ref={containerRef}>
+      {/*
+        2026-11-14: six controls sat above the table (League table, AF Power, Playoff picture, Final results,
+        If scores held, Table/Cards). The league table is the default and needs no button; the other two
+        views fold under "More views"; the live switch is one toggle; the layout follows the screen.
+      */}
       <div className="af-stb-controls" role="group" aria-label={copy('Standings view')}>
-        <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which table')}>
-          <button type="button" role="radio" aria-checked={view === 'official' || (view === 'playoffs' && !canPicture)} onClick={() => setView('official')}>
-            {copy('League table')}
+        {view !== 'official' && !(view === 'playoffs' && !canPicture) ? (
+          <button type="button" className="af-stg-btn" data-testid="standings-back-to-table" onClick={() => setView('official')}>
+            {guideCopy.backToTable}
           </button>
-          <button type="button" role="radio" aria-checked={view === 'power'} onClick={() => setView('power')}>
-            {copy('AF Power')}
-          </button>
-          {canPicture ? (
-            <button type="button" role="radio" aria-checked={view === 'playoffs'} onClick={() => setView('playoffs')}>
-              {m.playoffPicture}
-            </button>
-          ) : null}
-        </div>
-        {live ? (
-          <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which results')}>
-            <button type="button" role="radio" aria-checked={!asIf} onClick={() => setAsIf(false)}>
-              {copy('Final results')}
-            </button>
-            <button type="button" role="radio" aria-checked={asIf} onClick={() => setAsIf(true)}>
-              {copy('If scores held')}
-            </button>
-          </div>
         ) : null}
+        {live ? (
+          <button
+            type="button"
+            className="af-stg-btn"
+            aria-pressed={asIf}
+            data-testid="standings-if-scores-held"
+            onClick={() => setAsIf((v) => !v)}
+          >
+            {guideCopy.ifScoresHeld}
+          </button>
+        ) : null}
+        {view === 'official' && layout === 'table' && !picture ? (
+          <button
+            type="button"
+            className="af-stg-btn"
+            aria-pressed={moreCols}
+            data-testid="standings-more-columns"
+            onClick={() => setMoreCols((v) => !v)}
+          >
+            {moreCols ? guideCopy.fewerColumns : guideCopy.moreColumns}
+          </button>
+        ) : null}
+        <details className="af-stg-views" data-testid="standings-more-views">
+          <summary>{guideCopy.moreViews}</summary>
+          <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which table')}>
+            <button type="button" role="radio" aria-checked={view === 'official' || (view === 'playoffs' && !canPicture)} onClick={() => setView('official')}>
+              {copy('League table')}
+            </button>
+            <button type="button" role="radio" aria-checked={view === 'power'} onClick={() => setView('power')}>
+              {copy('AF Power')}
+            </button>
+            {canPicture ? (
+              <button type="button" role="radio" aria-checked={view === 'playoffs'} onClick={() => setView('playoffs')}>
+                {m.playoffPicture}
+              </button>
+            ) : null}
+          </div>
+        </details>
         {board.divisions.length > 0 ? (
           <label className="af-stb-select">
             <span>{copy('Divisions')}</span>
@@ -1720,14 +1765,6 @@ export function StandingsBoardView({
             </select>
           </label>
         ) : null}
-        <div className="af-stb-seg" role="radiogroup" aria-label={copy('Layout')}>
-          <button type="button" role="radio" aria-checked={layout === 'table'} onClick={() => chooseLayout('table')}>
-            {copy('Table')}
-          </button>
-          <button type="button" role="radio" aria-checked={layout === 'cards'} onClick={() => chooseLayout('cards')}>
-            {copy('Cards')}
-          </button>
-        </div>
       </div>
 
       <div className="af-stb-kind" data-view={view}>
@@ -1752,10 +1789,9 @@ export function StandingsBoardView({
           are left out here because they are simulated from final results.
         </p>
       ) : finalBoard.pendingWeeks.length > 0 ? (
-        <p className="af-stb-pending" role="note">
-          Week {finalBoard.pendingWeeks.join(', ')} {finalBoard.pendingWeeks.length === 1 ? 'is' : 'are'} still being played. The table counts
-          results through week {finalBoard.throughWeek}, the last week {finalBoard.rules.platformLabel} has made final; those games are still
-          counted as left to play.{live ? ' Switch to “If scores held” to see the table as it would stand now.' : ''}
+        <p className="af-stb-pending" role="note" data-testid="standings-pending">
+          {guideCopy.pendingShort(finalBoard.pendingWeeks.join(', '), finalBoard.throughWeek)}
+          {live ? ` ${guideCopy.pendingLiveHint}` : ''}
         </p>
       ) : null}
 
@@ -1772,29 +1808,28 @@ export function StandingsBoardView({
           </li>
         </ul>
       ) : view !== 'power' ? (
-        <ul className="af-stb-legend" aria-label={copy('Status key')}>
+        /*
+         * 2026-11-14: one line of marks. The full wording of each status ("within a win of the line", "no
+         * result can knock them out") is in each row's status chip and in "How this table works".
+         */
+        <ul className="af-stb-legend af-stg-legend" aria-label={copy('Status key')} data-testid="standings-key">
           {byes > 0 ? (
             <li data-zone="bye">
-              <span aria-hidden>★</span> {copy('Bye')} — {copy('top')} {byes}
+              <span aria-hidden>★</span> {guideCopy.keyBye(byes)}
             </li>
           ) : null}
           <li data-zone="playoff">
-            <span aria-hidden>●</span> {copy('Playoffs')} — {copy('top')} {field}
+            <span aria-hidden>●</span> {guideCopy.keyPlayoffs(field)}
           </li>
           <li data-zone="bubble">
-            <span aria-hidden>◐</span> {copy('Bubble — within a win of the line')}
+            <span aria-hidden>◐</span> {guideCopy.keyBubble}
           </li>
           <li data-zone="eliminated">
-            <span aria-hidden>✕</span> {copy('Eliminated — cannot reach the line')}
+            <span aria-hidden>✕</span> {guideCopy.keyOut}
           </li>
           <li data-zone="clinched">
-            <span aria-hidden>✓</span> {copy('Clinched — no result can knock them out')}
+            <span aria-hidden>✓</span> {guideCopy.keyClinched}
           </li>
-          {board.teams.some((t) => t.projected) ? (
-            <li data-zone="model">
-              <span className="af-stb-projtag">{copy('Model')}</span> {copy('Projection, not a result')}
-            </li>
-          ) : null}
         </ul>
       ) : null}
 
@@ -1814,8 +1849,10 @@ export function StandingsBoardView({
         <Cards board={board} groups={groups} view={view === 'power' ? 'power' : 'official'} odds={odds} efficiency={efficiency} plain={plain} />
       ) : view !== 'power' ? (
         <>
-          <p className="af-stb-cue">{copy('Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.')}</p>
-          <OfficialTable board={board} groups={groups} plain={plain} odds={odds} sort={sortable} onSort={chooseSort} />
+          {moreCols ? (
+            <p className="af-stb-cue">{copy('Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.')}</p>
+          ) : null}
+          <OfficialTable board={board} groups={groups} plain={plain} odds={odds} sort={sortable} onSort={chooseSort} more={moreCols} />
         </>
       ) : (
         <>
@@ -1867,6 +1904,12 @@ export function StandingsBoardView({
         )}
       </details>
 
+      {/*
+        Folded (2026-11-13 standings guide): the tiebreak picker, the head-to-head grid and both charts
+        explain how the table got here. The table itself is the answer; these are one tap away.
+      */}
+      <details className="af-stg-deeper" data-testid="standings-how-table">
+        <summary>{guideCopy.deeperBoard}</summary>
       {board.hasHeadToHead && board.teams.length > 1 ? <WhyAbove board={board} view={view} /> : null}
 
       {board.hasHeadToHead && board.teams.length > 2 ? <HeadToHeadGrid board={board} /> : null}
@@ -1885,6 +1928,7 @@ export function StandingsBoardView({
         </h3>
         <StandingsPointsChart board={board} teams={board.teams} />
       </section>
+      </details>
     </div>
     </EliminationContext.Provider>
   )

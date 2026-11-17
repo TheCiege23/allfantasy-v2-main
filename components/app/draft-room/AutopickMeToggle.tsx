@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react'
 
 /** `draft_as_me` (AF Pro): as soon as the manager is on the clock, the queue goes first, then Chimmy picks the way they draft. */
-export type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
+type AutopickMode = 'standard' | 'ai_queue' | 'draft_as_me'
 
 export type ViewerAutopickData = {
   enabled: boolean
@@ -12,7 +12,7 @@ export type ViewerAutopickData = {
   updatedAt: string | null
 }
 
-export type AutopickMeToggleProps = {
+type AutopickMeToggleProps = {
   viewerAutopick: ViewerAutopickData | null | undefined
   leagueId: string
   onUpdate: (updated: ViewerAutopickData) => void
@@ -54,7 +54,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
           const msg =
             data?.error ??
             (res.status === 403
-              ? 'AF Pro required to enable AI queue auto-pick.'
+              ? 'AF Pro required to enable Chimmy queue auto-pick.'
               : 'Failed to save preference.')
           throw new Error(msg)
         }
@@ -126,7 +126,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             title={isProEligible ? undefined : 'AF Pro required'}
             onClick={() => {
               if (!isProEligible) {
-                setError('AF Pro required to enable AI queue auto-pick.')
+                setError('AF Pro required to enable Chimmy queue auto-pick.')
                 return
               }
               void save(true, 'ai_queue')
@@ -137,7 +137,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
                 : 'border-white/15 text-white/45 hover:border-white/25 hover:text-white/70'
             } ${!isProEligible ? 'cursor-not-allowed opacity-45' : ''}`}
           >
-            AI Queue{!isProEligible ? ' (Pro)' : ''}
+            Chimmy Queue{!isProEligible ? ' (Pro)' : ''}
           </button>
           <button
             type="button"

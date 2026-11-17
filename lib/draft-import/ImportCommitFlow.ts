@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import type { DraftImportPreview } from './DraftImportPreview'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
-export interface ImportCommitResult {
+interface ImportCommitResult {
   success: boolean
   error?: string
   backupId?: string
@@ -60,7 +60,7 @@ function buildImportFingerprint(input: {
 /**
  * Create backup of current draft session state (for rollback). Returns backup id.
  */
-export async function createImportBackup(leagueId: string): Promise<string | null> {
+async function createImportBackup(leagueId: string): Promise<string | null> {
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,

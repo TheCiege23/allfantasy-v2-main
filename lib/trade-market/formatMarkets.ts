@@ -58,9 +58,9 @@ export function bookKey(b: MarketBook): string {
   return `${b.format}:${b.qbFormat}`
 }
 
-export const FORMAT_CALCULATION_VERSION = 'ct2.0'
+const FORMAT_CALCULATION_VERSION = 'ct2.0'
 
-export type ResolvedTradeLeague = {
+type ResolvedTradeLeague = {
   /** Our `League.id` — the unit "distinct leagues" is counted in. */
   leagueKey: string
   book: MarketBook
@@ -194,7 +194,7 @@ export function seasonLeagueRow(current: LeagueRow, seasonPlatformLeagueId: stri
  *   2. that SEASON's own settings from `league_dynasty_seasons` (`seasonLeagueRow`);
  *   3. `league_seasons` → the league's settings TODAY (`carried: true`), the last resort.
  */
-export async function resolveTradeLeagues(
+async function resolveTradeLeagues(
   prisma: PrismaClient,
   historyIds: readonly string[],
 ): Promise<Map<string, ResolvedTradeLeague>> {
@@ -277,7 +277,7 @@ export type LineupObservation = {
   observedValue: number
 }
 
-export type FormatGather = {
+type FormatGather = {
   byBook: Map<string, CompletedTradeGather>
   lineupObservations: LineupObservation[]
   /** Every trade whose league resolved, with the format to stamp on it (`stampTradeFormats`). */
@@ -302,7 +302,7 @@ const asIds = (raw: unknown): string[] =>
   Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
 
 /** One roster's side of one trade, as the Sleeper trade-fact sweep recorded it. */
-export type TradeFactSide = { faabIn: number; faabOut: number; playersInIds: string[]; playersOutIds: string[] }
+type TradeFactSide = { faabIn: number; faabOut: number; playersInIds: string[]; playersOutIds: string[] }
 
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x))
 
@@ -480,9 +480,9 @@ export async function gatherFormatObservations(
 
 // ─── Lineup factors ─────────────────────────────────────────────────────────────────────────────────
 
-export type LineupBucket = 'low' | 'high'
+type LineupBucket = 'low' | 'high'
 
-export type LineupFactor = {
+type LineupFactor = {
   position: LineupPosition
   bucket: LineupBucket
   /** low: the league's starters at this position are BELOW `bound`; high: ABOVE it. */
@@ -507,11 +507,11 @@ export type LineupFactorTable = {
 }
 
 /** Thresholds for publishing a lineup factor. A factor is a claim about a whole format, so it needs breadth. */
-export const LINEUP_MIN_OBSERVATIONS = 100
-export const LINEUP_MIN_LEAGUES = 8
-export const LINEUP_MIN_STANDARD = 200
-export const LINEUP_FACTOR_MIN = 0.8
-export const LINEUP_FACTOR_MAX = 1.25
+const LINEUP_MIN_OBSERVATIONS = 100
+const LINEUP_MIN_LEAGUES = 8
+const LINEUP_MIN_STANDARD = 200
+const LINEUP_FACTOR_MIN = 0.8
+const LINEUP_FACTOR_MAX = 1.25
 
 const median = (xs: number[]): number | null => {
   if (xs.length === 0) return null
@@ -618,7 +618,7 @@ export type BookResult = {
 }
 
 /** Per-book values from one gather. PURE. */
-export function computeBookValues(gather: CompletedTradeGather): { values: CompletedTradeMarketValue[]; medianAdjustment: number | null } {
+function computeBookValues(gather: CompletedTradeGather): { values: CompletedTradeMarketValue[]; medianAdjustment: number | null } {
   const baselineFor = tierBaselines(gather)
   const values = [...gather.byPlayer.entries()].map(([playerId, e]) =>
     computeCompletedTradeValue({

@@ -1,10 +1,10 @@
 import type { CSSProperties } from 'react'
 import './survivor-weekly.css'
 
-export type SurvivorAvatarStatus = 'active' | 'immune' | 'out'
+type SurvivorAvatarStatus = 'active' | 'immune' | 'out'
 
 /** "Open Team 12" reads as O12, the way the seat list numbers it. */
-export function survivorInitials(name: string): string {
+function survivorInitials(name: string): string {
   const words = name.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/).filter(Boolean)
   if (!words.length) return '?'
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase()

@@ -23,7 +23,7 @@
 
 export const PERIOD_WEEKS_KEY = 'guillotine_period_weeks'
 
-export type PeriodWeeks = 1 | 2
+type PeriodWeeks = 1 | 2
 
 /** Sports whose Guilly leagues may use two-week elimination periods. */
 export function supportsTwoWeekPeriods(sport: string | null | undefined): boolean {

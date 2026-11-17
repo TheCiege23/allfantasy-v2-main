@@ -1,5 +1,4 @@
 import CoreTradeRefresh from '@/components/core-app/CoreTradeRefresh'
-import Link from 'next/link'
 import { Suspense, type ComponentProps, type ReactNode } from 'react'
 import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
 import { HomeTradeEvaluatorCard } from '@/components/core-app/home/HomeTradeEvaluatorCard'

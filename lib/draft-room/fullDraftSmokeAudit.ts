@@ -48,7 +48,7 @@ export type SmokePick = {
   pickedAt: Date | null
 }
 
-export type SmokeAuditLogRow = { id: string; action: string }
+type SmokeAuditLogRow = { id: string; action: string }
 
 export type SmokeChatPickEventRow = {
   id: string
@@ -63,7 +63,7 @@ export type FullDraftSmokeInput = {
   chatPickEvents: SmokeChatPickEventRow[]
 }
 
-export type FullDraftSmokeReport = {
+type FullDraftSmokeReport = {
   leagueId: string
   sessionId: string
   status: string

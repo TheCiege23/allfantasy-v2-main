@@ -3,7 +3,13 @@
 import ThreadPanel from './ThreadPanel'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { LeagueScopePicker } from './LeagueScopePicker'
-import { Bell, Eye, Hash, Lock, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'lucide-react'
+import { Bell, Eye, Hash, Lock, MessageCircle, MessagesSquare, Music, Radio, Sparkles, Users, X } from 'lucide-react'
+import dynamic from 'next/dynamic'
+/*
+ * Loaded only when someone opens the Music tab: most chat opens never touch it, and its module
+ * graph (MusicKit loader, the music engine's exports) has no business in every chat panel.
+ */
+const MusicPanel = dynamic(() => import('@/components/app-music/MusicPanel'), { ssr: false })
 import { LeagueConversation } from './LeagueConversation'
 import { DM_PRIVACY, HUDDLE_PRIVACY } from './privacyCopy'
 import { useCommsKeyboardInset } from './useCommsKeyboardInset'
@@ -77,7 +83,13 @@ export type { CommsLeague } from './ChimmyPanel'
  * ./ChimmyPanel, with the rest of the Chimmy tab) rather than retyped per answer.
  */
 
-export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms' | 'discord'
+/*
+ * 'music' (2026-11-15, user's call): the app-wide music controls live here as a tab rather than
+ * as a widget of their own. ⚠ The tab owns NO audio — this drawer is remounted on every /core
+ * screen change, so the player lives in the root layout (components/app-music/AppMusicDock.tsx)
+ * and this tab only drives it. See components/app-music/musicBus.ts.
+ */
+export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms' | 'discord' | 'music'
 
 export type CommsDrawerProps = {
   leagueDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
@@ -154,6 +166,8 @@ const TABS: Array<{ id: CommsTab; label: string; audience: string }> = [
   { id: 'huddle', label: 'Huddle', audience: 'Only this Huddle’s members' },
   { id: 'dms', label: 'DMs', audience: 'One person' },
   { id: 'discord', label: 'Discord', audience: "Everyone in one league's server" },
+  // Plays on your own device; nothing is shared with anyone.
+  { id: 'music', label: 'Music', audience: 'Just you' },
 ]
 
 const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
@@ -162,6 +176,7 @@ const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
   huddle: Users,
   dms: MessageCircle,
   discord: Radio,
+  music: Music,
 }
 
 // ── League chat panel ──────────────────────────────────────────────────
@@ -785,7 +800,8 @@ export function CommsDrawer({
                   data-tab={t.id}
                   data-on={tab === t.id}
                   onClick={() => setTab(t.id)}
-                  title={coreUiCopy(t.audience, language)}
+                  /* Music is icon-only (af-comms.css), so its tooltip names it rather than its audience. */
+                  title={coreUiCopy(t.id === 'music' ? t.label : t.audience, language)}
                   aria-label={badge ? `${coreUiCopy(t.label, language)}, ${badge} unread` : undefined}
                 >
                   <Icon size={14} aria-hidden />
@@ -837,6 +853,8 @@ export function CommsDrawer({
           <ThreadPanel key="huddle" kind="group" privacy={HUDDLE_PRIVACY} />
         ) : tab === 'dms' ? (
           <ThreadPanel key="dms" kind="dm" privacy={DM_PRIVACY} />
+        ) : tab === 'music' ? (
+          <MusicPanel />
         ) : (
           <DiscordPanel leagues={leagues} scopeId={scopeId} onScope={setScopeId} />
         )}
@@ -848,6 +866,9 @@ export function CommsDrawer({
             into. What is true is narrower, and it is the part that matters: we never change your
             league on the platform it lives on.
           */}
+          {/* The support inbox (lib/support): a person answers, in /help and by email. A footLINK, not a
+              footnote: footnotes are hidden on a phone, and this is the one line that must show there. */}
+          <a href="/help" className="af-cm-footlink" data-testid="comms-get-help">{coreUiCopy('Need help? Message us', language)}</a>
           <span className="af-cm-footnote">AllFantasy never changes your league on {availableImportPlatformsPhrase()}.</span>
         </footer>
       </aside>

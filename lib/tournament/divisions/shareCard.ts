@@ -13,7 +13,7 @@ export const SHARE_SIZES = {
 } as const
 export type ShareSize = keyof typeof SHARE_SIZES
 
-export type PathRow = { label: string; opponent: string; score: string; won: boolean | null }
+type PathRow = { label: string; opponent: string; score: string; won: boolean | null }
 
 export type ShareCard = {
   headline: string

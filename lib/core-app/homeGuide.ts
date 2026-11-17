@@ -23,7 +23,7 @@ import type { StandingSnap } from './sinceLastVisit'
  */
 export type DecisionTier = 'now' | 'week' | 'fyi'
 
-export const DECISION_TIERS: readonly DecisionTier[] = ['now', 'week', 'fyi']
+const DECISION_TIERS: readonly DecisionTier[] = ['now', 'week', 'fyi']
 
 const DAY_MS = 86_400_000
 

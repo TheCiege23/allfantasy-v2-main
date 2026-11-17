@@ -40,8 +40,8 @@ const PULSE_ES: Readonly<Record<string, string>> = {
   // Summaries
   'Connect or open a league so Fantasy OS can summarize health, activity, and recommended next actions.':
     'Conecta o abre una liga para que Fantasy OS pueda resumir su salud, su actividad y los próximos pasos recomendados.',
-  'League Pulse is reading team ownership, league state, and competitive balance signals without adding AI guesses.':
-    'El pulso de la liga lee la propiedad de los equipos, el estado de la liga y las señales de equilibrio competitivo, sin añadir suposiciones de IA.',
+  'League Pulse is reading team ownership, league state, and competitive balance signals without adding Chimmy guesses.':
+    'El pulso de la liga lee la propiedad de los equipos, el estado de la liga y las señales de equilibrio competitivo, sin añadir suposiciones de Chimmy.',
 
   // Why
   'No supported league state was available for deterministic analysis.':

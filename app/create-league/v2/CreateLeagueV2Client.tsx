@@ -26,7 +26,7 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { applyRequestedFormat, type RequestableFormat } from '@/lib/create-league-v2/requestedFormat'
 
-export interface CreateLeagueV2ClientProps {
+interface CreateLeagueV2ClientProps {
   userId: string
   /** Opened from the demo league: offer "Create a test league" pre-selected. */
   fromDemo?: boolean
@@ -307,7 +307,7 @@ function TestLeagueToggle({ checked, onChange, fromDemo }: { checked: boolean; o
           <span>
             <span className="block text-sm font-bold">Create a test league</span>
             <span className="mt-1 block text-sm leading-6 text-[color:var(--text-secondary)]">
-              Every empty team gets a placeholder AI manager, so you can run the whole flow — draft, lineups,
+              Every empty team gets a placeholder Chimmy manager, so you can run the whole flow — draft, lineups,
               trades, scoring — on your own. Test leagues send no invites and don&apos;t count as real leagues.
               {fromDemo ? ' Pre-selected because you came from the demo league.' : ''}
             </span>

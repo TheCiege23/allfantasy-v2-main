@@ -62,4 +62,3 @@ export function HomeFormatGuide({ formats }: { formats: FormatCount[] }) {
   )
 }
 
-export default HomeFormatGuide

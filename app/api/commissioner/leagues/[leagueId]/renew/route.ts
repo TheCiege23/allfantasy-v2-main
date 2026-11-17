@@ -16,6 +16,7 @@
  *     the season engine's own state too (open draft / `renewedIntoSeason`), inside its transaction.
  * Commissioner only for POST. All members can GET.
  */
+import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -44,7 +45,6 @@ import {
   resolveRenewDraftOrderMode,
   type RenewRedraftLeagueResult,
 } from '@/lib/redraft/offseason/renewRedraftLeague'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
 
 export const dynamic = 'force-dynamic'
 
@@ -167,7 +167,7 @@ export async function GET(
   } catch { /* table may not exist */ }
 
   return NextResponse.json({
-    isCommissioner: await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id),
+    isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'league'),
     currentSeason,
     nextSeason,
     leagueType,
@@ -245,7 +245,8 @@ export async function POST(
     },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
   const zombie = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { universeId: true } })
   if (zombie || league.leagueVariant === 'zombie' || league.leagueType === 'zombie') return NextResponse.json({
     error: 'zombie_season_renewal_required',

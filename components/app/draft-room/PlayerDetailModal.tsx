@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Star, Flame } from 'lucide-react'
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import type { NormalizedDraftRoomPlayer } from '@/lib/players/normalizePlayer'
@@ -28,7 +29,7 @@ import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
 import type { PlayerDraftOutlook } from '@/lib/draft-room/playerDraftOutlook'
 import { PlayerDraftOutlookSection } from './PlayerDraftOutlookSection'
 
-export interface PlayerDetailPlayer {
+interface PlayerDetailPlayer {
   id?: string | null
   name: string
   position?: string | null
@@ -46,7 +47,7 @@ export interface PlayerDetailPlayer {
   jersey?: number | null
 }
 
-export interface LeagueContext {
+interface LeagueContext {
   /** Pick label (e.g. "2.07") if this player has been drafted in this league. */
   draftedPickLabel?: string | null
   /** Display name of the team currently rostering this player, if any. */
@@ -62,7 +63,7 @@ export type DraftAssistantRoomContext = {
   digestPreview?: string | null
 }
 
-export interface PlayerDetailModalProps {
+interface PlayerDetailModalProps {
   open: boolean
   onClose: () => void
   player: PlayerDetailPlayer
@@ -81,8 +82,8 @@ export interface PlayerDetailModalProps {
   assistantRoomContext?: DraftAssistantRoomContext | null
   /** Live snake redraft: denser chrome aligned with draft room surfacing */
   presentationVariant?: 'default' | 'redraft_snake'
-  /** Header rankings row: label next to numeric ADP (matches list when using AI ADP sort). */
-  adpDisplayLabel?: 'ADP' | 'AI ADP'
+  /** Header rankings row: label next to numeric ADP (matches list when using Chimmy ADP sort). */
+  adpDisplayLabel?: 'ADP' | 'Chimmy ADP'
   /** When Draft is disabled, clarifies drafted vs wrong turn */
   draftUnavailableReason?: 'already_drafted' | 'not_your_pick' | null
   /** NFL: season projection + splits from `/draft/pool` (mobile detail access without list grid). */
@@ -324,7 +325,9 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
   const rankings = analytics?.rankings ?? null
   const news = analytics?.news ?? []
 
-  return (
+  // Rendered into <body>: inside a panel (the phone's player tray is `relative z-10`) a
+  // `fixed` overlay is trapped in that panel's stacking context and can land under other layers.
+  const card = (
     <div
       className="fixed inset-0 z-[120] flex items-start justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
@@ -353,7 +356,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
               rsModal ? 'border-cyan-500/15 shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]' : 'border-white/8'
             }`}
           >
-            <div className="flex items-start gap-5">
+            <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
               {/* E.1: shared PlayerAvatar replaces the previous inline `<img>` + initials block.
                 * The old code rendered headerImageUrl unconditionally — when the resolver returned
                 * a synthesized `data:image/svg+xml` URI containing the literal text "AF" as a fallback
@@ -372,7 +375,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                 className={rsModal ? 'rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.45)]' : ''}
               />
 
-              <div className="min-w-0 flex-1">
+              <div className="min-w-[200px] flex-1">
                 <div className="flex items-center gap-2">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">
                     {player.position ?? '—'}
@@ -390,7 +393,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                 </h2>
 
                 {/* Physical-stat chip bar */}
-                <div className="mt-3 grid max-w-xl grid-cols-5 gap-3 text-center">
+                <div className="mt-3 grid max-w-xl grid-cols-3 gap-2 text-center sm:grid-cols-5 sm:gap-3">
                   <StatChip label="Age" value={player.age ? String(player.age) : '—'} />
                   <StatChip label="Height" value={formatHeight(player.heightIn)} />
                   <StatChip
@@ -473,12 +476,18 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                 ) : null}
               </div>
 
-              <div className="flex shrink-0 flex-col items-end gap-2">
+              {/* Room v2 (2026-11): star, + Queue, Draft — every button 44px tall (a phone touch
+                  target), Draft the main one. Draft and Queue sit in the header so you can act
+                  without closing the card. A phone gives them their own full-width row under the
+                  name; from md they stack in a narrow column at the right, so the name and the
+                  Age / Height / Weight / Exp / College boxes keep their width. */}
+              <div className="flex w-full shrink-0 flex-row flex-wrap items-center gap-2 md:w-auto md:flex-col md:items-end" data-testid="player-detail-actions">
                 {onToggleWatchlist && (
                   <button
                     type="button"
                     onClick={onToggleWatchlist}
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                    data-testid="player-detail-watchlist"
+                    className={`order-1 inline-flex h-11 w-11 items-center justify-center rounded-full border transition ${
                       isWatchlisted
                         ? 'border-amber-400 bg-amber-400/20 text-amber-200'
                         : 'border-white/20 bg-white/[0.05] text-white/70 hover:bg-white/10'
@@ -493,14 +502,16 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                     <button
                       type="button"
                       onClick={onMakePick}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500 px-4 py-1.5 text-xs font-bold text-black shadow hover:bg-cyan-400"
+                      data-testid="player-detail-draft"
+                      className="order-3 inline-flex h-11 items-center gap-1.5 rounded-full bg-cyan-400 px-6 text-sm font-black text-[#06070f] shadow-[0_8px_24px_rgba(34,211,238,0.35)] hover:bg-cyan-300"
                     >
                       <Flame className="h-3.5 w-3.5" />
                       Draft
                     </button>
                   ) : (
                     <span
-                      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
+                      data-testid="player-detail-draft-unavailable"
+                      className={`order-3 inline-flex h-11 items-center rounded-full border px-4 text-[12px] font-semibold ${
                         rsModal ? 'border-white/18 bg-black/35 text-white/55' : 'border-white/15 bg-white/[0.06] text-white/45'
                       }`}
                       title={
@@ -520,7 +531,8 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                   <button
                     type="button"
                     onClick={onAddToQueue}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold text-white/85 hover:bg-white/10"
+                    data-testid="player-detail-queue"
+                    className="order-2 inline-flex h-11 items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-4 text-sm font-bold text-white/90 hover:bg-white/10"
                   >
                     + Queue
                   </button>
@@ -746,7 +758,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
           )}
         </div>
 
-        {/* Right rail: news + AI insight */}
+        {/* Right rail: news + Chimmy insight */}
         <aside className="hidden w-80 shrink-0 flex-col overflow-y-auto border-l border-white/8 bg-black/25 lg:flex">
           <div className="border-b border-white/8 px-4 py-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Latest news</p>
@@ -769,7 +781,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
             {analytics?.aiInsights && (
               <div className="border-t border-cyan-500/25 bg-cyan-500/[0.04] px-4 py-3">
                 <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">
-                  AI insight
+                  Chimmy insight
                 </p>
                 <p className="text-[12px] leading-relaxed text-white/75">{analytics.aiInsights}</p>
               </div>
@@ -779,6 +791,7 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
       </div>
     </div>
   )
+  return typeof document !== 'undefined' ? createPortal(card, document.body) : card
 }
 
 function DraftPoolNflProjectionSplitsSection({

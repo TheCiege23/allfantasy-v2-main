@@ -1,7 +1,7 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { createLiveTradeReviewDataProvider, type CommissionerTradeReviewV1 } from '@/lib/decision-os/commissioner-intelligence/trade-review'
 
 export const dynamic = 'force-dynamic'
@@ -43,7 +43,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   // Commissioner-scoped: assertCommissioner throws for non-commissioners → 403.
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'view')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

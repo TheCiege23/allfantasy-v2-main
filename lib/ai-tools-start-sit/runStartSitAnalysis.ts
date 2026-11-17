@@ -8,17 +8,7 @@ import 'server-only'
 import type { LeagueSport, SportsPlayerRecord } from '@prisma/client'
 import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-context-types'
 import { leagueToolAccessUserMessage } from '@/lib/ai-tools/league-tool-access-messages'
-import type {
-  StartSitAnalyzeError,
-  StartSitAnalyzeResult,
-  StartSitAnalysisMode,
-  StartSitMode,
-  StartSitPlayerRow,
-  StartSitRec,
-  StartSitSourceFlags,
-  StartSitStructuredDecision,
-  StartSitValidationSnapshot,
-} from '@/lib/ai-tools-start-sit/types'
+import type { StartSitAnalyzeError, StartSitAnalyzeResult, StartSitMode, StartSitPlayerRow, StartSitRec, StartSitSourceFlags, StartSitStructuredDecision, StartSitValidationSnapshot } from '@/lib/ai-tools-start-sit/types'
 export type {
   StartSitAnalyzeError,
   StartSitAnalyzeResult,
@@ -49,7 +39,6 @@ import { fetchNativeOpponentMatchup, fetchSleeperMatchupContext } from '@/lib/ai
 import { runStartSitGlobalAnalysis } from '@/lib/ai-tools-start-sit/runStartSitGlobalAnalysis'
 import { formatStartSitLockStatusLabel } from '@/lib/ai-tools-start-sit/startSitTimeLabels'
 import { buildUnresolvedLineupDecisions } from '@/lib/ai-tools-start-sit/startSitUnresolved'
-import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n))
@@ -74,7 +63,6 @@ function volFromInjury(status: string | null | undefined): number {
   if (s.includes('prob')) return 0.26
   return 0.24
 }
-
 
 async function resolveRecord(sport: string, rawId: string): Promise<SportsPlayerRecord | null> {
   const direct = await prisma.sportsPlayerRecord.findUnique({ where: { id: rawId } })

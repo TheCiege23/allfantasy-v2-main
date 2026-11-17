@@ -4,7 +4,7 @@ import { pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { normalizeNflTeam } from '@/lib/redraft/lineupLock'
 import type { FinalBoxCoverage } from './gameBoxCoverage'
 
-export type StatCoverage = {
+type StatCoverage = {
   sport: string; source: string; periodId: string; kind: 'game' | 'week'; identitySpace: 'canonical' | 'sleeper'
   season: number; week: number | null; startTime: Date; endTime: Date
   teams: string[]; participantIds: string[]; gameKeys: string[]

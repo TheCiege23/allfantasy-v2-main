@@ -15,9 +15,9 @@
  */
 
 /** Shared vocabulary: who does the value favor, from the requesting manager's view. */
-export type TradeAdvantage = 'even' | 'you' | 'opponent'
+type TradeAdvantage = 'even' | 'you' | 'opponent'
 
-export interface SurfaceParityComparison {
+interface SurfaceParityComparison {
   canonicalGrade: string | null
   canonicalFairnessScore: number | null
   canonicalConfidenceScore: number

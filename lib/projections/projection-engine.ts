@@ -1,26 +1,6 @@
 import { prisma } from "../prisma"
 import { currentFantasySeason } from "@/lib/core-app/connectLeague"
 
-interface PlayerProjection {
-  playerId: string
-  playerName: string
-  position: string
-  team: string
-  projectedPoints: number
-  isRookie: boolean
-  confidenceScore: number
-  factors: {
-    baseProjection: number
-    opponentAdjustment: number
-    offensiveLineAdjustment: number
-    qbAdjustment: number
-    coachingAdjustment: number
-    schemeAdjustment: number
-    injuryAdjustment: number
-    weatherAdjustment: number
-  }
-}
-
 interface RookieCollegeStats {
   passingYards: number
   passingTDs: number

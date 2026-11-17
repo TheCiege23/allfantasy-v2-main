@@ -338,4 +338,3 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
   )
 }
 
-export default LegacyHome

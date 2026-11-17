@@ -18,7 +18,7 @@ import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-tr
 import { hasSyncedProviderPicks, loadImportedFuturePicks } from '@/lib/league-trade-engine/importedFuturePicks'
 import { buildLeaguePickBoard, type BoardPickInput, type LeaguePickBoard } from './leaguePickBoard'
 
-export type LeaguePickBoardResult =
+type LeaguePickBoardResult =
   | { ok: true; board: LeaguePickBoard; trade: PickBoardTradeContext }
   | { ok: true; board: null; reason: 'no_picks_tracked' }
   | { ok: false; status: 401 | 403 | 404; error: string }

@@ -11,7 +11,7 @@ import { getQualificationCutSlotsPerConference, getRoundWindow } from './tournam
 import { LATER_ROUND_NAMES, TOURNAMENT_LEAGUE_VARIANT } from './constants'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export interface QualificationAdvancementResult {
+interface QualificationAdvancementResult {
   advanced: number
   eliminated: number
   bubbleAdvanced: number
@@ -23,7 +23,7 @@ export interface QualificationAdvancementResult {
  * Sync TournamentParticipant for every user in feeder leagues (round 0).
  * Call before running advancement so we have participant rows to update.
  */
-export async function syncQualificationParticipants(tournamentId: string): Promise<number> {
+async function syncQualificationParticipants(tournamentId: string): Promise<number> {
   const feederLeagues = await prisma.legacyTournamentLeague.findMany({
     where: { tournamentId, roundIndex: 0 },
     include: {

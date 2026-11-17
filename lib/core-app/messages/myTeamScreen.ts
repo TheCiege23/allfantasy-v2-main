@@ -219,7 +219,7 @@ export const myTeamScreenMessages = defineMessages({
     decisionReviewSwap: (starter: string, bench: string) => `Review ${starter} vs ${bench}`,
     decisionKickoffReached: 'The starter or bench option has already reached kickoff. Confirm locks and AutoSubs on your platform; this notice does not establish that a lineup change is allowed.',
     decisionOutOrBye: (name: string, onBye: boolean) =>
-      `${name} is ${onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`,
+      `${name} is ${onBye ? 'on a bye' : 'ruled out'} — he scores zero unless you start someone else.`,
     decisionBenchProjectsMore: (bench: string, delta: number) =>
       `${bench} projects ${delta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`,
     decisionScoringDisfavors: "This league's scoring does not favor the bench option. These projections do not support a swap.",
@@ -412,7 +412,7 @@ export const myTeamScreenMessages = defineMessages({
     decisionReviewSwap: (starter, bench) => `Revisa ${starter} frente a ${bench}`,
     decisionKickoffReached: 'El partido del titular o de la opción de banca ya comenzó. Confirma los cierres y AutoSubs en tu plataforma; este aviso no garantiza que puedas cambiar la alineación.',
     decisionOutOrBye: (name, onBye) =>
-      `${name} está ${onBye ? 'en semana de descanso' : 'descartado'}. Revisa la elegibilidad del reemplazo, los cierres individuales y los cambios automáticos en tu plataforma.`,
+      `${name} está ${onBye ? 'en semana de descanso' : 'descartado'}: suma cero si no alineas a otro.`,
     decisionBenchProjectsMore: (bench, delta) =>
       `${bench} proyecta ${delta.toFixed(1)} puntos más con la puntuación de esta liga. Confirma primero su estado de lesión y su elegibilidad.`,
     decisionScoringDisfavors: 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.',

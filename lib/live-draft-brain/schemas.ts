@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const PickRecommendationSchema = z.object({
+const PickRecommendationSchema = z.object({
   playerName: z.string(),
   position: z.string(),
   team: z.string(),
@@ -22,7 +22,7 @@ export const PickRecommendationSchema = z.object({
   waitOrTakeNow: z.enum(['take_now', 'safe_to_wait', 'unlikely_to_return']),
 })
 
-export const NextPickPredictionSchema = z.object({
+const NextPickPredictionSchema = z.object({
   manager: z.string(),
   predictedPlayer: z.string(),
   predictedPosition: z.string(),
@@ -30,36 +30,7 @@ export const NextPickPredictionSchema = z.object({
   reason: z.string(),
 })
 
-export const AiManagerAssignmentSchema = z.object({
-  teamId: z.string(),
-  aiStyle: z.string(),
-  tradeAggression: z.enum(['none', 'low', 'medium', 'high']),
-  active: z.boolean(),
-})
-
-export const DraftTradeDecisionSchema = z.object({
-  action: z.enum(['send', 'accept', 'reject', 'counter']),
-  confidence: z.number(),
-  reasoning: z.array(z.string()),
-  guardrailsPassed: z.boolean(),
-})
-
-export const PostDraftGradeSchema = z.object({
-  teamName: z.string(),
-  letterGrade: z.string(),
-  numericScore: z.number(),
-  bestPick: z.string(),
-  biggestReach: z.string(),
-  summary: z.string(),
-})
-
-export const LeagueChatPostSchema = z.object({
-  title: z.string(),
-  body: z.string(),
-  awards: z.array(z.string()),
-})
-
-export const CombinedAdpDataSchema = z.object({
+const CombinedAdpDataSchema = z.object({
   playerKey: z.string(),
   playerName: z.string(),
   externalAdp: z.number().nullable(),
@@ -94,5 +65,4 @@ export const LiveDraftBrainEnvelopeSchema = z.object({
   }),
 })
 
-export type PickRecommendationJson = z.infer<typeof PickRecommendationSchema>
 export type LiveDraftBrainEnvelope = z.infer<typeof LiveDraftBrainEnvelopeSchema>

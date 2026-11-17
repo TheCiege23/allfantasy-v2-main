@@ -58,7 +58,7 @@ export async function GET(
           message:
             typeof refusal.message === 'string' && refusal.message.trim()
               ? refusal.message
-              : 'AI draft rankings explanations are part of AF Commissioner.',
+              : 'Chimmy draft rankings explanations are part of AF Commissioner.',
           upgradePath: typeof refusal.upgradePath === 'string' ? refusal.upgradePath : null,
         }
       }

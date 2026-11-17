@@ -953,7 +953,6 @@ export async function acceptAfLeagueTrade(input: {
   })
   if (!life.ok) throw lifecycleGateThrowable(life.err)
 
-  const settings = resolveLeagueTradeSettings(league)
   // "Hold flagged trades" (lib/integrity/holdFlaggedTrades.ts): a trade the collusion check flags now,
   // before it executes, goes to commissioner review whatever the league's review mode.
   // Survivor "hold it for the commissioner" (the trade-rule check could not run) takes the same route.

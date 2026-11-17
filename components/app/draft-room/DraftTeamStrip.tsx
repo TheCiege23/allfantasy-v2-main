@@ -27,11 +27,11 @@ export interface DraftTeamStripTeamMeta {
   isOrphan?: boolean
   /** Highlights the cell border when this slot is on the clock. */
   isOnClock?: boolean
-  /** AI opponent archetype label from `/api/league/ai-opponents/summary`. */
+  /** Chimmy opponent archetype label from `/api/league/ai-opponents/summary`. */
   aiArchetypeLabel?: string | null
 }
 
-export interface DraftTeamStripProps {
+interface DraftTeamStripProps {
   teamCount: number
   slotOrder: SlotOrderEntry[]
   /** Map of rosterId → LeagueTeam metadata for richer display. Optional. */

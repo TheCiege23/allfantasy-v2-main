@@ -6,12 +6,12 @@
  * Everything here is plain data so it can cross the network and be unit-tested without I/O.
  */
 
-export type ImportReviewSeverity = 'blocking' | 'warning' | 'info'
+type ImportReviewSeverity = 'blocking' | 'warning' | 'info'
 
 /** What the commissioner can fix in place for a given warning. */
-export type ImportReviewFixKind = 'team_name' | 'owner' | 'player_match'
+type ImportReviewFixKind = 'team_name' | 'owner' | 'player_match'
 
-export type ImportReviewWarningCode =
+type ImportReviewWarningCode =
   | 'players_unmatched'
   | 'team_no_owner'
   | 'team_name_missing'
@@ -68,13 +68,13 @@ export interface ImportReviewSettingRow {
   value: string
 }
 
-export interface ImportReviewNotImported {
+interface ImportReviewNotImported {
   key: string
   label: string
   state: 'partial' | 'missing'
 }
 
-export type ImportReviewChangeKind = 'added' | 'removed' | 'changed'
+type ImportReviewChangeKind = 'added' | 'removed' | 'changed'
 
 export interface ImportReviewChange {
   kind: ImportReviewChangeKind

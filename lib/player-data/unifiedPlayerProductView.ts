@@ -44,7 +44,7 @@ export type UnifiedPlayerAugment = {
   soccerLeague?: RollingInsightsSoccerLeagueCode | null
 }
 
-export type UnifiedProductMeta = {
+type UnifiedProductMeta = {
   /** Canonical player id used in UI/API */
   playerId: string
   /** External/provider id when distinct from internal pool id */
@@ -222,7 +222,7 @@ function readMetadataLoose(entry: NormalizedDraftEntry, key: string): unknown {
   return dm[key]
 }
 
-export function buildUnifiedMeta(
+function buildUnifiedMeta(
   entry: NormalizedDraftEntry,
   augment?: UnifiedPlayerAugment,
 ): UnifiedProductMeta {

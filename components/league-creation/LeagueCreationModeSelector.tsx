@@ -6,7 +6,7 @@ import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-
 
 export type CreationMode = 'create' | 'import';
 
-export interface LeagueCreationModeSelectorProps {
+interface LeagueCreationModeSelectorProps {
   value: CreationMode;
   onChange: (mode: CreationMode) => void;
   disabled?: boolean;

@@ -1,8 +1,8 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { runAICommissionerCycle } from '@/lib/ai-commissioner'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
@@ -23,7 +23,7 @@ async function paidToolPost(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -52,7 +52,7 @@ async function paidToolPost(
     tokenRuleCode: 'commissioner_ai_cycle_run',
     tokenSourceType: 'commissioner_ai_cycle',
     tokenSourceId: `${leagueId}:${season ?? 'auto'}:${Date.now()}`,
-    tokenDescription: 'AI Commissioner cycle run',
+    tokenDescription: 'Chimmy Commissioner cycle run',
     tokenMetadata: {
       leagueId,
       sport: body?.sport ?? null,
@@ -92,7 +92,7 @@ async function paidToolPost(
           sourceType: 'commissioner_ai_cycle_refund',
           sourceId: spendLedgerId,
           idempotencyKey: `refund:commissioner_ai_cycle:${spendLedgerId}`,
-          description: 'Auto refund after failed AI Commissioner run.',
+          description: 'Auto refund after failed Chimmy Commissioner run.',
           metadata: { leagueId },
         })
         .catch(() => null)

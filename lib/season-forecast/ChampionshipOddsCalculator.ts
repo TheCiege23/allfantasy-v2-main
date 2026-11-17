@@ -14,7 +14,7 @@ function randomNormal(mean: number, stdDev: number): number {
   return mean + stdDev * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
 }
 
-export interface ChampionshipOddsInput {
+interface ChampionshipOddsInput {
   simulationResults: SimulatedStanding[][]
   playoffSpots: number
   teamProjections: Map<string, { mean: number; stdDev: number }>

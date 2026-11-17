@@ -22,7 +22,7 @@ import { cupGameDetails } from "./nbaCupProgress"
 
 export type CupLeader = { name: string; points: number }
 
-export type CupGameDetail = {
+type CupGameDetail = {
   detail: string | null
   period: number | null
   clock: string | null
@@ -84,7 +84,7 @@ export function cupTeamCode(name: string, fromFeed?: string | null): string {
   return nbaCupLogoCode(name) ?? fromFeed ?? name.split(/\s+/).pop()?.slice(0, 3).toUpperCase() ?? name
 }
 
-export type CupGameState = "live" | "final" | "scheduled"
+type CupGameState = "live" | "final" | "scheduled"
 
 export function cupGameState(series: Pick<PlayoffSeriesView, "status" | "winnerTeamName">): CupGameState {
   if (series.status === "final" || series.winnerTeamName) return "final"
@@ -120,9 +120,9 @@ export function cupGameProgress(series: PlayoffSeriesView): number {
 
 // ── standings ───────────────────────────────────────────────────────────────
 
-export type CupResultDot = "W" | "L" | "live" | "todo"
+type CupResultDot = "W" | "L" | "live" | "todo"
 
-export type CupStatus =
+type CupStatus =
   | "won_group" | "clinched_group" | "controls_path" | "needs_help"
   | "wild_card_only" | "wild_card" | "awaiting" | "eliminated"
   | "schedule_pending" | "tiebreak_pending" | "qualified"
@@ -153,7 +153,7 @@ export type CupGroup = {
   complete: boolean
 }
 
-export type CupSeedSlot = { seed: number; team: string; how: string; confirmed: boolean }
+type CupSeedSlot = { seed: number; team: string; how: string; confirmed: boolean }
 
 const STATUS_LABEL: Record<CupStatus, string> = {
   won_group: "Won group",

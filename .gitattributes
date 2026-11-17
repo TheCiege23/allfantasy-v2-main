@@ -24,3 +24,6 @@ scripts/ci/*.sh text eol=lf
 # migration.sql was already LF (205 of 205), so adding it renormalises nothing.
 prisma/migrations/**/migration.sql text eol=lf
 prisma/migrations-pending/**/migration.sql text eol=lf
+
+# Redacted MIME fixture checksums must be identical on Windows and Linux.
+__tests__/fixtures/leaguesafe/*.eml text eol=lf

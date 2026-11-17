@@ -47,7 +47,7 @@ function FootprintKpi({
   )
 }
 
-export function PlatformFocus({
+function PlatformFocus({
   snapshot,
   draftsApproachingCount,
   loading = false,

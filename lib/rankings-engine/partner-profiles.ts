@@ -1,6 +1,6 @@
 import { getV2Rankings } from "./v2-adapter"
 
-export type PartnerProfile = {
+type PartnerProfile = {
   rosterId: string
   name: string
   sampleSize: number

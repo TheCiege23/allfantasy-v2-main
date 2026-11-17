@@ -17,6 +17,8 @@ import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
 import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
+import { syncLeagueIrSlotsColumn } from '@/lib/roster-engine/irSlotsColumn'
+import { alertManagersToFixLineups, findLineupsNeedingFixes } from '@/lib/roster-legality/recheckLeagueLineups'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,9 +85,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     ),
   })
 
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/reset-default' })
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/reset-default' })
+  // The default's slots and IR count, like a save (lib/roster-engine/irSlotsColumn.ts,
+  // lib/roster-legality/recheckLeagueLineups.ts).
+  await syncLeagueIrSlotsColumn(leagueId, config.slots ?? {})
+  const lineupsNeedingFixes = await findLineupsNeedingFixes(leagueId)
+  if (lineupsNeedingFixes.length > 0) void alertManagersToFixLineups(leagueId, lineupsNeedingFixes)
   return NextResponse.json({
     ok: true, config, unifiedConfig, draftRounds,
     bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],
+    lineupsNeedingFixes: lineupsNeedingFixes.length,
   })
 }

@@ -81,7 +81,7 @@ export const ALIAS_ONLY_FORMAT_IDS = [
 ] as const
 
 /** Every id a league can present, by either route. */
-export const KNOWN_FORMAT_IDS = [
+const KNOWN_FORMAT_IDS = [
   ...CANONICAL_FORMAT_IDS,
   ...ALIAS_ONLY_FORMAT_IDS,
 ] as const
@@ -122,7 +122,7 @@ export function formatModelFor(formatId: string | null | undefined): FormatValue
 }
 
 /** What a league looks like to the resolver. A superset of `readFormatRules`' input. */
-export interface FormatLeagueDescriptor {
+interface FormatLeagueDescriptor {
   leagueType?: string | null
   aliasTags?: string[] | null
   isDynasty?: boolean | null

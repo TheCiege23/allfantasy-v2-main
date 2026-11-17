@@ -18,14 +18,14 @@ import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
  * the join route checks the lock only on the branch that would create a fresh roster.
  */
 
-export type JoinLockLeague = {
+type JoinLockLeague = {
   leagueVariant?: string | null
   leagueType?: string | null
   bestBallMode?: boolean | null
   guillotineMode?: boolean | null
 }
 
-export type PostDraftJoinLockKind = 'survivor' | 'best_ball' | 'guillotine'
+type PostDraftJoinLockKind = 'survivor' | 'best_ball' | 'guillotine'
 
 /** Has this league's current draft session left `pre_draft`? No session means it has not. */
 export function draftHasStarted(status: string | null | undefined): boolean {

@@ -12,7 +12,7 @@ export type PreparationContext = {
   playerPool: string;
   purpose: string;
 };
-export type PreparationEntry = {
+type PreparationEntry = {
   playerId: string;
   playerKey: string;
   playerName: string;
@@ -39,7 +39,6 @@ export type PreparationPlayer = PreparationEntry & {
   withinNextRound: number;
   personalRank?: number;
 };
-export const PREPARATION_VERSION = "hq-adp-v1";
 const record = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v)
     ? (v as Record<string, unknown>)
@@ -295,7 +294,7 @@ export function preparationPlayers(
     };
   });
 }
-export type OutlookInput = {
+type OutlookInput = {
   id: string;
   name: string;
   capital: number;

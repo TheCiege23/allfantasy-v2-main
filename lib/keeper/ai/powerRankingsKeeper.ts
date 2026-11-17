@@ -1,4 +1,4 @@
-export type KeeperStrengthRanking = {
+type KeeperStrengthRanking = {
   rosterId: string
   keeperStrengthScore: number
   keeperSurplusTotal: number

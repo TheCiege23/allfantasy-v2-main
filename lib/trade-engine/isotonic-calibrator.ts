@@ -116,7 +116,7 @@ function computeECE(predictions: number[], outcomes: number[], binCount: number 
   return ece
 }
 
-export function fitIsotonicMap(
+function fitIsotonicMap(
   predictions: number[],
   outcomes: number[],
 ): IsotonicMap | null {

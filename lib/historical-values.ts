@@ -715,7 +715,6 @@ export async function computeDualModeGrades(
   loadData();
   
   const currentData = isSuperFlex ? sfCurrent : oneQbCurrent;
-  const historicalData = isSuperFlex ? sfHistorical : oneQbHistorical;
   
   // Tracking for valuation details
   let playersFromExcel = 0;

@@ -10,11 +10,7 @@ import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zomb
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
-import {
-  NFL_DYNASTY_TEAM_COUNTS,
-  SURVIVOR_CREATE_CAST_SIZES,
-  getTeamCountOptionsForSport,
-} from '@/lib/league-creation-wizard/sport-team-limits'
+import { NFL_DYNASTY_TEAM_COUNTS, SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { SUPPORTED_SPORTS, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import {
   getDraftTypeUiHint,

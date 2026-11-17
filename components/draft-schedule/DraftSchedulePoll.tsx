@@ -158,4 +158,3 @@ export function DraftSchedulePoll({ leagueId, disabled = false }: { leagueId: st
   )
 }
 
-export default DraftSchedulePoll

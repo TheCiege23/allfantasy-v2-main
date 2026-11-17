@@ -20,7 +20,7 @@ import type {
  * turn the master switch into a suggestion.
  */
 
-export function getLeagueOverride(
+function getLeagueOverride(
   prefs: NotificationPreferences | null | undefined,
   leagueId: string | null | undefined,
 ): LeagueNotificationOverride | undefined {

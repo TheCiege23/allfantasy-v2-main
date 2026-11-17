@@ -5,9 +5,9 @@
 
 import type { AIContextEnvelope, ModelOutput } from "./types"
 
-export type ConfidenceLabel = "low" | "medium" | "high"
+type ConfidenceLabel = "low" | "medium" | "high"
 
-export interface ConfidenceResult {
+interface ConfidenceResult {
   label: ConfidenceLabel
   scorePct: number
   reason?: string
@@ -57,11 +57,3 @@ function scoreToLabel(pct: number): ConfidenceLabel {
   return "low"
 }
 
-/**
- * Format a short user-facing confidence line for UI.
- */
-export function formatConfidenceLine(result: ConfidenceResult): string {
-  if (result.label === "high") return "High confidence in this analysis."
-  if (result.label === "low") return "Confidence is limited; " + (result.reason ?? "data or context is limited.")
-  return "Medium confidence. " + (result.reason ?? "")
-}

@@ -7,8 +7,6 @@
  */
 import { prisma } from '@/lib/prisma'
 import { resolveAllFantasyMarketValue } from '@/lib/trade-market/allFantasyMarketValues'
-import { assembleDiscoveryLeague } from '@/lib/trade-discovery/assembleRosters'
-import { findPartners, findPackages } from '@/lib/trade-discovery/redraftTradeDiscovery'
 import { discoverySignals } from '@/lib/trade-block/redraftTradeBlockService'
 import type {
   PlayerMarketValueData,
@@ -145,64 +143,3 @@ export async function summarizeTradeBlock(
   return { ok: true, data, text, limitations: data.leagueVisibleItems.length ? [] : [{ code: 'LIMITED_DATA', detail: 'No active league-visible block items.' }] }
 }
 
-// ── findTradePartners / suggestTradePackages (T7 — deterministic, no auto-submit) ─
-async function loadDiscovery(leagueId: string, myRosterId: string) {
-  const league = await assembleDiscoveryLeague(leagueId).catch(() => null)
-  if (!league) return null
-  const myRoster = league.rosters.find((r) => r.rosterId === myRosterId)
-  if (!myRoster) return null
-  const signals = await discoverySignals(leagueId, myRosterId).catch(() => null)
-  if (signals) for (const r of league.rosters) r.blockPlayerIds = signals.blockPlayerIdsByRoster[r.rosterId] ?? []
-  return { league, myRoster, signals }
-}
-
-export async function findTradePartners(leagueId: string, myRosterId: string | null): Promise<TradeToolResult<unknown>> {
-  if (!myRosterId) return { ok: false, data: null, text: ['You need a claimed roster in this league to find trade partners.'], limitations: [{ code: 'NO_ROSTER', detail: 'No roster for user.' }] }
-  const ctx = await loadDiscovery(leagueId, myRosterId)
-  if (!ctx) return { ok: false, data: null, text: ['This league has no native redraft trade data to match partners.'], limitations: [{ code: 'NOT_REDRAFT_LEAGUE', detail: 'No discovery league.' }] }
-  const partners = findPartners({
-    myRoster: ctx.myRoster,
-    otherRosters: ctx.league.rosters,
-    sport: ctx.league.sport,
-    myInterest: { playerIds: ctx.signals?.myInterestPlayerIds ?? [], positions: ctx.signals?.myInterestPositions ?? [], hasPrivate: true },
-    hasNativeBlock: ctx.signals?.hasNativeBlock ?? false,
-  })
-  return {
-    ok: true,
-    data: { partnerCount: partners.length, partners, sport: ctx.league.sport },
-    text: [
-      partners.length ? `Found ${partners.length} deterministic partner match(es) based on roster needs/surpluses and trade-block signals. Chimmy can help you build an offer, but will not auto-submit it.` : 'No strong partner matches right now based on current needs and block signals.',
-      ...(ctx.league.sport === 'NCAAF' ? ['NCAAF has limited valuation data — treat matches as lower confidence.'] : []),
-    ],
-    limitations: ctx.league.sport === 'NCAAF' ? [{ code: 'LIMITED_DATA', detail: 'NCAAF limited data.' }] : [],
-  }
-}
-
-export async function suggestTradePackages(
-  leagueId: string,
-  myRosterId: string | null,
-  partnerRosterId: string | null,
-): Promise<TradeToolResult<unknown>> {
-  if (!myRosterId) return { ok: false, data: null, text: ['You need a claimed roster in this league to build trade packages.'], limitations: [{ code: 'NO_ROSTER', detail: 'No roster for user.' }] }
-  if (!partnerRosterId) return { ok: false, data: null, text: ['Tell me which team you want to trade with and I can suggest deterministic packages.'], limitations: [{ code: 'LIMITED_DATA', detail: 'No partner roster specified.' }] }
-  const ctx = await loadDiscovery(leagueId, myRosterId)
-  if (!ctx) return { ok: false, data: null, text: ['This league has no native redraft trade data to build packages.'], limitations: [{ code: 'NOT_REDRAFT_LEAGUE', detail: 'No discovery league.' }] }
-  const partner = ctx.league.rosters.find((r) => r.rosterId === partnerRosterId)
-  if (!partner) return { ok: false, data: null, text: ['That partner team is not in this league.'], limitations: [{ code: 'NOT_FOUND', detail: 'Partner roster not found.' }] }
-  const faabSupported = (ctx.myRoster.faabBalance ?? 0) > 0 || (partner.faabBalance ?? 0) > 0
-  const packages = findPackages({
-    myRoster: ctx.myRoster,
-    partnerRoster: partner,
-    sport: ctx.league.sport,
-    faabSupported,
-    draftPickTrading: ctx.league.draftPickTrading,
-  })
-  return {
-    ok: true,
-    data: { packageCount: packages.length, packages, canStartProposal: packages.length > 0 },
-    text: [
-      packages.length ? `Built ${packages.length} deterministic package option(s) with fairness bands. You can open the Trade Center to start any of them — Chimmy will not auto-submit.` : 'No balanced packages found between these two rosters right now.',
-    ],
-    limitations: [],
-  }
-}

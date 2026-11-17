@@ -56,14 +56,14 @@ export function importedPlayerDataEquivalent(stored: unknown, incoming: unknown)
   return stableJson(withoutRunScopedKeys(stored)) === stableJson(withoutRunScopedKeys(incoming))
 }
 
-export type StoredImportedRoster = {
+type StoredImportedRoster = {
   platformUserId: string
   playerData: unknown
   faabRemaining: number | null
   waiverPriority: number | null
 }
 
-export type IncomingImportedRoster = {
+type IncomingImportedRoster = {
   platformUserId: string
   playerData: unknown
   faabRemaining: number | null

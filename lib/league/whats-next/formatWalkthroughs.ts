@@ -13,7 +13,7 @@
  */
 import type { WhatsNextFormatId } from './types'
 
-export type WalkthroughStep = { title: string; body: string }
+type WalkthroughStep = { title: string; body: string }
 export type FormatWalkthrough = { format: WhatsNextFormatId; title: string; steps: readonly WalkthroughStep[] }
 
 const W = (format: WhatsNextFormatId, title: string, steps: WalkthroughStep[]): FormatWalkthrough => ({ format, title, steps })
@@ -145,7 +145,7 @@ export function hasSeenWalkthrough(userId: string | null | undefined, format: Wh
   }
 }
 
-export const WALKTHROUGH_SEEN_ENDPOINT = '/api/user/format-walkthroughs'
+const WALKTHROUGH_SEEN_ENDPOINT = '/api/user/format-walkthroughs'
 
 /**
  * The account's answer: `true` seen, `false` not seen, `null` unknown (signed out, offline, a failed

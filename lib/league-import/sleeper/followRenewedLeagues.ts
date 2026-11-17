@@ -39,7 +39,7 @@ export function followsRenewalAutomatically(platform: string | null | undefined)
 /** League.sport → Sleeper's sport path segment (the reverse of import-sleeper's `sportMap`). */
 const SLEEPER_SPORT: Partial<Record<LeagueSport, string>> = { NFL: 'nfl', NBA: 'nba', MLB: 'mlb', NHL: 'nhl', SOCCER: 'mls' }
 
-export type SleeperLeagueLike = { league_id?: string | number | null; previous_league_id?: string | number | null; [key: string]: unknown }
+type SleeperLeagueLike = { league_id?: string | number | null; previous_league_id?: string | number | null; [key: string]: unknown }
 
 export type RenewalDeps = {
   listUserLeagues(sleeperUserId: string, sport: string, season: number): Promise<SleeperLeagueLike[]>
@@ -48,7 +48,7 @@ export type RenewalDeps = {
   afterImport(args: { leagueId: string; platformLeagueId: string; userId: string; isDynasty: boolean }): Promise<void>
 }
 
-export type RenewalSummary = {
+type RenewalSummary = {
   candidates: number
   sleeperCalls: number
   renewalsFound: number

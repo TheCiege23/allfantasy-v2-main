@@ -428,7 +428,7 @@ export async function POST(req: NextRequest) {
       round = 1,
       pick = 1,
       totalTeams = 12,
-      managerName = 'AI Manager',
+      managerName = 'Chimmy Manager',
       sport = 'NFL',
       isDynasty = true,
       isSF = false,

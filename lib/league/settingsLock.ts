@@ -18,7 +18,7 @@
 
 export const SETTINGS_LOCK_KEY = 'settings_lock'
 
-export const LOCK_GROUPS = ['scoring', 'rosters', 'keepers', 'trades', 'waivers', 'playoffs'] as const
+export const LOCK_GROUPS = ['scoring', 'rosters', 'keepers', 'trades', 'waivers', 'playoffs', 'format'] as const
 export type LockGroup = (typeof LOCK_GROUPS)[number]
 
 export const LOCK_GROUP_LABELS: Record<LockGroup, { label: string; help: string }> = {
@@ -28,17 +28,19 @@ export const LOCK_GROUP_LABELS: Record<LockGroup, { label: string; help: string 
   trades: { label: 'Trades', help: 'Trade deadline, review and pick trading' },
   waivers: { label: 'Waivers', help: 'Waiver type, FAAB budget, bids and schedule' },
   playoffs: { label: 'Playoffs', help: 'Playoff teams, start week, byes and bracket' },
+  // 2026-11-15: the rules only a specialty format has. Checked by every format's own rules route (lib/league/formatRulesGuard.ts).
+  format: { label: 'Format rules', help: 'Guillotine chops, pirate claims, Big Brother, devy, C2C and IDP rules' },
 }
 
 /** How long a passed vote opens an area for the change it was held for. */
 export const UNLOCK_WINDOW_MS = 72 * 60 * 60 * 1000
 export const VOTE_DAY_OPTIONS = [1, 2, 3, 5, 7] as const
 export const DEFAULT_VOTE_DAYS = 2
-export const VOTES_KEPT = 30
+const VOTES_KEPT = 30
 export const YES = 'yes'
 export const NO = 'no'
 
-export type UnlockVoteStatus = 'voting' | 'passed' | 'failed'
+type UnlockVoteStatus = 'voting' | 'passed' | 'failed'
 
 export type UnlockVote = {
   id: string
@@ -137,11 +139,19 @@ const KEY_RULES: Array<[RegExp, LockGroup | null]> = [
   [/trad(e|ing)|veto/i, 'trades'],
   [/keeper/i, 'keepers'],
   [/waiver|faab/i, 'waivers'],
+  // Rules no pattern below reached, so a locked league could still change them (2026-11-15): protected/conditional
+  // pick terms are a trade rule; the third-place game and the standings tiebreakers decide the playoffs; the games
+  // limit and the sport config's games-count rules decide what scores.
+  [/^pick_terms_rule$/, 'trades'],
+  [/^thirdPlaceGameEnabled$|^tiebreaker_order$|^tiebreakerOrder$/, 'playoffs'],
+  [/^gamesLimits$|^games_limits$|^sportConfig$/, 'scoring'],
   [/playoff|consolation|toilet|championship|seeding|bye/i, 'playoffs'],
   [/scor|median|ppr|points/i, 'scoring'],
   [/[sS]tat[A-Z_]|[sS]tats$/, 'scoring'],
   [/roster|taxi|lineup|bench|starter|positions?$/i, 'rosters'],
   [/^ir$|^ir[A-Z_]|[a-z]I[rR][A-Z_]|[a-z]IR$|[sS]lots?$/, 'rosters'],
+  // A specialty format's rules (best ball, pirate, … under `settings.conceptRules`). Last, so nothing above moves.
+  [/^conceptRules$/, 'format'],
 ]
 
 /** The lockable group one settings key belongs to, or null for keys no lock covers. */

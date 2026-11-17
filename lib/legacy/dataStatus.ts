@@ -37,20 +37,9 @@ export interface LegacyDataStatus {
   externalActionUrl?: string
 }
 
-export interface LegacyResponseMeta {
-  status: LegacyDataStatus
-  requestId?: string
-  warnings?: Array<{ code: string; message: string }>
-}
-
-export interface LegacyApiResponse<T> {
-  data: T | null
-  meta: LegacyResponseMeta
-}
-
 // ── Import display state ─────────────────────────────────────────────────────
 
-export type LegacyImportDisplayState =
+type LegacyImportDisplayState =
   | 'not_started'
   | 'queued'
   | 'running'

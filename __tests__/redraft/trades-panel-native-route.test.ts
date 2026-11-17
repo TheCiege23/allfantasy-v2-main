@@ -116,6 +116,8 @@ const getStoredTeamLogoResolver = vi.fn()
 vi.mock('@/lib/sport-teams/storedTeamLogos', () => ({
   getStoredTeamLogoResolver: (...args: unknown[]) => getStoredTeamLogoResolver(...args),
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromBoolean(() => async (l: string, u: string) => Boolean(await isElevatedCommissioner(l, u))))
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'

@@ -29,7 +29,7 @@ import './whats-next.css'
 const REFRESH_MS = 60_000
 
 /** "2d 4h", "3h 12m", "12m 30s" — coarse when far away, to the second in the last hour. */
-export function formatTimeLeft(ms: number): string {
+function formatTimeLeft(ms: number): string {
   if (ms <= 0) return 'now'
   const s = Math.floor(ms / 1000)
   const d = Math.floor(s / 86400)

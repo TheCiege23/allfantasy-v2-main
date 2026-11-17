@@ -16,7 +16,7 @@ import { getTeamCountOptions } from './rules-engine'
 import type { CreateLeagueCompletionIssue } from './form-completion'
 
 /** The wizard's four steps (Summary was folded into Review). Keep in step with CreateLeagueWizard. */
-export type CreateWizardStep = 'sport' | 'basics' | 'draft' | 'review'
+type CreateWizardStep = 'sport' | 'basics' | 'draft' | 'review'
 
 export const CREATE_WIZARD_STEPS: readonly CreateWizardStep[] = ['sport', 'basics', 'draft', 'review']
 
@@ -39,7 +39,7 @@ export type CreateWizardField =
   | 'survivor'
   | 'tePremium'
 
-export interface StepIssue extends CreateLeagueCompletionIssue {
+interface StepIssue extends CreateLeagueCompletionIssue {
   step: CreateWizardStep
   field: CreateWizardField | null
 }

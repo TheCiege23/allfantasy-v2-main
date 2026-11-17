@@ -14,7 +14,7 @@ import type { WeekAllData } from './weekAll'
  * played is a claim nobody can make yet.
  */
 
-export type StoryResult = {
+type StoryResult = {
   leagueId: string
   leagueName: string
   platform: string | null
@@ -25,9 +25,9 @@ export type StoryResult = {
   margin: number
 }
 
-export type StoryAward = { leagueId: string; leagueName: string; label: string; value: number; unit: 'pts' | 'margin' }
-export type StoryUpset = { leagueId: string; leagueName: string; winChance: string; pointsFor: number; pointsAgainst: number }
-export type StoryTopScorer = { name: string; points: number; leagueName: string }
+type StoryAward = { leagueId: string; leagueName: string; label: string; value: number; unit: 'pts' | 'margin' }
+type StoryUpset = { leagueId: string; leagueName: string; winChance: string; pointsFor: number; pointsAgainst: number }
+type StoryTopScorer = { name: string; points: number; leagueName: string }
 
 export type StoryCard =
   | { kind: 'cover'; key: string; season: number; week: number; wins: number; losses: number; ties: number; leagues: number; pending: number }
@@ -156,7 +156,7 @@ export function buildWeeklyStory(input: {
 }
 
 /** The cover line with no model involved — also the fallback whenever Chimmy's line is refused. */
-export function templateHeadline(input: { wins: readonly StoryResult[]; losses: readonly StoryResult[]; ties: number }): string {
+function templateHeadline(input: { wins: readonly StoryResult[]; losses: readonly StoryResult[]; ties: number }): string {
   const w = input.wins.length
   const l = input.losses.length
   const record = recordText(w, l, input.ties)

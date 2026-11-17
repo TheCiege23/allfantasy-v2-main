@@ -81,7 +81,7 @@ export function AFProPlanSpotlight({ className = '' }: { className?: string }) {
 
       <p className="mt-1 text-xs text-white/65">
         Deep player and trade analysis, Competitive Edge, and Chimmy answers every day. Tokens pay
-        for single AI actions without a plan.
+        for single Chimmy actions without a plan.
       </p>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">

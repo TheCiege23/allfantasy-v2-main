@@ -23,11 +23,11 @@ import { createNbaCampusTradeGrader } from './nbaCampusTradeValue'
  * dynasty league). An NBA, NHL or MLB dynasty league is graded over five seasons, picks included. It
  * never falls through to the NFL chart, which prices none of these sports.
  */
-export type SportPointsGrader = {
+type SportPointsGrader = {
   grade(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView>
 }
 
-export type SportPointsGraderDeps = { loadBase: typeof loadSportPointsBase }
+type SportPointsGraderDeps = { loadBase: typeof loadSportPointsBase }
 
 export function createSportPointsGrader(
   args: {

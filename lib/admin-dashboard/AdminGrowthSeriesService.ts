@@ -31,9 +31,9 @@ import { prisma } from "@/lib/prisma"
 
 export type GrowthGranularity = "day" | "week" | "month"
 
-export type GrowthMetricKey = "signups" | "entries" | "pools" | "activeUsers" | "paidConversions"
+type GrowthMetricKey = "signups" | "entries" | "pools" | "activeUsers" | "paidConversions"
 
-export type GrowthBucket = {
+type GrowthBucket = {
   /** Stable key for the bucket, e.g. "2026-09-01" or "2026-09". */
   key: string
   /** Human label for an axis, already in the reporting timezone. */
@@ -68,7 +68,7 @@ export type GrowthMetric = {
   buckets: GrowthBucket[]
 }
 
-export type GrowthSeriesForGranularity = {
+type GrowthSeriesForGranularity = {
   granularity: GrowthGranularity
   windowLabel: string
   metrics: GrowthMetric[]

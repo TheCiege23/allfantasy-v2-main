@@ -7,6 +7,7 @@ import { assertLeagueCommissioner } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
 import { getPirateDashboard, seedPirateClaims } from '@/lib/pirate/service'
 import { isPirateLeague, readPirateRules } from '@/lib/pirate/rules'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,9 +42,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
   const actor = await userId()
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
-  const gate = await assertLeagueCommissioner(leagueId, actor)
+  const gate = await assertLeagueCommissioner(leagueId, actor, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
   if (!isPirateLeague(gate.league)) return NextResponse.json({ error: 'Not a Pirate League' }, { status: 400 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const current = readPirateRules(gate.league.settings)
   const protectionLimit = body.protectionLimit == null ? current.protectionLimit : Number(body.protectionLimit)
@@ -71,5 +74,6 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     where: { id: leagueId },
     data: { settings: { ...settings, conceptRules: { ...conceptRules, extensions: { ...extensions, pirate } } } as Prisma.InputJsonValue },
   })
+  await logFormatRulesChange({ leagueId, userId: actor, format: 'pirate', fields: Object.keys(body).filter((k) => k in pirate) })
   return NextResponse.json({ rules: pirate })
 }

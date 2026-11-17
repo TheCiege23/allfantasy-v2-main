@@ -431,6 +431,9 @@ export const PROBES = {
    */
   '/api/cron/draft-pool-prewarm': { heartbeat: 'cron-draft-pool-prewarm' },
   '/api/cron/import-backfill-sweeper': { heartbeat: 'cron-import-backfill-sweeper' },
+  // The daily Stripe key check writes nothing but this heartbeat: a check that stopped firing
+  // must not look like a check that keeps finding nothing wrong. A key problem records `failed`.
+  '/api/cron/stripe-key-health': { heartbeat: 'cron-stripe-key-health' },
   '/api/tournament/automation': { heartbeat: 'cron-tournament-automation' },
   // draft-tick WAS instrumented, but only below its DRAFT_TICK_CRON_ENABLED early-return -- so
   // the default path (flag off) recorded nothing and the job looked identical whether it ran
@@ -556,6 +559,13 @@ export const PROBES = {
    * reason in `warnings` and the count in rowsSkipped: the job did what it is configured to do.
    */
   '/api/cron/trade-weekly-recalibration': { heartbeat: 'cron-trade-weekly-recalibration' },
+
+  /*
+   * Weekly check of the Music tab's YouTube stations (lib/app-music/stationHealth.ts). A week
+   * where a station needs a look records `partial`, and a missing YOUTUBE_API_KEY records
+   * `failed` -- so this heartbeat answers both "did it fire" and "could it actually check".
+   */
+  '/api/cron/music-station-health': { heartbeat: 'cron-music-station-health' },
 
   /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output

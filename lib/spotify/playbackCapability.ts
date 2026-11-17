@@ -21,7 +21,7 @@ export const REQUIRED_PLAYBACK_SCOPES = [
   'user-modify-playback-state',
 ] as const
 
-export type PlaybackCapability = {
+type PlaybackCapability = {
   canPlay: boolean
   /** Scopes the stored grant is missing, for a precise message. */
   missing: string[]
@@ -96,7 +96,7 @@ export function describePlaybackGap(
 }
 
 /** Scopes GET /v1/me/playlists needs to return the listener's PRIVATE playlists too. */
-export const REQUIRED_PLAYLIST_SCOPES = ['playlist-read-private', 'playlist-read-collaborative'] as const
+const REQUIRED_PLAYLIST_SCOPES = ['playlist-read-private', 'playlist-read-collaborative'] as const
 
 /**
  * Can this grant see the listener's whole library, or only their public playlists?

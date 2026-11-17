@@ -42,6 +42,8 @@ const {
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerRole: requireCommissionerRoleMock }))
+// The rookie-order routes check the shared rule (lib/league/commissionerAccess.ts); the commissioner here owns the league.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromOwner(() => FREE_COMMISSIONER))
 vi.mock('@/lib/subscription/EntitlementResolver', () => ({
   EntitlementResolver: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
     this.resolveForUser = resolveForUserMock

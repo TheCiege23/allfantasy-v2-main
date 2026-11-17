@@ -187,14 +187,3 @@ describe('fillTestLeagueWithPlaceholders', () => {
     expect((tx.league.update.mock.calls[0]![0] as { data: { settings: Record<string, unknown> } }).data.settings).toEqual({ foo: 1, isTestLeague: true })
   })
 })
-
-describe('analytics exclusion', () => {
-  it('subtracts test leagues using a POSITIVE match, never a NOT filter', async () => {
-    prisma.league.count = vi.fn(async (args?: { where?: Record<string, unknown> }) => (JSON.stringify(args ?? {}).includes('isTestLeague') ? 3 : 40)) as never
-    const { countRealLeagues } = await import('@/lib/demo-league/analyticsExclusion')
-    expect(await countRealLeagues()).toBe(37)
-    expect(await countRealLeagues({ sport: 'NFL' } as never)).toBe(37)
-    const calls = (prisma.league.count as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => JSON.stringify(c[0] ?? {}))
-    expect(calls.some((c) => c.includes('"NOT"'))).toBe(false)
-  })
-})

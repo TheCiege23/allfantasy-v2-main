@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET / PATCH /api/leagues/[leagueId]/settings/draft
@@ -111,7 +112,7 @@ export async function GET(
   return NextResponse.json({
     leagueId,
     leagueType: league.leagueType,
-    isCommissioner: league.userId === userId,
+    isCommissioner: (await canCommissionerAct(leagueId, userId, 'league')),
     current: {
       draftType: leagueSettings?.draftType ?? 'snake',
       executionMode,
@@ -140,7 +141,7 @@ export async function PATCH(
     select: { id: true, userId: true, leagueType: true, isDynasty: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (league.userId !== userId) {
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
 

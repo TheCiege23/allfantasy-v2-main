@@ -1,6 +1,6 @@
 "use client";
 
-export interface SEOFieldsProps {
+interface SEOFieldsProps {
   seoTitle: string;
   seoDescription: string;
   tags: string[];

@@ -25,8 +25,9 @@
 import { confidenceLevelFor, type ChimmyConfidenceLevel, type ChimmyTrackRecord } from '@/lib/chimmy-chat/confidence-rubric'
 import type { ChimmyAnswerType } from '@/lib/chimmy-chat/response-contract'
 import { decayWeight, shrunkWeightedRate } from './shrinkage'
+import type { LedgerSnapshot } from './ledgerRecord'
 
-export const LEARNING_SNAPSHOT_VERSION = 1
+const LEARNING_SNAPSHOT_VERSION = 1
 /** How far back advice is resolved: a full NFL regular season fits inside it. */
 export const LEARNING_WINDOW_DAYS = 140
 /** A resolved call's weight halves every four weeks. */
@@ -34,7 +35,7 @@ export const LEARNING_HALF_LIFE_DAYS = 28
 /** A confidence band says nothing until this many of its calls are resolved… */
 export const CALIBRATION_MIN_SAMPLE = 20
 /** …and is shrunk toward the confidence it was shown with, worth this many calls. */
-export const CALIBRATION_PRIOR_WEIGHT = 20
+const CALIBRATION_PRIOR_WEIGHT = 20
 /** The newest verdicts kept per user — more than the behaviour rates ever read. */
 export const MAX_USER_VERDICTS = 60
 
@@ -53,7 +54,7 @@ export type AdviceOutcome = {
 }
 
 /** Raw and decayed counts for one confidence band. */
-export type BandCounts = {
+type BandCounts = {
   /** Resolved right/wrong calls. */
   n: number
   right: number
@@ -83,6 +84,12 @@ export type AdviceLearningSnapshot = {
   record?: { start_sit: RecordCounts }
   /** userId → [right, wrong, same] start/sit calls. */
   userRecords?: Record<string, [number, number, number]>
+  /**
+   * ALLFANTASY'S OWN CALLS (2026-11-15): My Team's bench check, the waiver panel's #1 pickup and the
+   * trade grades, graded by `ledgerGrading.ts` in the same rebuild. Optional: a snapshot written before
+   * then has none, and a rebuild that could not read the schedule writes none. See `ledgerRecord.ts`.
+   */
+  ledger?: LedgerSnapshot
 }
 
 /** Graded calls: right, wrong, and `same` (within a point — neither, and never in a rate). */

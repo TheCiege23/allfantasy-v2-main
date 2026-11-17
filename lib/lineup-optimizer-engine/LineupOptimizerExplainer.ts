@@ -1,7 +1,7 @@
 import { runCostControlledOpenAIText } from '@/lib/ai-cost-control'
 import type { LineupOptimizerResult } from './types'
 
-export interface LineupOptimizerExplanation {
+interface LineupOptimizerExplanation {
   summary: string
   bullets: string[]
   source: 'ai' | 'deterministic'

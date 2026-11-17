@@ -82,7 +82,7 @@ import {
  * leagues can build an explicitly labelled shadow plan for their source app.
  */
 
-export type TradesTabProps = {
+type TradesTabProps = {
   league: UserLeague
   teams: LeagueTeamSlot[]
 }
@@ -114,7 +114,7 @@ type PanelResponse = {
   error?: string
 }
 
-export type BuilderOfferAsset = {
+type BuilderOfferAsset = {
   playerId: string | null
   name: string
   position: string | null
@@ -125,7 +125,7 @@ export type BuilderOfferAsset = {
   faabAmount: number | null
 }
 
-export type BuilderOffer = {
+type BuilderOffer = {
   provider: 'sleeper' | 'yahoo'
   transactionId: string
   direction: 'incoming' | 'outgoing'
@@ -625,7 +625,7 @@ export function toAnalyzeAssets(
   return { assets: out, dropped }
 }
 
-export type PendingVerdict =
+type PendingVerdict =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | { kind: 'skipped'; why: string }
@@ -1428,7 +1428,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               className="rounded-xl border border-violet-500/35 bg-violet-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-violet-100 hover:bg-violet-500/20"
               data-testid="trades-tab-chimmy-analyze"
             >
-              AI trade analysis
+              Chimmy trade analysis
             </button>
           ) : null}
             <button

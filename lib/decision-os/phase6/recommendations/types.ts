@@ -8,7 +8,7 @@
 
 // ── Recommendation metadata types ────────────────────────────────────────────
 
-export type RecommendationTier = 'manager' | 'commissioner' | 'platform'
+type RecommendationTier = 'manager' | 'commissioner' | 'platform'
 
 export type RecommendationCategory =
   // Manager tier
@@ -35,7 +35,7 @@ export type RecommendationPriority = 'critical' | 'high' | 'medium' | 'low'
 export type RecommendationSeverity = 'urgent' | 'elevated' | 'standard' | 'advisory'
 export type RecommendationConfidence = 'high' | 'medium' | 'low'
 
-export interface RecommendedAction {
+interface RecommendedAction {
   action: string
   rationale: string
 }
@@ -95,7 +95,7 @@ export interface DetectedPatternSlice {
 }
 
 /** Structural slice of Phase 6.5 DimensionPercentileRank */
-export interface BenchmarkDimensionSlice {
+interface BenchmarkDimensionSlice {
   value: number
   percentile: number
 }
@@ -112,7 +112,7 @@ export interface LeagueBenchmarkSlice {
 // ── Manager-tier input ────────────────────────────────────────────────────────
 
 /** Structural slice of Phase 6.2 ManagerDnaProfile */
-export interface ManagerIdentitySlice {
+interface ManagerIdentitySlice {
   primaryIdentity: string         // ghost_manager | set_and_forget | ...
   decisionStyle: string           // decisive | indecisive | reactive | methodical
   transactionStyle: string        // trade_dominant | waiver_dominant | balanced | passive

@@ -53,7 +53,7 @@ export type AuditRow = {
 }
 
 /** One trade from a chosen team's point of view. */
-export type TeamTradeLine = {
+type TeamTradeLine = {
   tradeKey: string
   completedAt: string | null
   partnerTeamId: string
@@ -108,9 +108,9 @@ export function auditTeams(rows: readonly AuditRow[]): { teamId: string; name: s
 }
 
 /** The minimum trades between one pair before frequency means anything. */
-export const PAIR_MIN_TRADES = 3
+const PAIR_MIN_TRADES = 3
 /** How many times the league's expected count a pair must reach. */
-export const PAIR_MULTIPLE = 3
+const PAIR_MULTIPLE = 3
 
 export type PairFinding = {
   teamIds: [string, string]

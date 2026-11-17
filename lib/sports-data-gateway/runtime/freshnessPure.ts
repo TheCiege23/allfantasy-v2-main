@@ -8,7 +8,7 @@ import type { SportsDataContext } from '../contracts'
 import type { CertifiedSnapshotMeta } from './store'
 
 /** Default staleness threshold (minutes) after which a certified snapshot reads as `delayed`. */
-export const DEFAULT_CERTIFIED_STALE_MINUTES = 60
+const DEFAULT_CERTIFIED_STALE_MINUTES = 60
 
 export function buildCertifiedFreshness(
   meta: CertifiedSnapshotMeta | null,

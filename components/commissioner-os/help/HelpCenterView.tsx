@@ -12,7 +12,7 @@ import type { CommissionerHelpArticleContract, CommissionerGlossaryTermContract,
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { helpText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
-export interface HelpCenterViewProps {
+interface HelpCenterViewProps {
   articles: CommissionerHelpArticleContract[]
   glossary: CommissionerGlossaryTermContract[]
   dataMode: CommissionerDataMode

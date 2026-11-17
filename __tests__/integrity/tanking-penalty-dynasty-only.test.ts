@@ -34,6 +34,8 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: vi.fn(async () => ({ userId: 'commish', settings: {}, ...m.league })) },
   },
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { PUT } from '@/app/api/leagues/[leagueId]/integrity/handler'
 

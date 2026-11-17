@@ -5,14 +5,6 @@
 
 import type { C2CLeagueConfigShape } from '../types'
 
-export interface C2CRosterSlotConstraint {
-  slotName: string
-  slotType: 'pro_starter' | 'pro_bench' | 'pro_ir' | 'taxi' | 'college'
-  maxCount: number
-  collegeOnly?: boolean
-  proOnly?: boolean
-}
-
 /**
  * College assets can only score in college contests; never in pro contests before promotion.
  */
@@ -65,11 +57,6 @@ export function validateC2CRosterSlots(args: {
     errors,
     warnings,
   }
-}
-
-function totalProStarters(config: C2CLeagueConfigShape): number {
-  const slots = config.proLineupSlots ?? {}
-  return Object.values(slots).reduce((s, n) => s + (typeof n === 'number' ? n : 0), 0)
 }
 
 export function getCollegeRosterSize(config: C2CLeagueConfigShape): number {

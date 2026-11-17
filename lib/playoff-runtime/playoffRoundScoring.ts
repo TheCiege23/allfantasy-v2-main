@@ -64,7 +64,7 @@ import { accumulateTeamTotals, resolveCategoryMatchup, type TeamStatTotals } fro
 import { resolveLeagueCategories, settingsForScoringWeek } from '@/lib/category-scoring/leagueScoringType'
 import type { CategoryDefinition } from '@/lib/category-scoring/types'
 
-export type PlayoffRoundScoreOutcome =
+type PlayoffRoundScoreOutcome =
   /** The season is not in its playoffs (still regular season, or already complete). */
   | 'not_in_playoffs'
   /** In playoffs with no bracket rows — the postseason roller generates one. */
@@ -80,7 +80,7 @@ export type PlayoffRoundScoreOutcome =
   /** The active round already carries final scores and is waiting on the roller. */
   | 'already_scored'
 
-export type PlayoffRoundScoreResult = {
+type PlayoffRoundScoreResult = {
   seasonId: string
   outcome: PlayoffRoundScoreOutcome
   roundNumber?: number
@@ -95,7 +95,7 @@ export type PlayoffRoundScoreResult = {
   lowerBracket?: LowerBracketScoreResult
 }
 
-export type PlayoffRoundScoreDeps = {
+type PlayoffRoundScoreDeps = {
   prisma?: PrismaClient
   now?: () => Date
   scoreRoster?: typeof scoreRosterForWeek
@@ -183,7 +183,7 @@ type GroupScore = {
  * `100 + n`, where `n` is the championship round it is played alongside, so its weeks are that
  * round's weeks — and its final is the championship's, `championship_length` included.
  */
-export type LowerBracketScoreResult = GroupScore
+type LowerBracketScoreResult = GroupScore
 
 export async function scoreActivePlayoffRound(
   params: { seasonId: string; calendarWeek: number },

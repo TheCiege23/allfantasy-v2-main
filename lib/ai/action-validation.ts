@@ -47,7 +47,7 @@ export function validateAiActionExecution(args: {
     return {
       ok: false,
       status: 422,
-      error: 'AI action requires explicit user confirmation before execution.',
+      error: 'Chimmy action requires explicit user confirmation before execution.',
     }
   }
 
@@ -56,7 +56,7 @@ export function validateAiActionExecution(args: {
     return {
       ok: false,
       status: 400,
-      error: 'AI action validation payload does not match requested action.',
+      error: 'Chimmy action validation payload does not match requested action.',
     }
   }
 
@@ -69,7 +69,7 @@ export function validateAiActionExecution(args: {
     return {
       ok: false,
       status: 400,
-      error: 'AI action validation league does not match target league.',
+      error: 'Chimmy action validation league does not match target league.',
     }
   }
 

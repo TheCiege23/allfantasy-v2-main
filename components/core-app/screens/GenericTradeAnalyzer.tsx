@@ -66,7 +66,7 @@ const SCORING_CHOICES: Readonly<Record<string, { label: string; choices: Readonl
 }
 
 /** "$25 FAAB", "25 faab", "FAAB 25" → a FAAB asset. Exported for its test. */
-export function parseFaabLine(line: string): number | null {
+function parseFaabLine(line: string): number | null {
   const m = /^(?:\$?\s*(\d{1,5})\s*(?:faab|fab)|(?:faab|fab)\s*\$?\s*(\d{1,5}))$/i.exec(line.trim())
   if (!m) return null
   const amount = Number(m[1] ?? m[2])

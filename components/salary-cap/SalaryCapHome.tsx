@@ -19,7 +19,7 @@ import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
 import { SalaryCapSpecialtyHome } from '@/components/league/specialty/salary/SalaryCapSpecialtyHome'
 import { SalaryCapBidCheck } from '@/components/league/specialty/salary/SalaryCapBidCheck'
 
-export interface SalaryCapHomeProps {
+interface SalaryCapHomeProps {
   leagueId: string
   /** The view a league-workspace tab opens (lib/salary-cap/workspaceTabs.ts). */
   initialView?: SalaryCapView
@@ -38,7 +38,7 @@ const VIEW_LABELS: Record<SalaryCapView, string> = {
   contracts: 'Contracts',
   'team-builder': 'Team Builder',
   draft: 'Draft & Contracts',
-  ai: 'AI Tools',
+  ai: 'Chimmy Tools',
   rules: 'Rules & Settings',
 }
 

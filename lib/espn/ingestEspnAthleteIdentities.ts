@@ -16,6 +16,7 @@ import {
   type EspnLinkSummary,
   type EspnIdentityMapSummary,
 } from '@/lib/espn/linkEspnIdentities'
+import { applyEspnIdentityOverrides, type EspnOverrideSummary } from '@/lib/espn/espnIdentityOverrides'
 
 /**
  * Give the ESPN player ids we actually hold a name.
@@ -71,6 +72,8 @@ export type EspnIdentityIngestSummary = {
   link?: EspnLinkSummary
   /** The ESPN -> Sleeper crosswalk, composed from id links rather than matched. */
   crosswalk?: EspnIdentityMapSummary
+  /** Reviewed links the linker refuses by design — see `espnIdentityOverrides.ts`. */
+  overrides?: EspnOverrideSummary
   stoppedEarly: boolean
   error?: string
 }
@@ -328,6 +331,12 @@ export async function ingestEspnAthleteIdentities(options?: {
     sportKey,
     isExhausted: options?.isExhausted,
   }).catch(() => undefined)
+
+  /* After the crosswalk, never before: the reviewed list only fills what the linker left empty, so
+     it must see what the linker just wrote. NFL only — every entry is an NFL player. */
+  if (sportKey === 'NFL') {
+    summary.overrides = await applyEspnIdentityOverrides(undefined, sportKey).catch(() => undefined)
+  }
 
   return summary
 }

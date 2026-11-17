@@ -43,7 +43,7 @@ interface ResolvedPlayer {
   position: string
 }
 
-export interface DraftFactSampleOptions {
+interface DraftFactSampleOptions {
   /** Prisma `LeagueSport` value. Required — these facts are never scanned across all sports. */
   sport: string
   /** Restrict to one season. Null scans every season the import captured. */
@@ -52,7 +52,7 @@ export interface DraftFactSampleOptions {
   maxFacts?: number
 }
 
-export interface DraftFactSampleResult {
+interface DraftFactSampleResult {
   picks: AggregatablePick[]
   factsScanned: number
   /** Player ids with no canonical identity row. Reported, never silently dropped. */

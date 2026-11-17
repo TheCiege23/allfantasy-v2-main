@@ -1,7 +1,7 @@
 "use client"
 
 import { isPushAndInAppOnly } from "@/lib/notification-settings/NotificationPreferenceResolver"
-import { allowsLeagueSms } from "@/lib/notifications/channelPolicy"
+import { isSmsCategory } from "@/lib/notifications/channelPolicy"
 
 import { ChevronDown, ChevronRight } from "lucide-react"
 import type { NotificationCategoryId, NotificationChannelPrefs } from "@/lib/notification-settings"
@@ -11,7 +11,7 @@ import { isPushCategory } from "@/lib/push-notifications/categories"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { tOr } from "@/lib/i18n/tInterpolate"
 
-export interface NotificationCategoryRendererProps {
+interface NotificationCategoryRendererProps {
   categoryId: NotificationCategoryId
   prefs: NotificationChannelPrefs
   deliveryAvailability: DeliveryMethodAvailability
@@ -134,7 +134,7 @@ export function NotificationCategoryRenderer({
                 <span style={{ color: "var(--text)" }}>{delivery.email}</span>
               </label>
             )}
-            {!isPushAndInAppOnly(categoryId) && deliveryAvailability.sms && allowsLeagueSms(categoryId, "settings") && (
+            {!isPushAndInAppOnly(categoryId) && deliveryAvailability.sms && isSmsCategory(categoryId) && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

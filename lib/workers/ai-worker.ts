@@ -7,7 +7,7 @@ import { createTimer, logStructured } from "@/lib/logging/structured";
 import { recordEngineTelemetrySample } from "@/lib/analytics/recordAnalyticsEvent";
 import { ENGINE } from "@/lib/analytics/eventNames";
 
-export type AiJobResult = {
+type AiJobResult = {
   ok: boolean;
   jobId: string | undefined;
   processedAt: string;
@@ -121,6 +121,3 @@ export async function stopAiWorker(): Promise<void> {
   aiWorker = null;
 }
 
-export function getAiWorker(): Worker<AiJobPayload, AiJobResult> | null {
-  return aiWorker;
-}

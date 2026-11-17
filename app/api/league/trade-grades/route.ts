@@ -1,10 +1,10 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getImportedTradeLedger } from '@/lib/trade-intel/importedTradeLedgerService'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
@@ -139,7 +139,7 @@ export async function GET(req: NextRequest) {
     const cursor = req.nextUrl.searchParams.get('cursor')
     const [viewerRosterId, commissioner] = await Promise.all([
       getCurrentUserRosterIdForLeague(league.id, userId),
-      isCommissioner(league.id, userId),
+      canCommissionerAct(league.id, userId, 'view'),
     ])
     const participantVisibility = viewerRosterId
       ? [{ proposerRosterId: viewerRosterId }, { receiverRosterId: viewerRosterId }]

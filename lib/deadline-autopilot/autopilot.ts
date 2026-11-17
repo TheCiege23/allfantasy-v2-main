@@ -21,12 +21,12 @@
 
 export const AUTOPILOT_SETTINGS_KEY = 'deadline_autopilot'
 
-export const STAGES = [
+const STAGES = [
   { key: '72h', ms: 72 * 3600_000 },
   { key: '24h', ms: 24 * 3600_000 },
   { key: '1h', ms: 1 * 3600_000 },
 ] as const
-export type StageKey = (typeof STAGES)[number]['key']
+type StageKey = (typeof STAGES)[number]['key']
 
 export const CUSTOM_KINDS = ['trade', 'taxi', 'franchise_tag', 'contract', 'keeper', 'other'] as const
 export type CustomKind = (typeof CUSTOM_KINDS)[number]
@@ -34,9 +34,9 @@ export type CustomKind = (typeof CUSTOM_KINDS)[number]
 export const LABEL_MAX = 80
 export const CUSTOM_MAX = 20
 /** A manual reminder for one deadline at most this often. */
-export const MANUAL_COOLDOWN_MS = 6 * 3600_000
+const MANUAL_COOLDOWN_MS = 6 * 3600_000
 
-export type CustomDeadline = { id: string; kind: CustomKind; label: string; at: string }
+type CustomDeadline = { id: string; kind: CustomKind; label: string; at: string }
 
 export type AutopilotSettings = {
   enabled: boolean
@@ -57,7 +57,7 @@ export type LeagueDeadline = {
   targeted: boolean
 }
 
-export type DueReminder = {
+type DueReminder = {
   deadline: LeagueDeadline
   stage: StageKey
   /** Every sent-marker this reminder writes: its own stage plus any looser stage it supersedes. */
@@ -87,7 +87,7 @@ export function withAutopilotSettings(settings: unknown, next: AutopilotSettings
   return { ...asRecord(settings), [AUTOPILOT_SETTINGS_KEY]: next }
 }
 
-export type CustomDeadlineInput = { id?: unknown; kind?: unknown; label?: unknown; at?: unknown }
+type CustomDeadlineInput = { id?: unknown; kind?: unknown; label?: unknown; at?: unknown }
 
 /**
  * Validate the commissioner's list. Past deadlines are accepted (so an edit does not fail because

@@ -14,7 +14,7 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { compareTradeValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
 import type { DemoLeagueView } from './types'
 
-export type DemoTradeVerdict = {
+type DemoTradeVerdict = {
   demo: true
   sideA: { slot: number; total: number; players: Array<{ name: string; value: number }> }
   sideB: { slot: number; total: number; players: Array<{ name: string; value: number }> }
@@ -23,7 +23,7 @@ export type DemoTradeVerdict = {
   summary: string
 }
 
-function settingsFor(view: DemoLeagueView): FantasyCalcSettings {
+export function settingsFor(view: DemoLeagueView): FantasyCalcSettings {
   const pos = view.settings.rosterPositions
   const superflex = pos.some((p) => p === 'SUPER_FLEX' || p === 'SF' || p === 'OP') || pos.filter((p) => p === 'QB').length >= 2
   const label = view.settings.scoringLabel
@@ -35,7 +35,7 @@ function settingsFor(view: DemoLeagueView): FantasyCalcSettings {
   }
 }
 
-export type DemoTradeInput = { slotA: number; slotB: number; giveA: string[]; giveB: string[] }
+type DemoTradeInput = { slotA: number; slotB: number; giveA: string[]; giveB: string[] }
 
 export async function evaluateDemoTrade(
   view: DemoLeagueView,

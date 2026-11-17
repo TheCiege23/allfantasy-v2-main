@@ -27,7 +27,7 @@ export type SensitiveTerm = {
   replacement: string
 }
 
-export type RedactionStats = {
+type RedactionStats = {
   replaced: number
   ambiguousTerms: number
 }

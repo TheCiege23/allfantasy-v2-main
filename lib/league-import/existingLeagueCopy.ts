@@ -20,7 +20,7 @@
 import { prisma } from '@/lib/prisma'
 import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 
-export type LeagueCopyTarget =
+type LeagueCopyTarget =
   | { kind: 'own' }
   | { kind: 'member'; ownerUserId: string; leagueId: string }
   | { kind: 'outsider' }

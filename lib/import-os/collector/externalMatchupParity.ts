@@ -60,9 +60,9 @@ export function externalMatchupSeasonActive(sport: string, season: number, now: 
   }
 }
 
-export type ExternalMatchupProvider = 'espn' | 'yahoo'
+type ExternalMatchupProvider = 'espn' | 'yahoo'
 
-export interface ExternalMatchupConnection {
+interface ExternalMatchupConnection {
   provider: ExternalMatchupProvider
   /** The provider's league id — ESPN numeric id / Yahoo league key. Matches `League.platformLeagueId`. */
   externalLeagueId: string

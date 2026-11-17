@@ -100,12 +100,3 @@ export class DbEvidenceRehydrator implements EvidenceRehydrator {
   }
 }
 
-/** Convenience predicate for the enqueue side (default rehydrator has no resolvers → everything unsupported). */
-export function isRefreshSupported(
-  rehydrator: EvidenceRehydrator | undefined,
-  tool: string,
-  decisionType: string,
-  connectedGroupId?: string | null,
-): boolean {
-  return rehydrator instanceof DbEvidenceRehydrator ? rehydrator.supports(tool, decisionType, connectedGroupId) : false
-}

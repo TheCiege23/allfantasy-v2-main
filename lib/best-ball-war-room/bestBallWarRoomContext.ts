@@ -26,17 +26,7 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
-import type {
-  BestBallDataAvailability,
-  BestBallLineupSlot,
-  BestBallPlayerFact,
-  BestBallRosterSettings,
-  BestBallScoringSettings,
-  BestBallSettings,
-  BestBallTeamSummary,
-  BestBallWarRoomContext,
-  DataState,
-} from './types'
+import type { BestBallDataAvailability, BestBallLineupSlot, BestBallPlayerFact, BestBallRosterSettings, BestBallScoringSettings, BestBallSettings, BestBallTeamSummary, BestBallWarRoomContext } from './types'
 
 export interface BuildBestBallWarRoomContextInput {
   leagueId: string

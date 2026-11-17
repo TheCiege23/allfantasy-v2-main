@@ -3,15 +3,8 @@
  * Delegates to platform chat-service and bracket league chat based on ChatRoomResolver.
  */
 
-import {
-  resolveChatRoom,
-  isLeagueVirtualRoom,
-  getLeagueIdFromVirtualRoom,
-  type ResolvedChatRoom,
-} from "./ChatRoomResolver"
-import type { PlatformChatMessage, PlatformChatThread } from "@/types/platform-shared"
-
-export type { ResolvedChatRoom }
+import { resolveChatRoom, isLeagueVirtualRoom, getLeagueIdFromVirtualRoom } from "./ChatRoomResolver"
+import type { PlatformChatMessage } from "@/types/platform-shared"
 
 export { resolveChatRoom, isLeagueVirtualRoom, getLeagueIdFromVirtualRoom }
 

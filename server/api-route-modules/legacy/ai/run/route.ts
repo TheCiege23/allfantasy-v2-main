@@ -23,6 +23,7 @@ import {
 } from "@/lib/legacy-ai-context"
 import { buildLegacyOrchestratorPlan } from "@/lib/legacy-tool/orchestrator"
 import { buildLegacyOffseasonBundle, type DraftWarRoomInput } from "@/lib/legacy-tool/offseason"
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   buildOffseasonDashboardData,
   buildDraftWarRoomData,
@@ -455,7 +456,6 @@ type LegacyAudit = {
   dataFreshness: Record<string, string>
 }
 
-
 type LegacyCitation = {
   claim: string
   source: string
@@ -500,11 +500,6 @@ function toStringArray(value: unknown, max = 8): string[] {
     .map((v) => v.trim())
     .filter(Boolean)
     .slice(0, max)
-}
-
-function toBoundedNumber(value: unknown, min: number, max: number, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback
-  return Math.max(min, Math.min(max, value))
 }
 
 function normalizeCitations(value: unknown, audit: LegacyAudit): LegacyCitation[] {
@@ -810,6 +805,13 @@ export const POST = withApiUsage({
       rateLimit: { action: "ai_run", maxRequests: 10, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_ai_report`, owner's decision 2026-11-17: lock all four free AF Legacy AI tools). The AI career report (Chimmy Analysis) ran its
+     * model for anyone before; the /af-legacy screen now locks it too. A guest actor holds no plan.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_ai_report' })
+    if (!plan.ok) return plan.response
     const sleeper_username = gate.identity.sleeperUsername
 
     const user = await prisma.legacyUser.findUnique({
@@ -1107,5 +1109,4 @@ Generate a comprehensive rating and analysis.`
     )
   }
 })
-
 

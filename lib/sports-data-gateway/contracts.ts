@@ -142,15 +142,3 @@ export type CanonicalPlayerGameStat = {
   source: SourceProvenance
 }
 
-/** Canonical event envelope for incremental OS reactions. Event ids are deterministic for dedup. */
-export type SportsDataEvent<T> = {
-  eventId: string
-  eventType: string
-  sport: string
-  entityId: string
-  occurredAt: string
-  observedAt: string
-  sourceProvider: string
-  snapshotVersion: string
-  payload: T
-}

@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/draft-room', () => ({ getManagerColorBySeed: () => '#ffffff' }))
-const db = vi.hoisted(() => ({ session: vi.fn(), update: vi.fn(), event: vi.fn(), picks: vi.fn(), remove: vi.fn(), start: vi.fn() }))
-vi.mock('@/lib/prisma', () => ({ prisma: { draftSession: { findFirst: db.session, updateMany: vi.fn(async () => ({ count: 1 })) }, league: { findUnique: vi.fn(async () => null) }, leagueSettings: { findUnique: vi.fn(async () => null) }, $transaction: async (fn: (tx: unknown) => unknown) => fn({ draftSession: { update: db.update }, draftPick: { findMany: db.picks, deleteMany: db.remove } }) } }))
+const db = vi.hoisted(() => ({ session: vi.fn(), update: vi.fn(), event: vi.fn(), picks: vi.fn(), remove: vi.fn(), start: vi.fn(), contracts: vi.fn(async () => ({ count: 1 })) }))
+vi.mock('@/lib/prisma', () => ({ prisma: { draftSession: { findFirst: db.session, updateMany: vi.fn(async () => ({ count: 1 })) }, league: { findUnique: vi.fn(async () => null) }, leagueSettings: { findUnique: vi.fn(async () => null) }, $transaction: async (fn: (tx: unknown) => unknown) => fn({ draftSession: { update: db.update }, draftPick: { findMany: db.picks, deleteMany: db.remove }, playerContract: { deleteMany: db.contracts } }) } }))
 vi.mock('@/lib/draft-archive/events', () => ({ recordArchiveEvent: db.event, updateSessionWithArchive: db.start }))
 vi.mock('@/lib/league/league-roster-draft-gate', () => ({ isLeagueRosterDraftReady: vi.fn(async () => true) }))
 vi.mock('@/lib/draft-defaults/DraftRoomConfigResolver', () => ({ getDraftConfigForLeague: vi.fn(async () => ({ timer_seconds: 90 })) }))
@@ -35,6 +35,21 @@ describe('native reset attempt archive', () => {
     db.picks.mockResolvedValue([])
     expect(await resetDraftSession('l')).toBe(true)
     expect(db.update.mock.calls[0][0].data.auctionState).toEqual({ rookieAuction })
+  })
+
+  // A snake salary-cap pick signed a rookie contract; a reset takes every pick back, so every contract.
+  it("a reset takes back each cleared pick's rookie contract", async () => {
+    db.contracts.mockClear()
+    db.session.mockResolvedValue({ id: 'd', leagueId: 'l', status: 'in_progress', draftType: 'snake' })
+    db.picks.mockResolvedValue([
+      { overall: 1, rosterId: 'a', playerId: 'p-1', playerName: 'One' },
+      { overall: 2, rosterId: 'b', playerId: null, playerName: 'Two' },
+    ])
+    expect(await resetDraftSession('l')).toBe(true)
+    expect(db.contracts.mock.calls.map((c) => c[0].where)).toEqual([
+      { leagueId: 'l', rosterId: 'a', playerId: 'p-1', source: 'rookie_draft', metadata: { path: ['draftPickOverall'], equals: 1 } },
+      { leagueId: 'l', rosterId: 'b', playerId: 'draft-2', source: 'rookie_draft', metadata: { path: ['draftPickOverall'], equals: 2 } },
+    ])
   })
 
 })

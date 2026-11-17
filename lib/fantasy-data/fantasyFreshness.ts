@@ -4,7 +4,7 @@
  */
 import type { FantasyDataEvidenceSnapshot } from "./fantasyDataEvidence"
 
-export type FantasyFreshnessTier =
+type FantasyFreshnessTier =
   | "fresh"        // < 6 hours old
   | "recent"       // 6–24 hours old
   | "stale"        // 1–7 days old

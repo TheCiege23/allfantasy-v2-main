@@ -20,7 +20,7 @@
  */
 
 /** The shape both callers and tests destructure. */
-export interface ProjectionCoverage {
+interface ProjectionCoverage {
   /** A vendor weekly projection feed lands rows in `fantasy_projections` for this sport. */
   weeklyFeedAvailable: boolean
   /** Computed season-long rows exist in `AFProjectionSnapshot` for this sport. */

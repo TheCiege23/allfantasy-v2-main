@@ -3,10 +3,10 @@
  * co-commissioner only. The latest finished week for everyone; the whole season on the
  * AF Commissioner plan (`commissioner_integrity_monitoring`, the league owner's plan).
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { prisma } from '@/lib/prisma'
 import { integrityEntitled, readLineupIntegrity } from '@/lib/lineup-integrity/lineupIntegrityService'
 
@@ -17,9 +17,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
-  const role = await getLeagueRole(leagueId, userId)
-  if (role === null) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, userId, 'view')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } })
   const entitled = await integrityEntitled(league?.userId ?? null)

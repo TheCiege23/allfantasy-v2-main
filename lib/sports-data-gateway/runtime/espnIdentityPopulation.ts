@@ -14,10 +14,10 @@ import 'server-only'
 import { fetchSleeperEspnCrosswalk, type SleeperEspnCrosswalkRow } from '../providers/sleeper'
 import { normalizePlayerNameForResolution } from '@/lib/shared-services/player-identity'
 
-export type IdentityCandidate = { espnId: string; sleeperId: string; canonicalName: string; normalizedName: string; position: string | null; team: string | null }
-export type IdentityConflict = { reason: 'espn_id_multiple_sleeper' | 'sleeper_id_espn_mismatch'; espnId: string; sleeperIds?: string[]; existingEspnId?: string }
+type IdentityCandidate = { espnId: string; sleeperId: string; canonicalName: string; normalizedName: string; position: string | null; team: string | null }
+type IdentityConflict = { reason: 'espn_id_multiple_sleeper' | 'sleeper_id_espn_mismatch'; espnId: string; sleeperIds?: string[]; existingEspnId?: string }
 
-export type IdentityPopulationSummary = {
+type IdentityPopulationSummary = {
   provider: 'sleeper_crosswalk'
   totalPlayers: number
   candidatesDiscovered: number
@@ -40,7 +40,7 @@ export type IdentityStore = {
   coverage(): Promise<{ identityMapRows: number; withEspnId: number; withSleeperId: number }>
 }
 
-export type CrosswalkFetcher = () => Promise<{ rows: SleeperEspnCrosswalkRow[]; totalPlayers: number; withEspn: number } | { error: string }>
+type CrosswalkFetcher = () => Promise<{ rows: SleeperEspnCrosswalkRow[]; totalPlayers: number; withEspn: number } | { error: string }>
 
 /**
  * Pure classifier: split candidates into deterministically-verified (Tier-1) vs quarantined conflicts.
@@ -145,9 +145,9 @@ export async function describeEspnIdentityCoverage(store?: IdentityStore): Promi
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** A named trusted crosswalk source. `sources` order = precedence (index 0 = highest). */
-export type CrosswalkSource = { name: string; fetch: CrosswalkFetcher }
-export type SourceReport = { name: string; totalPlayers: number; withEspn: number; contributed: number; error?: string }
-export type MultiSourcePopulationSummary = IdentityPopulationSummary & { sources: SourceReport[]; crossSourceConflicts: number }
+type CrosswalkSource = { name: string; fetch: CrosswalkFetcher }
+type SourceReport = { name: string; totalPlayers: number; withEspn: number; contributed: number; error?: string }
+type MultiSourcePopulationSummary = IdentityPopulationSummary & { sources: SourceReport[]; crossSourceConflicts: number }
 
 /**
  * Pure multi-source classifier. Precedence = `sourceRows` order. Cross-source conflict when one sleeper id is

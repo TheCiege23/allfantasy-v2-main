@@ -14,7 +14,7 @@ import { mapJoinError } from "@/lib/world-cup/worldCupBracketUtils"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { makeWcT } from "@/lib/world-cup/worldCupI18n"
 
-export type InvitePreviewPayload = {
+type InvitePreviewPayload = {
   inviteCode: string
   challengeId: string
   name: string

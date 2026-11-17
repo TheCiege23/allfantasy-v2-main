@@ -29,7 +29,7 @@ export function useAI<T = any>() {
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || options?.errorMessage || 'AI request failed');
+          throw new Error(data.error || options?.errorMessage || 'Chimmy request failed');
         }
 
         if (options?.successMessage) {

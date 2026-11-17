@@ -13,12 +13,6 @@ export type {
   LeagueArchetypeResult,
   ArchetypeDerivationStep,
   ArchetypeSignalCoverage,
-  LeagueActivitySignalInput,
-  LeagueParticipationInput,
-  LeagueEngagementTierInput,
-  ActivityTierInput,
-  RetentionRiskInput,
-  CommissionerWorkloadInput,
 } from './archetypes/types'
 
 // 6.1 — Behavioral Patterns
@@ -46,12 +40,10 @@ export type {
   EngagementReliability,
   ManagerTrait,
   ManagerEngagementTier,
-  ManagerActivityRatesInput,
   ManagerSignalInput,
   ManagerLeagueContextInput,
   ManagerPatternGroupInput,
   DetectedPatternInput,
-  EvidenceWindowInput,
   PatternConfidenceInput,
 } from './dna/types'
 
@@ -68,7 +60,6 @@ export type {
   PlatformBenchmarkResult,
   BenchmarkRiskLevel,
   BenchmarkWorkloadLevel,
-  BenchmarkActivityInput,
 } from './benchmark/types'
 
 // 6.4 — Recommendation Engine
@@ -80,18 +71,14 @@ export {
   RECOMMENDATION_VERSION,
 } from './recommendations/recommendations'
 export type {
-  RecommendationTier,
   RecommendationCategory,
   RecommendationPriority,
   RecommendationSeverity,
   RecommendationConfidence,
-  RecommendedAction,
   Recommendation,
   RecommendationSet,
   DetectedPatternSlice,
-  BenchmarkDimensionSlice,
   LeagueBenchmarkSlice,
-  ManagerIdentitySlice,
   ManagerRecommendationInput,
   LeagueArchetypeSlice,
   LeagueSignalsSlice,
@@ -120,15 +107,12 @@ export type {
   CohortRecommendation,
   MonetizationSignal,
   DataQualityReport,
-  DataQualityDimensionCompleteness,
   DriverStrength,
   ChurnRiskLevel,
   AdoptionGap,
   CommissionerPrevalence,
-  HealthCorrelation,
   EngagementSignal,
   RetentionSignal,
-  CohortPriority,
   MonetizationPotential,
   HealthTier,
 } from './company/types'

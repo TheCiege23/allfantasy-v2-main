@@ -3,7 +3,7 @@
  * Keep strings stable — stored in ActivityEvent.type and PlatformNotification.type.
  */
 
-export const LEAGUE_FANOUT_EVENT_TYPES = [
+const LEAGUE_FANOUT_EVENT_TYPES = [
   'league_created',
   'settings_changed',
   'lifecycle_transition',

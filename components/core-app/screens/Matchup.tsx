@@ -25,6 +25,11 @@ import { matchupConfidenceText, matchupReasonText } from '@/lib/core-app/matchup
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import { MatchupMarketPanel } from '@/components/core-app/MatchupMarketPanel'
+import { matchupHeadline, pct } from '@/lib/core-app/matchupGuide'
+import { matchupGuideMessages } from '@/lib/core-app/messages/matchupGuide'
+import { platformLabel } from '@/lib/core-app/platformLinks'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/matchup/af-matchup-guide.css'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -721,7 +726,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
       */}
       <p className="af-mu-note af-mu-note--lead">
         {live
-          ? m.livePoints(data.playerScoring.data.source, data.playerScoring.data.playersScored)
+          ? m.livePoints(platformLabel(data.playerScoring.data.source), data.playerScoring.data.playersScored)
           : matchupReasonText(data.playerScoring.reason, language)}
       </p>
       {/* The key for the per-player markers — only when one is on the board. */}
@@ -868,9 +873,11 @@ function InsightCards({
         <div className="af-mu-insight" data-kind="to-win">
           <h2 className="af-mu-insight-label">{m.toWinLabel}</h2>
           <p className="af-mu-insight-title af-num">{win.needed > 0 ? m.toWinNeed(win.needed) : m.toWinAhead}</p>
-          <p className="af-mu-insight-body">
-            {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected)}
-          </p>
+          {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected, win.short) ? (
+            <p className="af-mu-insight-body" data-testid="matchup-to-win-body">
+              {m.toWinBody(win.needed, win.theirProjected, win.yourScore, win.yourLeft, win.yourLeftProjected, win.short)}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -968,6 +975,33 @@ export function Matchup({ data }: MatchupProps) {
 
   const bannerRef = useRef<HTMLElement | null>(null)
 
+  /*
+   * 2026-11-13 guide: the title said only "Matchup". It now says the answer people open the page for —
+   * who's winning — by the same rule as the margin chip (scored once anyone has played, projected
+   * before). One line says what the page is for; up to three numbers sit under it.
+   */
+  const g = useMessages(matchupGuideMessages)
+  const pWin = data.winProbability.available ? data.winProbability.data.pWin : null
+  const head = matchupHeadline({ weekState, scored, projected, pWin })
+  const winPct = pct(pWin)
+  const suffix = winPct != null && head.kind !== 'final' ? g.toWinSuffix(winPct) : ''
+  const f1 = (n: number) => n.toFixed(1)
+  const headline =
+    head.kind === 'final'
+      ? (head.result === 'won' ? g.won : head.result === 'lost' ? g.lost : g.tied)(f1(head.you), f1(head.them))
+      : head.kind === 'live'
+        ? (head.leader === 'you' ? g.liveAhead(f1(head.margin)) : head.leader === 'them' ? g.liveBehind(f1(head.margin)) : g.liveLevel) + suffix
+        : head.kind === 'projected'
+          ? (head.leader === 'you' ? g.projWin : head.leader === 'them' ? g.projLose : g.projLevel)(f1(head.you), f1(head.them)) +
+            (winPct != null ? g.chanceSuffix(winPct) : '')
+          : g.unknown
+  /*
+   * 2026-11-14: the headline is the whole top. The intro ("Follow this week's head-to-head … Lineup
+   * changes are made on Sleeper") is gone — the banner above every league tab says where changes
+   * happen — and so are the win-chance, projected-final and players-left chips: the scoreboard right
+   * below shows each of them.
+   */
+
   return (
     /*
       Every name in this lineup belongs to THIS league, so the card opens in
@@ -990,41 +1024,24 @@ export function Matchup({ data }: MatchupProps) {
         The page title, through the shared header like every other /core screen: "Matchup", with the
         week as its eyebrow. The week banner and the head-to-head card follow directly, unchanged.
       */}
-      <PageHeader
-        className="af-mu-head"
-        title={copy('Matchup')}
-        eyebrow={data.week.available ? `${copy('Week')} ${data.week.data.week}` : null}
-        eyebrowTestId="matchup-week-eyebrow"
-      />
+      <section className="af-hg-head af-mug-head" aria-labelledby="af-mug-title">
+        <PageHeader
+          className="af-mu-head"
+          eyebrowClassName="af-hg-eyebrow"
+          titleClassName="af-hg-title"
+          subClassName="af-hg-intro"
+          title={<span id="af-mug-title">{headline}</span>}
+          eyebrow={data.week.available ? g.eyebrow(data.week.data.week) : null}
+          eyebrowTestId="matchup-week-eyebrow"
+        />
+      </section>
 
       {/* ── Week banner ─────────────────────────────────────────────── */}
       <header className="af-mu-week">
         {/*
-          The league is NAMED AND SHOWN. On an account with sixty leagues the
-          only thing that told you which one you were looking at was a
-          highlighted rail chip, which is a poor answer to "whose matchup is
-          this".
+          The league's crest and name left this bar on 2026-11-14: the league bar above every league
+          tab names it, and the rail highlights it. The bar is the week now.
         */}
-        {data.league.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            className="af-mu-league-crest"
-            src={data.league.logoUrl}
-            alt=""
-            width={24}
-            height={24}
-          />
-        ) : (
-          <span className="af-mu-league-crest af-mu-league-crest--none" aria-hidden>
-            {initialsOf(data.league.name)}
-          </span>
-        )}
-        {/*
-          The league's name, in the banner. It was the page's h1 until 2026-11; the h1 is now the
-          shared PageHeader's "Matchup" above (the screen had no h1 at all before that, so a screen
-          reader jumping by heading landed halfway down). The name stays here as text.
-        */}
-        <p className="af-mu-league-name">{data.league.name}</p>
 
         {data.week.available ? (
           <>
@@ -1105,7 +1122,8 @@ export function Matchup({ data }: MatchupProps) {
             through one hardened resolver — never built here — and the component
             renders nothing at all for a native league.
           */}
-          {data.league.sourceLink ? (
+          {/* One button (2026-11-14): "Set lineup in" when that link resolved, else the matchup itself. */}
+          {data.league.sourceLink && !data.league.lineupLink ? (
             <SourceActionLink
               link={data.league.sourceLink}
               className="af-btn af-mu-source"
@@ -1202,12 +1220,10 @@ export function Matchup({ data }: MatchupProps) {
               </div>
               {data.winProbability.available ? (
                 <>
-                  <div
-                    className="af-mu-centre-value af-num"
-                    data-tone={data.winProbability.data.pWin >= 0.5 ? 'good' : 'bad'}
-                  >
-                    {Math.round(data.winProbability.data.pWin * 100)}%
-                  </div>
+                  {/*
+                    The percentage is the headline's ("· 9% to win"); here it is the bar, which is what a
+                    glance mid-game reads (2026-11-14). The bar still says the number to a screen reader.
+                  */}
                   {/*
                     The same number as a bar — your share on the left, theirs on the right, matching
                     the two team cards either side of it. A percentage is read; a bar is SEEN, which
@@ -1229,10 +1245,16 @@ export function Matchup({ data }: MatchupProps) {
                     is a Gaussian over projected margins, and the detail line is
                     what stops it being mistaken for a count of simulated seasons.
                   */}
-                  <p className="af-mu-centre-why">
+                  {/*
+                    Folded (2026-11-13 guide): the model's own sentence — "17 yet to start · … · 250.7
+                    projected points outstanding · LOW confidence" — stays attached to the number, one
+                    tap away, rather than as four lines of counts under it.
+                  */}
+                  <details className="af-mu-centre-why af-mug-sure">
+                    <summary>{g.howSure}</summary>
                     {matchupReasonText(data.winProbability.data.detail, language)} ·{' '}
                     {matchupConfidenceText(data.winProbability.data.confidence, language)}
-                  </p>
+                  </details>
                 </>
               ) : (
                 <>
@@ -1254,26 +1276,35 @@ export function Matchup({ data }: MatchupProps) {
                 as a live lead has been told something false by a screen that
                 knew better.
               */}
-              {compared == null ? (
-                <div className="af-mu-margin af-num" data-leader="unknown">
-                  {copy('No margin yet')}
-                </div>
-              ) : leader ? (
-                <div className="af-mu-margin af-num" data-leader={leader}>
-                  {scored
-                    ? leader === 'you'
-                      ? copy('You lead by ')
-                      : copy('Behind by ')
-                    : leader === 'you'
-                      ? copy('Projected ahead by ')
-                      : copy('Projected behind by ')}
-                  {Math.abs(compared.you - compared.opponent).toFixed(1)}
-                </div>
-              ) : (
-                <div className="af-mu-margin af-num" data-leader="tied">
-                  {copy(scored ? 'Level' : 'Projected level')}
-                </div>
-              )}
+              {/*
+                During the week "Behind by 13.0" is the headline's, and the tag that repeated it here is gone
+                (2026-11-14). On a finished week it stays: it is the result, and the redraft scoreboard
+                hides everything else in this column then (af-core-redraft-matchup.css).
+              */}
+              {weekState === 'final' ? (
+                <>
+                {compared == null ? (
+                  <div className="af-mu-margin af-num" data-leader="unknown">
+                    {copy('No margin yet')}
+                  </div>
+                ) : leader ? (
+                  <div className="af-mu-margin af-num" data-leader={leader}>
+                    {scored
+                      ? leader === 'you'
+                        ? copy('You lead by ')
+                        : copy('Behind by ')
+                      : leader === 'you'
+                        ? copy('Projected ahead by ')
+                        : copy('Projected behind by ')}
+                    {Math.abs(compared.you - compared.opponent).toFixed(1)}
+                  </div>
+                ) : (
+                  <div className="af-mu-margin af-num" data-leader="tied">
+                    {copy(scored ? 'Level' : 'Projected level')}
+                  </div>
+                )}
+                </>
+              ) : null}
             </div>
 
             <TeamCard
@@ -1320,16 +1351,17 @@ export function Matchup({ data }: MatchupProps) {
       </section>
 
       {/* ── What decides it ─────────────────────────────────────────── */}
-      <section className="af-frame af-mu-section">
-        <header className="af-mu-section-head">
-          <h2 className="af-label">{copy('What decides it')}</h2>
-        </header>
-        <ul className="af-mu-missing">
-          {/*
-            The series with this manager. "Meetings on file", never "all-time": a Sleeper league gets a
-            new id every season, so what is on file is this season's league.
-          */}
-          {data.headToHead && data.headToHead.meetings.length > 0 ? (
+      {/*
+        "What decides it" listed players yet to play and the projected final — both already on the
+        scoreboard and in the headline chips (2026-11-13 guide). The one thing only it said, the series
+        with this manager, stays, under a name that says what it is.
+      */}
+      {data.headToHead && data.headToHead.meetings.length > 0 ? (
+        <section className="af-frame af-mu-section">
+          <header className="af-mu-section-head">
+            <h2 className="af-label">{g.historyTitle}</h2>
+          </header>
+          <ul className="af-mu-missing">
             <li>
               <span className="af-mu-missing-key">{copy('Head to head')}</span>
               <span className="af-mu-missing-value af-num">
@@ -1341,41 +1373,9 @@ export function Matchup({ data }: MatchupProps) {
                 </em>
               </span>
             </li>
-          ) : null}
-          <li>
-            <span className="af-mu-missing-key">{copy('Players yet to play')}</span>
-            <span className="af-mu-missing-why">{matchupReasonText(data.yetToPlay.reason, language)}</span>
-          </li>
-          <li>
-            <span className="af-mu-missing-key">{copy(data.projectedFinal.available && data.projectedFinal.data.model === 'best_ball_full_roster' ? 'Projected Best Ball final' : 'Projected final')}</span>
-            {data.projectedFinal.available ? (
-              <span className="af-mu-missing-value af-num">
-                {data.projectedFinal.data.you.toFixed(1)} –{' '}
-                {data.projectedFinal.data.opponent.toFixed(1)}
-                {data.projectedFinal.data.model === 'best_ball_full_roster' ? (
-                  <em className="af-mu-missing-caveat"> — {copy('highest projected legal lineup from each eligible full roster')}</em>
-                ) : null}
-                {/*
-                  ⚠ SHOWN WHENEVER EITHER SIDE IS SHORT, BECAUSE THE TWO SIDES CAN
-                  BE SHORT BY DIFFERENT AMOUNTS. That does not just make both totals
-                  low, it tilts the comparison — the side missing more starters
-                  looks like it is losing when it may not be.
-                */}
-                {data.projectedFinal.data.unprojected.you +
-                  data.projectedFinal.data.unprojected.opponent >
-                0 ? (
-                  <em className="af-mu-missing-caveat">
-                    {' '}
-                    — {m.builtWithout(data.projectedFinal.data.unprojected.you, data.projectedFinal.data.unprojected.opponent)}
-                  </em>
-                ) : null}
-              </span>
-            ) : (
-              <span className="af-mu-missing-why">{matchupReasonText(data.projectedFinal.reason, language)}</span>
-            )}
-          </li>
-        </ul>
-      </section>
+          </ul>
+        </section>
+      ) : null}
       </>
       )}
       {/* Your starters' scoring environment, from the stored odds. Self-contained: nothing off-NFL or once final. */}

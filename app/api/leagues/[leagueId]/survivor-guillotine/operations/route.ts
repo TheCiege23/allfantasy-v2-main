@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, context: Context) {
   const userId = (await getServerSession(authOptions as never) as { user?: { id?: string } } | null)?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await context.params
-  const access = await assertLeagueCommissioner(leagueId, userId)
+  const access = await assertLeagueCommissioner(leagueId, userId, 'view')
   if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
   const [season, league, canEditPaid] = await Promise.all([
     prisma.survivorGuillotineLeague.findUnique({ where: { leagueId },
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, context: Context) {
   if (!body || typeof body.action !== 'string') return NextResponse.json({ error: 'Action required' }, { status: 400 })
   const commissionerActions = new Set(['set_tribes', 'finalize_captains', 'save_calendar', 'advance', 'advance_hosted_ceremony', 'restart_hosted_ceremony', 'settle_auction', 'commissioner_choice', 'resolve_tie', 'audit_corrections', 'review_correction', 'award_correction_compensation', 'start_captain_draft', 'commissioner_draft_pick', 'set_faab_on_chop'])
   if (commissionerActions.has(body.action)) {
-    const access = await assertLeagueCommissioner(leagueId, userId)
+    const access = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!access.ok) return NextResponse.json({ error: 'Commissioner access required' }, { status: access.status })
   }
   try {

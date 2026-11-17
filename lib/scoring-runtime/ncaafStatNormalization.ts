@@ -21,7 +21,7 @@
  * missing conversion evidence is not inferred from a score residual.
  */
 
-export interface NcaafGameStats {
+interface NcaafGameStats {
   stats: Record<string, number>
   /** Numeric CFBD keys that are neither scored nor known-non-scoring. Diagnostic. */
   unmappedKeys: string[]
@@ -128,7 +128,7 @@ export function normalizeCfbdGameStats(raw: unknown): NcaafGameStats {
   return { stats, unmappedKeys: unmapped, appeared }
 }
 
-export interface NcaafWeekAggregate {
+interface NcaafWeekAggregate {
   stats: Record<string, number>
   /** Game rows in which the player appeared. A player who appeared and produced nothing still counts. */
   gamesCounted: number

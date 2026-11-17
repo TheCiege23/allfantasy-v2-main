@@ -37,13 +37,11 @@ import { userHasBracketBrainAi } from '@/lib/bracket-brain/bracketBrainAccess'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** All WC AI features that have per-user daily caps. */
-export type WcAiCapFeature =
+type WcAiCapFeature =
   | 'chimmy'
   | 'explain_bracket'
   | 'commissioner_brain'
   | 'wc_matchup_narrative'
-
-export type { CapTier }
 
 // ── Tier resolution ───────────────────────────────────────────────────────────
 
@@ -87,7 +85,7 @@ const WC_UPGRADE_MESSAGES: Record<WcAiCapFeature, Record<CapTier, string>> = {
     admin: "You've used today's Chimmy questions. They reset at midnight UTC.",
   },
   explain_bracket: {
-    free:  "Bracket explanations require AF Pro. Upgrade to get daily AI bracket breakdowns.",
+    free:  "Bracket explanations require AF Pro. Upgrade to get daily Chimmy bracket breakdowns.",
     pro:   "You've used today's bracket explanation. It resets at midnight UTC.",
     admin: "You've reached today's bracket explanation limit. Resets at midnight UTC.",
   },
@@ -97,9 +95,9 @@ const WC_UPGRADE_MESSAGES: Record<WcAiCapFeature, Record<CapTier, string>> = {
     admin: "You've used today's Commissioner Brain calls. Resets at midnight UTC.",
   },
   wc_matchup_narrative: {
-    free:  "AI Matchup Intelligence requires AF Pro.",
-    pro:   "You've used today's 25 AI matchup analyses. They reset at midnight UTC.",
-    admin: "You've reached today's matchup AI limit. Resets at midnight UTC.",
+    free:  "Chimmy Matchup Intelligence requires AF Pro.",
+    pro:   "You've used today's 25 Chimmy matchup analyses. They reset at midnight UTC.",
+    admin: "You've reached today's matchup Chimmy limit. Resets at midnight UTC.",
   },
 }
 

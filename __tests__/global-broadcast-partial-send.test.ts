@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   dispatchNotification: vi.fn(),
 }))
 
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: mocks.requireVerifiedUser }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: mocks.requireVerifiedUser, requireAgeConfirmedUser: mocks.requireVerifiedUser }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({
   createLeagueChatMessage: mocks.createLeagueChatMessage,
 }))

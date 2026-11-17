@@ -23,7 +23,7 @@ export function isSupportedPositionSport(sport: string | null | undefined): spor
 }
 
 /** Detailed canonical position kept verbatim (e.g. DE/DT/NT/EDGE, CB/S/FS/SS, OLB/ILB/MLB). */
-export type CanonicalPositionRecord = {
+type CanonicalPositionRecord = {
   providerPosition: string
   canonicalPrimaryPosition: string
   sport: CanonicalSport

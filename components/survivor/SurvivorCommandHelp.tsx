@@ -2,7 +2,7 @@
 
 import { HelpCircle } from 'lucide-react'
 
-export interface SurvivorCommandHelpProps {
+interface SurvivorCommandHelpProps {
   compact?: boolean
 }
 

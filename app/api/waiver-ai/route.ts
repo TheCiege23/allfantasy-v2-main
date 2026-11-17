@@ -18,6 +18,7 @@ import { logAiOutput } from "@/lib/ai/output-logger"
 import { buildSportContextString } from "@/lib/ai/AISportContextResolver"
 import { buildWaiverRecommendationContext } from "@/lib/ai/SportAwareRecommendationService"
 import { resolveSportVariantContext } from "@/lib/league-defaults-orchestrator/SportVariantContextResolver"
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   buildWaiverEnvelope,
   getMandatorySystemPromptSuffix,
@@ -82,11 +83,9 @@ interface TripleAIWaiverResult {
   }
 }
 
-const DEEPSEEK_TEMP = 0.1
 const GROK_TEMP = 0.3
 const OPENAI_TEMP = 0.4
 
-const DEEPSEEK_TOKENS = 900
 const GROK_TOKENS = 500
 const OPENAI_TOKENS = 1200
 
@@ -536,6 +535,19 @@ export const POST = withApiUsage({
   const userId = session?.user?.id ?? null
   const isPro = session?.user?.isPro ?? false
 
+  /*
+   * AF Pro (`ai_waivers`, owner's decision 2026-11-16). The /waiver-ai screen's lock was the only one: a direct
+   * POST ran the model for anyone, signed in or not. Refused before the rate limit, the body and the model.
+   */
+  if (!userId) {
+    return NextResponse.json(
+      { success: false, error: 'Sign in to use Waiver Chimmy.', code: 'sign_in' },
+      { status: 401 }
+    )
+  }
+  const plan = await requireFeatureEntitlement({ userId, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'ai_waivers' })
+  if (!plan.ok) return plan.response
+
   const ip = getClientIp(request) || 'unknown'
 
   let rawBody: AnyObj
@@ -665,7 +677,7 @@ export const POST = withApiUsage({
       return NextResponse.json(
         {
           success: false,
-          error: 'Waiver AI analysis failed.',
+          error: 'Waiver Chimmy analysis failed.',
           validated: false,
           providers,
           rate_limit: { remaining, retryAfterSec },
@@ -681,7 +693,7 @@ export const POST = withApiUsage({
       return NextResponse.json(
         {
           success: false,
-          error: 'Waiver AI response validation failed.',
+          error: 'Waiver Chimmy response validation failed.',
           validated: false,
           issues: parsedRes.error.issues,
           rate_limit: { remaining, retryAfterSec },
@@ -776,7 +788,7 @@ export const POST = withApiUsage({
     return NextResponse.json(
       {
         success: false,
-        error: 'Waiver AI request failed.',
+        error: 'Waiver Chimmy request failed.',
         message: msg,
         validated: false,
         rate_limit: { remaining, retryAfterSec },

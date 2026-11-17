@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react"
 import type { PlayoffSeriesView } from "@/lib/playoffs/types"
 import { cupGameDetails, cupTeamName, nbaCupGroupStandings, type CupScorer } from "@/lib/playoffs/nbaCupProgress"
 
-export const cupScorerText = (leaders: CupScorer[] | undefined) => leaders?.length
+const cupScorerText = (leaders: CupScorer[] | undefined) => leaders?.length
   ? leaders.map((leader) => `${leader.name} · ${leader.points} pts`).join(" / ") : "Scorer data pending"
 
-export function NbaCupGameSummary({ game, records = {} }: { game: PlayoffSeriesView; records?: Record<string, string> }) {
+function NbaCupGameSummary({ game, records = {} }: { game: PlayoffSeriesView; records?: Record<string, string> }) {
   const details = cupGameDetails(game)
   const active = game.status === "in_progress", final = game.status === "final"
   return <article className="rounded-2xl border border-white/15 bg-slate-900 p-4 text-white" aria-label={`${game.homeTeamName} versus ${game.awayTeamName} ${final ? "final" : "live"} score`}>

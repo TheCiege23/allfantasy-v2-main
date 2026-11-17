@@ -3,9 +3,11 @@
  * Single source for sport slugs, tool slugs, metadata, and internal links.
  */
 
-import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
+import { availableImportPlatformsPhrase, getImportPlatforms } from '@/lib/league-import/provider-ui-config'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
-const BASE = 'https://allfantasy.ai'
+// www via the shared helper: the apex 301s to www, so an apex canonical names a redirect.
+const BASE = getPublicSiteOrigin()
 
 export type SportSlug =
   | 'fantasy-football'
@@ -66,6 +68,15 @@ export interface SportConfig {
   headline: string
   body: string
   leagueSport: string // NFL, NBA, etc.
+  /** The sport as it reads in a sentence and on the button: "Start a free {noun} league". */
+  noun: string
+  /**
+   * The scoring a manager can pick, in words. Written from the create-league presets
+   * (lib/league-creation-preset/scoring-presets.ts) — say it here and nowhere else on the page.
+   */
+  scoring: string
+  /** Overrides the default "Start a free {noun} league" -> /create-league. */
+  primaryCta?: { label: string; href: string }
   toolHrefs: { label: string; href: string }[]
   keywords: string[]
 }
@@ -89,134 +100,186 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
   'fantasy-football': {
     slug: 'fantasy-football',
     leagueSport: 'NFL',
-    title: 'Fantasy Football Tools – AI Trade Analyzer & More | AllFantasy',
+    noun: 'fantasy football',
+    title: 'Free Fantasy Football Leagues & Trade Analyzer | AllFantasy',
     description:
-      'AllFantasy fantasy football tools: AI trade analyzer, mock drafts, waiver wire advisor, and league management for NFL fantasy leagues.',
-    headline: 'Fantasy Football Tools',
+      'Start a free fantasy football league or bring the one you already play in. PPR or superflex, redraft, dynasty or best ball, with AI trade and waiver help.',
+    headline: 'Free Fantasy Football Leagues',
     body:
-      'AllFantasy brings AI-powered fantasy football tools to your NFL leagues. Analyze trades with context-aware grades, run mock drafts, get waiver and lineup advice, and manage your league in one place. Built for redraft and dynasty.',
-    keywords: ['fantasy football tools', 'NFL fantasy', 'fantasy trade analyzer', 'fantasy football AI'],
+      'Run your fantasy football league on AllFantasy for free: draft, set lineups, trade and work the waiver wire in one place, with Chimmy on hand when you want a second opinion.',
+    scoring: 'Standard, half PPR or full PPR, with TE premium, superflex and 2QB setups.',
+    keywords: [
+      'free fantasy football league',
+      'fantasy football app',
+      'fantasy football trade analyzer',
+      'dynasty fantasy football',
+      'best ball fantasy football',
+    ],
     toolHrefs: [
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
-      { label: 'Mock Draft', href: '/mock-draft' },
+      { label: 'Mock Draft', href: '/tools/mock-draft-simulator' },
       { label: 'Waiver Wire Advisor', href: '/waiver-ai' },
-      { label: 'Season Strategy', href: '/season-strategy' },
       { label: 'Manager Comparison', href: '/manager-compare' },
-      { label: 'Social Pulse', href: '/social-pulse' },
-      { label: 'Sports App', href: '/discover/leagues' },
-      { label: 'Legacy & Dynasty', href: '/af-legacy' },
+      { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
   'fantasy-basketball': {
     slug: 'fantasy-basketball',
     leagueSport: 'NBA',
-    title: 'Fantasy Basketball Tools – AI Analysis & League Management | AllFantasy',
+    noun: 'fantasy basketball',
+    title: 'Free Fantasy Basketball Leagues – Points or Categories | AllFantasy',
     description:
-      'AllFantasy fantasy basketball tools for NBA leagues: trade analyzer, waiver advice, power rankings, and AI-powered draft and lineup help.',
-    headline: 'Fantasy Basketball Tools',
+      'Start a free fantasy basketball league with points, head-to-head categories or rotisserie scoring. Redraft or dynasty, with trades, waivers and AI help.',
+    headline: 'Free Fantasy Basketball Leagues',
     body:
-      'AllFantasy supports NBA fantasy basketball with AI trade analysis, waiver wire recommendations, power rankings, and draft tools. Use the Sports App for league management and the Trade Analyzer for deal evaluation.',
-    keywords: ['fantasy basketball tools', 'NBA fantasy', 'fantasy basketball AI', 'basketball trade analyzer'],
+      'Play fantasy basketball your way on AllFantasy, free: pick a scoring style, draft, and work trades and waivers all season, with Chimmy’s read on any move when you want it.',
+    scoring: 'Points, 9-cat or 8-cat head-to-head, or 9-cat rotisserie.',
+    keywords: [
+      'free fantasy basketball league',
+      'fantasy basketball app',
+      'fantasy basketball categories',
+      '9 cat fantasy basketball',
+      'dynasty fantasy basketball',
+    ],
     toolHrefs: [
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
-      { label: 'Mock Draft', href: '/mock-draft' },
+      { label: 'Mock Draft', href: '/tools/mock-draft-simulator' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
-      { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Social Pulse', href: '/social-pulse' },
-      { label: 'Power Rankings', href: '/core/rankings?scope=league&panel=power' },
-      { label: 'Sports App', href: '/discover/leagues' },
+      { label: 'Power Rankings', href: '/tools/power-rankings' },
+      { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
   'fantasy-baseball': {
     slug: 'fantasy-baseball',
     leagueSport: 'MLB',
-    title: 'Fantasy Baseball Tools – AI Trade Analyzer & Waiver Help | AllFantasy',
+    noun: 'fantasy baseball',
+    title: 'Free Fantasy Baseball Leagues – Roto, H2H or Points | AllFantasy',
     description:
-      'AllFantasy fantasy baseball tools for MLB leagues: AI trade analyzer, waiver wire advisor, mock drafts, and dynasty management.',
-    headline: 'Fantasy Baseball Tools',
+      'Start a free fantasy baseball league with rotisserie, head-to-head categories or points scoring. Redraft or dynasty, with trades, waivers and AI help.',
+    headline: 'Free Fantasy Baseball Leagues',
     body:
-      'AllFantasy offers fantasy baseball tools for MLB redraft and dynasty leagues. Analyze trades, get waiver and lineup advice, run mock drafts, and use Chimmy AI for real-time guidance.',
-    keywords: ['fantasy baseball tools', 'MLB fantasy', 'fantasy baseball AI', 'baseball trade analyzer'],
+      'Run a fantasy baseball league on AllFantasy for free, from a classic roto league to points. Draft, trade and work the waiver wire all season, with Chimmy’s help when you want it.',
+    scoring: '5×5 or 6×6 categories, played as rotisserie or head-to-head, or points.',
+    keywords: [
+      'free fantasy baseball league',
+      'fantasy baseball app',
+      'rotisserie fantasy baseball',
+      '5x5 roto league',
+      'dynasty fantasy baseball',
+    ],
     toolHrefs: [
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
-      { label: 'Mock Draft', href: '/mock-draft' },
-      { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/discover/leagues' },
-      { label: 'Chimmy AI', href: '/chimmy' },
+      { label: 'Mock Draft', href: '/tools/mock-draft-simulator' },
+      { label: 'Chimmy', href: '/chimmy' },
+      { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
   'fantasy-hockey': {
     slug: 'fantasy-hockey',
     leagueSport: 'NHL',
-    title: 'Fantasy Hockey Tools – AI Analysis & League Tools | AllFantasy',
+    noun: 'fantasy hockey',
+    title: 'Free Fantasy Hockey Leagues – Points or Categories | AllFantasy',
     description:
-      'AllFantasy fantasy hockey tools for NHL leagues: trade analyzer, waiver wire advisor, mock drafts, and AI-powered league management.',
-    headline: 'Fantasy Hockey Tools',
+      'Start a free fantasy hockey league with points, head-to-head categories or rotisserie scoring. Redraft or dynasty, with trades, waivers and AI help.',
+    headline: 'Free Fantasy Hockey Leagues',
     body:
-      'AllFantasy supports NHL fantasy hockey with AI trade analysis, waiver recommendations, mock draft simulator, and league management in the Sports App. Dynasty and redraft supported.',
-    keywords: ['fantasy hockey tools', 'NHL fantasy', 'fantasy hockey AI', 'hockey trade analyzer'],
+      'Play fantasy hockey on AllFantasy for free: draft, set your lineup, trade and work waivers all season, with Chimmy on hand when you want a second opinion.',
+    scoring: 'Points, or categories played head-to-head or as rotisserie.',
+    keywords: [
+      'free fantasy hockey league',
+      'fantasy hockey app',
+      'fantasy hockey categories',
+      'dynasty fantasy hockey',
+      'NHL fantasy league',
+    ],
     toolHrefs: [
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
-      { label: 'Mock Draft', href: '/mock-draft' },
+      { label: 'Mock Draft', href: '/tools/mock-draft-simulator' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
-      { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/discover/leagues' },
-      { label: 'Legacy', href: '/af-legacy' },
+      { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
   'fantasy-soccer': {
     slug: 'fantasy-soccer',
     leagueSport: 'SOCCER',
-    title: 'Fantasy Soccer Tools – AI Trade & League Management | AllFantasy',
+    noun: 'fantasy soccer',
+    /*
+     * ⚠ NAME ONLY WHAT THE POOL HAS. The soccer player pool is European club soccer whatever the
+     * league's stored pipeline says (CreateLeagueWizard: "the pipeline is stored, not read by the
+     * pool"), and the data provider documents EPL, La Liga and Serie A (RI_SOCCER_LEAGUES) — not
+     * MLS. "Including" is deliberate: it does not claim that list is the whole pool.
+     */
+    title: 'Free Fantasy Soccer Leagues – Premier League & More | AllFantasy',
     description:
-      'AllFantasy fantasy soccer tools: AI trade analyzer, waiver advice, and league management for fantasy soccer leagues.',
-    headline: 'Fantasy Soccer Tools',
+      'Start a free season-long fantasy soccer league with European club players, including the Premier League, La Liga and Serie A. Draft, trade and set lineups.',
+    headline: 'Free Fantasy Soccer Leagues',
     body:
-      'AllFantasy brings AI-powered tools to fantasy soccer: trade analysis, waiver wire advisor, and league management. Use the Sports App and Trade Analyzer for smarter decisions.',
-    keywords: ['fantasy soccer tools', 'soccer fantasy', 'fantasy soccer AI', 'soccer trade analyzer'],
+      'Run a season-long fantasy soccer league with your friends: draft your own squad from European club soccer, including the Premier League, La Liga and Serie A, then trade and set lineups all season.',
+    scoring: 'Points.',
+    keywords: [
+      'free fantasy soccer league',
+      'fantasy soccer app',
+      'premier league fantasy draft',
+      'fantasy soccer draft league',
+      'dynasty fantasy soccer',
+    ],
     toolHrefs: [
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
-      { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/discover/leagues' },
-      { label: 'Chimmy AI', href: '/chimmy' },
+      { label: 'Chimmy', href: '/chimmy' },
+      { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
   'ncaa-football-fantasy': {
     slug: 'ncaa-football-fantasy',
     leagueSport: 'NCAAF',
-    title: 'NCAA Football Fantasy Tools – AI Analysis & Dynasty | AllFantasy',
+    noun: 'college fantasy football',
+    // "College fantasy football" is how people search; "NCAA football fantasy" was the old headline.
+    title: 'Free College Fantasy Football Leagues | AllFantasy',
     description:
-      'AllFantasy NCAA football fantasy tools: trade analyzer, waiver advisor, and dynasty league management for college fantasy football.',
-    headline: 'NCAA Football Fantasy Tools',
+      'Start a free college fantasy football league. Draft college players and play it as a one-season league or a dynasty, with trades, waivers and AI help.',
+    headline: 'College Fantasy Football Leagues',
     body:
-      'AllFantasy supports NCAA football fantasy with AI trade analysis, waiver wire advice, and dynasty tools. Use the Sports App and Legacy experience for college fantasy leagues.',
-    keywords: ['NCAA football fantasy', 'college fantasy football', 'NCAAF fantasy tools'],
+      'Play fantasy football with college players on AllFantasy, free. Draft from the college game, set lineups each week, and run it for one season or as a dynasty.',
+    scoring: 'Standard, half PPR or full PPR.',
+    keywords: [
+      'college fantasy football',
+      'college fantasy football league',
+      'NCAA fantasy football',
+      'devy fantasy football',
+      'campus to canton league',
+    ],
     toolHrefs: [
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
-      { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/discover/leagues' },
-      { label: 'Legacy & Dynasty', href: '/af-legacy' },
+      { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
   'ncaa-basketball-fantasy': {
     slug: 'ncaa-basketball-fantasy',
     leagueSport: 'NCAAB',
-    title: 'NCAA Basketball Fantasy & Bracket Tools | AllFantasy',
+    noun: 'college basketball fantasy',
+    title: 'March Madness Pools & College Basketball Fantasy | AllFantasy',
+    primaryCta: { label: 'Start a free bracket pool', href: '/brackets' },
     description:
-      'AllFantasy NCAA basketball tools: bracket challenge, fantasy league management, and AI-powered bracket analysis and pool management.',
-    headline: 'NCAA Basketball Fantasy & Bracket Tools',
+      'Run a free March Madness bracket pool with friends, or a season-long college basketball fantasy league. Live leaderboards and AI help with your picks.',
+    headline: 'March Madness Brackets & College Basketball Fantasy',
     body:
-      'AllFantasy offers NCAA basketball bracket challenges, pool management, and fantasy league tools. Compete in bracket contests and use AI to stress-test your picks. Fantasy league support for NCAAB.',
-    keywords: ['NCAA basketball fantasy', 'bracket challenge', 'March Madness', 'NCAAB fantasy'],
+      'Create a free March Madness bracket pool and invite your friends, or play college basketball fantasy all season long. Chimmy can pressure-test your bracket before it locks.',
+    scoring: 'Points.',
+    keywords: [
+      'march madness bracket pool',
+      'bracket challenge',
+      'free bracket pool',
+      'college basketball fantasy',
+      'NCAA basketball fantasy league',
+    ],
     toolHrefs: [
-      { label: 'Bracket Challenge', href: '/brackets' },
-      { label: 'Bracket Hub', href: '/brackets' },
+      // No /brackets here: the primary button already goes there. (It was listed twice before,
+      // and two entries with one href also shared a React key.)
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
-      { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/discover/leagues' },
+      { label: 'Find a league', href: '/discover/leagues' },
     ],
   },
 }
@@ -233,14 +296,14 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     openToolHref: '/trade-evaluator',
     examples: [
       'Evaluate redraft and dynasty trades with league context',
-      'See letter grades and AI explanations for both sides',
+      'See letter grades and Chimmy explanations for both sides',
       'Get counter-offer suggestions to maximize value',
     ],
     relatedToolSlugs: ['mock-draft-simulator', 'waiver-wire-advisor', 'ai-draft-assistant', 'legacy-dynasty'],
     keywords: ['fantasy trade analyzer', 'trade analyzer', 'fantasy football trade', 'AI trade analysis'],
     faqs: [
       { q: 'What sports does the trade analyzer support?', a: 'NFL, NBA, MLB, NHL, NCAA Basketball, NCAA Football, and Soccer. Redraft and dynasty formats.' },
-      { q: 'How does the AI grade trades?', a: 'Grades consider lineup impact, replacement value, and your league settings. You get letter grades and explanations for both sides.' },
+      { q: 'How does Chimmy grade trades?', a: 'Grades consider lineup impact, replacement value, and your league settings. You get letter grades and explanations for both sides.' },
       { q: 'Do I need to connect my league?', a: 'You can use the analyzer standalone or with a connected league for better context.' },
     ],
   },
@@ -249,7 +312,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     title: 'AI Trade Finder - League-Wide Trade Discovery | AllFantasy',
     description:
       'AI scans your synced Sleeper league to find the best available fantasy trades based on roster fit, trade goals, partner alignment, and market context.',
-    headline: 'AI Trade Finder',
+    headline: 'Chimmy Trade Finder',
     benefitSummary:
       'Scan your full league for realistic trade paths, partner fits, and analyzer-ready packages without manually checking every roster.',
     openToolHref: '/core/trades#trade-finder',
@@ -268,8 +331,8 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Full AI-powered mock draft room that looks and feels like a live draft board. Import your Sleeper league for real managers and draft slots, or run a custom open mock across all supported sports.',
     headline: 'Mock Draft Simulator',
     benefitSummary:
-      'Import a real Sleeper league or build a custom room, then draft against AI teams using ADP, roster needs, and scoring-aware logic in one shareable board.',
-    badge: 'AI-Powered',
+      'Import a real Sleeper league or build a custom room, then draft against Chimmy teams using ADP, roster needs, and scoring-aware logic in one shareable board.',
+    badge: 'Chimmy-powered',
     openToolHref: '/mock-draft',
     examples: [
       'Import real Sleeper managers, avatars, and draft order when available',
@@ -286,7 +349,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'AllFantasy waiver wire advisor gives AI-powered pickup recommendations and lineup help tuned to your league settings and scoring.',
     headline: 'Waiver Wire Advisor',
     benefitSummary:
-      'Get pickup and lineup recommendations based on your league. AI considers scoring, roster needs, and availability.',
+      'Get pickup and lineup recommendations based on your league. Chimmy considers scoring, roster needs, and availability.',
     openToolHref: '/waiver-ai',
     examples: [
       'Waiver and free-agent pickup recommendations',
@@ -303,10 +366,10 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Compare any two fantasy managers head-to-head. AI grades records, win rates, championships, and play style across redraft, dynasty, and specialty formats. Includes trade style and manager DNA.',
     headline: 'Manager Comparison',
     benefitSummary:
-      'Stack two Sleeper managers side-by-side with AI grades, verdict hero, DNA signals, trade style context, and shared-league opponent tendencies.',
+      'Stack two Sleeper managers side-by-side with Chimmy grades, verdict hero, DNA signals, trade style context, and shared-league opponent tendencies.',
     openToolHref: '/manager-compare',
     icon: '⚔️',
-    badge: 'AI-Powered',
+    badge: 'Chimmy-powered',
     examples: [
       'Compare redraft, dynasty, and specialty format grades for two managers',
       'See trade style, manager DNA, and shared-league opponent tendencies in one place',
@@ -316,7 +379,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     keywords: ['manager comparison', 'fantasy manager grades', 'sleeper manager compare', 'head to head fantasy managers'],
     faqs: [
       { q: 'What does Manager Comparison measure?', a: 'It compares Sleeper manager history, format-specific grades, win rates, championships, and play-style tendencies.' },
-      { q: 'Does the tool include AI analysis?', a: 'Yes. The head-to-head verdict, manager grading, and follow-up context are presented through an AI-assisted comparison flow.' },
+      { q: 'Does the tool include Chimmy analysis?', a: 'Yes. The head-to-head verdict, manager grading, and follow-up context are presented through a Chimmy-assisted comparison flow.' },
       { q: 'Can I share a comparison with someone else?', a: 'Yes. After loading results, you can copy a shareable URL with both manager usernames baked into the page.' },
     ],
   },
@@ -350,10 +413,10 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'Generate AI-powered social captions for your fantasy career rank, trades, league standings, player takes, and waiver wins. Load a dynasty report, edit the caption, and earn reward tokens for sharing.',
     headline: 'Career Share',
     benefitSummary:
-      'Turn your fantasy moments into post-ready captions with Grok AI, optional dynasty report context, platform-aware formatting, and daily share rewards.',
+      'Turn your fantasy moments into post-ready captions with Grok Chimmy, optional dynasty report context, platform-aware formatting, and daily share rewards.',
     openToolHref: '/career-share',
     icon: '🚀',
-    badge: 'Grok AI',
+    badge: 'Grok Chimmy',
     examples: [
       'Create a ranking flex post from your AllFantasy career tier and XP snapshot',
       'Generate social copy for trade debates, league standing updates, player stock takes, and waiver pickups',
@@ -396,13 +459,13 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     title: 'AI Draft Assistant – Fantasy Draft Help | AllFantasy',
     description:
       'AllFantasy AI draft assistant helps you draft smarter with real-time rankings, strategy tips, and Chimmy AI guidance during your draft.',
-    headline: 'AI Draft Assistant',
+    headline: 'Chimmy Draft Assistant',
     benefitSummary:
-      'Draft with AI support: rankings, strategy, and Chimmy answering your questions in real time.',
+      'Draft with Chimmy support: rankings, strategy, and Chimmy answering your questions in real time.',
     openToolHref: '/legacy?tab=mock-draft',
     examples: [
       'Real-time draft rankings and suggestions',
-      'Chimmy AI for draft questions',
+      'Chimmy for draft questions',
       'Snake and auction support',
     ],
     relatedToolSlugs: ['mock-draft-simulator', 'trade-analyzer', 'waiver-wire-advisor', 'legacy-dynasty'],
@@ -437,11 +500,11 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
       'AllFantasy NCAA bracket challenge: create pools, invite friends, fill out brackets, and use AI to stress-test your picks. Compete in public and private contests.',
     headline: 'NCAA Bracket Challenge',
     benefitSummary:
-      'Build bracket pools, track standings, and get AI bracket analysis. March Madness made social and smart.',
+      'Build bracket pools, track standings, and get Chimmy bracket analysis. March Madness made social and smart.',
     openToolHref: '/brackets',
     examples: [
       'Create and join bracket pools',
-      'AI bracket review and simulation',
+      'Chimmy bracket review and simulation',
       'Live standings and leaderboards',
     ],
     relatedToolSlugs: ['power-rankings', 'legacy-dynasty', 'trade-analyzer'],
@@ -476,7 +539,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     examples: [
       'Dynasty history and legacy score',
       'Hall of fame moments and reputation',
-      'Trade analyzer, waiver AI, and Chimmy chat',
+      'Trade analyzer, waiver Chimmy, and Chimmy chat',
     ],
     relatedToolSlugs: ['trade-analyzer', 'mock-draft-simulator', 'waiver-wire-advisor', 'bracket-challenge'],
     keywords: ['dynasty fantasy', 'legacy fantasy', 'hall of fame fantasy', 'fantasy commissioner'],
@@ -502,6 +565,19 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
 
 export function getSportCanonical(slug: SportSlug): string {
   return `${BASE}/sports/${slug}`
+}
+
+/**
+ * Platforms a league of this sport can be imported from today, by short name.
+ *
+ * Read from the importer's own config (`available` and `supportedSports`), never typed into copy:
+ * NFL can come from five platforms but most sports from one, so a sentence written once for
+ * "fantasy sports" would over-promise on every page but football.
+ */
+export function getImportPlatformsForSport(leagueSport: string): string[] {
+  return getImportPlatforms()
+    .filter((p) => p.status === 'live' && (p.supportedSports as readonly string[]).includes(leagueSport))
+    .map((p) => p.name)
 }
 
 export function getToolCanonical(slug: ToolSlug): string {

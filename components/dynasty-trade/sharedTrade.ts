@@ -24,7 +24,7 @@ export function shareableLeagueGrade(tradeGrade: DynastyTradeGrade | null): Dyna
   }
 }
 
-export type SharedTradeView = {
+type SharedTradeView = {
   teamAName: string
   teamBName: string
   leagueContext: string | null

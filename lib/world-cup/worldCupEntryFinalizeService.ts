@@ -18,7 +18,7 @@ import {
 import { isWorldCupEntryCompleteFromSelections } from "./worldCupScoringService"
 import { getWorldCupGroupStageView } from "./worldCupGroupStageService"
 
-export type WorldCupEntryCompletionReview = {
+type WorldCupEntryCompletionReview = {
   challengeId: string
   entryId: string
   groupStageComplete: boolean

@@ -11,6 +11,7 @@ import {
   CSP_ENFORCED_POLICY,
   CSP_REPORT_PATH,
   cspMode,
+  evalRollback,
 } from '@/lib/security/cspReportOnly'
 
 const MEASURED_SCRIPT_ORIGINS = [
@@ -33,8 +34,9 @@ describe('the ENFORCED policy', () => {
     }
   })
 
-  it("allows GTM's eval (98 inline reports) and inline script", () => {
-    expect(CSP_ENFORCED_DIRECTIVES['script-src']).toContain("'unsafe-eval'")
+  it('refuses eval, and still allows inline script (this policy is the pre-nonce allowlist)', () => {
+    expect(CSP_ENFORCED_DIRECTIVES['script-src']).not.toContain("'unsafe-eval'")
+    expect(CSP_ENFORCED_POLICY).not.toContain('unsafe-eval')
     expect(CSP_ENFORCED_DIRECTIVES['script-src']).toContain("'unsafe-inline'")
   })
 
@@ -70,12 +72,24 @@ describe('the ENFORCED policy', () => {
   })
 })
 
+describe('evalRollback (CSP_ALLOW_EVAL)', () => {
+  it("adds 'unsafe-eval' only for exactly 1, so a typo or a stray value cannot loosen the site", () => {
+    expect(evalRollback('1')).toEqual(["'unsafe-eval'"])
+    expect(evalRollback(' 1 ')).toEqual(["'unsafe-eval'"])
+    for (const v of [undefined, '', '0', 'true', 'yes', '11']) expect(evalRollback(v), String(v)).toEqual([])
+  })
+})
+
 describe('cspMode', () => {
-  it('enforces unless explicitly rolled back', () => {
+  it('defaults to enforce (the allowlist) unless explicitly set', () => {
+    // Every mode except report-only ENFORCES the allowlist or stricter, so an unset or
+    // mistyped variable can never loosen the site.
     expect(cspMode(undefined)).toBe('enforce')
     expect(cspMode('')).toBe('enforce')
-    expect(cspMode('enforce')).toBe('enforce')
     expect(cspMode('garbage')).toBe('enforce')
+    expect(cspMode('nonce-report')).toBe('nonce-report')
+    expect(cspMode('enforce')).toBe('enforce')
+    expect(cspMode('nonce')).toBe('nonce')
     expect(cspMode('report-only')).toBe('report-only')
     expect(cspMode(' Report-Only ')).toBe('report-only')
   })

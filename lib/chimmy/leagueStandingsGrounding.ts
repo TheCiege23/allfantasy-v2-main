@@ -53,13 +53,13 @@ function hasPlayedGames(rows: RosterRow[]): boolean {
   return rows.some((r) => r.wins > 0 || r.losses > 0 || r.ties > 0 || r.pointsFor > 0)
 }
 
-function describeManager(r: RosterRow, isViewer: boolean): string {
+function describeManager(r: RosterRow, isViewer: boolean, ranks?: { pf: number; pa: number } | null): string {
   const who = r.teamName ? `${r.teamName} (${r.ownerName})` : r.ownerName
   const parts = [
     `${who}${isViewer ? ' ← THIS USER' : ''}`,
     `${r.wins}-${r.losses}${r.ties > 0 ? `-${r.ties}` : ''}`,
-    `PF ${r.pointsFor.toFixed(1)}`,
-    `PA ${r.pointsAgainst.toFixed(1)}`,
+    `PF ${r.pointsFor.toFixed(1)}${ranks ? ` (#${ranks.pf})` : ''}`,
+    `PA ${r.pointsAgainst.toFixed(1)}${ranks ? ` (#${ranks.pa})` : ''}`,
   ]
   if (r.streak) parts.push(`streak ${r.streak}`)
   if (r.playoffSeed != null) parts.push(`seed ${r.playoffSeed}`)
@@ -176,8 +176,36 @@ export async function buildLeagueStandingsContext(
     return b.pointsFor - a.pointsFor
   })
 
-  lines.push('Standings (use ONLY these numbers; do not compute your own):')
-  for (const r of sorted) lines.push(describeManager(r, viewer?.ownerId === r.ownerId))
+  /*
+   * PF/PA RANKS AND THE ONE COMPARISON THAT MATTERS FOR "WHO IS BEST AND WHY" (2026-11-15). A
+   * tester asked exactly that and got a bare team name; the real answer — the standings leader was
+   * not the highest-scoring team — only came on a follow-up. Computed here because the model is
+   * told above not to compute its own. Skipped on a truncated list, where a rank would be a guess.
+   */
+  const complete = rows.length >= totalTeams
+  const rankOf = (value: (r: RosterRow) => number) =>
+    new Map([...rows].sort((a, b) => value(b) - value(a)).map((r, i) => [r.ownerId, i + 1]))
+  const pfRank = complete ? rankOf((r) => r.pointsFor) : null
+  const paRank = complete ? rankOf((r) => r.pointsAgainst) : null
+
+  lines.push(`Standings (use ONLY these numbers; do not compute your own${complete ? '; PF/PA rank in brackets, PA #1 = faced the most points' : ''}):`)
+  for (const r of sorted) {
+    const ranks = pfRank && paRank ? { pf: pfRank.get(r.ownerId) ?? 0, pa: paRank.get(r.ownerId) ?? 0 } : null
+    lines.push(describeManager(r, viewer?.ownerId === r.ownerId, ranks))
+  }
+
+  if (complete && sorted.length > 1) {
+    const leader = sorted[0]!
+    const topScorer = [...rows].sort((a, b) => b.pointsFor - a.pointsFor)[0]!
+    const toughest = [...rows].sort((a, b) => b.pointsAgainst - a.pointsAgainst)[0]!
+    const label = (r: RosterRow) => r.teamName ?? r.ownerName
+    const facts = [`Most points scored: ${label(topScorer)} (${topScorer.pointsFor.toFixed(1)} PF).`]
+    if (leader.ownerId !== topScorer.ownerId) {
+      facts.push(`The standings leader, ${label(leader)}, is NOT the top scorer — #${pfRank?.get(leader.ownerId)} in points for. Say so when asked who is best.`)
+    }
+    facts.push(`Toughest schedule so far: ${label(toughest)} (${toughest.pointsAgainst.toFixed(1)} PA, the most points faced).`)
+    lines.push(`KEY FACTS: ${facts.join(' ')}`)
+  }
 
   if (viewer) {
     lines.push(

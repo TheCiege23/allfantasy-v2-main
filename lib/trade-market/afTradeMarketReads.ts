@@ -26,7 +26,7 @@ import {
  * lineup factor table) older than `AF_MARKET_MAX_AGE_DAYS` are therefore ignored, not served.
  */
 
-export const AF_MARKET_SPORT = 'NFL'
+const AF_MARKET_SPORT = 'NFL'
 export const AF_MARKET_MAX_AGE_DAYS = 21
 
 export type AfMarketRow = {
@@ -217,7 +217,7 @@ export function lineupNote(table: LineupFactorTable | null, lineup: LineupProfil
 
 // ─── The public board ───────────────────────────────────────────────────────────────────────────────
 
-export type AfMarketMover = {
+type AfMarketMover = {
   playerId: string
   name: string
   position: string | null
@@ -228,7 +228,7 @@ export type AfMarketMover = {
   confidence: number
 }
 
-export type AfMarketBoard = {
+type AfMarketBoard = {
   /** False when there is no fresh run to show — the UI then says so rather than showing old movers. */
   fresh: boolean
   generatedAt: string | null

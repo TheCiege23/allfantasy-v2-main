@@ -10,7 +10,7 @@ import { getLeagueListDestinationHref } from '@/lib/dashboard/league-list-destin
 import { importedPlatformLabel } from '@/lib/dashboard/platform-label'
 import { isShadowLeague, shadowDisclosure } from '@/lib/league/write-authority'
 
-export type LeagueSidebarCardProps = {
+type LeagueSidebarCardProps = {
   league: UserLeague
   /** Illegal roster / lineup issue count (My Leagues rail). */
   rosterIssueCount?: number

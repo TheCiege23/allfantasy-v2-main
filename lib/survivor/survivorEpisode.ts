@@ -35,7 +35,7 @@ export type SurvivorEpisodeFacts = {
   tone?: SurvivorStoryTone
 }
 
-export type SurvivorEpisodeScene = { label: string; text: string }
+type SurvivorEpisodeScene = { label: string; text: string }
 export type SurvivorEpisode = { week: number; title: string; scenes: SurvivorEpisodeScene[] }
 
 const pts = (value: number) => value.toFixed(1)
@@ -53,7 +53,7 @@ function toneFacts(facts: SurvivorEpisodeFacts) {
   return { idolsPlayed: facts.idolsPlayed.length, tie: facts.tie, eliminated: facts.eliminated.length, merged: facts.merged, remaining: facts.remaining ?? null }
 }
 
-export function episodeTitle(facts: SurvivorEpisodeFacts): string {
+function episodeTitle(facts: SurvivorEpisodeFacts): string {
   return storyEpisodeTitle(facts.tone ?? 'classic', toneFacts(facts))
 }
 

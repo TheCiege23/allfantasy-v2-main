@@ -1,8 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { FORMAT_DEMO_META, getFormatDemo } from '@/lib/demo-league/formats/registry'
-import { DemoOverview } from '@/components/demo-league/DemoScreens'
+import { DemoLeagueExtras, DemoOverview } from '@/components/demo-league/DemoScreens'
 import { FormatPanels } from '@/components/demo-league/formats/FormatPanels'
+import { FormatRealScreen } from '@/components/demo-league/formats/FormatRealScreen'
+import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
+import { DEMO_HIDDEN_HOME_SECTIONS, demoLeagueHome } from '@/lib/demo-league/coreHome'
 
 export function generateStaticParams() {
   return FORMAT_DEMO_META.map((f) => ({ format: f.id }))
@@ -47,10 +50,21 @@ export default async function DemoFormatPage(props: { params: Promise<{ format: 
         </div>
       </header>
 
+      {demo.real ? <FormatRealScreen screen={demo.real} /> : null}
       <FormatPanels panels={demo.panels} teams={demo.view.teams} />
 
       {demo.standingsNote ? <p className="text-sm af-muted">{demo.standingsNote}</p> : null}
-      <DemoOverview view={demo.view} sample createHref={createHref} testLeagueHref={testHref} standingsMode={demo.standingsMode} standingsTitle={demo.standingsTitle} />
+      {demo.standingsMode === 'points' ? (
+        <DemoOverview view={demo.view} sample createHref={createHref} testLeagueHref={testHref} standingsMode={demo.standingsMode} standingsTitle={demo.standingsTitle} />
+      ) : (
+        <LeagueHome
+          data={demoLeagueHome(demo.view, { id: `demo-${demo.id}`, format: demo.id, name: `${demo.title} example` })}
+          hiddenSections={[...DEMO_HIDDEN_HOME_SECTIONS]}
+          otherLeagueIssueCount={0}
+          identityInShell
+        />
+      )}
+      {demo.standingsMode === 'points' ? null : <DemoLeagueExtras view={demo.view} sample createHref={createHref} testLeagueHref={testHref} />}
     </div>
   )
 }
