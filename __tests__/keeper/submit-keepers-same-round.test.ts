@@ -110,3 +110,23 @@ describe('submitKeeperSelections — choosing to keep nobody', () => {
     expect(m.recordUpsert).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * A record's yearsKept was the constant 1, so every keeper read as "first year" in the commissioner
+ * records and the trade notes. It is now this keep's season as a keeper: the eligibility row's
+ * history count (seasons already kept, the max-years rule's own count) plus this one.
+ */
+describe('submitKeeperSelections — the year a keep represents', () => {
+  it("writes the player's year as a keeper on create and on a resubmission", async () => {
+    setup('player_chooses')
+    m.eligFindMany.mockResolvedValue([
+      { ...elig('a', 5), yearsKept: 2 },
+      { ...elig('b', 7), yearsKept: 0 },
+      // An older eligibility row with no count reads as never kept.
+      { ...elig('c', 9), yearsKept: null },
+    ])
+    await submitKeeperSelections('R', 'L', 'S', ['a', 'b', 'c'])
+    const written = m.recordUpsert.mock.calls.map(([arg]) => [arg.create.playerId, arg.create.yearsKept, arg.update.yearsKept])
+    expect(written).toEqual([['a', 3, 3], ['b', 1, 1], ['c', 1, 1]])
+  })
+})

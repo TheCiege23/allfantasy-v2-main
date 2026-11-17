@@ -183,6 +183,13 @@ async function submitKeeperSelectionsLocked(
     if (spot && spot.round !== spot.costRound) warnings.push(`${pid}: ${costLabel}`)
 
     const player = sourcePlayers.find((p) => p.playerId === pid && !p.droppedAt)!
+    /*
+     * This keep's season as a keeper: the seasons he was already a LOCKED keeper (the eligibility
+     * row's history count, the same one the max-years rule uses) plus this one. It was the constant
+     * 1, so every record said "first year". Selection is refused once the session locks (above), so
+     * the history here never already includes this season.
+     */
+    const yearsKept = Math.max(0, e.yearsKept ?? 0) + 1
     const rec = await db.keeperRecord.upsert({
       where: {
         seasonId_rosterId_playerId: {
@@ -201,7 +208,7 @@ async function submitKeeperSelectionsLocked(
         team: player.team,
         sport: player.sport,
         originalDraftYear: new Date().getFullYear(),
-        yearsKept: 1,
+        yearsKept,
         costRound,
         costAuctionValue: e.projectedCostAuction,
         costLabel,
@@ -212,6 +219,7 @@ async function submitKeeperSelectionsLocked(
         costRound,
         costAuctionValue: e.projectedCostAuction,
         costLabel,
+        yearsKept,
         status: 'pending',
         submittedAt: new Date(),
       },
