@@ -7,7 +7,8 @@ import { readWeeklyChecklist } from '@/lib/commissioner/weeklyChecklistService'
 export const dynamic = 'force-dynamic'
 
 /**
- * GET — this week's commissioner checklist for a redraft league (lib/commissioner/weeklyChecklist).
+ * GET — this week's commissioner checklist for an AllFantasy-run redraft, keeper, dynasty, guillotine or
+ * best ball league (lib/commissioner/weeklyChecklist).
  * Commissioners and co-commissioners. `{ applies: false, reason }` for leagues it does not cover yet.
  */
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
