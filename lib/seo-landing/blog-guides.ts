@@ -73,10 +73,17 @@ const C2C: BlogGuideLink = {
   slug: 'campus-to-canton-fantasy-football',
   title: 'Campus to Canton (C2C) Fantasy Football: How It Works',
 }
+const SURVIVOR: BlogGuideLink = {
+  slug: 'survivor-fantasy-league',
+  title: 'How Survivor Fantasy Leagues Work: Tribes, Idols and Tribal Council',
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
-  guillotine: [GUILLOTINE],
+  guillotine: [GUILLOTINE, SURVIVOR],
+  survivor: [SURVIVOR, GUILLOTINE],
+  // The Survivor guide covers this variant in its own section; the guillotine guide covers the chop.
+  'survivor-guillotine': [SURVIVOR, GUILLOTINE],
   dynasty: [DYNASTY, TRADE_DEADLINE],
   devy: [DEVY, C2C, DYNASTY],
   keeper: [KEEPER, DYNASTY],
