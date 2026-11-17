@@ -61,6 +61,8 @@ export { EspnApiResponseError, EspnFormatChangedError, EspnUnavailableError }
  */
 const ESPN_BENCH_SLOT = 20
 const ESPN_IR_SLOT = 21
+/** ESPN's D/ST lineup slot — the key its scoring `pointsOverrides` uses for team-defense rules. */
+const ESPN_DST_LINEUP_SLOT_ID = 16
 
 type EspnAuthContext = {
   swid: string | null
@@ -579,9 +581,20 @@ function parseEspnSettings(raw: any): EspnImportSettings | null {
       if (!isRecord(item)) return null
       const statId = parseNumber(item.statId, null)
       if (statId == null) return null
+      /*
+       * 🛑 A D/ST RULE'S VALUE IS IN `pointsOverrides["16"]`, NOT IN `points`. ESPN writes every
+       * team-defense rule as `points: 0` with the real weight keyed by lineup slot 16 (D/ST) — 27 of
+       * the 46 items in `contracts/espn/fixtures/fantasy-league.NFL.2026.json`, sack +1, INT +2,
+       * shutout +5. Reading `points` alone stored every defence rule as 0, so a league's D/ST scored
+       * nothing it should. Slot 16 is the only override key ESPN uses there, and wherever an item
+       * carries both, the two are equal — so the override is read only when `points` is 0.
+       */
+      const base = parseNumber(item.points, 0) ?? 0
+      const overrides = isRecord(item.pointsOverrides) ? item.pointsOverrides : null
+      const dstOverride = overrides ? parseNumber(overrides[String(ESPN_DST_LINEUP_SLOT_ID)], null) : null
       return {
         statId,
-        points: parseNumber(item.points, 0) ?? 0,
+        points: base !== 0 ? base : dstOverride ?? 0,
       }
     })
     .filter(Boolean) as EspnImportSettings['scoringItems']
@@ -1522,6 +1535,7 @@ export { resolveEspnOwners as resolveEspnOwnersForTest }
  * regression test that does not require a live ESPN league or its cookies.
  */
 export { parseEspnSchedule as parseEspnScheduleForTest }
+export { parseEspnSettings as parseEspnSettingsForTest }
 
 /**
  * The activity the trade windows read, for the Decision OS activity ingest
