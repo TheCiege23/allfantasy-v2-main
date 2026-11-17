@@ -69,16 +69,21 @@ const IDP: BlogGuideLink = {
   slug: 'idp-fantasy-football',
   title: 'IDP Fantasy Football: How Individual Defensive Players Work',
 }
+const C2C: BlogGuideLink = {
+  slug: 'campus-to-canton-fantasy-football',
+  title: 'Campus to Canton (C2C) Fantasy Football: How It Works',
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
   guillotine: [GUILLOTINE],
   dynasty: [DYNASTY, TRADE_DEADLINE],
-  devy: [DEVY, DYNASTY],
+  devy: [DEVY, C2C, DYNASTY],
   keeper: [KEEPER, DYNASTY],
   'best-ball': [BEST_BALL],
   'salary-cap': [SALARY_CAP, DYNASTY],
   idp: [IDP, DYNASTY],
+  c2c: [C2C, DEVY],
 }
 
 /** Guides for /sports/<slug>. */
@@ -87,7 +92,7 @@ export const SPORT_GUIDES: Partial<Record<SportSlug, readonly BlogGuideLink[]>> 
   'fantasy-basketball': [POINTS_VS_CATEGORIES, NBA_CUP_POOL],
   'fantasy-hockey': [HOCKEY],
   'fantasy-soccer': [SOCCER],
-  'ncaa-football-fantasy': [DEVY, CFP_POOL],
+  'ncaa-football-fantasy': [DEVY, C2C, CFP_POOL],
 }
 
 export function blogGuideHref(slug: string): string {
