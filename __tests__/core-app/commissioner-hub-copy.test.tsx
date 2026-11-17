@@ -55,6 +55,7 @@ const FILES = [
   'components/core-app/commissioner/AutomationRecipes.tsx',
   'components/core-app/commissioner/CalendarExportButton.tsx',
   'components/core-app/commissioner/CommissionerChimmy.tsx',
+  'components/core-app/commissioner/FantraxTradeHistoryUpload.tsx',
   'components/core-app/commissioner/FormatTemplateControl.tsx',
   'components/core-app/commissioner/GuidedWorkflows.tsx',
   'components/core-app/commissioner/MemberActivityList.tsx',

@@ -45,6 +45,7 @@ import {
   RecentChangesFallback,
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
+import { FantraxTradeHistoryUpload } from '@/components/core-app/commissioner/FantraxTradeHistoryUpload'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
 import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
@@ -389,6 +390,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <p className="af-ch-muted">{data.history.tradeAvailable ? t('No trade records on file.') : t('Trade history unavailable.')}</p>
         )}
         <p className="af-ch-muted">{t(data.history.tradeNote)}</p>
+        {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
+        {league.platform.toLowerCase() === 'fantrax' && (league.sport ?? 'NFL').toUpperCase() === 'NFL' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
         <h3>{t('Draft archive')}</h3>
         {data.history.drafts.length ? (
           data.history.drafts.map((draft) => (
