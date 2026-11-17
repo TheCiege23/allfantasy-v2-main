@@ -5,10 +5,10 @@ import { SurvivorGuillotineSetup } from '@/components/survivor-guillotine/Surviv
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 describe('Survivor Guilly commissioner workshop', () => {
-  it('opens with a valid football schedule and snake draft', () => {
+  it('opens with a valid football schedule and alternating Gauntlet draft', () => {
     render(<SurvivorGuillotineSetup />)
     expect(screen.getByText('Season fits · three finalists remain')).toBeTruthy()
-    expect((screen.getByLabelText('New tribe draft') as HTMLSelectElement).value).toBe('snake')
+    expect((screen.getByLabelText('New tribe draft') as HTMLSelectElement).value).toBe('alternating')
     expect((screen.getByRole('button', { name: 'Export season rules' }) as HTMLButtonElement).disabled).toBe(false)
     expect((screen.getByLabelText('Allow trading (off by default)') as HTMLInputElement).checked).toBe(false)
   })
@@ -31,19 +31,23 @@ describe('Survivor Guilly commissioner workshop', () => {
     expect(screen.getByLabelText('Player games per team / period')).toBeTruthy()
   })
   it('creates a league, saves Survivor rules, then exposes its invite link', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, league: { id: 'new-league' } }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ result: { revision: 1 } }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ inviteLink: 'https://example.test/join?code=ABC' }) })
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === '/api/leagues') return { ok: true, json: async () => ({ success: true, league: { id: 'new-league' } }) }
+      if (options?.method === 'PUT') return { ok: true, json: async () => ({ result: { revision: 1 } }) }
+      if (url.startsWith('/api/leagues/join?')) return { ok: true, json: async () => ({ inviteLink: 'https://example.test/join?code=ABC' }) }
+      return { ok: false, json: async () => ({}) }
+    })
     vi.stubGlobal('fetch', fetchMock)
     render(<SurvivorGuillotineSetup />)
     fireEvent.change(screen.getByLabelText('League name'), { target: { value: 'Island League' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create Survivor Guilly league' }))
     expect(await screen.findByRole('link', { name: 'https://example.test/join?code=ABC' })).toBeTruthy()
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+    const createCall = fetchMock.mock.calls.find(([url]) => url === '/api/leagues')!
+    const rulesCall = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT')!
+    expect(JSON.parse(createCall[1]!.body as string)).toMatchObject({
       concept: 'redraft', sport: 'NFL', teamCount: 22, leagueName: 'Island League', draftType: 'snake',
     })
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ action: 'rules', config: { teamCount: 22 } })
-    expect(fetchMock.mock.calls[2][0]).toBe('/api/leagues/join?leagueId=new-league')
+    expect(JSON.parse(rulesCall[1]!.body as string)).toMatchObject({ action: 'rules', config: { teamCount: 22 } })
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/leagues/join?leagueId=new-league')).toBe(true)
   })
 })
