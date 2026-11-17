@@ -2308,6 +2308,22 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         })
           .then((packet) => {
             grounding.buildMs = packet.meta.durationMs
+            if (grounding.outcome === 'timeout') {
+              /*
+               * The packet arrived after the ceiling had already dropped it. Say which reads were slow — slice
+               * names and milliseconds only — so the next fix is a named slice, not a guess. The warning further
+               * down cannot: it fires before the packet exists.
+               */
+              const slowest = [...packet.meta.sources]
+                .filter((x): x is typeof x & { ms: number } => typeof x.ms === 'number')
+                .sort((a, b) => b.ms - a.ms)
+                .slice(0, 5)
+                .map((x) => `${x.slice} ${x.ms}ms`)
+                .join(', ')
+              console.warn(
+                `[chimmy] Decision OS grounding finished late: ${packet.meta.durationMs}ms (engine ${packet.meta.engineMs ?? '?'}ms). Slowest: ${slowest || 'none timed'}.`,
+              )
+            }
             const text = serializeDecisionOsGroundingForPrompt(packet)
             // ⚠ Never overwrite a verdict the ceiling has already reached. The race abandons this
             // promise but does not stop it, so this callback still runs AFTER a timeout — and

@@ -626,6 +626,42 @@ export interface GroundingPacketArgs {
  */
 export const IDP_KICKER_DEADLINE_MS = 2700
 
+/**
+ * 🛑 ONE LATE READ USED TO COST THE WHOLE PACKET (re-score 2026-11-17). The chat route races the entire build
+ * against 3,000 ms and drops ALL of it when it loses (`app/api/chat/chimmy/route.ts` `withPacketCeiling`), and
+ * most reads here had no clock of their own — so one slow slice sent Chimmy into an answer with no league data at
+ * all (measured on production: 3,261 ms for one league, every slice lost).
+ *
+ * Every read started below now has until this many ms from the packet's start. Past it, that ONE slice becomes a
+ * "did not finish in time" gap and the rest of the packet still lands. 2,400 leaves the route's ceiling as a
+ * backstop rather than the mechanism, with room for the IDP/kicker hop (`IDP_KICKER_DEADLINE_MS`, which keeps its
+ * own later deadline because it can only start after the context engine) and for serialization.
+ *
+ * ⚠ A deadline abandons a read; it does not cancel it. The work still completes and is still billed — the same
+ * property the route's ceiling has. What changes is that it no longer takes the other slices down with it.
+ */
+export const PACKET_SLICE_DEADLINE_MS = 2400
+
+/** The gap a slice gets when its read did not finish inside `PACKET_SLICE_DEADLINE_MS`. */
+export const SLICE_LATE_GAP: GroundingGap = {
+  reason: 'not_computed',
+  detail: 'This did not finish in time for this answer.',
+  remedy: 'Asking again usually includes it — most of these reads are cached once they complete.',
+}
+
+/** The nine context-engine slices, which share one read and so go late together. */
+const CONTEXT_SLICE_NAMES = [
+  'matchup',
+  'roster',
+  'standings',
+  'rankings',
+  'leagueDifficulty',
+  'importedHistory',
+  'replayInsights',
+  'devy',
+  'leagueOffice',
+] as const
+
 /** The slice, or a stated gap when it cannot finish in the time left. Never throws. */
 export function withSliceDeadline(
   remainingMs: number,
@@ -715,13 +751,48 @@ export async function buildDecisionOsGroundingPacket(
    * `flags` is the one true dependency and is already awaited above: it decides which of these may
    * run at all, and a feed gathered then discarded would be a killed feed that still cost a query.
    */
-  const kick = <T,>(slice: string, promise: Promise<T>): Promise<T> => {
+  const time = <T,>(slice: string, promise: Promise<T>): Promise<T> => {
     const startedAt = Date.now()
     return promise.then((value) => {
       sliceMs.set(slice, Date.now() - startedAt)
       return value
     })
   }
+
+  /** Slices whose read did not finish inside `PACKET_SLICE_DEADLINE_MS` — stamped with `SLICE_LATE_GAP` below. */
+  const lateSlices = new Set<string>()
+
+  /**
+   * The read, or `null` once the packet's budget is spent. Every reader below already grades `null` as an absent
+   * slice; `lateSlices` is what lets that absence say WHY. Never rejects for lateness; a read that rejects still
+   * rejects, exactly as before.
+   */
+  const withinBudget = <T,>(slice: string, promise: Promise<T>, onLate?: () => void): Promise<T | null> => {
+    const remainingMs = PACKET_SLICE_DEADLINE_MS - (Date.now() - startedAt)
+    const late = () => {
+      lateSlices.add(slice)
+      if (!sliceMs.has(slice)) sliceMs.set(slice, Date.now() - startedAt)
+      onLate?.()
+    }
+    if (remainingMs <= 0) {
+      promise.catch(() => undefined)
+      late()
+      return Promise.resolve(null)
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        late()
+        resolve(null)
+      }, remainingMs)
+    })
+    return Promise.race([promise, deadline]).finally(() => {
+      if (timer) clearTimeout(timer)
+    })
+  }
+
+  /** Timed AND bounded: the per-slice figure in `meta.sources`, and the budget above. */
+  const kick = <T,>(slice: string, promise: Promise<T>): Promise<T | null> => withinBudget(slice, time(slice, promise))
 
   const importKill = killed('importAssertions')
   const rulesKill = killed('leagueRules')
@@ -763,7 +834,8 @@ export async function buildDecisionOsGroundingPacket(
   // keeper leagues on the dynasty chart that the player card does not (2026-11-17).
   const pValueFormat: Promise<{ format: string; qbFormat: string } | null> = args.valueFormat
     ? Promise.resolve(args.valueFormat)
-    : loadLeagueValueFormat(leagueId).catch(() => null)
+    : // Bounded too: market values wait on it, and it was the one read here with no clock at all.
+      withinBudget('marketValues', loadLeagueValueFormat(leagueId).catch(() => null))
 
   const pMarket =
     want.values && !marketKill
@@ -909,10 +981,36 @@ export async function buildDecisionOsGroundingPacket(
         )
       : Promise.resolve(null)
 
+  /*
+   * 🛑 THE CONTEXT ENGINE STARTED LAST, AFTER EVERY READ ABOVE HAD BEEN AWAITED (re-score 2026-11-17). Roster,
+   * matchup and standings — the facts users ask about most — waited behind market, projections, rules and the
+   * devy board, so the engine's own time was added on top of the slowest of them. It starts here, with the rest,
+   * and is awaited where its result is graded. Same arguments, same single `loadContext` call.
+   */
+  const pEngine =
+    args.userId && leagueId && !contextKill
+      ? (() => {
+          const engineStartedAt = Date.now()
+          return withinBudget(
+            'context',
+            new ChimmyContextEngine()
+              .loadContext({ userId: args.userId, leagueId, week: args.week ?? null })
+              .catch(() => null)
+              .then((bundle) => {
+                engineMs = Date.now() - engineStartedAt
+                return bundle
+              }),
+            () => {
+              engineMs = Date.now() - engineStartedAt
+            },
+          )
+        })()
+      : null
+
   // ── The assertions first: everything else is judged against them. ─────────────────────────
   const assertions = await pAssertions
 
-  const importSlice: GroundedSlice<ImportAssertions> = importKill
+  let importSlice: GroundedSlice<ImportAssertions> = importKill
     ? absent<ImportAssertions>(importKill)
     : assertions
     ? present(assertions, {
@@ -963,8 +1061,23 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'Re-import the league so its settings and starting slots are rebuilt.',
       }, v)
     } else {
-      marketValues = hasSubstance(rows)
-        ? present(rows, { servedFrom: 'store', conclusive: v })
+      /*
+       * 🛑 A PLACEHOLDER ROW IS NOT A VALUE. For a sport with no market (NBA, MLB, NHL, soccer…) the adapter returns
+       * ONE `no_producer` row, which `hasSubstance` counted — so the slice printed "available" and then nothing,
+       * because the serializer drops non-`ok` rows. Present only when some row actually carries a price. A sport
+       * the market never prices is not missing data either: its values come from the league's own board, through
+       * Chimmy's value tool, so it is `not_requested` here and raises no confidence-lowering gap.
+       */
+      const priced = (rows ?? []).some((r) => r.status === 'ok')
+      const noMarketForSport = hasSubstance(rows) && rows.every((r) => r.status === 'no_producer')
+      marketValues = priced
+        ? present(rows!, { servedFrom: 'store', conclusive: v })
+        : noMarketForSport
+        ? absent({
+            reason: 'not_requested',
+            detail: `No market price exists for ${args.sport}; this league's values come from its own board.`,
+            remedy: 'Nothing to fix — ask about a player and the league board is used.',
+          }, v)
         : absent({
             reason: 'not_computed',
             detail: `No market values are held for ${args.sport} in ${vf.format}/${vf.qbFormat}.`,
@@ -1071,11 +1184,8 @@ export async function buildDecisionOsGroundingPacket(
      * is what "moving the providers behind Decision OS" means; calling each provider separately
      * would discard the caching and the isolation it already does correctly.
      */
-    const engineStartedAt = Date.now()
-    const bundle = await new ChimmyContextEngine()
-      .loadContext({ userId: args.userId, leagueId, week: args.week ?? null })
-      .catch(() => null)
-    engineMs = Date.now() - engineStartedAt
+    // Started in the first wave (`pEngine`); `engineMs` is set by it.
+    const bundle = pEngine ? await pEngine : null
 
     if (bundle) {
       // `meta.providers[].cached` is the engine's own answer to "was this served warm".
@@ -1227,7 +1337,7 @@ export async function buildDecisionOsGroundingPacket(
    */
   const [leagueIntelText, portfolioOutcome] = await Promise.all([pLeagueIntel, pPortfolio])
 
-  const leagueIntelligence: GroundedSlice<string> = leagueIntelKill
+  let leagueIntelligence: GroundedSlice<string> = leagueIntelKill
     ? absent<string>(leagueIntelKill)
     : hasSubstance(leagueIntelText)
     ? present(leagueIntelText, { servedFrom: 'live', conclusive: verdictFor('standings') })
@@ -1237,7 +1347,7 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'It needs recorded league activity — trades, matchups, valuations — to summarise.',
       })
 
-  const commissionerHealthDecision: GroundedSlice<DecisionFact> = commishHealthKill
+  let commissionerHealthDecision: GroundedSlice<DecisionFact> = commishHealthKill
     ? absent<DecisionFact>(commishHealthKill)
     : (await pCommishHealth) ??
       absent<DecisionFact>({
@@ -1246,7 +1356,7 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'Ask about your league’s health and the deterministic engine runs.',
       })
 
-  const rosterValueGrade: GroundedSlice<RosterValueGradeFact> = rosterValueGradeKill
+  let rosterValueGrade: GroundedSlice<RosterValueGradeFact> = rosterValueGradeKill
     ? absent<RosterValueGradeFact>(rosterValueGradeKill)
     : (await pRosterValueGrade) ??
       absent<RosterValueGradeFact>({
@@ -1282,7 +1392,7 @@ export async function buildDecisionOsGroundingPacket(
    * `intent === 'waiver'`. The pool read and the engine run land on waiver questions and nothing
    * else — the gate below is load-bearing, not decorative.
    */
-  const waiverDecision: GroundedSlice<DecisionFact> = waiverDecisionKill && want.waiverDecision
+  let waiverDecision: GroundedSlice<DecisionFact> = waiverDecisionKill && want.waiverDecision
     ? absent<DecisionFact>(waiverDecisionKill)
     : (await pWaiverDecision) ??
     absent<DecisionFact>({
@@ -1291,7 +1401,7 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'Ask who to claim off waivers and it is requested.',
       })
 
-  const portfolio: GroundedSlice<string> = portfolioKill
+  let portfolio: GroundedSlice<string> = portfolioKill
     ? absent<string>(portfolioKill)
     : portfolioOutcome?.status === 'ok' && hasSubstance(portfolioOutcome.text)
     ? /*
@@ -1405,7 +1515,7 @@ export async function buildDecisionOsGroundingPacket(
      * `IDP_KICKER_DEADLINE_MS` from the packet's start; past that it reports a gap and the packet still lands.
      */
     const remainingMs = IDP_KICKER_DEADLINE_MS - (Date.now() - startedAt)
-    idpKickerValues = await kick(
+    idpKickerValues = await time(
       'idpKickerValues',
       withSliceDeadline(remainingMs, loadIdpKickerValueSlice({
         sport: args.sport,
@@ -1427,6 +1537,32 @@ export async function buildDecisionOsGroundingPacket(
       })),
     )
   }
+
+  /*
+   * A slice whose read ran out of budget says so, instead of a reason that sends someone looking at the wrong
+   * system ("rules could not be resolved", "engine did not return"). Only absent slices are restamped.
+   */
+  const stamp = <T,>(name: string, s: GroundedSlice<T>): GroundedSlice<T> =>
+    lateSlices.has(name) && !s.present ? { ...s, gap: SLICE_LATE_GAP } : s
+  if (contextFacts && lateSlices.has('context')) {
+    const facts = contextFacts as unknown as Record<string, GroundedSlice<unknown>>
+    for (const name of CONTEXT_SLICE_NAMES) {
+      const s = facts[name]
+      if (s && !s.present) facts[name] = { ...s, gap: SLICE_LATE_GAP }
+    }
+  }
+  importSlice = stamp('importAssertions', importSlice)
+  leagueRules = stamp('leagueRules', leagueRules)
+  marketValues = stamp('marketValues', marketValues)
+  devyValues = stamp('devyValues', devyValues)
+  projections = stamp('projections', projections)
+  commissionerIntelligence = stamp('commissionerIntelligence', commissionerIntelligence)
+  leagueIntelligence = stamp('leagueIntelligence', leagueIntelligence)
+  portfolio = stamp('portfolio', portfolio)
+  savedAnalysis = stamp('savedAnalysis', savedAnalysis)
+  commissionerHealthDecision = stamp('commissionerHealthDecision', commissionerHealthDecision)
+  rosterValueGrade = stamp('rosterValueGrade', rosterValueGrade)
+  waiverDecision = stamp('waiverDecision', waiverDecision)
 
   const slices: Array<[string, GroundedSlice<unknown>]> = [
     ['importAssertions', importSlice as GroundedSlice<unknown>],
