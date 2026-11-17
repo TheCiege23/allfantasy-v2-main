@@ -1,5 +1,5 @@
 import { approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
-export type WorldCupTokenConfirmationResponse = {
+type WorldCupTokenConfirmationResponse = {
   code?: string
   error?: string
   message?: string
@@ -23,7 +23,7 @@ export function isWorldCupTokenConfirmationResponse(
   )
 }
 
-export function formatWorldCupTokenConfirmationMessage(
+function formatWorldCupTokenConfirmationMessage(
   body: WorldCupTokenConfirmationResponse
 ): string {
   const cost =

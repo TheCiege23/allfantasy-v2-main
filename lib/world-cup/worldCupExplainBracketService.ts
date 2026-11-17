@@ -76,7 +76,7 @@ function buildExplainContract(opts: { poolName: string; locale?: string | null }
   }
 }
 
-export type WorldCupBracketExplanationResult =
+type WorldCupBracketExplanationResult =
   | {
       ok: true
       summary: string
@@ -89,7 +89,7 @@ export type WorldCupBracketExplanationResult =
       reason: "entry_not_found" | "internal_error"
     }
 
-export type WorldCupExplainBracketInput = {
+type WorldCupExplainBracketInput = {
   challengeId: string
   entryId: string
   userId: string

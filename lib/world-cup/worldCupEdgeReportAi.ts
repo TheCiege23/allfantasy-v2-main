@@ -26,7 +26,7 @@ export type EdgeReportCoaching = {
   fromCache: boolean
 }
 
-export type EdgeReportCoachingResult =
+type EdgeReportCoachingResult =
   | { ok: true; coaching: EdgeReportCoaching }
   | { ok: false; reason: "provider_missing" | "parse_error" | "error"; fallback: string }
 

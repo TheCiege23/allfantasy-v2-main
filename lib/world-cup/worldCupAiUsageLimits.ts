@@ -37,13 +37,11 @@ import { userHasBracketBrainAi } from '@/lib/bracket-brain/bracketBrainAccess'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** All WC AI features that have per-user daily caps. */
-export type WcAiCapFeature =
+type WcAiCapFeature =
   | 'chimmy'
   | 'explain_bracket'
   | 'commissioner_brain'
   | 'wc_matchup_narrative'
-
-export type { CapTier }
 
 // ── Tier resolution ───────────────────────────────────────────────────────────
 

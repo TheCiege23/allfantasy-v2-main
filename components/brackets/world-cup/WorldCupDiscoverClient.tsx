@@ -14,7 +14,7 @@ import WorldCupInviteJoinPanel, {
   type WorldCupInviteJoinPanelHandle,
 } from "./WorldCupInviteJoinPanel"
 
-export type DiscoverCardApi = {
+type DiscoverCardApi = {
   id: string
   name: string
   seasonYear: number

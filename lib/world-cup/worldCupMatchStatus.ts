@@ -74,7 +74,7 @@ export function isWorldCupMatchFinal(match: WorldCupMatchView): boolean {
 
 // ── Pick live state ───────────────────────────────────────────────────────────
 
-export type WorldCupPickLiveState =
+type WorldCupPickLiveState =
   | "not_started"
   | "winning"
   | "drawing"
@@ -149,33 +149,6 @@ export function getWorldCupMatchDisplayScore(match: WorldCupMatchView): string {
 
 // ── Kickoff format ────────────────────────────────────────────────────────────
 
-/**
- * Formats a kickoff datetime string for display.
- *
- * @param startsAt ISO date string from the DB (UTC).
- * @param timezone  IANA timezone string (e.g. "America/New_York"). Optional.
- */
-export function formatWorldCupKickoff(
-  startsAt: string | null | undefined,
-  timezone?: string
-): string {
-  if (!startsAt) return "Time TBD"
-  try {
-    const opts: Intl.DateTimeFormatOptions = {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZoneName: "short",
-      timeZone: timezone,
-    }
-    return new Date(startsAt).toLocaleString(undefined, opts)
-  } catch {
-    return "Time TBD"
-  }
-}
-
 /** Short kickoff — "Sat Jun 14, 9:00 AM" without timezone */
 export function formatWorldCupKickoffShort(startsAt: string | null | undefined): string {
   if (!startsAt) return "TBD"
@@ -190,42 +163,4 @@ export function formatWorldCupKickoffShort(startsAt: string | null | undefined):
   } catch {
     return "TBD"
   }
-}
-
-// ── Provider status normalization ─────────────────────────────────────────────
-
-/**
- * normalizeWorldCupProviderStatus
- *
- * Maps common external provider status strings to the internal WorldCupMatchStatus type.
- * Provider-specific raw codes should be stored in `apiStatusShort` alongside this.
- *
- * Mappings:
- *   final      — "FT", "AET", "PEN", "FT_PEN", "ft", "full-time"
- *   halftime   — "HT", "ht"
- *   live       — "1H", "2H", "ET", "E1", "E2", "P", "LIVE", "extra_time", "penalties"
- *   postponed  — "PST", "SUSP", "INT", "suspended", "tbd" (when explicitly postponed)
- *   cancelled  — "CANC", "ABD", "AWD", "WO"
- *   scheduled  — "NS", "TBD", "SCH", anything else
- */
-export function normalizeWorldCupProviderStatus(
-  raw?: string | null
-): "scheduled" | "live" | "halftime" | "final" | "postponed" | "cancelled" {
-  if (!raw) return "scheduled"
-  const s = raw.trim().toUpperCase()
-  // Final
-  if (["FT", "AET", "PEN", "FT_PEN"].includes(s)) return "final"
-  if (["FULL-TIME", "FULL TIME", "MATCH FINISHED", "FINISHED"].some((k) => s.includes(k)))
-    return "final"
-  // Halftime
-  if (s === "HT" || s === "HALFTIME" || s === "HALF-TIME") return "halftime"
-  // Live / in progress
-  if (["1H", "2H", "ET", "E1", "E2", "P", "BT", "LIVE", "IN PLAY", "EXTRA_TIME", "EXTRA TIME", "PENALTIES"].includes(s))
-    return "live"
-  // Postponed / suspended
-  if (["PST", "SUSP", "INT", "SUSPENDED", "POSTPONED"].includes(s)) return "postponed"
-  // Cancelled / abandoned
-  if (["CANC", "ABD", "AWD", "WO", "CANCELLED", "ABANDONED"].includes(s)) return "cancelled"
-  // Scheduled / TBD / not started
-  return "scheduled"
 }

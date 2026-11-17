@@ -41,7 +41,7 @@ export type EdgeSection = {
  * Structured data passed to the LLM coaching layer.
  * Contains only primitive values so the prompt serialiser can't hallucinate.
  */
-export type EdgeReportGrounding = {
+type EdgeReportGrounding = {
   poolName: string
   userRank: number | null
   totalEntries: number
