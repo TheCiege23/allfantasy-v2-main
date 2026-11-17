@@ -49,6 +49,7 @@ import { DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE } from '@/lib/league/roster-c
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { COMPLETED_DRAFT_SESSION_STATUS, CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { CUSTOM_TIMER_MAX_SECONDS } from '@/lib/draft/draftSettingsPolicy'
+import { buildSleeperUserToRosterIdMap, remapSleeperMirrorPickRosterIds } from '@/lib/draft/sleeperMirrorRosterIds'
 
 /** `pickMetadata.adpAtPick` when it is a positive number (recorded at pick time since #2475). */
 function adpAtPickFromMetadata(meta: unknown): number | null {
@@ -501,6 +502,20 @@ export async function buildSessionSnapshot(
     }
   })
 
+  // Mirrored picks carry a Sleeper USER id in `rosterId`; the room keys "mine" on `Roster.id`.
+  // See lib/draft/sleeperMirrorRosterIds.ts for why platformUserId alone is not the join.
+  const clientPicks: DraftPickSnapshot[] =
+    session.sleeperDraftId && picks.some((p) => p.source === 'sleeper-mirror')
+      ? remapSleeperMirrorPickRosterIds(
+          picks,
+          buildSleeperUserToRosterIdMap(
+            await prisma.roster
+              .findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } })
+              .catch(() => []),
+          ),
+        )
+      : picks
+
   let auction: AuctionSessionSnapshot | undefined
   if (session.draftType === 'auction') {
     const config = getAuctionConfigFromSession(session)
@@ -620,7 +635,7 @@ export async function buildSessionSnapshot(
     slotOrder,
     tradedPicks,
     version: session.version,
-    picks,
+    picks: clientPicks,
     currentPick,
     timer,
     updatedAt: session.updatedAt.toISOString(),

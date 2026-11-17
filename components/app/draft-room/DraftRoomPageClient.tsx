@@ -52,7 +52,7 @@ import { DraftIntroGate } from '@/components/draft/DraftIntroGate'
 import type { DraftAiOverlaySignal, PlayerEntry } from '@/components/app/draft-room/PlayerPanel'
 import type { AuctionSpotlightPanelProps } from '@/components/app/draft-room/AuctionSpotlightPanel'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
-import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnouncementAssets'
+import { resolvePickAnnouncementAssets, roundOneAnnouncementKey } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
 import { tileSignatureChipsByOverall } from '@/lib/draft-room/leagueSignature'
 import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
@@ -842,7 +842,7 @@ export function DraftRoomPageClient({
 
     const picks = session.picks ?? []
     if (!roundOneBootstrapRef.current) {
-      for (const p of picks) roundOneSeenPickIdsRef.current.add(p.id)
+      for (const p of picks) roundOneSeenPickIdsRef.current.add(roundOneAnnouncementKey(p))
       roundOneBootstrapRef.current = true
       return
     }
@@ -853,8 +853,9 @@ export function DraftRoomPageClient({
     const visualsOn = draftUISettings?.roundOnePickAnnouncementEnabled !== false
 
     for (const p of picks) {
-      if (roundOneSeenPickIdsRef.current.has(p.id)) continue
-      roundOneSeenPickIdsRef.current.add(p.id)
+      const seenKey = roundOneAnnouncementKey(p)
+      if (roundOneSeenPickIdsRef.current.has(seenKey)) continue
+      roundOneSeenPickIdsRef.current.add(seenKey)
       if (!rsRoom || !visualsOn || p.round !== 1) continue
 
       const assets = resolvePickAnnouncementAssets(p, players)
@@ -4121,12 +4122,14 @@ export function DraftRoomPageClient({
           showAiOverlays={showAiOverlays}
           presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
           leftAtPick={leftAtPick}
+          mirroredFromSleeper={Boolean(session?.sleeperDraftId)}
         />
       </div>
     },
     [
       players,
       leftAtPick,
+      session?.sleeperDraftId,
       presentationVariant,
       draftIntelLoading,
       session?.status,
