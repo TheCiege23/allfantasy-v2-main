@@ -248,8 +248,15 @@ describe('slot chips are tinted by position family, read under the league’s sp
 })
 
 describe('the stylesheet', () => {
-  const CORE = readFileSync(join(process.cwd(), 'components/core-app/af-core.css'), 'utf8')
-  const MATCHUP = readFileSync(join(process.cwd(), 'components/core-app/af-matchup.css'), 'utf8')
+  /*
+   * ⚠ LINE ENDINGS NORMALISED ON READ. The committed CSS is LF, but a Windows checkout with
+   * `core.autocrlf=true` writes it CRLF — and the third theme selector below spans two lines and is
+   * matched with a literal `\n`. Read raw, `blockOf` found nothing and this suite failed on every
+   * Windows machine while passing on CI, which reads as a broken stylesheet when nothing is broken.
+   */
+  const readCss = (path: string) => readFileSync(join(process.cwd(), path), 'utf8').replace(/\r\n/g, '\n')
+  const CORE = readCss('components/core-app/af-core.css')
+  const MATCHUP = readCss('components/core-app/af-matchup.css')
   const blockOf = (selector: string) => {
     const at = CORE.indexOf(`\n${selector} {`)
     return at < 0 ? '' : CORE.slice(at, CORE.indexOf('\n}', at))
