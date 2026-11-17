@@ -186,7 +186,7 @@ async function requestCoachAdvice(input: {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to get coach advice');
+    throw new Error(readPlanRefusal(res.status, data)?.message ?? (typeof data?.error === 'string' ? data.error : 'Failed to get coach advice'));
   }
   return data as CoachAdviceResult;
 }

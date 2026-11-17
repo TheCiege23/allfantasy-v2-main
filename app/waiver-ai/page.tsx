@@ -12,6 +12,7 @@ import EngagementEventTracker from '@/components/engagement/EngagementEventTrack
 import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type WaiverType = 'FAAB' | 'ROLLING' | 'PRIORITY'
 type LeagueFormat = 'redraft' | 'dynasty' | 'keeper'
@@ -1387,7 +1388,8 @@ export default function WaiverAIPage() {
       }
 
       if (!response.ok || !payload.data) {
-        throw new Error(payload.error ?? 'Failed to analyze waivers.')
+        // A plan refusal says which plan and why ("AF Pro is required…"), never the bare "Premium feature".
+        throw new Error(readPlanRefusal(response.status, payload)?.message ?? payload.error ?? 'Failed to analyze waivers.')
       }
 
       setAnalysis({

@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * Third batch from the 2026-11-10 plan-features audit — the owner's decisions of 2026-11-11:
- *   1. Trade Finder is locked to AF Legacy (`legacy_trade_finder`).
+ *   1. Trade Finder is locked (`legacy_trade_finder`) — to AF Pro since 2026-11-16 ("AF Pro everywhere"); it was AF Legacy.
  *   2. Best-ball roster construction is locked (`roster_construction_planning`).
  *   3. HOH nomination / POV analysis and cap advice are AF Pro, not Commissioner.
  *   4. Draft Rankings (`draft_rankings`) is the AI read of the draft-results rankings.
@@ -97,7 +97,13 @@ beforeEach(() => {
   enhance.mockClear()
 })
 
-describe('1. Trade Finder is AF Legacy', () => {
+describe('1. Trade Finder is AF Pro (was AF Legacy until 2026-11-16)', () => {
+  it('its one key names AF Pro, so the API, matchmaking and the screen all ask for the same plan', async () => {
+    const { getRequiredPlanForFeature, getAcceptedPlansForFeature } = await import('@/lib/subscription/feature-access')
+    expect(getRequiredPlanForFeature('legacy_trade_finder')).toBe('pro')
+    expect(getAcceptedPlansForFeature('legacy_trade_finder')).toEqual(['pro'])
+  })
+
   it('the /api/trade-finder cost gate asks for legacy_trade_finder', async () => {
     const { AI_COST_GATES } = await import('@/lib/ai-protection/costGate')
     expect(AI_COST_GATES.trade_finder.featureId).toBe('legacy_trade_finder')
