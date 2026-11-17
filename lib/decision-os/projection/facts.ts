@@ -93,7 +93,7 @@ export interface ProjectionFact {
   factors: StoredProjectionFactors | null
 }
 
-export interface ProjectionFactsArgs {
+interface ProjectionFactsArgs {
   sport: string
   season: number
   week?: number | null
@@ -141,7 +141,7 @@ export async function currentProjectionWeek(sport: string, season: number): Prom
  * must not present as "this player has no projection" without checking that the writer has run —
  * `not_computed` and `no_producer` are separate answers and only the caller knows which it needs.
  */
-export async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<ProjectionFact[]> {
+async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<ProjectionFact[]> {
   const sport = args.sport.trim().toUpperCase()
   const week = args.week != null ? args.week : await currentProjectionWeek(sport, args.season)
 

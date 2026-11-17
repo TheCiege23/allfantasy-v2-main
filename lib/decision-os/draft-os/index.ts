@@ -156,7 +156,7 @@ import { HOURS } from '../domain-os/types'
  * an empty level is more honest than a placeholder that reads as populated.
  */
 
-export type DraftOsArgs = { leagueId: string }
+type DraftOsArgs = { leagueId: string }
 
 /**
  * League RULES for the draft: scoring, roster shape, draft config, waiver and playoff settings.

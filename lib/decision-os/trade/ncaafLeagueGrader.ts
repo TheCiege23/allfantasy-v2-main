@@ -16,13 +16,13 @@ import { indexBoard, type BoardPlayer } from './sportPointsValue'
  * Redraft uses points over replacement. Dynasty adds seasons based on class year
  * and prices picks from the projected freshman pool. Other formats use their existing chart path.
  */
-export type NcaafLeagueGrader = {
+type NcaafLeagueGrader = {
   /** A grade, or null when this league type is still graded on the chart path. */
   grade(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView | null>
   priceDivision(give: readonly TradeAssetInput[], get: readonly TradeAssetInput[]): Promise<TradeGradeView | ReturnType<typeof priceSportDynastySides> | null>
 }
 
-export type NcaafLeagueGraderDeps = {
+type NcaafLeagueGraderDeps = {
   loadBase: typeof loadNcaafRedraftBase
   loadClassYears?: typeof loadNcaafClassYears
 }

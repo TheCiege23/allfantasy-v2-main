@@ -33,7 +33,7 @@ export type TradeLedgerRow = {
   isTrade: boolean
 }
 
-export type TradeLedgerSkip = 'ungraded' | 'no_moves' | 'no_players' | 'season_over'
+type TradeLedgerSkip = 'ungraded' | 'no_moves' | 'no_players' | 'season_over'
 
 type Json = Record<string, unknown>
 const obj = (v: unknown): Json => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {})
@@ -81,7 +81,7 @@ export function tradeLedgerRow(input: {
   }
 }
 
-export type LetterSummary = { n: number; netPerWeek: number; positive: number; negative: number }
+type LetterSummary = { n: number; netPerWeek: number; positive: number; negative: number }
 
 /**
  * PURE. Grade rows: per letter, how many, the mean net PPR per week, and how many came out ahead.

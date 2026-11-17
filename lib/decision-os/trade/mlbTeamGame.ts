@@ -32,7 +32,7 @@ export const MLB_REGULAR_SEASON_GAMES = 162
 export const MLB_CLUBS = 30
 
 /** Innings an appearance at or above which a pitcher is a starter. */
-export const STARTER_INNINGS_PER_APPEARANCE = 3
+const STARTER_INNINGS_PER_APPEARANCE = 3
 
 /*
  * Who bats and who pitches, per appearance — never "any at-bat at all". A starter who batted twice in
@@ -54,11 +54,11 @@ export const MIN_AT_BATS = 100
 export const MIN_INNINGS = 30
 
 /** Engine stat keys that only a pitcher records (the `p_` keys, pitcher strikeouts `so`, …). */
-export const MLB_PITCHING_STAT_KEYS: ReadonlySet<string> = new Set([
+const MLB_PITCHING_STAT_KEYS: ReadonlySet<string> = new Set([
   'ip', 'outs', 'so', 'w', 'l', 'sv', 'hld', 'bs', 'er', 'qs', 'wp', 'bk', 'p_r', 'p_h', 'p_hr', 'p_bb', 'p_hbp',
 ])
 
-export type MlbLine = {
+type MlbLine = {
   id: string
   position: string
   /** Appearances behind the projection (its own confidence reasons). */
@@ -74,7 +74,7 @@ export type MlbLine = {
   stats: Record<string, number>
 }
 
-export type MlbTeamGameLine<T extends MlbLine> = T & {
+type MlbTeamGameLine<T extends MlbLine> = T & {
   /** Per-TEAM-game stat line. */
   stats: Record<string, number>
   /** SP or RP for a pure pitcher, OF for any outfielder, DH for a two-way player; otherwise as filed. */

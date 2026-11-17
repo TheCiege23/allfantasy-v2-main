@@ -22,7 +22,7 @@ type PrismaLike = typeof defaultPrisma
  * stops at whatever the provider exposes, and nobody performed those actions inside this product.
  * Callers mark it explicitly — see `provenance` below and the `imported_activity` fact source.
  */
-export type ImportedActivityEvidence = {
+type ImportedActivityEvidence = {
   /** Content-derived version. Any new row changes it, so unchanged evidence keeps one identity. */
   version: string
   lastActivityAt: Date | null

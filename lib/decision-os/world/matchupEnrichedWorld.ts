@@ -32,7 +32,7 @@ import { resolvePerformanceEnrichedCanonicalWorld } from './performanceEnrichedW
 // Types
 // ──────────────────────────────────────────────────────────────────────────
 
-export interface MatchupPerspectiveRow {
+interface MatchupPerspectiveRow {
   season: number | null
   week: number
   /** Canonical LeagueTeam.id of the opponent, or null when the bridge could not resolve it. */
@@ -43,7 +43,7 @@ export interface MatchupPerspectiveRow {
   result: 'W' | 'L' | 'T'
 }
 
-export interface MatchupSeasonSummary {
+interface MatchupSeasonSummary {
   /** Completed matchups only. null = no completed sample (NOT an 0-0-0 record). */
   wins: number | null
   losses: number | null
@@ -70,11 +70,11 @@ export interface MatchupContext {
   uncertainty: string[]
 }
 
-export interface MatchupEnrichedRosterFacts extends PerformanceEnrichedRosterFacts {
+interface MatchupEnrichedRosterFacts extends PerformanceEnrichedRosterFacts {
   matchupContext: MatchupContext
 }
 
-export interface MatchupEnrichmentSummary {
+interface MatchupEnrichmentSummary {
   totalRosters: number
   withHistory: number
   missingCount: number
@@ -83,12 +83,12 @@ export interface MatchupEnrichmentSummary {
   seasonMismatch: boolean
 }
 
-export interface MatchupEnrichedCanonicalWorld extends Omit<PerformanceEnrichedCanonicalWorld, 'rosters'> {
+interface MatchupEnrichedCanonicalWorld extends Omit<PerformanceEnrichedCanonicalWorld, 'rosters'> {
   rosters: MatchupEnrichedRosterFacts[]
   matchupSummary: MatchupEnrichmentSummary
 }
 
-export interface MatchupContextResult {
+interface MatchupContextResult {
   rows: RawMatchupFactRow[]
   error: string | null
 }
@@ -97,7 +97,7 @@ export interface MatchupPort {
   loadMatchupFactRows(leagueId: string): Promise<RawMatchupFactRow[]>
 }
 
-export interface MatchupEnrichedWorldDeps {
+interface MatchupEnrichedWorldDeps {
   matchup?: MatchupPort
 }
 

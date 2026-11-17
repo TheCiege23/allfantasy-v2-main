@@ -13,7 +13,7 @@ import { projectMatchupContext, type MatchupContext } from '@/lib/decision-os/wo
 import type { RawMatchupFactRow, RawPlayerGameFactRow } from '@/lib/decision-os/world/facts'
 import { prisma } from '@/lib/prisma'
 
-export interface CitedPlayerPerformance {
+interface CitedPlayerPerformance {
   playerId: string
   gamesPlayed: number
   avgFantasyPoints: number

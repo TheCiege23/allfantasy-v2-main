@@ -37,7 +37,7 @@ export interface PsychologyConsistencyFact {
   crossSportCaveat: string | null
 }
 
-export interface PsychologyConsistencySliceArgs {
+interface PsychologyConsistencySliceArgs {
   userId?: string | null
   leagueId?: string | null
 }

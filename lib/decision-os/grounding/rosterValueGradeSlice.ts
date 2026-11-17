@@ -56,7 +56,7 @@ export interface RosterValueGradeFact {
   strongestOutOf: number | null
 }
 
-export interface RosterValueGradeSliceArgs {
+interface RosterValueGradeSliceArgs {
   userId?: string | null
   leagueId?: string | null
 }

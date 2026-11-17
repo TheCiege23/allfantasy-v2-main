@@ -49,10 +49,6 @@ export const SEVERITY_DEFINITIONS: Record<SeverityToken, SeverityDefinition> = {
   },
 }
 
-export function severityDefinition(token: SeverityToken): SeverityDefinition {
-  return SEVERITY_DEFINITIONS[token]
-}
-
 // ── Score → severity ──────────────────────────────────────────────────────────
 
 /** Maps a 0–100 score to a severity token. Higher = better. */

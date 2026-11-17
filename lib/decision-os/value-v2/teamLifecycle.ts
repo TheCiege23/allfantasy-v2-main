@@ -46,7 +46,7 @@ export const TEAM_GAP_MANAGER_UNKNOWN = 'window_team_manager_kind_unknown'
 export const TEAM_GAP_SEAT_VACANT = 'window_team_seat_vacant_but_claimed'
 export const TEAM_GAP_STATE_UNRECOGNISED = 'window_team_state_unrecognised'
 
-export interface TeamStateFacts {
+interface TeamStateFacts {
   lifecycleState: TeamLifecycleState | string | null | undefined
   managerKind: TeamManagerKind | string | null | undefined
   /** Competition axis. Present means knocked out; it does NOT mean archived. */
@@ -55,7 +55,7 @@ export interface TeamStateFacts {
   archivedAt?: Date | string | null
 }
 
-export type TeamStateVerdict =
+type TeamStateVerdict =
   | { resolvable: true; eliminated: boolean }
   | { resolvable: false; gap: string }
 

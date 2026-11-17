@@ -22,9 +22,9 @@ import { noopObserver, type IntelligenceObserver } from './observability'
 
 type PrismaLike = typeof defaultPrisma
 
-export const RESERVATION_RECONCILE_JOB_TYPE = 'decision_os.reservation_reconcile'
+const RESERVATION_RECONCILE_JOB_TYPE = 'decision_os.reservation_reconcile'
 
-export type ReconcileSummary = {
+type ReconcileSummary = {
   processed: number
   finalized: number
   released: number

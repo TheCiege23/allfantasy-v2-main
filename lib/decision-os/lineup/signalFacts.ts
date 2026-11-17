@@ -23,7 +23,7 @@ import { projectProjectionContext } from '@/lib/decision-os/world/projectionEnri
 import { projectWeatherContext } from '@/lib/decision-os/world/weatherEnrichedWorld'
 import type { RawNewsRow, RawProjectionRow, RawWeatherRow } from '@/lib/decision-os/world/facts'
 
-export interface SignalFactsPlayer {
+interface SignalFactsPlayer {
   playerId: string
   playerName: string
   team?: string | null
@@ -73,7 +73,7 @@ const NEWS_CITE_LIMIT = 3
 const NEWS_WINDOW_DAYS = 7
 
 /** Pure projection from already-loaded rows/contexts. Exported for fixture-driven tests. */
-export function projectLineupSignalFacts(args: {
+function projectLineupSignalFacts(args: {
   players: SignalFactsPlayer[]
   sport: string
   week: number

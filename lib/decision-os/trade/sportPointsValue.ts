@@ -87,12 +87,12 @@ export type BoardPlayer = {
  * replacement levels would be computed from a fragment. Measured 2026-10-09: NBA 516 of 585 (88%) clear
  * it; NHL 219 of 1,049 (21%) — 707 of its projections already rest on 2–4 games of the new season.
  */
-export const MIN_BOARD_COVERAGE = 0.6
+const MIN_BOARD_COVERAGE = 0.6
 
 /** A starting lineup slot: how many per team and which positions may fill it. */
 export type LineupSlot = { slot: string; eligible: readonly string[]; count: number }
 
-export type SportSeasonWindow = {
+type SportSeasonWindow = {
   season: number
   seasonLabel: string
   gamesRemaining: number
@@ -136,7 +136,7 @@ export type SportPointsContext = {
   rosterProvider?: string
 }
 
-export const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
+const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
   `Draft picks have no ${SPORT_LABEL[sport]} price yet, so a deal carrying one is not graded.`
 export const SPORT_FAAB_REASON =
   'FAAB has no price on the over-replacement scale this sport is graded on, so a deal carrying it is not graded.'
@@ -415,7 +415,7 @@ export function replacementFromLineups(
 type Priced = { name: string; value: number }
 
 /** One player's price on the board, or why not — what a value lookup and the trade grade both read. */
-export type BoardPlayerPrice =
+type BoardPlayerPrice =
   | {
       ok: true
       player: BoardPlayer

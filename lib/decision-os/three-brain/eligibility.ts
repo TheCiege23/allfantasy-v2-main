@@ -32,7 +32,7 @@ export type ClaudeReviewPolicy = {
   confidenceThreshold?: number
 }
 
-export type ClaudeReviewEligibility = {
+type ClaudeReviewEligibility = {
   eligible: boolean
   /** Deterministic triggers that fired (for non-sensitive telemetry / explanation). */
   triggers: string[]

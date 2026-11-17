@@ -22,11 +22,11 @@ export type TokenReservation = {
   tokenCost: number
 }
 
-export type TokenAuthorization =
+type TokenAuthorization =
   | { ok: true; reservation: TokenReservation }
   | { ok: false; denyReason: 'token_purchase_required' }
 
-export type TokenReserveInput = {
+type TokenReserveInput = {
   userId: string
   userEmail?: string | null
   entitlementMode: 'subscription' | 'tokens'

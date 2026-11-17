@@ -21,7 +21,7 @@ import type { BehavioralEvent } from '../behavioral/events/types'
 import type { LeagueBehavioralFacts, ManagerBehavioralFacts } from '../behavioral/facts'
 import { assembleLeagueBehavioralFacts, assembleManagerBehavioralFacts } from '../behavioral/assemble'
 
-export type SnapshotCadence = 'daily'
+type SnapshotCadence = 'daily'
 
 export interface LeagueBehavioralSnapshotRecord {
   scope: 'league'
@@ -99,7 +99,7 @@ export function captureLeagueBehavioralSnapshot(
  * Capture one snapshot per manager who had ≥1 event in the window (`activeManagerIds`).
  * A league with zero events yields zero manager snapshots — honest, not an error.
  */
-export function captureManagerBehavioralSnapshots(
+function captureManagerBehavioralSnapshots(
   input: CaptureBehavioralSnapshotInput,
 ): ManagerBehavioralSnapshotRecord[] {
   const cadence = input.cadence ?? 'daily'

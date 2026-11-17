@@ -26,7 +26,7 @@ import type { TradeWorldFacts, TradeLeagueFacts } from '../trade/loader'
  * served from a copy taken before it passed.
  */
 
-export type TradeOsArgs = {
+type TradeOsArgs = {
   leagueId: string
   seasonId: string
   proposerRosterId: string
@@ -38,7 +38,7 @@ async function deriveWorldFacts(args: TradeOsArgs): Promise<TradeWorldFacts | nu
 }
 
 /** Args for the league+season source. No roster pair, deliberately — see below. */
-export type TradeLeagueOsArgs = { leagueId: string; seasonId: string }
+type TradeLeagueOsArgs = { leagueId: string; seasonId: string }
 
 /**
  * League rules + deadline: shared, slow, and the reason this feed is worth having.
@@ -83,7 +83,7 @@ export const tradeRosterSource: OsFactSource<TradeOsArgs, TradeWorldFacts> = {
   derive: deriveWorldFacts,
 }
 
-export function createTradeOs(deps: Parameters<typeof createOsFeed>[1] = {}): OsFeed {
+function createTradeOs(deps: Parameters<typeof createOsFeed>[1] = {}): OsFeed {
   return createOsFeed('trade', deps)
 }
 
