@@ -198,6 +198,7 @@ type LandingCopy = {
     /** Link to /blog — the guides had no link from the homepage. */
     blog: string
     dashboard: string
+    leagueTypesFaq: string
     privacy: string
     terms: string
     dataDeletion: string
@@ -398,6 +399,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       playerFinder: 'Player finder',
       blog: 'Blog',
       dashboard: 'Dashboard',
+      leagueTypesFaq: 'League Types FAQ',
       privacy: 'Privacy',
       terms: 'Terms',
       dataDeletion: 'Data deletion',
@@ -612,6 +614,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       playerFinder: 'Buscador de jugadores',
       blog: 'Blog',
       dashboard: 'Panel',
+      leagueTypesFaq: 'Tipos de liga y reglas',
       privacy: 'Privacidad',
       terms: 'Términos',
       dataDeletion: 'Eliminación de datos',
