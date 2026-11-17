@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { logAuditEntry, getFullAuditTrail } from '@/lib/zombie/auditService'
 import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
+import { OVERRIDABLE_ZOMBIE_STATUSES, STATUS_OVERRIDE_BLOCKING_RESOLUTIONS } from '@/lib/zombie/statusOverride'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,7 +83,12 @@ export async function POST(req: Request) {
     const prev = await prisma.zombieLeagueTeam.findUnique({
       where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
     })
-    if (!['Survivor', 'Zombie', 'Whisperer', 'Revived', 'Eliminated'].includes(newStatus)) return NextResponse.json({ error: 'Unknown team status' }, { status: 400 })
+    if (!(OVERRIDABLE_ZOMBIE_STATUSES as readonly string[]).includes(newStatus)) return NextResponse.json({ error: 'Unknown team status' }, { status: 400 })
+    // The same guard item grants have: never change a team's status under a week that is settling or held for review.
+    const currentResolution = await prisma.zombieWeeklyResolution.findUnique({ where: { zombieLeagueId_week: { zombieLeagueId: z.id, week: z.currentWeek } }, select: { status: true } })
+    if (currentResolution && (STATUS_OVERRIDE_BLOCKING_RESOLUTIONS as readonly string[]).includes(currentResolution.status)) {
+      return NextResponse.json({ error: 'This week is being settled or is held for review. Change statuses once it is complete.' }, { status: 409 })
+    }
     if (z.sport === 'NFL' && (newStatus === 'Whisperer' || prev?.status === 'Whisperer')) {
       return NextResponse.json({ error: 'Use the reviewed 2025 offer or combat workflow to change the Whisperer. A status-only override cannot transfer the role or its ambushes.' }, { status: 409 })
     }

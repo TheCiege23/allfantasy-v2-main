@@ -145,6 +145,12 @@ describe('every specialty format rules route checks the lock and writes the log'
     ['app/api/commissioner/leagues/[leagueId]/idp/cap-config/route.ts', 1],
     ['app/api/devy/route.ts', 1],
     ['app/api/c2c/settings/route.ts', 1],
+    // Survivor: every route that rewrites the league's Survivor rules (the foundation route logs its two saves).
+    ['app/api/survivor/season/route.ts', 1],
+    ['server/api-route-modules/league-survivor/settings-screen/route.ts', 1],
+    ['server/api-route-modules/league-survivor/config/route.ts', 1],
+    ['server/api-route-modules/league-survivor/foundation/route.ts', 2],
+    ['app/api/survivor/commissioner/route.ts', 1],
   ])('%s', (path, logs) => {
     expect(calls(path, 'formatRulesLockedResponse')).toHaveLength(1)
     expect(calls(path, 'logFormatRulesChange').length).toBe(logs)

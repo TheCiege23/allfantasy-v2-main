@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
+import { OVERRIDABLE_ZOMBIE_STATUSES } from '@/lib/zombie/statusOverride'
 
 type TeamRow = {
   rosterId: string
@@ -51,7 +52,8 @@ const OVERRIDE_ACTIONS = [
   },
 ]
 
-const STATUSES = ['Survivor', 'Zombie', 'Whisperer', 'Revived', 'Eliminated']
+// Shared with the route; "Eliminated" is not a game status (lib/zombie/statusOverride.ts).
+const STATUSES = OVERRIDABLE_ZOMBIE_STATUSES
 const ITEM_TYPES = [
   { value: 'serum_antidote', label: '🧪 Serum Antidote' },
   { value: 'weapon_knife', label: '🔪 Knife' },
