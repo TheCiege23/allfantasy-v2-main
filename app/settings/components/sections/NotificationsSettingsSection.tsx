@@ -763,12 +763,9 @@ export function NotificationsSettingsSection({
       </div>
 
       <section aria-labelledby="imported-league-alerts-title" className="space-y-2" data-testid="imported-league-alerts">
-        <h3 id="imported-league-alerts-title" className="text-sm font-medium text-[var(--text)]">Imported league alerts</h3>
+        <h3 id="imported-league-alerts-title" className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.importedTitle")}</h3>
         <p className="text-xs text-[var(--muted)]">
-          Sleeper leagues: choose additional AF alerts for matchup score changes, your starting lineup changes,
-          completed league trades, and draft starts, picks, or completion. Updates arrive after a league sync;
-          these are not play-by-play or on-the-clock alerts. Scoring and lineup alerts require your linked Sleeper
-          account to match a team in the league. Turn on the categories you want, then save.
+          {t("settings.notifications.importedHint")}
         </p>
         <ul className="space-y-2">
           {IMPORTED_NOTIFICATION_CATEGORY_IDS.map((categoryId) => (
