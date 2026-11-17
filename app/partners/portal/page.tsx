@@ -65,7 +65,7 @@ export default async function PartnerPortalPage() {
             title="This account isn't part of a partner workspace"
             action={
               <>
-                <Link href="/contact?topic=partners" className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-bold text-[#050814] hover:bg-cyan-400">
+                <Link href="/partners#contact" className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-bold text-[#050814] hover:bg-cyan-400">
                   Talk to us
                 </Link>
                 <DemoLink />
