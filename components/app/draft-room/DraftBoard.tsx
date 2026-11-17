@@ -21,6 +21,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 import { useStickyBoardHeader } from './useStickyBoardHeader'
+import { seatDisplayName } from '@/lib/draft-room/seatLabel'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -775,7 +776,7 @@ function DraftBoardInner({
               {orderedSlots.map((entry) => {
                 const meta = teamMetaByRoster?.[entry.rosterId] ?? null
                 const isUser = Boolean(currentUserRosterId) && entry.rosterId === currentUserRosterId
-                const headerName = meta?.teamName?.trim() || entry.displayName
+                const headerName = seatDisplayName(meta?.teamName, entry.displayName)
                 return (
                 <div
                   key={entry.rosterId}

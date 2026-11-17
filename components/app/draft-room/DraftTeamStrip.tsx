@@ -17,6 +17,7 @@ import { getManagerColorBySlot } from '@/lib/draft-room'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { BotPersonalityBadge } from '@/components/league-feed/BotPersonalityBadge'
 import { SurvivorTribeBadge } from '@/components/league/survivor/SurvivorTribeBadge'
+import { seatDisplayName } from '@/lib/draft-room/seatLabel'
 
 export interface DraftTeamStripTeamMeta {
   rosterId: string
@@ -86,11 +87,10 @@ export function DraftTeamStrip({
           const entry = bySlot.get(slot)
           const meta = entry ? teamMetaByRoster?.[entry.rosterId] : null
           const color = getManagerColorBySlot(slot)
-          const displayName =
-            meta?.teamName?.trim() ||
-            meta?.ownerName?.trim() ||
-            entry?.displayName ||
-            `Team ${slot}`
+          // An empty imported seat is named "Unknown" upstream; show it as an open seat instead.
+          const displayName = entry
+            ? seatDisplayName(meta?.teamName, meta?.ownerName, entry.displayName)
+            : `Team ${slot}`
           const isUser = !!currentUserRosterId && entry?.rosterId === currentUserRosterId
           const isOnClock = !!onClockRosterId && entry?.rosterId === onClockRosterId
           const isOrphan = meta?.isOrphan
