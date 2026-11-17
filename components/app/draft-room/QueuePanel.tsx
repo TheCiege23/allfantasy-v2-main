@@ -53,6 +53,8 @@ type QueuePanelProps = {
   presentationVariant?: 'default' | 'redraft_snake'
   /** Viewer's next pick — each row gets an estimated "left @" chance from market ADP. */
   leftAtPick?: { overall: number; label: string } | null
+  /** Sleeper-mirrored room: Sleeper's public API has no queue endpoint, so nothing can sync from it. */
+  mirroredFromSleeper?: boolean
 }
 
 export function QueuePanel({
@@ -79,6 +81,7 @@ export function QueuePanel({
   showAiOverlays = true,
   presentationVariant = 'default',
   leftAtPick = null,
+  mirroredFromSleeper = false,
 }: QueuePanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -456,7 +459,9 @@ export function QueuePanel({
               No players in your queue
             </p>
             <p className="max-w-[220px] text-[11px] leading-relaxed text-white/45">
-              Add from player pool to prep your next picks.
+              {mirroredFromSleeper
+                ? 'Your Sleeper queue does not sync here. Add players from the pool to plan your next picks, then draft on Sleeper.'
+                : 'Add from player pool to prep your next picks.'}
             </p>
           </div>
         ) : showFilteredEmptyState ? (
