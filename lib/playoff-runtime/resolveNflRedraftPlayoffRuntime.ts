@@ -20,7 +20,7 @@ import { CONSOLATION_ROUND_OFFSET } from './playoffRoundWeeks'
 import { loadSeasonRosterDivisions, type SeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { divisionRecords } from '@/lib/league/divisions/leagueDivisions'
 
-export type NflRedraftPlayoffRuntimeResolved =
+type NflRedraftPlayoffRuntimeResolved =
   | {
       ok: true
       state: NflRedraftPlayoffRuntimeState

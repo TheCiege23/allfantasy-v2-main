@@ -4,8 +4,8 @@ import type { NbaCupGame } from "./nbaCupTournament"
 
 export const nbaCupCacheKey = (season: number) => `BRACKET:nba_cup:automatic:${season}`
 /** Durable propagation state; no player picks or private data are stored here. */
-export type NbaCupFanout = { eventIds: string[]; cursor: string | null; restart: boolean }
-export type NbaCupSnapshot = { games: NbaCupGame[]; checkedDates: Record<string, string>; cursor: number; syncedAt: string; fanout?: NbaCupFanout | null }
+type NbaCupFanout = { eventIds: string[]; cursor: string | null; restart: boolean }
+type NbaCupSnapshot = { games: NbaCupGame[]; checkedDates: Record<string, string>; cursor: number; syncedAt: string; fanout?: NbaCupFanout | null }
 
 export async function readNbaCupSnapshot(season: number): Promise<NbaCupSnapshot | null> {
   const row = await prisma.sportsDataCache.findUnique({ where: { cacheKey: nbaCupCacheKey(season) }, select: { data: true } })

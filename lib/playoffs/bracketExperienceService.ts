@@ -17,7 +17,7 @@ const finalizedEntryReader = prisma.playoffBracketEntry as unknown as { findMany
 const projectionEntries = (view: PlayoffChallengeView, tie: Map<string, number | null> = new Map()): ProjectionEntry[] => view.entries.map(e => ({
   id: e.id, name: e.name, totalScore: e.totalScore ?? 0, correctPicks: e.correctPicks ?? 0, finalizedAt: e.finalizedAt ?? null, rank: e.rank ?? null, tiebreakerTotalScore: tie.get(e.id) ?? null,
 }))
-export async function loadProvisionalStandings(view: PlayoffChallengeView) {
+async function loadProvisionalStandings(view: PlayoffChallengeView) {
   if (!view.series.some(g => g.bestOf === 1)) return null
   const locked = view.series.filter(g => g.bestOf === 1 && g.status === "in_progress" && gameHasLocked(g, Date.now())).map(g => g.id)
   const entries = await finalizedEntryReader.findMany({ where: { challengeId: view.challenge.id, finalizedAt: { not: null } }, select: { id: true, tiebreakerTotalScore: true } })
