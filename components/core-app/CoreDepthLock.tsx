@@ -3,7 +3,7 @@ import '@/components/core-app/af-core-lock.css'
 import type { ReactNode } from 'react'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { coreDepthLockCopy, depthLabelText } from '@/lib/core-app/coreDepthLockCopy'
-import { withEntrySource } from '@/lib/monetization/upgradeEntrySource'
+import { CoreDepthLockCta } from '@/components/core-app/CoreDepthLockCta'
 
 /*
  * The two faces of the /core depth paywall (lib/core-app/coreDepthAccess.ts).
@@ -66,9 +66,10 @@ export function CoreDepthLock({ access, what, lang }: { access: CoreDepthAccess;
           in case the plan's path ever stops starting with /upgrade. */}
       {/* `from=lock_<depth>` (2026-11-15) is how a purchase is traced back to the lock that sold it —
           lib/monetization/upgradeEntrySource.ts. */}
-      <a className="af-core-lock-cta" href={withEntrySource(access.upgradePath, `lock_${access.depth}`)} data-ios-purchase>
+      {/* …and `back=<this page>` (2026-11-17) is where the success panel returns them — lib/monetization/lockReturn.ts. */}
+      <CoreDepthLockCta href={access.upgradePath} source={`lock_${access.depth}`}>
         {c.cta(access.planName)}
-      </a>
+      </CoreDepthLockCta>
     </section>
   )
 }
