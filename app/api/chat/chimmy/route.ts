@@ -2202,10 +2202,10 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * exactly like `getInsightBundle`, `buildLeagueSportsGroundingPacket` and the sixteen specialty
    * builders before them. `buildDecisionOsGroundingPacket` performs no membership check of its own:
    * `resolveLeagueMembership` appears nowhere in `lib/decision-os/grounding/`, and its `userId` is
-   * used only to scope slices WITHIN the league (`loadLineupDecisionSlice({ userId, leagueId })`),
+   * used only to scope slices WITHIN the league (`loadWaiverDecisionSlice({ userId, leagueId, … })`),
    * never to decide whether the caller may see it. It is also the WIDEST of the four — it fans out
-   * to league rules, values, projections, lineup, waiver, roster-value, commissioner-health,
-   * psychology-consistency, saved analysis, league intelligence and league context.
+   * to league rules, values, projections, waiver, roster-value, commissioner-health,
+   * saved analysis, league intelligence and league context.
    *
    * ⚠ THE FLAG IS WHY THIS ONE IS SCOPED CONDITIONALLY, NOT WHY IT IS SAFE. A flag being off in
    * tests says nothing about production.

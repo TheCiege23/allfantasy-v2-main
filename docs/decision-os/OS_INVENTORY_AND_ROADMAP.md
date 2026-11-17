@@ -417,8 +417,8 @@ class of truth, a **Decision domain** owns a class of question, and a hub, page 
 | Player Value OS | **Fact OS** — market · IDP · kicker · devy | `decision-os/grounding/*Slice` |
 | Projection OS | **Fact OS** | `domain-os` projection source |
 | Identity OS | **Fact OS** | `decision-os/import/assertions` (R4) |
-| Manager Psychology OS | **Fact OS** — now inside the hub | `decision-os/psychology-os` (R4b) |
-| Lineup · Waiver · Trade · Commissioner | **Decision domains** — all four have engines | `decision-os/{lineup,waiver,trade,commissioner-health}` |
+| Manager Psychology OS | **Retired from the hub 2026-11-17.** Manager facts reach Chimmy through the paid `get_manager_record` tool, never the packet | `psychological-profiles/*` (the feed `decision-os/psychology-os` is deleted) |
+| Lineup · Waiver · Trade · Commissioner | **Decision domains.** Lineup's second engine was deleted 2026-11-17; My Team's `optimizeLineup` (`decision-os/lineup/bestLineup.ts`) is the one start/sit answer | `decision-os/{waiver,trade,commissioner-health}` + `lineup/bestLineup.ts` |
 | Draft | **Decision domain — engine exists** (2026-11-14 correction): `decision-os/draft/decision.ts` wraps `draft-helper/RecommendationEngine.ts`; duplicate rankers converging, see `docs/os/OS_BACKBONE_PRINCIPLES.md` §2 | `decision-os/draft` |
 | Decision OS | **the hub** — the only thing that assembles, grades and answers | `decision-os/grounding` |
 | Chimmy | **the interface** | `/api/chat/chimmy` |
@@ -2448,8 +2448,8 @@ rewrite** — the lesson §2.14 and §2.16 both record about rivalling working p
 | | |
 |---|---|
 | `'psychology'` as an `OsDomain` | **no migration** — `domain` is `VarChar(16)`, the value is 10 chars |
-| `lib/decision-os/psychology-os/` | league-level source, **12h TTL**, schedulable by the 1.1b three-part rule |
-| `managerPsychology` packet slice | graded on the **existing** `managerBehaviour` fact profile |
+| `lib/decision-os/psychology-os/` | league-level source, **12h TTL**, schedulable by the 1.1b three-part rule — ⚠ **deleted 2026-11-17**, never loaded after Milestone 32 |
+| `managerPsychology` packet slice | graded on the **existing** `managerBehaviour` fact profile — ⚠ **removed 2026-11-17** with its kill switch |
 | `managerPsychology` kill switch | eleventh feed, fail-open like the rest |
 | serializer rendering | labels + **only the scores that cleared the floor** |
 
