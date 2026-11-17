@@ -13,6 +13,7 @@ import KeeperPanel from '@/components/app/draft-room/KeeperPanel'
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
+import DraftRoomMusicBar from './DraftRoomMusicBar'
 import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
 import { useCommissionerActions } from '@/hooks/useCommissionerActions'
 import { DraftRoomSettingsModal } from '@/components/app/draft-room/DraftRoomSettingsModal'
@@ -5349,6 +5350,7 @@ export function DraftRoomPageClient({
             leagueId={leagueId}
             onUpdate={handleAutopickMeUpdate}
           />
+          {leagueId ? <DraftRoomMusicBar leagueId={leagueId} draftStatus={session.status} /> : null}
         </>
       }
       managerStrip={null}
