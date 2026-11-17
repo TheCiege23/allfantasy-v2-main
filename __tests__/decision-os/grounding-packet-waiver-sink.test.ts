@@ -10,7 +10,6 @@ const loadWaiver = vi.fn()
 
 vi.mock('@/lib/decision-os/grounding/decisionBridge', () => ({
   loadWaiverDecisionSlice: loadWaiver,
-  loadLineupDecisionSlice: vi.fn(async () => null),
   loadCommissionerHealthDecisionSlice: vi.fn(async () => null),
 }))
 vi.mock('@/lib/decision-os/import-os', () => ({ createImportOsLoaders: () => ({ loadAssertions: vi.fn(async () => null) }) }))

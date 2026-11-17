@@ -256,7 +256,7 @@ function packetWithRules(rules: unknown): DecisionOsGroundingPacket {
     importAssertions: absent(), marketValues: absent(), devyValues: absent(), projections: absent(),
     leagueRules: { present: true, value: rules, asOf: '2026-09-02T08:00:00.000Z', servedFrom: 'store', confidence: null, conclusive: { ok: true }, gap: null },
     contextFacts: null, contextLookups: null, commissionerIntelligence: absent(), leagueIntelligence: absent(),
-    portfolio: absent(), savedAnalysis: absent(), managerPsychology: absent(), gaps: [],
+    portfolio: absent(), savedAnalysis: absent(), gaps: [],
     meta: { durationMs: 1, engineMs: null, sources: [], killedFeeds: [] },
   } as unknown as DecisionOsGroundingPacket
 }

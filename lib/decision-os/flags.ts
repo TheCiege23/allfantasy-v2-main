@@ -42,7 +42,13 @@ import { prisma } from '@/lib/prisma'
  * `CACHE_MS`. Steady state is zero queries per turn.
  */
 
-/** The ten feeds a packet assembles. Each is independently killable. */
+/**
+ * The feeds a packet assembles. Each is independently killable.
+ *
+ * ⚠ `managerPsychology`, `lineupDecision` and `psychologyConsistency` were removed 2026-11-17 with
+ * the slices themselves. A leftover `decision_os_feed_*` row or `DECISION_OS_FEED_*` env var for
+ * one of them is inert: kills resolve only against this list.
+ */
 export type DecisionOsFeed =
   | 'importAssertions'
   | 'leagueRules'
@@ -54,25 +60,13 @@ export type DecisionOsFeed =
   | 'leagueIntelligence'
   | 'portfolio'
   | 'savedAnalysis'
-  /** Manager behavioural profiles (R4b). Killable like every other feed, fail-open. */
-  | 'managerPsychology'
-  /**
-   * The lineup decision bridged from Pipeline A (R2.4).
-   *
-   * 🛑 THIS ONE RUNS AN ENGINE RATHER THAN READING A STORE, which is why its own switch matters
-   * more than the others'. Every feed above is a read; this is a decision computed inside the chat
-   * route's latency ceiling. If it ever becomes the slow slice, an operator must be able to drop it
-   * without dropping the packet — and without a per-engine switch, one slow engine is a slow Chimmy
-   * for everyone.
-   */
-  | 'lineupDecision'
   /**
    * The commissioner health decision bridged from Pipeline A (R2.3).
    *
-   * ⚠ ITS OWN SWITCH, SEPARATE FROM `lineupDecision`, BECAUSE THEY COST DIFFERENT THINGS. The
-   * lineup bridge is one loader call; this one runs TEN parallel queries through
-   * `getCommissionerHubHealthForUser`. An operator shedding load needs to drop the expensive one
-   * without losing the cheap one, and a single "decisions" switch would make that impossible.
+   * ⚠ ITS OWN SWITCH, SEPARATE FROM `waiverDecision`, BECAUSE THEY COST DIFFERENT THINGS. This
+   * one runs TEN parallel queries through `getCommissionerHubHealthForUser`. An operator shedding
+   * load needs to drop one engine without losing the other, which a single "decisions" switch
+   * would make impossible.
    */
   | 'commissionerHealthDecision'
   /**
@@ -86,15 +80,9 @@ export type DecisionOsFeed =
   /**
    * Roster value grade — this roster's positional strengths/weaknesses ranked against the rest of
    * the league by market value (R3.3, 2.2). Bridges `lib/core-app/rosterGrade.ts`, joins the
-   * concurrent wave like the two decision bridges above (own DB reads, no roster dependency).
+   * concurrent wave like the decision bridges (own DB reads, no roster dependency).
    */
   | 'rosterValueGrade'
-  /**
-   * Cross-league + cross-sport psychology consistency, SELF ONLY (R4b.5, P5/P7). Derived at read,
-   * never cached — see `psychologyConsistencySlice.ts`'s own header for why this cannot share
-   * `managerPsychology`'s feed the way trajectory did.
-   */
-  | 'psychologyConsistency'
   /**
    * The waiver claim decision (R2.6) — a LIVE run of the waiver recommender over the league's available pool, on
    * waiver questions only. 🛑 It had no switch (re-score item 9, 2026-11-16): the one slice that runs a real
@@ -114,12 +102,9 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'leagueIntelligence',
   'portfolio',
   'savedAnalysis',
-  'managerPsychology',
-  'lineupDecision',
   'commissionerHealthDecision',
   'idpKickerValues',
   'rosterValueGrade',
-  'psychologyConsistency',
   'waiverDecision',
 ] as const
 

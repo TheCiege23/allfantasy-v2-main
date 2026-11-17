@@ -51,7 +51,7 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  * exists to fix, so it must not be reachable from inside the fix.
  *
  * `Pick` makes a wrong key `TS2344` at the definition site (and enumerates the valid ones);
- * `Required` keeps all four mandatory, so dropping one is `TS2741` rather than a silent `undefined`.
+ * `Required` keeps every one mandatory, so dropping one is `TS2741` rather than a silent `undefined`.
  * Both verified against a planted failure before being relied on.
  */
 type PacketWant = NonNullable<GroundingPacketArgs['want']>
@@ -59,9 +59,7 @@ type PacketWant = NonNullable<GroundingPacketArgs['want']>
 type IntentDerivedWant = Required<
   Pick<
     PacketWant,
-    | 'lineupDecision'
     | 'commissionerHealthDecision'
-    | 'psychologyConsistency'
     | 'rosterValueGrade'
     | 'waiverDecision'
   >
@@ -70,44 +68,13 @@ type IntentDerivedWant = Required<
 export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentDerivedWant {
   return {
     /*
-     * 🛑 ALWAYS FALSE, AND THE MEASUREMENT IS THE WHOLE REASON — 2026-09-07.
-     *
-     * This was `intent === 'start_sit'`, which is the obviously correct mapping and was also the
-     * most expensive line in the packet. Built against a real 13-roster Sleeper league with the
-     * live route's own arguments:
-     *
-     *     general       1,615 ms      waiver     1,004 ms      player_value  643 ms
-     *     start_sit    37,256 ms   (warm; 38,528 ms on a second warm run, 56,729 ms cold)
-     *
-     * The chat route caps the packet at 3s, so start/sit — the most common question in the
-     * product — lost its grounding on EVERY turn. It did not merely fail to help.
-     *
-     * ⚠ THE CEILING IS A `Promise.race`, WHICH ABANDONS THE RESULT WITHOUT CANCELLING THE WORK.
-     * All 37s of reads still complete and are still billed, so requesting this slice made
-     * start/sit strictly worse than not requesting it: same empty prompt section, plus 3s of
-     * user-visible latency and 37s of database work. The route says so in its own words — "a
-     * packet that is routinely late is therefore strictly WORSE than one that is switched off".
-     *
-     * ⚠ THIS IS NOT A JUDGEMENT THAT A LINEUP DECISION IS UNWANTED. It is the one slice whose
-     * cost exceeds the budget it has to fit in. The cost lives in `loadLineupSetInputs` +
-     * `runLineupSetDecision` (see `decisionBridge.ts`), which is the same engine the standing
-     * rule already forbids calling from a page render. Fix the bridge and this mapping comes
-     * back; restoring it first only re-buys the 37s.
-     *
-     * ⚠ KEPT AS AN EXPLICIT `false` RATHER THAN DROPPED FROM THE `Pick` ABOVE. `Required` makes a
-     * missing key `TS2741`, and that guard is what stops the OTHER four being silently lost to a
-     * rename — see the header. Removing the key to express "never" would spend a compiler check
-     * that is protecting unrelated flags.
+     * `lineupDecision` and `psychologyConsistency` USED TO BE MAPPED HERE, both to a hard `false`.
+     * Both slices were deleted from the packet on 2026-11-17: the lineup one cost 37s against a 3s
+     * ceiling and duplicated My Team's `optimizeLineup` (the one start/sit answer, owner decision
+     * 2026-09-29), and the psychology one had no renderer. Manager facts reach Chimmy through the
+     * paid `get_manager_record` tool instead.
      */
-    lineupDecision: false,
     commissionerHealthDecision: intent === 'commissioner',
-    /*
-     * 🛑 OFF — 2026-11-16 (re-score item 9). It ran on every manager_psychology question and NOTHING printed it:
-     * `serialize.ts` has no entry for the slice, so each run was a cross-league walk whose result was thrown away,
-     * on a packet with a 3 s ceiling. It returns with the facts-only, paid psychology work (re-score item 11),
-     * which is where its renderer and its entitlement gate belong.
-     */
-    psychologyConsistency: false,
     /*
      * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
      *
@@ -121,13 +88,13 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * duration. So 4,590 of 4,593 ms does not mean this slice "takes" 4.6s in isolation — it means
      * it is the LAST thing to finish, i.e. it IS the critical path. Nothing else is waited on.
      *
-     * ⚠ AND THE CASE IS GENUINELY WEAKER THAN `lineupDecision`'S ABOVE. That slice was 37s against
-     * a 3s ceiling and was therefore discarded on EVERY turn — removing it cost nothing at all.
+     * ⚠ AND THE CASE IS GENUINELY WEAKER THAN THE OLD `lineupDecision` ONE. That slice was 37s
+     * against a 3s ceiling and was therefore discarded on EVERY turn — removing it cost nothing.
      * This one is ~4.6s: over the ceiling most of the time, but not always. So this is a
      * MITIGATION, not a free win, and it is worth saying which one it is.
      *
      * The reason it still goes: the ceiling discards the WHOLE packet, not the slow slice. Asking
-     * for this trades the other fifteen feeds — values, projections, psychology, portfolio, league
+     * for this trades the other fifteen feeds — values, projections, portfolio, league
      * intelligence, import state — against one roster grade, on the roll of whether the build lands
      * under 3s. That is a bad trade at any hit rate.
      *

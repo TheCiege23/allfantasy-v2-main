@@ -11,81 +11,54 @@ const ALL_INTENTS: ChimmyOrchestrationIntent[] = [
 ]
 
 /**
- * ── The intent router — R2/R3.1/R3.3/R4b.5's opt-in slices were built, wired into the packet,
+ * ── The intent router — R2/R3.1/R3.3's opt-in slices were built, wired into the packet,
  * and never requested by the one live chat route. `deriveWantFromIntent` is the mapping that
  * closes that gap: given the intent the route already classifies a turn as (for an unrelated,
  * pre-existing purpose), decide which of the low-risk opt-in slices are worth asking for.
  *
  * PURE, so every intent's mapping is assertable directly — no route, no mocks, no request.
  */
-describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
-  /**
-   * ⚠ THE SECOND ASSERTION IN THIS FILE TO BE INVERTED DELIBERATELY, AND FOR THE OPPOSITE REASON
-   * TO THE WAIVER ONE BELOW — that one was turned ON because its gap became honest; this one is
-   * turned OFF because its slice cannot fit the budget it has to run inside.
-   *
-   * Measured 2026-09-07 against a real 13-roster Sleeper league, with the live chat route's own
-   * arguments: start_sit built the packet in 37,256 ms warm (38,528 ms on a second warm run,
-   * 56,729 ms cold) against a 3s route ceiling, while every other intent finished in 0.6–1.6s.
-   *
-   * 🛑 SO `false` IS NOT "WE DECIDED A LINEUP DECISION IS NOT WORTH IT". The ceiling is a
-   * `Promise.race`, which abandons the result without cancelling the work — the slice was
-   * discarded on every turn AND still paid for in full. Requesting it made start/sit strictly
-   * worse than not requesting it. Restore this mapping when the bridge is fast enough to land
-   * inside 3s, and not before; a green test here is not evidence that it is.
+describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
+  /*
+   * 🛑 `lineupDecision` AND `psychologyConsistency` ARE NOT ROUTER KEYS ANY MORE — the slices were
+   * deleted from the packet on 2026-11-17. Both had been pinned to a hard `false` here: the lineup
+   * slice cost 37s against the 3s chat ceiling (measured 2026-09-07) and duplicated My Team's
+   * `optimizeLineup`; the psychology one had no renderer. An exact key set fails the moment either
+   * is re-added, which a pair of `toBe(false)` assertions could not do.
    */
-  it('start_sit turns on NOTHING — lineupDecision costs 37s against a 3s ceiling', () => {
-    const w = deriveWantFromIntent('start_sit')
-    expect(w.lineupDecision).toBe(false)
-    expect(w.commissionerHealthDecision).toBe(false)
-    expect(w.psychologyConsistency).toBe(false)
-    expect(w.rosterValueGrade).toBe(false)
-    expect(w.waiverDecision).toBe(false)
+  it('the router decides exactly three slices', () => {
+    for (const intent of ALL_INTENTS) {
+      expect(Object.keys(deriveWantFromIntent(intent)).sort()).toEqual([
+        'commissionerHealthDecision',
+        'rosterValueGrade',
+        'waiverDecision',
+      ])
+    }
   })
 
-  /**
-   * The structural guard that would catch a careless restore: no intent may ask for
-   * `lineupDecision`, whatever else changes. Without this, re-adding `intent === 'start_sit'`
-   * turns the test above red and reads like a stale assertion to be updated — which is exactly
-   * how a 37s slice gets switched back on.
-   */
-  it('NO intent asks for lineupDecision, on any path', () => {
-    for (const intent of ALL_INTENTS) {
-      expect(deriveWantFromIntent(intent).lineupDecision).toBe(false)
-    }
+  it('start_sit turns on nothing', () => {
+    const w = deriveWantFromIntent('start_sit')
+    expect(w.commissionerHealthDecision).toBe(false)
+    expect(w.rosterValueGrade).toBe(false)
+    expect(w.waiverDecision).toBe(false)
   })
 
   it('commissioner turns on commissionerHealthDecision, and nothing else', () => {
     const w = deriveWantFromIntent('commissioner')
     expect(w.commissionerHealthDecision).toBe(true)
-    expect(w.lineupDecision).toBe(false)
-    expect(w.psychologyConsistency).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  /*
-   * 🛑 INVERTED 2026-11-16 (re-score item 9): the slice ran on every psychology question and nothing printed it —
-   * `serialize.ts` has no entry for it. It comes back with the facts-only, paid psychology renderer (item 11).
-   */
-  it('NO intent runs psychologyConsistency while nothing renders it', () => {
-    for (const intent of ALL_INTENTS) expect(deriveWantFromIntent(intent).psychologyConsistency).toBe(false)
-    const serializer = readFileSync(resolve(process.cwd(), 'lib/decision-os/grounding/serialize.ts'), 'utf8')
-    // The day the serializer renders it, this fails — and the mapping above can be restored with item 11.
-    expect(serializer).not.toMatch(/packet\.psychologyConsistency/)
-  })
-
-  it('manager_psychology turns on nothing else either', () => {
+  it('manager_psychology turns on nothing', () => {
     const w = deriveWantFromIntent('manager_psychology')
-    expect(w.psychologyConsistency).toBe(false)
-    expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
   })
 
   /**
    * ⚠ THE THIRD INVERTED ASSERTION IN THIS FILE, AND THE WEAKEST OF THE THREE — WHICH IS EXACTLY
-   * WHY IT SAYS SO. `waiver` was turned ON because its gap became honest. `lineupDecision` was
-   * turned OFF because 37s against a 3s ceiling meant it was discarded on every single turn, so
+   * WHY IT SAYS SO. `waiver` was turned ON because its gap became honest. The old `lineupDecision`
+   * was turned OFF because 37s against a 3s ceiling meant it was discarded on every single turn, so
    * removing it cost nothing. This one is ~4.6s: over the ceiling most of the time, not all of it.
    *
    * Profiled 2026-09-07 from the packet's own `meta.sources`, median of 3:
@@ -107,9 +80,7 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
   it('player_value turns on rosterValueGrade, and nothing else', () => {
     const w = deriveWantFromIntent('player_value')
     expect(w.rosterValueGrade).toBe(true)
-    expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
-    expect(w.psychologyConsistency).toBe(false)
     expect(w.waiverDecision).toBe(false)
   })
 
@@ -138,9 +109,7 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
   it('waiver turns on waiverDecision — which answers with an honest gap, not a decision', () => {
     const w = deriveWantFromIntent('waiver')
     expect(w.waiverDecision).toBe(true)
-    expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
-    expect(w.psychologyConsistency).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
   })
 

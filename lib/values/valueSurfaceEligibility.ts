@@ -117,7 +117,7 @@ export async function resolveLeagueValueSurfaces(
  * Every league this manager is in.
  *
  * ⚠ CLAIMED TEAMS **AND** OWNED LEAGUES, WHICH IS THE PAIR THE REST OF THE CODEBASE USES
- * (see `CrossLeagueRollup.leagueIdsForUser`). Reading only `League.userId` misses every league
+ * (the retired `CrossLeagueRollup.leagueIdsForUser` read the same two). Reading only `League.userId` misses every league
  * a manager joined rather than created, which is most of them.
  *
  * ⚠ SHORT-CIRCUITS ONCE BOTH ARE TRUE. A manager in thirty leagues should not pay thirty
