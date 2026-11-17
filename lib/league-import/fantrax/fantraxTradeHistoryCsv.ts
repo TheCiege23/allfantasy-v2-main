@@ -4,9 +4,9 @@
  * The export is one row per ASSET MOVED, not one row per trade:
  *
  *   "Player","Team","Position","From","To","# Obj","Date (EST)","Week"
- *   "Joe Milton","PHI","SFX","#9 Team A","#27 Team B","0","Mon Nov 16, 2026, 7:57PM","10"
- *   "2027 Draft Pick, Round 1 (#27 Team B)","","","#27 Team B","#9 Team A","0","Mon Nov 16, 2026, 7:57PM","10"
- *   "Budget Amount: $5000.00","","","#27 Team B","#9 Team A","0","Mon Nov 16, 2026, 7:57PM","10"
+ *   "Sample Player","NYG","QB","#4 Team A","#12 Team B","0","Sun Oct 4, 2026, 1:00PM","5"
+ *   "2027 Draft Pick, Round 1 (#12 Team B)","","","#12 Team B","#4 Team A","0","Sun Oct 4, 2026, 1:00PM","5"
+ *   "Budget Amount: $25.00","","","#12 Team B","#4 Team A","0","Sun Oct 4, 2026, 1:00PM","5"
  *
  * So a trade is rebuilt from rows sharing the exact `Date (EST)` minute AND connected by the teams they move between
  * — two unrelated trades accepted in the same minute stay two trades.
@@ -15,7 +15,7 @@
  * It is kept (the smallest in the trade) because LeagueTrade.week is required, but nothing should rank by it; the
  * trade's date is the fact.
  *
- * ⚠ TEAM LABELS CARRY A DISPLAY PREFIX — "#9 New York Jets". It is Fantrax's standings number, not an id, and it
+ * ⚠ TEAM LABELS CARRY A DISPLAY PREFIX — "#4 Team A". It is Fantrax's standings number, not an id, and it
  * changes as the standings do, so it is stripped. Matching a label to a roster is the caller's job.
  *
  * Nothing is dropped silently: a row that cannot be read is returned in `skipped` with the reason.
@@ -88,7 +88,7 @@ export function readCsvRows(text: string): Array<{ line: number; cells: string[]
   return rows
 }
 
-/** "#9 New York Jets" → "New York Jets". A label without the prefix is returned trimmed. */
+/** "#4 Team A" → "Team A". A label without the prefix is returned trimmed. */
 export function stripFantraxStandingPrefix(label: string): string {
   return String(label ?? '').trim().replace(/^#\d+\s+/, '').trim()
 }
@@ -103,7 +103,7 @@ function easternOffsetMinutes(at: Date): number {
   return Math.round((asUtc - at.getTime()) / 60_000)
 }
 
-/** "Mon Nov 16, 2026, 7:57PM" (US Eastern wall clock) → the UTC instant, or null when it is not that shape. */
+/** "Sun Oct 4, 2026, 1:00PM" (US Eastern wall clock) → the UTC instant, or null when it is not that shape. */
 export function parseFantraxEasternDate(text: string): Date | null {
   const m = DATE.exec(String(text ?? '').trim())
   if (!m) return null
