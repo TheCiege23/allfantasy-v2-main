@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { getAdminAccessState } from "@/lib/adminAuth"
 import { prisma } from "@/lib/prisma"
 import { LS_BOT_ADDRESS } from "@/lib/leaguesafe/inbound-security"
+import { parseStoredNotification } from "./actions"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -11,7 +12,7 @@ export const metadata = { title: "LeagueSafe raw email capture", robots: { index
 const STATUSES = ["captured", "parsed", "unparseable", "rejected"] as const
 type Status = typeof STATUSES[number]
 const PAGE_SIZE = 25
-type RawEmailSearchParams = { status?: string | string[]; after?: string | string[]; id?: string | string[] }
+type RawEmailSearchParams = { status?: string | string[]; after?: string | string[]; id?: string | string[]; parse?: string | string[] }
 
 export default async function LeagueSafeRawPage({ searchParams }: {
   searchParams: Promise<RawEmailSearchParams>
@@ -32,6 +33,7 @@ export default async function LeagueSafeRawPage({ searchParams }: {
 
   let rows
   let selected
+  let reviewCount
   try {
     rows = await prisma.leagueSafeRawEmail.findMany({
       where: status ? { processingStatus: status } : {},
@@ -41,12 +43,13 @@ export default async function LeagueSafeRawPage({ searchParams }: {
       select: { id: true, messageId: true, receivedAt: true, from: true, to: true, subject: true, processingStatus: true },
     })
     selected = id ? await prisma.leagueSafeRawEmail.findUnique({ where: { id } }) : null
+    reviewCount = await prisma.leagueSafeRawEmail.count({ where: { processingStatus: "unparseable" } })
   } catch {
     console.error("[leaguesafe] admin_read_failed")
     return (
       <main className="mx-auto max-w-4xl p-6 text-white">
         <h1 className="text-2xl font-bold">LeagueSafe capture unavailable</h1>
-        <p className="mt-4">Check the database connection and apply the Phase 0 migration, then reload.</p>
+        <p className="mt-4">Check the database connection and required LeagueSafe migrations, then reload.</p>
         <Link className="mt-4 inline-block underline" href="/admin">Back to admin</Link>
       </main>
     )
@@ -60,6 +63,16 @@ export default async function LeagueSafeRawPage({ searchParams }: {
         <Link href="/admin" className="text-cyan-300 underline">Back to admin</Link>
         <h1 className="text-3xl font-bold">LeagueSafe email capture</h1>
         <p>Inbox: {LS_BOT_ADDRESS}. Select an email to inspect its original headers and MIME content.</p>
+        <p>Parsing is manual. Parsed notifications do not update dues, payouts, or member mappings.</p>
+        {reviewCount > 0 && <p role="alert" className="rounded border border-amber-400 p-3">
+          {reviewCount} email(s) need parser review. <Link className="underline" href={query({ status: "unparseable" })}>Review unparseable emails</Link>
+        </p>}
+        {typeof params.parse === "string" && <p role="status">{
+          ({ parsed: "Notification parsed. No ledger entries created.", unparseable: "Unsupported or invalid notification. Added to admin review.",
+            unchanged: "This parser version already processed the email. Nothing changed.", conflict: "Another request changed this email. Review its current result.",
+            rejected: "Rejected delivery. Parsing is blocked.", not_found: "Email not found.",
+            unavailable: "Parsing unavailable. Check server configuration or database migrations.", invalid: "Invalid email selection." } as Record<string, string>)[params.parse] ?? ""
+        }</p>}
         <nav aria-label="Filter email status" className="flex flex-wrap gap-4">
           <Link aria-current={!status ? "page" : undefined} className="underline" href={query({})}>All emails</Link>
           {STATUSES.map((value) => (
@@ -103,7 +116,16 @@ export default async function LeagueSafeRawPage({ searchParams }: {
               <div><dt className="inline font-bold">Status: </dt><dd className="inline">{selected.processingStatus}</dd></div>
               <div><dt className="inline font-bold">Rejection reason: </dt><dd className="inline">{selected.rejectionReason || "None"}</dd></div>
               <div><dt className="inline font-bold">Received (UTC): </dt><dd className="inline">{selected.receivedAt.toISOString()}</dd></div>
+              <div><dt className="inline font-bold">Parser version: </dt><dd className="inline">{selected.parserVersion || "Not processed"}</dd></div>
+              <div><dt className="inline font-bold">Parser review reason: </dt><dd className="inline">{selected.parseError || "None"}</dd></div>
+              <div><dt className="inline font-bold">Parse attempted (UTC): </dt><dd className="inline">{selected.parseAttemptedAt?.toISOString() || "Never"}</dd></div>
             </dl>
+            {selected.processingStatus !== "rejected" && !selected.rejectionReason && <form action={parseStoredNotification}>
+              <input type="hidden" name="id" value={selected.id} />
+              <button type="submit" className="rounded border border-cyan-300 px-3 py-2">Parse stored notification</button>
+            </form>}
+            {selected.parsedPayload && <><h3 className="font-semibold">Parsed notification (review only)</h3>
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded bg-black p-3 text-xs">{JSON.stringify(selected.parsedPayload, null, 2)}</pre></>}
             <h3 className="font-semibold">Delivery authentication</h3>
             <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-black p-3 text-xs">{JSON.stringify(selected.authResults, null, 2)}</pre>
             <h3 className="font-semibold">Original RFC822 / MIME message</h3>

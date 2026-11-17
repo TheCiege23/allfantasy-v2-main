@@ -3,11 +3,14 @@ name: LeagueSafe Phase 1 database
 on:
   pull_request:
     paths:
+      - '.gitattributes'
       - '.github/workflows/leaguesafe-phase1-db.yml'
       - 'prisma/schema.prisma'
       - 'prisma/migrations/**'
       - 'lib/leaguesafe/**'
       - '__tests__/leaguesafe-*.test.*'
+      - '__tests__/fixtures/leaguesafe/**'
+      - 'app/admin/leaguesafe/raw/**'
       - 'package.json'
       - 'package-lock.json'
       - 'vitest.config.ts'
@@ -55,9 +58,14 @@ jobs:
         run: npm ci
       - name: Validate the Prisma schema
         run: npx prisma validate
-      - name: Test Phase 1 arithmetic and migration constraints
+      - name: Test LeagueSafe models, Phase 2 parsing, and admin boundaries
         run: >-
           npx vitest run
           __tests__/leaguesafe-dues-ledger.test.ts
           __tests__/leaguesafe-phase1-db.test.ts
+          __tests__/leaguesafe-notification-parser.test.ts
+          __tests__/leaguesafe-processing.test.ts
+          __tests__/leaguesafe-processing-db.test.ts
+          __tests__/leaguesafe-parse-action.test.ts
+          __tests__/leaguesafe-admin.test.tsx
           --pool=threads --maxWorkers=1

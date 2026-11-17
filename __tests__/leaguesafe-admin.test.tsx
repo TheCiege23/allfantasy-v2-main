@@ -1,21 +1,41 @@
 // @vitest-environment node
 import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { parse, type DefaultTreeAdapterMap } from "parse5"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  access: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(),
+  access: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(),
   redirect: vi.fn(() => { throw new Error("REDIRECT") }),
 }))
 vi.mock("@/lib/adminAuth", () => ({ getAdminAccessState: mocks.access }))
 vi.mock("@/lib/prisma", () => ({
-  prisma: { leagueSafeRawEmail: { findMany: mocks.findMany, findUnique: mocks.findUnique } },
+  prisma: { leagueSafeRawEmail: { findMany: mocks.findMany, findUnique: mocks.findUnique, count: mocks.count } },
 }))
+vi.mock("@/app/admin/leaguesafe/raw/actions", () => ({ parseStoredNotification: vi.fn() }))
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
 vi.mock("next/link", () => ({
   default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => React.createElement("a", props, children),
 }))
 import Page from "@/app/admin/leaguesafe/raw/page"
+
+// React may emit its own form-replay script. The security boundary is the email
+// content: every displayed MIME/JSON block must contain text nodes only.
+function inertEmailBlocks(html: string): string[] {
+  const pending: DefaultTreeAdapterMap["node"][] = [parse(html)]
+  const blocks: string[] = []
+  while (pending.length) {
+    const node = pending.pop()!
+    if (!("childNodes" in node)) continue
+    if ("tagName" in node && node.tagName === "pre") {
+      expect(node.childNodes.every(child => child.nodeName === "#text")).toBe(true)
+      blocks.push(node.childNodes.map(child => "value" in child ? child.value : "").join(""))
+    }
+    pending.push(...node.childNodes)
+  }
+  expect(blocks.length).toBeGreaterThan(0)
+  return blocks
+}
 
 const row = {
   id: "raw-1", messageId: "19abc", receivedAt: new Date("2026-11-14T10:00:00Z"),
@@ -26,6 +46,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.access.mockResolvedValue({ status: "admin" })
   mocks.findMany.mockResolvedValue([row])
+  mocks.count.mockResolvedValue(0)
   mocks.findUnique.mockResolvedValue({
     ...row, rfcMessageId: "<fixture@example.invalid>", rejectionReason: null,
     authResults: { dkim: "pass" }, rawBody: '<script>alert("fixture")</script>',
@@ -38,6 +59,7 @@ describe("admin-only LeagueSafe capture viewer", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/admin")
     expect(mocks.findMany).not.toHaveBeenCalled()
     expect(mocks.findUnique).not.toHaveBeenCalled()
+    expect(mocks.count).not.toHaveBeenCalled()
   })
   it("lists only envelope metadata without loading every raw email body", async () => {
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }))
@@ -48,7 +70,7 @@ describe("admin-only LeagueSafe capture viewer", () => {
   it("renders source content as escaped text, with no executable email HTML", async () => {
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: "raw-1" }) }))
     expect(html).toContain("&lt;script&gt;")
-    expect(html).not.toContain("<script>")
+    expect(inertEmailBlocks(html)).toContain('<script>alert("fixture")</script>')
     expect(html).toContain("Delivery authentication")
     expect(html).toContain("fixture@example.invalid")
   })
@@ -76,7 +98,7 @@ describe("admin-only LeagueSafe capture viewer", () => {
     expect(html).toContain("leaguesafe_dkim_did_not_pass")
     expect(html).toContain("status=rejected&amp;after=raw-cursor&amp;id=raw-rejected")
     expect(html).toContain("&lt;script&gt;")
-    expect(html).not.toContain("<script>")
+    expect(inertEmailBlocks(html)).toContain("<script>rejected fixture</script>")
   })
   it("applies status filters and bounded cursor pagination", async () => {
     mocks.findMany.mockResolvedValue(Array.from({ length: 26 }, (_, index) => ({ ...row, id: "raw-" + index })))
@@ -100,5 +122,24 @@ describe("admin-only LeagueSafe capture viewer", () => {
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: "missing" }) }))
     expect(html).toContain("No emails captured")
     expect(html).toContain("Email not found")
+  })
+  it("surfaces a durable admin review alert even when the current filter hides unparseable messages", async () => {
+    mocks.count.mockResolvedValue(2)
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ status: "captured" }) }))
+    expect(html).toContain('role="alert"')
+    expect(html).toContain("2 email(s) need parser review")
+    expect(html).toContain("status=unparseable")
+  })
+  it("escapes parsed payloads and offers manual parsing only for accepted records", async () => {
+    const accepted = { ...row, rawBody: "MIME", authResults: {}, parsedPayload: { league: "<script>bad</script>" } }
+    mocks.findUnique.mockResolvedValue(accepted)
+    let html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: row.id }) }))
+    expect(html).toContain("Parse stored notification")
+    expect(html).toContain("&lt;script&gt;")
+    expect(inertEmailBlocks(html)).toContain(JSON.stringify(accepted.parsedPayload, null, 2))
+    expect(inertEmailBlocks(html)).toContain("MIME")
+    mocks.findUnique.mockResolvedValue({ ...accepted, processingStatus: "rejected", rejectionReason: "leaguesafe_dkim_did_not_pass" })
+    html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({ id: row.id }) }))
+    expect(html).not.toContain("Parse stored notification")
   })
 })
