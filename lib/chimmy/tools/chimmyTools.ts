@@ -22,6 +22,7 @@ import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import type { FaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
 import type { MatchupSettleRun } from '@/lib/chimmy/matchupPreviewGrounding'
 import { SUPERSEDING_TOOLS } from '@/lib/chimmy/answerPolish'
+import { cleanSearchTerm, findStation, stationMenu } from '@/lib/chimmy/musicCards'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -98,6 +99,8 @@ export type ChimmyToolContext = {
   mockDraftBoard?: import('@/lib/mock-draft/mockChimmyBoard').MockDraftBoard | null
   /** Queue changes proposed for that mock; the room applies one only when the user taps Confirm. */
   mockQueueProposals?: import('@/lib/mock-draft/mockChimmyBoard').MockQueueProposal[]
+  /** The one music card for this answer (play a station or a search, or stop); the user's tap plays it. */
+  musicCards?: import('@/lib/chimmy/musicCards').MusicCard[]
   /**
    * Every trade letter the one trade engine gave during this answer, collected so the route can check
    * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
@@ -928,6 +931,23 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'play_music',
+      description: `Prepares a music card for the AllFantasy music player. Use when the user asks to play, put on or stop music or a podcast ("play some hype music", "put on a football podcast", "play Drake", "stop the music"). It plays NOTHING by itself: the card plays only when the user taps it. Pass EXACTLY ONE of: station (an AllFantasy station id), search (an artist, song or album to find on YouTube), or stop=true. Prefer a station when the request is a mood or genre. Stations: ${stationMenu()}.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          station: { type: 'string', description: 'An AllFantasy station id from the list.' },
+          search: { type: 'string', description: 'An artist, song or album to search YouTube for, e.g. "Drake".' },
+          stop: { type: 'boolean', description: 'true to stop whatever is playing.' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'recall_past_chats',
       description: 'AF Pro. Search the signed-in user\'s OWN earlier Chimmy conversations (any league, any day) for what was discussed — e.g. "what did you tell me about Bijan last week", "did we talk about trading my WR", "remind me what you recommended". Returns dated excerpts of matching messages, newest first. Use only for questions about past conversations; the current conversation is already in context.',
       parameters: {
@@ -1013,6 +1033,33 @@ export async function executeChimmyTool(
 
   try {
     switch (name) {
+      /*
+       * Music (2026-11-16): a card, never playback. No league, no plan gate, no server write — the
+       * player is in the user's browser and starts only from their tap on the card.
+       */
+      case 'play_music': {
+        if (!ctx.musicCards) {
+          return "This chat surface cannot show a music card, so nothing was prepared. Tell the user to open the Music tab in the chat panel and pick a station there. Do not say anything is playing."
+        }
+        if (ctx.musicCards.length > 0) return 'There is already a music card in this answer; no second one was made.'
+        const asks = [args.station != null && args.station !== '', args.search != null && args.search !== '', args.stop === true].filter(Boolean).length
+        if (asks !== 1) return 'Pass exactly one of: station, search, or stop=true. Nothing was prepared.'
+        if (args.stop === true) {
+          ctx.musicCards.push({ kind: 'stop' })
+          return 'A "Stop music" card is ready under your answer; the music stops when the user taps it. Say that, and never say it has stopped.'
+        }
+        if (args.station != null && args.station !== '') {
+          const station = findStation(args.station)
+          if (!station) return `There is no station "${String(args.station)}". Pick one from the list, or use search for an artist or song. Nothing was prepared.`
+          ctx.musicCards.push({ kind: 'station', stationId: station.id, label: station.label })
+          return `A "${station.label}" card is ready under your answer; it starts playing when the user taps Play. Say that in one line, and never say it is playing.`
+        }
+        const term = cleanSearchTerm(args.search)
+        if (!term) return 'The search was empty. Nothing was prepared.'
+        ctx.musicCards.push({ kind: 'search', term })
+        return `A card to play "${term}" from YouTube is ready under your answer; one tap finds it and starts playing. Say that in one line, and never say it is playing.`
+      }
+
       case 'recall_past_chats': {
         if (!ctx.userId) return 'No signed-in user was verified, so no past conversations were read.'
         const { recallPastChats } = await import('@/lib/chimmy/tools/recallPastChats')
