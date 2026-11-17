@@ -29,7 +29,7 @@ import {
 export type LifecycleGatedSection = 'scoring' | 'roster'
 
 /** `allowed`: no question asked. `confirm`: only with the explicit flag. `refused`: never. */
-export type SettingsEditPolicy = 'allowed' | 'confirm' | 'refused'
+type SettingsEditPolicy = 'allowed' | 'confirm' | 'refused'
 
 export const SETTINGS_EDIT_POLICY: Record<LeagueLifecycleState, SettingsEditPolicy> = {
   setup: 'allowed',
@@ -44,7 +44,7 @@ export const SETTINGS_EDIT_POLICY: Record<LeagueLifecycleState, SettingsEditPoli
   archived: 'refused',
 }
 
-export type SettingsEditRefusalBody = { error: string; code: string; message?: string }
+type SettingsEditRefusalBody = { error: string; code: string; message?: string }
 
 export type SettingsEditDecision =
   | { ok: true; state: LeagueLifecycleState; midSeason: boolean }
@@ -55,7 +55,7 @@ const ACTION: Record<LifecycleGatedSection, LeagueLifecycleAction> = {
   roster: 'settings_edit_roster',
 }
 
-export function lifecycleRefusalMessage(section: LifecycleGatedSection, state: LeagueLifecycleState): string {
+function lifecycleRefusalMessage(section: LifecycleGatedSection, state: LeagueLifecycleState): string {
   const what = section === 'scoring' ? 'Scoring' : 'Roster slots'
   if (state === 'drafting') return `${what} can't be changed while the draft is in progress. Try again once it finishes.`
   if (state === 'archived') return `${what} can't be changed on an archived league.`

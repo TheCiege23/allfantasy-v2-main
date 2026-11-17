@@ -13,7 +13,7 @@ import type { WhatsNextFormatId } from './types'
  * entry is merged in SQL, never read-modify-written in JS, so a save cannot discard another Core
  * preference written at the same moment. No migration: the column already exists.
  */
-export const WALKTHROUGH_SEEN_KEY = 'formatWalkthroughSeen'
+const WALKTHROUGH_SEEN_KEY = 'formatWalkthroughSeen'
 
 export function isWalkthroughFormat(value: unknown): value is WhatsNextFormatId {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(FORMAT_WALKTHROUGHS, value)

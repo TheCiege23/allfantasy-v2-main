@@ -14,7 +14,7 @@ import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
 import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleService'
 import { canViewLeague, isElevatedCommissioner } from '@/server/services/permissionService'
 
-export type DraftToRosterSyncSummary = {
+type DraftToRosterSyncSummary = {
   leagueId: string
   draftId: string
   teamsSynced: number
@@ -24,7 +24,7 @@ export type DraftToRosterSyncSummary = {
   missingRosterRows: number
 }
 
-export type DraftToRosterSyncError = {
+type DraftToRosterSyncError = {
   ok: false
   code:
     | 'UNAUTHORIZED'
@@ -109,7 +109,7 @@ async function isFullyMaterializedForSession(params: {
   return true
 }
 
-export type DraftToRosterSyncResult = { ok: true; summary: DraftToRosterSyncSummary } | DraftToRosterSyncError
+type DraftToRosterSyncResult = { ok: true; summary: DraftToRosterSyncSummary } | DraftToRosterSyncError
 
 /**
  * Commissioner-only: persist completed draft picks onto `Roster.playerData` for NFL redraft core leagues.

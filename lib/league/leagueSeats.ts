@@ -64,7 +64,7 @@ export async function countSeatsHeldByPeopleByLeague(
   return out
 }
 
-export type AssignLeagueSeatResult =
+type AssignLeagueSeatResult =
   | { ok: true; rosterId: string; teamNumber: number | null; alreadyHeld: boolean }
   | {
       ok: false
