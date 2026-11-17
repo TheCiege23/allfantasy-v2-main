@@ -48,3 +48,29 @@ export function draftPlaylistPlayKey(stationId: string): string {
 export function draftPlaylistOffered(status: string | null | undefined): boolean {
   return status !== 'completed'
 }
+
+/**
+ * The playlist as the draft settings response carries it (`draftPlaylist`), so every member's room hears about a
+ * change on its next settings poll (2026-11-17). undefined means the response did not say — keep what you have.
+ */
+export function readLivePlaylist(value: unknown): DraftPlaylist | null | undefined {
+  if (value === null) return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  return readDraftPlaylist({ [DRAFT_PLAYLIST_SETTINGS_KEY]: { stationId: (value as Record<string, unknown>).stationId } })
+}
+
+export type PlaylistFollow = { action: 'none' } | { action: 'stop' } | { action: 'play'; stationId: string }
+
+/**
+ * What a member's player does when the room playlist changes under it.
+ *
+ * Only a member who is ALREADY playing the room playlist is touched: they tapped Play on "the draft playlist", so
+ * they follow the commissioner — switched to the new station, or stopped when it is removed. Music a member picked
+ * themselves is never touched, and a member who is not playing anything still hears nothing until they tap Play.
+ * 🛑 This never STARTS music in a quiet room; it only changes or ends music that member already chose.
+ */
+export function followPlaylistChange(playingKey: string | null | undefined, offered: DraftPlaylist | null): PlaylistFollow {
+  if (!playingKey || !playingKey.startsWith('draft-playlist:')) return { action: 'none' }
+  if (!offered) return { action: 'stop' }
+  return playingKey === draftPlaylistPlayKey(offered.stationId) ? { action: 'none' } : { action: 'play', stationId: offered.stationId }
+}

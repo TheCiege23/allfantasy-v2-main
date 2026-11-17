@@ -5,10 +5,10 @@ import { prisma } from '@/lib/prisma'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { canCommissionerAct, commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { readLeagueDraftPlaylist } from '@/lib/draft-room/draftPlaylistRead'
 import {
   DRAFT_PLAYLIST_SETTINGS_KEY,
   parsePlaylistChoice,
-  readDraftPlaylist,
   type StoredDraftPlaylist,
 } from '@/lib/draft-room/draftPlaylist'
 
@@ -28,10 +28,7 @@ async function sessionUser(): Promise<SessionUser | null> {
   return session?.user?.id ? session.user : null
 }
 
-async function readPlaylist(leagueId: string) {
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
-  return league ? readDraftPlaylist(league.settings) : null
-}
+const readPlaylist = readLeagueDraftPlaylist
 
 export async function GET(_req: Request, { params }: Ctx) {
   const user = await sessionUser()

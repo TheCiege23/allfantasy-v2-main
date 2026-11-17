@@ -90,6 +90,53 @@ for (const viewport of [
     await expect(bar.getByTestId('draft-room-music-slot')).toHaveCount(0)
   })
 
+  test(`${viewport.name}: a commissioner's change reaches a member already playing the playlist`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    await stubPlaylist(page, { playlist: GAME_DAY, isCommissioner: false, canSet: false, planRequired: false })
+    await page.goto('/e2e/draft-room-music')
+    const bar = page.getByTestId('draft-room-music')
+    const log = page.getByTestId('music-engine-log').locator('li')
+    await bar.getByTestId('draft-room-music-play-playlist').click()
+
+    await page.getByTestId('harness-live-change').click()
+    await expect(bar.getByTestId('draft-room-music-title')).toHaveText('Draft playlist: Football podcast')
+    await expect(bar.getByTestId('draft-room-music-note')).toHaveText('The draft playlist is now Football podcast.')
+    await expect(log).toHaveText([
+      'play draft-playlist:game-day — Game day hype · draft playlist',
+      'play draft-playlist:ff-podcast — Football podcast · draft playlist',
+    ])
+    await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-live-switched.png`), fullPage: false })
+
+    await page.getByTestId('harness-live-remove').click()
+    await expect(bar.getByTestId('draft-room-music-title')).toHaveText('Music for the draft')
+    await expect(bar.getByTestId('draft-room-music-note')).toHaveText('The draft playlist was turned off.')
+    await expect(log).toHaveCount(3)
+    await expect(log.nth(2)).toHaveText('stop')
+  })
+
+  test(`${viewport.name}: 🛑 a change never starts music, and never touches music a member chose`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    await stubPlaylist(page, { playlist: GAME_DAY, isCommissioner: false, canSet: false, planRequired: false })
+    await page.goto('/e2e/draft-room-music')
+    const bar = page.getByTestId('draft-room-music')
+    const log = page.getByTestId('music-engine-log').locator('li')
+
+    // Quiet room: the offer updates, nothing plays.
+    await page.getByTestId('harness-live-change').click()
+    await expect(bar.getByTestId('draft-room-music-title')).toHaveText('Draft playlist: Football podcast')
+    await expect(bar.getByTestId('draft-room-music-play-playlist')).toBeVisible()
+    await expect(log).toHaveCount(0)
+
+    // Music the member picked keeps going through a removal.
+    await bar.getByTestId('draft-room-music-more').click()
+    await bar.locator('#draft-room-music-station').selectOption('game-day')
+    await bar.getByTestId('draft-room-music-play-pick').click()
+    await page.getByTestId('harness-live-remove').click()
+    await expect(bar.getByTestId('draft-room-music-title')).toHaveText('Music for the draft')
+    await expect(log).toHaveText(['play game-day — Game day hype'])
+    await expect(bar.getByTestId('draft-room-music-stop')).toBeVisible()
+  })
+
   test(`${viewport.name}: music a member chose keeps playing when the draft finishes`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await stubPlaylist(page, { playlist: null, isCommissioner: false, canSet: false, planRequired: false })
