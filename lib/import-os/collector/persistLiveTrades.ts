@@ -103,7 +103,7 @@ function toTradeFact(t: NormalizedTransaction, season: number): NormalizedTradeF
   }
 }
 
-export interface PersistLiveTradesResult {
+interface PersistLiveTradesResult {
   /** Completed trades present in this sync's payload. */
   tradesSeen: number
   /** Rows upserted — one PER SIDE of each trade, which is how LeagueTrade is keyed. */
