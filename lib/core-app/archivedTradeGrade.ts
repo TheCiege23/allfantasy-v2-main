@@ -43,6 +43,18 @@ export type ArchivedTradeRow = {
    * Sleeper snowflakes, so without it a new original could never be priced at the time of the trade.
    */
   tradeDate?: Date | string | null
+  /**
+   * Waiver budget (FAAB) the row's side gave / received. NULL on both = not read (every row written before the
+   * columns existed): the grade then neither prices FAAB nor calls a one-way row a Pirate steal.
+   */
+  budgetGiven?: number | null
+  budgetReceived?: number | null
+}
+
+/** The row's FAAB both ways, or null when it was never read. One side read and the other not is read as 0. */
+export function archivedRowFaab(t: Pick<ArchivedTradeRow, 'budgetGiven' | 'budgetReceived'>): { received: number; gave: number } | null {
+  if (t.budgetGiven == null && t.budgetReceived == null) return null
+  return { received: Number(t.budgetReceived ?? 0), gave: Number(t.budgetGiven ?? 0) }
 }
 
 /** A printable pick with the drafted player attached where the ledger knows it. */
@@ -116,6 +128,7 @@ export async function gradeArchivedTradeRows(args: {
         picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         currentSeason,
+        faab: archivedRowFaab(t),
         original: args.freezeOriginal === false ? undefined : {
           afLeagueId: args.afLeagueId, tradeId: t.transactionId, frozen, onFreeze: (f) => toFreeze.push(f), now,
           ...(args.sleeperIdOf && t.tradeDate ? { tradeAt: t.tradeDate } : {}),
