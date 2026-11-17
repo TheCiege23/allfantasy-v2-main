@@ -35,7 +35,7 @@ function players(v: unknown): ActionCardPlayer[] {
 function readActionCard(v: unknown): ChimmyActionCard | null {
   if (!v || typeof v !== 'object') return null
   const o = v as Record<string, unknown>
-  const kind = o.kind === 'lineup' || o.kind === 'trade' || o.kind === 'automation' || o.kind === 'queue' ? o.kind : null
+  const kind = o.kind === 'lineup' || o.kind === 'trade' || o.kind === 'automation' || o.kind === 'queue' || o.kind === 'settings' ? o.kind : null
   const actionId = str(o.actionId, 80)
   const token = typeof o.token === 'string' && o.token.length > 10 && o.token.length < 16_000 ? o.token : null
   const title = str(o.title, 120)
@@ -76,6 +76,22 @@ function readActionCard(v: unknown): ChimmyActionCard | null {
     const changes = a && Array.isArray(a.changes) ? a.changes.map((c) => str(c, 240)).filter((c): c is string => Boolean(c)).slice(0, 12) : []
     if (changes.length === 0) return null
     return { ...base, automation: { changes } }
+  }
+  if (kind === 'settings') {
+    const s = o.settings && typeof o.settings === 'object' ? (o.settings as Record<string, unknown>) : null
+    if (!s || !Array.isArray(s.changes)) return null
+    const changes = s.changes
+      .map((c) => {
+        const r = c && typeof c === 'object' ? (c as Record<string, unknown>) : null
+        const label = str(r?.label, 60)
+        const from = str(r?.from, 80)
+        const to = str(r?.to, 80)
+        return label && from && to ? { label, from, to } : null
+      })
+      .filter((c): c is { label: string; from: string; to: string } => c !== null)
+      .slice(0, 9)
+    if (changes.length === 0) return null
+    return { ...base, settings: { changes, midSeason: s.midSeason === true } }
   }
   if (kind === 'queue') {
     const q = o.queue && typeof o.queue === 'object' ? (o.queue as Record<string, unknown>) : null

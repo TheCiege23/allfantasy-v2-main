@@ -101,6 +101,21 @@ function isSpec(value: unknown): value is ChimmyActionSpec {
     }
     return false
   }
+  if (s.kind === 'settings') {
+    const SECTIONS = ['general', 'waivers', 'trades', 'playoffs', 'roster']
+    const value = (v: unknown) => v === null || typeof v === 'string' || typeof v === 'number'
+    return (
+      typeof s.section === 'string' &&
+      SECTIONS.includes(s.section) &&
+      typeof s.midSeason === 'boolean' &&
+      Array.isArray(s.changes) &&
+      s.changes.length > 0 &&
+      s.changes.every((c) => {
+        const r = c as Record<string, unknown>
+        return Boolean(c) && typeof r.key === 'string' && value(r.from) && value(r.to)
+      })
+    )
+  }
   if (s.kind === 'queue') {
     return (
       typeof s.sessionId === 'string' &&

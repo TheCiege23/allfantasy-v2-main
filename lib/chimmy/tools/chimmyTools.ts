@@ -904,6 +904,30 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'propose_league_rule_change',
+      description:
+        "COMMISSIONERS ONLY, AllFantasy-hosted leagues only. Prepares a change to the league's settings and shows a CONFIRM CARD listing each setting before → after — nothing is saved unless the commissioner taps Confirm. Use when a commissioner asks to change: the league name, waiver type, FAAB budget, minimum FAAB bid, trade review period, trade deadline, number of playoff teams, playoff start week, or IR slots. Pass only the settings they asked to change, with the new value. One card covers one area of the settings page (general, waivers, trades, playoffs, roster); for changes in two areas, call this once per area. Scoring, roster slot layout, draft setup and league size cannot be changed here — point them to the league's Settings page. It refuses, and says why, for anyone who is not the commissioner and for imported leagues (whose settings belong to their platform).",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'New league name.' },
+          waiver_type: { type: 'string', enum: ['faab', 'rolling', 'reverse_standings'], description: 'New waiver type.' },
+          waiver_budget: { type: 'number', description: 'New FAAB budget per team, in dollars (1-10000).' },
+          waiver_min_bid: { type: 'number', description: 'New minimum FAAB bid, in dollars (0-100).' },
+          trade_review_hours: { type: 'number', description: 'New trade review period in hours (0-168; 0 = no review).' },
+          trade_deadline_week: { type: 'number', description: 'New trade deadline week (1-18), or 0 for no deadline.' },
+          playoff_teams: { type: 'number', description: 'New number of playoff teams (2 up to the league size).' },
+          playoff_start_week: { type: 'number', description: 'New week the playoffs start (10-18).' },
+          ir_slots: { type: 'number', description: 'New number of IR slots per team (0-10).' },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'recall_past_chats',
       description: 'AF Pro. Search the signed-in user\'s OWN earlier Chimmy conversations (any league, any day) for what was discussed — e.g. "what did you tell me about Bijan last week", "did we talk about trading my WR", "remind me what you recommended". Returns dated excerpts of matching messages, newest first. Use only for questions about past conversations; the current conversation is already in context.',
       parameters: {
@@ -1624,6 +1648,40 @@ export async function executeChimmyTool(
           preset: args.preset,
           handoverDays: args.handover_days,
           handoverTo: args.handover_to,
+        })
+        if (outcome.ok) ctx.actionCards.push(outcome.card)
+        return outcome.text
+      }
+
+      case 'propose_league_rule_change': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        if (!ctx.actionCards) {
+          return "This chat surface cannot show a confirm card, so nothing was prepared. Tell the commissioner to change it on the league's Settings page. Do not say it was changed."
+        }
+        if (ctx.actionCards.length >= MAX_ACTION_CARDS_PER_ANSWER) {
+          return `There are already ${MAX_ACTION_CARDS_PER_ANSWER} confirm cards in this answer; no more were made. Ask the user to confirm or dismiss those first.`
+        }
+        // The model's snake_case names → the League columns the catalog knows. Absent ones stay absent.
+        const SETTING_ARG: Record<string, string> = {
+          name: 'name',
+          waiver_type: 'waiverType',
+          waiver_budget: 'waiverBudget',
+          waiver_min_bid: 'waiverMinBid',
+          trade_review_hours: 'tradeReviewHours',
+          trade_deadline_week: 'tradeDeadlineWeek',
+          playoff_teams: 'playoffTeams',
+          playoff_start_week: 'playoffStartWeek',
+          ir_slots: 'irSlots',
+        }
+        const changes: Record<string, unknown> = {}
+        for (const [arg, value] of Object.entries(args)) {
+          if (value === undefined || value === null || value === '') continue
+          changes[SETTING_ARG[arg] ?? arg] = value
+        }
+        const outcome = await (await import('@/lib/chimmy/actions/settingsAction')).proposeSettingsChange({
+          leagueId: ctx.leagueId,
+          userId: ctx.userId,
+          changes,
         })
         if (outcome.ok) ctx.actionCards.push(outcome.card)
         return outcome.text

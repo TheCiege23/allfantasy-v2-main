@@ -9,6 +9,7 @@ import { executeLineupAction } from './lineupAction'
 import { executeTradeAction } from './tradeAction'
 import { executeAutomationAction } from './automationAction'
 import { executeQueueAction } from './queueAction'
+import { executeSettingsAction } from './settingsAction'
 import type { ChimmyActionConfirmResult } from './types'
 
 /**
@@ -136,6 +137,31 @@ export async function confirmChimmyAction(args: { token: unknown; userId: string
       await writeOutcome(key, { ...base, status: 'executed', message: r.message, at: new Date().toISOString() })
       // The services log their own audit row (automation_preset.applied / inactive_auto_handover.set).
       return { ok: true, status: 'executed', kind: 'automation', message: r.message }
+    }
+
+    /*
+     * League settings (stage 5). `executeLeagueSettingsPatch` writes its own `settings_patch` audit row
+     * and the league's `settings_changed` event; this adds the Chimmy row naming the card, as the
+     * lineup branch does. ⚠ Before the trade fallthrough below, for the same reason as the queue.
+     */
+    if (payload.spec.kind === 'settings') {
+      const r = await executeSettingsAction(payload, args.userId)
+      if (!r.ok) {
+        await writeOutcome(key, { ...base, status: 'refused', message: r.message, at: new Date().toISOString() })
+        return { ok: false, status: 'refused', kind: 'settings', message: r.message }
+      }
+      await writeOutcome(key, { ...base, status: 'executed', message: r.message, at: new Date().toISOString() })
+      await logAction({
+        leagueId: payload.leagueId,
+        userId: args.userId,
+        actionType: 'chimmy_settings_changed',
+        entityType: 'league',
+        entityId: payload.leagueId,
+        beforeState: r.before,
+        afterState: r.after,
+        metadata: { source: 'chimmy_action_confirm', actionId: payload.actionId, section: payload.spec.section, midSeason: payload.spec.midSeason },
+      }).catch(() => null)
+      return { ok: true, status: 'executed', kind: 'settings', message: r.message }
     }
 
     /*
