@@ -42,6 +42,7 @@ describe('lander → guide links', () => {
     expect(LEAGUE_TYPE_GUIDES.zombie?.[0].slug).toBe('zombie-fantasy-league')
     expect(LEAGUE_TYPE_GUIDES['big-brother']?.[0].slug).toBe('big-brother-fantasy-league')
     expect(SPORT_GUIDES['fantasy-football']?.map((g) => g.slug)).toContain('faab-fantasy-football')
+    expect(SPORT_GUIDES['fantasy-football']?.[0].slug).toBe('how-to-start-a-fantasy-football-league')
     expect(blogGuideHref('keeper-league-guide')).toBe('/blog/keeper-league-guide')
   })
 
