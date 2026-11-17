@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveTenantsForUser, withTenant } from '@/lib/domain/db'
 import { createActorContext } from '@/lib/domain/actorContext'
 import { authorize } from '@/lib/domain/authorize'
+import { recomputeLedgerForLeagues } from '@/lib/chimmy-outcomes/ledgerGrading'
 import type { BindingRow, LeagueFacts, PortalDeps, TenantRoleName } from '@/lib/partner-portal/workspace'
 
 /**
@@ -62,4 +63,7 @@ export const portalDeps: PortalDeps = {
     ])
     return { leagues: leagues.map((l) => ({ id: l.id, name: l.name, sport: l.sport ? String(l.sport) : null })), snapshots, managers }
   },
+
+  // Same ids, same rule. Postgres only: the schedule, weekly scores and week-stats feed the import crons keep current.
+  readRecommendationRecord: (leagueIds) => recomputeLedgerForLeagues(leagueIds),
 }

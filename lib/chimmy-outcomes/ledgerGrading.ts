@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { MY_TEAM_BENCH_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
@@ -88,7 +89,15 @@ export async function placePlayerIds(ids: readonly string[], db: Db = prisma): P
   return placed
 }
 
-async function loadBenchRows(season: number, db: Db): Promise<BenchRow[]> {
+/**
+ * `AND <col> = ANY(ids)` when the read is scoped to a set of leagues (a partner workspace), nothing otherwise —
+ * the platform-wide rebuild passes no scope and its SQL is unchanged.
+ */
+function leagueScope(column: Prisma.Sql, leagueIds: readonly string[] | undefined): Prisma.Sql {
+  return leagueIds ? Prisma.sql`AND ${column} = ANY(${[...leagueIds]}::text[])` : Prisma.empty
+}
+
+async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<BenchRow[]> {
   const rows = await db.$queryRaw<Array<{ user_id: string; week: number; withdrawn: boolean; rec_pts: number | null; alt_pts: number | null }>>`
     SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts
     FROM chimmy_advice a
@@ -97,7 +106,8 @@ async function loadBenchRows(season: number, db: Db): Promise<BenchRow[]> {
       ON r."leagueId" = l."platformLeagueId" AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
     LEFT JOIN league_player_weekly_scores s
       ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
-    WHERE a.surface = ${MY_TEAM_BENCH_SURFACE} AND a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}`
+    WHERE a.surface = ${MY_TEAM_BENCH_SURFACE} AND a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}
+      ${leagueScope(Prisma.sql`a.league_id`, leagueIds)}`
   return rows.map((r) => ({
     userId: r.user_id,
     week: Number(r.week),
@@ -107,11 +117,12 @@ async function loadBenchRows(season: number, db: Db): Promise<BenchRow[]> {
   }))
 }
 
-async function loadAddRows(season: number, db: Db): Promise<AddRow[]> {
+async function loadAddRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<AddRow[]> {
   const rows = await db.$queryRaw<Array<{ user_id: string; week: number; rec_key: string; alt_key: string }>>`
     SELECT user_id, week, rec_player_key AS rec_key, alt_player_key AS alt_key
     FROM chimmy_advice
-    WHERE surface = ${WAIVER_PANEL_SURFACE} AND advice_type = 'add' AND season = ${season}`
+    WHERE surface = ${WAIVER_PANEL_SURFACE} AND advice_type = 'add' AND season = ${season}
+      ${leagueScope(Prisma.sql`league_id`, leagueIds)}`
   const ids = [...new Set(rows.flatMap((r) => [r.rec_key, r.alt_key]).filter(Boolean))]
   const feed = await readPprByWeek(season, ids, db)
   return rows.map((r) => {
@@ -236,4 +247,30 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     part(() => gradeTrades(season, cal, now, db), { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }),
   ])
   return foldLedger({ season, cal, now, bench, adds, trades })
+}
+
+/**
+ * The same ledger, scoped to a set of leagues — a partner workspace's linked leagues (lib/partner-portal).
+ * Start/sit (My Team's bench check) and pickups (the waiver panel's #1 add) only: trade evaluations are not
+ * keyed to a league in a way a partner scope can trust yet, so they are left out rather than guessed.
+ *
+ * The `users` map is EMPTIED: a partner sees counts for its leagues, never which person was given which call.
+ * Null when the schedule has no regular-season weeks for the season, or when no league is given.
+ */
+export async function recomputeLedgerForLeagues(
+  leagueIds: readonly string[],
+  opts: { now?: Date; db?: Db } = {},
+): Promise<LedgerSnapshot | null> {
+  if (leagueIds.length === 0) return null
+  const now = opts.now ?? new Date()
+  const db = opts.db ?? prisma
+  const season = nflSeasonFor(now)
+  const cal = await loadNflWeekCalendar(season, db)
+  if (cal.size === 0) return null
+  const [bench, adds] = await Promise.all([
+    part(() => loadBenchRows(season, db, leagueIds), [] as BenchRow[]),
+    part(() => loadAddRows(season, db, leagueIds), [] as AddRow[]),
+  ])
+  const folded = foldLedger({ season, cal, now, bench, adds, trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 } })
+  return { ...folded, users: {} }
 }

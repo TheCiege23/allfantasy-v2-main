@@ -20,6 +20,7 @@
 import { computeHealth, deriveActionItems, type CommissionerActionItem } from '@/lib/intelligence/IntelligenceQueryService'
 import type { BindingSyncState } from '@/lib/domain/syncHealth'
 import { syncHealthView } from '@/lib/domain/syncHealth'
+import { ledgerRecordFor, MIN_GRADED_FOR_OVERALL_RATE, type LedgerSnapshot } from '@/lib/chimmy-outcomes/ledgerRecord'
 
 export type TenantRoleName = 'TENANT_OWNER' | 'TENANT_ADMIN' | 'TENANT_SUPPORT'
 
@@ -39,6 +40,11 @@ export type PortalDeps = {
   readWorkspace: (tenantId: string) => Promise<{ name: string | null; bindings: BindingRow[] }>
   /** On the app connection, BY ID ONLY: facts for leagues that came out of the RLS-filtered bindings. */
   readLeagueFacts: (leagueIds: string[]) => Promise<LeagueFacts>
+  /**
+   * The advice ledger graded over these leagues only (lib/chimmy-outcomes/ledgerGrading.ts
+   * recomputeLedgerForLeagues). Same rule as the bindings: ids from the RLS-filtered read, never the caller.
+   */
+  readRecommendationRecord?: (leagueIds: string[]) => Promise<LedgerSnapshot | null>
   now?: () => Date
 }
 
@@ -66,6 +72,43 @@ export type PortalSource = {
   reason: string | null
 }
 
+/**
+ * How the recommendations given in the workspace's leagues turned out — counts, then a rate once the sample
+ * is big enough (the same MIN_GRADED_FOR_OVERALL_RATE the platform-wide record uses). NFL only: the grading
+ * reads the NFL schedule and week-stats feed.
+ */
+export type PartnerRecord = {
+  season: number
+  /** Every NFL week through this one is over; nothing after it is graded. */
+  throughWeek: number
+  /** The rate needs this many decided calls (or graded pickups). */
+  minSample: number
+  startSit: { right: number; wrong: number; same: number; ratePct: number | null; gainPerCall: number | null; pending: number } | null
+  pickups: { graded: number; startable: number; ratePct: number | null; vsDrop: number; beatDrop: number; pending: number } | null
+}
+
+/** Pure: the scoped ledger → what the portal shows. Null when nothing has been given or graded at all. */
+export function buildPartnerRecord(ledger: LedgerSnapshot | null): PartnerRecord | null {
+  if (!ledger) return null
+  const view = ledgerRecordFor({ ...ledger, users: {} }, null)
+  const benchPending = Math.max(0, ledger.bench?.pending ?? 0)
+  const pickPending = Math.max(0, ledger.pickups?.pending ?? 0)
+  const b = view?.bench?.everyone ?? null
+  const p = view?.pickups?.everyone ?? null
+  const startSit = b
+    ? { right: b.right, wrong: b.wrong, same: b.same, ratePct: b.ratePct, gainPerCall: b.gainPerCall, pending: benchPending }
+    : benchPending
+      ? { right: 0, wrong: 0, same: 0, ratePct: null, gainPerCall: null, pending: benchPending }
+      : null
+  const pickups = p
+    ? { graded: p.graded, startable: p.startable, ratePct: p.ratePct, vsDrop: p.vsDrop, beatDrop: p.beatDrop, pending: pickPending }
+    : pickPending
+      ? { graded: 0, startable: 0, ratePct: null, vsDrop: 0, beatDrop: 0, pending: pickPending }
+      : null
+  if (!startSit && !pickups) return null
+  return { season: ledger.season, throughWeek: ledger.throughWeek, minSample: MIN_GRADED_FOR_OVERALL_RATE, startSit, pickups }
+}
+
 export type PortalView =
   | { kind: 'unavailable' }
   | { kind: 'not_member' }
@@ -80,6 +123,9 @@ export type PortalView =
       leagues: PortalLeague[]
       sources: PortalSource[]
       summary: { leagues: number; managers: number; activeManagers: number; activePct: number; medianHealth: number; needsAttention: number; openItems: number }
+      /** Null when nothing was recommended in these leagues yet, or the record could not be read (the page says which). */
+      record: PartnerRecord | null
+      recordUnavailable: boolean
     }
 
 function daysBetween(then: Date | null, now: Date): number | null {
@@ -193,6 +239,19 @@ export async function loadPortalView(user: { id: string; label: string }, deps: 
   const leagueIds = [...new Set(workspace.bindings.map((b) => b.leagueId))]
   const facts = leagueIds.length ? await deps.readLeagueFacts(leagueIds) : { leagues: [], snapshots: [], managers: [] }
   const leagues = buildPortalLeagues(workspace.bindings, facts, now)
+
+  // The record is a section of the page, not the page: a failure here is said on the card, never a broken portal.
+  let record: PartnerRecord | null = null
+  let recordUnavailable = false
+  if (leagueIds.length && deps.readRecommendationRecord) {
+    try {
+      record = buildPartnerRecord(await deps.readRecommendationRecord(leagueIds))
+    } catch (error) {
+      console.error('[partner-portal] recommendation record read failed:', error instanceof Error ? error.message : error)
+      recordUnavailable = true
+    }
+  }
+
   return {
     kind: 'ok',
     tenantId: m.tenantId,
@@ -202,5 +261,7 @@ export async function loadPortalView(user: { id: string; label: string }, deps: 
     leagues,
     sources: buildPortalSources(workspace.bindings, now),
     summary: summarizePortal(leagues),
+    record,
+    recordUnavailable,
   }
 }

@@ -24,6 +24,7 @@ const deps = vi.hoisted(() => ({
   authorizeRead: vi.fn(async () => true),
   readWorkspace: vi.fn(),
   readLeagueFacts: vi.fn(async () => ({ leagues: [{ id: 'L1', name: 'Harbor City', sport: 'NFL' }], snapshots: [], managers: [] })),
+  readRecommendationRecord: vi.fn(async () => null as unknown),
 }))
 vi.mock('@/lib/partner-portal/workspaceDeps', () => ({ portalDeps: deps }))
 
@@ -75,6 +76,49 @@ describe('/partners/portal', () => {
     expect(document.body.textContent).toContain('Never synced')
   })
 
+  it('the recommendation record: graded counts, a bar with a text legend, and the sample rule', async () => {
+    deps.resolveTenantsForUser.mockResolvedValue([{ tenantId: 't-acme', role: 'TENANT_OWNER' }])
+    deps.readWorkspace.mockResolvedValue({
+      name: 'Acme Fantasy',
+      bindings: [{ id: 'b1', leagueId: 'L1', provider: 'sleeper', status: 'OK', consecutiveFailures: 0, lastSyncedAt: new Date(), lastErrorAt: null, lastErrorSummary: null }],
+    })
+    deps.readRecommendationRecord.mockResolvedValueOnce({
+      season: 2026,
+      throughWeek: 10,
+      bench: { right: 8, wrong: 4, same: 2, gain: 30, pending: 3, unscored: 0, withdrawn: 0 },
+      pickups: { graded: 6, startable: 4, vsDrop: 5, beatDrop: 3, lostDrop: 2, pending: 2, noStats: 0 },
+      trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 },
+      users: {},
+    })
+    await renderPage()
+    expect(screen.getByRole('heading', { name: 'Recommendation record' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: '8 recommended player scored more, 2 within a point, 4 benched player scored more' })).toBeTruthy()
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('14 calls')
+    expect(text).toContain('A rate shows once 30 calls are decided (12 now)')
+    expect(text).toContain('3 calls are waiting on games.')
+    expect(text).toContain('4 of 6')
+    expect(text).toContain('3 of 5')
+    expect(text).toContain('2026 NFL season, through week 10')
+  })
+
+  it('no recommendations yet, and a failed read, are each said plainly', async () => {
+    deps.resolveTenantsForUser.mockResolvedValue([{ tenantId: 't-acme', role: 'TENANT_OWNER' }])
+    deps.readWorkspace.mockResolvedValue({
+      name: 'Acme Fantasy',
+      bindings: [{ id: 'b1', leagueId: 'L1', provider: 'sleeper', status: 'OK', consecutiveFailures: 0, lastSyncedAt: new Date(), lastErrorAt: null, lastErrorSummary: null }],
+    })
+    await renderPage()
+    expect(document.body.textContent).toContain('No lineup or pickup recommendations have been given in your linked leagues')
+    cleanup()
+    deps.readRecommendationRecord.mockRejectedValueOnce(new Error('x'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await renderPage()
+    spy.mockRestore()
+    expect(document.body.textContent).toContain("The record couldn't be read just now")
+    expect(document.body.textContent).toContain('Harbor City')
+  })
+
   it('a member with no linked leagues is told what happens next', async () => {
     deps.resolveTenantsForUser.mockResolvedValue([{ tenantId: 't-acme', role: 'TENANT_SUPPORT' }])
     deps.readWorkspace.mockResolvedValue({ name: 'Acme Fantasy', bindings: [] })
@@ -86,6 +130,21 @@ describe('/partners/portal', () => {
     for (const setup of [
       () => deps.resolveTenantsForUser.mockResolvedValue([]),
       () => deps.resolveTenantsForUser.mockRejectedValue(new Error('x')),
+      () => {
+        deps.resolveTenantsForUser.mockResolvedValue([{ tenantId: 't', role: 'TENANT_OWNER' }])
+        deps.readWorkspace.mockResolvedValue({
+          name: 'Acme',
+          bindings: [{ id: 'b1', leagueId: 'L1', provider: 'sleeper', status: 'OK', consecutiveFailures: 0, lastSyncedAt: new Date(), lastErrorAt: null, lastErrorSummary: null }],
+        })
+        deps.readRecommendationRecord.mockResolvedValueOnce({
+          season: 2026,
+          throughWeek: 10,
+          bench: { right: 40, wrong: 10, same: 2, gain: 120, pending: 0, unscored: 0, withdrawn: 0 },
+          pickups: { graded: 31, startable: 20, vsDrop: 25, beatDrop: 15, lostDrop: 10, pending: 0, noStats: 0 },
+          trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 },
+          users: {},
+        })
+      },
     ]) {
       setup()
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {})

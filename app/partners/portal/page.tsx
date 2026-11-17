@@ -6,7 +6,7 @@ import { buildSeoMeta } from '@/lib/seo'
 import { loadPortalView } from '@/lib/partner-portal/workspace'
 import { portalDeps } from '@/lib/partner-portal/workspaceDeps'
 import { Card, StatTile } from '@/components/partners/PartnerSections'
-import { DemoLink, PortalLeagueTable, PortalNotice, PortalSourcesTable } from '@/components/partners/PortalSections'
+import { DemoLink, PortalLeagueTable, PortalNotice, PortalSourcesTable, RecommendationRecord } from '@/components/partners/PortalSections'
 
 /**
  * The signed-in partner portal (docs/os/OS_BACKBONE_PRINCIPLES.md §4, owner's decisions 2026-11-17). The read
@@ -107,9 +107,12 @@ export default async function PartnerPortalPage() {
               <Card title="Data quality" subtitle="Sync health per source, including leagues that have never synced.">
                 <PortalSourcesTable sources={view.sources} now={now} />
               </Card>
-              <p className="text-xs text-white/45">
-                Recommendations and their outcomes for your leagues are coming to this workspace next. The demo shows how they will look.
-              </p>
+              <Card
+                title="Recommendation record"
+                subtitle="How the lineup and pickup recommendations given in your leagues turned out, graded only once every game of the week is over."
+              >
+                <RecommendationRecord record={view.record} unavailable={view.recordUnavailable} />
+              </Card>
             </>
           )
         ) : null}

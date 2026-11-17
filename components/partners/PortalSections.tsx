@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { TierBadge } from '@/components/partners/PartnerSections'
 import { VIZ } from '@/components/partners/vizTokens'
 import { freshnessLabel } from '@/lib/partner-portal/demoTenant'
-import type { PortalLeague, PortalSource } from '@/lib/partner-portal/workspace'
+import type { PartnerRecord, PortalLeague, PortalSource } from '@/lib/partner-portal/workspace'
 
 /** The API's health statuses, shown with the same icon-plus-word badge as the demo (never colour alone). */
 const STATUS: Record<PortalLeague['status'], { tier: 'strong' | 'steady' | 'watch' | 'at_risk'; label: string }> = {
@@ -141,5 +141,129 @@ export function DemoLink() {
     <Link href="/partners#demo" className="rounded-xl border border-white/20 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/5">
       See the demo
     </Link>
+  )
+}
+
+// ── Recommendation record ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Right / same / wrong as one segmented bar. Identity colours (categorical slots, not status colours), a 2px
+ * surface gap between segments, and a legend that carries the counts in text so nothing is colour-alone.
+ */
+function OutcomeBar({ right, same, wrong }: { right: number; same: number; wrong: number }) {
+  const total = right + same + wrong
+  const parts = [
+    { key: 'right', label: 'Recommended player scored more', n: right, color: VIZ.series1 },
+    { key: 'same', label: 'Within a point', n: same, color: VIZ.neutral },
+    { key: 'wrong', label: 'Benched player scored more', n: wrong, color: VIZ.series2 },
+  ]
+  if (total === 0) return null
+  return (
+    <div>
+      <div
+        role="img"
+        aria-label={`${right} recommended player scored more, ${same} within a point, ${wrong} benched player scored more`}
+        className="flex h-3 w-full gap-[2px] overflow-hidden rounded"
+      >
+        {parts
+          .filter((p) => p.n > 0)
+          .map((p) => (
+            <div key={p.key} style={{ width: `${(100 * p.n) / total}%`, background: p.color }} />
+          ))}
+      </div>
+      <ul className="mt-3 space-y-1.5 text-xs text-white/70">
+        {parts.map((p) => (
+          <li key={p.key} className="flex items-center gap-2">
+            <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: p.color }} />
+            <span className="flex-1">{p.label}</span>
+            <span className="tabular-nums text-white">{p.n}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function RecordBlock({ heading, value, detail, children }: { heading: string; value: string; detail: string; children?: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <h3 className="text-sm font-semibold text-white">{heading}</h3>
+      <div className="mt-2 text-3xl font-black tabular-nums text-white">{value}</div>
+      <p className="mt-1 text-xs text-white/60">{detail}</p>
+      {children ? <div className="mt-4">{children}</div> : null}
+    </div>
+  )
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+export function RecommendationRecord({ record, unavailable }: { record: PartnerRecord | null; unavailable: boolean }) {
+  if (unavailable) {
+    return <p className="text-sm text-white/60">The record couldn&apos;t be read just now. Your leagues and their data are unaffected; try again later.</p>
+  }
+  if (!record) {
+    return (
+      <p className="text-sm text-white/60">
+        No lineup or pickup recommendations have been given in your linked leagues this NFL season yet. They appear here, graded, once their games
+        are played.
+      </p>
+    )
+  }
+  const s = record.startSit
+  const p = record.pickups
+  const decided = s ? s.right + s.wrong : 0
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        {s ? (
+          <RecordBlock
+            heading="Start / sit"
+            value={s.ratePct != null ? `${s.ratePct}%` : plural(s.right + s.wrong + s.same, 'call', 'calls')}
+            detail={
+              s.ratePct != null
+                ? `of ${decided} decided calls, the recommended starter out-scored the player benched` +
+                  (s.gainPerCall != null ? ` · ${s.gainPerCall >= 0 ? '+' : ''}${s.gainPerCall} pts per call` : '')
+                : `graded so far. A rate shows once ${record.minSample} calls are decided (${decided} now).`
+            }
+          >
+            <OutcomeBar right={s.right} same={s.same} wrong={s.wrong} />
+            {s.pending ? <p className="mt-3 text-xs text-white/50">{plural(s.pending, 'call is', 'calls are')} waiting on games.</p> : null}
+          </RecordBlock>
+        ) : null}
+        {p ? (
+          <RecordBlock
+            heading="Waiver pickups"
+            value={p.ratePct != null ? `${p.ratePct}%` : plural(p.graded, 'pickup', 'pickups')}
+            detail={
+              p.ratePct != null
+                ? `of ${p.graded} top pickups averaged 10+ PPR over that week and the next two`
+                : `graded so far. A rate shows once ${record.minSample} are graded.`
+            }
+          >
+            <ul className="space-y-1.5 text-xs text-white/70">
+              <li className="flex justify-between gap-3">
+                <span>Averaged 10+ PPR a week</span>
+                <span className="tabular-nums text-white">
+                  {p.startable} of {p.graded}
+                </span>
+              </li>
+              {p.vsDrop ? (
+                <li className="flex justify-between gap-3">
+                  <span>Out-scored the suggested drop</span>
+                  <span className="tabular-nums text-white">
+                    {p.beatDrop} of {p.vsDrop}
+                  </span>
+                </li>
+              ) : null}
+            </ul>
+            {p.pending ? <p className="mt-3 text-xs text-white/50">{plural(p.pending, 'pickup is', 'pickups are')} still inside the three-week window.</p> : null}
+          </RecordBlock>
+        ) : null}
+      </div>
+      <p className="text-xs text-white/45">
+        {record.season} NFL season, through week {record.throughWeek}. Start/sit is graded on each league&apos;s own scoring; pickups on standard
+        PPR. Counts only — no manager is identified.
+      </p>
+    </div>
   )
 }
