@@ -165,3 +165,33 @@ describe('a playlist change reaching an open room (2026-11-17)', () => {
     expect(await readLeagueDraftPlaylist('missing')).toBeNull()
   })
 })
+
+describe('autoplay for members (2026-11-17)', () => {
+  it('starts the offered playlist in a quiet room', async () => {
+    const { shouldAutoplayDraftPlaylist, readDraftPlaylist } = await import('@/lib/draft-room/draftPlaylist')
+    const offered = readDraftPlaylist({ draft_room_playlist: { stationId: 'game-day' } })
+    expect(shouldAutoplayDraftPlaylist({ offered, playingKey: null, optedOut: false, available: true })).toBe(true)
+  })
+
+  it('🛑 never over other music, never after a Stop, never with no playlist or no player', async () => {
+    const { shouldAutoplayDraftPlaylist, readDraftPlaylist } = await import('@/lib/draft-room/draftPlaylist')
+    const offered = readDraftPlaylist({ draft_room_playlist: { stationId: 'game-day' } })
+    const base = { offered, playingKey: null, optedOut: false, available: true }
+    expect(shouldAutoplayDraftPlaylist({ ...base, playingKey: 'ff-podcast' })).toBe(false)
+    expect(shouldAutoplayDraftPlaylist({ ...base, playingKey: 'draft-playlist:game-day' })).toBe(false)
+    expect(shouldAutoplayDraftPlaylist({ ...base, optedOut: true })).toBe(false)
+    expect(shouldAutoplayDraftPlaylist({ ...base, offered: null })).toBe(false)
+    expect(shouldAutoplayDraftPlaylist({ ...base, available: false })).toBe(false)
+  })
+
+  it('a Stop holds for three days per league; anything unreadable is not a Stop', async () => {
+    const { optOutStillHolds, draftPlaylistOptOutKey, DRAFT_PLAYLIST_OPT_OUT_MS } = await import('@/lib/draft-room/draftPlaylist')
+    const now = 1_800_000_000_000
+    expect(optOutStillHolds(String(now - 1000), now)).toBe(true)
+    expect(optOutStillHolds(String(now - DRAFT_PLAYLIST_OPT_OUT_MS - 1), now)).toBe(false)
+    expect(optOutStillHolds(null, now)).toBe(false)
+    expect(optOutStillHolds('yes', now)).toBe(false)
+    expect(optOutStillHolds('0', now)).toBe(false)
+    expect(draftPlaylistOptOutKey('L1')).not.toBe(draftPlaylistOptOutKey('L2'))
+  })
+})
