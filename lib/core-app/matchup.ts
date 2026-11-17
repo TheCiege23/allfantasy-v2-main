@@ -31,6 +31,7 @@ import { realManagerName, rosterLabel } from './managerName'
 import { eliminationFormat, type EliminationFormat } from './railMatchupMode'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
+import { withNewestKickoffs } from './nextGameMap'
 import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /*
@@ -935,8 +936,11 @@ async function buildMatchupData(
    * kickoff wins. A club with no fixture this week gets nothing, never a guess.
    */
   const gameByClub = new Map<string, { kickoff: string | null; opponent: string | null; home: boolean }>()
-  for (const g of [...games]
-    .filter((x) => x.seasonType === 'regular')
+  /*
+   * Kickoffs from the newest-fetched row for each game: a weekly-refreshed source can carry a time
+   * the league has since moved, and the untyped rows are often the fresh ones. See `withNewestKickoffs`.
+   */
+  for (const g of withNewestKickoffs(games.filter((x) => x.seasonType === 'regular'), games)
     .sort((a, b) => (a.startTime?.getTime() ?? 0) - (b.startTime?.getTime() ?? 0))) {
     const home = normalizeTeamAbbrev(g.homeTeam)
     const away = normalizeTeamAbbrev(g.awayTeam)

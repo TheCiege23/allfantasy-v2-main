@@ -50,18 +50,18 @@ export const LANDING_COPY = {
       secondaryCtaHref: '/commissioner-upgrade?highlight=dispersal_draft',
     },
     tools: {
-      eyebrow: 'AI Tools — Optional, But Powerful',
+      eyebrow: 'Chimmy Tools — Optional, But Powerful',
       titleTop: 'Play Your Way.',
-      titleBottom: 'AI When You Want It.',
+      titleBottom: 'Chimmy When You Want It.',
       subtitle:
-        "Every manager gets AI tools built around your league's scoring, roster, and matchup context. Use them to get an edge — or don't. Either way, it's a great season.",
+        "Every manager gets Chimmy tools built around your league's scoring, roster, and matchup context. Use them to get an edge — or don't. Either way, it's a great season.",
       cards: [
-        { icon: '⚖️', title: 'Trade Analyzer', body: 'AI fairness scores, value deltas, and lineup impact — before you accept or reject any deal.', previewTitle: 'Example output', previewLines: ['Fairness score: 92/100', 'Lineup swing: +11.8 pts', 'Verdict: accept'] },
+        { icon: '⚖️', title: 'Trade Analyzer', body: 'Chimmy fairness scores, value deltas, and lineup impact — before you accept or reject any deal.', previewTitle: 'Example output', previewLines: ['Fairness score: 92/100', 'Lineup swing: +11.8 pts', 'Verdict: accept'] },
         { icon: '🎯', title: 'Draft Assistant', body: 'Live draft help with tier awareness, ADP tracking, and need-based pivot suggestions.', previewTitle: 'Live draft cue', previewLines: ['Tier break in 2 picks', 'Best value: DeVonta Smith', 'Pivot if RB run continues'] },
         { icon: '🧠', title: 'Chimmy, Your Coach', body: "Ask anything. Chimmy knows your roster, your opponents, and what matters this week.", previewTitle: 'Example response', previewLines: ['Start Nico Collins over Pittman.', 'You need ceiling this week.', 'Opponent is weak vs outside WRs.'] },
       ],
       previewLabel: 'Example output',
-      optionalNote: 'AI is optional — you can draft, trade, and win without ever touching a single AI tool.',
+      optionalNote: 'Chimmy is optional — you can draft, trade, and win without ever touching a single Chimmy tool.',
     },
     stats: [
       { value: '13+', label: 'League formats' },
@@ -251,16 +251,16 @@ export const LANDING_COPY = {
     tools: {
       eyebrow: 'Herramientas IA — Opcionales, pero poderosas',
       titleTop: 'Juega a tu manera.',
-      titleBottom: 'IA cuando la quieras.',
+      titleBottom: 'Chimmy cuando la quieras.',
       subtitle:
-        'Cada manager obtiene herramientas de IA adaptadas a su liga, roster y contexto de puntuación. Úsalas para ganar ventaja — o no. De cualquier forma, es una gran temporada.',
+        'Cada manager obtiene herramientas de Chimmy adaptadas a su liga, roster y contexto de puntuación. Úsalas para ganar ventaja — o no. De cualquier forma, es una gran temporada.',
       cards: [
         { icon: '⚖️', title: 'Trade Analyzer', body: 'Puntajes de equidad, delta de valor e impacto en tu lineup — antes de aceptar o rechazar cualquier trade.', previewTitle: 'Ejemplo', previewLines: ['Equidad: 92/100', 'Impacto: +11.8 pts', 'Veredicto: aceptar'] },
         { icon: '🎯', title: 'Draft Assistant', body: 'Ayuda en vivo con tiers, ADP y pivotes según necesidad.', previewTitle: 'Señal en draft', previewLines: ['Tier break en 2 picks', 'Mejor valor: DeVonta Smith', 'Pivota si sigue la corrida de RB'] },
         { icon: '🧠', title: 'Chimmy, tu coach', body: 'Pregunta lo que quieras. Chimmy conoce tu roster, tus rivales y lo que importa esta semana.', previewTitle: 'Respuesta ejemplo', previewLines: ['Inicia a Nico Collins sobre Pittman.', 'Necesitas techo esta semana.', 'Tu rival es débil contra WR abiertos.'] },
       ],
       previewLabel: 'Ejemplo',
-      optionalNote: 'La IA es opcional — puedes draftear, tradear y ganar sin usar una sola herramienta de IA.',
+      optionalNote: 'Chimmy es opcional — puedes draftear, tradear y ganar sin usar una sola herramienta de Chimmy.',
     },
     stats: [
       { value: '13+', label: 'Formatos de liga' },
@@ -448,18 +448,18 @@ export const LANDING_COPY = {
       secondaryCtaHref: '/commissioner-upgrade?highlight=dispersal_draft',
     },
     tools: {
-      eyebrow: 'AI 工具 — 可选，但强大',
+      eyebrow: 'Chimmy 工具 — 可选，但强大',
       titleTop: '按你的方式玩。',
-      titleBottom: '需要时用 AI。',
+      titleBottom: '需要时用 Chimmy。',
       subtitle:
-        '每位管理员都获得围绕联赛计分、名单和对阵情况构建的 AI 工具。用它们获得优势 — 或不用。无论如何，这都是一个精彩的赛季。',
+        '每位管理员都获得围绕联赛计分、名单和对阵情况构建的 Chimmy 工具。用它们获得优势 — 或不用。无论如何，这都是一个精彩的赛季。',
       cards: [
-        { icon: '⚖️', title: '交易分析器', body: 'AI 公平评分、价值差异和阵容影响 — 在接受或拒绝任何交易之前。', previewTitle: '示例输出', previewLines: ['公平分数：92/100', '阵容波动：+11.8 分', '裁定：接受'] },
+        { icon: '⚖️', title: '交易分析器', body: 'Chimmy 公平评分、价值差异和阵容影响 — 在接受或拒绝任何交易之前。', previewTitle: '示例输出', previewLines: ['公平分数：92/100', '阵容波动：+11.8 分', '裁定：接受'] },
         { icon: '🎯', title: '草案助手', body: '实时草案帮助，包括层级感知、ADP 跟踪和基于需求的转变建议。', previewTitle: '实时草案提示', previewLines: ['2 次选择后层级中断', '最佳价值：DeVonta Smith', '若 RB 连跑继续则转变'] },
         { icon: '🧠', title: 'Chimmy 教练', body: '随便问。Chimmy 了解你的名单、对手以及本周什么最重要。', previewTitle: '示例回应', previewLines: ['首发 Nico Collins 而非 Pittman。', '本周你需要上限。', '对手对外线 WR 较弱。'] },
       ],
       previewLabel: '示例输出',
-      optionalNote: 'AI 是可选的 — 你可以在不使用任何 AI 工具的情况下进行草案、交易和获胜。',
+      optionalNote: 'Chimmy 是可选的 — 你可以在不使用任何 Chimmy 工具的情况下进行草案、交易和获胜。',
     },
     stats: [
       { value: '13+', label: '联赛格式' },
@@ -647,18 +647,18 @@ export const LANDING_COPY = {
       secondaryCtaHref: '/commissioner-upgrade?highlight=dispersal_draft',
     },
     tools: {
-      eyebrow: 'AI Tools — Opsyonal, Ngunit Makapangyarihan',
+      eyebrow: 'Chimmy Tools — Opsyonal, Ngunit Makapangyarihan',
       titleTop: 'Maglaro sa Sarili Mong Paraan.',
-      titleBottom: 'AI Kung Kailan Mo Gusto.',
+      titleBottom: 'Chimmy Kung Kailan Mo Gusto.',
       subtitle:
-        'Ang bawat manager ay nakakakuha ng mga AI tool na itinayo sa paligid ng scoring, roster, at matchup context ng iyong liga. Gamitin ang mga ito para makakuha ng kalamangan — o huwag. Anuman ang paraan, ito ay isang mahusay na season.',
+        'Ang bawat manager ay nakakakuha ng mga Chimmy tool na itinayo sa paligid ng scoring, roster, at matchup context ng iyong liga. Gamitin ang mga ito para makakuha ng kalamangan — o huwag. Anuman ang paraan, ito ay isang mahusay na season.',
       cards: [
-        { icon: '⚖️', title: 'Trade Analyzer', body: 'AI fairness scores, value deltas, at lineup impact — bago ka tumanggap o tumanggi ng anumang deal.', previewTitle: 'Halimbawang output', previewLines: ['Fairness score: 92/100', 'Lineup swing: +11.8 pts', 'Hatol: tanggapin'] },
+        { icon: '⚖️', title: 'Trade Analyzer', body: 'Chimmy fairness scores, value deltas, at lineup impact — bago ka tumanggap o tumanggi ng anumang deal.', previewTitle: 'Halimbawang output', previewLines: ['Fairness score: 92/100', 'Lineup swing: +11.8 pts', 'Hatol: tanggapin'] },
         { icon: '🎯', title: 'Draft Assistant', body: 'Live na tulong sa draft na may tier awareness, ADP tracking, at mga mungkahi batay sa pangangailangan.', previewTitle: 'Live draft cue', previewLines: ['Tier break sa 2 picks', 'Pinakamahusay na halaga: DeVonta Smith', 'Lumipat kung nagpapatuloy ang RB run'] },
         { icon: '🧠', title: 'Chimmy Coach', body: 'Magtanong ng kahit ano. Kilala ni Chimmy ang iyong roster, mga kalaban, at kung ano ang mahalaga ngayong linggo.', previewTitle: 'Halimbawang sagot', previewLines: ['I-start si Nico Collins kaysa Pittman.', 'Kailangan mo ng ceiling ngayong linggo.', 'Mahina ang kalaban laban sa mga labas na WR.'] },
       ],
       previewLabel: 'Halimbawang output',
-      optionalNote: 'Ang AI ay opsyonal — maaari kang mag-draft, mag-trade, at manalo nang hindi gumagamit ng kahit isang AI tool.',
+      optionalNote: 'Ang Chimmy ay opsyonal — maaari kang mag-draft, mag-trade, at manalo nang hindi gumagamit ng kahit isang Chimmy tool.',
     },
     stats: [
       { value: '13+', label: 'Mga format ng liga' },
@@ -846,18 +846,18 @@ export const LANDING_COPY = {
       secondaryCtaHref: '/commissioner-upgrade?highlight=dispersal_draft',
     },
     tools: {
-      eyebrow: 'Công Cụ AI — Tùy Chọn, Nhưng Mạnh Mẽ',
+      eyebrow: 'Công Cụ Chimmy — Tùy Chọn, Nhưng Mạnh Mẽ',
       titleTop: 'Chơi Theo Cách Của Bạn.',
-      titleBottom: 'AI Khi Bạn Muốn.',
+      titleBottom: 'Chimmy Khi Bạn Muốn.',
       subtitle:
-        'Mỗi manager nhận được công cụ AI được xây dựng xung quanh cài đặt tính điểm, danh sách và bối cảnh đối đầu của giải đấu. Sử dụng chúng để có lợi thế — hoặc không. Dù thế nào, đây cũng là một mùa giải tuyệt vời.',
+        'Mỗi manager nhận được công cụ Chimmy được xây dựng xung quanh cài đặt tính điểm, danh sách và bối cảnh đối đầu của giải đấu. Sử dụng chúng để có lợi thế — hoặc không. Dù thế nào, đây cũng là một mùa giải tuyệt vời.',
       cards: [
-        { icon: '⚖️', title: 'Trade Analyzer', body: 'Điểm công bằng AI, chênh lệch giá trị và tác động lineup — trước khi bạn chấp nhận hoặc từ chối bất kỳ giao dịch nào.', previewTitle: 'Ví dụ đầu ra', previewLines: ['Điểm công bằng: 92/100', 'Thay đổi lineup: +11.8 pts', 'Phán quyết: chấp nhận'] },
+        { icon: '⚖️', title: 'Trade Analyzer', body: 'Điểm công bằng Chimmy, chênh lệch giá trị và tác động lineup — trước khi bạn chấp nhận hoặc từ chối bất kỳ giao dịch nào.', previewTitle: 'Ví dụ đầu ra', previewLines: ['Điểm công bằng: 92/100', 'Thay đổi lineup: +11.8 pts', 'Phán quyết: chấp nhận'] },
         { icon: '🎯', title: 'Draft Assistant', body: 'Hỗ trợ bản thảo trực tiếp với nhận thức về tier, theo dõi ADP và gợi ý chuyển hướng dựa trên nhu cầu.', previewTitle: 'Tín hiệu bản thảo trực tiếp', previewLines: ['Phá vỡ tier sau 2 lượt chọn', 'Giá trị tốt nhất: DeVonta Smith', 'Chuyển hướng nếu RB run tiếp tục'] },
         { icon: '🧠', title: 'Chimmy Coach', body: 'Hỏi bất cứ điều gì. Chimmy biết danh sách của bạn, đối thủ và điều gì quan trọng trong tuần này.', previewTitle: 'Ví dụ phản hồi', previewLines: ['Bắt đầu Nico Collins thay vì Pittman.', 'Bạn cần ceiling tuần này.', 'Đối thủ yếu trước các WR bên ngoài.'] },
       ],
       previewLabel: 'Ví dụ đầu ra',
-      optionalNote: 'AI là tùy chọn — bạn có thể draft, trade và chiến thắng mà không cần chạm vào bất kỳ công cụ AI nào.',
+      optionalNote: 'Chimmy là tùy chọn — bạn có thể draft, trade và chiến thắng mà không cần chạm vào bất kỳ công cụ Chimmy nào.',
     },
     stats: [
       { value: '13+', label: 'Định dạng giải đấu' },

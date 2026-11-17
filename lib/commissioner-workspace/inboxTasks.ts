@@ -62,7 +62,7 @@ export function detectInboxConditions(input: InboxConditionInput, now: Date): Wo
 
   for (const a of input.alerts) {
     if (a.snoozedUntil && a.snoozedUntil.getTime() > now.getTime()) continue
-    add(`operational:alert:${a.alertId}:v1`, a.headline, a.summary ?? 'An AI commissioner alert is open for this league.', settingsHref, level(a.severity))
+    add(`operational:alert:${a.alertId}:v1`, a.headline, a.summary ?? 'a Chimmy commissioner alert is open for this league.', settingsHref, level(a.severity))
   }
 
   for (const f of input.integrity) add(`operational:integrity:${f.id}:v1`, 'Integrity flag to review', f.summary ?? `An open ${f.flagType.replace(/_/g, ' ')} flag needs a commissioner decision.`, settingsHref, level(f.severity))

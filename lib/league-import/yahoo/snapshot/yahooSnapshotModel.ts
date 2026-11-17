@@ -28,9 +28,9 @@ import type {
   YahooSnapshotRoster,
 } from './yahooSnapshotTypes'
 
-export const YAHOO_SNAPSHOT_SOURCE_PREFIX = 'yahoo-snapshot:'
+const YAHOO_SNAPSHOT_SOURCE_PREFIX = 'yahoo-snapshot:'
 /** Stamped into `settings.raw.source`, which the adapter carries to `league.yahoo_settings`. */
-export const YAHOO_SNAPSHOT_RAW_SOURCE = 'yahoo_paste_snapshot'
+const YAHOO_SNAPSHOT_RAW_SOURCE = 'yahoo_paste_snapshot'
 
 /** `yahoo-snapshot:<id>` is how a pasted league travels through preview and commit as a `sourceId`. */
 export function yahooSnapshotSourceId(leagueId: string): string {
@@ -81,7 +81,7 @@ export function parseYahooLeagueId(raw: string | null | undefined): string | nul
  */
 const YAHOO_FOOTBALL_BASE = 'https://football.fantasysports.yahoo.com/f1'
 
-export function yahooSnapshotPageUrl(leagueId: string, page: YahooSnapshotPageKind, teamNumber?: number): string {
+function yahooSnapshotPageUrl(leagueId: string, page: YahooSnapshotPageKind, teamNumber?: number): string {
   if (page === 'settings') return `${YAHOO_FOOTBALL_BASE}/${leagueId}/settings`
   if (page === 'draft') return `${YAHOO_FOOTBALL_BASE}/${leagueId}/draftresults`
   if (page === 'roster') return `${YAHOO_FOOTBALL_BASE}/${leagueId}/${teamNumber ?? 1}`
@@ -89,7 +89,7 @@ export function yahooSnapshotPageUrl(leagueId: string, page: YahooSnapshotPageKi
 }
 
 /** Lowercase and collapse everything that is not a letter or digit — for matching team names only. */
-export function normalizeSnapshotTeamName(name: string): string {
+function normalizeSnapshotTeamName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
@@ -152,7 +152,7 @@ function extendsAtWordBoundary(a: string, b: string): boolean {
  * matches it. Two candidates, or a team another roster already holds, means no match: an unmatched
  * roster is reported to the commissioner, a wrongly matched one silently moves players between teams.
  */
-export function resolveSnapshotTeam(
+function resolveSnapshotTeam(
   teamNorms: readonly string[],
   name: string,
   taken?: ReadonlySet<string>,

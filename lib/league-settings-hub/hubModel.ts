@@ -593,7 +593,7 @@ export function buildNotificationGroups(kind: HubKind, isCommissioner: boolean, 
           { id: 'lineup_alerts', label: 'Inactive Player Notifications', description: 'Alerts when starting an inactive player' },
           { id: 'injury_alerts', label: 'Injury Status Notifications', description: 'Alerts when injury status changes' },
         ] },
-    { key: 'ai', label: 'AI & Draft', rows: [
+    { key: 'ai', label: 'Chimmy & Draft', rows: [
       { id: 'ai_alerts', label: 'Chimmy Insights', description: 'Lineup, waiver and trade nudges from Chimmy' },
       { id: 'draft_alerts', label: 'Draft Alerts', description: 'On the clock, picks made, draft starting' },
       { id: 'followed_players', label: 'Followed Players', description: 'News on players you follow' },

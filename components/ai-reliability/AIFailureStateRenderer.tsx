@@ -33,7 +33,7 @@ export default function AIFailureStateRenderer({
   className = '',
 }: AIFailureStateRendererProps) {
   const [detailsOpen, setDetailsOpen] = React.useState(false)
-  const message = fallbackExplanation ?? reliability?.fallbackExplanation ?? (usedDeterministicFallback ? 'AI analysis is temporarily unavailable. Showing data-only result.' : '')
+  const message = fallbackExplanation ?? reliability?.fallbackExplanation ?? (usedDeterministicFallback ? 'Chimmy analysis is temporarily unavailable. Showing data-only result.' : '')
 
   if (!message && !reliability?.dataQualityWarnings?.length && confidence == null) return null
 
@@ -58,7 +58,7 @@ export default function AIFailureStateRenderer({
                 className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${retryLoading ? 'animate-spin' : ''}`} />
-                {retryLoading ? 'Retrying…' : 'Retry AI analysis'}
+                {retryLoading ? 'Retrying…' : 'Retry Chimmy analysis'}
               </button>
             )}
           </div>

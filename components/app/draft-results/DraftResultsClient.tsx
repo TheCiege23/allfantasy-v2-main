@@ -115,7 +115,7 @@ export function DraftResultsClient({
             data-testid="draft-results-ai-explanations-toggle"
           >
             <Wand2 className="h-3.5 w-3.5" />
-            {aiExplainEnabled && !aiLock ? 'AI explanations on' : 'AI explanations off'}
+            {aiExplainEnabled && !aiLock ? 'Chimmy explanations on' : 'Chimmy explanations off'}
           </button>
           {aiLock ? (
             <span
@@ -132,7 +132,7 @@ export function DraftResultsClient({
             </span>
           ) : (
             <span className="text-xs text-white/50">
-              Rankings stay deterministic; AI only rewrites explanation text.
+              Rankings stay deterministic; Chimmy only rewrites explanation text.
             </span>
           )}
         </div>
@@ -349,7 +349,7 @@ function ManagerRankCard({ entry }: { entry: ManagerRankingEntry }) {
             <p className="text-xs text-white/70">
               {entry.explanation}
               {entry.explanationSource === 'ai' ? (
-                <span className="ml-1 text-[11px] uppercase tracking-wide text-violet-300">AI</span>
+                <span className="ml-1 text-[11px] uppercase tracking-wide text-violet-300">Chimmy</span>
               ) : (
                 <span className="ml-1 text-[11px] uppercase tracking-wide text-cyan-300">Deterministic</span>
               )}

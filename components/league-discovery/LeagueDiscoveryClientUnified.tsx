@@ -102,7 +102,7 @@ function DiscoveryCardItem({ card, showJoin }: { card: DiscoveryCard; showJoin?:
             {hasAI && (
               <span className="inline-flex items-center gap-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-200">
                 <Sparkles className="h-3 w-3" />
-                AI-enabled
+                Chimmy-enabled
               </span>
             )}
           </div>
@@ -275,11 +275,11 @@ export default function LeagueDiscoveryClientUnified() {
             data-testid="discovery-recommendations-ai-toggle"
           >
             <Wand2 className="h-3.5 w-3.5" />
-            {recommendationAiExplainEnabled ? 'AI explanations on' : 'AI explanations off'}
+            {recommendationAiExplainEnabled ? 'Chimmy explanations on' : 'Chimmy explanations off'}
           </button>
         </div>
         <p className="text-[11px] text-white/50 mb-3">
-          Deterministic-first recommendations from your sports, league history, draft activity, league types, and AI usage.
+          Deterministic-first recommendations from your sports, league history, draft activity, league types, and Chimmy usage.
         </p>
         {loadingRec ? (
           <div className="flex justify-center py-8">
@@ -308,7 +308,7 @@ export default function LeagueDiscoveryClientUnified() {
                   </div>
                 )}
                 <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-white/35">
-                  {item.explanationSource === 'ai' ? 'AI-enhanced explanation' : 'Deterministic explanation'}
+                  {item.explanationSource === 'ai' ? 'Chimmy-enhanced explanation' : 'Deterministic explanation'}
                 </p>
               </div>
             ))}

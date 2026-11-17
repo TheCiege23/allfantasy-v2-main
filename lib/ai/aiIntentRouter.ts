@@ -237,7 +237,7 @@ export function routeAiIntent(input: AiIntentRouterInput): AiRouteDecision {
     return {
       mode: "upgrade",
       intent: "general",
-      reason: "User does not have AI entitlement — route to upgrade prompt",
+      reason: "User does not have Chimmy entitlement — route to upgrade prompt",
       modelHint: null,
     }
   }

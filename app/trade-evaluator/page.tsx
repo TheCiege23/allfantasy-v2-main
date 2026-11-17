@@ -304,7 +304,7 @@ const PHASES: Array<{ key: PhaseKey; label: string; icon: string }> = [
   { key: "plan", label: "Planning", icon: "📋" },
   { key: "pricing", label: "Pricing", icon: "💰" },
   { key: "engine", label: "Engine", icon: "⚙️" },
-  { key: "ai", label: "AI", icon: "🧠" },
+  { key: "ai", label: "Chimmy", icon: "🧠" },
   { key: "check", label: "Check", icon: "✅" },
 ]
 
@@ -420,14 +420,14 @@ function scoringFromLinkedLeague(league: LinkedLeague): ScoringFormat | null {
 
 function providerList(payload: ApiTradeResponse) {
   const providers = payload.aiProviders
-  if (!providers) return ["AI"]
+  if (!providers) return ["Chimmy"]
 
   const labels: string[] = []
   if (providers.openai === "ok") labels.push("OpenAI")
   if (providers.anthropic === "ok") labels.push("Anthropic")
   if (providers.xai === "ok" || providers.grok === "ok") labels.push("Grok")
   if (providers.deepseek === "ok") labels.push("DeepSeek")
-  return labels.length > 0 ? labels : ["AI"]
+  return labels.length > 0 ? labels : ["Chimmy"]
 }
 
 function buildNegotiationSteps(payload: ApiTradeResponse) {
@@ -569,7 +569,7 @@ function LoadingState({ phase }: { phase: PhaseKey }) {
           ))}
         </div>
         <h2 className="mt-5 text-xl font-bold text-white">Running multi-stage trade analysis</h2>
-        <p className="mt-2 text-sm text-white/50">Planning, pricing, engine reasoning, AI synthesis, and output checks.</p>
+        <p className="mt-2 text-sm text-white/50">Planning, pricing, engine reasoning, Chimmy synthesis, and output checks.</p>
       </div>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-5">
@@ -1091,7 +1091,7 @@ function TradeHubInner() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
-                AI Trade Analyzer
+                Chimmy Trade Analyzer
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-white/50">
                 PECR
@@ -1509,7 +1509,7 @@ function TradeHubInner() {
                 <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
-                      AI Analysis
+                      Chimmy Analysis
                     </span>
                     {result.fairnessMethod ? (
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-white/45">

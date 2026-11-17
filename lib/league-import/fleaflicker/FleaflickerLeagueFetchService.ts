@@ -235,7 +235,7 @@ async function resolveFleaflickerServedSeason(
  * repeated import simply sees the same trade IDs again; persistence dedupes
  * those IDs instead of deleting and rebuilding the league ledger.
  */
-export async function fetchFleaflickerTransactions(
+async function fetchFleaflickerTransactions(
   sport: FleaflickerSport,
   leagueId: number,
   options: { maxPages?: number } = {},
@@ -298,7 +298,7 @@ export class FleaflickerSeasonMismatchError extends Error {
   }
 }
 
-export interface FleaflickerScoreboardWeek {
+interface FleaflickerScoreboardWeek {
   /** The scoring period, 1-indexed. */
   week: number
   /** Taken from `schedulePeriod.low.season`, never from the request. */
@@ -372,7 +372,7 @@ export async function fetchFleaflickerScoreboard(
  * APPLY HERE, and its absence is deliberate rather than forgotten. There is no
  * season to be clamped and no `schedulePeriod` to check one against.
  */
-export async function fetchFleaflickerRules(
+async function fetchFleaflickerRules(
   sport: FleaflickerSport,
   leagueId: number,
 ): Promise<FleaflickerRulesResponse> {
@@ -423,7 +423,7 @@ export async function fetchFleaflickerDraftBoard(
  * No `scoring_period`: the endpoint then serves the current lineup period, which is the lineup an
  * import is for. The captured fixture pinned week 1 only because a finished season has no "current".
  */
-export async function fetchFleaflickerTeamRoster(
+async function fetchFleaflickerTeamRoster(
   sport: FleaflickerSport,
   leagueId: number,
   teamId: number,

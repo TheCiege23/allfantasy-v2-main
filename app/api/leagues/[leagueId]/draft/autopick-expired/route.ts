@@ -166,7 +166,7 @@ export async function POST(
           team: aiResult.pick.team ?? null,
           playerId: aiResult.pick.playerId ?? null,
           byeWeek: aiResult.pick.byeWeek ?? null,
-          reason: aiResult.pick.reason || 'AI-powered pick (subscription)',
+          reason: aiResult.pick.reason || 'Chimmy-powered pick (subscription)',
           strategy: 'ai-powered',
         }
       }

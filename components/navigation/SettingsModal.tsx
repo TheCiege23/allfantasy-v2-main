@@ -56,7 +56,7 @@ export default function SettingsModal({ open, onClose, username }: SettingsModal
               Settings
             </h2>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Manage your AllFantasy profile, account, privacy, and AI preferences.{" "}
+              Manage your AllFantasy profile, account, privacy, and Chimmy preferences.{" "}
               <Link href="/settings" className="underline" onClick={onClose}>Full settings →</Link>
             </p>
           </div>

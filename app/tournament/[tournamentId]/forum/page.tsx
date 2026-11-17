@@ -8,7 +8,7 @@ import { useTournamentParticipantState } from '@/lib/tournament/useTournamentPar
 import { ForumPostCard } from '@/app/tournament/components/ForumPostCard'
 import { StandingsRow } from '@/app/tournament/components/StandingsRow'
 
-const FILTERS = ['All', 'Commissioner', 'AI Recaps', 'Results', 'Drafts', 'Rules'] as const
+const FILTERS = ['All', 'Commissioner', 'Chimmy Recaps', 'Results', 'Drafts', 'Rules'] as const
 
 export default function TournamentForumPage() {
   const tournamentId = useParams<{ tournamentId: string }>()?.tournamentId ?? ''
@@ -19,7 +19,7 @@ export default function TournamentForumPage() {
 
   const posts = useMemo(() => {
     let a = [...ctx.announcements]
-    if (filter === 'AI Recaps') a = a.filter((x) => x.type === 'round_summary')
+    if (filter === 'Chimmy Recaps') a = a.filter((x) => x.type === 'round_summary')
     else if (filter === 'Results') a = a.filter((x) => x.type.includes('qualifier') || x.type.includes('round'))
     else if (filter === 'Drafts') a = a.filter((x) => x.type === 'draft_scheduled')
     else if (filter === 'Rules') a = a.filter((x) => x.type === 'welcome')

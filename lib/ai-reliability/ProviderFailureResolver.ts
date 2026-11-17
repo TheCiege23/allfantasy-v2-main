@@ -27,9 +27,9 @@ export function resolveProviderFailure(providerResults: ProviderResultMeta[]): P
 
   let message: string;
   if (allFailed) {
-    message = 'AI analysis is temporarily unavailable. You can still see deterministic (data-only) results below.';
+    message = 'Chimmy analysis is temporarily unavailable. You can still see deterministic (data-only) results below.';
   } else if (fallbackUsed) {
-    message = `Some AI providers didn't respond; results are based on ${ok.map((r) => r.provider).join(' and ')}.`;
+    message = `Some Chimmy providers didn't respond; results are based on ${ok.map((r) => r.provider).join(' and ')}.`;
   } else {
     message = '';
   }

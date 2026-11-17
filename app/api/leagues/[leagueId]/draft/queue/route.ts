@@ -70,7 +70,7 @@ export async function PUT(
     const { hasAccess } = await entitlementResolver.resolveForUser(userId, 'pro_draft_ai')
     if (body.aiManageDraftQueueEnabled === true && !hasAccess) {
       return NextResponse.json(
-        { error: 'AF Pro required to enable AI queue management.' },
+        { error: 'AF Pro required to enable Chimmy queue management.' },
         { status: 403 }
       )
     }

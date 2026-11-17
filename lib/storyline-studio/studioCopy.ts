@@ -30,8 +30,8 @@ const ES: Record<string, string> = {
   'Trash talk': 'Picante',
   Neutral: 'Neutral',
   'Rewriting…': 'Reescribiendo…',
-  'The AI rewrite did not hold to the facts, so the template is shown instead.':
-    'La reescritura con IA no se ajustó a los datos, así que se muestra la plantilla.',
+  'Chimmy rewrite did not hold to the facts, so the template is shown instead.':
+    'La reescritura con Chimmy no se ajustó a los datos, así que se muestra la plantilla.',
   'Auto-post storylines': 'Publicar historias automáticamente',
   'Once a week, the top storyline goes into the league chat at the time you choose.':
     'Una vez por semana, la mejor historia se publica en el chat de la liga a la hora que elijas.',

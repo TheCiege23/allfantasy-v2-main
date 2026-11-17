@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic"
 const AREAS = [
   {
     id: "draft",
-    description: "Draft AI: pick suggestions, mock draft simulation, in-league orphan pick",
+    description: "Draft Chimmy: pick suggestions, mock draft simulation, in-league orphan pick",
     endpoints: [
       "POST /api/mock-draft/ai-pick",
       "POST /api/mock-draft/simulate",
@@ -25,7 +25,7 @@ const AREAS = [
   },
   {
     id: "chat",
-    description: "Chat (Chimmy): AI assistant, tools, multi-provider",
+    description: "Chat (Chimmy): Chimmy assistant, tools, multi-provider",
     endpoints: [
       "POST /api/chimmy",
       "POST /api/chat/chimmy",
@@ -34,7 +34,7 @@ const AREAS = [
   },
   {
     id: "trades",
-    description: "Trades: trade analyzer, AI grades, orphan trade decision",
+    description: "Trades: trade analyzer, Chimmy grades, orphan trade decision",
     endpoints: [
       "POST /api/trade-evaluator",
       "POST /api/legacy/trade/analyze",
@@ -43,7 +43,7 @@ const AREAS = [
   },
   {
     id: "waivers",
-    description: "Waivers: Waiver AI priorities, FAAB, trends",
+    description: "Waivers: Waiver Chimmy priorities, FAAB, trends",
     endpoints: [
       "POST /api/waiver-ai",
       "POST /api/legacy/waiver/analyze",
@@ -52,7 +52,7 @@ const AREAS = [
   },
   {
     id: "war_room",
-    description: "War room: mock-draft helpers + AF War Room AI routes (session, recommend, compare, outlook, queue, intel, post-draft)",
+    description: "War room: mock-draft helpers + AF War Room Chimmy routes (session, recommend, compare, outlook, queue, intel, post-draft)",
     endpoints: [
       "POST /api/mock-draft/ai-pick",
       "POST /api/mock-draft/needs",
@@ -93,7 +93,7 @@ export async function GET() {
       openclawGrowth,
     },
     message: atLeastOne
-      ? "At least one AI provider is available; areas may have additional provider requirements."
+      ? "At least one Chimmy provider is available; areas may have additional provider requirements."
       : "No AI providers configured; set OPENAI_API_KEY, DEEPSEEK_API_KEY, XAI_API_KEY, or OpenClaw tokens.",
   })
 }

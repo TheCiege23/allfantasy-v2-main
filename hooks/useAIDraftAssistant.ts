@@ -245,7 +245,7 @@ export function useAIDraftAssistant() {
       setState((current) => ({
         ...current,
         loading: false,
-        error: error?.message || 'AI suggestion failed',
+        error: error?.message || 'Chimmy suggestion failed',
       }))
     }
   }, [])

@@ -23,7 +23,7 @@ interface AIFeature {
 const AI_FEATURES: AIFeature[] = [
   {
     icon: '\u{2696}\uFE0F',
-    title: 'AI Trade Analyzer',
+    title: 'Chimmy Trade Analyzer',
     description: 'Context-aware evaluations using manager tendencies, league scoring, and competitive windows',
     route: '/af-legacy',
     tabId: 'trade',
@@ -37,7 +37,7 @@ const AI_FEATURES: AIFeature[] = [
   {
     icon: '\u{1F525}',
     title: 'Rivalry Week Storylines',
-    description: 'AI-generated weekly narratives with rivalry scoring, revenge games, and trade tension tracking',
+    description: 'Chimmy-generated weekly narratives with rivalry scoring, revenge games, and trade tension tracking',
     route: '/af-legacy',
     tabId: 'transfer',
     featureKey: 'rivalry',
@@ -88,7 +88,7 @@ const AI_FEATURES: AIFeature[] = [
   },
   {
     icon: '\u{1F50D}',
-    title: 'AI Trade Finder',
+    title: 'Chimmy Trade Finder',
     description: 'Scans every roster in your league to surface mutually beneficial trade proposals with acceptance odds',
     route: '/af-legacy',
     tabId: 'finder',
@@ -138,7 +138,7 @@ function FeatureCard({
         setError(true)
         return
       }
-      setInsight(data.insight || 'AI insight unavailable.')
+      setInsight(data.insight || 'Chimmy insight unavailable.')
     } catch {
       setError(true)
     } finally {
@@ -205,13 +205,13 @@ function FeatureCard({
             )}
             {error && (
               <div className="text-[11px] text-red-300/70 py-1">
-                Could not load AI insight. Try again later.
+                Could not load Chimmy insight. Try again later.
               </div>
             )}
             {insight && !loading && (
               <div className="space-y-2.5">
                 <div className="flex items-start gap-2">
-                  <div className={cx('w-4 h-4 rounded-md flex items-center justify-center shrink-0 mt-0.5 text-[11px] font-black', feature.tagClasses)}>AI</div>
+                  <div className={cx('h-4 px-1 rounded-md flex items-center justify-center shrink-0 mt-0.5 text-[11px] font-black', feature.tagClasses)}>Chimmy</div>
                   <p className="text-[11px] text-white/60 leading-relaxed">{insight}</p>
                 </div>
               </div>
@@ -256,7 +256,7 @@ export default function AIFeaturesPanel({ leagueName, leagueId, onNavigate }: AI
                 AF
               </div>
               <div>
-                <h3 className="text-sm font-black text-white">AI Features Included at Launch</h3>
+                <h3 className="text-sm font-black text-white">Chimmy Features Included at Launch</h3>
                 <p className="text-[11px] text-white/35 mt-0.5">
                   {leagueName ? (
                     <>Unlocked for <span className="text-cyan-400/60 font-semibold">{leagueName}</span></>
@@ -272,7 +272,7 @@ export default function AIFeaturesPanel({ leagueName, leagueId, onNavigate }: AI
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-rival-pulse" />
                 <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">All Active</span>
               </div>
-              <span className="text-[11px] text-white/20">{AI_FEATURES.length} AI-powered tools ready</span>
+              <span className="text-[11px] text-white/20">{AI_FEATURES.length} Chimmy-powered tools ready</span>
             </div>
           </div>
         </div>

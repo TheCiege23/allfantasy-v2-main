@@ -46,7 +46,7 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
               title={side.aiInsight}
             >
               <Sparkles className="h-2.5 w-2.5" />
-              AI
+              Chimmy
             </span>
           ) : null}
           <span className="truncate">{side.name}</span>

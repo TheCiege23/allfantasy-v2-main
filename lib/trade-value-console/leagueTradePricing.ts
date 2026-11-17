@@ -961,6 +961,12 @@ export type LeagueTradeChart = {
   isSuperFlex: boolean
   waiverBudget: number
   /**
+   * True only when `waiverBudget` is the league's OWN (an override or the saved league budget), not the $100
+   * stand-in. A completed trade's budget money is priced only then: $5000 of a Fantrax budget read against $100
+   * is "a whole budget" on any league whose real budget is larger, which is a confident wrong letter.
+   */
+  waiverBudgetFromLeague?: boolean
+  /**
    * This league's FAAB state (`loadLeagueFaabState`), or null: FAAB then prices on the linear formula. TODAY's
    * balances and week — so a dated chart (`withDatedMarket`) drops it rather than price a past trade on them.
    */
@@ -1041,6 +1047,7 @@ export async function resolveLeagueTradeChart(args: {
     input.waiverBudget ??
     leagueSnapshot?.waiverBudget ??
     100
+  const waiverBudgetFromLeague = [input.waiverBudget, leagueSnapshot?.waiverBudget].some((b) => typeof b === 'number' && Number.isFinite(b) && b > 0)
 
   /*
    * The chart's reception weight is the league's, when the league states one: `scoringFit` measures
@@ -1138,6 +1145,7 @@ export async function resolveLeagueTradeChart(args: {
     tePremium: Boolean(tePremium),
     isSuperFlex,
     waiverBudget,
+    waiverBudgetFromLeague,
     faabState,
     pprNfl,
     fcPlayers,

@@ -93,9 +93,13 @@ describe('gradeSleeperActivityTrade', () => {
     expect(gradeArchived.mock.calls[0]![1].gave).toEqual([{ name: null, sleeperId: 'zzz' }])
   })
 
-  it('withholds FAAB trades and three-team trades without asking the grader', async () => {
-    const faab = await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx({ waiver_budget: [{ sender: 2, receiver: 1, amount: 15 }] }), rosterNames: NAMES, players: PLAYERS, now: 0 })
-    expect(faab).toEqual({ graded: false, reason: 'FAAB in this trade is not priced on the league chart' })
+  it('FAAB in the trade reaches the grade, each way from the first roster\'s side', async () => {
+    await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx({ transaction_id: 'tx-faab', waiver_budget: [{ sender: 2, receiver: 1, amount: 15 }, { sender: 1, receiver: 2, amount: 4 }] }), rosterNames: NAMES, players: PLAYERS, now: 0 })
+    expect(gradeArchived).toHaveBeenCalledTimes(1)
+    expect(gradeArchived.mock.calls[0][1]).toMatchObject({ faab: { received: 15, gave: 4 } })
+  })
+
+  it('withholds three-team trades without asking the grader', async () => {
     const three = await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx({ transaction_id: 'tx-3', roster_ids: [1, 2, 3] }), rosterNames: NAMES, players: PLAYERS, now: 0 })
     expect(three).toEqual({ graded: false, reason: 'only two-team trades are graded' })
     expect(gradeArchived).not.toHaveBeenCalled()

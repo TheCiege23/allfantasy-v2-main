@@ -393,7 +393,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
 
         <FeatureGate
           featureId="commissioner_automation"
-          featureNameOverride="AI Commissioner"
+          featureNameOverride="Chimmy Commissioner"
           tokenRuleCodeOverride="commissioner_ai_cycle_run"
         >
           <AICommissionerPanel leagueId={leagueId} />
@@ -451,7 +451,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
               className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-500/20"
               data-testid="commissioner-tab-ai-team-managers-link"
             >
-              <Bot className="h-3.5 w-3.5" /> AI team managers
+              <Bot className="h-3.5 w-3.5" /> Chimmy team managers
             </Link>
             <Link
               href={premiumActionHref('league_rankings', `${leagueBase}?tab=Power Rankings`)}

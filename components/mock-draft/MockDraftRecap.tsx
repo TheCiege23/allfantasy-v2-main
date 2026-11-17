@@ -350,9 +350,9 @@ export function MockDraftRecap({
 
       {/* AI recap summary placeholder */}
       <section className="rounded-xl border border-dashed border-white/20 bg-white/[0.02] p-6 text-center">
-        <p className="text-sm font-medium text-white/70">AI recap summary</p>
+        <p className="text-sm font-medium text-white/70">Chimmy recap summary</p>
         <p className="mt-2 text-[12px] text-white/50">
-          Post-draft AI analysis will appear here (e.g. best value picks, risks, and lineup outlook).
+          Post-draft Chimmy analysis will appear here (e.g. best value picks, risks, and lineup outlook).
           This is a placeholder for a future model-generated recap.
         </p>
       </section>

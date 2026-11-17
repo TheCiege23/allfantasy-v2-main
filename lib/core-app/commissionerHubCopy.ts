@@ -21,6 +21,25 @@ import { coreLocale } from './messages/coreLocale'
 const ES: Record<string, string> = {
   // ── Storyline Studio (components/core-app/commissioner/StorylineStudio.tsx keeps its own strings) ──
   'Storyline Studio': 'Estudio de historias',
+  // ── Fantrax trade history upload (components/core-app/commissioner/FantraxTradeHistoryUpload.tsx) ──
+  'Fantrax trade history': 'Historial de intercambios de Fantrax',
+  'Fantrax does not send completed trades to AllFantasy. Download the trade history from Fantrax (Transaction History, Trade) as a CSV and upload it here. Uploading the same file again does not add anything twice.':
+    'Fantrax no envía los intercambios completados a AllFantasy. Descarga el historial de intercambios desde Fantrax (Transaction History, Trade) como CSV y súbelo aquí. Subir el mismo archivo otra vez no agrega nada dos veces.',
+  'A trade that moved budget is graded only once this league’s waiver budget is set in league settings.':
+    'Un intercambio que movió presupuesto se califica solo cuando el presupuesto de reclamos de la liga está configurado en los ajustes de la liga.',
+  'Uploading…': 'Subiendo…',
+  'Upload trade history CSV': 'Subir el CSV del historial de intercambios',
+  'The upload did not go through. Nothing was changed.': 'La subida no se completó. No se cambió nada.',
+  '1 trade added.': 'Se agregó 1 intercambio.',
+  '1 trade was not added:': 'No se agregó 1 intercambio:',
+  '1 line of the file could not be read.': 'No se pudo leer 1 línea del archivo.',
+  'Only two-team trades are imported.': 'Solo se importan intercambios entre dos equipos.',
+  'Only the commissioner can upload trade history.': 'Solo el comisionado puede subir el historial de intercambios.',
+  'Choose the trade history CSV.': 'Elige el CSV del historial de intercambios.',
+  'The file is too large for a trade history export.': 'El archivo es demasiado grande para un historial de intercambios.',
+  'This is not an imported Fantrax league.': 'Esta no es una liga importada de Fantrax.',
+  'Trade history upload is available for Fantrax NFL leagues only.': 'La subida del historial de intercambios solo está disponible para ligas de NFL de Fantrax.',
+  'The file is empty.': 'El archivo está vacío.',
   // ── Header, gate, footer ──────────────────────────────────────────────
   '← All leagues you run': '← Todas las ligas que diriges',
   // ── The headline and the folds (2026-11-14) ──────────────────────────
@@ -229,7 +248,7 @@ const ES: Record<string, string> = {
   'Asking…': 'Preguntando…',
   'Ask Chimmy': 'Preguntar a Chimmy',
   'Template guidance': 'Orientación de plantilla',
-  'AI guidance': 'Orientación de IA',
+  'Chimmy guidance': 'Orientación de Chimmy',
   'review evidence before acting.': 'revisa los datos antes de actuar.',
   'Chimmy could not answer': 'Chimmy no pudo responder',
 
@@ -347,6 +366,17 @@ const es = (s: string) => hubCopy(s, 'es')
 
 /** Templates, each anchored to the whole string. Names and numbers they carry are kept as they are. */
 const PATTERNS: Pattern[] = [
+  // Fantrax trade history upload: counts, and the reasons a trade was not added (names kept as written).
+  [/^(\d+) trades added\.$/, (n) => `Se agregaron ${n} intercambios.`],
+  [/^(\d+) trades were not added:$/, (n) => `No se agregaron ${n} intercambios:`],
+  [/^(\d+) lines of the file could not be read\.$/, (n) => `No se pudieron leer ${n} líneas del archivo.`],
+  [/^(.+) could not be matched to a player with a Fantrax id\.$/, (who) => `No se pudo emparejar a ${who} con un jugador con id de Fantrax.`],
+  [/^(.+) matches more than one player\.$/, (who) => `${who} coincide con más de un jugador.`],
+  [/^(.+) moves twice in one trade\.$/, (who) => `${who} aparece dos veces en el mismo intercambio.`],
+  [/^No team in this league is named "(.+)"\.$/, (team) => `Ningún equipo de esta liga se llama "${team}".`],
+  [/^Two teams in this league are named "(.+)"\.$/, (team) => `Dos equipos de esta liga se llaman "${team}".`],
+  [/^"(.+)" has no manager on file in this league\.$/, (team) => `"${team}" no tiene mánager registrado en esta liga.`],
+  [/^This is not a Fantrax trade history export — missing columns?: (.+)\.$/, (cols) => `Este no es un historial de intercambios de Fantrax: faltan columnas: ${cols}.`],
   // gate
   [/^You are a member of (.+)\. Ask its commissioner to add you as a co-commissioner if you need this\.$/s, (l) => `Eres miembro de ${l}. Pide a su comisionado que te añada como cocomisionado si lo necesitas.`],
   [/^You have view-only access to (.+)\.$/s, (l) => `Tienes acceso de solo lectura a ${l}.`],

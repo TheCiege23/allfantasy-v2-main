@@ -12,7 +12,7 @@ const TYPE_LABELS: Record<GuillotineAIPanelType, string> = {
   survival: 'Survival & chop-risk',
   waiver: 'Waiver aftermath',
   recap: 'Weekly recap',
-  orphan: 'Orphan / AI manager',
+  orphan: 'Orphan / Chimmy manager',
 }
 
 export type DeterministicSummaryShape = {
@@ -116,7 +116,7 @@ export function GuillotineAIPanel({
     <section className="rounded-2xl border border-cyan-500/20 bg-cyan-950/20 p-4 sm:p-6">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
         <Sparkles className="h-5 w-5 text-cyan-400" />
-        Guilly AI
+        Guilly Chimmy
       </h2>
       <p className="mb-4 text-sm text-white/70">
         Strategy and explanation only. Elimination and standings are computed by the league engine.
@@ -151,7 +151,7 @@ export function GuillotineAIPanel({
         ))}
       </div>
 
-      <FeatureGate featureId="guillotine_ai" featureNameOverride="Guilly AI" className="mt-2">
+      <FeatureGate featureId="guillotine_ai" featureNameOverride="Guilly Chimmy" className="mt-2">
         <button
           type="button"
           onClick={runAI}
@@ -164,7 +164,7 @@ export function GuillotineAIPanel({
               Generating…
             </>
           ) : (
-            <>Get AI strategy: {TYPE_LABELS[type]}</>
+            <>Get Chimmy strategy: {TYPE_LABELS[type]}</>
           )}
         </button>
       </FeatureGate>
@@ -179,7 +179,7 @@ export function GuillotineAIPanel({
       {result && (
         <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-300">
-            AI explanation ({result.type})
+            Chimmy explanation ({result.type})
           </p>
           <p className="whitespace-pre-wrap text-sm text-white/90">{result.explanation}</p>
         </div>

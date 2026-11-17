@@ -440,7 +440,7 @@ export async function runDraftPlayerCompare(input: DraftCompareInput): Promise<D
       winner: aWins ? 'A' : 'B',
       confidence: 58,
       breakdown: {
-        projection: 'ADP-based tiebreak (AI unavailable).',
+        projection: 'ADP-based tiebreak (Chimmy unavailable).',
         matchup: 'Compare schedules post-draft.',
         usage: 'Verify camp depth charts.',
         risk: 'Injury and role volatility apply to both.',

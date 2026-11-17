@@ -72,7 +72,7 @@ export async function sendPrivateTradeAIDM(
         creatorUserId: input.receiverUserId,
         threadType: 'ai',
         productType: 'app',
-        title: 'Trade AI Private Reviews',
+        title: 'Trade Chimmy Private Reviews',
       })
       aiThreadId = createdThread?.id ?? null
     }
@@ -92,7 +92,7 @@ export async function sendPrivateTradeAIDM(
     })
 
     const privateReviewText = [
-      `Private AI trade review for proposal ${input.proposalId}.`,
+      `Private Chimmy trade review for proposal ${input.proposalId}.`,
       `Suggested action: ${input.review.verdict.toUpperCase()}.`,
       input.review.summary,
       `Counter suggestion: ${counterSuggestion}`,

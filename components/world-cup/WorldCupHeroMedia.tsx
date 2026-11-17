@@ -116,7 +116,7 @@ export function WorldCupHeroMedia({
       ) : (
         <Image
           src={posterSrc}
-          alt="2026 FIFA World Cup — AllFantasy.AI"
+          alt="2026 FIFA World Cup — AllFantasy"
           fill
           sizes="(max-width: 768px) 100vw, 560px"
           className="object-cover"

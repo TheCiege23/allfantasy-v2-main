@@ -215,10 +215,10 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
     htmlLang: 'en',
     ogLocale: 'en_US',
     meta: {
-      title: 'AllFantasy.ai — Fantasy Leagues, Tools & AI Help in One Place',
-      description: `Create a fantasy league or connect ${platforms}. Manage teams, drafts, trades and waivers in one place, with AI help from Chimmy when you need it.`,
+      title: 'AllFantasy.ai — Fantasy Leagues, Tools & Chimmy Help in One Place',
+      description: `Create a fantasy league or connect ${platforms}. Manage teams, drafts, trades and waivers in one place, with Chimmy help from Chimmy when you need it.`,
       ogTitle: 'AllFantasy.ai — Play Fantasy Sports in One Place',
-      ogDescription: 'Create or connect fantasy leagues, manage your teams and get AI help for your next move.',
+      ogDescription: 'Create or connect fantasy leagues, manage your teams and get Chimmy help for your next move.',
     },
     nav: {
       how: 'What you get',
@@ -287,7 +287,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
           body: 'Values come from trades managers actually made, not votes, and update daily.',
         },
         {
-          title: 'Chimmy, your AI assistant',
+          title: 'Chimmy, your Chimmy assistant',
           body: `Ask about your real rosters. Free accounts get ${FREE_CHIMMY_QUESTIONS_PER_DAY} questions a day.`,
         },
       ],
@@ -432,10 +432,10 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
     htmlLang: 'es',
     ogLocale: 'es_US',
     meta: {
-      title: 'AllFantasy.ai — Ligas, herramientas y ayuda de IA en un solo lugar',
+      title: 'AllFantasy.ai — Ligas, herramientas y ayuda de Chimmy en un solo lugar',
       description: `Crea una liga de fantasy o conecta ${platforms}. Maneja tus equipos, drafts, cambios y agentes libres en un solo lugar, con ayuda de Chimmy cuando la necesites.`,
       ogTitle: 'AllFantasy.ai — Juega fantasy en un solo lugar',
-      ogDescription: 'Crea o conecta ligas de fantasy, maneja tus equipos y recibe ayuda de IA para tu siguiente jugada.',
+      ogDescription: 'Crea o conecta ligas de fantasy, maneja tus equipos y recibe ayuda de Chimmy para tu siguiente jugada.',
     },
     nav: {
       how: 'Qué incluye',
@@ -503,7 +503,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
           body: 'Los valores salen de cambios que los managers sí hicieron, no de votos, y se actualizan a diario.',
         },
         {
-          title: 'Chimmy, tu asistente de IA',
+          title: 'Chimmy, tu asistente de Chimmy',
           body: `Pregunta sobre tus rosters reales. Las cuentas gratis tienen ${FREE_CHIMMY_QUESTIONS_PER_DAY} preguntas al día.`,
         },
       ],

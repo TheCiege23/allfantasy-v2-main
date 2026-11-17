@@ -211,14 +211,14 @@ export function TournamentControlDashboard({
           <MessageSquare className="h-5 w-5 text-amber-400" /> Announcements
         </h2>
         <p className="mb-4 text-sm text-white/60">
-          Create hub announcements. Use AI to generate copy from current standings and rules, then post.
+          Create hub announcements. Use Chimmy to generate copy from current standings and rules, then post.
         </p>
         <button
           type="button"
           onClick={() => { setAiOpen(true); setAiText('') }}
           className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-2.5 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
         >
-          <Sparkles className="h-4 w-4" /> Generate with AI
+          <Sparkles className="h-4 w-4" /> Generate with Chimmy
         </button>
         <Link
           href={`/tournament/${tournamentId}`}

@@ -5555,7 +5555,7 @@ export function DraftRoomPageClient({
     {/* D.6 — Sleeper-style War Room as floating bottom-right popup. The same
         DraftTeamPanel content that used to live in the left aside lives inside
         the popup body now, so power users still have one-click access to
-        starter balance / positional mix / AI guidance, but the layout reclaims
+        starter balance / positional mix / Chimmy guidance, but the layout reclaims
         that left column for the player table. */}
     <WarRoomPopup hasNewIntel={warRoomHasNewIntel} triggerLabel="AF Legacy Draft Room">
       <DraftTeamPanel {...draftTeamPanelProps} redraftStarterHints={redraftStarterHints} />

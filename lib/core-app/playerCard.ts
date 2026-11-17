@@ -940,6 +940,9 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
         picksReceived: true,
         // For the drafted-pick match the grade makes — see `archivedTradeGrade.ts`.
         partnerRosterId: true,
+        // Waiver budget each way, priced by the grade — see `archivedRowFaab`.
+        budgetGiven: true,
+        budgetReceived: true,
         history: { select: { sleeperLeagueId: true } },
         // Each trade's ids are named from its own sport's pool — Sleeper reuses ids across sports.
         sport: true,

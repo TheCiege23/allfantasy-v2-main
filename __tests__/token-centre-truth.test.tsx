@@ -97,7 +97,7 @@ describe('/tokens', () => {
     // 2026-11-14: one fold, "What tokens don't cover", holds this and what never costs tokens.
     expect(not).toContain('What tokens don’t cover')
     expect(not).toContain('AF Pro')
-    expect(not).toContain('Survivor and Big Brother AI')
+    expect(not).toContain('Survivor and Big Brother Chimmy')
     expect(document.body.textContent).not.toContain('before you click')
     expect(document.body.textContent).toContain('never expire')
   })

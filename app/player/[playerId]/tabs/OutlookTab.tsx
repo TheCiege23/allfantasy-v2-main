@@ -88,7 +88,7 @@ export function OutlookTab({ player }: { player: PlayerIdentity }) {
 
       {data.confidencePct != null && (
         <p className="text-[11px] text-white/25">
-          AI confidence: {data.confidencePct}% · Format fit: {data.bestFormatFit ?? 'all'} · Horizon: {data.timeHorizon ?? '—'}
+          Chimmy confidence: {data.confidencePct}% · Format fit: {data.bestFormatFit ?? 'all'} · Horizon: {data.timeHorizon ?? '—'}
         </p>
       )}
     </div>

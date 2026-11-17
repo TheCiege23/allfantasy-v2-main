@@ -333,7 +333,7 @@ export async function runAICommissionerCycle(input: {
     sport: sport as LeagueSport,
     actionType: 'RUN_CYCLE',
     source: input.source ?? 'system',
-    summary: `AI Commissioner cycle completed. Signals: ${signals.length}, new alerts: ${createdAlerts.length}.`,
+    summary: `Chimmy Commissioner cycle completed. Signals: ${signals.length}, new alerts: ${createdAlerts.length}.`,
   })
 
   return {
@@ -472,7 +472,7 @@ function buildDeterministicCommissionerAnswer(input: {
   }
 
   return [
-    `AI Commissioner recap for ${insights.sport}:`,
+    `Chimmy Commissioner recap for ${insights.sport}:`,
     `- ${insights.weeklyRecapPost.body}`,
     `- ${insights.controversialTrades.length} controversial trade(s) currently tracked.`,
     `- ${insights.waiverHighlights.length} waiver highlight(s) in the latest cycle.`,

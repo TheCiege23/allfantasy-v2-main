@@ -576,7 +576,7 @@ export async function handleC2CCommissionerQuery(leagueId: string, message: stri
     temperature: 0.35,
   })
 
-  return { reply: r.ok && r.text?.trim() ? r.text.trim() : 'Chimmy could not generate a reply. Check AI configuration.' }
+  return { reply: r.ok && r.text?.trim() ? r.text.trim() : 'Chimmy could not generate a reply. Check Chimmy configuration.' }
 }
 
 export async function generateC2CConstitution(leagueId: string): Promise<string> {

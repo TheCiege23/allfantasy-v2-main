@@ -50,7 +50,7 @@ export async function buildIdpContextForChimmy(
   }
 
   parts.push(
-    'When the user asks about IDP: roster requirements, scoring settings, grouped vs split positions, waiver/trade implications, or best-ball implications — explain using this context. You can answer: why is this LB ranked so high, should I start this CB or safety, do I need more DL depth, is this trade fair in my scoring format, why did my best ball lineup choose this defender. Always recommend using Trade Analyzer, Waiver AI, or league tools for actual decisions. Do not decide outcomes.'
+    'When the user asks about IDP: roster requirements, scoring settings, grouped vs split positions, waiver/trade implications, or best-ball implications — explain using this context. You can answer: why is this LB ranked so high, should I start this CB or safety, do I need more DL depth, is this trade fair in my scoring format, why did my best ball lineup choose this defender. Always recommend using Trade Analyzer, Waiver Chimmy, or league tools for actual decisions. Do not decide outcomes.'
   )
   return parts.join(' ')
 }

@@ -70,18 +70,18 @@ beforeEach(() => {
 })
 
 const CASES: Array<{ name: string; path: string; featureId: string; body: unknown }> = [
-  { name: 'Waiver AI screen', path: '@/app/api/waiver-ai/route', featureId: 'ai_waivers', body: { sleeper_username: 'sam' } },
-  { name: 'AI waiver engine', path: '@/app/api/ai/waiver/route', featureId: 'ai_waivers', body: {} },
-  { name: 'draft-room AI advice', path: '@/app/api/ai/draft/recommend/route', featureId: 'pro_draft_ai', body: { leagueId: 'L1' } },
+  { name: 'Waiver Chimmy screen', path: '@/app/api/waiver-ai/route', featureId: 'ai_waivers', body: { sleeper_username: 'sam' } },
+  { name: 'Chimmy waiver engine', path: '@/app/api/ai/waiver/route', featureId: 'ai_waivers', body: {} },
+  { name: 'draft-room Chimmy advice', path: '@/app/api/ai/draft/recommend/route', featureId: 'pro_draft_ai', body: { leagueId: 'L1' } },
   { name: 'coach advice', path: '@/app/api/coach/advice/route', featureId: 'player_ai_recommendations', body: { type: 'lineup' } },
-  { name: 'AI workbench run', path: '@/app/api/ai/run/route', featureId: 'player_ai_recommendations', body: { tool: 'waiver', sport: 'NFL' } },
-  { name: 'AI workbench compare', path: '@/app/api/ai/compare/route', featureId: 'player_ai_recommendations', body: { tool: 'waiver', sport: 'NFL' } },
+  { name: 'Chimmy workbench run', path: '@/app/api/ai/run/route', featureId: 'player_ai_recommendations', body: { tool: 'waiver', sport: 'NFL' } },
+  { name: 'Chimmy workbench compare', path: '@/app/api/ai/compare/route', featureId: 'player_ai_recommendations', body: { tool: 'waiver', sport: 'NFL' } },
   { name: 'AF Legacy trade proposals', path: '@/server/api-route-modules/legacy/trade/proposal-generator/route', featureId: 'legacy_trade_proposals', body: {
     leagueId: 'L1', username: 'sam', myRosterId: 1, targetRosterId: 2,
     desiredAssets: [{ type: 'player', name: 'A' }],
     myTeam: { displayName: 'Me', players: [] }, targetTeam: { displayName: 'Them', players: [] },
   } },
-  { name: 'AF Legacy waiver AI', path: '@/server/api-route-modules/legacy/waiver/analyze/route', featureId: 'legacy_waiver_analysis', body: { sleeper_username: 'sam' } },
+  { name: 'AF Legacy waiver Chimmy', path: '@/server/api-route-modules/legacy/waiver/analyze/route', featureId: 'legacy_waiver_analysis', body: { sleeper_username: 'sam' } },
   { name: 'AF Legacy team direction', path: '@/server/api-route-modules/legacy/rankings/analyze/route', featureId: 'legacy_rankings_analysis', body: { sleeper_username: 'sam', league_id: 'L1' } },
   { name: 'AF Legacy market board', path: '@/server/api-route-modules/legacy/social-pulse/route', featureId: 'legacy_social_pulse', body: { sport: 'NFL', format: 'redraft', players: ['A'] } },
   { name: 'AF Legacy manager comparison', path: '@/server/api-route-modules/legacy/compare/route', featureId: 'legacy_manager_compare', body: { username_a: 'sam', username_b: 'kim' } },
@@ -89,7 +89,7 @@ const CASES: Array<{ name: string; path: string; featureId: string; body: unknow
   { name: 'AF Legacy trade ideas', path: '@/server/api-route-modules/legacy/trade-ideas/route', featureId: 'legacy_trade_proposals', body: { leagueId: 'L1', username: 'sam' } },
   { name: 'AF Legacy goal proposals', path: '@/server/api-route-modules/legacy/trade/goal-proposals/route', featureId: 'legacy_trade_proposals', body: { leagueId: 'L1', username: 'sam', goal: 'rebuild' } },
   { name: 'AF Legacy Trade Hub report', path: '@/server/api-route-modules/legacy/trade/analyze/route', featureId: 'legacy_trade_hub', body: { sport: 'NFL', format: 'dynasty', sleeper_username_a: 'sam', sleeper_username_b: 'kim', assetsA: [{ type: 'player', player: { id: 'p1', name: 'Player One' } }], assetsB: [{ type: 'player', player: { id: 'p2', name: 'Player Two' } }] } },
-  { name: 'AF Legacy AI career report', path: '@/server/api-route-modules/legacy/ai/run/route', featureId: 'legacy_ai_report', body: { sleeper_username: 'sam' } },
+  { name: 'AF Legacy Chimmy career report', path: '@/server/api-route-modules/legacy/ai/run/route', featureId: 'legacy_ai_report', body: { sleeper_username: 'sam' } },
 ]
 
 describe('each paid route refuses a caller without the plan, before anything is spent', () => {
@@ -108,7 +108,7 @@ describe('signing in comes first, and is new on the two routes that took anonymo
     session.mockResolvedValue(null)
     const res = await (await load('@/app/api/waiver-ai/route'))(post({ sleeper_username: 'sam' }))
     expect(res.status).toBe(401)
-    expect(await res.json()).toMatchObject({ code: 'sign_in', error: 'Sign in to use Waiver AI.' })
+    expect(await res.json()).toMatchObject({ code: 'sign_in', error: 'Sign in to use Waiver Chimmy.' })
     expect(gateCalls).toEqual([])
     expect(spend).not.toHaveBeenCalled()
   })

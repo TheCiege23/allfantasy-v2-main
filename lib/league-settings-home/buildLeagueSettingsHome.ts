@@ -430,7 +430,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       id: 'commissioner',
       title: 'Commissioner tools',
       rows: [
-        { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
+        { id: 'league-ai', label: 'League Chimmy', value: 'Helpers & commissioner intelligence', target: 'ai' },
         { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls and league history', target: 'commissioner-tools' },
         { id: 'dues', label: 'Dues & payouts', value: 'Track who has paid', target: 'dues' },
         { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },

@@ -58,7 +58,7 @@ function toMessagePreview(
   if (normalizedType === "pin") return "Pinned a message"
   if (normalizedType === "broadcast") return "Commissioner announcement"
   if (normalizedType === "draft_intel_intro") return "Chimmy draft intel connected"
-  if (normalizedType === "draft_intel_queue") return "Chimmy updated your AI queue"
+  if (normalizedType === "draft_intel_queue") return "Chimmy updated your Chimmy queue"
   if (normalizedType === "draft_intel_on_clock") return "Chimmy says you're on the clock"
   if (normalizedType === "draft_intel_recap") return "Chimmy posted your draft recap"
   const text = String(body || "").trim()
@@ -77,7 +77,7 @@ function isDraftIntelMetadata(metadata: unknown): metadata is Record<string, unk
 function resolveSystemSenderName(messageType: string | null | undefined, metadata?: unknown): string {
   const normalizedType = String(messageType || "text").toLowerCase()
   if (normalizedType.startsWith("draft_intel") || isDraftIntelMetadata(metadata)) {
-    return "Chimmy AI"
+    return "Chimmy"
   }
   return "System"
 }
@@ -255,7 +255,7 @@ async function normalizeThread(
         : row.threadType === "dm"
           ? dmTitle
           : row.threadType === "ai"
-            ? "Chimmy AI"
+            ? "Chimmy"
             : "Chat Thread"),
     lastMessageAt: toIso(row.lastMessageAt),
     unreadCount,
@@ -290,7 +290,7 @@ async function normalizeThread(
         typeof latestMetadata?.botLabel === "string"
           ? latestMetadata.botLabel
           : isDraftIntelThread
-            ? "Chimmy AI"
+            ? "Chimmy"
             : null,
       archived: latestMetadata?.archived === true,
       allowReplies: latestMetadata?.allowReplies !== false,
@@ -410,7 +410,7 @@ async function getLegacyFallbackThreads(appUserId: string): Promise<PlatformChat
     id: `ai:${c.id}`,
     threadType: 'ai',
     productType: 'legacy',
-    title: c.title || 'AI Chat Session',
+    title: c.title || 'Chimmy Chat Session',
     lastMessageAt: toIso(c.lastMessageAt),
     unreadCount: 0,
     memberCount: 1,

@@ -29,7 +29,7 @@ describe("World Cup entitlement helpers", () => {
     expect(canUseWorldCupCommissionerTools({ plans: ["supreme"] })).toBe(true)
   })
 
-  it("unlocks AI tools for Bracket Brain access and Pro-style plans", () => {
+  it("unlocks Chimmy tools for Bracket Brain access and Pro-style plans", () => {
     expect(canUseWorldCupAiTools({ hasBracketBrainAi: true })).toBe(true)
     expect(canUseWorldCupAiTools({ hasAfPro: true })).toBe(true)
     expect(canUseWorldCupAiTools({ plans: ["pro"] })).toBe(true)
@@ -39,12 +39,12 @@ describe("World Cup entitlement helpers", () => {
   it("returns copy-ready labels for the shell premium panel", () => {
     expect(resolveWorldCupEntitlementSummary({}).labels).toEqual({
       commissioner: "Requires AF Commissioner",
-      ai: "Requires AI/Pro",
+      ai: "Requires Chimmy/Pro",
     })
 
     expect(resolveWorldCupEntitlementSummary({ isAdmin: true }).labels).toEqual({
       commissioner: "AF Commissioner active",
-      ai: "AI/Pro active",
+      ai: "Chimmy/Pro active",
     })
   })
 })

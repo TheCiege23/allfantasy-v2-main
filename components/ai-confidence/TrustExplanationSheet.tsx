@@ -170,7 +170,7 @@ export default function TrustExplanationSheet({
           <div className="flex items-center justify-between px-5 py-3 border-b border-white/8">
             <div className="flex items-center gap-2.5">
               <Brain className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-base font-semibold text-white">AI Confidence</h3>
+              <h3 className="text-base font-semibold text-white">Chimmy Confidence</h3>
             </div>
             <button
               onClick={onClose}
@@ -197,7 +197,7 @@ export default function TrustExplanationSheet({
           <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-slate-900/95 backdrop-blur-sm border-b border-white/8">
             <div className="flex items-center gap-2.5">
               <Brain className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-base font-semibold text-white">AI Confidence</h3>
+              <h3 className="text-base font-semibold text-white">Chimmy Confidence</h3>
             </div>
             <button
               onClick={onClose}

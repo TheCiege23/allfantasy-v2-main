@@ -12,19 +12,19 @@ export const AF_PLANS: Record<
   af_pro: {
     label: 'AF Pro',
     shortLabel: 'Pro',
-    description: 'Personal AI — lineups, outlooks, waivers, trades, draft help.',
+    description: 'Personal Chimmy — lineups, outlooks, waivers, trades, draft help.',
     unlocks: [
-      'User-facing AI tools',
+      'User-facing Chimmy tools',
       'Lineup & player insights',
       'Waiver / trade / draft assistants',
       'Survivor: threat map, social pulse, challenge outlook, jury projection, Exile status',
-      'Survivor: tribe, Tribal Council, Exile and best-ball AI help (token metered)',
+      'Survivor: tribe, Tribal Council, Exile and best-ball Chimmy help (token metered)',
     ],
   },
   af_commissioner: {
     label: 'AF Commissioner',
     shortLabel: 'Commissioner',
-    description: 'Commissioner AI — league health, fairness, automation, tournament ops.',
+    description: 'Commissioner Chimmy — league health, fairness, automation, tournament ops.',
     unlocks: [
       'Anti-collusion & anti-tanking signals',
       'League health & fairness alerts',

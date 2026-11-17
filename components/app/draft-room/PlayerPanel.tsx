@@ -1079,7 +1079,7 @@ function PlayerPanelInner({
         >
           {/* G.1 — Sort buttons (ADP / AI ADP / Proj / Name) removed.
               They duplicated the SleeperPoolTable's clickable column headers, which
-              are the canonical sort UI. The "Use AI ADP" toggle, AI-ADP warnings,
+              are the canonical sort UI. The "Use Chimmy ADP" toggle, AI-ADP warnings,
               and the "My roster / Pool" view-toggle remain in this row because they
               don't belong on the table header. */}
           {effectiveUseAiAdp && (

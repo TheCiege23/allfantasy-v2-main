@@ -75,7 +75,7 @@ async function paidToolPost(req: Request, ctx: { params: Promise<{ leagueId: str
       text: hook.text,
       source: 'template',
       tone,
-      factGuardErrors: check?.errors ?? ['The AI did not return a rewrite.'],
+      factGuardErrors: check?.errors ?? ['Chimmy did not return a rewrite.'],
       refunded: Boolean(spend),
     })
   }

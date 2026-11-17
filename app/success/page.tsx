@@ -317,10 +317,10 @@ function SuccessContent() {
                   <span className="text-xs font-bold uppercase tracking-widest text-neon-cyan/80">Live Preview</span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
-                  See the AI in action with AF Legacy
+                  See Chimmy in action with AF Legacy
                 </h3>
                 <p className="text-sm text-gray-400 mb-5 max-w-sm mx-auto">
-                  Import your Sleeper leagues and get AI-powered trade evaluations, rankings, and insights — right now.
+                  Import your Sleeper leagues and get Chimmy-powered trade evaluations, rankings, and insights — right now.
                 </p>
                 <div className="inline-flex items-center gap-2 bg-gradient-to-r from-neon-cyan to-neon-blue text-dark-900 font-bold rounded-xl px-6 py-3 text-sm transition-transform group-hover:scale-105">
                   Try AF Legacy

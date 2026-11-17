@@ -72,8 +72,8 @@ const chimmy = makeMsg({
 describe("WorldCupChatMessageBubble: chimmy variant", () => {
   it("1. renders Bot icon and AI chip and freshness chip", () => {
     render(<WorldCupChatMessageBubble message={chimmy} />)
-    expect(screen.getByText("Chimmy")).toBeTruthy()
-    expect(screen.getByText("AI")).toBeTruthy()
+    // The sender name and the chip both read Chimmy now that the chip no longer says AI.
+    expect(screen.getAllByText("Chimmy").length).toBeGreaterThanOrEqual(2)
     expect(screen.getByTestId("chimmy-freshness-chip")).toBeTruthy()
   })
 

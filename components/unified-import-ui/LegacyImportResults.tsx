@@ -219,7 +219,7 @@ export function LegacyImportResults({
               />
               <StatTile
                 icon={<Sparkles className="h-4 w-4 text-violet-300" aria-hidden />}
-                label="AI system sync"
+                label="Chimmy system sync"
                 value={
                   payload.latest_ai_report?.rating != null
                     ? `Grade ${payload.latest_ai_report.rating}`

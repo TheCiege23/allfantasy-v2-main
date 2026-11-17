@@ -80,7 +80,7 @@ async function getReturnNudges(userId: string): Promise<RetentionNudge[]> {
       id: "return_nudge_few_days",
       type: "return_nudge",
       title: "Quick check-in",
-      body: "See how your teams are doing and get the latest AI insights.",
+      body: "See how your teams are doing and get the latest Chimmy insights.",
       href: sanitizeNudgeHref("/feed"),
       ctaLabel: "View feed",
     })
@@ -153,7 +153,7 @@ async function getWeeklySummaryNudges(userId: string): Promise<RetentionNudge[]>
     {
       id: "nudge_weekly_ai_summary",
       type: "weekly_summary",
-      title: "Weekly AI summary",
+      title: "Weekly Chimmy summary",
       body: "Get a personalized summary of your leagues and trends from Chimmy.",
       href: sanitizeNudgeHref("/chimmy"),
       ctaLabel: "Get summary",
@@ -170,7 +170,7 @@ async function getAICheckInNudges(userId: string): Promise<RetentionNudge[]> {
       id: "ai_check_in",
       type: "ai_check_in",
       title: "Chimmy check-in",
-      body: "Get a quick tip or ask how your league is doing. Your AI assistant is here to help.",
+      body: "Get a quick tip or ask how your league is doing. Your Chimmy assistant is here to help.",
       href: sanitizeNudgeHref("/chimmy"),
       ctaLabel: "Check in with Chimmy",
     },

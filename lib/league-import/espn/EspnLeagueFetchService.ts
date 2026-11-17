@@ -363,7 +363,7 @@ async function loadEspnLeagueRaw(args: {
  * is retried for the adjacent one before anyone is told the league does not exist. An explicit
  * season (from a URL or `2025:123`) is never second-guessed.
  */
-export async function loadEspnLeagueRawForInput(args: {
+async function loadEspnLeagueRawForInput(args: {
   input: EspnLeagueInput
   auth: EspnAuthContext
   views: string[]

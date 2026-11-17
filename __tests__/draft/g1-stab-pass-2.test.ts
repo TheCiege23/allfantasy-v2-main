@@ -72,7 +72,7 @@ function read(rel: string): string {
 describe('G.1 #1 — duplicate Sort row removed from PlayerPanel', () => {
   const src = read('components/app/draft-room/PlayerPanel.tsx')
 
-  it('the four sort buttons (ADP / AI ADP / Proj / Name) are gone', () => {
+  it('the four sort buttons (ADP / Chimmy ADP / Proj / Name) are gone', () => {
     expect(src).not.toMatch(/data-testid="draft-sort-adp"/)
     expect(src).not.toMatch(/data-testid="draft-sort-ai-adp"/)
     expect(src).not.toMatch(/data-testid="draft-sort-projected"/)
@@ -83,8 +83,8 @@ describe('G.1 #1 — duplicate Sort row removed from PlayerPanel', () => {
     expect(src).not.toMatch(/>Sort:</)
   })
 
-  it('keeps "Use AI ADP" toggle (it does NOT belong on the table header)', () => {
-    expect(src).toMatch(/Use AI ADP/)
+  it('keeps "Use Chimmy ADP" toggle (it does NOT belong on the table header)', () => {
+    expect(src).toMatch(/Use Chimmy ADP/)
   })
 
   it('keeps "My roster" / "Pool" view toggle', () => {
