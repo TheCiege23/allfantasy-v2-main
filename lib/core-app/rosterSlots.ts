@@ -142,6 +142,87 @@ export function orderStartingSlots<T extends { slotLabel: string }>(slots: reado
     .map(({ slot }) => slot)
 }
 
+/** ESPN slot names (`espnLookups.ts`) that are not starting slots, beyond `NON_STARTING_SLOT`. */
+const COMPRESSED_NON_STARTING = new Set(['BE', 'IR', 'HC'])
+
+/**
+ * ESPN's compressed template (`["QB:1","RB:2",…,"BE:7","IR:1","FLEX:1"]`) expanded into one entry
+ * per STARTING slot, in reading order — or null when the league does not carry that shape.
+ *
+ * ⚠ THIS IS A LIST OF THE LEAGUE'S SLOTS, NOT AN ALIGNMENT WITH ANY STORED `starters` ARRAY.
+ * `startingSlotTemplate` refuses this shape for exactly that reason, and that refusal stands: ESPN's
+ * `starters` come in roster-array order and cannot be read index-for-index against it. What this is
+ * good for is the Matchup board, which must pair two teams' lineups slot by slot — so it needs to
+ * know which slots exist, and then PLACE each side's starters into them (`assignLineupToSlots`).
+ */
+export function expandSlotCountTemplate(settings: unknown): string[] | null {
+  if (!settings || typeof settings !== 'object') return null
+  const s = settings as Record<string, unknown>
+  const raw =
+    (Array.isArray(s.roster_positions) && s.roster_positions) ||
+    (Array.isArray(s.rosterPositions) && s.rosterPositions) ||
+    null
+  if (!raw || raw.length === 0) return null
+  const slots: string[] = []
+  for (const value of raw) {
+    const m = /^([A-Z/_]+):(\d+)$/.exec(String(value ?? '').trim().toUpperCase())
+    if (!m) return null
+    const [, name, countText] = m
+    if (NON_STARTING_SLOT.has(name) || COMPRESSED_NON_STARTING.has(name)) continue
+    const label = SLOT_ALIAS[name] ?? PROVIDER_SLOT_ALIAS[name] ?? name
+    for (let i = 0; i < Number(countText); i++) slots.push(label)
+  }
+  if (slots.length === 0) return null
+  return orderStartingSlots(slots.map((slotLabel) => ({ slotLabel }))).map((s) => s.slotLabel)
+}
+
+/**
+ * Place a lineup into a league's slots: each slot gets one player or null, and anyone who fits no
+ * slot is returned in `extra` rather than dropped.
+ *
+ * Passes, each over the slots still free:
+ *   1. the slot the PROVIDER recorded for the player (`storedLabel`) — exact, when it was imported;
+ *   2. a slot named for the player's own position (an RB into an RB slot);
+ *   3. any slot the position is eligible for (`isEligibleForSlot` — the FLEX, the superflex);
+ *   4. a player with no known position takes any free slot, so a nameless starter still shows.
+ *
+ * ⚠ PASS 2 BEFORE PASS 3 MATTERS ONLY WHEN A FLEX PRECEDES A POSITION SLOT. In the reading order
+ * `expandSlotCountTemplate` returns, every position slot already comes first, so eligibility alone
+ * would place correctly. Given any other order, an RB offered a leading FLEX would take it and leave
+ * a tight end with nowhere to go. Without stored labels the FLEX is whichever eligible player is left
+ * over, which may not be the one the manager chose; it is still the right SLOT for the pairing.
+ */
+export function assignLineupToSlots<T>(
+  slots: readonly string[],
+  players: readonly T[],
+  storedLabelOf: (player: T) => string | null | undefined,
+  positionOf: (player: T) => string | null | undefined,
+  sport?: string | null,
+): { slots: Array<T | null>; extra: T[] } {
+  const placed: Array<T | null> = slots.map(() => null)
+  const left = players.map((player) => player)
+  const norm = (v: string | null | undefined) => {
+    const u = (v ?? '').trim().toUpperCase()
+    return u === 'DST' || u === 'D/ST' ? 'DEF' : u
+  }
+  const pass = (fits: (slot: string, player: T) => boolean) => {
+    for (let p = 0; p < left.length; ) {
+      const slot = placed.findIndex((filled, i) => filled === null && fits(slots[i], left[p]))
+      if (slot === -1) { p++; continue }
+      placed[slot] = left[p]
+      left.splice(p, 1)
+    }
+  }
+  pass((slot, player) => {
+    const stored = norm(storedLabelOf(player))
+    return stored !== '' && norm(SLOT_ALIAS[stored] ?? PROVIDER_SLOT_ALIAS[stored] ?? stored) === norm(slot)
+  })
+  pass((slot, player) => norm(positionOf(player)) !== '' && norm(positionOf(player)) === norm(slot))
+  pass((slot, player) => isEligibleForSlot(slot, norm(positionOf(player)), sport))
+  pass((_slot, player) => norm(positionOf(player)) === '')
+  return { slots: placed, extra: left }
+}
+
 /**
  * Which positions may legally fill each slot.
  *
