@@ -28,7 +28,7 @@ import { computeRookieOrder, type RookieOrderConfig } from '@/lib/rookie-order/r
 
 export type RookieDraftOrderMode = 'worst_to_first' | 'reverse_max_pf'
 
-export interface RookieDraftSlot {
+interface RookieDraftSlot {
   slot: number
   teamId: string
   teamName: string
@@ -41,7 +41,7 @@ export interface RookieDraftSlot {
   playoffFinish: string | null // 'Champion', 'Runner-Up', 'Seed 3', etc.
 }
 
-export interface RookieDraftOrderResult {
+interface RookieDraftOrderResult {
   mode: RookieDraftOrderMode
   season: number // The season this draft order is FOR (next season)
   basedOnSeason: number // The season data is FROM
@@ -266,7 +266,7 @@ type OrderTeamRow = {
 }
 
 /** The legacy modes as engine settings: they differ only in how the non-playoff teams are ordered. */
-export const LEGACY_MODE_ENGINE_CONFIG: Record<RookieDraftOrderMode, RookieOrderConfig> = {
+const LEGACY_MODE_ENGINE_CONFIG: Record<RookieDraftOrderMode, RookieOrderConfig> = {
   worst_to_first: { nonPlayoff: 'reverse_record', playoff: 'finish_then_seed', withinRound: 'worse_seed' },
   reverse_max_pf: { nonPlayoff: 'reverse_max_pf', playoff: 'finish_then_seed', withinRound: 'worse_seed' },
 }

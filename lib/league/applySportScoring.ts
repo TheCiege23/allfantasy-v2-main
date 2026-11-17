@@ -126,11 +126,11 @@ export type ScoringApplyOutcome =
   | 'refused'
   | 'premium_required'
 
-export type ScoringApplyResult =
+type ScoringApplyResult =
   | { ok: true; outcome: 'saved'; midSeason: boolean }
   | { ok: false; outcome: Exclude<ScoringApplyOutcome, 'saved'>; status: number; body: Record<string, unknown> }
 
-export type ApplySportScoringInput = {
+type ApplySportScoringInput = {
   leagueId: string
   userId: string
   /** The sport the caller expects; a league of another sport is refused, as each route always did. */

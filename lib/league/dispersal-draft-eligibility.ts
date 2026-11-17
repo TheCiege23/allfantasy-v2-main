@@ -39,18 +39,3 @@ export function isLeagueEligibleForDispersalDraft(league: LeagueEligibilityField
   return false
 }
 
-/** UI helper: quick check on `leagueVariant` string alone (does not know `isDynasty` / `leagueType`). */
-export function leagueVariantMatchesDispersalDraft(leagueVariant: string | null | undefined): boolean {
-  if (!leagueVariant) return false
-  const lv = leagueVariant.trim().toLowerCase()
-  if (DISPERSAL_DRAFT_VARIANT_EXACT.has(lv)) return true
-  return (
-    lv.includes('devy') ||
-    lv.includes('c2c') ||
-    lv.includes('merged_devy') ||
-    lv.includes('salary_cap') ||
-    (lv.includes('salary') && lv.includes('cap')) ||
-    (lv.includes('dynasty') && lv.includes('bestball')) ||
-    lv.includes('dynasty')
-  )
-}

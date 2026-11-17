@@ -98,8 +98,6 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'historicalBackfillSweptAt', // /api/cron/import-backfill-sweeper
 ] as const
 
-export type AfOwnedLeagueSettingsKey = (typeof AF_OWNED_LEAGUE_SETTINGS_KEYS)[number]
-
 /**
  * AllFantasy-owned values that live INSIDE a platform-owned object.
  *
@@ -109,7 +107,7 @@ export type AfOwnedLeagueSettingsKey = (typeof AF_OWNED_LEAGUE_SETTINGS_KEYS)[nu
  * and it is how the EFL format hub finds a league. Carried as a path, so the rest of
  * `conceptRules` is still exactly what the platform sent.
  */
-export const AF_OWNED_LEAGUE_SETTINGS_PATHS: ReadonlyArray<readonly string[]> = [
+const AF_OWNED_LEAGUE_SETTINGS_PATHS: ReadonlyArray<readonly string[]> = [
   ['conceptRules', 'extensions', 'commissionerTemplate'],
   // The pre-`extensions` spelling the reader still accepts as a fallback.
   ['conceptRules', 'commissionerTemplate'],
