@@ -23,11 +23,12 @@ import { cannotStart, isNonStarterSlot } from '@/lib/redraft/lineupValidation'
 
 export type ChecklistStatus = 'done' | 'todo' | 'heads_up'
 /** The league formats the checklist covers (lib/commissioner/weeklyChecklistService.ts `checklistFormat`). */
-export type ChecklistFormat = 'redraft' | 'keeper' | 'dynasty' | 'guillotine' | 'best_ball'
+export type ChecklistFormat = 'redraft' | 'keeper' | 'dynasty' | 'guillotine' | 'best_ball' | 'zombie'
 type Bilingual = { en: string; es: string }
 
 export type ChecklistItem = {
   id: 'scores' | 'chop' | 'waivers' | 'lineups' | 'trades' | 'dues' | 'trade_deadline' | 'playoffs' | 'final_week'
+    | 'zombie_paused' | 'zombie_hold' | 'zombie_correction' | 'zombie_whisperer' | 'zombie_ok'
   status: ChecklistStatus
   title: Bilingual
   detail: Bilingual

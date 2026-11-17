@@ -1,3 +1,4 @@
+import { prisma } from '@/lib/prisma'
 import { logAuditEntry } from './auditService'
 
 /**
@@ -58,4 +59,25 @@ export async function recordSettlementHold(zombieLeagueId: string, week: number,
     newState: { code: reason.code, kind: reason.kind },
     isVisibleToAffectedUser: false,
   }).catch(() => {})
+}
+
+export type SettlementHoldView = { week: number; reason: HoldReason; heldAt: string | null }
+
+export async function readSettlementHold(zombieLeagueId: string): Promise<SettlementHoldView | null> {
+  const held = await prisma.zombieWeeklyResolution.findFirst({
+    where: { zombieLeagueId, status: 'review_required' },
+    orderBy: { week: 'asc' },
+    select: { week: true },
+  })
+  if (!held) return null
+  const entry = await prisma.zombieAuditEntry.findFirst({
+    where: { zombieLeagueId, week: held.week, action: SETTLEMENT_HELD_ACTION },
+    orderBy: { createdAt: 'desc' },
+    select: { newState: true, createdAt: true },
+  })
+  const code = entry?.newState && typeof entry.newState === 'object' && !Array.isArray(entry.newState)
+    ? (entry.newState as Record<string, unknown>).code
+    : null
+  // A week held before reasons were recorded reads as unknown (support), never as a guess.
+  return { week: held.week, reason: describeHoldReason(typeof code === 'string' ? code : null), heldAt: entry?.createdAt.toISOString() ?? null }
 }
