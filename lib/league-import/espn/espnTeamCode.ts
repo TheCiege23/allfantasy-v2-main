@@ -100,7 +100,7 @@ export function findEspnTeamIdByCode(raw: unknown, code: string | null | undefin
   return hits.length === 1 ? hits[0] : null
 }
 
-export type EspnViewerTeamProof = 'swid' | 'team_code'
+type EspnViewerTeamProof = 'swid' | 'team_code'
 
 /**
  * Which team in `raw` is this user's, and how we know. The SWID cookie wins whenever it answers;
