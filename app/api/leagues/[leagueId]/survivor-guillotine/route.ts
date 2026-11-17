@@ -70,11 +70,15 @@ export async function GET(_req: NextRequest, context: Context) {
       const opponentIds = teams.filter(team => !team.eliminatedAt && team.externalId &&
         team.externalId !== ownedTeam.externalId).map(team => team.externalId!)
       const opponents = await prisma.roster.findMany({ where: { leagueId, id: { in: opponentIds } },
-        select: { id: true, playerData: true } })
+        select: { id: true, playerData: true, redraftRosterId: true } })
       const ids = [...new Set(opponents.flatMap(row => getRosterPlayerIds(row.playerData)))]
-      const availablePlayers = await prisma.player.findMany({ where: { id: { in: ids } },
-        select: { id: true, name: true, position: true, team: true } })
+      const nativeRosterIds = opponents.flatMap(row => row.redraftRosterId ? [row.redraftRosterId] : [])
+      const [availablePlayers, nativePlayers] = await Promise.all([
+        prisma.player.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, position: true, team: true } }),
+        prisma.redraftRosterPlayer.findMany({ where: { rosterId: { in: nativeRosterIds }, playerId: { in: ids }, droppedAt: null }, select: { playerId: true, playerName: true, position: true, team: true } }),
+      ])
       const byId = new Map(availablePlayers.map(player => [player.id, player]))
+      for (const player of nativePlayers) byId.set(player.playerId, { id: player.playerId, name: player.playerName, position: player.position, team: player.team })
       return opponents.flatMap(roster => getRosterPlayerIds(roster.playerData).flatMap(id => {
         const player = byId.get(id)
         return player ? [{ ...player, rosterId: roster.id }] : []
@@ -93,14 +97,17 @@ export async function GET(_req: NextRequest, context: Context) {
   ])
   const releasedIds = [...new Set(releaseRows.filter(c => !hiddenPeriods.includes(c.period)).flatMap(c =>
     getRosterPlayerIds((c.releaseSnapshot as { playerData?: unknown } | null)?.playerData)))]
-  const [releasedPlayerRows, leagueRosters] = releasedIds.length ? await Promise.all([
+  const [releasedPlayerRows, nativeReleasedRows, leagueRosters] = releasedIds.length ? await Promise.all([
     prisma.player.findMany({ where: { id: { in: releasedIds } }, select: { id: true, name: true, position: true, team: true } }),
+    prisma.redraftRosterPlayer.findMany({ where: { playerId: { in: releasedIds }, roster: { leagueId } }, select: { playerId: true, playerName: true, position: true, team: true }, orderBy: { addedAt: 'desc' } }),
     prisma.roster.findMany({ where: { leagueId }, select: { playerData: true } }),
-  ]) : [[], []]
+  ]) : [[], [], []]
+  const releasedNames = new Map(releasedPlayerRows.map(p => [p.id, { name: p.name, position: p.position, team: p.team }]))
+  for (const player of nativeReleasedRows) if (!releasedNames.has(player.playerId)) releasedNames.set(player.playerId, { name: player.playerName, position: player.position, team: player.team })
   const releasedPlayers = selectReleasedPlayers({ chops: releaseRows, hiddenPeriods,
     rosterPlayerIds: getRosterPlayerIds,
     ownedPlayerIds: new Set(leagueRosters.flatMap(r => getRosterPlayerIds(r.playerData))),
-    players: new Map(releasedPlayerRows.map(p => [p.id, { name: p.name, position: p.position, team: p.team }])) })
+    players: releasedNames })
   const reversals = reversalRows.filter(r => !hiddenPeriods.includes(r.period)).map(r => ({ period: r.period,
     rosterId: r.rosterId, score: r.score, reversedAt: r.reversedAt?.toISOString() ?? null, reason: r.reversalReason }))
   const players = playerRows.map(player => ({ id: player.playerId, name: player.playerName, position: player.position, team: player.team }))
