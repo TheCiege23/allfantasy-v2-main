@@ -666,7 +666,7 @@ export function FindLeagueClient() {
             </label>
             <label className="block">
               <span className="text-xs font-medium mb-1 block" style={{ color: "var(--muted)" }}>
-                AI features
+                Chimmy features
               </span>
               <label className="flex items-center gap-2 mt-1">
                 <input
@@ -679,7 +679,7 @@ export function FindLeagueClient() {
                   style={{ borderColor: "var(--border)" }}
                 />
                 <span className="text-sm" style={{ color: "var(--text)" }}>
-                  AI enabled
+                  Chimmy enabled
                 </span>
               </label>
             </label>

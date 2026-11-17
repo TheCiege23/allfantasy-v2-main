@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     },
     data: {
       externalId: rosterId,
-      ownerName: 'AI Manager',
+      ownerName: 'Chimmy Manager',
       isOrphan: false,
     },
   })

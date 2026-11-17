@@ -91,7 +91,7 @@ export function CapOverviewBar({
       </div>
 
       {capAdviceLoading ? (
-        <p className="text-[11px] text-white/40">Loading AI cap tips…</p>
+        <p className="text-[11px] text-white/40">Loading Chimmy cap tips…</p>
       ) : capAdvice?.recommendations?.length ? (
         <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/15 p-3" data-testid="cap-overview-ai-moves">
           <h3 className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/90">Best cap moves</h3>
@@ -112,7 +112,7 @@ export function CapOverviewBar({
               onClick={onOpenFullCapAnalysis}
               className="mt-3 rounded-lg border border-cyan-500/40 px-3 py-2 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-950/40"
             >
-              See Full AI Cap Analysis
+              See Full Chimmy Cap Analysis
             </button>
           ) : null}
         </div>

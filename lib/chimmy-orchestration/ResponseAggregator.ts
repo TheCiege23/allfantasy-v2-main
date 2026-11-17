@@ -47,7 +47,7 @@ export function aggregateChimmyResponse(input: {
   const factGuardWarnings = deterministicLayer.missingSections.length
     ? [
         `Missing deterministic sections: ${deterministicLayer.missingSections.join(', ')}`,
-        'AI explanation is constrained to available deterministic evidence.',
+        'Chimmy explanation is constrained to available deterministic evidence.',
       ]
     : undefined
 

@@ -199,7 +199,7 @@ export default function MarketTimingAlerts() {
             </svg>
             Market Timing Alerts
           </h3>
-          <p className="text-xs text-white/40 mt-0.5">AI-powered buy/sell signals based on dynasty market data</p>
+          <p className="text-xs text-white/40 mt-0.5">Chimmy-powered buy/sell signals based on dynasty market data</p>
         </div>
         <button
           onClick={fetchAlerts}

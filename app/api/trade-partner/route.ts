@@ -51,7 +51,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-partner", tool: "TradeP
 
     if (!responseText) {
       return NextResponse.json(
-        { error: 'No response from AI' },
+        { error: 'No response from Chimmy' },
         { status: 500 }
       );
     }

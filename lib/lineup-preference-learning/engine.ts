@@ -134,13 +134,13 @@ export function applyLearningEvent(
       reinforceTrait(
         t,
         scale,
-        `Accepted AI lineup (${closeCall ? 'close call' : 'clear edge'}).`,
+        `Accepted Chimmy lineup (${closeCall ? 'close call' : 'clear edge'}).`,
         'ai_lineup_accepted'
       )
     }
     if (reinforce.length === 0 && closeCall) {
       const t = ensureTrait(map, 'prefers_consistency', createdAt)
-      reinforceTrait(t, 0.5 * scale, 'Accepted AI on a close decision.', 'ai_lineup_accepted')
+      reinforceTrait(t, 0.5 * scale, 'Accepted Chimmy on a close decision.', 'ai_lineup_accepted')
     }
     return
   }
@@ -151,12 +151,12 @@ export function applyLearningEvent(
     for (const id of rejected) {
       if (!LINEUP_PREFERENCE_TRAIT_IDS.includes(id as LineupPreferenceTraitId)) continue
       const t = ensureTrait(map, id, createdAt)
-      penalizeTrait(t, 0.85, 'User rejected AI aligned with this trait.', 'ai_lineup_rejected')
+      penalizeTrait(t, 0.85, 'User rejected Chimmy aligned with this trait.', 'ai_lineup_rejected')
     }
     for (const id of aligned) {
       if (!LINEUP_PREFERENCE_TRAIT_IDS.includes(id as LineupPreferenceTraitId)) continue
       const t = ensureTrait(map, id, createdAt)
-      reinforceTrait(t, 0.9, 'User chose a path aligned with this trait instead of AI.', 'ai_lineup_rejected')
+      reinforceTrait(t, 0.9, 'User chose a path aligned with this trait instead of Chimmy.', 'ai_lineup_rejected')
     }
     return
   }

@@ -140,7 +140,7 @@ export default function LeagueDiscoverySuggest() {
     <div className="space-y-6 rounded-2xl border border-cyan-500/20 bg-cyan-950/20 p-6">
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-cyan-400" />
-        <h2 className="text-lg font-bold text-white">League Discovery AI</h2>
+        <h2 className="text-lg font-bold text-white">League Discovery Chimmy</h2>
       </div>
       <p className="text-sm text-white/70">
         Get league suggestions based on your skill level, sports, preferred activity, and competition balance.

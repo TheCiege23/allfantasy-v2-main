@@ -114,7 +114,7 @@ export default function SeoLandingFooter() {
             AllFantasy helps fantasy sports players manage leagues, analyze decisions, and build their fantasy legacy. We are not a sportsbook and do not offer gambling services.
           </p>
           <p className="text-xs leading-relaxed italic" style={{ color: 'var(--muted2)', opacity: 0.6 }}>
-            "AllFantasy helps fantasy sports players draft smarter, manage better, and build a lasting legacy across every league, season, and sport — powered by AI, built for commissioners, and designed without gambling."
+            "AllFantasy helps fantasy sports players draft smarter, manage better, and build a lasting legacy across every league, season, and sport — powered by Chimmy, built for commissioners, and designed without gambling."
           </p>
         </div>
       </div>

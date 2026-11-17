@@ -37,7 +37,7 @@ export default async function PodcastPage() {
         </div>
         <h1 className="text-2xl font-bold text-white">Fantasy podcast</h1>
         <p className="mt-1 text-sm text-white/60">
-          AI-generated weekly recaps: league recap, waiver targets, performance summaries.
+          Chimmy-generated weekly recaps: league recap, waiver targets, performance summaries.
         </p>
         <PodcastListClient />
       </div>

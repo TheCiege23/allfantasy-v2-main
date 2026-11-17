@@ -129,7 +129,7 @@ function buildImprovementHints(state: TrustState, riskTags: string[]): string[] 
   const hints: string[] = []
   if (state === 'learning') {
     hints.push('More historical trade data would improve accuracy.')
-    hints.push('Playing more seasons helps the AI learn your patterns.')
+    hints.push('Playing more seasons helps Chimmy learn your patterns.')
   }
   if (state === 'medium') {
     hints.push('Simulating outcomes can help clarify edge cases.')

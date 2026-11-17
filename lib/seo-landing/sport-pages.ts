@@ -37,7 +37,7 @@ const FANTASY_NCAA_CONFIG: SportSeoPageConfig = {
     'AllFantasy NCAA fantasy tools for basketball and football: bracket challenge, trade analyzer, waiver advisor, and dynasty league management for college fantasy.',
   headline: 'NCAA Fantasy – Basketball & Football',
   body:
-    'AllFantasy supports NCAA Basketball and NCAA Football fantasy with bracket challenges, AI trade analysis, waiver advice, and dynasty tools. Use the Sports App for league management, the Bracket Challenge for March Madness, and the Trade Analyzer for college fantasy leagues.',
+    'AllFantasy supports NCAA Basketball and NCAA Football fantasy with bracket challenges, Chimmy trade analysis, waiver advice, and dynasty tools. Use the Sports App for league management, the Bracket Challenge for March Madness, and the Trade Analyzer for college fantasy leagues.',
   toolHrefs: [
     { label: 'Bracket Challenge', href: '/brackets' },
     { label: 'Bracket Hub', href: '/brackets' },

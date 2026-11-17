@@ -212,7 +212,7 @@ export async function generateEdgeReportCoaching(input: {
     return {
       ok: false,
       reason: "provider_missing",
-      fallback: "AI coaching is temporarily unavailable. Your deterministic report above is always accurate.",
+      fallback: "Chimmy coaching is temporarily unavailable. Your deterministic report above is always accurate.",
     }
   }
 

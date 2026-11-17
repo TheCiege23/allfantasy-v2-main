@@ -300,7 +300,7 @@ export async function POST(
       category: 'trade_proposals',
       productType: 'app',
       type: 'draft_trade_ai_private_review',
-      title: `Private AI trade review${league?.name ? ` - ${league.name}` : ''}`,
+      title: `Private Chimmy trade review${league?.name ? ` - ${league.name}` : ''}`,
       body: `${aiReview.summary} Suggested action: ${aiReview.verdict.toUpperCase()}. Counter suggestion: ${privateAiDm.counterSuggestion}.`,
       actionHref: `/league/${leagueId}?tab=Draft`,
       actionLabel: 'Open draft trade panel',

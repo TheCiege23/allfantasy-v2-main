@@ -807,7 +807,7 @@ export async function runPreAnalysis(
         ?? cachedManagerData.tendencies
       return {
         status: 'ready',
-        message: 'Your AI GM is ready with comprehensive analysis!',
+        message: 'Your Chimmy GM is ready with comprehensive analysis!',
         cache: {
           leagueSettings: existingCache.leagueSettings as unknown as LeagueSettings,
           userTradingProfile: existingCache.userTradingProfile as unknown as UserTradingProfile,
@@ -836,7 +836,7 @@ export async function runPreAnalysis(
       return {
         status: 'analyzing',
         estimatedTime: Math.max(15 - Math.floor(minutesSinceStart * 60), 5),
-        message: 'Your AI GM is gathering intelligence. This includes analyzing league trades, roster needs, and market values...',
+        message: 'Your Chimmy GM is gathering intelligence. This includes analyzing league trades, roster needs, and market values...',
       };
     }
   }
@@ -1002,7 +1002,7 @@ export async function runPreAnalysis(
     
     return {
       status: 'ready',
-      message: 'Your AI GM is ready with comprehensive analysis!',
+      message: 'Your Chimmy GM is ready with comprehensive analysis!',
       cache: {
         leagueSettings,
         userTradingProfile,
@@ -1032,7 +1032,7 @@ export async function runPreAnalysis(
     return {
       status: 'pending',
       estimatedTime: 20,
-      message: 'For a comprehensive trade review, your AI GM needs about 20 seconds to gather league data, trading history, and market values.',
+      message: 'For a comprehensive trade review, your Chimmy GM needs about 20 seconds to gather league data, trading history, and market values.',
     };
   }
 }
@@ -1054,7 +1054,7 @@ export async function getPreAnalysisStatus(
     return {
       status: 'pending',
       estimatedTime: 15,
-      message: 'Your AI GM needs about 15 seconds to gather comprehensive intelligence about your league, roster, and the trade market.',
+      message: 'Your Chimmy GM needs about 15 seconds to gather comprehensive intelligence about your league, roster, and the trade market.',
     };
   }
   
@@ -1065,7 +1065,7 @@ export async function getPreAnalysisStatus(
       return {
         status: 'pending',
         estimatedTime: 10,
-        message: 'Refreshing your AI GM with the latest market data and player news...',
+        message: 'Refreshing your Chimmy GM with the latest market data and player news...',
       };
     }
     
@@ -1074,7 +1074,7 @@ export async function getPreAnalysisStatus(
       ?? statusManagerData.tendencies
     return {
       status: 'ready',
-      message: 'Your AI GM is ready! Trade history and market data loaded.',
+      message: 'Your Chimmy GM is ready! Trade history and market data loaded.',
       cache: {
         leagueSettings: cache.leagueSettings as unknown as LeagueSettings,
         userTradingProfile: cache.userTradingProfile as unknown as UserTradingProfile,
@@ -1097,14 +1097,14 @@ export async function getPreAnalysisStatus(
     return {
       status: 'analyzing',
       estimatedTime: 10,
-      message: 'Your AI GM is gathering intelligence. Analyzing league trades, roster needs, and market values...',
+      message: 'Your Chimmy GM is gathering intelligence. Analyzing league trades, roster needs, and market values...',
     };
   }
   
   return {
     status: 'pending',
     estimatedTime: 15,
-    message: 'Your AI GM needs about 15 seconds to gather comprehensive intelligence.',
+    message: 'Your Chimmy GM needs about 15 seconds to gather comprehensive intelligence.',
   };
 }
 

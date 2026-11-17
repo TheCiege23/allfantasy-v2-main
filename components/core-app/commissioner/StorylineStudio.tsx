@@ -290,7 +290,7 @@ function HookCard({
         return
       }
       setText(body.text ?? hook.text)
-      if (body.source !== 'ai') setNote(t('The AI rewrite did not hold to the facts, so the template is shown instead.'))
+      if (body.source !== 'ai') setNote(t('Chimmy rewrite did not hold to the facts, so the template is shown instead.'))
     } finally {
       setState('idle')
     }

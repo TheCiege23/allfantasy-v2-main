@@ -78,7 +78,7 @@ export default function ResetLeaguePanel({ leagueId }: { leagueId?: string }) {
           className="w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-xs text-white"
         >
           <option value="soft">Soft reset (waivers, standings, draft session)</option>
-          <option value="full">Full reset (+ chat + AI alerts)</option>
+          <option value="full">Full reset (+ chat + Chimmy alerts)</option>
         </select>
       </div>
       <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">

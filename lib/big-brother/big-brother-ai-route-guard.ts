@@ -101,7 +101,7 @@ export async function resolveBigBrotherAiAccess(input: {
       entitlement,
       requiredPlan: null,
       upgradePath: '/settings',
-      message: 'Ungated Big Brother AI surface.',
+      message: 'Ungated Big Brother Chimmy surface.',
     }
     return {
       ok: true,
@@ -158,7 +158,7 @@ export async function resolveBigBrotherAiAccess(input: {
     tokenRuleCode: ruleCode,
     tokenSourceType: 'big_brother_ai',
     tokenSourceId: `${leagueId}:${type}:${Date.now()}`,
-    tokenDescription: `Big Brother AI — ${type}`,
+    tokenDescription: `Big Brother Chimmy — ${type}`,
     tokenMetadata: { leagueId, bigBrotherAiType: type },
   })
 

@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   } catch (e) {
     // Claude down or unparseable: the engine's own pick is still a real answer.
     if (fallback) return NextResponse.json({ result: fallback, contextSources, source: 'engine' })
-    const msg = e instanceof Error ? e.message : 'AI error'
+    const msg = e instanceof Error ? e.message : 'Chimmy error'
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 }

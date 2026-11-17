@@ -549,7 +549,7 @@ const spanish: Record<string, string> = {
   'Player Comparison': 'Comparación de jugadores',
   'Player Comparison Lab': 'Laboratorio de comparación',
   'League Power Rankings': 'Ranking de poder de la liga',
-  'AI power rankings, trends, strengths and risks for a league.': 'Ranking con IA, tendencias, fortalezas y riesgos de una liga.',
+  'Chimmy power rankings, trends, strengths and risks for a league.': 'Ranking con Chimmy, tendencias, fortalezas y riesgos de una liga.',
   'AF Rankings (career rank)': 'Ranking AF (trayectoria)',
   'Share something': 'Comparte algo',
   'AllFantasy never posts for you. These produce something you copy and post yourself.': 'AllFantasy nunca publica por ti. Crea algo que tú decides compartir.',

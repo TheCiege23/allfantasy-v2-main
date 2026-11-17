@@ -591,7 +591,7 @@ export async function buildDeterministicCoachEvaluation(
     {
       id: 'waiver',
       type: 'waiver',
-      label: 'Open Waiver AI',
+      label: 'Open Waiver Chimmy',
       summary: `${snapshot.waiverStrategy.summary} Start with ${waiverOpportunities[0]?.position ?? snapshot.weakestSlot.slotLabel}.`,
       priority: waiverOpportunities[0]?.priority ?? 'high',
       toolHref: getWaiverToolHref(snapshot.leagueId, {

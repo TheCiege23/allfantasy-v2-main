@@ -290,7 +290,7 @@ export async function POST(
   if (plan.mode === 'suggestion_af_pro_required') {
     return NextResponse.json(
       {
-        error: 'AF Pro required to persist AI-adjusted draft queue order.',
+        error: 'AF Pro required to persist Chimmy-adjusted draft queue order.',
         code: 'AF_PRO_REQUIRED',
         persisted: false,
         suggestionOnly: true,
@@ -305,7 +305,7 @@ export async function POST(
     return NextResponse.json({
       persisted: false,
       mode: 'suggestion_only',
-      message: 'AI queue management is disabled.',
+      message: 'Chimmy queue management is disabled.',
       reordered: plan.displayOrder,
       ...common,
     })

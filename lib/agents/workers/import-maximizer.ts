@@ -43,7 +43,7 @@ async function notifyLeagueResync(userId: string, leagueName: string, leagueId: 
     productType: 'app',
     type: 'league_sync_stale',
     title: 'League data is out of date',
-    body: `Your ${leagueName} league data was stale. A sync has started automatically so AI recommendations can use current data.`,
+    body: `Your ${leagueName} league data was stale. A sync has started automatically so Chimmy recommendations can use current data.`,
     actionHref: `/leagues/${leagueId}`,
     actionLabel: 'Open league',
     meta: { leagueId, leagueName },

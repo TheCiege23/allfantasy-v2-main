@@ -60,7 +60,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/waiver", tool: "AiWaiver" 
   try {
     if (!(await isAIAssistantEnabled()) || !(await isToolWaiverAIEnabled())) {
       return NextResponse.json(
-        { error: 'Waiver AI is temporarily disabled by platform configuration.' },
+        { error: 'Waiver Chimmy is temporarily disabled by platform configuration.' },
         { status: 503 }
       )
     }

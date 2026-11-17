@@ -148,12 +148,12 @@ function CommissionerLeagueOrphanPanel({ leagueId }: { leagueId: string }) {
           body: JSON.stringify({ rosterId, aiManagerType: aiType }),
         })
         const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error((json as { error?: string }).error ?? 'AI assign failed')
+        if (!res.ok) throw new Error((json as { error?: string }).error ?? 'Chimmy assign failed')
       }
-      toast.success('AI manager assigned.')
+      toast.success('Chimmy manager assigned.')
       await load()
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'AI assign failed')
+      toast.error(e instanceof Error ? e.message : 'Chimmy assign failed')
     } finally {
       setBusy(null)
     }
@@ -261,9 +261,9 @@ function CommissionerLeagueOrphanPanel({ leagueId }: { leagueId: string }) {
             </div>
 
             <div className="rounded-xl border border-white/10 bg-[#080f1f] p-4">
-              <h4 className="text-sm font-semibold text-white">🤖 Assign AI Manager</h4>
+              <h4 className="text-sm font-semibold text-white">🤖 Assign Chimmy Manager</h4>
               <p className="mt-2 text-[11px] leading-relaxed text-white/50">
-                An AI will manage this team until a human takes over, or for the full season.
+                a Chimmy will manage this team until a human takes over, or for the full season.
               </p>
               <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-white/70">
                 <label className="flex items-center gap-1.5">
@@ -305,7 +305,7 @@ function CommissionerLeagueOrphanPanel({ leagueId }: { leagueId: string }) {
                 onClick={() => void postAi()}
                 className="mt-4 w-full rounded-lg border border-violet-400/35 bg-violet-500/15 py-2 text-xs font-bold text-violet-100 disabled:opacity-40"
               >
-                {busy === 'ai' ? 'Assigning…' : 'Assign AI Manager'}
+                {busy === 'ai' ? 'Assigning…' : 'Assign Chimmy Manager'}
               </button>
             </div>
 

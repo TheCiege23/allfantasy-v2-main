@@ -758,7 +758,7 @@ export function MatchupSimulationPage({
           <CardContent className="space-y-3">
             <p className="text-sm text-white/70">
               Deterministic 1,500-sim matchup engine with lineup slots, variance ranges,
-              schedule factors, and AI overlays from DeepSeek, Grok, and OpenAI.
+              schedule factors, and Chimmy overlays from DeepSeek, Grok, and OpenAI.
             </p>
             <Button onClick={() => setSimulatorOpen(true)} data-testid="matchup-open-simulator" className="gap-2">
               <Play className="h-4 w-4" />
@@ -791,7 +791,7 @@ export function MatchupSimulationPage({
       </div>
 
       <InContextMonetizationCard
-        title="Matchup AI explanation access"
+        title="Matchup Chimmy explanation access"
         featureId="matchup_explanations"
         tokenRuleCodes={['ai_matchup_explanation_single']}
         testIdPrefix="matchup-monetization"
@@ -948,7 +948,7 @@ export function MatchupSimulationPage({
               />
             </label>
             <label className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-              <span className="text-[11px] uppercase tracking-wider text-white/45">AI explanation</span>
+              <span className="text-[11px] uppercase tracking-wider text-white/45">Chimmy explanation</span>
               <button
                 type="button"
                 onClick={() => setAiExplanationEnabled((current) => !current)}
@@ -1097,7 +1097,7 @@ export function MatchupSimulationPage({
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg text-white">
                     <Sparkles className="h-4 w-4 text-cyan-300" />
-                    AI insight overlays
+                    Chimmy insight overlays
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">

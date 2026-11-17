@@ -218,7 +218,7 @@ export async function applyWorldCupBracketSettingsPatch(input: {
   )
   if (advancedSettingTouched && !hasAdvancedCommissioner) {
     throw new Error(
-      "AF Commissioner is required for custom scoring, custom locks, advanced invite controls, advanced notifications, and commissioner AI settings."
+      "AF Commissioner is required for custom scoring, custom locks, advanced invite controls, advanced notifications, and commissioner Chimmy settings."
     )
   }
 
@@ -234,7 +234,7 @@ export async function applyWorldCupBracketSettingsPatch(input: {
     throw new Error("AF Pro is required to enable Bracket Brain for this pool.")
   }
   if (patch.commissioner?.enableAiSummaries === true && !userHasAfPro) {
-    throw new Error("AF Pro is required to enable AI summaries.")
+    throw new Error("AF Pro is required to enable Chimmy summaries.")
   }
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

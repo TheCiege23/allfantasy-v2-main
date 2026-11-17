@@ -101,7 +101,7 @@ const SECTION_LABELS: Record<string, Line> = {
   conceptRules: { en: 'format', es: 'formato' },
   dynasty: { en: 'dynasty', es: 'dinastía' },
   divisions: { en: 'division', es: 'divisiones' },
-  ai: { en: 'AI', es: 'IA' },
+  ai: { en: 'Chimmy', es: 'Chimmy' },
 }
 
 type Action = {

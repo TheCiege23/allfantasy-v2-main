@@ -7,7 +7,7 @@ import { getSEOPageConfig } from "@/lib/seo"
 export const metadata: Metadata = buildMetadata(
   getSEOPageConfig("trade-analyzer") ?? {
     title: "Fantasy Trade Analyzer | AllFantasy",
-    description: "AI-powered trade grades and analysis for fantasy sports.",
+    description: "Chimmy-powered trade grades and analysis for fantasy sports.",
     canonical: `${getPublicSiteOrigin()}/trade-analyzer`,
   }
 )

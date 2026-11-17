@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       contextSources: { news: enrichment.news.length, injuries: enrichment.injuries.length, engine: grounding.available },
     })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'AI error'
+    const msg = e instanceof Error ? e.message : 'Chimmy error'
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 }

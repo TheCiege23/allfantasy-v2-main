@@ -302,7 +302,7 @@ export default function RivalryWeekCards({ data, narratives }: { data: RivalryWe
           <span className="animate-rival-pulse">{'\u{1F3C6}'}</span>
           <span>Rivalry <span className="bg-gradient-to-r from-amber-400 to-red-400 bg-clip-text text-transparent">Week Mode</span></span>
         </h3>
-        <p className="text-[11px] text-white/30 font-medium">AI-generated weekly narrative cards from your league data</p>
+        <p className="text-[11px] text-white/30 font-medium">Chimmy-generated weekly narrative cards from your league data</p>
       </div>
 
       <div className="grid gap-4">

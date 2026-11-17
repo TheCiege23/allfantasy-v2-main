@@ -86,9 +86,9 @@ export function getDefaultTopicHints(category: BlogCategory, sport?: string): st
       `Slump and surge candidates ${sportLabel}`,
     ],
     ai_explainer: [
-      "How to use AI for fantasy trades",
+      "How to use Chimmy for fantasy trades",
       "Using the waiver advisor",
-      "Mock draft with AI",
+      "Mock draft with Chimmy",
     ],
     tool_landing: [
       "Trade Analyzer guide",

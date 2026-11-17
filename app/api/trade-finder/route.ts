@@ -728,7 +728,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
           rawCandidatesGenerated: generatorOutput.rawCandidatesGenerated,
           prunedTo: generatorOutput.prunedTo,
           aiEnhanced: false,
-          note: 'AI enhancement unavailable — showing raw scored candidates',
+          note: 'Chimmy enhancement unavailable — showing raw scored candidates',
         },
       })
     }
@@ -825,7 +825,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
 
 export const GET = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFinder" })(async () => {
   return NextResponse.json({
-    message: 'AllFantasy Trade Finder API v1 — Candidate Generator + AI Ranking',
+    message: 'AllFantasy Trade Finder API v1 — Candidate Generator + Chimmy Ranking',
     usage: {
       method: 'POST',
       body: {

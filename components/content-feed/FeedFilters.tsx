@@ -15,7 +15,7 @@ const SPORT_LABELS: Record<string, string> = {
 
 const CONTENT_TYPE_LABELS: Record<FeedItemType, string> = {
   creator_post: "Creators",
-  ai_story_card: "AI stories",
+  ai_story_card: "Chimmy stories",
   power_rankings_card: "Rankings",
   trend_alert: "Trends",
   blog_preview: "Blog",
@@ -24,7 +24,7 @@ const CONTENT_TYPE_LABELS: Record<FeedItemType, string> = {
   matchup_card: "Matchups",
   player_news: "News",
   league_update: "League",
-  ai_insight: "AI insight",
+  ai_insight: "Chimmy insight",
   community_highlight: "Community",
 }
 

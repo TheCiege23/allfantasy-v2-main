@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
               scoringMode: 'combined_total',
               draftFormat: 'combined_total',
               reasonings: [smoke.text],
-              warnings: ['Smoke provider response: verify against live AI before publishing.'],
+              warnings: ['Smoke provider response: verify against live Chimmy before publishing.'],
             },
           }
           await writeAiResultCache({
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
               cantonProjection: 'Developmental projection; verify with live model.',
               startRec: 'bench',
               declarationRisk: 'medium - smoke provider fallback',
-              holdRecommendation: 'Hold until live AI is available.',
+              holdRecommendation: 'Hold until live Chimmy is available.',
               verdict: smoke.text,
             },
           }

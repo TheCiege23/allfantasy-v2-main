@@ -139,7 +139,7 @@ export default function AIGMStatusIndicator({
     return (
       <div className="flex items-center gap-2 text-sm text-green-400">
         <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-        <span>AI GM Ready</span>
+        <span>Chimmy GM Ready</span>
       </div>
     )
   }
@@ -153,7 +153,7 @@ export default function AIGMStatusIndicator({
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-green-400 font-semibold">AI GM Ready</span>
+              <span className="text-green-400 font-semibold">Chimmy GM Ready</span>
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             </div>
             <p className="text-sm text-white/70">
@@ -167,7 +167,7 @@ export default function AIGMStatusIndicator({
         
         {status.cache?.rosterNeeds && status.cache.rosterNeeds.recommendations.length > 0 && (
           <div className="mt-3 pt-3 border-t border-green-500/20">
-            <p className="text-xs text-white/60 mb-2">Quick insights from your AI GM:</p>
+            <p className="text-xs text-white/60 mb-2">Quick insights from your Chimmy GM:</p>
             <div className="flex flex-wrap gap-2">
               {status.cache.rosterNeeds.weaknesses.map((pos, i) => (
                 <span key={i} className="px-2 py-1 bg-red-500/20 text-red-300 text-xs rounded-lg">
@@ -194,7 +194,7 @@ export default function AIGMStatusIndicator({
             🔍
           </div>
           <div className="flex-1">
-            <span className="text-cyan-400 font-semibold">AI GM Gathering Intelligence</span>
+            <span className="text-cyan-400 font-semibold">Chimmy GM Gathering Intelligence</span>
             <p className="text-sm text-white/70">
               {status.estimatedTime ? `~${status.estimatedTime} seconds remaining` : 'Analyzing your league...'}
             </p>

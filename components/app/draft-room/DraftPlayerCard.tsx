@@ -289,7 +289,7 @@ function DraftPlayerCardInner({
         .join(' · ')
     : ''
   const storedSummary = normalized.stats?.summary
-  const meaningfulSummary = storedSummary && !/^(No stats available$|(?:AI |Chimmy )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
+  const meaningfulSummary = storedSummary && !/^(No stats available$|(?:Chimmy |Chimmy )?ADP\b|Bye\b)/i.test(storedSummary) ? storedSummary : null
   const statLine = meaningfulSummary ?? (projectedPoints != null ? `Proj ${projectedPoints.toFixed(1)} pts` : '')
   const boxScoreLine = compactStats || nbaRates
   const displayStatLine = boxScoreLine ? [display?.stats?.seasonLabel, boxScoreLine].filter(Boolean).join(' · ') : statLine

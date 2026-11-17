@@ -21,7 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-describe('Waiver AI UI', () => {
+describe('Waiver Chimmy UI', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
   })
@@ -33,7 +33,7 @@ describe('Waiver AI UI', () => {
         return jsonResponse(
           {
             error: 'AF_PRO_REQUIRED',
-            message: 'AI waiver recommendations are available with AF Pro.',
+            message: 'Chimmy waiver recommendations are available with AF Pro.',
             upgradePath: '/pricing?plan=af-pro&feature=waiver-ai',
           },
           402,
@@ -115,7 +115,7 @@ describe('Waiver AI UI', () => {
         return jsonResponse(
           {
             error: 'AF_COMMISSIONER_REQUIRED',
-            message: 'League-wide AI waiver tools require AF Commissioner.',
+            message: 'League-wide Chimmy waiver tools require AF Commissioner.',
             upgradePath: '/pricing?plan=af-commissioner&feature=commissioner-waiver-ai',
           },
           402,
@@ -136,7 +136,7 @@ describe('Waiver AI UI', () => {
     await waitFor(() => {
       expect(screen.getByTestId('commissioner-waiver-insights-locked')).toBeInTheDocument()
     })
-    expect(screen.getByText(/League-wide AI waiver tools require AF Commissioner/i)).toBeInTheDocument()
+    expect(screen.getByText(/League-wide Chimmy waiver tools require AF Commissioner/i)).toBeInTheDocument()
   })
 
   it('renders commissioner insights settings and fairness warnings', async () => {
@@ -174,7 +174,7 @@ describe('Waiver AI UI', () => {
     expect(screen.getByText(/Consider moving to FAAB/i)).toBeInTheDocument()
   })
 
-  it('regular waiver page still renders without AI access', async () => {
+  it('regular waiver page still renders without Chimmy access', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/waiver-wire/leagues/league-1/settings')) {

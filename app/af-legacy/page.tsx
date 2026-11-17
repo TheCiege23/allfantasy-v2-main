@@ -1418,7 +1418,7 @@ function AFLegacyContent() {
       'trade': 'Fantasy Football Trade Analyzer (Dynasty & Redraft) | AllFantasy',
       'finder': 'Fantasy Football Trade Finder Tool | Discover Winning Trades with Chimmy',
       'player-finder': 'Fantasy Football Player Finder & Value Tool | AllFantasy',
-      'waiver': 'Fantasy Football Waiver Wire AI | Best Pickup Suggestions',
+      'waiver': 'Fantasy Football Waiver Wire Chimmy | Best Pickup Suggestions',
       'rankings': 'Fantasy Football League Rankings & Power Rankings | AllFantasy',
       'pulse': 'Fantasy Football Market Pulse & Player Sentiment | AllFantasy',
       'compare': 'Fantasy Football Player Comparison Tool | Start or Sit with Chimmy',
@@ -5680,7 +5680,7 @@ function AFLegacyContent() {
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
                 <h3 className="text-lg font-semibold text-white mb-3">Chimmy isn't perfect — and that's the point.</h3>
                 <p className="text-sm text-white/60 mb-3">
-                  AF Legacy is a live preview of Chimmy, the AI powering the AllFantasy app launching in 2026.
+                  AF Legacy is a live preview of Chimmy, Chimmy powering the AllFantasy app launching in 2026.
                   Some insights are marked "learning" as Chimmy ingests more league data and improves.
                 </p>
               </div>
@@ -5833,7 +5833,7 @@ function AFLegacyContent() {
                         { icon: '🤖', label: 'Chimmy Insights' },
                         { icon: '🏆', label: 'Power Rankings' },
                         { icon: '🔄', label: 'Trade Evaluator' },
-                        { icon: '📈', label: 'Waiver AI' },
+                        { icon: '📈', label: 'Waiver Chimmy' },
                         { icon: '💬', label: 'Chimmy Coaching' },
                       ].map((item, idx) => (
                         <div key={idx} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
@@ -6224,7 +6224,7 @@ function AFLegacyContent() {
                     const tabLabels: Record<string, string> = {
                       'overview': 'Overview',
                       'trade': 'Chimmy Trade Hub',
-                      'waiver': 'Waiver AI',
+                      'waiver': 'Waiver Chimmy',
                       'chat': 'Chimmy Chat',
                       'transfer': 'Transfer',
                     }
@@ -10774,7 +10774,7 @@ function AFLegacyContent() {
                     </div>
 
                     {/* ═══════════════════════════════════════════════════════════════════════════════
-                        GOAL-DRIVEN AI TRADE PROPOSAL GENERATOR
+                        GOAL-DRIVEN CHIMMY TRADE PROPOSAL GENERATOR
                     ═══════════════════════════════════════════════════════════════════════════════ */}
                     {tradeHubLeague && (
                     <div className="rounded-2xl bg-black/30 border border-white/10 overflow-hidden">
@@ -11006,7 +11006,7 @@ function AFLegacyContent() {
                     )}
 
                     {/* ═══════════════════════════════════════════════════════════════════════════════
-                        AI TRADE PROPOSAL GENERATOR
+                        CHIMMY TRADE PROPOSAL GENERATOR
                     ═══════════════════════════════════════════════════════════════════════════════ */}
                     {tradeHubManagers.length > 0 && tradeHubTeamA && (
                     <div className="rounded-2xl bg-black/30 border border-white/10 overflow-hidden">
@@ -11492,7 +11492,7 @@ function AFLegacyContent() {
                       whyBullets={waiverAnalysis.one_move.top_drivers?.filter((d: any) => d.direction === 'positive').map((d: any) => d.detail) || []}
                     />
                   ) : (
-                    <HeroMetric value="--" label="Waiver AI" helper="Select a league to find your best pickups" accent="emerald" />
+                    <HeroMetric value="--" label="Waiver Chimmy" helper="Select a league to find your best pickups" accent="emerald" />
                   )}
                   <LegacyWaiverTabIntro />
 
@@ -11524,7 +11524,7 @@ function AFLegacyContent() {
                           </div>
                         </div>
 
-                        <FeatureGate featureId="legacy_waiver_analysis" featureNameOverride="Waiver AI">
+                        <FeatureGate featureId="legacy_waiver_analysis" featureNameOverride="Waiver Chimmy">
                         <button
                           onClick={runWaiverAnalysis}
                           disabled={waiverLoading || !waiverSelectedLeague}
@@ -15090,7 +15090,7 @@ function AFLegacyContent() {
                                         </div>
                                         <div className="flex flex-wrap gap-1">
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
-                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver Chimmy</span>
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
                                         </div>
                                       </div>
@@ -15707,7 +15707,7 @@ function AFLegacyContent() {
                                         {[
                                           { name: 'Trade Analyzer', desc: 'Chimmy-powered trade evaluation with tier system', icon: '📊', color: 'cyan' },
                                           { name: 'Trade Finder', desc: 'Find optimal trades with other managers', icon: '🔍', color: 'purple' },
-                                          { name: 'Waiver AI', desc: 'Smart waiver recommendations & FAAB', icon: '🎯', color: 'emerald' },
+                                          { name: 'Waiver Chimmy', desc: 'Smart waiver recommendations & FAAB', icon: '🎯', color: 'emerald' },
                                           { name: 'Chimmy GM Assistant', desc: 'Personal GM with counter-offers & targeting', icon: '🧠', color: 'amber' },
                                           { name: 'League Rankings', desc: 'See where you rank in your league', icon: '🏆', color: 'pink' },
                                           { name: 'Chimmy Chat', desc: 'Personalized advice based on your data', icon: '💬', color: 'blue' },
@@ -15885,7 +15885,7 @@ function AFLegacyContent() {
                                         </div>
                                         <div className="flex flex-wrap gap-1">
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
-                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver Chimmy</span>
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
                                         </div>
                                       </div>

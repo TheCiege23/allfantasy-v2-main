@@ -358,7 +358,7 @@ export function buildLeagueHomePulse({
           ? 'Draft setup is the next launch blocker.'
           : 'This league has enough signal for active monitoring.',
     summary:
-      'League Pulse is reading team ownership, league state, and competitive balance signals without adding AI guesses.',
+      'League Pulse is reading team ownership, league state, and competitive balance signals without adding Chimmy guesses.',
     why:
       orphanTeams.length > 0
         ? 'Unclaimed or orphan teams reduce engagement and commissioner confidence.'

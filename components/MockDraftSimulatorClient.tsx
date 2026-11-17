@@ -537,7 +537,7 @@ export default function MockDraftSimulatorClient({
   )
   const requireNflAdvancedTool = useCallback(() => {
     if (selectedSport === 'NFL') return true
-    toast.error('This advanced AI tool is currently available for NFL mock drafts only.')
+    toast.error('This advanced Chimmy tool is currently available for NFL mock drafts only.')
     return false
   }, [selectedSport])
 
@@ -1098,7 +1098,7 @@ export default function MockDraftSimulatorClient({
         toast.success(`Mock draft complete! ${inlineProposals.length} trade offer${inlineProposals.length > 1 ? 's' : ''} from other managers.`)
       } else {
         setTradeProposals({})
-        toast.success(livePlayback ? 'Live room started. AI bots are drafting for absent managers.' : 'Mock draft complete! AI drafted for all managers.')
+        toast.success(livePlayback ? 'Live room started. Chimmy bots are drafting for absent managers.' : 'Mock draft complete! Chimmy drafted for all managers.')
       }
     }
     setIsSimulating(false)
@@ -1610,7 +1610,7 @@ export default function MockDraftSimulatorClient({
               onClick={() => setUseAiBoardAdp((prev) => !prev)}
               data-testid="mock-draft-ai-adp-toggle"
             >
-              {useAiBoardAdp ? 'AI ADP On' : 'AI ADP Off'}
+              {useAiBoardAdp ? 'Chimmy ADP On' : 'Chimmy ADP Off'}
             </Button>
           </div>
           <div className="md:col-span-3">
@@ -1699,7 +1699,7 @@ export default function MockDraftSimulatorClient({
           <div className="inline-flex items-center gap-3 glass-card rounded-2xl px-8 py-6">
             <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
             <div className="text-left">
-              <p className="text-lg font-semibold text-white">AI is drafting...</p>
+              <p className="text-lg font-semibold text-white">Chimmy is drafting...</p>
               <p className="text-sm text-gray-400">
                 Analyzing {selectedSport === 'NFL' ? 'live ADP' : `the imported ${selectedSport} player pool`}, team needs &amp; real draft tendencies
               </p>
@@ -1776,10 +1776,10 @@ export default function MockDraftSimulatorClient({
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <div className="rounded-xl border border-yellow-700/30 bg-yellow-950/15 p-3">
                     <div className="text-xs font-semibold uppercase tracking-wider text-yellow-300 mb-1">Scout Recommendation</div>
-                    {liveIntelLoading ? <div className="text-xs text-gray-400">Updating AI scout...</div> : (
+                    {liveIntelLoading ? <div className="text-xs text-gray-400">Updating Chimmy scout...</div> : (
                       <>
                         <div className="text-sm text-gray-200">{liveSuggestion?.suggestions?.[0]?.player || 'Waiting for user pick context'}</div>
-                        <div className="text-xs text-gray-400">{liveSuggestion?.suggestions?.[0]?.reason || liveSuggestion?.aiInsight || 'AI will suggest a pick when your slot is on the clock.'}</div>
+                        <div className="text-xs text-gray-400">{liveSuggestion?.suggestions?.[0]?.reason || liveSuggestion?.aiInsight || 'Chimmy will suggest a pick when your slot is on the clock.'}</div>
                       </>
                     )}
                   </div>
@@ -1829,7 +1829,7 @@ export default function MockDraftSimulatorClient({
                           </p>
                           <div className="flex items-center gap-3 mt-1">
                             <span className="text-xs text-cyan-400">
-                              {useAiBoardAdp ? 'AI ADP' : 'ADP'}: {getDisplayedAdp(player).toFixed(1)}
+                              {useAiBoardAdp ? 'Chimmy ADP' : 'ADP'}: {getDisplayedAdp(player).toFixed(1)}
                             </span>
                             {player.value != null && (
                               <span className="text-xs text-emerald-400">Value: {player.value.toFixed(0)}</span>
@@ -1927,7 +1927,7 @@ export default function MockDraftSimulatorClient({
                               </Badge>
                               <span className="text-sm text-gray-400">{pick.team}</span>
                               {pick.isBotPick && (
-                                <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">AI BOT</span>
+                                <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Chimmy bot</span>
                               )}
                             </div>
                           ) : (
@@ -1944,7 +1944,7 @@ export default function MockDraftSimulatorClient({
                             return (
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-gray-500">{useAiBoardAdp ? 'AI ADP' : 'ADP'} {displayedAdp.toFixed(1)}</span>
+                                  <span className="text-gray-500">{useAiBoardAdp ? 'Chimmy ADP' : 'ADP'} {displayedAdp.toFixed(1)}</span>
                                   <span className={`font-bold flex items-center gap-0.5 ${
                                     isSteal ? 'text-emerald-400' : isReach ? 'text-orange-400' : 'text-gray-400'
                                   }`}>
@@ -2219,7 +2219,7 @@ export default function MockDraftSimulatorClient({
             <Users className="h-12 w-12 mx-auto mb-4 text-gray-700" />
             <p className="text-lg mb-1">Ready to draft</p>
             <p className="text-sm text-gray-600">
-              AI will draft for all managers based on {selectedSport === 'NFL' ? 'live ADP data' : `the imported ${selectedSport} player pool`} and real tendencies
+              Chimmy will draft for all managers based on {selectedSport === 'NFL' ? 'live ADP data' : `the imported ${selectedSport} player pool`} and real tendencies
             </p>
           </div>
         </div>

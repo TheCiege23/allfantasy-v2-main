@@ -60,7 +60,7 @@ export const AI_COST_GATES = {
   chimmy_voice: { label: 'Chimmy voice', featureId: 'ai_chat', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
   legacy_chat: { label: 'Chimmy chat', featureId: 'ai_chat', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 100, dailyAnonymous: 5 },
   start_sit_ai: { label: 'start/sit analysis', featureId: 'pro_start_sit', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
-  trade_ai: { label: 'AI trade analysis', featureId: 'trade_analyzer', paidFromLaunch: true, perMinute: 10, dailyFree: 15, dailyPaid: 200 },
+  trade_ai: { label: 'Chimmy trade analysis', featureId: 'trade_analyzer', paidFromLaunch: true, perMinute: 10, dailyFree: 15, dailyPaid: 200 },
   // /api/trade-finder never required sign-in; a small anonymous allowance keeps any logged-out
   // use working until launch, after which it needs an account and the plan like its siblings.
   // The plan key is `legacy_trade_finder`, the same key the Trade Finder's buttons are locked to in the
@@ -75,7 +75,7 @@ export const AI_COST_GATES = {
   trade_center_ai: { label: 'trade write-ups', featureId: 'trade_analyzer', paidFromLaunch: true, perMinute: 20, dailyFree: 30, dailyPaid: 300, dailyAnonymous: 10 },
 
   // ── Commissioner ─────────────────────────────────────────────────────────────
-  weekly_recap_ai: { label: 'AI weekly recaps', featureId: 'commissioner_ai_recap', paidFromLaunch: true, perMinute: 5, dailyFree: 5, dailyPaid: 50 },
+  weekly_recap_ai: { label: 'Chimmy weekly recaps', featureId: 'commissioner_ai_recap', paidFromLaunch: true, perMinute: 5, dailyFree: 5, dailyPaid: 50 },
   // Matches the sibling /api/{idp,devy}/ai, which require commissioner_ai_tools.
   league_format_ai: { label: 'devy & IDP analysis', featureId: 'commissioner_ai_tools', paidFromLaunch: true, perMinute: 10, dailyFree: 20, dailyPaid: 200 },
 

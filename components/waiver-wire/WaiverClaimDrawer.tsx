@@ -168,7 +168,7 @@ export default function WaiverClaimDrawer({
           </p>
         )}
         <p className="mt-1 text-[11px] text-[var(--muted)]">
-          Claims will be processed according to your league&apos;s waiver settings. AI suggestions are advisory only and do
+          Claims will be processed according to your league&apos;s waiver settings. Chimmy suggestions are advisory only and do
           not guarantee that a claim will succeed.
         </p>
       </div>

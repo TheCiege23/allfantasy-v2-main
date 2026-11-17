@@ -69,7 +69,7 @@ export function resolveWorldCupEntitlementSummary(input: WorldCupEntitlementInpu
     chat: canUseWorldCupChat(input),
     labels: {
       commissioner: commissioner ? "AF Commissioner active" : "Requires AF Commissioner",
-      ai: ai ? "AI/Pro active" : "Requires AI/Pro",
+      ai: ai ? "Chimmy/Pro active" : "Requires Chimmy/Pro",
     },
   }
 }

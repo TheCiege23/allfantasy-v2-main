@@ -541,7 +541,7 @@ export const POST = withApiUsage({
    */
   if (!userId) {
     return NextResponse.json(
-      { success: false, error: 'Sign in to use Waiver AI.', code: 'sign_in' },
+      { success: false, error: 'Sign in to use Waiver Chimmy.', code: 'sign_in' },
       { status: 401 }
     )
   }
@@ -677,7 +677,7 @@ export const POST = withApiUsage({
       return NextResponse.json(
         {
           success: false,
-          error: 'Waiver AI analysis failed.',
+          error: 'Waiver Chimmy analysis failed.',
           validated: false,
           providers,
           rate_limit: { remaining, retryAfterSec },
@@ -693,7 +693,7 @@ export const POST = withApiUsage({
       return NextResponse.json(
         {
           success: false,
-          error: 'Waiver AI response validation failed.',
+          error: 'Waiver Chimmy response validation failed.',
           validated: false,
           issues: parsedRes.error.issues,
           rate_limit: { remaining, retryAfterSec },
@@ -788,7 +788,7 @@ export const POST = withApiUsage({
     return NextResponse.json(
       {
         success: false,
-        error: 'Waiver AI request failed.',
+        error: 'Waiver Chimmy request failed.',
         message: msg,
         validated: false,
         rate_limit: { remaining, retryAfterSec },

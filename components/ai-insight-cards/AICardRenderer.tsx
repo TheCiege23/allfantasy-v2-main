@@ -184,6 +184,6 @@ function getVariantLabel(v: AICardVariant): string {
     case 'matchup_prediction': return 'Matchup'
     case 'draft_grade': return 'Draft Grade'
     case 'power_rankings': return 'Power Rankings'
-    default: return 'AI Insight'
+    default: return 'Chimmy Insight'
   }
 }

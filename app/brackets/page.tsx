@@ -208,7 +208,7 @@ export default async function BracketsHomePage() {
       {/* ─────────────────────────────────────────────────────────────
           Supporting sections below the dramatic hero. Mobile-friendly,
           stack cleanly, kept from Phase 7 v1 so the hub still has the
-          how-it-works / sports grid / AI features / footer that
+          how-it-works / sports grid / Chimmy features / footer that
           earlier validation covered.
           ───────────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto flex w-full max-w-[1400px] flex-col gap-10 px-4 pb-12 sm:gap-14 sm:px-6 sm:pb-16">

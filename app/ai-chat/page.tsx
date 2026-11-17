@@ -52,7 +52,7 @@ export default async function AIChatPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <LandingToolVisitTracker path="/ai-chat" toolName="AI Chat" />
+      <LandingToolVisitTracker path="/ai-chat" toolName="Chimmy Chat" />
       <AIToolSeoLanding config={config} />
     </>
   )

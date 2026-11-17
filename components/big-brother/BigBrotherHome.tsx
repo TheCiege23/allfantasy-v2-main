@@ -220,7 +220,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
                 </span>
               </p>
               <p className="mt-2 text-[12px] leading-relaxed text-white/45">
-                HOH and Veto winners are computed by the league engine (lineups, seeds, or configured rules). Chimmy and AI
+                HOH and Veto winners are computed by the league engine (lineups, seeds, or configured rules). Chimmy and Chimmy
                 only narrate — they never pick the winner.
               </p>
             </div>

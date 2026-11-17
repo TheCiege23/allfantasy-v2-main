@@ -794,7 +794,7 @@ const TASK_EXACT_ES: Record<string, string> = {
   'League dues are unpaid': 'Hay cuotas de la liga sin pagar',
   'Payout request awaits approval': 'Una solicitud de pago espera aprobación',
   'A league payout request is waiting for commissioner approval.': 'Una solicitud de pago de la liga espera la aprobación del comisionado.',
-  'An AI commissioner alert is open for this league.': 'Hay una alerta del comisionado IA abierta en esta liga.',
+  'a Chimmy commissioner alert is open for this league.': 'Hay una alerta del comisionado Chimmy abierta en esta liga.',
   'A dispute needs your ruling': 'Una disputa espera tu decisión',
   'Managers say they paid dues': 'Hay mánagers que dicen haber pagado las cuotas',
   'A rule change is waiting for you': 'Un cambio de reglas te está esperando',

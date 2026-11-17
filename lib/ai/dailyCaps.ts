@@ -59,15 +59,15 @@ function endOfUtcDay(d = new Date()): Date {
 
 function capExceededMessage(feature: CapFeature): string {
   if (feature === 'explain_bracket') {
-    return "You've reached today's bracket explanation limit. Try again tomorrow or upgrade for more AI help."
+    return "You've reached today's bracket explanation limit. Try again tomorrow or upgrade for more Chimmy help."
   }
   if (feature === 'commissioner_brain') {
-    return "You've reached today's Commissioner Brain limit. Try again tomorrow or upgrade for more AI help."
+    return "You've reached today's Commissioner Brain limit. Try again tomorrow or upgrade for more Chimmy help."
   }
   if (feature === 'wc_matchup_narrative') {
-    return "You've reached today's matchup AI limit. Try again tomorrow or upgrade for more AI help."
+    return "You've reached today's matchup Chimmy limit. Try again tomorrow or upgrade for more Chimmy help."
   }
-  return "You've reached today's Chimmy limit. Try again tomorrow or upgrade for more AI help."
+  return "You've reached today's Chimmy limit. Try again tomorrow or upgrade for more Chimmy help."
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

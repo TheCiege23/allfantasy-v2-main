@@ -417,7 +417,7 @@ function computeAICounterProjection(trades: ScoredTrade[]): AICounterProjection 
       actualNetValue: Math.round(actualNetValue),
       projectedNetIfFollowed: 0,
       netDifference: 0,
-      message: 'No AI counter-proposals found for your past trades. Use the AI Trade Evaluator to get counter-suggestions on future trades!',
+      message: 'No Chimmy counter-proposals found for your past trades. Use Chimmy Trade Evaluator to get counter-suggestions on future trades!',
     }
   }
 
@@ -429,8 +429,8 @@ function computeAICounterProjection(trades: ScoredTrade[]): AICounterProjection 
     projectedNetIfFollowed: Math.round(projectedNetIfFollowed),
     netDifference: Math.round(netDifference),
     message: netDifference > 0
-      ? `If you had followed AI counter-proposals on ${tradesWithCounters} trade${tradesWithCounters !== 1 ? 's' : ''}, your projected net value would be +${Math.round(netDifference).toLocaleString()} higher.`
-      : `Your actual trades outperformed AI counter-proposals by ${Math.abs(Math.round(netDifference)).toLocaleString()} — great instincts!`,
+      ? `If you had followed Chimmy counter-proposals on ${tradesWithCounters} trade${tradesWithCounters !== 1 ? 's' : ''}, your projected net value would be +${Math.round(netDifference).toLocaleString()} higher.`
+      : `Your actual trades outperformed Chimmy counter-proposals by ${Math.abs(Math.round(netDifference)).toLocaleString()} — great instincts!`,
   }
 }
 
