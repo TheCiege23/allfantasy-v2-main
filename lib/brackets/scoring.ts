@@ -317,22 +317,3 @@ export function scoreEntry(
     }
   }
 }
-
-export const SCORING_MODE_INFO: Record<ScoringMode, { label: string; description: string }> = {
-  fancred_edge: {
-    label: "AF March Madness",
-    description: "Headline scoring: R64=1, R32=2, S16=5, E8=10, F4=18, CH=30. Upset Delta Bonus + Leverage Bonus from league pick rarity. Optional Insurance Token protects one pick.",
-  },
-  momentum: {
-    label: "Momentum Scoring",
-    description: "Base points per round + upset seed-gap bonus. Rewards correctly picking underdogs with bonus points that scale by round depth.",
-  },
-  accuracy_boldness: {
-    label: "Accuracy + Boldness",
-    description: "Base points per round + uniqueness bonus based on league pick distribution. Bold, less popular correct picks earn extra points.",
-  },
-  streak_survival: {
-    label: "Streak & Survival",
-    description: "Base points per round + streak bonuses that scale deeper into the tournament. Consecutive correct picks build multiplying bonuses.",
-  },
-}
