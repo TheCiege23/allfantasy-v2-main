@@ -213,10 +213,12 @@ describe('wiring', () => {
     // Found live 2026-11-16: "Put Bijan Robinson at the top of my queue" from a league mock room was
     // refused as "not a fantasy sports question" — no keyword matched and the room has no opening line.
     const route = read('app/api/chat/chimmy/route.ts')
-    expect(route).toMatch(/if \(!portfolioReport && !mockDraftBoard && !hasSportsContent\(domainInput, hasImage\)\)/)
+    // The filter line must exempt a question with a mock board; other exemptions (music) may sit beside it.
+    const filter = /if \(!portfolioReport && !mockDraftBoard && [^\n]*!hasSportsContent\(domainInput, hasImage\)\) \{/.exec(route)
+    expect(filter).not.toBeNull()
     // The board is resolved before the filter runs, so the exemption can see it.
     expect(route.indexOf('const mockDraftBoard =')).toBeGreaterThan(0)
-    expect(route.indexOf('const mockDraftBoard =')).toBeLessThan(route.indexOf('!mockDraftBoard && !hasSportsContent'))
+    expect(route.indexOf('const mockDraftBoard =')).toBeLessThan(filter!.index)
   })
 
   it('the room asks Chimmy with its session, and the card changes the queue only through Confirm, then saves it', () => {
