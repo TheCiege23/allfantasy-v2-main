@@ -432,6 +432,33 @@ describe('dynasty commissioner choices reach the runtime', () => {
 
 
 /*
+ * ⚠ The league row's waiver type defaulted to "rolling" while the engine row ran FAAB, so the
+ * commissioner's waiver panel and the constitution described a different league from the one running.
+ */
+describe('the league row and the waiver engine agree on the waiver type', () => {
+  it('a FAAB redraft league writes FAAB and its budget to both', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody(), buildEngine())
+    expect(tx.leagueWaiverSettings.create.mock.calls[0]?.[0].data).toMatchObject({ waiverType: 'faab', faabBudget: 100 })
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ waiverType: 'faab', waiverBudget: 100 })
+  })
+
+  it("a dynasty league's recommended rolling waivers reach the league row too", async () => {
+    const tx = buildTx()
+    const setup = { waiverTypeRecommended: 'rolling' }
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'dynasty', conceptSetup: setup }), buildEngine({ leagueFormatId: 'dynasty' }))
+    expect(tx.leagueWaiverSettings.create.mock.calls[0]?.[0].data.waiverType).toBe('rolling')
+    expect(tx.league.create.mock.calls[0]?.[0].data.waiverType).toBe('rolling')
+  })
+
+  it('[control] zombie keeps its first-come override on the league row', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody({ concept: 'zombie', sport: 'NBA' }), buildEngine({ leagueFormatId: 'zombie' }))
+    expect(tx.league.create.mock.calls[0]?.[0].data).toMatchObject({ waiverType: 'fcfs', waiverHours: 0 })
+  })
+})
+
+/*
  * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`. The Zombie tab, its landing, the trades tab
  * and Chimmy's zombie context all key on the variant, so a new zombie league looked like plain redraft.
  */
