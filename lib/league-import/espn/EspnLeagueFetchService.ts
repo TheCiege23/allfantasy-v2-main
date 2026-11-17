@@ -623,16 +623,19 @@ function parseEspnRosterEntries(
 ): {
   playerIds: string[]
   starterIds: string[]
+  /** ESPN's own slot for each starter (`QB`, `FLEX`, `D/ST`…), keyed by player id. */
+  starterSlotById: Record<string, string>
   reserveIds: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 } {
   const playerIds: string[] = []
   const starterIds: string[] = []
+  const starterSlotById: Record<string, string> = {}
   const reserveIds: string[] = []
   const playerMap: Record<string, { name: string; position: string; team: string }> = {}
 
   if (!Array.isArray(entries)) {
-    return { playerIds, starterIds, reserveIds, playerMap }
+    return { playerIds, starterIds, starterSlotById, reserveIds, playerMap }
   }
 
   for (const entry of entries) {
@@ -660,6 +663,13 @@ function parseEspnRosterEntries(
       reserveIds.push(playerId)
     } else if (!isBench) {
       starterIds.push(playerId)
+      /*
+       * Kept so My Team can name the slot rather than infer it from the player — without it an
+       * ESPN FLEX holding a tight end read "TE". An id this table does not know is left out, which
+       * makes the reader ignore the whole map (all-or-nothing, `storedStarterSlotLabels`).
+       */
+      const slotLabel = ESPN_SLOT_LABELS[lineupSlotId]
+      if (slotLabel) starterSlotById[playerId] = slotLabel
     }
     const positionLabel = ESPN_POSITION_LABELS[positionId]
     if (!positionLabel && positionId > 0 && unmappedPositions) {
@@ -672,7 +682,7 @@ function parseEspnRosterEntries(
     }
   }
 
-  return { playerIds, starterIds, reserveIds, playerMap }
+  return { playerIds, starterIds, starterSlotById, reserveIds, playerMap }
 }
 
 /**
@@ -754,6 +764,7 @@ function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImpo
         waiverPriority: parseNumber(team.waiverRank, null),
         rosterPlayerIds: roster.playerIds,
         starterPlayerIds: roster.starterIds,
+        starterSlotById: roster.starterSlotById,
         reservePlayerIds: roster.reserveIds,
         playerMap: roster.playerMap,
       }

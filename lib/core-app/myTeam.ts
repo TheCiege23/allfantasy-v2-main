@@ -29,7 +29,7 @@ import { resolveCurrentWeekForLeague } from './currentWeek'
 import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
-import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
+import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap } from './nextGameMap'
 import { collegeFixturesByPlayerTeam } from './collegeNextGame'
@@ -55,7 +55,9 @@ import { createRenderTimer, type RenderTimer } from './renderTiming'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
+  orderStartingSlots,
   startingSlotTemplate,
+  storedStarterSlotLabels,
 } from './rosterSlots'
 
 /**
@@ -575,9 +577,19 @@ async function resolvePlayers(
    * name-only bridge, then to the descriptive-id parse, then to an honest
    * "could not identify" — none of which this removes.
    */
-  const sleeperIdByRosterId = await crosswalkToSleeperIds(platform, sport, ids).catch(
+  const playerCrosswalk = await crosswalkToSleeperIds(platform, sport, ids).catch(
     () => new Map<string, string>(),
   )
+  /*
+   * ⚠ AND A TEAM DEFENCE IS NOT AN ATHLETE, SO THE PLAYER CROSSWALK NEVER HOLDS ONE. An ESPN
+   * D/ST id (`-16002`, the Bills) reached only the name-only bridge below: "BUF D/ST" with no
+   * position, so it rendered under a neutral "SLOT 9" with "no game found", while the score sync
+   * and live runtime already translated the same id through `withTeamDefenseIds`. Ids only — the
+   * ESPN id encodes the club, and a row with no position is accepted only on that id's say-so.
+   */
+  const sleeperIdByRosterId = String(sport).toUpperCase() === 'NFL'
+    ? withTeamDefenseIds(platform, playerCrosswalk, ids.map((playerId) => ({ playerId })))
+    : playerCrosswalk
   const lookupIds = [
     ...new Set(ids.map((id) => sleeperLookupId(platform, id, sleeperIdByRosterId, sport)).filter((x): x is string => x != null)),
   ]
@@ -1451,18 +1463,27 @@ async function loadMyTeamData(
    * for a league that carries no template.
    */
   const slotTemplate = startingSlotTemplate(league.settings)
+  // No league template (ESPN): the slot each starter is in, as the provider recorded it at import.
+  const providerSlots = slotTemplate ? null : storedStarterSlotLabels(pd.starter_slot_by_id, starterIds)
 
-  const starterSlots = starterIds.map((id, i) => {
+  const builtSlots = starterIds.map((id, i) => {
     const isEmptySlot = id === '0'
     const player = isEmptySlot ? null : resolved.get(id) ?? null
     return {
-      slotLabel: slotTemplate?.[i] ?? inferSlotLabel(player?.position ?? null, i),
+      slotLabel: slotTemplate?.[i] ?? providerSlots?.[i] ?? inferSlotLabel(player?.position ?? null, i),
       player,
       empty: isEmptySlot,
       // Present id, no player row — a lookup failure, NOT an empty slot.
       unresolvedId: !isEmptySlot && player == null ? id : null,
     }
   })
+  /*
+   * ⚠ A TEMPLATE IS THE LEAGUE'S OWN ORDER; WITHOUT ONE, THE STORED ORDER IS NOBODY'S. An ESPN
+   * roster lists starters in the provider's roster-array order, so the screen opened on a WR and
+   * put the QB fifth. Re-ordering the DISPLAY slots only — `starterIds` keeps its stored order,
+   * which the native-lineup alignment check below compares against.
+   */
+  const starterSlots = slotTemplate || isNativePlatform(league.platform) ? builtSlots : orderStartingSlots(builtSlots)
 
   /*
    * ⚠ TAXI WAS MISSING FROM THIS FILTER AND EVERY TAXI PLAYER RENDERED TWICE.

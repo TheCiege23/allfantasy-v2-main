@@ -42,6 +42,8 @@ export interface EspnImportTeam {
   waiverPriority: number | null
   rosterPlayerIds: string[]
   starterPlayerIds: string[]
+  /** ESPN's own slot per starter, keyed by player id. Optional: the MLB service does not fill it. */
+  starterSlotById?: Record<string, string>
   reservePlayerIds: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 }
