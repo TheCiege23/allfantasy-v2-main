@@ -66,6 +66,9 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             <Link href="/contact?topic=partners" className="rounded-xl border border-white/20 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/5">
               Talk to us
             </Link>
+            <Link href="/partners/portal" className="self-center px-2 text-sm font-semibold text-cyan-300 hover:underline">
+              Partner sign in
+            </Link>
           </div>
         </div>
       </header>
