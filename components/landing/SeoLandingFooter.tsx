@@ -45,6 +45,7 @@ const FOOTER_SECTIONS = [
       { href: '/league-types/dynasty', label: 'Dynasty' },
       { href: '/league-types/devy', label: 'Devy' },
       { href: '/league-types', label: 'All league types' },
+      { href: '/league-types/faq', label: 'League Types FAQ' },
     ],
   },
   {
