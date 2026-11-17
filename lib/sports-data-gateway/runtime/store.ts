@@ -7,7 +7,7 @@ import 'server-only'
  * fails closed. Invariants preserved: partial/failed scope never certifies; freshness advances only after a
  * completed run; reruns create no duplicate records/events (deterministic keys + ON CONFLICT).
  */
-import type { SyncLock, SyncStore, RunResult } from '@/lib/import-os/runner'
+import type { RunResult } from '@/lib/import-os/runner'
 import type { SnapshotDraft } from './snapshot'
 import { canCertify } from './snapshot'
 import { type DiffEvent } from './events'
@@ -210,16 +210,3 @@ export type CertifiedSnapshotMeta = {
   limitations: string[]
 }
 
-/** Adapt the store to the Phase 4 runner interfaces (so the existing runner drives it). */
-export function asSyncLock(store: SportsRuntimeStore): SyncLock {
-  return { acquire: (k, l, n) => store.acquire(k, l, n), release: (k, t) => store.release(k, t) }
-}
-export function asSyncStore(store: SportsRuntimeStore, persistScope: SyncStore['persistScope']): SyncStore {
-  return {
-    getCheckpoint: (rk, s) => store.getCheckpoint(rk, s),
-    saveCheckpoint: (rk, s, c) => store.saveCheckpoint(rk, s, c),
-    persistScope,
-    recordRun: (r) => store.recordRun(r),
-    setLastSuccessfulSyncAt: (rk, iso) => store.setLastSuccessfulSyncAt(rk, iso),
-  }
-}

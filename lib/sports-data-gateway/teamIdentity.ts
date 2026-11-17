@@ -6,7 +6,7 @@
  * Free-agent values are unresolved BY DESIGN (not an error). Aliases cover the real divergences (WAS↔WSH) and
  * relocated franchises (OAK→LV, SD→LAC, STL→LAR, JAC→JAX).
  */
-export type CanonicalTeamIdentity = {
+type CanonicalTeamIdentity = {
   canonicalTeamId: string
   sport: string
   league: string
@@ -19,8 +19,8 @@ export type CanonicalTeamIdentity = {
   historicalAliases: Array<{ value: string; validFrom: string | null; validTo: string | null }>
 }
 
-export type TeamResolutionEvidence = { rule: string; provider: string; value: string }
-export type TeamResolutionResult =
+type TeamResolutionEvidence = { rule: string; provider: string; value: string }
+type TeamResolutionResult =
   | { status: 'resolved'; canonicalTeamId: string; evidence: TeamResolutionEvidence[] }
   | { status: 'ambiguous'; candidates: string[]; evidence: TeamResolutionEvidence[] }
   | { status: 'unresolved'; evidence: TeamResolutionEvidence[] }
@@ -88,7 +88,7 @@ export function resolveTeam(input: { provider: string; ref: string | null; sport
   return { status: 'unresolved', evidence: [{ rule: 'no_match', provider, value: up }] }
 }
 
-export type TeamMappingCertification = {
+type TeamMappingCertification = {
   version: string
   sport: string
   providerCoverage: Record<string, number>
