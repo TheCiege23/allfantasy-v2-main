@@ -48,6 +48,7 @@ import {
 } from '@/lib/legacy-tool/notifications'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 const openai = getOpenAIRouteClient()
 
@@ -200,6 +201,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/waiver/analyze", tool:
       rateLimit: { action: 'waiver_analyze', maxRequests: 10, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_waiver_analysis`): the /af-legacy screen locks this action (Waiver AI), and that lock was the only one —
+     * a direct POST ran the model for anyone. A guest actor (`guest:…`) holds no plan and gets the same lock.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_waiver_analysis' })
+    if (!plan.ok) return plan.response
 
     const resolvedUsername = gate.identity.sleeperUsername
     /*

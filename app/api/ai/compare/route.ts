@@ -21,6 +21,7 @@ import {
   type DeterministicContextEnvelope,
 } from '@/lib/ai-context-envelope'
 import type { AIContextEnvelope } from '@/lib/unified-ai/types'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 function isRequestContract(body: Record<string, unknown>): boolean {
   return typeof body.tool === 'string' && typeof body.sport === 'string'
@@ -183,6 +184,10 @@ export async function POST(req: Request) {
       { status: 401 }
     )
   }
+
+  // AF Pro (`player_ai_recommendations`, owner's decision 2026-11-16): the AI workbench, before any provider call.
+  const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null, featureId: 'player_ai_recommendations' })
+  if (!plan.ok) return plan.response
 
   let body: Record<string, unknown>
   try {

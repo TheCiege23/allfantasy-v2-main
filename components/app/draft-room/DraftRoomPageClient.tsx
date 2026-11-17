@@ -140,6 +140,7 @@ import {
 import { buildDraftChatPlayerContextFromDisplay } from '@/lib/draft-room/draft-chat-player-context'
 import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
 import type { DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type DraftRoomPageClientProps = {
   /** Draft session id from URL (`/draft/[draftId]/snake`) — used for telemetry / deep links only. */
@@ -3775,7 +3776,7 @@ export function DraftRoomPageClient({
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || !data.ok) {
-          setWarRoomError(typeof data.error === 'string' ? data.error : 'War room unavailable')
+          setWarRoomError(readPlanRefusal(res.status, data)?.message ?? (typeof data.error === 'string' ? data.error : 'War room unavailable'))
           setWarRoomData(null)
           return
         }

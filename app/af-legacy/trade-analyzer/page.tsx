@@ -9,6 +9,7 @@ import { legacyPromptSeason as currentYear } from '@/lib/legacy/promptSeason'
 import NegotiationSheet, { type NegotiationBlock } from '@/components/ai/NegotiationSheet'
 import type { TradeCandidate } from '@/lib/trade-finder/apply-counter'
 import type { TradeAsset as IndexTradeAsset } from '@/lib/trade-finder/asset-index'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type Sport = 'NFL' | 'NBA'
 type Format = 'redraft' | 'dynasty' | 'specialty'
@@ -645,7 +646,7 @@ export default function LegacyTradeAnalyzerPage() {
       }
 
       if (!res.ok) {
-        setSocialInfo(data?.error || 'Failed to fetch Social Pulse')
+        setSocialInfo(readPlanRefusal(res.status, data)?.message ?? (data?.error || 'Failed to fetch Social Pulse'))
         return
       }
 

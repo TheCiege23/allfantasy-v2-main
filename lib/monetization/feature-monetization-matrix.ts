@@ -749,7 +749,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Generating AI trade proposals is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_trade_proposals) on POST /api/legacy/trade/proposal-generator (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Generate Trade Proposals' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -761,9 +761,14 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     key: "legacy_trade_finder",
     title: "Trade Review",
     accessType: "subscription_only",
-    requiredPlanId: "war_room",
+    /*
+     * AF Pro (owner's decision 2026-11-16: "Trade Finder = AF Pro everywhere"). It was AF Legacy here while the
+     * league trade finder and Chimmy's find_trade_ideas were AF Pro, so the same finder asked for two plans. The
+     * key keeps its old name: the API cost gate, /api/trade-finder/matchmaking and TradeFinderV2 all read it.
+     */
+    requiredPlanId: "pro",
     tokenRuleCode: null,
-    lockedReason: "Finding real trade opportunities against your roster is part of AF Legacy.",
+    lockedReason: "Finding real trade opportunities against your roster is part of AF Pro.",
     backendEnforcement: "Server: aiCostGate trade_finder (POST /api/trade-finder) and requireFeatureEntitlement on POST /api/trade-finder/matchmaking. Client FeatureGate in components/TradeFinderV2.tsx (the AF Legacy finder tab). /trade-finder redirects to the Trades screen finder.",
     frontendGateBehavior: "FeatureGate around the 'Find Trades' / 'Find Best Partners' buttons.",
     unavailableBehavior: "disable_with_fallback",
@@ -779,7 +784,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Full waiver-wire analysis is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_waiver_analysis) on POST /api/legacy/waiver/analyze (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Analyze Free Agents' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -794,7 +799,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Manager comparison analysis is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_manager_compare) on POST /api/legacy/compare (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Compare Managers' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -809,7 +814,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Full team-direction rankings analysis is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_rankings_analysis) on POST /api/legacy/rankings/analyze (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Show My Rankings' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
@@ -824,7 +829,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Live social/market pulse search is part of AF Legacy.",
-    backendEnforcement: "Client-side FeatureGate around the action trigger in app/af-legacy/page.tsx.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_social_pulse) on POST /api/legacy/social-pulse (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
     frontendGateBehavior: "FeatureGate around the 'Get Social Pulse' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
