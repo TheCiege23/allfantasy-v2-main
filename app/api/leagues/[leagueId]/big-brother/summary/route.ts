@@ -247,6 +247,7 @@ export async function GET(
       sport: config.sport,
       finaleFormat: config.finaleFormat,
       juryStartMode: config.juryStartMode,
+      evictionTieBreakMode: config.evictionTieBreakMode,
       challengeMode: config.challengeMode,
     },
     sportCalendar: {
