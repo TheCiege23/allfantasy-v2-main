@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { logAuditEntry, getFullAuditTrail } from '@/lib/zombie/auditService'
 import { generateRulesDocument } from '@/lib/zombie/rulesDocGenerator'
 import { OVERRIDABLE_ZOMBIE_STATUSES, STATUS_OVERRIDE_BLOCKING_RESOLUTIONS } from '@/lib/zombie/statusOverride'
+import { readSettlementHold, releaseSettlementHold } from '@/lib/zombie/settlementHoldRelease'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,11 +17,14 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const leagueId = searchParams?.get('leagueId')
   const type = searchParams?.get('type')
-  if (!leagueId || type !== 'audit') return NextResponse.json({ error: 'leagueId and type=audit required' }, { status: 400 })
+  if (!leagueId || (type !== 'audit' && type !== 'settlement_hold')) return NextResponse.json({ error: 'leagueId and type=audit|settlement_hold required' }, { status: 400 })
 
   await requireCommissionerAccess(leagueId, session.user.id, 'view')
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // A week held for review, with the reason in words (lib/zombie/settlementHoldRelease.ts).
+  if (type === 'settlement_hold') return NextResponse.json({ hold: await readSettlementHold(z.id) })
 
   const entries = await getFullAuditTrail(z.id)
   return NextResponse.json({ entries })
@@ -69,6 +73,16 @@ export async function POST(req: Request) {
   if (action === 'generate_rules_doc') {
     const doc = await generateRulesDocument(z.id)
     return NextResponse.json({ ok: true, documentId: doc.id, version: doc.version })
+  }
+
+  // Release a week held for review and run its settlement again (lib/zombie/settlementHoldRelease.ts): refused
+  // unless the week is held and nothing has been applied; a cause that is still there holds it again.
+  if (action === 'retry_settlement') {
+    const week = typeof body.week === 'number' ? body.week : Number(body.week)
+    if (!Number.isInteger(week) || week < 1) return NextResponse.json({ error: 'week required' }, { status: 400 })
+    const result = await releaseSettlementHold({ zombieLeagueId: z.id, week, actorUserId: session.user.id })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json({ ok: true, outcome: result.outcome, detail: result.detail })
   }
 
   if (action === 'override_status') {

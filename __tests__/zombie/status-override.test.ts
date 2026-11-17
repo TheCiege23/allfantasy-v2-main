@@ -18,6 +18,14 @@ vi.mock('next-auth', () => ({ getServerSession: async () => ({ user: { id: 'u-co
 vi.mock('@/lib/league/commissionerAccess', () => ({ requireCommissionerAccess: async () => undefined }))
 vi.mock('@/lib/zombie/auditService', () => ({ logAuditEntry: vi.fn(async () => undefined), getFullAuditTrail: vi.fn() }))
 vi.mock('@/lib/zombie/rulesDocGenerator', () => ({ generateRulesDocument: vi.fn() }))
+const hold = vi.hoisted(() => ({
+  releases: [] as unknown[],
+  result: { ok: true, outcome: 'settled', detail: 'Week 6 settled.' } as Record<string, unknown>,
+}))
+vi.mock('@/lib/zombie/settlementHoldRelease', () => ({
+  readSettlementHold: vi.fn(async () => ({ week: 6, reason: { code: 'ZOMBIE_WINNINGS_STATUS_REQUIRED', kind: 'commissioner', text: 'Fix it' }, heldAt: null })),
+  releaseSettlementHold: vi.fn(async (input: unknown) => { hold.releases.push(input); return hold.result }),
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     zombieLeague: { findUnique: vi.fn(async () => m.league) },
@@ -33,7 +41,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { POST } from '@/app/api/zombie/commissioner/route'
+import { GET, POST } from '@/app/api/zombie/commissioner/route'
 import { OVERRIDABLE_ZOMBIE_STATUSES } from '@/lib/zombie/statusOverride'
 
 const post = (newStatus: string) =>
@@ -88,3 +96,36 @@ describe('override_status', () => {
     expect(() => settle('Eliminated')).toThrow('ZOMBIE_WINNINGS_STATUS_REQUIRED')
   })
 })
+
+describe('settlement hold actions', () => {
+  const retry = (week: unknown) =>
+    POST(new Request('http://x/api/zombie/commissioner', { method: 'POST', body: JSON.stringify({ leagueId: 'L', action: 'retry_settlement', week }) }))
+
+  beforeEach(() => {
+    hold.releases.length = 0
+    hold.result = { ok: true, outcome: 'settled', detail: 'Week 6 settled.' }
+  })
+
+  it('GET type=settlement_hold returns the held week and its reason', async () => {
+    const res = await GET(new Request('http://x/api/zombie/commissioner?leagueId=L&type=settlement_hold'))
+    expect(await res.json()).toMatchObject({ hold: { week: 6, reason: { kind: 'commissioner' } } })
+  })
+
+  it('retry_settlement releases that week for this league, as this commissioner', async () => {
+    const res = await retry(6)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, outcome: 'settled' })
+    expect(hold.releases).toEqual([{ zombieLeagueId: 'z1', week: 6, actorUserId: 'u-comm' }])
+  })
+
+  it('a missing or bad week is a 400; a refusal keeps its status and message', async () => {
+    expect((await retry(undefined)).status).toBe(400)
+    expect((await retry(0)).status).toBe(400)
+    expect(hold.releases).toEqual([])
+    hold.result = { ok: false, status: 409, error: 'Week 6 is not on hold.' }
+    const res = await retry(6)
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'Week 6 is not on hold.' })
+  })
+})
+
