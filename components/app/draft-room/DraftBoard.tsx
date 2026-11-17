@@ -16,6 +16,7 @@ import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
 import type { TileSignatureChip } from '@/lib/draft-room/leagueSignature'
 import type { SlotSalary } from '@/lib/draft-room/leagueNote'
+import { keeperPlayerKeys } from '@/lib/keeper/keeperPlayerKey'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
@@ -87,6 +88,8 @@ type DraftBoardProps = {
   slotSalaryByOverall?: Record<number, SlotSalary>
   /** Stage 2/3 tournament: each seat's previous-stage seed (`loadDraftRoomLeagueFacts`). */
   seedByRosterId?: Record<string, number> | null
+  /** Keeper league: a kept player's year as a keeper (`loadDraftRoomLeagueFacts`), 2+ only. */
+  keeperYearsByPlayer?: Record<string, number> | null
   /**
    * Team avatars / orphan / bot-personality for the sticky column header. Snake and linear
    * boards have no separate team strip, so the header is where this lives.
@@ -198,6 +201,7 @@ function DraftBoardInner({
   signatureByOverall,
   slotSalaryByOverall,
   seedByRosterId,
+  keeperYearsByPlayer,
   teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
@@ -360,6 +364,9 @@ function DraftBoardInner({
         signatureChip: existing?.playerName ? signatureByOverall?.[overall] ?? null : null,
         // A kept player is not a draft-slot contract; every other tile shows its slot's salary.
         slotSalary: useLock ? null : slotSalaryByOverall?.[overall] ?? null,
+        keeperYear: useLock && lock && keeperYearsByPlayer
+          ? keeperPlayerKeys(lock).map((key) => keeperYearsByPlayer[key]).find((n) => typeof n === 'number') ?? null
+          : null,
       }
       const pid = existing?.playerId ? String(existing.playerId).trim() : ''
       const poolEntry = pid && poolPlayerById ? poolPlayerById[pid] : undefined
@@ -394,6 +401,7 @@ function DraftBoardInner({
     adpDeltaByOverall,
     signatureByOverall,
     slotSalaryByOverall,
+    keeperYearsByPlayer,
   ])
 
   const auctionColumns = useMemo(() => {

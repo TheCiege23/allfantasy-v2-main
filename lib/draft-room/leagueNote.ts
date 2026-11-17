@@ -26,6 +26,11 @@ export type DraftRoomLeagueFacts = {
    * FROZEN field (`loadSeasonDraftContext`), so it cannot drift from the order the draft runs in.
    */
   seedByRosterId?: Record<string, number> | null
+  /**
+   * Keeper league: how many seasons each player has been a locked keeper, by `keeperPlayerKeys`
+   * (player id, and normalized name + position). Only 2+ — a first-year keeper needs no label.
+   */
+  keeperYearsByPlayer?: Record<string, number> | null
 }
 
-export const NO_LEAGUE_FACTS: DraftRoomLeagueFacts = { note: null, slotSalaryByOverall: null, seedByRosterId: null }
+export const NO_LEAGUE_FACTS: DraftRoomLeagueFacts = { note: null, slotSalaryByOverall: null, seedByRosterId: null, keeperYearsByPlayer: null }

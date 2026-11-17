@@ -25,6 +25,9 @@ export const draftRoomHeaderMessages = defineMessages({
       `Salary $${salary} for ${years} ${years === 1 ? 'year' : 'years'}`,
     /** A stage 2/3 tournament seat's seed from the previous stage. */
     seed: (n: number): string => `Seed ${n} from the last stage`,
+    /** A kept player's year as a keeper, on his tile (2+ only). */
+    keeperYear: (n: number): string => `Yr ${n}`,
+    keeperYearTitle: (n: number): string => `Year ${n} as a keeper`,
   },
   es: {
     upIn: (n: number): string => (n === 1 ? 'Te toca después' : `Te toca en ${n}`),
@@ -42,5 +45,7 @@ export const draftRoomHeaderMessages = defineMessages({
     slotSalary: (salary: number, years: number): string =>
       `Salario de $${salary} por ${years} ${years === 1 ? 'año' : 'años'}`,
     seed: (n: number): string => `Cabeza de serie ${n} de la etapa anterior`,
+    keeperYear: (n: number): string => `Año ${n}`,
+    keeperYearTitle: (n: number): string => `Año ${n} como keeper`,
   },
 })

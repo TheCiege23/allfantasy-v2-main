@@ -5432,6 +5432,7 @@ export function DraftRoomPageClient({
                   signatureByOverall={boardSignatureByOverall}
                   slotSalaryByOverall={leagueFacts?.slotSalaryByOverall ?? undefined}
                   seedByRosterId={leagueFacts?.seedByRosterId ?? null}
+                  keeperYearsByPlayer={leagueFacts?.keeperYearsByPlayer ?? null}
                   teamMetaByRoster={teamMetaByRoster}
                 />
               </div>

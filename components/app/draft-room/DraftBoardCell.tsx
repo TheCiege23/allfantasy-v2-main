@@ -57,6 +57,8 @@ export type DraftBoardCellPick = {
   signatureChip?: { kind: 'age' | 'class'; text: string; title: string } | null
   /** Snake salary-cap signature: the contract this slot is signed to (`loadRookieContractTerms`). */
   slotSalary?: { salary: number; years: number } | null
+  /** Keeper league: this kept player's year as a keeper (2+), from the league's keeper history. */
+  keeperYear?: number | null
 }
 
 function TinyHeadshot({
@@ -556,7 +558,20 @@ function DraftBoardCellInner({
               style={{ color: keptHex }}
               data-testid={`draft-board-cell-keeper-cost-${pick.overall}`}
             >
-              {pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
+              {pick.keeperYear ? (
+                <>
+                  {/* Below 120px "Costs " gives way so the round and the year both fit (globals.css). */}
+                  <span className="af-tile-squeezable">{pick.isViewerKeeper ? 'Costs your ' : 'Costs '}</span>
+                  {`Rd ${pick.round}`}
+                  <span
+                    title={headerCopy.keeperYearTitle(pick.keeperYear)}
+                    aria-label={headerCopy.keeperYearTitle(pick.keeperYear)}
+                    data-testid={`draft-board-cell-keeper-year-${pick.overall}`}
+                  >
+                    {` · ${headerCopy.keeperYear(pick.keeperYear)}`}
+                  </span>
+                </>
+              ) : pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
             </span>
           ) : null}
         </div>
