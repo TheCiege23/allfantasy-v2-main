@@ -14,7 +14,7 @@
  */
 import type { IntelligenceRequestContext, IntelligenceRunRecord } from './types'
 
-export type RehydratedEvidence = {
+type RehydratedEvidence = {
   ok: true
   /** The request rebuilt from CURRENT evidence. */
   ctx: IntelligenceRequestContext
@@ -25,7 +25,7 @@ export type RehydratedEvidence = {
   isLiveEvidence: boolean
   evidenceLoadedAt: string
 }
-export type RehydrationFailure = { ok: false; reason: string }
+type RehydrationFailure = { ok: false; reason: string }
 export type RehydrationResult = RehydratedEvidence | RehydrationFailure
 
 export interface EvidenceRehydrator {

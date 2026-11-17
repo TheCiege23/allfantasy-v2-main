@@ -12,9 +12,9 @@ export type DecisionOSEvidenceSourceType =
   | 'user_input'
   | 'ai_narrative'
 
-export type DecisionOSTrustLevel = 'authoritative' | 'high' | 'medium' | 'low' | 'unverified'
+type DecisionOSTrustLevel = 'authoritative' | 'high' | 'medium' | 'low' | 'unverified'
 
-export type DecisionOSRecommendationType =
+type DecisionOSRecommendationType =
   | 'manager_intelligence'
   | 'league_intelligence'
   | 'commissioner_recommendation'
@@ -31,10 +31,10 @@ export type DecisionOSRecommendationType =
   | 'benchmark'
   | 'action_recommendation'
 
-export type DecisionOSRiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical'
-export type DecisionOSActionability = 'informational' | 'review' | 'recommended' | 'urgent' | 'blocked'
+type DecisionOSRiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical'
+type DecisionOSActionability = 'informational' | 'review' | 'recommended' | 'urgent' | 'blocked'
 
-export type DecisionOSEvidenceRef = {
+type DecisionOSEvidenceRef = {
   id: string
   sourceType: DecisionOSEvidenceSourceType
   sourceId: string
@@ -45,7 +45,7 @@ export type DecisionOSEvidenceRef = {
   metadata?: Record<string, unknown>
 }
 
-export type DecisionOSDerivationStep = {
+type DecisionOSDerivationStep = {
   id: string
   label: string
   inputEvidenceIds: string[]
@@ -54,7 +54,7 @@ export type DecisionOSDerivationStep = {
   confidenceDelta?: number
 }
 
-export type DecisionOSAiBoundary = {
+type DecisionOSAiBoundary = {
   usedAi: boolean
   role: 'none' | 'explanation_only' | 'summary_only' | 'unsupported'
   model?: string | null

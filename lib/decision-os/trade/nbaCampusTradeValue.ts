@@ -17,7 +17,7 @@ const playerKey = (asset: TradeAssetInput) => asset.kind === 'player' ? asset.ro
 const withheld = (reason: string): TradeGradeView => ({ graded: false, reason, basis: null })
 
 /** A real campus board shares the saved roster ids and season with the league. */
-export function nbaCampusProduction(ctx: SportPointsContext, held: ReadonlySet<string>) {
+function nbaCampusProduction(ctx: SportPointsContext, held: ReadonlySet<string>) {
   const production = new Map<string, { name: string; perGame: number; dynasty: number | null }>()
   for (const id of held) {
     const raw = collegeId.exec(id)?.[1]

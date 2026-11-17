@@ -69,7 +69,7 @@ function clamp(n: number, lo: number, hi: number): number {
  * answers "could we price it", not "how good was the input"; `valuationBasis` is preserved per
  * asset for anyone who needs the second question.
  */
-export function computeConfidence(sides: SideTotals[]): number {
+function computeConfidence(sides: SideTotals[]): number {
   let players = 0
   let priced = 0
   for (const side of sides) {

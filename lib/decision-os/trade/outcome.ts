@@ -9,7 +9,7 @@
 import type { Decision } from '@/lib/decision-os/core/decision'
 import type { TradeEvaluation } from './decision'
 
-export interface TradeOutcomeHooks {
+interface TradeOutcomeHooks {
   onTradeEvaluated?: (decisionId: string, evaluation: TradeEvaluation | null) => void
   onTradeProposed?: (decisionId: string, proposalId: string) => void
   onTradeAccepted?: (decisionId: string, proposalId: string) => void

@@ -16,7 +16,7 @@ import { loadScheduleGameRows } from './port'
 const NEXT_GAME_STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000
 const DENSITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
-export interface NextGameFreshness {
+interface NextGameFreshness {
   fetchedAt: string | null
   expiresAt: string | null
   updatedAt: string | null
@@ -24,7 +24,7 @@ export interface NextGameFreshness {
   staleReason: string | null
 }
 
-export interface TeamNextGameContext {
+interface TeamNextGameContext {
   team: string
   /** Next game at-or-after `now` with a real kickoff timestamp. */
   nextOpponent: string | null

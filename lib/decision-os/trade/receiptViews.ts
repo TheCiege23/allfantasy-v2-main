@@ -15,7 +15,7 @@ type ReceiptLike = {
   assets: Array<{ side: 'give' | 'get'; name: string; kind: 'player' | 'pick' | 'faab'; leagueValue: number | null }>
 }
 
-export type LegacyVerdict = 'Fair' | 'Slightly favors A' | 'Slightly favors B' | 'Strongly favors A' | 'Strongly favors B'
+type LegacyVerdict = 'Fair' | 'Slightly favors A' | 'Slightly favors B' | 'Strongly favors A' | 'Strongly favors B'
 
 /** The one grade's label, in the legacy analyzer's words. Side A is the side that sends `give`. */
 export function legacyVerdictFromGrade(grade: TradeGradeView): LegacyVerdict | null {
@@ -225,7 +225,7 @@ export function gradeInputsFromLegacyAssets(
  * `betterAlternatives` is always empty: it was model-invented partners with model-invented fit
  * scores. `riskFlags` are the explanation's risks, which were checked against the packet.
  */
-export type ExplanationLike = {
+type ExplanationLike = {
   verdict: {
     headline: string
     reasons: Array<{ text: string }>

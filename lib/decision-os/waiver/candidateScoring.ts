@@ -18,14 +18,14 @@ export type CrowdTrendData = {
   dropRank: number | null
 }
 
-export type WaiverDimensions = {
+type WaiverDimensions = {
   startNow: number
   stash: number
   needFit: number
   leagueDemand: number
 }
 
-export type WaiverDriverId =
+type WaiverDriverId =
   | 'wa_starter_upgrade'
   | 'wa_bye_week_fill'
   | 'wa_need_slot'
@@ -38,7 +38,7 @@ export type WaiverDriverId =
   | 'wa_role_trend'
   | 'wa_crowd_trend'
 
-export type WaiverDriver = {
+type WaiverDriver = {
   id: WaiverDriverId
   label: string
   score: number

@@ -23,7 +23,7 @@ export * from './outcome'
 export * from './canonicalMemo'
 export * from './canonicalEvaluator'
 
-export interface RunTradeEvaluateInput {
+interface RunTradeEvaluateInput {
   worldInput: TradeWorldInput
   userId: string
   leagueId: string
@@ -33,7 +33,7 @@ export interface RunTradeEvaluateInput {
   snapshotConfidenceScore: number | null
 }
 
-export interface RunTradeEvaluateDeps {
+interface RunTradeEvaluateDeps {
   decision: TradeDecisionDeps
   /** When present, run the Parity Gate against the persisted deterministic snapshot (shadow mode). */
   shadow?: { snapshot: TradeValueSnapshot }

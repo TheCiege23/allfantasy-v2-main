@@ -63,7 +63,7 @@ function scoringMap(raw: unknown, gaps: string[]): Record<string, number> | null
   return result
 }
 
-export function resolveLeagueRuntimeV2(input: {
+function resolveLeagueRuntimeV2(input: {
   leagueId: string; sport: string; format: string; teamCount: number | null
   scoringSettings: unknown; starterSlots: unknown; rosterSize: number | null
   irSlots: number | null; taxiSlots: number | null; formatRules: Record<string, unknown> | null

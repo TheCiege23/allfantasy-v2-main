@@ -123,7 +123,7 @@ export const stubDataProvider: IntelligenceDataProvider = {
 // ── View param ────────────────────────────────────────────────────────────────
 
 /** Valid values for the `?view=` query parameter. */
-export type IntelligenceViewParam = 'raw' | 'presentation'
+type IntelligenceViewParam = 'raw' | 'presentation'
 
 const VALID_VIEW_VALUES: ReadonlySet<string> = new Set<IntelligenceViewParam>(['raw', 'presentation'])
 

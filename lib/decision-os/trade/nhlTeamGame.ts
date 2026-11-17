@@ -18,7 +18,7 @@
 /** The NHL regular season, for a season the board cannot read team games from. */
 export const NHL_REGULAR_SEASON_GAMES = 82
 
-export type NhlLine = {
+type NhlLine = {
   id: string
   position: string
   sampleGames: number | null
@@ -27,7 +27,7 @@ export type NhlLine = {
   stats: Record<string, number>
 }
 
-export type NhlTeamGameLine<T extends NhlLine> = T & {
+type NhlTeamGameLine<T extends NhlLine> = T & {
   /** Share of team games this line counts for: 1 for a skater, games played ÷ team games for a goalie. */
   share: number
 }

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { createOsStore, safeRead, safeWrite, type OsStore } from './store'
-import type { OsDomain, OsFactEnvelope, OsScopeLevel } from './types'
+import type { OsDomain, OsScopeLevel } from './types'
 
 /**
  * Domain OS kernel — the read-through feed.
@@ -31,7 +31,7 @@ export interface OsFactSource<TArgs, TFacts> {
   measure?: (facts: TFacts) => { confidence?: number | null; sampleSize?: number | null }
 }
 
-export interface OsFeedOutcome {
+interface OsFeedOutcome {
   servedFrom: 'store' | 'live' | 'unavailable'
   level: OsScopeLevel
   ageMs: number | null
@@ -56,7 +56,7 @@ export interface OsFeedOutcome {
  * Measured 2026-09-01: with `domain_os_facts` absent from production, every refresh in this
  * codebase was a `write_failed` and every one of them reported `written`.
  */
-export type OsRefreshOutcome = 'written' | 'unavailable' | 'write_failed'
+type OsRefreshOutcome = 'written' | 'unavailable' | 'write_failed'
 
 export interface OsFeed {
   /** Read one fact family, preferring maintained state. Never throws. */
@@ -150,4 +150,3 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
   }
 }
 
-export type { OsFactEnvelope, OsScopeLevel, OsDomain }

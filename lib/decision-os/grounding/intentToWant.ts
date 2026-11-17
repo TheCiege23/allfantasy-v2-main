@@ -56,7 +56,7 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  */
 type PacketWant = NonNullable<GroundingPacketArgs['want']>
 
-export type IntentDerivedWant = Required<
+type IntentDerivedWant = Required<
   Pick<
     PacketWant,
     | 'lineupDecision'

@@ -70,7 +70,7 @@ export function isGuillotineBasisGrade(grade: { lines?: ReadonlyArray<{ valueSou
 export type GuillotineSeat = { slot: string; eligible: readonly string[] }
 
 /** A free agent good enough to set a slot's replacement level must have played this many games (NFL). */
-export const MIN_REPLACEMENT_GAMES = 3
+const MIN_REPLACEMENT_GAMES = 3
 
 /** The replacement-level games bar per sport: NFL three games, daily sports ten. */
 export function minReplacementGamesFor(sport: GuillotineTradeSport): number {
@@ -262,7 +262,7 @@ export function faabWorth(amount: number, ctx: Pick<GuillotineContext, 'liveFaab
   return (Math.min(amount, ctx.liveFaab) / ctx.liveFaab) * (ctx.wireValue + ctx.releaseValue)
 }
 
-export function guillotineBasis(ctx: GuillotineContext): string {
+function guillotineBasis(ctx: GuillotineContext): string {
   const weeks = ctx.survival[0] ?? 0
   const perWeek =
     ctx.sport != null && ctx.sport !== 'NFL' && ctx.gamesPerWeek != null

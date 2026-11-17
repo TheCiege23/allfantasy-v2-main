@@ -128,7 +128,7 @@ export function deriveIdpRules(rules: unknown): Record<string, number> | null {
  * not use. Caught by the typechecker after the tests were already green, which is the whole
  * argument for the gate.
  */
-export type MarketPpr = 0 | 0.5 | 1
+type MarketPpr = 0 | 0.5 | 1
 
 export function deriveLeagueSizeAndPpr(
   rules: unknown,

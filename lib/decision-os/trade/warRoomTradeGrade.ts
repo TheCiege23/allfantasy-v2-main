@@ -19,7 +19,7 @@ import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
  * roster is the viewer's own — a commissioner analysing another team gets the chart, not their need.
  */
 
-export type WarRoomTradeSide = {
+type WarRoomTradeSide = {
   players: Array<{ playerId: string; name: string | null }>
   picks: Array<{ season: number | null; round: number | null; label: string }>
   /** Ids the War Room could not find on any roster. Named, never priced as zero. */

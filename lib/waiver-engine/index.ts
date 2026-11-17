@@ -15,9 +15,6 @@ export type {
   WaiverCandidate,
   WaiverRosterPlayer,
   WaiverScoringContext,
-  WaiverDimensions,
-  WaiverDriverId,
-  WaiverDriver,
   ScoredWaiverTarget,
   CrowdTrendData,
 } from "./waiver-scoring";

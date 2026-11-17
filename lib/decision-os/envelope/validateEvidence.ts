@@ -16,7 +16,7 @@ import { sanitizeUntrusted } from '@/lib/chimmy/sanitizeUntrusted'
 import { scopedRefusal, type ScopedRefusal } from './refusalScope'
 import type { EnvelopeCalculation, EnvelopeFact, EnvelopeGap } from './types'
 
-export type ValidationResult = {
+type ValidationResult = {
   facts: EnvelopeFact[]
   calculations: EnvelopeCalculation[]
   gaps: EnvelopeGap[]
@@ -33,7 +33,7 @@ export type ValidationResult = {
  * weigh it. It is not worth CONCLUDING from, because the conclusion carries no
  * label and outlives the caveat.
  */
-export function supportableFacts(facts: readonly EnvelopeFact[]): EnvelopeFact[] {
+function supportableFacts(facts: readonly EnvelopeFact[]): EnvelopeFact[] {
   return facts.filter(
     (f) =>
       !f.stale &&

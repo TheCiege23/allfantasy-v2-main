@@ -105,7 +105,7 @@ export function rosterPositionsFrom(rules: unknown): string[] {
   return raw.map((x) => String(x)).filter(Boolean)
 }
 
-export interface IdpKickerSliceArgs {
+interface IdpKickerSliceArgs {
   sport: string
   leagueId?: string | null
   /** Sleeper ids to price. The CALLER bounds this — the adapter never truncates. */

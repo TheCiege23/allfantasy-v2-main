@@ -123,7 +123,6 @@ export type {
 // ── Token system ──────────────────────────────────────────────────────────────
 export {
   SEVERITY_DEFINITIONS,
-  severityDefinition,
   scoreToSeverity,
   percentileToSeverity,
   engagementTierToSeverity,

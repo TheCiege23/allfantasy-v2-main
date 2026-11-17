@@ -25,7 +25,7 @@ type PrismaLike = typeof defaultPrisma
  * NEVER THROWS. Callers mount this on paths that document "must never fail the route" — enrichment
  * is decoration over a Decision that is already complete and correct without it.
  */
-export type AttachOutcome<TAction> = {
+type AttachOutcome<TAction> = {
   decision: Decision<TAction>
   /** True only when AI prose actually replaced the deterministic explanation. */
   enriched: boolean
