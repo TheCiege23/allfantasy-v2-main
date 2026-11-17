@@ -316,7 +316,11 @@ export function DraftTopBar({
           ? headerCopy.noteCap(leagueNote.cap)
           : leagueNote.kind === 'zombie'
             ? [leagueNote.universe, leagueNote.level].filter(Boolean).join(' · ') || null
-            : [leagueNote.conference, leagueNote.round].filter(Boolean).join(' · ') || null
+            : leagueNote.kind === 'best_ball'
+              ? headerCopy.noteBestBall
+              : leagueNote.kind === 'big_brother'
+                ? headerCopy.noteBigBrother
+                : [leagueNote.conference, leagueNote.round].filter(Boolean).join(' · ') || null
   const liveRemaining = useDraftCountdownSeconds(
     timerStatus,
     timerEndAtIso ?? undefined,

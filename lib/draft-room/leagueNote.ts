@@ -1,7 +1,8 @@
 /**
  * Room v2 league notes (2026-11): the one rule a league type drafts under, said next to its chip in
  * the header — a Guillotine league's chop schedule, a Pirate league's protection count, a salary-cap
- * league's cap, a tournament league's conference and round. Facts only; the header words them
+ * league's cap, a tournament league's conference and round. Best Ball and Big Brother carry no draft-time
+ * setting worth a number, so theirs is the format's own fixed rule. Facts only; the header words them
  * (`draftRoomHeaderMessages`), so they read in Spanish too.
  *
  * Client-safe types. The server reads them in `loadDraftRoomLeagueFacts`.
@@ -13,6 +14,10 @@ export type LeagueNote =
   | { kind: 'tournament'; conference: string | null; round: string | null }
   /** Proper names from the league's Zombie universe, printed as they are. */
   | { kind: 'zombie'; universe: string | null; level: string | null }
+  /** Fixed by the format: lineups set themselves. */
+  | { kind: 'best_ball' }
+  /** Fixed by the format: a Head of Household and an eviction every week. */
+  | { kind: 'big_brother' }
 
 /** A snake salary-cap slot: the contract that pick is signed to (`loadRookieContractTerms`). */
 export type SlotSalary = { salary: number; years: number }
