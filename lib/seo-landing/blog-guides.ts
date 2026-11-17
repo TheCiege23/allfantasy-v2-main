@@ -81,6 +81,10 @@ const ZOMBIE: BlogGuideLink = {
   slug: 'zombie-fantasy-league',
   title: 'How Zombie Fantasy Leagues Work: Survivors, Zombies and the Whisperer',
 }
+const BIG_BROTHER: BlogGuideLink = {
+  slug: 'big-brother-fantasy-league',
+  title: 'How Big Brother Fantasy Leagues Work: HOH, Veto and Evictions',
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
@@ -96,6 +100,7 @@ export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGui
   idp: [IDP, DYNASTY],
   c2c: [C2C, DEVY],
   zombie: [ZOMBIE, SURVIVOR, GUILLOTINE],
+  'big-brother': [BIG_BROTHER, SURVIVOR, ZOMBIE],
 }
 
 /** Guides for /sports/<slug>. */
