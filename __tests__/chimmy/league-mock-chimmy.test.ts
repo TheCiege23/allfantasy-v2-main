@@ -160,6 +160,25 @@ describe('the prompt for a league mock room', () => {
   })
 })
 
+describe("this user's next picks", () => {
+  it('a paused room with this user up: their pick now, then the real snake turns — never a guess', async () => {
+    // 4-team snake, user in slot 2: picks #2, #7, #10. Found live: Chimmy said "#5" for a waiting room.
+    seed({ state: { currentPick: 2, timerPaused: true } })
+    const lines = mockDraftBoardLines((await loadLeagueMockBoard({ sessionId: SESSION, userId: 'u1', now: NOW }))!)
+    expect(lines.find((l) => l.startsWith('THIS USER IS UP'))).toMatch(/\(#2\) is theirs once the mock resumes/)
+    expect(lines.find((l) => l.startsWith("THIS USER'S NEXT PICK"))).toMatch(/^THIS USER'S NEXT PICK AFTER THIS ONE: .*\(#7\), 5 picks away/)
+    expect(lines.find((l) => l.startsWith("THIS USER'S PICKS AFTER THAT"))).toMatch(/\(#10\)\..*never work a pick out yourself/)
+  })
+
+  it('not up yet: the next pick is the first turn, and the ones after it are listed', async () => {
+    seed({ state: { currentPick: 3 } })
+    const lines = mockDraftBoardLines((await loadLeagueMockBoard({ sessionId: SESSION, userId: 'u1', now: NOW }))!)
+    expect(lines.some((l) => l.startsWith('THIS USER IS UP'))).toBe(false)
+    expect(lines.find((l) => l.startsWith("THIS USER'S NEXT PICK"))).toMatch(/^THIS USER'S NEXT PICK: .*\(#7\), 4 picks away/)
+    expect(lines.find((l) => l.startsWith("THIS USER'S PICKS AFTER THAT"))).toMatch(/\(#10\)/)
+  })
+})
+
 describe('the card for a league mock room', () => {
   it('Confirm applies to the queue the user sees; a changed queue is refused', async () => {
     const b = (await loadLeagueMockBoard({ sessionId: SESSION, userId: 'u1', clientQueueIds: ['s9'], now: NOW }))!

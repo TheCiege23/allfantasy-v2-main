@@ -8,8 +8,8 @@ import { findMultiADP, type ADPFormat } from '@/lib/multi-platform-adp'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
 import { attachAfAdpToMockPool } from '@/lib/mock-draft/mockPoolAfAdp'
-import { fillPoolFromConsensus, type MockPoolEntry } from '@/lib/mock-draft/nflPoolConsensusFill'
-import { getLiveAdpByName } from '@/lib/adp/liveAdpFallback'
+import { fillPoolFromConsensus, type ConsensusRow, type MockPoolEntry } from '@/lib/mock-draft/nflPoolConsensusFill'
+import { getLiveAdpByName, getSeasonDefenseAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
 import { prisma } from '@/lib/prisma'
 import { resolveSleeperIdsBatch } from '@/lib/sleeper/players-cache'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -265,8 +265,19 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
    * built from their own sources above. A failed read leaves the list as it was.
    */
   if (type === 'redraft' && pool !== 'rookie') {
-    const consensus = await getLiveAdpByName({ sport: 'NFL' }).catch(() => new Map())
-    entries = fillPoolFromConsensus(entries, consensus.values(), limit)
+    const [consensus, defenses] = await Promise.all([
+      getLiveAdpByName({ sport: 'NFL' }).catch(() => new Map<string, LiveAdpEntry>()),
+      /*
+       * The latest week's board held 4 team defenses (2026-11-16) — 4 for an 8-team draft. Each
+       * defense's last consensus price this season fills the rest (lib/adp/liveAdpFallback.ts).
+       */
+      getSeasonDefenseAdp({ sport: 'NFL' }).catch(() => []),
+    ])
+    const rows: ConsensusRow[] = [
+      ...consensus.values(),
+      ...defenses.map((d) => ({ name: d.name, adp: d.adp, position: 'DEF', team: d.team })),
+    ]
+    entries = fillPoolFromConsensus(entries, rows, limit)
   }
 
   /*

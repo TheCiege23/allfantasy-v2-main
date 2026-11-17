@@ -189,6 +189,13 @@ export function mockDraftBoardLines(board: MockDraftBoard): string[] {
 
   const onClockSlot = board.upcomingSlots[0] ?? null
   const userOnClock = board.draftType !== 'auction' && onClockSlot === board.userSlot && board.status === 'drafting'
+  /*
+   * THIS USER'S SLOT IS UP even while the room is paused or not started — only the CLOCK needs
+   * 'drafting'. Treating "up" as "on the clock" made the pick in front of them their "next" one in a
+   * waiting room, with nothing after it, and Chimmy filled the gap (2026-11-16: "back on the clock
+   * at 2.01 (pick #5)" in a 4-team snake, where slot 1 picks again at #8).
+   */
+  const userUp = board.draftType !== 'auction' && onClockSlot === board.userSlot
   if (board.draftType !== 'auction') {
     lines.push(
       `STATUS: pick ${formatPickLabel(board.currentPick, board.teamCount)} (#${board.currentPick}) is on the clock — ${
@@ -216,11 +223,19 @@ export function mockDraftBoardLines(board: MockDraftBoard): string[] {
 
   if (board.draftType !== 'auction') {
     const turns = userTurnOveralls(board)
-    const next = userOnClock ? turns[1] : turns[0]
+    const nextIndex = userUp ? 1 : 0
+    const next = turns[nextIndex]
+    if (userUp && !userOnClock) {
+      lines.push(`THIS USER IS UP: pick ${formatPickLabel(board.currentPick, board.teamCount)} (#${board.currentPick}) is theirs once the mock ${board.status === 'paused' ? 'resumes' : 'starts'}.`)
+    }
     if (next != null) {
       const away = next - board.currentPick
-      lines.push(`THIS USER'S NEXT PICK${userOnClock ? ' AFTER THIS ONE' : ''}: ${formatPickLabel(next, board.teamCount)} (#${next}), ${away} pick${away === 1 ? '' : 's'} away.`)
-      const between = board.upcomingSlots.slice(userOnClock ? 1 : 0, next - board.currentPick).filter((s) => s !== board.userSlot)
+      lines.push(`THIS USER'S NEXT PICK${userUp ? ' AFTER THIS ONE' : ''}: ${formatPickLabel(next, board.teamCount)} (#${next}), ${away} pick${away === 1 ? '' : 's'} away.`)
+      const later = turns.slice(nextIndex + 1, nextIndex + 3)
+      if (later.length > 0) {
+        lines.push(`THIS USER'S PICKS AFTER THAT: ${later.map((o) => `${formatPickLabel(o, board.teamCount)} (#${o})`).join(', ')}. Use these numbers; never work a pick out yourself.`)
+      }
+      const between = board.upcomingSlots.slice(userUp ? 1 : 0, next - board.currentPick).filter((s) => s !== board.userSlot)
       const before = [...new Set(between)].map((slot) => board.teams.find((t) => t.slot === slot)).filter((t) => t != null)
       if (before.length > 0) {
         lines.push(
@@ -229,8 +244,10 @@ export function mockDraftBoardLines(board: MockDraftBoard): string[] {
             .join('; ')}. These are the room's roster-needs reads, not predictions of a pick.`,
         )
       }
-    } else if (!userOnClock) {
+    } else if (!userUp) {
       lines.push('THIS USER HAS NO PICKS LEFT in this mock.')
+    } else {
+      lines.push("This is THIS USER'S LAST PICK in this mock.")
     }
   }
 
