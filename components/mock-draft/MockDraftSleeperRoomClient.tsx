@@ -22,6 +22,7 @@ import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/Dr
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
+import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
 import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 import { LanguageFallbackBoundary } from '@/components/i18n/LanguageProviderClient'
 import { mockDraftRoomMessages } from '@/lib/core-app/messages/mockDraftRoom'
@@ -170,6 +171,12 @@ interface LeagueMockPayload {
     managers: LeagueManager[]
     detectedUserSlot: number
     hasExplicitDraftOrder: boolean
+    /**
+     * Room v2: the league's real type and its room facts (lib/mock-draft/leagueMockRoomFacts). Optional:
+     * a mock saved before them restores without, and falls back to the dynasty/redraft accent.
+     */
+    leagueConcept?: string | null
+    leagueFacts?: Pick<DraftRoomLeagueFacts, 'note' | 'slotSalaryByOverall'> | null
   }
 }
 
@@ -2224,6 +2231,7 @@ export default function MockDraftSleeperRoomClient({
       teamCount={draftState.settings.teamCount} rounds={draftState.settings.rounds}
       draftType={draftState.settings.draftType} sport={draftState.settings.sport}
       currentOverall={draftState.status === 'drafting' ? draftState.currentPick : null}
+      slotSalaryByOverall={draftState.settings.draftType === 'auction' ? null : leaguePayload?.leagueFacts?.slotSalaryByOverall ?? null}
     />
 
     const sport = draftState.settings.sport
@@ -2594,8 +2602,8 @@ export default function MockDraftSleeperRoomClient({
     )
 
     const status = draftState.status
-    /* A league mock takes its league's accent (dynasty or redraft); an open mock has no league, so no chip. */
-    const leagueAccent = leaguePayload ? leagueAccentFor(null, { isDynasty: leaguePayload.isDynasty }) : null
+    /* A league mock takes its league's real type (the same reader as the live room); an open mock has no league, so no chip. */
+    const leagueAccent = leaguePayload ? leagueAccentFor(leaguePayload.leagueConcept ?? null, { isDynasty: leaguePayload.isDynasty }) : null
     const pausePill =
       status === 'complete' ? null : status === 'drafting' ? (
         <button
@@ -2622,6 +2630,7 @@ export default function MockDraftSleeperRoomClient({
         <DraftTopBar
           leagueName={leaguePayload?.leagueName ?? mockCopy.openMock}
           leagueAccent={leagueAccent}
+          leagueNote={leaguePayload?.leagueFacts?.note ?? null}
           sport={sport}
           draftType={draftState.settings.draftType}
           teamCount={draftState.settings.teamCount}
