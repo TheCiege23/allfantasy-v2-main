@@ -24,7 +24,9 @@ import { describe, expect, it } from 'vitest'
 const ROOT = process.cwd()
 
 /** Deliberately narrow — see file header. Recursively walked. */
-const SCAN_ROOTS = ['app/dashboard']
+// app/partners + components/partners: the B2B front door, whose language rule is the same ("Intelligence", never
+// the bare label) by the B2B requirements doc — added with the page on 2026-11-17.
+const SCAN_ROOTS = ['app/dashboard', 'app/partners', 'components/partners']
 
 /** Specific files outside SCAN_ROOTS that are part of the same dashboard surface (already fixed
  *  this pass) or return literal strings rendered to users despite living under app/api. */
