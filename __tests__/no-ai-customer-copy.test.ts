@@ -124,7 +124,8 @@ const ALLOWLIST: Record<string, string[]> = {
   // that recommendations are machine-generated. Same reasoning as brand-voice-chimmy-labels.test.ts.
   'app/ai/tools/AIToolsPageClient.tsx': ['AI Transparency', 'league management, AI analysis, and', 'AI recommendations are designed to support your decisions'],
   'app/war-room/page.tsx': ['AI Transparency'],
-  'app/mission/page.tsx': ['AI Transparency'],
+  // The mission page's transparency section: says the AI features are optional and links the legal page.
+  'app/mission/page.tsx': ['AI Transparency', 'Our AI features are optional guidance', 'fully useful with AI turned off'],
   'components/landing/SeoLandingFooter.tsx': ['AI Transparency'],
 }
 
@@ -143,6 +144,43 @@ function metadataMask(lines: string[]): boolean[] {
     mask[i] = true
     const d = (depth ?? 0) + (line.match(/[{[]/g)?.length ?? 0) - (line.match(/[}\]]/g)?.length ?? 0)
     depth = d > 0 ? d : null
+  }
+  return mask
+}
+
+/**
+ * JSX text that shares its line with tags or `{expressions}` — `<Bot /> AI Commissioner`,
+ * `AI explanation ({result.type})`, `<span>📈</span> Waiver AI`. The three checks above cannot see
+ * it: it is not quoted, it is not between `>` and `<` on one line, and the braces disqualify it as a
+ * bare text line. 36 such labels survived the 2026-11-17 rewrite and this guard until it was added.
+ *
+ * Quoted strings are blanked first (their own check reads them), and only a standalone token counts:
+ * `AI_FEATURES`, `isAI`, `.AI`, `AI(` and `AI:` / `AI =` (a key or a binding) are code.
+ */
+const BARE_AI_TOKEN = /(?<![.\w$])AI(?![\w$(])(?!\s*[:=.])/
+function unquotedText(line: string): string | null {
+  const t = line.trim()
+  if (!t || t.startsWith('//') || t.startsWith('*') || t.startsWith('import ') || isConsoleCall(line)) return null
+  const code = line.split(' // ')[0]!.replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '""').replace(/\{\/\*.*?\*\/\}/g, '')
+  return BARE_AI_TOKEN.test(code) ? code : null
+}
+
+/** Lines inside a multi-line `/* … *\/` or `{/* … *\/}` comment. */
+function blockCommentMask(lines: string[]): boolean[] {
+  const mask = new Array<boolean>(lines.length).fill(false)
+  let open = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (open) {
+      mask[i] = true
+      if (line.includes('*/')) open = false
+      continue
+    }
+    const start = line.indexOf('/*')
+    if (start >= 0 && !line.slice(start).includes('*/')) {
+      open = true
+      mask[i] = true
+    }
   }
   return mask
 }
@@ -166,6 +204,7 @@ describe('no-AI customer-copy regression guard (whole app)', () => {
       const offenders: string[] = []
       const lines = src.split(/\r?\n/)
       const isMeta = metadataMask(lines)
+      const inBlockComment = blockCommentMask(lines)
       for (const [idx, raw] of lines.entries()) {
         if (isMeta[idx]) continue
         if (isCommentOrImport(raw) || isConsoleCall(raw)) continue
@@ -187,6 +226,11 @@ describe('no-AI customer-copy regression guard (whole app)', () => {
         if (isBareTextLine(raw)) {
           const text = raw.trim()
           if (findForbidden(text) && !isAllowlisted(rel, text)) offenders.push(`bare text line: ${text}`)
+        }
+
+        if (rel.endsWith('.tsx') && !inBlockComment[idx]) {
+          const text = unquotedText(raw)
+          if (text !== null && !isAllowlisted(rel, raw.trim())) offenders.push(`jsx text beside code: ${raw.trim()}`)
         }
       }
       expect(offenders, offenders.join('\n')).toEqual([])

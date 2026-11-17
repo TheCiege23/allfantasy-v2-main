@@ -218,7 +218,7 @@ export function TournamentControlDashboard({
           onClick={() => { setAiOpen(true); setAiText('') }}
           className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-2.5 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
         >
-          <Sparkles className="h-4 w-4" /> Generate with AI
+          <Sparkles className="h-4 w-4" /> Generate with Chimmy
         </button>
         <Link
           href={`/tournament/${tournamentId}`}

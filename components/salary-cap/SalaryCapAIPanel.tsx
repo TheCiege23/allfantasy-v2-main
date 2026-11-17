@@ -138,7 +138,7 @@ export function SalaryCapAIPanel({
                 Generating…
               </>
             ) : (
-              <>Get AI advice: {TYPE_LABELS[type]}</>
+              <>Get Chimmy advice: {TYPE_LABELS[type]}</>
             )}
           </button>
         </FeatureGate>
@@ -153,7 +153,7 @@ export function SalaryCapAIPanel({
         {result && (
           <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-300">
-              AI explanation ({result.type.replace(/_/g, ' ')})
+              Chimmy explanation ({result.type.replace(/_/g, ' ')})
             </p>
             <p className="whitespace-pre-wrap text-sm text-white/90">{result.explanation}</p>
           </div>

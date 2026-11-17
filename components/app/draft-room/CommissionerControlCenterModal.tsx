@@ -795,9 +795,9 @@ export function CommissionerControlCenterModal({
               </p>
               {ui.orphanTeamAiManagerEnabled && (
                 <p className="mt-1 text-white/60">
-                  Requested mode: <span className="text-white">{requestedOrphanMode.toUpperCase()}</span>
+                  Requested mode: <span className="text-white">{requestedOrphanMode === 'ai' ? 'Chimmy' : requestedOrphanMode.toUpperCase()}</span>
                   {' · '}Effective mode:{' '}
-                  <span className="text-white">{effectiveOrphanMode.toUpperCase()}</span>
+                  <span className="text-white">{effectiveOrphanMode === 'ai' ? 'Chimmy' : effectiveOrphanMode.toUpperCase()}</span>
                   {requestedOrphanMode === 'ai' ? ` · Chimmy providers ${orphanAiProviderAvailable ? 'available' : 'unavailable'}.` : '.'}
                 </p>
               )}

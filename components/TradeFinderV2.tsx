@@ -1369,7 +1369,7 @@ export default function TradeFinderV2({
         <div className="space-y-4">
           <div className="text-center">
             <p className="text-xs text-white/40">
-              AI scanned {response.meta.partnersEvaluated} teams, generated {response.meta.rawCandidatesGenerated} candidates, refined to {response.meta.prunedTo}
+              Chimmy scanned {response.meta.partnersEvaluated} teams, generated {response.meta.rawCandidatesGenerated} candidates, refined to {response.meta.prunedTo}
             </p>
           </div>
 

@@ -272,7 +272,7 @@ export default function AIFeaturesPanel({ leagueName, leagueId, onNavigate }: AI
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-rival-pulse" />
                 <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">All Active</span>
               </div>
-              <span className="text-[11px] text-white/20">{AI_FEATURES.length} AI-powered tools ready</span>
+              <span className="text-[11px] text-white/20">{AI_FEATURES.length} Chimmy-powered tools ready</span>
             </div>
           </div>
         </div>

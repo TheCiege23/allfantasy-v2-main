@@ -594,7 +594,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Bot className="h-4 w-4 text-purple-300" /> AI Commissioner
+            <Bot className="h-4 w-4 text-purple-300" /> Chimmy Commissioner
           </h2>
           <p className="mt-1 text-xs text-white/65">
             Governance assistant for rule enforcement, reminders, disputes, collusion signals, and commissioner notice workflow.

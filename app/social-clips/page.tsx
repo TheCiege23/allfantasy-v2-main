@@ -169,7 +169,7 @@ export default function SocialClipsPage() {
       <Card className="border-amber-500/20 bg-amber-500/5">
         <CardHeader>
           <CardTitle className="text-lg text-white flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-amber-400" /> AI social clip
+            <Sparkles className="h-5 w-5 text-amber-400" /> Chimmy social clip
           </CardTitle>
           <p className="text-sm text-zinc-400">
             Multi-provider: narrative (xAI) → fact check (DeepSeek) → polish (OpenAI). Generate → preview → edit → approve → publish or copy.

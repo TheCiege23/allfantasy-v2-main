@@ -2442,7 +2442,7 @@ export default function WorldCupBracketShell({
             <p className="mt-2 text-center text-[11px] text-white/30">
               Use code{" "}
               <span className="font-bold text-amber-300/60">WassupFred</span>
-              {" "}for 20% off your first AI upgrade
+              {" "}for 20% off your first Chimmy upgrade
             </p>
           </div>
         </div>
