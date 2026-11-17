@@ -513,7 +513,7 @@ export function PostDraftView({
     { id: 'teams', label: 'Teams', icon: Users },
     { id: 'roster', label: 'My Roster', icon: ListOrdered },
     { id: 'replay', label: 'Replay', icon: LayoutGrid },
-    { id: 'recap', label: 'AI Recap', icon: Sparkles },
+    { id: 'recap', label: 'Chimmy Recap', icon: Sparkles },
     { id: 'share', label: 'Share', icon: Share2 },
   ]
 
@@ -577,7 +577,7 @@ export function PostDraftView({
                   onClick={() => setTab('recap')}
                   className="rounded border border-violet-300/30 bg-violet-500/10 px-2.5 py-1.5 text-xs text-violet-100 hover:bg-violet-500/20"
                 >
-                  AI recap
+                  Chimmy recap
                 </button>
               </div>
             </div>
@@ -827,7 +827,7 @@ export function PostDraftView({
 
         {tab === 'recap' && (
           <section className="space-y-3" data-testid="post-draft-ai-recap-panel">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">AI recap</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">Chimmy recap</h2>
             {recapSectionsLoading && (
               <p className="text-white/60 text-xs">Building deterministic recap cards…</p>
             )}
@@ -905,7 +905,7 @@ export function PostDraftView({
                 className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm text-white hover:bg-cyan-500 min-h-[44px]"
               >
                 <Sparkles className="h-4 w-4" />
-                Generate AI narrative recap
+                Generate Chimmy narrative recap
               </button>
             )}
             {recapLoading && <p className="text-white/60">Generating recap…</p>}
@@ -920,7 +920,7 @@ export function PostDraftView({
             {recapExecutionMode && (
               <p className="text-[11px] text-white/60" data-testid="post-draft-ai-recap-execution">
                 {recapExecutionMode === 'ai_explained'
-                  ? 'Execution: deterministic recap + AI narrative layer'
+                  ? 'Execution: deterministic recap + Chimmy narrative layer'
                   : 'Execution: deterministic recap only'}
               </p>
             )}

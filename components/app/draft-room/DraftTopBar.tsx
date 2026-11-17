@@ -61,15 +61,15 @@ type DraftTopBarProps = {
   commissionerPauseControlsEnabled?: boolean
   /** For reconnect/refresh state */
   isReconnecting?: boolean
-  /** Orphan roster on clock: show CPU/AI Manager badge and allow Run pick */
+  /** Orphan roster on clock: show CPU/Chimmy Manager badge and allow Run pick */
   isOrphanOnClock?: boolean
-  /** The team on the clock is a Chimmy AI manager slot, which picks on its own after a short delay. */
+  /** The team on the clock is a Chimmy manager slot, which picks on its own after a short delay. */
   chimmyManagerOnClock?: boolean
-  /** When orphan on clock: 'cpu' | 'ai' - label shows "CPU Manager" or "AI Manager" */
+  /** When orphan on clock: 'cpu' | 'ai' - label shows "CPU Manager" or "Chimmy Manager" */
   orphanDrafterMode?: 'cpu' | 'ai'
-  /** Selected setting mode; used to show fallback state when requested AI runs in CPU fallback. */
+  /** Selected setting mode; used to show fallback state when requested Chimmy runs in CPU fallback. */
   orphanDrafterRequestedMode?: 'cpu' | 'ai'
-  /** True when requested AI mode fell back to CPU due unavailable providers/errors. */
+  /** True when requested Chimmy mode fell back to CPU due unavailable providers/errors. */
   orphanFallbackActive?: boolean
   onRunAiPick?: () => void
   runAiPickLoading?: boolean
@@ -101,7 +101,7 @@ type DraftTopBarProps = {
   thirdRoundReversal?: boolean
   /** When set, the overflow menu shows a "Big Screen / Cast Board" entry that opens this URL in a new tab. */
   bigScreenHref?: string | null
-  /** Compact AI recommendation overlay for current-pick strip. */
+  /** Compact Chimmy recommendation overlay for current-pick strip. */
   aiRecommendationOverlay?: {
     label?: string | null
     playerName?: string | null
@@ -113,7 +113,7 @@ type DraftTopBarProps = {
     byeWeekConflict?: boolean
     note?: string | null
   } | null
-  /** Shared toggle controlling whether AI overlays are shown cross-surface. */
+  /** Shared toggle controlling whether Chimmy overlays are shown cross-surface. */
   showAiOverlays?: boolean
   poolReadiness?: {
     ready: boolean

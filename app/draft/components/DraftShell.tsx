@@ -461,7 +461,7 @@ export function DraftShell({
               { key: 'queue', i18nKey: 'draftRoom.legacy.queueTab', label: 'Queue' },
               { key: 'roster', i18nKey: 'draftRoom.legacy.rosterTab', label: 'Roster' },
               { key: 'chat', i18nKey: 'draftRoom.legacy.draftChat', label: 'Draft Chat' },
-              { key: 'ai', i18nKey: 'draftRoom.legacy.aiTab', label: 'AI' },
+              { key: 'ai', i18nKey: 'draftRoom.legacy.aiTab', label: 'Chimmy' },
             ] as const).map((tab) => {
               const translated = t(tab.i18nKey)
               const resolvedLabel =

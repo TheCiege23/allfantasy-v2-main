@@ -61,44 +61,15 @@ describe('PositionChip — position-aware color badges (Commit 22)', () => {
 // 2. ADP delta badge — surfaces existing p.adp / p.aiAdp data
 // ---------------------------------------------------------------------------
 
-describe('ADP delta badge — surfaces existing client-side data (Commit 22)', () => {
-  // The badge now measures market ADP against AF ADP, the column it sits beside.
-  it('ADP case computes delta as Math.round(p.adp - AF ADP)', () => {
-    expect(tableSrc).toMatch(/Math\.round\(p\.adp - Number\(p\.afAdp\)\)/)
-  })
-
-  it('delta is only shown when both adp and afAdp are finite numbers', () => {
-    expect(tableSrc).toMatch(/p\.adp != null[\s\S]{0,100}Number\.isFinite[\s\S]{0,100}p\.afAdp != null/)
-  })
-
-  it('delta is only rendered when delta !== 0 (no noise for exact match)', () => {
-    expect(tableSrc).toMatch(/delta !== null && delta !== 0/)
-  })
-
-  it('positive delta (AI values player higher) uses emerald class', () => {
-    expect(tableSrc).toMatch(/delta > 0.*text-emerald/)
-  })
-
-  it('negative delta (AI values player lower) uses rose class', () => {
-    expect(tableSrc).toMatch(/text-rose.*delta|delta.*text-rose/)
-  })
-
-  it('delta badge carries a descriptive title for non-sighted users', () => {
-    expect(tableSrc).toMatch(/undervalued.*overvalued|overvalued.*undervalued/)
-  })
-
-  it('delta span is aria-hidden (decorative — the ADP title already conveys the info)', () => {
-    expect(tableSrc).toMatch(/aria-hidden[\s\S]{0,80}adp-delta|adp-delta[\s\S]{0,80}aria-hidden/)
-  })
-
-  it('delta testid uses -adp-delta suffix', () => {
-    expect(tableSrc).toMatch(/adp-delta/)
+describe('ADP column shows one number (2026-11-16)', () => {
+  // The unlabelled +3/−2 gap to the AF ADP column printed beside it was removed: users could
+  // not tell what it meant, and it repeated a number already on the row.
+  it('no longer renders an adp-delta badge in the pool', () => {
+    expect(tableSrc).not.toMatch(/data-testid=\{`\$\{testIdBase\}-adp-delta`\}/)
+    expect(tableSrc).toMatch(/data-testid=\{`\$\{testIdBase\}-adp`\}/)
   })
 })
 
-// ---------------------------------------------------------------------------
-// 3. Null stat cell dimming
-// ---------------------------------------------------------------------------
 
 describe('null stat cells — dimmed for "no data" clarity (Commit 22)', () => {
   it("em-dash values get text-white/30 class in the default stat branch", () => {

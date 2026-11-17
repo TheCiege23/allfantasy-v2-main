@@ -84,13 +84,13 @@ describe('DraftTeamPanel wires the team-needs surface', () => {
 
   it('imports the computeTeamNeeds + detectByeWeekClusters helpers', () => {
     expect(src).toMatch(
-      /import \{ computeTeamNeeds, detectByeWeekClusters \} from '@\/lib\/draft-room\/teamNeeds'/,
+      /import \{ computeStarterNeedsForDisplay, detectByeWeekClusters \} from '@\/lib\/draft-room\/teamNeeds'/,
     )
   })
 
   it('computes teamNeeds from { picks: myPicks, starterSlots }', () => {
     expect(src).toMatch(
-      /const teamNeeds = computeTeamNeeds\(\{ picks: myPicks, starterSlots \}\)/,
+      /const teamNeeds = computeStarterNeedsForDisplay\(\{ picks: myPicks, starterSlots \}\)/,
     )
   })
 

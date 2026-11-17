@@ -62,7 +62,8 @@ export async function loadDraftChatWireMessages(leagueId: string, userId: string
         ...baseOpts,
         limit: Math.min(limit, 80),
         source: 'draft',
-        messageTypeIn: ['draft_pick'],
+        // Pick cards, plus the trade / commissioner-change cards (lib/draft-room/postDraftRoomEventChat).
+        messageTypeIn: ['draft_pick', 'draft_event'],
       }),
     ])
     rows = mergeDraftRoomChatStreams(leagueMsgs, pickMsgs, limit)

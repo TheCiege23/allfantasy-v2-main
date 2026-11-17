@@ -81,7 +81,7 @@ type DraftRoomShellProps = {
    * Optional bottom dock when `bottomBar` is provided.
    */
   layout?: 'classic' | 'premium'
-  /** Left column — your team / AI badges (desktop premium) */
+  /** Left column — your team / Chimmy badges (desktop premium) */
   teamPanel?: ReactNode
   /** Center column — usually player pool + queue stacked */
   centerColumn?: ReactNode
