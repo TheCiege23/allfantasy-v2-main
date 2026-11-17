@@ -89,6 +89,10 @@ const FAAB: BlogGuideLink = {
   slug: 'faab-fantasy-football',
   title: 'How FAAB Works: Fantasy Football Waiver Bidding Explained',
 }
+const START_A_LEAGUE: BlogGuideLink = {
+  slug: 'how-to-start-a-fantasy-football-league',
+  title: "How to Start a Fantasy Football League: A Commissioner's Checklist",
+}
 
 /** Guides for /league-types/<slug>, the format's own guide first. */
 export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGuideLink[]>> = {
@@ -109,7 +113,8 @@ export const LEAGUE_TYPE_GUIDES: Partial<Record<LeagueTypeSlug, readonly BlogGui
 
 /** Guides for /sports/<slug>. */
 export const SPORT_GUIDES: Partial<Record<SportSlug, readonly BlogGuideLink[]>> = {
-  'fantasy-football': [DYNASTY, KEEPER, BEST_BALL, SALARY_CAP, IDP, FAAB, TRADE_DEADLINE, GUILLOTINE],
+  // The checklist leads: this page is where someone deciding to start a league lands.
+  'fantasy-football': [START_A_LEAGUE, DYNASTY, KEEPER, BEST_BALL, SALARY_CAP, IDP, FAAB, TRADE_DEADLINE, GUILLOTINE],
   'fantasy-basketball': [POINTS_VS_CATEGORIES, NBA_CUP_POOL],
   'fantasy-hockey': [HOCKEY],
   'fantasy-soccer': [SOCCER],
