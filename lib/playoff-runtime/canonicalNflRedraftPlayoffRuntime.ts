@@ -106,18 +106,18 @@ export type NflRedraftRegularSeasonMatchupInput = {
   isMedianMatchup?: boolean | null
 }
 
-export type NflRedraftPlayoffBracketStatus = 'not_generated' | 'pending' | 'active' | 'locked' | 'complete'
-export type NflRedraftPlayoffBracketType = 'championship' | 'consolation' | 'third_place'
-export type NflRedraftPlayoffMatchupStatus = 'scheduled' | 'active' | 'final' | 'bye' | 'cancelled'
-export type NflRedraftPlayoffRoundStatus = 'pending' | 'active' | 'completed' | 'cancelled'
-export type NflRedraftPlayoffQualifiedBy = 'division' | 'wildcard' | 'standings'
+type NflRedraftPlayoffBracketStatus = 'not_generated' | 'pending' | 'active' | 'locked' | 'complete'
+type NflRedraftPlayoffBracketType = 'championship' | 'consolation' | 'third_place'
+type NflRedraftPlayoffMatchupStatus = 'scheduled' | 'active' | 'final' | 'bye' | 'cancelled'
+type NflRedraftPlayoffRoundStatus = 'pending' | 'active' | 'completed' | 'cancelled'
+type NflRedraftPlayoffQualifiedBy = 'division' | 'wildcard' | 'standings'
 /**
  * The bracket the non-playoff teams play. `consolation`: winners advance and the final's winner is
  * the best of the rest. `toilet_bowl`: losers advance and the final's loser finishes last.
  */
 export type NflRedraftLowerBracketMode = 'none' | 'consolation' | 'toilet_bowl'
 
-export type NflRedraftPlayoffSettings = {
+type NflRedraftPlayoffSettings = {
   playoffTeamCount: number
   regularSeasonEndWeek: number
   playoffStartWeek: number
@@ -154,7 +154,7 @@ export type NflRedraftPlayoffSettings = {
   supportWarnings: string[]
 }
 
-export type NflRedraftPlayoffTeamState = {
+type NflRedraftPlayoffTeamState = {
   rosterId: string
   displayName: string
   ownerId: string | null
@@ -224,7 +224,7 @@ export type NflRedraftPlayoffRoundState = {
   matchups: NflRedraftPlayoffMatchupState[]
 }
 
-export type NflRedraftPlayoffFinalStanding = {
+type NflRedraftPlayoffFinalStanding = {
   finish: number
   rosterId: string
   displayName: string
@@ -237,7 +237,7 @@ export type NflRedraftPlayoffFinalStanding = {
   thirdPlace: boolean
 }
 
-export type NflRedraftPlayoffBracketState = {
+type NflRedraftPlayoffBracketState = {
   bracketId: string | null
   status: NflRedraftPlayoffBracketStatus
   locked: boolean
@@ -286,12 +286,12 @@ export type NflRedraftPlayoffRuntimeState = {
   }
 }
 
-export type NflRedraftGeneratedPlayoffBracket = {
+type NflRedraftGeneratedPlayoffBracket = {
   bracket: NflRedraftPlayoffBracketState
   events: CanonicalLeagueRuntimeEvent[]
 }
 
-export type NflRedraftPlayoffAdvanceResult =
+type NflRedraftPlayoffAdvanceResult =
   | {
       ok: true
       state: NflRedraftPlayoffRuntimeState
@@ -308,7 +308,7 @@ export type NflRedraftPlayoffAdvanceResult =
       events: CanonicalLeagueRuntimeEvent[]
     }
 
-export type NflRedraftPlayoffFinalizeResult =
+type NflRedraftPlayoffFinalizeResult =
   | {
       ok: true
       state: NflRedraftPlayoffRuntimeState
@@ -584,9 +584,9 @@ function tiebreakerValue(team: NflRedraftPlayoffTeamState, key: string, ctx: Tie
 const HEAD_TO_HEAD_KEYS = new Set(['head_to_head', 'h2h'])
 
 /** Head-to-head results between pairs of teams: `index.get(a)?.get(b)` is a's record vs b. */
-export type HeadToHeadIndex = Map<string, Map<string, { wins: number; losses: number; ties: number }>>
+type HeadToHeadIndex = Map<string, Map<string, { wins: number; losses: number; ties: number }>>
 
-export function buildHeadToHeadIndex(
+function buildHeadToHeadIndex(
   matchups: NflRedraftRegularSeasonMatchupInput[] | null | undefined,
   regularSeasonEndWeek: number | null,
 ): HeadToHeadIndex {
@@ -627,7 +627,7 @@ export function buildHeadToHeadIndex(
 }
 
 /** Each counted regular-season week's points by roster, for the `all_play` tiebreaker — the same rows head-to-head counts. */
-export function regularSeasonWeekScores(
+function regularSeasonWeekScores(
   matchups: NflRedraftRegularSeasonMatchupInput[] | null | undefined,
   regularSeasonEndWeek: number | null,
 ): Map<number, Map<string, number>> {

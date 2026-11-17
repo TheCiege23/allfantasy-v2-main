@@ -137,12 +137,20 @@ describe('every specialty format rules route checks the lock and writes the log'
     ['app/api/leagues/[leagueId]/guillotine/summary/route.ts', 3],
     ['app/api/leagues/[leagueId]/pirate/route.ts', 1],
     ['app/api/leagues/[leagueId]/big-brother/config/route.ts', 1],
+    // Its `update_config` action is the second Big Brother rules write path.
+    ['app/api/leagues/[leagueId]/big-brother/admin/route.ts', 1],
     ['app/api/leagues/[leagueId]/devy/config/route.ts', 1],
     ['app/api/leagues/[leagueId]/merged-devy-c2c/config/route.ts', 1],
     ['app/api/leagues/[leagueId]/idp/config/route.ts', 1],
     ['app/api/commissioner/leagues/[leagueId]/idp/cap-config/route.ts', 1],
     ['app/api/devy/route.ts', 1],
     ['app/api/c2c/settings/route.ts', 1],
+    // Survivor: every route that rewrites the league's Survivor rules (the foundation route logs its two saves).
+    ['app/api/survivor/season/route.ts', 1],
+    ['server/api-route-modules/league-survivor/settings-screen/route.ts', 1],
+    ['server/api-route-modules/league-survivor/config/route.ts', 1],
+    ['server/api-route-modules/league-survivor/foundation/route.ts', 2],
+    ['app/api/survivor/commissioner/route.ts', 1],
   ])('%s', (path, logs) => {
     expect(calls(path, 'formatRulesLockedResponse')).toHaveLength(1)
     expect(calls(path, 'logFormatRulesChange').length).toBe(logs)

@@ -107,7 +107,7 @@ export function translateImportedRosterData(data: unknown, idMap: Map<string, st
   }
 }
 
-export type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skippedNotTraded: number; skippedPastSeason: number }
+type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skippedNotTraded: number; skippedPastSeason: number }
 
 /**
  * Copy the source league's traded future picks into the new native league, inside the creation
@@ -124,7 +124,7 @@ export type CarriedFuturePicks = { copied: number; skippedUnmapped: number; skip
  * native rookie draft will ever consume it. `skipDuplicates` on the
  * (leagueId, pickSeason, round, originalRosterId) key keeps a retried carryover from duplicating rows.
  */
-export async function carryOverImportedFuturePicks(tx: Tx, args: {
+async function carryOverImportedFuturePicks(tx: Tx, args: {
   sourceLeagueId: string
   targetLeagueId: string
   /** Provider team id (`LeagueTeam.externalId`) → the new native `Roster.id`. */

@@ -37,7 +37,7 @@ function prismaErrorDetail(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-export type ExecuteCanonicalLeagueCreationResult =
+type ExecuteCanonicalLeagueCreationResult =
   | { ok: true; response: CreateLeagueSuccessResponse }
   | { ok: false; status: number; response: CreateLeagueErrorResponse }
 

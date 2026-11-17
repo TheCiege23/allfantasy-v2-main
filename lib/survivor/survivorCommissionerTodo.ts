@@ -47,6 +47,14 @@ export type SurvivorCommissionerTodoFacts = {
   /** Commissioner alerts already sent (`kind:dedupeKey`), so the list agrees with the inbox. */
   sentAlertKeys: string[]
   tribeRedrawPending: boolean
+  /**
+   * Builder challenges that are locked and set to be settled by hand. The season runner skips them
+   * (lib/survivor/survivorChallengeBuilder.ts: it auto-settles only non-`manual` sources), so nobody
+   * gets the prize until the commissioner enters the result.
+   */
+  manualChallengesAwaitingResult?: number
+  /** Rewards waiting for their winner to pick a target (`awaiting_choice`). The commissioner may set it. */
+  rewardsAwaitingChoice?: number
 }
 
 const PRE_DRAFT = new Set(['pre_draft', 'scheduled'])
@@ -128,6 +136,27 @@ export function buildSurvivorCommissionerTodo(facts: SurvivorCommissionerTodoFac
       title: 'The jury vote needs a look',
       body: 'The jury deadline passed and no winner could be crowned. Review the finale.',
       href: `${base}/jury`, cta: 'Open the finale',
+    })
+  }
+
+  const manualChallenges = facts.manualChallengesAwaitingResult ?? 0
+  if (manualChallenges > 0) {
+    items.push({
+      id: 'settle_challenges', tone: 'action',
+      title: manualChallenges === 1 ? 'Settle a hand-scored challenge' : `Settle ${manualChallenges} hand-scored challenges`,
+      body: `${manualChallenges === 1 ? 'A challenge is' : `${manualChallenges} challenges are`} locked and set to be settled by you. Nobody gets the prize until you enter the result.`,
+      href: `${hub}?tab=minigames`, cta: 'Settle',
+    })
+  }
+
+  // The winner's choice, not the commissioner's chore: a heads-up that the prize is not paid yet.
+  const awaitingChoice = facts.rewardsAwaitingChoice ?? 0
+  if (awaitingChoice > 0 && !seasonOver) {
+    items.push({
+      id: 'rewards_awaiting_choice', tone: 'heads_up',
+      title: awaitingChoice === 1 ? 'A reward is waiting on its winner' : `${awaitingChoice} rewards are waiting on their winners`,
+      body: 'The winner picks who it goes to or who it targets. If they never do, you can set it under Rewards.',
+      href: `${hub}?tab=rewards`, cta: 'See rewards',
     })
   }
 

@@ -1,7 +1,7 @@
 import type { PlayoffSeriesView } from "./types"
 import { cupPointsLeaders, type CupGameDetails } from "./nbaCupProgress"
 
-export type CupRound = "cup_group_play" | "cup_quarterfinals" | "cup_semifinals" | "cup_championship"
+type CupRound = "cup_group_play" | "cup_quarterfinals" | "cup_semifinals" | "cup_championship"
 export type NbaCupGame = CupGameDetails & {
   eventId: string; round: CupRound; label: string; startsAt: string | null
   homeTeamName: string; awayTeamName: string; conference: "east" | "west" | "finals"
@@ -29,7 +29,7 @@ export type NbaCupGame = CupGameDetails & {
 }
 
 /** A team's points leader for one game. */
-export type NbaCupLeader = { name: string; points: number }
+type NbaCupLeader = { name: string; points: number }
 
 /**
  * ⚠ ONLY ONCE THE GAME HAS STARTED. Before tipoff ESPN's competitor `leaders`

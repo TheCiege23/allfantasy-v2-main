@@ -169,7 +169,7 @@ function buildOpenTeamName(slotNumber: number): string {
   return `Open Team ${slotNumber}`
 }
 
-export type CanonicalCreateTransactionResult = {
+type CanonicalCreateTransactionResult = {
   leagueId: string
   homepageUrl: string
   inviteUrl: string

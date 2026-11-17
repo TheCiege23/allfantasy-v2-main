@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
 import { runBigBrotherAdminAction } from '@/lib/big-brother/BigBrotherAdminService'
 import type { BigBrotherAdminAction } from '@/lib/big-brother/BigBrotherAdminService'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,13 @@ export async function POST(
     return NextResponse.json({ error: `Invalid action: ${action}` }, { status: 400 })
   }
 
+  // A rules change is a rules change whichever route carries it: the league's "Format rules" lock, then the league
+  // log (lib/league/formatRulesGuard.ts), exactly as the config PATCH route does.
+  if (action === 'update_config') {
+    const formatLocked = await formatRulesLockedResponse(leagueId)
+    if (formatLocked) return formatLocked
+  }
+
   const result = await runBigBrotherAdminAction({
     leagueId,
     action,
@@ -72,6 +80,9 @@ export async function POST(
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error ?? 'Action failed' }, { status: 400 })
+  }
+  if (action === 'update_config') {
+    await logFormatRulesChange({ leagueId, userId, format: 'big_brother', fields: Object.keys(body.params ?? {}) })
   }
   return NextResponse.json({ ok: true, message: result.message })
 }
