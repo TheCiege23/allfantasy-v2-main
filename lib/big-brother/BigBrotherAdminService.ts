@@ -16,6 +16,7 @@ import { tallyEvictionVotes } from './BigBrotherVoteEngine'
 import { releaseEvictedRoster } from './BigBrotherRosterReleaseEngine'
 import { getExcludedRosterIds } from './bigBrotherGuard'
 import { appendBigBrotherAudit } from './BigBrotherAuditLog'
+import { parseBigBrotherConfigPatch } from './configPatch'
 import type { BigBrotherWeekPhase } from './types'
 
 export type BigBrotherAdminAction =
@@ -76,17 +77,13 @@ export async function runBigBrotherAdminAction(input: BigBrotherAdminInput): Pro
       return { ok: true, message: 'Week progression resumed' }
     }
     case 'update_config': {
-      const upd: Record<string, unknown> = {}
-      if (params.juryStartMode != null) upd.juryStartMode = String(params.juryStartMode)
-      if (params.juryStartAfterEliminations != null) upd.juryStartAfterEliminations = Number(params.juryStartAfterEliminations)
-      if (params.juryStartWhenRemaining != null) upd.juryStartWhenRemaining = Number(params.juryStartWhenRemaining)
-      if (params.juryStartWeek != null) upd.juryStartWeek = Number(params.juryStartWeek)
-      if (params.evictionTieBreakMode != null) upd.evictionTieBreakMode = String(params.evictionTieBreakMode)
-      if (params.challengeMode != null) upd.challengeMode = String(params.challengeMode)
-      if (params.finaleFormat != null) upd.finaleFormat = String(params.finaleFormat)
-      if (Object.keys(upd).length === 0) return { ok: false, error: 'No config fields to update' }
-      await upsertBigBrotherConfig(leagueId, upd as any)
-      await appendBigBrotherAudit(leagueId, config.configId, 'phase_transition', { adminAction: 'update_config', upd })
+      // The same rule as the config PATCH route (./configPatch.ts): live settings only, each value checked, and jury
+      // and finale fixed once anyone has been evicted. This path used to store any string or NaN it was sent.
+      const evictionsSoFar = await prisma.bigBrotherCycle.count({ where: { leagueId, evictedRosterId: { not: null } } })
+      const parsed = parseBigBrotherConfigPatch(params, { evictionsSoFar, current: config })
+      if (!parsed.ok) return { ok: false, error: parsed.error }
+      await upsertBigBrotherConfig(leagueId, parsed.input)
+      await appendBigBrotherAudit(leagueId, config.configId, 'phase_transition', { adminAction: 'update_config', upd: parsed.input })
       return { ok: true, message: 'Config updated' }
     }
     case 'reopen_nominations': {
