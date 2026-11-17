@@ -239,7 +239,7 @@ const tradeVisualSpanish: Record<string,string> = {
   "League settings are unavailable, so this league trade cannot be graded.":"La configuración de la liga no está disponible, así que este intercambio de liga no se puede calificar.",
   "only two-team trades are graded":"solo se califican los intercambios entre dos equipos",
   "FAAB in this trade is not priced on the league chart":"el FAAB de este intercambio no tiene precio en la tabla de la liga",
-  "this trade moved waiver budget, and the league's own budget isn't on file to price it against":"este intercambio movió presupuesto de waivers, y el presupuesto propio de la liga no está registrado para valorarlo",
+  "this trade moved waiver budget, and the league's own budget isn't on file to price it against":"este intercambio movió presupuesto de reclamos (FAAB), y el presupuesto propio de la liga no está registrado para valorarlo",
   "Draft picks are not priced in a Guilly league — every roster is gone by next season. This deal is not graded.":"Las selecciones del draft no se valoran en una liga Guilly: ninguna plantilla sigue en la próxima temporada. Este intercambio no se califica.",
   "No live team’s FAAB balance is on file, so FAAB in this deal cannot be priced. This deal is not graded.":"No hay registrado el saldo de FAAB de ningún equipo vivo, así que el FAAB de este intercambio no se puede valorar. Este intercambio no se califica.",
 }
