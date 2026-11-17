@@ -1,8 +1,35 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import DraftRoomMusicBar from '@/components/app/draft-room/DraftRoomMusicBar'
-import { musicBus, type MusicActions } from '@/components/app-music/musicBus'
+import { musicBus, placeYouTube, type MusicActions } from '@/components/app-music/musicBus'
+import '@/components/app-music/af-app-music.css'
+
+/**
+ * Stands in for AppMusicDock's YouTube box: the same class, attributes and placement rule (placeYouTube), with a
+ * grey square where the iframe would be, so the spec can measure where the player sits without loading YouTube.
+ */
+function StandInPlayer() {
+  const snap = useSyncExternalStore(musicBus.subscribe, musicBus.getSnapshot, musicBus.getServerSnapshot)
+  const screen = useSyncExternalStore(musicBus.subscribe, musicBus.getScreen, musicBus.getServerScreen)
+  const slot = useSyncExternalStore(musicBus.subscribe, musicBus.getSlot, musicBus.getServerSlot)
+  if (!snap.yt) return null
+  const place = placeYouTube(screen, slot)
+  const rect = place.rect
+  return (
+    <div
+      className="af-amd-yt"
+      data-testid="stand-in-player"
+      data-where={place.where}
+      data-in-chat={place.where === 'chat' ? 'true' : undefined}
+      data-in-slot={place.where === 'slot' ? 'true' : undefined}
+      style={rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : undefined}
+    >
+      {rect ? null : <div className="af-amd-yt-head"><span className="af-amd-yt-title">{snap.yt.label}</span></div>}
+      <iframe title="stand-in player" srcDoc="<body style='margin:0;background:#555'></body>" />
+    </div>
+  )
+}
 
 /**
  * The draft room's music bar (2026-11-17) with a STAND-IN music engine: the real bar, but the engine only records
@@ -41,7 +68,8 @@ export default function DraftRoomMusicHarness() {
           Draft room top bar · Round 3, pick 5 · You are on the clock in 2 picks
         </div>
         <DraftRoomMusicBar leagueId="e2e-league" draftStatus={status} />
-        <div className="grid h-40 grid-cols-6 gap-1 rounded-xl border border-white/10 p-2" aria-hidden>
+        <StandInPlayer />
+        <div className="grid h-40 grid-cols-6 gap-1 rounded-xl border border-white/10 p-2" aria-hidden data-testid="harness-board">
           {Array.from({ length: 18 }, (_, i) => (
             <div key={i} className="rounded bg-white/[0.06]" />
           ))}

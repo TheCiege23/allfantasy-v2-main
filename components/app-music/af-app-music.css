@@ -74,6 +74,16 @@
 }
 .af-amd-yt[data-in-chat] iframe { height: 100%; }
 
+/* In a page's own slot (the draft room's music row on a phone): laid over the slot, inline like the chat.
+   It keeps the corner box's z-index (58), so the chat panel and sheets still cover it. */
+.af-amd-yt[data-in-slot] {
+  right: auto;
+  bottom: auto;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.af-amd-yt[data-in-slot] iframe { height: 100%; }
+
 .af-amd-yt-head {
   display: flex;
   align-items: center;
@@ -109,7 +119,7 @@
 .af-amd-yt-btn:hover { background: var(--amp-bg); color: var(--amp-accent); }
 
 @media (max-width: 720px) {
-  .af-amd-yt:not([data-in-chat]) { left: 12px; right: auto; }
+  .af-amd-yt:not([data-in-chat]):not([data-in-slot]) { left: 12px; right: auto; }
 }
 
 /* ── The chat panel's Music tab ─────────────────────────────────────────── */
