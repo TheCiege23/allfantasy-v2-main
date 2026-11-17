@@ -101,7 +101,7 @@ describe('the accent in the room', () => {
   })
 
   it('the on-the-clock tile, its label, its pulse and the legend all read the accent, cyan by default', () => {
-    const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
+    const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8').replace(/\r\n/g, '\n')
     const cell = src('components/app/draft-room/DraftBoardCell.tsx')
     expect(cell).toContain('ring-[color:var(--af-league-accent,#67e8f9)]')
     expect(cell).toContain('text-[color:var(--af-league-accent,#67e8f9)]')
@@ -113,7 +113,7 @@ describe('the accent in the room', () => {
   })
 
   it('the live draft route carries the league concept all the way to the room', () => {
-    const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
+    const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8').replace(/\r\n/g, '\n')
     // The confirmed concept, then the pirate / survivor-guilly variant, then the column (league-signatures).
     expect(src('lib/draft/resolve-draft-context.ts')).toContain('leagueType: draftRoomLeagueConceptRaw(resolvedLeague)')
     expect(src('app/drafts/[draftId]/page.tsx')).toContain('leagueType={context.leagueType}')

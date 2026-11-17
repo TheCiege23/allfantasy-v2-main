@@ -14,7 +14,8 @@ import { tileSignatureChip, tileSignatureChipsByOverall } from '@/lib/draft-room
 
 afterEach(cleanup)
 
-const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
+// Source checks compare LF text: a Windows checkout (core.autocrlf) reads CRLF and fails a two-line match.
+const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8').replace(/\r\n/g, '\n')
 
 describe('which concept the room is', () => {
   const concept = (league: Parameters<typeof draftRoomLeagueConceptRaw>[0]) =>

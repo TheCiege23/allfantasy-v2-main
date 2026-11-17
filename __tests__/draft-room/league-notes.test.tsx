@@ -76,7 +76,7 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
+const src = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8').replace(/\r\n/g, '\n')
 
 describe('slot salaries are the contract', () => {
   it('termsFor reproduces the old in-line calculation exactly (sport scale, min salary, rookie years)', async () => {
