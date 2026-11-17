@@ -1,4 +1,4 @@
-import type { PlayoffChallengeConfig, PlayoffChallengeListItem, PlayoffChallengeView, PlayoffCreateResponse, PlayoffSport } from "./types"
+import type { PlayoffChallengeConfig, PlayoffChallengeView, PlayoffCreateResponse, PlayoffSport } from "./types"
 
 export async function createPlayoffBracketChallengeClient(input: {
   name?: string
@@ -34,22 +34,6 @@ export async function createPlayoffBracketChallengeClient(input: {
     name: payload.name,
     redirectUrl: payload.redirectUrl ?? `/brackets/leagues/${payload.challengeId}`,
   }
-}
-
-export async function listPlayoffBracketChallengesClient(sport?: PlayoffSport): Promise<PlayoffChallengeListItem[]> {
-  const query = sport ? `?sport=${encodeURIComponent(sport)}` : ""
-  const response = await fetch(`/api/brackets/playoffs${query}`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-  })
-
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload?.error ?? "Failed to load playoff challenges")
-  }
-
-  return Array.isArray(payload?.challenges) ? payload.challenges : []
 }
 
 export async function getPlayoffBracketViewClient(challengeId: string, entryId?: string, inviteCode?: string | null): Promise<PlayoffChallengeView> {
