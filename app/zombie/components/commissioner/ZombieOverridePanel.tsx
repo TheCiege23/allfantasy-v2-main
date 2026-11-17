@@ -22,13 +22,8 @@ const OVERRIDE_ACTIONS = [
     icon: '🧟',
     destructive: true,
   },
-  {
-    id: 'override_winnings',
-    label: 'Adjust Winnings',
-    description: 'Add or subtract from a player\'s winnings/points balance.',
-    icon: '💰',
-    destructive: false,
-  },
+  // "Adjust Winnings" is gone: a hand edit never reached the winnings ledger, so the next settlement erased it, and a
+  // ledger row the settlement did not write holds the following week (app/api/zombie/commissioner/route.ts).
   {
     id: 'award_item',
     label: 'Award Item',
@@ -68,7 +63,6 @@ export function ZombieOverridePanel({ leagueId, canEdit }: { leagueId: string; c
   const [selectedAction, setSelectedAction] = useState<string | null>(null)
   const [selectedUser, setSelectedUser] = useState('')
   const [newStatus, setNewStatus] = useState('Survivor')
-  const [amount, setAmount] = useState('0')
   const [itemType, setItemType] = useState('serum_antidote')
   const [reason, setReason] = useState('')
   const [status, setStatus] = useState('')
@@ -97,9 +91,6 @@ export function ZombieOverridePanel({ leagueId, canEdit }: { leagueId: string; c
     if (selectedAction === 'override_status') {
       payload.userId = selectedUser
       payload.newStatus = newStatus
-    } else if (selectedAction === 'override_winnings') {
-      payload.userId = selectedUser
-      payload.adjustmentAmount = parseFloat(amount)
     } else if (selectedAction === 'award_item') {
       payload.userId = selectedUser
       payload.itemType = itemType
@@ -125,7 +116,7 @@ export function ZombieOverridePanel({ leagueId, canEdit }: { leagueId: string; c
 
   const d = !canEdit
   const actionDef = OVERRIDE_ACTIONS.find((a) => a.id === selectedAction)
-  const needsUser = ['override_status', 'override_winnings', 'award_item'].includes(selectedAction ?? '')
+  const needsUser = ['override_status', 'award_item'].includes(selectedAction ?? '')
 
   return (
     <div className="px-6 py-5 text-[13px] text-white/85">
@@ -207,21 +198,6 @@ export function ZombieOverridePanel({ leagueId, canEdit }: { leagueId: string; c
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-            </div>
-          )}
-
-          {selectedAction === 'override_winnings' && (
-            <div className="mb-3">
-              <label className="mb-1 block text-[11px] text-[var(--zombie-text-dim)]">
-                Adjustment amount (positive = add, negative = subtract)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-lg border border-[var(--zombie-border)] bg-[var(--zombie-panel)] px-3 py-2 text-[12px] text-white focus:outline-none"
-              />
             </div>
           )}
 

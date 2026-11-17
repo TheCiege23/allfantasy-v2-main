@@ -129,3 +129,20 @@ describe('settlement hold actions', () => {
   })
 })
 
+describe('override_winnings (Adjust Winnings) is refused in every sport', () => {
+  const adjust = () =>
+    POST(new Request('http://x/api/zombie/commissioner', { method: 'POST', body: JSON.stringify({ leagueId: 'L', action: 'override_winnings', userId: 'pu1', adjustmentAmount: 50 }) }))
+
+  it('NFL points to the correction tool; other sports say why; nothing is written', async () => {
+    m.league.sport = 'NFL'
+    let res = await adjust()
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toContain('stat correction tool')
+    m.league.sport = 'NBA'
+    res = await adjust()
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toContain('the next weekly settlement would undo it')
+    expect(m.updates).toEqual([])
+  })
+})
+

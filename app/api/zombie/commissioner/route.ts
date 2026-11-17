@@ -124,33 +124,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
+  /*
+   * 🛑 "ADJUST WINNINGS" IS REFUSED, IN EVERY SPORT (owner's decision, 2026-11-17). It only incremented
+   * `zombieLeagueTeam.totalWinnings`; every weekly settlement recomputes that total from the `zombieWeeklyWinnings`
+   * ledger, so the next week silently erased the adjustment — and one made after the last week made the season's
+   * accounting fail ("The winnings total disagrees with the season ledger."). Writing it to the ledger instead is no
+   * better: the settlement snapshot refuses any earlier ledger row it did not write itself
+   * (lib/zombie/weeklySettlementSnapshot.ts `readZombieOpeningState`, all sports) and holds the next week.
+   * A real adjustment needs its own ledger source the settlement accepts; until then, refuse rather than pretend.
+   */
   if (action === 'override_winnings') {
-    const userId = typeof body.userId === 'string' ? body.userId : null
-    const adjustment = typeof body.adjustmentAmount === 'number' ? body.adjustmentAmount : parseFloat(String(body.adjustmentAmount))
-    if (!userId || !Number.isFinite(adjustment)) {
-      return NextResponse.json({ error: 'userId and adjustmentAmount required' }, { status: 400 })
-    }
-
-    const paid = await prisma.zombiePaidConfig.findUnique({ where: { zombieLeagueId: z.id } })
-    if (paid?.potIsLocked) return NextResponse.json({ error: 'Pot is locked' }, { status: 400 })
-
-    const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
-    if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-
-    await prisma.zombieLeagueTeam.update({
-      where: { leagueId_rosterId: { leagueId, rosterId: roster.id } },
-      data: { totalWinnings: { increment: adjustment } },
-    })
-    await logAuditEntry(z.id, {
-      category: 'commissioner_override',
-      action: 'WINNINGS_ADJUSTED',
-      description: reason,
-      amount: adjustment,
-      actorUserId: session.user.id,
-      actorRole: 'commissioner',
-      targetUserId: userId,
-    })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({
+      error: z.sport === 'NFL'
+        ? 'Winnings can no longer be adjusted by hand: the next weekly settlement would undo it. Use the reviewed stat correction tool to change a settled week.'
+        : 'Winnings can no longer be adjusted by hand: the next weekly settlement would undo it.',
+    }, { status: 409 })
   }
 
   if (action === 'award_item') {
