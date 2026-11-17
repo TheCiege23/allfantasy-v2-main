@@ -234,3 +234,20 @@ for (const viewport of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 }
+
+test.describe('on an iPhone', () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+  })
+
+  test('the playing line says to tap the video if there is no sound', async ({ page }, testInfo) => {
+    await stubPlaylist(page, { playlist: GAME_DAY, isCommissioner: false, canSet: false, planRequired: false })
+    await page.goto('/e2e/draft-room-music')
+    const bar = page.getByTestId('draft-room-music')
+    await page.getByTestId('harness-board').click()
+    // iOS can hold back the sound until the person taps the player itself, and the page cannot tell — so it says so.
+    await expect(bar.getByTestId('draft-room-music-sub')).toHaveText('Playing Game day hype · draft playlist. No sound? Tap the video once.')
+    await page.screenshot({ path: testInfo.outputPath('iphone-hint.png'), fullPage: false })
+  })
+})
