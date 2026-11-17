@@ -12,6 +12,8 @@ import {
 } from "@/lib/monetization/catalog"
 import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
 import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheckoutSession"
+import { switchToSupreme } from "@/lib/monetization/supremeSwitch"
+import { getStripeClient } from "@/lib/stripe-client"
 import { isFoundingMemberUser } from "@/lib/monetization/foundingMemberServer"
 import {
   duplicatePlanReason,
@@ -41,6 +43,11 @@ type CheckoutSubscriptionBody = {
   couponCode?: string
   /** Which surface sent the buyer (lib/monetization/upgradeEntrySource.ts). Normalized; junk is dropped. */
   entrySource?: string
+  /**
+   * The buyer confirmed switching their current plan to Supreme. A switch charges the card on file with no
+   * Checkout page in between, so it never happens without this (the first request gets `confirm_switch`).
+   */
+  confirmSwitch?: boolean
 }
 
 export async function POST(req: Request) {
@@ -94,6 +101,54 @@ export async function POST(req: Request) {
         },
         { status: 409 }
       )
+    }
+
+    /*
+     * 🛑 SUPREME OVER PRO / COMMISSIONER IS A SWITCH, NOT A SECOND SUBSCRIPTION (owner's decision,
+     * 2026-11-16 — lib/monetization/supremeSwitch.ts). The plan they already pay for becomes Supreme,
+     * charged only the difference; no Checkout page. `not_applicable` falls through to a normal checkout.
+     */
+    if (item.planFamily === "af_supreme" && (livePlanFamilies.has("af_pro") || livePlanFamilies.has("af_commissioner"))) {
+      if (body?.confirmSwitch !== true) {
+        const current = livePlanFamilies.has("af_commissioner") && livePlanFamilies.has("af_pro")
+          ? "AF Pro and AF Commissioner plans"
+          : livePlanFamilies.has("af_commissioner") ? "AF Commissioner plan" : "AF Pro plan"
+        const price = `$${item.amountUsd.toFixed(2)}/${item.interval === "year" ? "year" : "month"}`
+        return NextResponse.json(
+          {
+            code: "confirm_switch",
+            message: `Switch your ${current} to AF Supreme? Your card on file is charged the difference for the rest of this billing period today, then ${price}. You won't be billed for both.`,
+          },
+          { status: 409 }
+        )
+      }
+      const entrySourceForSwitch = normalizeEntrySource(body?.entrySource)
+      const result = await switchToSupreme({
+        userId: session.user.id,
+        supremeSku: item.sku,
+        stripe: getStripeClient(),
+        entrySource: entrySourceForSwitch,
+      })
+      if (result.kind === "failed") {
+        return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
+      }
+      if (result.kind === "switched") {
+        try {
+          const jar = await cookies()
+          await recordFunnelEvent({
+            event: MONETIZATION.PLAN_SWITCHED,
+            userId: session.user.id,
+            getCookie: (name) => jar.get(name)?.value,
+            meta: { sku: item.sku, from_sku: result.fromSku, entry_source: entrySourceForSwitch ?? "unknown", cancelled: result.cancelledSubscriptionIds.length },
+          })
+        } catch {
+          // Never costs the switch.
+        }
+        const returnTo = resolveSafeReturnPath(body?.returnPath, "/pricing")
+        const sep = returnTo.includes("?") ? "&" : "?"
+        // Same success landing a checkout uses; the rows already say Supreme, so the sync banner settles at once.
+        return NextResponse.json({ url: `${returnTo}${sep}checkout=success&switched=1`, sku: item.sku, purchaseType: "subscription", switched: true })
+      }
     }
 
     // ── Coupon validation (server-side, client discount never trusted) ──────

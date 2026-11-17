@@ -28,6 +28,8 @@ export type MonetizationCheckoutResult =
   | { ok: false; error: string }
 
 const CHECKOUT_TIMEOUT_MS = 12_000
+/** A plan switch charges the card and waits on the invoice, so it gets longer than starting Checkout. */
+const SWITCH_TIMEOUT_MS = 30_000
 const inFlightCheckoutRequests = new Map<string, Promise<MonetizationCheckoutResult>>()
 
 function resolveCheckoutEndpoint(productType: MonetizationCheckoutProductType): CheckoutEndpoint {
@@ -97,22 +99,49 @@ export async function resolveCheckoutUrl(
         }),
         signal: controller.signal,
       })
-      const data = (await response.json().catch(() => ({}))) as {
+      let data = (await response.json().catch(() => ({}))) as {
         url?: string
         error?: string
         message?: string
+        code?: string
         metaEvent?: MetaEventPayload
+      }
+      let status = response.status
+      /*
+       * Supreme over Pro / Commissioner switches the plan in place and charges the card on file — no Checkout
+       * page — so the server asks first (`confirm_switch`). Nothing is charged unless the buyer says yes.
+       */
+      if (status === 409 && data.code === "confirm_switch") {
+        // The first request's timer must not run while the buyer reads the dialog.
+        globalThis.clearTimeout(timeoutId)
+        const yes = typeof window !== "undefined" && window.confirm(data.message ?? "Switch your current plan to AF Supreme?")
+        if (!yes) return { ok: false, error: "No change made — you're still on your current plan." }
+        const switchController = new AbortController()
+        const switchTimeoutId = globalThis.setTimeout(() => switchController.abort(), SWITCH_TIMEOUT_MS)
+        const confirmed = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sku: normalizedRequest.sku,
+            returnPath: normalizedRequest.returnPath,
+            ...(entrySource ? { entrySource } : {}),
+            confirmSwitch: true,
+          }),
+          signal: switchController.signal,
+        }).finally(() => globalThis.clearTimeout(switchTimeoutId))
+        data = (await confirmed.json().catch(() => ({}))) as typeof data
+        status = confirmed.status
       }
       /*
        * Signed out (or the session lapsed): send them to sign in and back, rather than printing the
        * route's bare "Unauthorized" under the plan they just chose. Every purchase surface already
        * navigates to `url` on ok, so this needs nothing from any of them.
        */
-      if (response.status === 401) {
+      if (status === 401) {
         const here = typeof window === "undefined" ? normalizedRequest.returnPath : `${window.location.pathname}${window.location.search}`
         return { ok: true, url: `/login?callbackUrl=${encodeURIComponent(here || "/pricing")}`, signIn: true }
       }
-      if (!response.ok || !data.url) {
+      if (status < 200 || status >= 300 || !data.url) {
         return {
           ok: false,
           // A geo refusal puts a code in `error` (PAID_GEO_BLOCKED, VPN_BLOCKED)
