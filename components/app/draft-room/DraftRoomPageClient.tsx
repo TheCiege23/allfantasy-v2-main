@@ -55,6 +55,7 @@ import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePick
 import { resolvePickAnnouncementAssets } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { fillPickHeadshotsFromPool } from '@/lib/draft-room/fillPickHeadshotsFromPool'
 import { tileSignatureChipsByOverall } from '@/lib/draft-room/leagueSignature'
+import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
 import type { DraftWarRoomSnapshot } from '@/components/draft/ai/DraftWarRoom'
 import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { KeeperRollCall } from '@/components/app/draft-room/KeeperRollCall'
@@ -152,8 +153,10 @@ type DraftRoomPageClientProps = {
   isCommissioner: boolean
   /** When IDP league, pass 'IDP' for position filters and roster template. */
   formatType?: string
-  /** `League.leagueType` as stored; the room's league-type accent (room v2). */
+  /** The league's concept (`draftRoomLeagueConceptRaw`); the room's league-type accent (room v2). */
   leagueType?: string | null
+  /** League note for the header and snake salary-cap slot salaries (`loadDraftRoomLeagueFacts`). */
+  leagueFacts?: DraftRoomLeagueFacts | null
   /** Premium chrome for live snake redraft route. */
   presentationVariant?: 'default' | 'redraft_snake'
   /**
@@ -277,6 +280,7 @@ export function DraftRoomPageClient({
   isCommissioner,
   formatType,
   leagueType = null,
+  leagueFacts = null,
   presentationVariant = 'default',
   initialSnapshot,
   initialPoolReadiness = null,
@@ -5230,6 +5234,7 @@ export function DraftRoomPageClient({
           <DraftTopBar
             leagueName={leagueName}
             leagueAccent={leagueAccent}
+            leagueNote={leagueFacts?.note ?? null}
             leagueLogoUrl={leagueLogoUrl ?? null}
             sport={effectiveDraftSport}
             draftType={session.draftType}
@@ -5421,6 +5426,7 @@ export function DraftRoomPageClient({
                   onCommissionerEditPick={commissionerCanEditBoard ? openCommissionerPickEditor : undefined}
                   adpDeltaByOverall={boardAdpDeltaByOverall}
                   signatureByOverall={boardSignatureByOverall}
+                  slotSalaryByOverall={leagueFacts?.slotSalaryByOverall ?? undefined}
                   teamMetaByRoster={teamMetaByRoster}
                 />
               </div>

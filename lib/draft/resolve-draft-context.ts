@@ -66,6 +66,9 @@ export type LiveDraftRouteContext = {
   routeType: DraftRouteType
   draftType: string
   status: string
+  /** The session's board size; sizes the snake salary-cap slot salaries. 0 when unknown. */
+  rounds: number
+  teamCount: number
 }
 
 export type MockDraftRouteContext = {
@@ -168,6 +171,8 @@ export async function resolveLiveDraftContextByDraftId(
     routeType,
     draftType: String(session.draftType ?? 'snake'),
     status: String(session.status ?? 'pre_draft'),
+    rounds: Number(session.rounds) || 0,
+    teamCount: Number(session.teamCount) || 0,
   }
 }
 

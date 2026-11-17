@@ -15,6 +15,7 @@ import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draf
 import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 import type { DraftTeamStripTeamMeta } from './DraftTeamStrip'
 import type { TileSignatureChip } from '@/lib/draft-room/leagueSignature'
+import type { SlotSalary } from '@/lib/draft-room/leagueNote'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
@@ -80,6 +81,8 @@ type DraftBoardProps = {
   adpDeltaByOverall?: Record<number, number>
   /** League signature chip per made pick (`tileSignatureChipsByOverall`): age or class year. */
   signatureByOverall?: Record<number, TileSignatureChip>
+  /** Snake salary-cap slot salaries by overall pick (`loadDraftRoomLeagueFacts`); empty and made tiles. */
+  slotSalaryByOverall?: Record<number, SlotSalary>
   /**
    * Team avatars / orphan / bot-personality for the sticky column header. Snake and linear
    * boards have no separate team strip, so the header is where this lives.
@@ -189,6 +192,7 @@ function DraftBoardInner({
   poolPlayerById,
   adpDeltaByOverall,
   signatureByOverall,
+  slotSalaryByOverall,
   teamMetaByRoster = null,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
@@ -348,6 +352,8 @@ function DraftBoardInner({
         ownerRosterId,
         adpDelta: existing?.playerName ? adpDeltaByOverall?.[overall] ?? null : null,
         signatureChip: existing?.playerName ? signatureByOverall?.[overall] ?? null : null,
+        // A kept player is not a draft-slot contract; every other tile shows its slot's salary.
+        slotSalary: useLock ? null : slotSalaryByOverall?.[overall] ?? null,
       }
       const pid = existing?.playerId ? String(existing.playerId).trim() : ''
       const poolEntry = pid && poolPlayerById ? poolPlayerById[pid] : undefined
@@ -381,6 +387,7 @@ function DraftBoardInner({
     poolPlayerById,
     adpDeltaByOverall,
     signatureByOverall,
+    slotSalaryByOverall,
   ])
 
   const auctionColumns = useMemo(() => {

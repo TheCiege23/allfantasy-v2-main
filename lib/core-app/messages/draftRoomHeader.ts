@@ -15,6 +15,14 @@ export const draftRoomHeaderMessages = defineMessages({
     soundOff: 'Off',
     soundHint: 'Beeps in the last 10 seconds of a pick',
     onTheClock: 'On the clock',
+    // League notes beside the league-type chip (room v2 league signatures).
+    noteGuillotine: (week: number, n: number): string =>
+      `Chops start Week ${week} · ${n} ${n === 1 ? 'team' : 'teams'} a week`,
+    notePirate: (n: number): string => `Protect ${n} ${n === 1 ? 'player' : 'players'} a week`,
+    noteCap: (cap: number): string => `$${cap} cap`,
+    /** A snake salary-cap slot: what the pick is signed to. */
+    slotSalary: (salary: number, years: number): string =>
+      `Salary $${salary} for ${years} ${years === 1 ? 'year' : 'years'}`,
   },
   es: {
     upIn: (n: number): string => (n === 1 ? 'Te toca después' : `Te toca en ${n}`),
@@ -25,5 +33,11 @@ export const draftRoomHeaderMessages = defineMessages({
     soundOff: 'Desactivado',
     soundHint: 'Pitidos en los últimos 10 segundos de cada selección',
     onTheClock: 'En el reloj',
+    noteGuillotine: (week: number, n: number): string =>
+      `Eliminaciones desde la semana ${week} · ${n} ${n === 1 ? 'equipo' : 'equipos'} por semana`,
+    notePirate: (n: number): string => `Protege ${n} ${n === 1 ? 'jugador' : 'jugadores'} por semana`,
+    noteCap: (cap: number): string => `Tope de $${cap}`,
+    slotSalary: (salary: number, years: number): string =>
+      `Salario de $${salary} por ${years} ${years === 1 ? 'año' : 'años'}`,
   },
 })

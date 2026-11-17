@@ -55,6 +55,8 @@ export type DraftBoardCellPick = {
   adpDelta?: number | null
   /** League signature (room v2): the player's age, or a college pick's class year. */
   signatureChip?: { kind: 'age' | 'class'; text: string; title: string } | null
+  /** Snake salary-cap signature: the contract this slot is signed to (`loadRookieContractTerms`). */
+  slotSalary?: { salary: number; years: number } | null
 }
 
 function TinyHeadshot({
@@ -413,6 +415,16 @@ function DraftBoardCellInner({
           {headerCopy.onTheClock}
         </span>
       ) : null}
+      {isEmpty && pick.slotSalary ? (
+        <span
+          className={`pointer-events-none self-center text-[12px] font-bold leading-none tabular-nums text-white/60 ${isCurrentPick ? 'mt-0.5' : 'mt-auto'}`}
+          title={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+          aria-label={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+          data-testid={`draft-board-cell-slot-salary-${pick.overall}`}
+        >
+          ${pick.slotSalary.salary}
+        </span>
+      ) : null}
       {isEmpty ? (
         <div className="mt-auto flex min-w-0 items-center justify-between gap-1 text-white/45">
           {emptyCellDirection === 'reverse' ? (
@@ -481,7 +493,7 @@ function DraftBoardCellInner({
           */}
           <span
             className={`flex max-w-full min-w-0 items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 ${
-              pick.signatureChip ? 'flex-nowrap' : 'flex-wrap'
+              pick.signatureChip || pick.slotSalary ? 'flex-nowrap' : 'flex-wrap'
             }`}
             data-testid={`draft-board-cell-info-${pick.overall}`}
           >
@@ -491,6 +503,16 @@ function DraftBoardCellInner({
             {pick.injuryStatus ? (
               <span className="shrink-0 font-bold text-red-700" title={pick.injuryStatus}>
                 {pick.injuryStatus.slice(0, 1).toUpperCase()}
+              </span>
+            ) : null}
+            {pick.slotSalary ? (
+              <span
+                className="shrink-0 rounded bg-black/20 px-0.5 font-bold tabular-nums"
+                title={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+                aria-label={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+                data-testid={`draft-board-cell-salary-${pick.overall}`}
+              >
+                ${pick.slotSalary.salary}
               </span>
             ) : null}
             {pick.signatureChip ? (
@@ -516,7 +538,7 @@ function DraftBoardCellInner({
             ) : null}
             {pick.adpDelta != null && pick.adpDelta !== 0 ? (
               <span
-                className={`shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums ${pick.signatureChip ? 'af-tile-squeezable' : ''}`}
+                className={`shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums ${pick.signatureChip || pick.slotSalary ? 'af-tile-squeezable' : ''}`}
                 title={
                   pick.adpDelta > 0
                     ? `Taken ${pick.adpDelta} picks after ADP`

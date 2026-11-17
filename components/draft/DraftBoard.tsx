@@ -1,3 +1,4 @@
+import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
 import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import {
   DraftRoomPageClient,
@@ -16,6 +17,8 @@ type LiveDraftBoardProps = {
   formatType?: string
   /** The league's concept (`draftRoomLeagueConceptRaw`); picks the room's league-type accent. */
   leagueType?: string | null
+  /** League note and snake salary-cap slot salaries (`loadDraftRoomLeagueFacts`). */
+  leagueFacts?: DraftRoomLeagueFacts | null
   /** Snake redraft live room — enables premium chrome from `/draft/[id]/snake`. */
   presentationVariant?: 'default' | 'redraft_snake'
   /**
@@ -50,6 +53,7 @@ export function DraftBoard(props: DraftBoardProps) {
       isCommissioner={props.isCommissioner}
       formatType={props.formatType}
       leagueType={props.leagueType ?? null}
+      leagueFacts={props.leagueFacts ?? null}
       presentationVariant={props.presentationVariant ?? 'default'}
       initialSnapshot={props.initialSnapshot ?? null}
       initialPoolReadiness={props.initialPoolReadiness ?? null}
