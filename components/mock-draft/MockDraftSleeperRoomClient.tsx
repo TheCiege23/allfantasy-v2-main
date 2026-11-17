@@ -22,6 +22,7 @@ import { DraftRoundOneAnnouncementOverlay } from '@/components/app/draft-room/Dr
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
 import { positionTintHex } from '@/lib/draft-room/positionTint'
 import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
+import { tileSignatureChipsByOverall } from '@/lib/draft-room/leagueSignature'
 import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
 import { SKIN_ON_FILL } from '@/lib/draft-room/sleeperSkin'
 import { LanguageFallbackBoundary } from '@/components/i18n/LanguageProviderClient'
@@ -249,6 +250,10 @@ interface AvailablePlayer {
   /* Optional so a mock saved before headshots existed still restores. */
   headshotUrl?: string | null
   teamLogoUrl?: string | null
+  /* The league signature chip (room v2): age, or a college player's class. Optional for older saved mocks. */
+  age?: number | null
+  classYearLabel?: string | null
+  poolType?: string | null
 }
 
 interface ChatMessage {
@@ -913,6 +918,20 @@ export default function MockDraftSleeperRoomClient({
   }, [settings.teamCount])
 
   const draftedIds = useMemo(() => new Set(draftState?.picks.map((pick) => pick.playerId) ?? []), [draftState?.picks])
+  /*
+   * A league mock's tiles carry the live board's signature chip: age in a dynasty, keeper, devy, C2C or
+   * EFL league, a college pick's class in devy and C2C. The pool keeps drafted players, so it is the lookup.
+   * An open mock has no league, so no chip.
+   */
+  const leagueConceptForMock = leaguePayload ? leagueAccentFor(leaguePayload.leagueConcept ?? null, { isDynasty: leaguePayload.isDynasty }).concept : null
+  const signatureByOverall = useMemo(
+    () => tileSignatureChipsByOverall(
+      leagueConceptForMock,
+      draftState?.picks ?? [],
+      (draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id })),
+    ),
+    [leagueConceptForMock, draftState?.picks, draftState?.availablePlayers],
+  )
 
   useEffect(() => {
     setQueue((current) => {
@@ -1481,6 +1500,9 @@ export default function MockDraftSleeperRoomClient({
           tier: Math.max(1, Math.ceil((index + 1) / 12)),
           posRank: `${position}${index + 1}`,
           isRookie: raw.isRookie === true,
+          age: numberFromUnknown(raw.age),
+          classYearLabel: stringFromUnknown(raw.classYearLabel),
+          poolType: stringFromUnknown(raw.poolType),
         } satisfies AvailablePlayer
       })
       .filter((player): player is AvailablePlayer => player != null)
@@ -2232,6 +2254,7 @@ export default function MockDraftSleeperRoomClient({
       draftType={draftState.settings.draftType} sport={draftState.settings.sport}
       currentOverall={draftState.status === 'drafting' ? draftState.currentPick : null}
       slotSalaryByOverall={draftState.settings.draftType === 'auction' ? null : leaguePayload?.leagueFacts?.slotSalaryByOverall ?? null}
+      signatureByOverall={signatureByOverall}
     />
 
     const sport = draftState.settings.sport

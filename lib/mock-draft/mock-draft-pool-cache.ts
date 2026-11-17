@@ -8,6 +8,7 @@ import { findMultiADP, type ADPFormat } from '@/lib/multi-platform-adp'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
 import { attachAfAdpToMockPool } from '@/lib/mock-draft/mockPoolAfAdp'
+import { loadNflAgesBySleeperId, plausibleAge } from '@/lib/mock-draft/mockPoolAges'
 import { fillPoolFromConsensus, type ConsensusRow, type MockPoolEntry } from '@/lib/mock-draft/nflPoolConsensusFill'
 import { getLiveAdpByName, getSeasonDefenseAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
 import { prisma } from '@/lib/prisma'
@@ -176,6 +177,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
       adp: player.adp,
       playerId: player.playerId ?? null,
       injuryStatus: null,
+      age: player.age ?? null,
     }))
     const normalized = normalizePlayerList(raw, sport)
     return {
@@ -197,6 +199,7 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
         isRookie: false,
         multiPlatformADP: null,
         playerId: player.playerId ?? null,
+        age: plausibleAge(player.age),
         byeWeek: normalized[index]?.byeWeek ?? null,
         injuryStatus: normalized[index]?.injuryStatus ?? null,
         display: normalized[index]?.display ?? null,
@@ -298,6 +301,15 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
     sleeperIds = []
   }
 
+  /*
+   * Ages for the league signature chip (room v2). A college row's Sleeper id was resolved without a
+   * team, so its age is not borrowed from a pro row that may share the name; it shows its class.
+   */
+  const isCollegeRow = (entry: MockPoolEntry) => entry.source === 'devy'
+  const agesBySleeperId = await loadNflAgesBySleeperId(
+    entries.map((entry, index) => (isCollegeRow(entry) ? null : sleeperIds[index] ?? null)),
+  )
+
   const adpFormat: ADPFormat = type === 'dynasty' ? 'dynasty' : 'redraft'
   const rawNormalized = entries.map((entry, index) => ({
     name: entry.name,
@@ -360,6 +372,9 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
         bye: entry.bye,
         isRookie,
         playerId: sleeperIds[index] ?? null,
+        age: plausibleAge(entry.age) ?? (isCollegeRow(entry) ? null : agesBySleeperId.get(sleeperIds[index] ?? '') ?? null),
+        poolType: isCollegeRow(entry) ? 'college' : 'pro',
+        classYearLabel: isCollegeRow(entry) ? entry.classYearLabel ?? null : null,
         byeWeek: normalized[index]?.byeWeek ?? entry.bye ?? null,
         injuryStatus: injuryStatus != null ? String(injuryStatus) : null,
         display,
