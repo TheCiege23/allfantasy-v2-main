@@ -15,8 +15,6 @@ import {
   mapJoinError,
 } from "@/lib/world-cup/worldCupBracketUtils"
 
-export type { InviteInfo }
-export { getBracketBlockReason, mapJoinError }
 
 export default function WorldCupJoinInvite({ invite }: { invite: InviteInfo }) {
   const router = useRouter()

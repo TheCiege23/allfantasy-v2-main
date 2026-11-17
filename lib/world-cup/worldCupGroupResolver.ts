@@ -8,7 +8,7 @@ export type WorldCupGroupStanding = {
   fairPlayPoints?: number | null
 }
 
-export type WorldCupThirdPlaceQualifier = {
+type WorldCupThirdPlaceQualifier = {
   group: string
   teamId: string
   teamName: string
@@ -17,14 +17,14 @@ export type WorldCupThirdPlaceQualifier = {
   goalsFor: number
 }
 
-export type WorldCupRoundOf32SlotResolution = {
+type WorldCupRoundOf32SlotResolution = {
   slotKey: string
   teamId: string | null
   teamName: string
   source: "group_winner" | "group_runner_up" | "best_third" | "placeholder"
 }
 
-export type WorldCupGroupResolverResult = {
+type WorldCupGroupResolverResult = {
   slots: WorldCupRoundOf32SlotResolution[]
   qualifiers: WorldCupThirdPlaceQualifier[]
   warnings: string[]
