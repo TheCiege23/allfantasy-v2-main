@@ -7,7 +7,7 @@ import { ingestRollingInsightsGameLogs } from '@/lib/sports-data/survivorNbaGame
 import { pendingStatCorrectionDates } from '@/lib/sports-data/statCoverage'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { syncSGProviderCatalog, type SGProviderSport } from './providerCatalog'
-import { syncSGProviderSchedule } from './providerSchedule'
+import { sgNflWeekAwaitingKickoff, syncSGProviderSchedule } from './providerSchedule'
 import { syncSGNflWeek } from './providerNflSnapshot'
 import { saveSGProviderHealth } from './providerHealth'
 
@@ -44,14 +44,16 @@ export async function ingestSGProviderData(args: SGIngestRequest) {
         AND "recordedAt" < "firstFinalObservedAt" + interval '12 hours' ORDER BY "firstFinalObservedAt" LIMIT 2`
       const weeks = [...new Set([current, ...(args.week ? [] : [current - 1, ...pending.map(row => row.week)])])].filter(week => week >= 1)
       const snapshots = []
+      const waitingForWeeks: number[] = []
       for (const week of weeks) {
-        const snapshot = await syncSGNflWeek(season, week)
         const slate = schedule.rows.filter(game => game.week === week)
+        if (sgNflWeekAwaitingKickoff(slate, now)) { waitingForWeeks.push(week); continue }
+        const snapshot = await syncSGNflWeek(season, week)
         if (slate.length && slate.every(game => game.status === 'final') && !snapshot.complete) throw Error(`Week ${week} has incomplete final stat coverage`)
         snapshots.push(snapshot)
       }
       await saveSGProviderHealth(args.sport, season, { checkedAt: new Date().toISOString(), status: 'healthy' })
-      return { ok: true, sport: args.sport, season, catalog, scheduledGames: schedule.games, snapshots }
+      return { ok: true, sport: args.sport, season, catalog, scheduledGames: schedule.games, snapshots, waitingForWeeks }
     }
     const today = easternCalendarDay(now)!.toISOString().slice(0, 10)
     const dates = args.date ? [args.date] : [...new Set([today, ...[1, 2].map(days => easternCalendarDay(new Date(now.getTime() - days * 86400_000))!.toISOString().slice(0, 10)), ...await pendingStatCorrectionDates(prisma, 'NBA', now, 2)])]

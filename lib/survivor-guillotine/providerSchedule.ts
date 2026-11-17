@@ -8,6 +8,10 @@ import { dailyTeamCode, readDailyTeamNames } from '@/lib/redraft/dailyTeamIdenti
 import type { SGProviderSport } from './providerCatalog'
 
 export type SGScheduledGame = { externalId: string; homeTeam: string; awayTeam: string; startTime: Date; week: number }
+/** A published future slate has no weekly stats yet; an unknown or started slate must still be fetched. */
+export function sgNflWeekAwaitingKickoff(games: readonly (SGScheduledGame & { status: string })[], now: Date): boolean {
+  return games.length > 0 && games.every(game => game.status === 'scheduled' && game.startTime.getTime() > now.getTime())
+}
 export function sgScheduleRows(sport: SGProviderSport, season: number, raw: unknown[], teamIds: ReadonlyMap<string, string>, normalizeTeam: (name: string) => string) {
   const knownTeams = new Set([...teamIds.values()].map(normalizeTeam))
   const games: Array<SGScheduledGame & { status: string }> = []

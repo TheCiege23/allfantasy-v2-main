@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 import { sgCatalogRows } from '@/lib/survivor-guillotine/providerCatalog'
-import { sgScheduleRows } from '@/lib/survivor-guillotine/providerSchedule'
+import { sgNflWeekAwaitingKickoff, sgScheduleRows } from '@/lib/survivor-guillotine/providerSchedule'
 import { sgNflSnapshotRows } from '@/lib/survivor-guillotine/providerNflSnapshot'
 const ids = new Map([['1','KC'],['2','BUF']])
 const game = { season_type:'Regular Season',season:2026,game_ID:'g',game_time:'2026-10-25T17:00:00Z',home_team_ID:1,away_team_ID:2,week:7,status:'Final' }
 describe('live provider normalization', () => {
+ it('waits only for a known future NFL slate, never an unknown or started slate',()=>{
+  const [future]=sgScheduleRows('NFL',2026,[{...game,status:'Scheduled'}],ids,x=>x)
+  const before=new Date('2026-10-25T16:00:00Z'),after=new Date('2026-10-25T18:00:00Z')
+  expect(sgNflWeekAwaitingKickoff([future],before)).toBe(true)
+  expect(sgNflWeekAwaitingKickoff([future],after)).toBe(false)
+  expect(sgNflWeekAwaitingKickoff([],before)).toBe(false)
+  expect(sgNflWeekAwaitingKickoff([{...future,status:'final'}],before)).toBe(false)
+ })
  it('keeps NFL offense aggregates out of player and defense scoring while preserving sparse measured zeroes', () => {
   const lines=sgNflSnapshotRows(new Map<string, unknown>([['TEAM_KC',{pass_yd:300}],['KC',{sack:2,pts_allow_0:1}],['123',{pass_yd:300,pass_td:2}],['124',{gms_active:1,gp:1,pos_rank_ppr:999}]]))
   expect(lines.map(x=>x.playerId)).toEqual(['nfl:def:KC','123','124'])
