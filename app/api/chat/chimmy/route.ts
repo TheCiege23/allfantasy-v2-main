@@ -37,6 +37,7 @@ import { chimmyDepthForPlan } from '@/lib/chimmy/chimmyDepth'
 import { mockDraftBoardText, parseMockDraftBoard } from '@/lib/chimmy/mockDraftGrounding'
 import { loadLeagueMockBoard, parseClientQueueIds } from '@/lib/chimmy/leagueMockBoard'
 import type { MockQueueProposal } from '@/lib/mock-draft/mockChimmyBoard'
+import { isMusicRequest, type MusicCard } from '@/lib/chimmy/musicCards'
 import { bracketFollowUps, type BracketEvidence } from '@/lib/chimmy/bracketEvidence'
 import { runAiProtection } from '@/lib/ai-protection'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration/orchestration-service'
@@ -1691,7 +1692,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    * non-user pick") had been rescuing it there. The league mock room has no such line, so its first
    * question failed every time.
    */
-  if (!portfolioReport && !mockDraftBoard && !hasSportsContent(domainInput, hasImage)) {
+  // A music request ("play some hype music") has no sports words; the music tool answers it.
+  if (!portfolioReport && !mockDraftBoard && !isMusicRequest(message) && !hasSportsContent(domainInput, hasImage)) {
     /*
      * ⚠ THIS DEFLECTION USED TO BE INDISTINGUISHABLE FROM AN ANSWER. It replied
      * "I'm Chimmy, your fantasy sports assistant. I can help with trades,
@@ -3225,7 +3227,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
      * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, currentQuestion: message, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[], bracketEvidence: [] as BracketEvidence[], proToolsRefused: [] as string[], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: [] as MockQueueProposal[], musicCards: [] as MusicCard[] }
     /*
      * ASKED FROM INSIDE THE DRAFT ROOM (stage 2 of drafts, 2026-11-16): the board is read up front and
      * handed to the loop, instead of costing the model a tool round trip first — which is several
@@ -3516,6 +3518,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           ...(toolContext.actionCards.length > 0 ? { actionCards: toolContext.actionCards } : {}),
           /* A mock draft's queue card: applied in the mock room, in the browser, only when they tap Confirm. */
           ...(toolContext.mockQueueProposals.length > 0 ? { mockQueueProposals: toolContext.mockQueueProposals } : {}),
+          // The music card (play a station or a search, or stop); the user's tap on it plays it.
+          ...(toolContext.musicCards.length > 0 ? { musicCard: toolContext.musicCards[0] } : {}),
           /* Chip, bid card and supersede keys — see `lib/chimmy/answerPolish.ts`. */
           ...(loopVerdict ? { verdict: loopVerdict } : {}),
           ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),

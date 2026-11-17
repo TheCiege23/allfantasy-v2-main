@@ -52,6 +52,8 @@ import '@/components/core-app/af-comms.css'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
+import ChimmyMusicCard from '@/components/chimmy/ChimmyMusicCard'
+import { readMusicCard, type MusicCard } from '@/lib/chimmy/musicCards'
 import { readActionCards, type ChimmyActionCard as ChimmyActionCardData } from '@/lib/chimmy-chat/actionCards'
 import {
   newerAnswers,
@@ -218,6 +220,8 @@ type ChatTurn = {
    * A card changes nothing until the user taps Confirm on it; see lib/chimmy/actions/confirmAction.ts.
    */
   actionCards?: ChimmyActionCardData[] | null
+  /** "Play some hype music": a music card from `meta.musicCard`. It plays only when the user taps it. */
+  musicCard?: MusicCard | null
   /** The engine's call — HOLD / BID / START … — from `meta`, never from the text. See answerPolish.ts. */
   verdict?: ChimmyVerdict | null
   /** The structured `get_faab_bid_plan` result, rendered as a card. */
@@ -1058,6 +1062,7 @@ export function ChimmyPanel({
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
             actionCards: readActionCards(payload.meta),
+            musicCard: readMusicCard(payload.meta),
             verdict: polish.verdict,
             faabPlan: polish.faabPlan,
             answerKeys: polish.answerKeys.length ? polish.answerKeys : null,
@@ -1389,6 +1394,7 @@ export function ChimmyPanel({
               {t.role === 'chimmy' && t.actionCards?.length
                 ? t.actionCards.map((card) => <ChimmyActionCard key={card.actionId} card={card} />)
                 : null}
+              {t.role === 'chimmy' && t.musicCard ? <ChimmyMusicCard card={t.musicCard} /> : null}
 
               {t.role === 'chimmy' && t.advice ? (
                 <ChimmyAdviceFollow

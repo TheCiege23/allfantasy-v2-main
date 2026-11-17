@@ -220,6 +220,8 @@ describe('tool specs', () => {
       'propose_automation_change',
       // Writes nothing: a settings confirm card; the save is the confirm route's, behind the commissioner's tap.
       'propose_league_rule_change',
+      // Writes nothing: a music card; the user's browser plays it only when they tap.
+      'play_music',
       // AF Pro: reads the user's OWN earlier Chimmy messages; writes nothing.
       'recall_past_chats',
     ])
