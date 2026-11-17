@@ -749,8 +749,8 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     requiredPlanId: "war_room",
     tokenRuleCode: null,
     lockedReason: "Generating AI trade proposals is part of AF Legacy.",
-    backendEnforcement: "Server: requireFeatureEntitlement(legacy_trade_proposals) on POST /api/legacy/trade/proposal-generator (since 2026-11-16), plus the client FeatureGate around the action trigger in app/af-legacy/page.tsx.",
-    frontendGateBehavior: "FeatureGate around the 'Generate Trade Proposals' button.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_trade_proposals) on POST /api/legacy/trade/proposal-generator (since 2026-11-16), /api/legacy/trade-ideas and /api/legacy/trade/goal-proposals (since 2026-11-17), plus the client FeatureGates around those three buttons in app/af-legacy/page.tsx.",
+    frontendGateBehavior: "FeatureGate around the 'Generate Trade Proposals', Trade Ideas and Goal Proposals buttons.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/legacy?tab=trade"],
@@ -834,6 +834,39 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
       routes: ["/af-legacy?tab=pulse"],
+      components: [],
+    },
+  },
+  // Owner's decision 2026-11-17: the four AF Legacy AI tools that ran free are locked. Trade Ideas and Goal
+  // Proposals share legacy_trade_proposals (the Trade Command Center); these two get keys of their own so the
+  // purchase funnel (from=lock_<key>) can tell them apart.
+  {
+    key: "legacy_trade_hub",
+    title: "Trade Hub report",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "The full AI trade report is part of AF Legacy.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_trade_hub) on POST /api/legacy/trade/analyze (since 2026-11-17), plus the client FeatureGate around the Trade Hub's generate button in app/af-legacy/page.tsx.",
+    frontendGateBehavior: "FeatureGate around the Trade Hub 'Analyze trade' button; the /af-legacy/trade-analyzer page shows the server's plan sentence.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy?tab=trade", "/af-legacy/trade-analyzer"],
+      components: [],
+    },
+  },
+  {
+    key: "legacy_ai_report",
+    title: "Chimmy Analysis",
+    accessType: "subscription_only",
+    requiredPlanId: "war_room",
+    tokenRuleCode: null,
+    lockedReason: "Chimmy's read of your whole fantasy career is part of AF Legacy.",
+    backendEnforcement: "Server: requireFeatureEntitlement(legacy_ai_report) on POST /api/legacy/ai/run (since 2026-11-17), plus a FeatureGate where the report renders in app/af-legacy/page.tsx.",
+    frontendGateBehavior: "A locked card in place of the Chimmy Analysis report.",
+    unavailableBehavior: "disable_with_fallback",
+    surfaceHints: {
+      routes: ["/af-legacy"],
       components: [],
     },
   },

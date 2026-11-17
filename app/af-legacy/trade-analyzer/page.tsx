@@ -1235,7 +1235,8 @@ export default function LegacyTradeAnalyzerPage() {
       }
 
       if (!res.ok) {
-        setError(data?.error || 'Failed to analyze trade')
+        // AF Legacy since 2026-11-17 (`legacy_trade_hub`): say which plan, never the bare "Premium feature".
+        setError(readPlanRefusal(res.status, data)?.message ?? (data?.error || 'Failed to analyze trade'))
         return
       }
 
