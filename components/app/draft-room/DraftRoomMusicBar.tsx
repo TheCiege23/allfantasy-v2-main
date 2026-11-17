@@ -17,7 +17,7 @@ import {
 
 /**
  * Music in the live draft room (2026-11-17). ONE slim row under the top bar, in normal flow — never over the board.
- * The room is a fixed full-height screen, so every pixel this takes comes out of the board on a phone: the row holds
+ * The room is a fixed full-height screen, so every pixel this takes comes out of the board, most of all on a phone: the row holds
  * a title, one button and "More"; choosing a station and the commissioner's setting live behind "More".
  *
  *  - Everyone: play one of the AllFantasy stations (the same ones Chimmy offers). It plays on THEIR device only.
@@ -32,21 +32,13 @@ import {
  * 🛑 Nothing is broadcast: each member's own device plays it. See lib/draft-room/draftPlaylist.ts.
  * The player is the app-wide one (AppMusicDock, through musicBus), so music keeps playing after the room.
  *
- * ⚠ ON A PHONE THE PLAYER SITS IN THIS ROW (2026-11-17). Its corner box covered about three columns by three rows of
- * the board. While YouTube plays, the row holds a 200×200 slot with the title and buttons beside it and reports the
- * slot through musicBus.setSlot; the one iframe is laid over it (never moved into it — that would restart the song).
- * 200×200 is YouTube's floor for a playing player, so the slot cannot be smaller. Wider screens keep the corner box.
+ * ⚠ THE PLAYER SITS IN THIS ROW, AT EVERY WIDTH (phones 2026-11-17, desktop the same day). The corner box covered
+ * part of the board — about three columns by three rows on a phone, the bottom-right cells on desktop — and with the
+ * playlist autoplaying, every member got it. While YouTube plays, the row holds a 200×200 slot with the title and
+ * buttons beside it and reports the slot through musicBus.setSlot; the one iframe is laid over it (never moved into
+ * it — that would restart the song). 200×200 is YouTube's floor for a playing player, so the slot cannot be smaller.
  */
 
-/** Same breakpoint as af-app-music.css's phone rule. */
-const PHONE_QUERY = '(max-width: 720px)'
-
-function subscribePhone(onChange: () => void): () => void {
-  const mq = window.matchMedia(PHONE_QUERY)
-  mq.addEventListener('change', onChange)
-  return () => mq.removeEventListener('change', onChange)
-}
-const isPhone = () => window.matchMedia(PHONE_QUERY).matches
 
 /**
  * Has the person tapped, clicked or typed on this page yet? Browsers allow sound only after that. Where the browser
@@ -104,8 +96,7 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
   const playlist = info?.playlist && draftPlaylistOffered(draftStatus) ? info.playlist : null
   const playlistKey = playlist ? draftPlaylistPlayKey(playlist.stationId) : null
   const playing = snap.yt
-  const phone = useSyncExternalStore(subscribePhone, isPhone, () => false)
-  const inRow = Boolean(playing && phone && available)
+  const inRow = Boolean(playing && available)
   const slotRef = useRef<HTMLDivElement | null>(null)
 
   // Report where the slot is, every frame, as the chat's Music tab does: the room can still shift (the top bar wraps,
@@ -329,7 +320,8 @@ export default function DraftRoomMusicBar({ leagueId, draftStatus, livePlaylist 
               </p>
               <p className="mt-1 line-clamp-3 text-[11px] text-white/60" data-testid="draft-room-music-sub">{sub}</p>
             </div>
-            <div className="flex flex-col gap-1.5">
+            {/* Stacked beside the slot on a phone; side by side under the title where there is room. */}
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
               {stopButton}
               {moreButton}
             </div>

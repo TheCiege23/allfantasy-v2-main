@@ -82,25 +82,24 @@ for (const viewport of [
     const player = page.getByTestId('stand-in-player')
     await expect(player).toBeVisible()
 
-    if (viewport.name === 'phone') {
-      // In the music row, laid exactly over its 200×200 slot, and above the board rather than on it.
-      await expect(player).toHaveAttribute('data-where', 'slot')
-      const slot = await bar.getByTestId('draft-room-music-slot').boundingBox()
-      const box = await player.boundingBox()
-      const board = await page.getByTestId('harness-board').boundingBox()
-      expect(slot && box && board).toBeTruthy()
-      expect(Math.abs(box!.x - slot!.x)).toBeLessThanOrEqual(1)
-      expect(Math.abs(box!.y - slot!.y)).toBeLessThanOrEqual(1)
-      expect(box!.width).toBeGreaterThanOrEqual(200)
-      expect(box!.height).toBeGreaterThanOrEqual(200)
-      expect(box!.y + box!.height).toBeLessThanOrEqual(board!.y)
-      await expect(bar.getByTestId('draft-room-music-stop')).toBeVisible()
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-    } else {
-      // Wide screens keep the corner box; the row stays one line.
-      await expect(player).toHaveAttribute('data-where', 'corner')
-      await expect(bar.getByTestId('draft-room-music-slot')).toHaveCount(0)
-    }
+    // At every width: in the music row, laid exactly over its 200×200 slot, and above the board rather than on it.
+    await expect(player).toHaveAttribute('data-where', 'slot')
+    const slot = await bar.getByTestId('draft-room-music-slot').boundingBox()
+    const box = await player.boundingBox()
+    const board = await page.getByTestId('harness-board').boundingBox()
+    expect(slot && box && board).toBeTruthy()
+    expect(Math.abs(box!.x - slot!.x)).toBeLessThanOrEqual(1)
+    expect(Math.abs(box!.y - slot!.y)).toBeLessThanOrEqual(1)
+    expect(box!.width).toBeGreaterThanOrEqual(200)
+    expect(box!.height).toBeGreaterThanOrEqual(200)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(board!.y)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    // Stop and More: stacked beside the slot on a phone, side by side where there is room.
+    const stop = await bar.getByTestId('draft-room-music-stop').boundingBox()
+    const more = await bar.getByTestId('draft-room-music-more').boundingBox()
+    expect(stop && more).toBeTruthy()
+    if (viewport.name === 'phone') expect(more!.y).toBeGreaterThan(stop!.y + stop!.height - 1)
+    else expect(Math.abs(more!.y - stop!.y)).toBeLessThanOrEqual(1)
     await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-player-placed.png`), fullPage: false })
 
     await bar.getByTestId('draft-room-music-stop').click()

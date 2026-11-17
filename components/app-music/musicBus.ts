@@ -86,7 +86,7 @@ const INITIAL: MusicSnapshot = {
 
 let snapshot: MusicSnapshot = INITIAL
 let screen: ScreenRect | null = null
-/** A page's own place for the player — today only the draft room's music row on a phone (2026-11-17). */
+/** A page's own place for the player — today only the draft room's music row (2026-11-17). */
 let slot: ScreenRect | null = null
 let actions: MusicActions | null = null
 const listeners = new Set<() => void>()
@@ -139,7 +139,7 @@ export const musicBus = {
   },
 
   /**
-   * A page's own place for the player, or null. The draft room's music row reports one on a phone so the player
+   * A page's own place for the player, or null. The draft room's music row reports one so the player
    * sits IN the row instead of floating over the board. The chat's Music tab still wins while it is showing.
    */
   setSlot(next: ScreenRect | null): void {
