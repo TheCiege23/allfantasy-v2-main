@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { BookOpen, ChevronDown, Search } from 'lucide-react'
 import {
@@ -25,6 +25,18 @@ export default function LeagueTypesFaq({ formats, sports }: { formats: LeagueGui
   const [query, setQuery] = useState('')
   const [sport, setSport] = useState('all')
   const [category, setCategory] = useState('all')
+  useEffect(() => {
+    function revealLinkedRules() {
+      const target = document.getElementById(window.location.hash.slice(1))
+      if (target?.tagName !== 'ARTICLE') return
+      const details = target.querySelector('details')
+      if (details) details.open = true
+      target.scrollIntoView?.({ block: 'start' })
+    }
+    revealLinkedRules()
+    window.addEventListener('hashchange', revealLinkedRules)
+    return () => window.removeEventListener('hashchange', revealLinkedRules)
+  }, [])
   const search = query.trim().toLowerCase()
   const filtered = formats.filter((format) => {
     const guide = LEAGUE_TYPE_GUIDES[format.id]
@@ -107,7 +119,7 @@ export default function LeagueTypesFaq({ formats, sports }: { formats: LeagueGui
 
         <section aria-labelledby="hybrid-formats" className="space-y-3">
           <h2 id="hybrid-formats" className="text-2xl font-bold">Specialty combinations</h2>
-          <article className="rounded-xl border border-[var(--border)] p-4">
+          <article id="survivor-guillotine" className="scroll-mt-24 rounded-xl border border-[var(--border)] p-4">
             <h3 className="font-bold">Survivor × Guillotine</h3>
             <p className="mt-2 text-sm leading-6 text-[var(--muted)]">A specialty combination of Survivor’s tribe structure and Guillotine’s score-based elimination. Read the format’s published chop, immunity and tribe transition rules; the standard Survivor voting rules should not be assumed.</p>
             <Link href="/league-types/survivor-guillotine" className="mt-3 inline-block text-sm underline underline-offset-4">Explore Survivor × Guillotine rules</Link>

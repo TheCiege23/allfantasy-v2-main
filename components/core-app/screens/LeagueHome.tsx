@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import { MemberStatusCard } from '@/components/league-home/MemberStatusCard'
 import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import Link from 'next/link'
@@ -837,6 +839,7 @@ export function LeagueHome({
           </div>
         </div>
 
+        {!identityInShell && <LeagueFormatFaqLink href={league.formatFaqHref} league={{ leagueType: league.format, leagueVariant: league.variant }} />}
         {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
       </header>
       <section className="af-lho-head" data-testid="league-overview-guide" data-format={elimination ? 'elimination' : 'h2h'}>

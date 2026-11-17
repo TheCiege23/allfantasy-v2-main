@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
@@ -204,6 +206,7 @@ export default function ZombieLeagueShell({
             </div>
           </div>
 
+          <LeagueFormatFaqLink league={{ leagueType: 'zombie' }} className="text-white" />
           <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
             <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/8 p-2">
               <p className="text-white/45">{t('zombie.shell.alive')}</p>
@@ -455,6 +458,7 @@ export default function ZombieLeagueShell({
               <div className="mt-1 font-black text-amber-100">{urgentOps || unreadOps}</div>
             </div>
           </div>
+          <LeagueFormatFaqLink league={{ leagueType: 'zombie' }} className="text-white" />
         </header>
 
         <nav className="grid grid-cols-5 border-b border-[var(--zombie-border)] bg-[var(--zombie-panel)] md:hidden">
