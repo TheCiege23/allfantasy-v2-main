@@ -151,9 +151,17 @@ describe('what the server reads for each league type', () => {
     expect((await loadDraftRoomLeagueFacts({ ...base, concept: 'salary_cap' })).slotSalaryByOverall).toBeNull()
   })
 
+  it('best ball and Big Brother: the format rule, with nothing read to say it', async () => {
+    h.guillotine = { eliminationStartWeek: 3, teamsPerChop: 2 }
+    h.tournamentRow = { conference: { name: 'Atlantic' }, round: { roundLabel: 'Round 1' } }
+    h.leagueSettings = { pirate: { protectionLimit: 4 } }
+    expect((await loadDraftRoomLeagueFacts({ ...base, concept: 'best_ball' })).note).toEqual({ kind: 'best_ball' })
+    expect((await loadDraftRoomLeagueFacts({ ...base, concept: 'big_brother' })).note).toEqual({ kind: 'big_brother' })
+  })
+
   it('every other type reads nothing', async () => {
     expect(await loadDraftRoomLeagueFacts({ ...base, concept: 'redraft' })).toEqual(NO_LEAGUE_FACTS)
-    expect(await loadDraftRoomLeagueFacts({ ...base, concept: 'big_brother' })).toEqual(NO_LEAGUE_FACTS)
+    expect(await loadDraftRoomLeagueFacts({ ...base, concept: 'dynasty' })).toEqual(NO_LEAGUE_FACTS)
   })
 
   it('both draft pages load the facts and hand them to the room', () => {
@@ -188,6 +196,12 @@ describe('the note beside the league chip', () => {
     renderBar({ leagueAccent: leagueAccentFor('salary_cap'), leagueNote: { kind: 'salary_cap', cap: 300 } })
     expect(screen.getByTestId('draft-topbar-league-note').textContent).toBe('$300 cap')
     cleanup()
+    renderBar({ leagueAccent: leagueAccentFor('best_ball'), leagueNote: { kind: 'best_ball' } })
+    expect(screen.getByTestId('draft-topbar-league-note').textContent).toBe('Lineups set themselves')
+    cleanup()
+    renderBar({ leagueAccent: leagueAccentFor('big_brother'), leagueNote: { kind: 'big_brother' } })
+    expect(screen.getByTestId('draft-topbar-league-note').textContent).toBe('Head of Household and an eviction every week')
+    cleanup()
     renderBar({ leagueAccent: leagueAccentFor('tournament'), leagueNote: { kind: 'tournament', conference: 'Atlantic', round: 'Round 1' } })
     const note = screen.getByTestId('draft-topbar-league-note')
     expect(note.textContent).toBe('Atlantic · Round 1')
@@ -210,6 +224,8 @@ describe('the note beside the league chip', () => {
     expect(es.noteGuillotine(3, 2)).toBe('Eliminaciones desde la semana 3 · 2 equipos por semana')
     expect(es.notePirate(1)).toBe('Protege 1 jugador por semana')
     expect(es.noteCap(300)).toBe('Tope de $300')
+    expect(es.noteBestBall).toBe('La alineación se arma sola')
+    expect(es.noteBigBrother).toBe('Jefe de Casa y una expulsión cada semana')
     expect(es.slotSalary(45, 3)).toBe('Salario de $45 por 3 años')
   })
 })

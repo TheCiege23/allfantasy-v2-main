@@ -20,6 +20,8 @@ export const draftRoomHeaderMessages = defineMessages({
       `Chops start Week ${week} · ${n} ${n === 1 ? 'team' : 'teams'} a week`,
     notePirate: (n: number): string => `Protect ${n} ${n === 1 ? 'player' : 'players'} a week`,
     noteCap: (cap: number): string => `$${cap} cap`,
+    noteBestBall: 'Lineups set themselves',
+    noteBigBrother: 'Head of Household and an eviction every week',
     /** A snake salary-cap slot: what the pick is signed to. */
     slotSalary: (salary: number, years: number): string =>
       `Salary $${salary} for ${years} ${years === 1 ? 'year' : 'years'}`,
@@ -42,6 +44,8 @@ export const draftRoomHeaderMessages = defineMessages({
       `Eliminaciones desde la semana ${week} · ${n} ${n === 1 ? 'equipo' : 'equipos'} por semana`,
     notePirate: (n: number): string => `Protege ${n} ${n === 1 ? 'jugador' : 'jugadores'} por semana`,
     noteCap: (cap: number): string => `Tope de $${cap}`,
+    noteBestBall: 'La alineación se arma sola',
+    noteBigBrother: 'Jefe de Casa y una expulsión cada semana',
     slotSalary: (salary: number, years: number): string =>
       `Salario de $${salary} por ${years} ${years === 1 ? 'año' : 'años'}`,
     seed: (n: number): string => `Cabeza de serie ${n} de la etapa anterior`,
