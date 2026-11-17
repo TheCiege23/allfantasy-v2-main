@@ -19,6 +19,9 @@
  * SubscriptionFeatureId would have looked tidier and matched nothing.
  */
 
+import { getPremiumMonetizationForFeature } from "@/lib/monetization/feature-monetization-matrix"
+import type { SubscriptionFeatureId } from "@/lib/subscription/types"
+
 type LockedFeature = {
   /** What the user was trying to do, in their words. */
   label: string
@@ -82,5 +85,15 @@ const LOCKED_FEATURES: Record<string, LockedFeature> = {
 export function resolveLockedFeature(raw: string | null | undefined): LockedFeature | null {
   if (!raw) return null
   const key = raw.trim().toLowerCase()
-  return LOCKED_FEATURES[key] ?? null
+  const listed = LOCKED_FEATURES[key]
+  if (listed) return listed
+  /*
+   * Every `FeatureGate` / `LockedFeatureCard` links with `feature=<SubscriptionFeatureId>`
+   * (buildMonetizationUpgradePathForFeature), and almost none of those ids are in the list above — so
+   * "You were using …" and "Back to …" stayed blank for nearly every lock. A premium feature has a real
+   * title in the plan matrix: that is a name, not a guess. Its href stays null — the lock's own
+   * `back=` (lib/monetization/lockReturn.ts) is the honest destination, league id and all.
+   */
+  const entry = getPremiumMonetizationForFeature(key as SubscriptionFeatureId)
+  return entry?.title ? { label: entry.title, href: null } : null
 }
