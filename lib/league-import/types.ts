@@ -269,6 +269,8 @@ export interface NormalizedTransaction {
   type: 'waiver' | 'trade' | 'free_agent' | 'drop'
   status: string
   created_at: string
+  /** Provider-reported status change time; distinct from when a trade was proposed. */
+  status_updated_at?: string
   adds?: Record<string, string>
   drops?: Record<string, string>
   roster_ids: string[]
@@ -365,6 +367,8 @@ export interface NormalizedImportResult {
   scoring: NormalizedScoring | null
   schedule: NormalizedMatchup[]
   draft_picks: NormalizedDraftPick[]
+  /** Fresh draft lifecycle observations when the provider exposes them. */
+  drafts?: Array<{ source_draft_id: string; status: string; start_time?: number }>
   /**
    * Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`).
    * Absent = provider does not expose traded picks; empty array = provider

@@ -67,6 +67,8 @@ export function getDefaultCategoryPreferences(
   opts: { smsConsented?: boolean } = {},
 ): NotificationChannelPrefs {
   if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) return { ...OPT_IN_CHANNEL }
+  // Additional provider alerts are opt-in; native AF defaults stay unchanged.
+  if (id.startsWith("imported_")) return { ...DEFAULT_CHANNEL, enabled: false, email: false }
   return {
     ...DEFAULT_CHANNEL,
     push: !PUSH_DEFAULT_OFF.has(id),

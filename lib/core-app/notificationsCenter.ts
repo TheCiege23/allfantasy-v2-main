@@ -286,12 +286,12 @@ function classify(text: string): NotificationFilter {
 function classifyStored(type: string, title: string, body: string | null, meta: unknown): NotificationFilter {
   const category = categoryFromMeta(meta)
   if (category) {
-    if (['lineup_reminders', 'lineup_alerts', 'injury_alerts'].includes(category)) return 'lineups'
-    if (['trade_proposals', 'trade_accept_reject'].includes(category)) return 'trades'
+    if (['lineup_reminders', 'lineup_alerts', 'injury_alerts', 'imported_lineup'].includes(category)) return 'lineups'
+    if (['trade_proposals', 'trade_accept_reject', 'imported_trade'].includes(category)) return 'trades'
     if (category === 'waiver_processing') return 'waivers'
     if (['chat_mentions', 'direct_messages', 'league_chat'].includes(category)) return 'mentions'
     if (['league_announcements', 'commissioner_alerts'].includes(category)) return 'commissioner'
-    if (['draft_alerts', 'draft_intel_alerts'].includes(category)) return 'drafts'
+    if (['draft_alerts', 'draft_intel_alerts', 'imported_draft'].includes(category)) return 'drafts'
     if (category === 'breaking_news') return 'news'
     return 'all'
   }

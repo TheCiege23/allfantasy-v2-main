@@ -25,6 +25,8 @@ export const SleeperHistoryMapper: IExternalHistoryMapper<SleeperImportPayload> 
       status: t.status,
       created_at: new Date(t.created).toISOString(),
       completed_at: t.status === 'complete' && typeof t.status_updated === 'number' && t.status_updated > 0 ? new Date(t.status_updated).toISOString() : undefined,
+      ...(typeof t.status_updated === 'number' && Number.isFinite(t.status_updated)
+        ? { status_updated_at: new Date(t.status_updated).toISOString() } : {}),
       adds: t.adds,
       drops: t.drops,
       roster_ids: (t.roster_ids ?? []).map(String),

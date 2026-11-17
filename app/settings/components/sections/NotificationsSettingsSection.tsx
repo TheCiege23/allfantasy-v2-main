@@ -11,6 +11,7 @@ import {
   sendTestNotification,
   describeTestNotificationResult,
   NOTIFICATION_CATEGORY_IDS,
+  IMPORTED_NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
   NOTIFICATION_CATEGORY_LABEL_KEYS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
@@ -726,7 +727,7 @@ export function NotificationsSettingsSection({
           </p>
         ) : null}
         <ul className="space-y-2">
-          {VISIBLE_CATEGORY_IDS.map((categoryId) => (
+          {VISIBLE_CATEGORY_IDS.filter((id) => !id.startsWith("imported_")).map((categoryId) => (
             <li key={categoryId}>
               <NotificationCategoryRenderer
                 categoryId={categoryId}
@@ -760,6 +761,31 @@ export function NotificationsSettingsSection({
           ))}
         </ul>
       </div>
+
+      <section aria-labelledby="imported-league-alerts-title" className="space-y-2" data-testid="imported-league-alerts">
+        <h3 id="imported-league-alerts-title" className="text-sm font-medium text-[var(--text)]">Imported league alerts</h3>
+        <p className="text-xs text-[var(--muted)]">
+          Sleeper leagues: choose additional AF alerts for matchup score changes, your starting lineup changes,
+          completed league trades, and draft starts, picks, or completion. Updates arrive after a league sync;
+          these are not play-by-play or on-the-clock alerts. Scoring and lineup alerts require your linked Sleeper
+          account to match a team in the league. Turn on the categories you want, then save.
+        </p>
+        <ul className="space-y-2">
+          {IMPORTED_NOTIFICATION_CATEGORY_IDS.map((categoryId) => (
+            <li key={categoryId}>
+              <NotificationCategoryRenderer
+                categoryId={categoryId}
+                prefs={prefs.categories?.[categoryId] ?? { enabled: false, inApp: true, push: true, email: false, sms: false }}
+                deliveryAvailability={deliveryAvailability}
+                expanded={expandedCategory === categoryId}
+                onToggleExpand={() => setExpandedCategory((c) => c === categoryId ? null : categoryId)}
+                onToggleEnabled={(enabled) => updateCategory(categoryId, { enabled })}
+                onToggleChannel={(channel, value) => updateCategory(categoryId, { [channel]: value })}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {remoteUpdatePending && (
         <div className="rounded-xl border border-[var(--accent-cyan)] bg-[color-mix(in_srgb,var(--accent-cyan)_12%,transparent)] px-3 py-2 text-sm text-[var(--text)]">
