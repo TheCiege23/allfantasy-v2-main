@@ -178,3 +178,21 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
   so for those regular-season week numbers a team's "earliest kickoff that week" is an August preseason
   game. The ESPN writer reads `seasonType: 'regular'` rows only for this reason.
 
+
+## Team-defense (D/ST) scoring, 2026-11-17 — resolved from committed fixtures and season stats, no probe
+
+- `D-02` RESOLVED, FIXTURE ONLY: every NFL team-defense scoring rule is `points: 0` with its real weight in
+  `pointsOverrides["16"]` (lineup slot 16 = D/ST). Measured in `fixtures/fantasy-league.NFL.2026.json`: 27 of
+  46 `scoringItems` carry an override, every override is keyed `"16"`, and wherever an item has both a non-zero
+  `points` and an override (93, 101–104, 206, 209) the two are equal. The importer read `points` only, so every
+  imported ESPN league stored its D/ST rules as 0. It now reads the slot-16 override when `points` is 0.
+- `D-03` RESOLVED, NO ESPN PROBE: ESPN D/ST stat ids → Sleeper keys, derived by the hand-run
+  `scripts/compare-espn-sleeper-stat-ids.mjs` (its season-total ESPN read predates this note; Sleeper's
+  public weekly DEF stats supplied per-game points allowed). Proof is the `teamDefense` section of
+  `lib/scoring-defaults/espn-stat-id-evidence.json`; the mapping is in `ScoringKeyAliasResolver.ts`.
+  `S-01` (past-week ESPN lineups) is NOT touched by this and stays declined.
+  - Points-allowed bucket edges were SEARCHED against Sleeper's per-game points allowed, not recalled:
+    0 | 1–6 | 7–13 | 14–17 | 18–21 | 22–27 | 28–34 | 35–45 | 46+.
+  - Fumble recoveries (96) = Sleeper `fum_rec` + `def_st_fum_rec`; return TDs score as sums at equal weight.
+  - ⚠ A shutout has NO `pts_allow` key in Sleeper's weekly rows (zeros are omitted). Reading only rows that
+    carry the key dropped exactly the 10 shutouts of 2024–25 and failed the 0-points bucket for no real reason.
