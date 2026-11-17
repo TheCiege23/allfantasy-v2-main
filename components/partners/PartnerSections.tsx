@@ -41,14 +41,14 @@ const TIER_STYLE: Record<Tier, { color: string; icon: ReactNode }> = {
   at_risk: { color: VIZ.status.critical, icon: <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" strokeWidth={2} strokeLinecap="round" /> },
 }
 
-export function TierBadge({ tier }: { tier: Tier }) {
+export function TierBadge({ tier, label }: { tier: Tier; label?: string }) {
   const s = TIER_STYLE[tier]
   return (
     <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/10 px-2 py-0.5 text-xs font-semibold text-white/85">
       <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" stroke={s.color} aria-hidden>
         {s.icon}
       </svg>
-      {TIER_LABEL[tier]}
+      {label ?? TIER_LABEL[tier]}
     </span>
   )
 }

@@ -13,6 +13,7 @@ import {
 } from '@/lib/partner-portal/demoTenant'
 import { ActivityChart } from '@/components/partners/ActivityChart'
 import { DecisionBars } from '@/components/partners/DecisionBars'
+import { PartnerInquiryForm } from '@/components/partners/PartnerInquiryForm'
 import {
   Card,
   DataQualityTable,
@@ -63,8 +64,11 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             <a href="#demo" className="rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-bold text-[#050814] hover:bg-cyan-400">
               Explore the live demo
             </a>
-            <Link href="/contact?topic=partners" className="rounded-xl border border-white/20 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/5">
+            <a href="#contact" className="rounded-xl border border-white/20 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/5">
               Talk to us
+            </a>
+            <Link href="/partners/portal" className="self-center px-2 text-sm font-semibold text-cyan-300 hover:underline">
+              Partner sign in
             </Link>
           </div>
         </div>
@@ -142,14 +146,15 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             </div>
           </Card>
 
-          <section className="rounded-2xl border border-cyan-500/30 bg-cyan-500/[0.06] p-6 text-center">
+          <section id="contact" className="relative scroll-mt-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/[0.06] p-5 sm:p-6">
             <h2 className="text-xl font-bold">See it on your own leagues</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-white/65">
-              We set up a sandbox tenant with your leagues, so the charts above show your platform instead of sample data.
+            <p className="mt-2 max-w-xl text-sm text-white/65">
+              We set up a sandbox tenant with your leagues, so the charts above show your platform instead of sample data. Tell us a little
+              about your platform and we&apos;ll be in touch.
             </p>
-            <Link href="/contact?topic=partners" className="mt-4 inline-block rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-bold text-[#050814] hover:bg-cyan-400">
-              Talk to us
-            </Link>
+            <div className="mt-5">
+              <PartnerInquiryForm />
+            </div>
           </section>
         </div>
       </div>
