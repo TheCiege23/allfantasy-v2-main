@@ -248,6 +248,25 @@ export async function confirmLeagueType(input: {
     return { ok: false, reason: 'write-failed' }
   }
 
+  /*
+   * A league confirmed as Salary Cap needs its cap config, or every cap feature stays off: the cap
+   * page answers "Not a salary cap league" (`isSalaryCapLeague` reads the config row or a
+   * `salary_cap` variant, and an imported league has neither). Only league creation used to write
+   * one, so all 12 imported Salary Cap leagues in production had none (2026-11).
+   *
+   * `upsertSalaryCapConfig(id, {})` creates the sport defaults the creation wizard uses, and its
+   * update half changes nothing when a config exists — a commissioner's settings are never reset.
+   * A failure is logged, never fatal: the person's confirmation stands either way.
+   */
+  if (input.type === 'salary_cap') {
+    try {
+      const { upsertSalaryCapConfig } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
+      await upsertSalaryCapConfig(input.leagueId, {})
+    } catch (err) {
+      console.warn('[leagueTypeConfirmation] salary cap config bootstrap failed (non-fatal)', err)
+    }
+  }
+
   const after = await leagueTypeState(input.leagueId)
   return after ? { ok: true, state: after } : { ok: false, reason: 'write-failed' }
 }
