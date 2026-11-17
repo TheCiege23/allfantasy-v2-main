@@ -37,6 +37,7 @@ describe('lander → guide links', () => {
     expect(LEAGUE_TYPE_GUIDES['best-ball']?.[0].slug).toBe('best-ball-fantasy-football')
     expect(LEAGUE_TYPE_GUIDES['salary-cap']?.[0].slug).toBe('salary-cap-fantasy-football')
     expect(LEAGUE_TYPE_GUIDES.idp?.[0].slug).toBe('idp-fantasy-football')
+    expect(LEAGUE_TYPE_GUIDES.c2c?.[0].slug).toBe('campus-to-canton-fantasy-football')
     expect(blogGuideHref('keeper-league-guide')).toBe('/blog/keeper-league-guide')
   })
 
