@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import sleeperApiFixture from './fixtures/sleeper-api.json'
 vi.mock('@/lib/sleeper-client', () => ({ getAllPlayers: vi.fn(async () => ({})) }))
 vi.mock('@/lib/providers/provider-circuit', () => ({
   isProviderCircuitOpen: () => false, isCircuitFailureStatus: () => true,
@@ -7,7 +8,7 @@ vi.mock('@/lib/providers/provider-circuit', () => ({
 }))
 import { fetchSleeperLeagueForImport } from '@/lib/league-import/sleeper/SleeperLeagueFetchService'
 import { SleeperAdapter } from '@/lib/league-import/adapters/sleeper/SleeperAdapter'
-const base = 'https://api.sleeper.app/v1'
+const base = sleeperApiFixture.baseUrl
 function responses(failDraftPicks = false) {
   return vi.fn(async (input: unknown) => {
     const url = String(input)
