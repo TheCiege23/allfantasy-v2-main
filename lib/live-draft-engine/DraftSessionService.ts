@@ -362,12 +362,6 @@ async function repairDraftSessionSlotOrderIfNeeded(leagueId: string): Promise<vo
     return
   }
 
-  if (league.leagueVariant === 'survivor_guillotine') {
-    const settings = league.settings as { draft_rounds?: unknown; survivorGuillotine?: { rosterExpansionState?: unknown } } | null
-    const configuredRounds = Number(settings?.draft_rounds)
-    if (settings?.survivorGuillotine?.rosterExpansionState && Number.isInteger(configuredRounds) && configuredRounds >= 1 && configuredRounds <= 50) rounds = configuredRounds
-  }
-
   const slotOrder = await buildSlotOrderForLeague(leagueId)
   if (!isCompleteSlotOrder(slotOrder, teamCount)) return
 
@@ -429,6 +423,12 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
     cpuAutoPick = ls.cpuAutoPick
     playerPool = ls.playerPool
     alphabeticalSort = ls.alphabeticalSort
+  }
+
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const settings = league.settings as { draft_rounds?: unknown; survivorGuillotine?: { rosterExpansionState?: unknown } } | null
+    const configuredRounds = Number(settings?.draft_rounds)
+    if (settings?.survivorGuillotine?.rosterExpansionState && Number.isInteger(configuredRounds) && configuredRounds >= 1 && configuredRounds <= 50) rounds = configuredRounds
   }
 
   const slotOrder = await buildSlotOrderForLeague(leagueId)
