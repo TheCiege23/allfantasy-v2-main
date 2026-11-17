@@ -56,7 +56,7 @@ export function normalizeDraftTypeForEngine(draftType: string): string {
   return normalizeDraftTypeForEngineValidation(draftType)
 }
 
-export const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
+const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
   'userId',
   'user_id',
   'commissionerUserId',
@@ -96,7 +96,7 @@ const dynastyCreationChoicesSchema = z.object({
 
 const SPORTS = z.enum(['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'])
 
-export const createLeagueBodySchema = z.object({
+const createLeagueBodySchema = z.object({
   concept: z.string().min(1).max(64),
   sport: SPORTS,
   scoringPreset: z.string().min(1).max(96).trim(),
@@ -114,7 +114,7 @@ export type ValidatedCreateLeagueBody = z.infer<typeof createLeagueBodySchema> &
   sport: LeagueSport
 }
 
-export type ValidateCreateLeagueResult =
+type ValidateCreateLeagueResult =
   | { ok: true; data: ValidatedCreateLeagueBody }
   | { ok: false; error: string; status: number; errors: ValidationIssue[] }
 
