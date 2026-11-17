@@ -1573,7 +1573,7 @@ test.describe('@draft-room click audit', () => {
       const aiExplanationToggle = page.getByTestId('draft-helper-ai-explanation-toggle').first()
       await aiExplanationToggle.check()
       await helperRefresh.click()
-      await expect(page.getByTestId('draft-helper-execution-mode').first()).toContainText(/AI explanation/i)
+      await expect(page.getByTestId('draft-helper-execution-mode').first()).toContainText(/Chimmy explanation/i)
       await aiExplanationToggle.uncheck()
       await helperRefresh.click()
       await expect(page.getByTestId('draft-helper-execution-mode').first()).toContainText(/instant automated recommendation/i)

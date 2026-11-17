@@ -1473,7 +1473,7 @@ export default function WaiverWirePage({
               className="rounded border-[var(--line2)] bg-[var(--surface2)]"
               data-testid="waiver-ai-engine-explanation-toggle"
             />
-            AI explanation {!aiAssistantEnabled && !aiAvailabilityLoading ? '(disabled)' : ''}
+            Chimmy explanation {!aiAssistantEnabled && !aiAvailabilityLoading ? '(disabled)' : ''}
           </label>
         </div>
 

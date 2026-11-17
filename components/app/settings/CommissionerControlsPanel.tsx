@@ -495,7 +495,7 @@ export default function CommissionerControlsPanel({ leagueId }: { leagueId?: str
 
       <div>
         <h4 className="text-xs font-semibold text-white/80 mb-2 flex items-center gap-1.5">
-          <UserPlus className="h-3.5 w-3.5" /> Replace managers / assign AI manager
+          <UserPlus className="h-3.5 w-3.5" /> Replace managers / assign Chimmy manager
         </h4>
         <p className="mb-2 text-xs text-white/60">
           Replacing or orphaning managers is free. Chimmy team manager assignment is an AF Commissioner premium tool.

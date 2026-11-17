@@ -2354,7 +2354,7 @@ export default function MockDraftSimulatorClient({
       <Dialog open={forecastOpen} onOpenChange={setForecastOpen}>
         <DialogContent className="max-w-4xl bg-black/95 border-cyan-900/40">
           <DialogHeader>
-            <DialogTitle>AI Predicted Draft Board ({forecastMeta?.rounds || 2} rounds  -  {forecastMeta?.simulations || 0} sims)</DialogTitle>
+            <DialogTitle>Chimmy Predicted Draft Board ({forecastMeta?.rounds || 2} rounds  -  {forecastMeta?.simulations || 0} sims)</DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto space-y-3 pr-1">
             {boardForecasts.length > 0 && (() => {
@@ -3153,7 +3153,7 @@ export default function MockDraftSimulatorClient({
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto bg-gray-950 border-amber-800/50">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl text-amber-300">
-              <Check className="h-5 w-5" /> Post-Draft Retrospective - AI vs Reality
+              <Check className="h-5 w-5" /> Post-Draft Retrospective - Chimmy vs Reality
             </DialogTitle>
           </DialogHeader>
 

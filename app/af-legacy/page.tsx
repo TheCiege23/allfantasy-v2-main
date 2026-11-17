@@ -12636,7 +12636,7 @@ function AFLegacyContent() {
                                     onClick={() => handleActiveTabChange('waiver')}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-xs font-medium hover:bg-emerald-500/30 transition"
                                   >
-                                    <span>📈</span> Waiver AI
+                                    <span>📈</span> Waiver Chimmy
                                   </button>
                                 </div>
                               </div>

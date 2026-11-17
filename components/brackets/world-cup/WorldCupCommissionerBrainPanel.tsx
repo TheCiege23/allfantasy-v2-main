@@ -383,7 +383,7 @@ export default function WorldCupCommissionerBrainPanel({
           Bracket Brain
         </div>
         <p className="mt-2 text-xs leading-relaxed text-white/55">
-          Basic lock reminders post for every commissioner. AI-enhanced Bracket Brain reports require{" "}
+          Basic lock reminders post for every commissioner. Chimmy-enhanced Bracket Brain reports require{" "}
           <span className="font-semibold text-white/85">AF Commissioner</span> or a confirmed token spend.
         </p>
         {hasAi ? (

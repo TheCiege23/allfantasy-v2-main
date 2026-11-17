@@ -133,7 +133,7 @@ function AIFoundTag({ label, delay }: { label: string; delay?: number }) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/20 text-[11px] font-semibold text-cyan-300 animate-ai-found">
       <span className="w-1 h-1 rounded-full bg-cyan-400 animate-rival-pulse" />
-      AI found: {label}
+      Chimmy found: {label}
     </span>
   )
 }

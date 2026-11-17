@@ -156,7 +156,7 @@ export function RecommendedLeaguesSection({ sport = null, limit = 6 }: Recommend
           ) : null}
           {profileSignals.aiUsageLevel ? (
             <span className="rounded-full border px-2 py-1 text-[11px]" style={{ borderColor: "var(--border)", color: "var(--text)" }}>
-              AI usage: {profileSignals.aiUsageLevel}
+              Chimmy usage: {profileSignals.aiUsageLevel}
             </span>
           ) : null}
         </div>

@@ -189,7 +189,7 @@ export function AiAutomationSettingsPanel({
         help={
           <>
             <strong>Free</strong> — draft notifications, autopick from queue, and slow-draft reminders (Sleeper-style draft
-            hygiene). <strong>AF Commissioner</strong> — optional AI tools for running the league; requires an active
+            hygiene). <strong>AF Commissioner</strong> — optional Chimmy tools for running the league; requires an active
             subscription.
           </>
         }
@@ -303,7 +303,7 @@ export function AiAutomationSettingsPanel({
         ) : null}
         {isC2c ? (
           <p className="rounded-lg border border-cyan-400/20 bg-cyan-500/[0.06] px-3 py-2 text-xs text-cyan-100/85">
-            <span className="font-semibold text-white/90">Campus to Canton:</span> commissioner AI can highlight pro and
+            <span className="font-semibold text-white/90">Campus to Canton:</span> commissioner Chimmy can highlight pro and
             college storylines, draft help across merged rounds, and fairness on cross-pool trades. Full C2C rules and
             pool sizes are tuned under <span className="text-white/80">League → Settings</span> after creation.
           </p>

@@ -215,7 +215,7 @@ describe("WorldCupBracketShell chatAiGate structured error state", () => {
 
   it("renders daily-limit card with today's AI limit copy", () => {
     const src = read("components/brackets/world-cup/WorldCupBracketShell.tsx")
-    expect(src).toContain("today&apos;s AI limit")
+    expect(src).toContain("today&apos;s Chimmy limit")
     expect(src).toContain("Upgrade for more AI")
   })
 

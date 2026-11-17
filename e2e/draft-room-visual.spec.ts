@@ -83,7 +83,7 @@ test('renders NBA player pool with AI ADP enabled', async ({ page }) => {
   // Smoke: AI ADP toggle visible and player name + value render.
   await expect(playerPanel).toBeVisible()
   await playerPanel.getByTestId('draft-player-search-input').fill('Hoops Floor General')
-  await expect(playerPanel.getByText('AI ADP').first()).toBeVisible()
+  await expect(playerPanel.getByText('Chimmy ADP').first()).toBeVisible()
   await expect(playerPanel.getByText('Hoops Floor General').first()).toBeVisible()
   await expect(playerPanel.getByTestId('sleeper-pool-row-0-ai-adp')).toContainText('5.2')
 

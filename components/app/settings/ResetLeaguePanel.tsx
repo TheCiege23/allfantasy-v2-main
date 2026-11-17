@@ -102,7 +102,7 @@ export default function ResetLeaguePanel({ leagueId }: { leagueId?: string }) {
           </p>
           <p>
             Draft session reset: {result.draftSessionReset ? 'yes' : 'no'}.
-            Extra cleanup: chat {result.chatMessagesRemoved}, AI alerts {result.aiAlertsRemoved}, AI logs {result.aiActionLogsRemoved}.
+            Extra cleanup: chat {result.chatMessagesRemoved}, Chimmy alerts {result.aiAlertsRemoved}, Chimmy logs {result.aiActionLogsRemoved}.
           </p>
         </div>
       )}
