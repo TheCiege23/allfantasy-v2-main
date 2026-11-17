@@ -148,6 +148,12 @@ export interface NormalizedRoster {
   player_ids: string[]
   starter_ids: string[]
   /**
+   * The slot each starter is in, keyed by player id, for a provider whose league template cannot
+   * be aligned to `starter_ids` (ESPN — see `startingSlotTemplate`). Stored as
+   * `playerData.starter_slot_by_id`; read by `storedStarterSlotLabels`. Omit when unknown.
+   */
+  starter_slot_by_id?: Record<string, string>
+  /**
    * INJURED RESERVE ONLY — never the bench.
    *
    * 🛑 THERE IS NO `bench_ids`, AND THAT IS WHY THIS KEEPS GOING WRONG. The bench
