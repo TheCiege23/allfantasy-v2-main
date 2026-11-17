@@ -21,6 +21,7 @@ const ctx = vi.hoisted(() => {
     draftPick: { delete: vi.fn(async ({ where }: { where: { id: string } }) => { state.deleted.push(where.id) }) },
     draftSession: { update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { state.updates.push(data); return {} }) },
     draftPickAuditLog: { create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { state.audits.push(data) }) },
+    playerContract: { deleteMany: vi.fn(async () => ({ count: 1 })) },
   }
   const prisma = {
     league: { findUnique: vi.fn(async () => ({ settings: {} })) },
@@ -73,6 +74,16 @@ describe('undo a college pick', () => {
     await undoLastPick('L1', { actorUserId: 'commish' })
     expect(rights.removeDraftCollegeRight).toHaveBeenCalledWith(ctx.tx, 'L1', expect.objectContaining({ id: 'p9', assetType: 'c2c_college', rosterId: 'r2' }))
     expect(rights.removeDraftCollegeRight.mock.invocationCallOrder[0]).toBeLessThan(ctx.tx.draftPick.delete.mock.invocationCallOrder[0]!)
+  })
+
+  // A snake salary-cap pick signed a rookie contract; the undo takes it back with the pick, atomically.
+  it('removes the rookie contract inside the same transaction, before the pick goes', async () => {
+    ctx.state.pick = { ...ctx.state.pick, playerId: 'nfl:77' }
+    await undoLastPick('L1', { actorUserId: 'commish' })
+    expect(ctx.tx.playerContract.deleteMany).toHaveBeenCalledWith({
+      where: { leagueId: 'L1', rosterId: 'r2', playerId: 'nfl:77', source: 'rookie_draft', metadata: { path: ['draftPickOverall'], equals: ctx.state.pick.overall } },
+    })
+    expect(ctx.tx.playerContract.deleteMany.mock.invocationCallOrder.at(-1)!).toBeLessThan(ctx.tx.draftPick.delete.mock.invocationCallOrder.at(-1)!)
   })
 
   it('a right that changed hands stops the undo, and the pick stays', async () => {

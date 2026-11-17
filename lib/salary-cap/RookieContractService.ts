@@ -132,15 +132,88 @@ export async function assignRookieContract(
       contractYear: 1,
       status: 'active',
       source: 'rookie_draft',
-      // draftPickOverall and draftRound stored if columns exist
-      ...(typeof (prisma.playerContract.create as unknown) === 'function'
-        ? {
-            draftPickOverall: draftSlot,
-            draftRound: round,
-            contractSource: 'rookie_draft',
-          }
-        : {}),
+      /*
+       * PlayerContract has no draftPickOverall / draftRound / contractSource columns. They were
+       * spread in here behind `typeof prisma.playerContract.create === 'function'`, which is always
+       * true, so Prisma rejected every rookie contract (#1928 → 2026-11). The pick goes in
+       * `metadata`, the model's own place for it; `source` already says rookie_draft.
+       */
+      metadata: { draftPickOverall: draftSlot, draftRound: round },
     },
   })
   return { ok: true, contractId: c.id, salary: finalSalary, contractYears: years }
+}
+
+/**
+ * The contract follows the pick. Until 2026-11 no rookie contract was ever written (see the create
+ * above), so undo, reset and the commissioner pick editor never had one to clean up; once the write
+ * works, a pick taken back would otherwise leave its salary counting against that team's cap.
+ *
+ * A pick's contract is found by league, team, player and `source: 'rookie_draft'`, plus the pick
+ * number in `metadata`. The player is part of the key because a league's next rookie draft reuses
+ * pick numbers. Contracts signed before this fix have no pick number and are never matched.
+ */
+type RookieContractDb = Pick<typeof prisma, 'playerContract'>
+type RookiePickRef = { overall: number; rosterId: string | null; playerId: string | null }
+
+/** The playerId a pick's contract is signed under — the pick's player, or a slot placeholder. */
+export function rookieContractPlayerId(playerId: string | null | undefined, overall: number): string {
+  const id = typeof playerId === 'string' ? playerId.trim() : ''
+  return id || `draft-${overall}`
+}
+
+function rookieContractWhere(leagueId: string, pick: RookiePickRef) {
+  return {
+    leagueId,
+    rosterId: pick.rosterId ?? '',
+    playerId: rookieContractPlayerId(pick.playerId, pick.overall),
+    source: 'rookie_draft',
+    metadata: { path: ['draftPickOverall'], equals: pick.overall },
+  }
+}
+
+/** Undo, reset, or the editor clearing / replacing a pick: its contract goes with it. */
+export async function removeRookieDraftContract(db: RookieContractDb, leagueId: string, pick: RookiePickRef): Promise<number> {
+  if (!pick.rosterId) return 0
+  const res = await db.playerContract.deleteMany({ where: rookieContractWhere(leagueId, pick) })
+  return res.count
+}
+
+/** The editor moving a made pick to another team: its contract moves with it. */
+export async function moveRookieDraftContract(
+  db: RookieContractDb,
+  leagueId: string,
+  pick: RookiePickRef,
+  newRosterId: string,
+): Promise<number> {
+  if (!pick.rosterId) return 0
+  const res = await db.playerContract.updateMany({ where: rookieContractWhere(leagueId, pick), data: { rosterId: newRosterId } })
+  return res.count
+}
+
+/**
+ * Sign a made pick's rookie contract when the league's startup draft is a snake — the gate
+ * `submitPick` has always used. Null when the league does not sign rookie contracts. Callers run it
+ * AFTER their pick is committed and treat a failure as non-fatal: a contract must never undo a pick.
+ */
+export async function signRookieContractForPick(input: {
+  leagueId: string
+  rosterId: string | null
+  playerId: string | null
+  playerName: string
+  position: string | null
+  overall: number
+}): Promise<Awaited<ReturnType<typeof assignRookieContract>> | null> {
+  if (!input.rosterId) return null
+  const capConfig = await getSalaryCapConfig(input.leagueId)
+  if (capConfig?.startupDraftType !== 'snake') return null
+  return assignRookieContract(
+    input.leagueId,
+    input.rosterId,
+    rookieContractPlayerId(input.playerId, input.overall),
+    input.playerName.trim(),
+    input.position,
+    input.overall,
+    new Date().getFullYear(),
+  )
 }
