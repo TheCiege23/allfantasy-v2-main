@@ -137,6 +137,8 @@ describe('every specialty format rules route checks the lock and writes the log'
     ['app/api/leagues/[leagueId]/guillotine/summary/route.ts', 3],
     ['app/api/leagues/[leagueId]/pirate/route.ts', 1],
     ['app/api/leagues/[leagueId]/big-brother/config/route.ts', 1],
+    // Its `update_config` action is the second Big Brother rules write path.
+    ['app/api/leagues/[leagueId]/big-brother/admin/route.ts', 1],
     ['app/api/leagues/[leagueId]/devy/config/route.ts', 1],
     ['app/api/leagues/[leagueId]/merged-devy-c2c/config/route.ts', 1],
     ['app/api/leagues/[leagueId]/idp/config/route.ts', 1],
