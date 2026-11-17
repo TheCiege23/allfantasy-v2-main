@@ -98,6 +98,14 @@ describe('the rules', () => {
 })
 
 describe('<LeagueHome />', () => {
+  it('shows the format FAQ to members and avoids repeating it when the league shell owns the header', () => {
+    const data = page()
+    data.league.formatFaqHref = '/league-types/faq#dynasty'
+    const { container, rerender } = render(<LeagueHome data={data} />)
+    expect(container.querySelector('a[href="/league-types/faq#dynasty"]')?.textContent).toContain('Format rules FAQ')
+    rerender(<LeagueHome data={data} identityInShell />)
+    expect(container.querySelector('a[href="/league-types/faq#dynasty"]')).toBeNull()
+  })
   it('leads with your place and record, then this week on one line', () => {
     const { getByTestId } = render(<LeagueHome data={page()} otherLeagueIssueCount={0} identityInShell />)
     expect(getByTestId('league-overview-guide').querySelector('.af-lho-title')?.textContent).toBe('12th of 14 · 2-7')

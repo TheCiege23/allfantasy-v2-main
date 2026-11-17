@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import { isZombieLeagueLike } from '@/lib/zombie/isZombieLeagueLike'
 import { leagueAudience } from '@/lib/league-privacy/leagueAudience'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
@@ -3297,6 +3299,7 @@ function LeagueHeader({
           </div>
 
           <div className="relative flex flex-wrap items-center justify-end gap-1" ref={memberGearWrapRef}>
+            <LeagueFormatFaqLink league={league} className="text-white/80" />
             <button
               type="button"
               onClick={onGoHome}

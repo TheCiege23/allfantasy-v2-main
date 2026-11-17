@@ -1,4 +1,5 @@
 import 'server-only'
+import { leagueFormatFaqHref } from '@/lib/league/leagueFormatFaq'
 import { leagueCalendar, type LeagueCalendarEvent } from './leagueCalendar'
 
 import { prisma } from '@/lib/prisma'
@@ -181,6 +182,7 @@ export type LeagueHomeData = {
     platform: string
     canRemoveImported?: boolean
     format: string | null
+    formatFaqHref?: string
     sport: string
     season: number | null
     currentWeek: number | null
@@ -1086,6 +1088,7 @@ export async function getLeagueHomeData(
       platform: String(league.platform ?? 'manual').toLowerCase(),
       canRemoveImported: league.userId === userId || isImportedPlatform(league.platform),
       format: league.leagueType ?? null,
+      formatFaqHref: leagueFormatFaqHref(league),
       sport: String(league.sport ?? 'NFL'),
       season: league.season ?? null,
       currentWeek,

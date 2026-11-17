@@ -6,9 +6,19 @@ import { listLeagueFormats } from '@/lib/league/format-engine'
 import { getLeagueTypeSports, LEAGUE_TYPE_PAGES } from '@/lib/seo-landing/league-type-pages'
 import { LEAGUE_MODIFIER_GUIDES, LEAGUE_TYPE_GUIDES } from '@/lib/league/league-type-guide'
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); window.history.replaceState(null, '', '/league-types/faq') })
 
 describe('public league type guide', () => {
+  it('opens rules from a league deep link on arrival and when the hash changes', () => {
+    window.history.replaceState(null, '', '/league-types/faq#dynasty')
+    const { container } = render(<LeagueTypesPage />)
+    expect(container.querySelector<HTMLDetailsElement>('#dynasty details')?.open).toBe(true)
+    expect(container.querySelector<HTMLDetailsElement>('#pirate details')?.open).toBe(false)
+    window.history.replaceState(null, '', '/league-types/faq#pirate')
+    fireEvent(window, new HashChangeEvent('hashchange'))
+    expect(container.querySelector<HTMLDetailsElement>('#pirate details')?.open).toBe(true)
+    expect(container.querySelector('#survivor-guillotine')).not.toBeNull()
+  })
   it('uses the same sport availability as the existing league type landers', () => {
     const { formats } = LeagueTypesPage().props
     for (const page of LEAGUE_TYPE_PAGES) {
